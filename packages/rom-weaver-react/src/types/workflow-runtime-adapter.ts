@@ -240,6 +240,7 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
 };
 
 type RuntimePatchApplyWorkerInput = {
+  inputSize?: number;
   logLevel?: LogLevel;
   options?: RuntimePatchApplyOptions;
   patchFormat?: string;
@@ -252,6 +253,7 @@ type RuntimePatchApplyWorkerInput = {
 };
 
 type RuntimePatchValidateWorkerInput = {
+  inputSize?: number;
   logLevel?: LogLevel;
   options?: RuntimePatchValidateOptions;
   patchFiles: Array<{ patchFileName: string; patchFilePath: string; patchFormat?: string }>;

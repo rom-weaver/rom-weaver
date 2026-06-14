@@ -415,11 +415,11 @@ const invokeRomWeaverPatchValidateWorker = async (
         ?.ignore_checksum_validation,
   );
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
-  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, threadArg } =
-    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
-  const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
+  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
+    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
+  const disableDefaultThreadArgInjection = singleThreadNoPool || (hasBpsPatch && !threadArg);
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch ? 8 : 64;
+  const scratchFilePoolSize = hasBpsPatch || singleThreadNoPool ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-validate", {
     ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
@@ -448,6 +448,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     requestedThreadArg,
     romFilePath: input.romFilePath,
     scratchFilePoolSize,
+    singleThreadNoPool,
     syncAccessMode: syncAccessMode || "",
     threadArg,
     validateWithChecksums,
@@ -514,11 +515,11 @@ const invokeRomWeaverPatchApplyWorker = async (
   );
   const ppfUndoAware = Boolean(applyOptionRecord?.ppfUndoAware ?? applyOptionRecord?.ppf_undo_aware);
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
-  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, threadArg } =
-    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
-  const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
+  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
+    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
+  const disableDefaultThreadArgInjection = singleThreadNoPool || (hasBpsPatch && !threadArg);
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch ? 8 : 64;
+  const scratchFilePoolSize = hasBpsPatch || singleThreadNoPool ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-apply", {
     add_header: addHeader,
@@ -550,6 +551,7 @@ const invokeRomWeaverPatchApplyWorker = async (
     requestedThreadArg,
     romFilePath: input.romFilePath,
     scratchFilePoolSize,
+    singleThreadNoPool,
     syncAccessMode: syncAccessMode || "",
     threadArg,
     virtualOnlyMounts,

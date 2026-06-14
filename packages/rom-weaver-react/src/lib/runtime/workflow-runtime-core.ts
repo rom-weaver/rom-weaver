@@ -247,6 +247,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       try {
         result = await adapter.invokeApplyPatchWorker(
           {
+            inputSize: inputSource.size,
             logLevel,
             options,
             patchFileName: patchSources[0]?.fileName || "patch.bin",
@@ -430,6 +431,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       };
       return await adapter.invokeValidatePatchWorker(
         {
+          inputSize: inputSource.size,
           logLevel,
           options: validationOptions,
           patchFiles: toPatchWorkerFiles(patchSources, patches),

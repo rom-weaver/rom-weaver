@@ -16,6 +16,16 @@ const XDELTA_PATCH_FILE_EXTENSION_REGEX = /\.(?:xdelta|delta|dat|vcdiff)$/i;
 const BPS_PATCH_FILE_EXTENSION_REGEX = /\.bps$/i;
 const PATCH_FORMAT_NORMALIZE_REGEX = /[^a-z0-9]+/g;
 
+// Below this source size a patch apply/validate is forced onto the runner's
+// no-pool, single-threaded path. In the browser the wasm engine reads the
+// source on the main thread and applies serially for inputs under the in-memory
+// apply cap, so a worker thread pool is never used — yet the runner otherwise
+// pre-allocates and tears down a full pool command per run (measured at ~50 ms
+// of pure setup/teardown for a tiny IPS). Gating well under the 256 MiB
+// in-memory cap keeps this provably serial (and therefore byte-identical) for
+// every format while covering all cartridge-sized ROMs and their patches.
+const SMALL_PATCH_APPLY_FAST_PATH_LIMIT_BYTES = 64 * 1024 * 1024;
+
 const normalizePatchFormat = (value: unknown): string => {
   if (typeof value !== "string") return "";
   return value.trim().toLowerCase().replace(PATCH_FORMAT_NORMALIZE_REGEX, "");
@@ -45,6 +55,7 @@ const isBpsPatchPath = (value: unknown) => {
 const resolvePatchApplyThreadArg = (
   requestedThreadArg: ThreadBudget | null,
   patchFiles: Array<{ patchFileName?: string; patchFilePath?: string; patchFormat?: string }>,
+  inputSize?: number,
 ) => {
   const hasXdeltaPatch = patchFiles.some((patch) => {
     return (
@@ -64,6 +75,7 @@ const resolvePatchApplyThreadArg = (
       forceSingleThreadReason: "xdelta",
       hasBpsPatch,
       hasXdeltaPatch,
+      singleThreadNoPool: false,
       threadArg: 1,
     };
   }
@@ -73,6 +85,21 @@ const resolvePatchApplyThreadArg = (
       forceSingleThreadReason: "bps",
       hasBpsPatch,
       hasXdeltaPatch,
+      singleThreadNoPool: false,
+      threadArg: null,
+    };
+  }
+  // Small non-bps/non-xdelta inputs apply serially in the browser regardless of
+  // requested threads, so skip the runner's worker pool entirely (no threads arg
+  // + defaultThreads:0 → zero-slot command, matching the bps path).
+  const isSmallInput = typeof inputSize === "number" && inputSize <= SMALL_PATCH_APPLY_FAST_PATH_LIMIT_BYTES;
+  if (isSmallInput) {
+    return {
+      forcedSingleThread: true,
+      forceSingleThreadReason: "small-input",
+      hasBpsPatch,
+      hasXdeltaPatch,
+      singleThreadNoPool: true,
       threadArg: null,
     };
   }
@@ -81,6 +108,7 @@ const resolvePatchApplyThreadArg = (
     forceSingleThreadReason: "",
     hasBpsPatch,
     hasXdeltaPatch,
+    singleThreadNoPool: false,
     threadArg: requestedThreadArg || null,
   };
 };
