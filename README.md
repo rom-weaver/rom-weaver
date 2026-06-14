@@ -56,7 +56,7 @@ WASM artifacts + JS wrappers (via [mise](https://mise.jdx.dev) tasks):
 mise run build-wasm
 ```
 
-The WASM artifact keeps the `rom-weaver-cli.wasm` package ABI, but the binary is
+The WASM artifact keeps the `rom-weaver-app.wasm` package ABI, but the binary is
 only a CLI/argv/reporter shim over the shared `rom-weaver-app` command
 orchestration crate.
 

@@ -12,8 +12,8 @@
     ```
 
 - `vendor/nod`:
-  - Git submodule currently tracks `brandonocasey/nod` branch `fix/rvz-zstd-groups-compress-bound`.
-  - Current pinned commit in this repo: `b9fe61a` (based on `v2.0.0-alpha.8`).
+  - Git submodule currently tracks branch `local-changes` at `https://forgejo.koof.win/bcasey/nod`.
+  - Current pinned commit in this repo: `5159244` (based on `v2.0.0-alpha.10`).
   - Workspace dependency is wired via root `Cargo.toml` (`[workspace.dependencies].nod` path).
   - Initialize or refresh with:
     ```bash
@@ -32,6 +32,10 @@
 - `vendor/qbsdiff-1.4.4`:
   - Local patched copy of the `qbsdiff` crate.
   - Manifest patch routes `bzip2` through `bzip2-sys` instead of adding `libbz2-rs-sys`.
+  - Wired through root `Cargo.toml` `[patch.crates-io]`.
+
+- `vendor/xdvdfs-0.8.3`:
+  - Local patched copy of the `xdvdfs` crate.
   - Wired through root `Cargo.toml` `[patch.crates-io]`.
 
 ## Validate after vendor updates

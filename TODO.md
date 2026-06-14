@@ -4,10 +4,10 @@
 
 ## Recent Updates (2026-05-16)
 
-- `this commit`: Dreamcast `.dcp` (Universal Dreamcast Patcher) apply landed. New crates `rom-weaver-gdrom` (GD-ROM ISO9660 read/write + `MODE1/2352` EDC/ECC) and `rom-weaver-dcp` (ZIP/manifest/apply/rebuild); `rom-weaver-xdelta` gained `apply_patch_bytes`. CLI `patch apply` routes `.dcp` to a disc rebuild (input .cue/.gdi → patched data track → reassembled disc → CHD/GDI), validated byte-correct per file on real data. The rebuild streams the raw `MODE1/2352` track to a writer (`rebuild_track_to_writer`): the layout is planned from file sizes and each file's bytes are produced on demand, so peak memory scales with the largest single patched file's apply working set, not the disc. Remaining work (tests, webapp wiring, parity, create, format coverage) is tracked under "Dreamcast `.dcp` — remaining work" in the Patch Formats section.
+- Dreamcast `.dcp` (Universal Dreamcast Patcher) apply landed. New crates `rom-weaver-gdrom` (GD-ROM ISO9660 read/write + `MODE1/2352` EDC/ECC) and `rom-weaver-dcp` (ZIP/manifest/apply/rebuild); `rom-weaver-xdelta` gained `apply_patch_bytes`. CLI `patch apply` routes `.dcp` to a disc rebuild (input .cue/.gdi → patched data track → reassembled disc → CHD/GDI), validated byte-correct per file on real data. The rebuild streams the raw `MODE1/2352` track to a writer (`rebuild_track_to_writer`): the layout is planned from file sizes and each file's bytes are produced on demand, so peak memory scales with the largest single patched file's apply working set, not the disc. Remaining work (tests, webapp wiring, parity, create, format coverage) is tracked under "Dreamcast `.dcp` — remaining work" in the Patch Formats section.
 - `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
-- `this commit`: Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
-- `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
+- Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
+- Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
 - `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
 - `6e2e7d1`: Standalone stream container support landed for `gz`, `bz2`, `xz`, and `zst` (`probe`/`extract`/`create`).
 - `edf17b0`: RUP parse/apply/create support landed with MD5-matched forward/undo apply validation.
@@ -20,8 +20,8 @@
 - `43ba2f3`: zip, zipx, 7z, and tar-family probe/extract/create handlers landed.
 - `78ae8b9`: z3ds probe/extract/create landed (parallel extract path for large files).
 - `67ef8fb`: rvz probe/extract/create landed.
-- `this commit`: The command surface now uses `probe`, archive entry output moved to standalone `list`, patch-apply gained `--strip-header`/`--add-header`/`--repair-checksum`, and checksum surfaces header/repair/byte-order compatibility via `checksum_variants` (no `--strip-header` flag).
-- `this commit`: Added backlog rows for NSZ-family decompression support (`.nsz`, `.xcz`, `.ncz`) aligned to the `nicoboss/nsz` reference format behavior.
+- The command surface now uses `probe`, archive entry output moved to standalone `list`, patch-apply gained `--strip-header`/`--add-header`/`--repair-checksum`, and checksum surfaces header/repair/byte-order compatibility via `checksum_variants` (no `--strip-header` flag).
+- Added backlog rows for NSZ-family decompression support (`.nsz`, `.xcz`, `.ncz`) aligned to the `nicoboss/nsz` reference format behavior.
 
 ## Commands
 
@@ -137,7 +137,7 @@ Apply is implemented and engine-tested; these items are not done:
 - DONE: `.dcp` added to the shared patch-extension list (`PATCH_FILTER_FILE_EXTENSIONS` in `rom-weaver-core/src/common_files.rs`), regenerated into `rom-weaver-format-metadata.ts`; the webapp classifier, file-picker `accept`, and patch-probe tolerance all derive from it, so a dropped `.dcp` routes to the patch bucket automatically (tsc + biome clean). No hardcoded patch list or format gate elsewhere.
 - TODO (form wiring — the main webapp gap): the only `.dcp` reference in `packages/rom-weaver-react/src` is the generated extension list; there is **no UI that pairs a `.dcp` with its disc source or dispatches the apply**. A `.dcp` is byte-stream→byte-stream-incompatible (it rebuilds a whole disc, not a single ROM), so the standard apply form's patch→ROM pairing does not model it. Needs: recognize a `.dcp` in the patch bucket as a disc-rebuild patch, require/pair a grouped disc ROM (`.gdi`/`.cue` + tracks, the disc-as-single-ROM grouping) as its source, and dispatch `run_dcp_apply` (same wasm CLI entry the native path uses) → CHD/GDI. Until this exists, `.dcp` apply is CLI-only despite the file routing to the right bucket.
 - TODO: end-to-end browser validation via the dev server (user-driven, after the form wiring above) — drop a disc (`.gdi` + tracks) + a `.dcp`, confirm it stages to OPFS, runs `run_dcp_apply` in the wasm CLI, and produces a CHD. Measure peak browser memory (the per-file VCDIFF apply is the floor — see Memory/perf). Check mobile Safari.
-- TODO: needs a fresh DCP-capable wasm build (`mise run build-wasm`) — the committed wasm artifact predates DCP.
+- TODO: needs a fresh DCP-capable wasm build (`mise run build-wasm`) — the local/built wasm artifact must be rebuilt to include DCP.
 
 **Parity / correctness**
 - Byte-identical-to-UDP disc image: current output is *file-level* parity (every rebuilt file byte-correct), not the same `.gdi`/CHD bytes UDP emits. Would require reproducing DiscUtils' ISO9660 layout exactly and a UDP reference output to diff against.
