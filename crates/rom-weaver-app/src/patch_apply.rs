@@ -467,178 +467,20 @@ impl CliApp {
             };
             let mut terminal_output_path = output.clone();
 
-            let mut current_input = apply_input;
-            let mut applied_formats = Vec::with_capacity(patch_count);
-            let mut report = OperationReport::failed(
-                OperationFamily::Patch,
-                None,
-                "apply",
-                "patch apply was not executed",
-                context.single_thread_execution(),
-            );
-
-            for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-                let Some(handler) = self.patches.probe(resolved_patch_path) else {
-                    let patch_label = if patch_path == resolved_patch_path {
-                        format!("`{}`", patch_path.display())
-                    } else {
-                        format!(
-                            "`{}` (resolved from `{}`)",
-                            resolved_patch_path.display(),
-                            patch_path.display()
-                        )
-                    };
-                    let unsupported_reason =
-                        explicitly_unsupported_patch_reason_for_path(resolved_patch_path);
-                    let (format_name, label) = match unsupported_reason {
-                        Some(reason) => (
-                            Some("PDS".to_string()),
-                            format!(
-                                "patch {}/{}: {} is explicitly not supported: {reason}",
-                                index + 1,
-                                patch_count,
-                                patch_label
-                            ),
-                        ),
-                        None => (
-                            None,
-                            format!(
-                                "patch {}/{}: no registered patch handler matched {}",
-                                index + 1,
-                                patch_count,
-                                patch_label
-                            ),
-                        ),
-                    };
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        format_name,
-                        "probe",
-                        label,
-                        probe_threads.clone(),
-                    );
-                };
-                applied_formats.push(handler.descriptor().name);
-                let patch_start_percent = patch_progress_segment_start(index, patch_count);
-
-                let is_last = index + 1 == patch_count;
-                let apply_output = if is_last {
-                    staged_output.clone()
-                } else {
-                    let intermediate_output = context
-                        .temp_paths()
-                        .next_path("patch-apply-output-step", Some("bin"));
-                    temp_paths.push(intermediate_output.clone());
-                    intermediate_output
-                };
-                if let Some(parent) = apply_output.parent()
-                    && !parent.exists()
-                    && let Err(error) = fs::create_dir_all(parent)
-                {
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "prepare",
-                        format!(
-                            "failed to prepare output path `{}`: {error}",
-                            apply_output.display()
-                        ),
-                        context.single_thread_execution(),
-                    );
-                }
-
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: Some(handler.descriptor().name),
-                    },
-                    "apply",
-                    if patch_count == 1 {
-                        format!("applying patch using {}", handler.descriptor().name)
-                    } else {
-                        format!(
-                            "applying patch {}/{} using {} (`{}`)",
-                            index + 1,
-                            patch_count,
-                            handler.descriptor().name,
-                            patch_path.display()
-                        )
-                    },
-                    Some(patch_start_percent),
-                    None,
-                );
-
-                let request = PatchApplyRequest {
-                    input: current_input,
-                    patches: vec![resolved_patch_path.clone()],
-                    output: apply_output.clone(),
-                };
-                let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
-                let patch_context =
-                    context
-                        .clone()
-                        .with_progress_sink(Arc::new(PatchApplyProgressSink::new(
-                            context.progress_sink(),
-                            index,
-                            patch_count,
-                            progress_tracker.clone(),
-                        )));
-                report = match handler.apply(&request, &patch_context) {
-                    Ok(report) => report,
-                    Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "apply",
-                        op.to_string(),
-                        context.single_thread_execution(),
-                    ),
-                    Err(error) => OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "apply",
-                        error.to_string(),
-                        context.single_thread_execution(),
-                    ),
-                };
-                if report.status != OperationStatus::Succeeded {
-                    if patch_count > 1 {
-                        report.label = format!(
-                            "patch {}/{} (`{}`): {}",
-                            index + 1,
-                            patch_count,
-                            patch_path.display(),
-                            report.label
-                        );
-                    }
-                    return report;
-                }
-                if !progress_tracker.saw_meaningful_running_progress() {
-                    self.emit_running(
-                        OperationLabel {
-                            command: "patch-apply",
-                            family: OperationFamily::Patch,
-                            format: Some(handler.descriptor().name),
-                        },
-                        "apply",
-                        if patch_count == 1 {
-                            format!("applied patch using {}", handler.descriptor().name)
-                        } else {
-                            format!(
-                                "applied patch {}/{} using {} (`{}`)",
-                                index + 1,
-                                patch_count,
-                                handler.descriptor().name,
-                                patch_path.display()
-                            )
-                        },
-                        None,
-                        report.thread_execution.clone(),
-                    );
-                }
-
-                current_input = apply_output;
-            }
+            let PatchApplyLoopOutcome {
+                mut report,
+                applied_formats,
+            } = match self.run_patch_apply_loop(
+                &resolved_patches,
+                apply_input,
+                &staged_output,
+                &probe_threads,
+                &context,
+                &mut temp_paths,
+            ) {
+                Ok(outcome) => outcome,
+                Err(report) => return *report,
+            };
 
             let mut raw_ready_output = staged_output.clone();
             let mut disc_track_overrides: Vec<CreateInputOverride> = Vec::new();
@@ -1003,7 +845,213 @@ struct PreparedApplyInput {
     restore_n64_order: Option<N64ByteOrderTransform>,
 }
 
+/// The state carried out of [`CliApp::run_patch_apply_loop`] when every patch
+/// applied successfully: the last successful apply report and the formats
+/// applied in order. The fully patched bytes live at the `staged_output` path
+/// the caller passed in (the final apply step writes there).
+struct PatchApplyLoopOutcome {
+    report: OperationReport,
+    applied_formats: Vec<&'static str>,
+}
+
 impl CliApp {
+    /// Apply each resolved patch in sequence, threading the running output
+    /// through every step (intermediate steps write temp files registered in
+    /// `temp_paths`; the final step writes `staged_output`). Returns the last
+    /// successful apply report plus the patched-output path and applied formats
+    /// on full success, or `Err(report)` carrying the failure report when a
+    /// patch handler is missing or an apply fails — the exact reports the
+    /// inline loop produced. Extracted from `run_patch_apply` to shrink it; the
+    /// `Err` early-exits map one-to-one onto the loop's former `return`s.
+    fn run_patch_apply_loop(
+        &self,
+        resolved_patches: &[(PathBuf, PathBuf)],
+        apply_input: PathBuf,
+        staged_output: &Path,
+        probe_threads: &Option<ThreadExecution>,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> std::result::Result<PatchApplyLoopOutcome, Box<OperationReport>> {
+        let patch_count = resolved_patches.len();
+        let mut current_input = apply_input;
+        let mut applied_formats = Vec::with_capacity(patch_count);
+        let mut report = OperationReport::failed(
+            OperationFamily::Patch,
+            None,
+            "apply",
+            "patch apply was not executed",
+            context.single_thread_execution(),
+        );
+
+        for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
+            let Some(handler) = self.patches.probe(resolved_patch_path) else {
+                let patch_label = if patch_path == resolved_patch_path {
+                    format!("`{}`", patch_path.display())
+                } else {
+                    format!(
+                        "`{}` (resolved from `{}`)",
+                        resolved_patch_path.display(),
+                        patch_path.display()
+                    )
+                };
+                let unsupported_reason =
+                    explicitly_unsupported_patch_reason_for_path(resolved_patch_path);
+                let (format_name, label) = match unsupported_reason {
+                    Some(reason) => (
+                        Some("PDS".to_string()),
+                        format!(
+                            "patch {}/{}: {} is explicitly not supported: {reason}",
+                            index + 1,
+                            patch_count,
+                            patch_label
+                        ),
+                    ),
+                    None => (
+                        None,
+                        format!(
+                            "patch {}/{}: no registered patch handler matched {}",
+                            index + 1,
+                            patch_count,
+                            patch_label
+                        ),
+                    ),
+                };
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    format_name,
+                    "probe",
+                    label,
+                    probe_threads.clone(),
+                )));
+            };
+            applied_formats.push(handler.descriptor().name);
+            let patch_start_percent = patch_progress_segment_start(index, patch_count);
+
+            let is_last = index + 1 == patch_count;
+            let apply_output = if is_last {
+                staged_output.to_path_buf()
+            } else {
+                let intermediate_output = context
+                    .temp_paths()
+                    .next_path("patch-apply-output-step", Some("bin"));
+                temp_paths.push(intermediate_output.clone());
+                intermediate_output
+            };
+            if let Some(parent) = apply_output.parent()
+                && !parent.exists()
+                && let Err(error) = fs::create_dir_all(parent)
+            {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "prepare",
+                    format!(
+                        "failed to prepare output path `{}`: {error}",
+                        apply_output.display()
+                    ),
+                    context.single_thread_execution(),
+                )));
+            }
+
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: Some(handler.descriptor().name),
+                },
+                "apply",
+                if patch_count == 1 {
+                    format!("applying patch using {}", handler.descriptor().name)
+                } else {
+                    format!(
+                        "applying patch {}/{} using {} (`{}`)",
+                        index + 1,
+                        patch_count,
+                        handler.descriptor().name,
+                        patch_path.display()
+                    )
+                },
+                Some(patch_start_percent),
+                None,
+            );
+
+            let request = PatchApplyRequest {
+                input: current_input,
+                patches: vec![resolved_patch_path.clone()],
+                output: apply_output.clone(),
+            };
+            let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
+            let patch_context =
+                context
+                    .clone()
+                    .with_progress_sink(Arc::new(PatchApplyProgressSink::new(
+                        context.progress_sink(),
+                        index,
+                        patch_count,
+                        progress_tracker.clone(),
+                    )));
+            report = match handler.apply(&request, &patch_context) {
+                Ok(report) => report,
+                Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "apply",
+                    op.to_string(),
+                    context.single_thread_execution(),
+                ),
+                Err(error) => OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "apply",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ),
+            };
+            if report.status != OperationStatus::Succeeded {
+                if patch_count > 1 {
+                    report.label = format!(
+                        "patch {}/{} (`{}`): {}",
+                        index + 1,
+                        patch_count,
+                        patch_path.display(),
+                        report.label
+                    );
+                }
+                return Err(Box::new(report));
+            }
+            if !progress_tracker.saw_meaningful_running_progress() {
+                self.emit_running(
+                    OperationLabel {
+                        command: "patch-apply",
+                        family: OperationFamily::Patch,
+                        format: Some(handler.descriptor().name),
+                    },
+                    "apply",
+                    if patch_count == 1 {
+                        format!("applied patch using {}", handler.descriptor().name)
+                    } else {
+                        format!(
+                            "applied patch {}/{} using {} (`{}`)",
+                            index + 1,
+                            patch_count,
+                            handler.descriptor().name,
+                            patch_path.display()
+                        )
+                    },
+                    None,
+                    report.thread_execution.clone(),
+                );
+            }
+
+            current_input = apply_output;
+        }
+
+        Ok(PatchApplyLoopOutcome {
+            report,
+            applied_formats,
+        })
+    }
+
     /// Shared compress-and-emit core for `patch apply` output compression, used
     /// by both the plain patch-apply path and the `.dcp` disc rebuild. Resolves
     /// the create handler for `plan.format`, emits the caller-supplied
