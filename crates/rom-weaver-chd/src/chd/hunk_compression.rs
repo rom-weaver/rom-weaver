@@ -59,6 +59,12 @@ impl ChdContainerHandler {
         compression_level: i32,
         hunk: &[u8],
     ) -> Result<Vec<u8>> {
+        trace!(
+            codec = ?primary_codec,
+            raw = hunk.len(),
+            level = compression_level,
+            "chd hunk encode"
+        );
         if matches!(create_kind, ChdCreateKind::Disc(_)) {
             return self.compress_rust_cd_hunk(primary_codec, compression_level, hunk);
         }
@@ -147,6 +153,10 @@ impl ChdContainerHandler {
             // FLAC only ever wins on CDDA audio; skip its trial when the hunk is provably all
             // data sectors and at least one other codec remains to carry the result.
             let skip_flac = has_flac && has_non_flac && Self::cd_hunk_is_all_data_sectors(&hunk);
+            trace!(
+                raw = hunk.len(),
+                has_flac, has_non_flac, skip_flac, "chd cd hunk codec trial"
+            );
             let needs_raw_sectors = has_flac && !skip_flac;
             let normalize_ecc = has_non_flac;
             let prepared = self.prepare_cd_hunk_streams(
@@ -189,6 +199,21 @@ impl ChdContainerHandler {
             }
         }
 
+        let raw_len = hunk.len();
+        let best_packed = best.as_ref().map(|(slot, payload)| (*slot, payload.len()));
+        let keep_compressed = best
+            .as_ref()
+            .map(|(_, compressed)| {
+                self.prefer_compressed_payload(primary_codec, compressed.len(), raw_len)
+            })
+            .unwrap_or(false);
+        trace!(
+            raw = raw_len,
+            best_slot = best_packed.map(|(slot, _)| slot),
+            packed = best_packed.map(|(_, len)| len),
+            keep_compressed,
+            "chd hunk best codec selected"
+        );
         Ok(best
             .filter(|(_, compressed)| {
                 self.prefer_compressed_payload(primary_codec, compressed.len(), hunk.len())
@@ -309,6 +334,13 @@ impl ChdContainerHandler {
         prepared: &PreparedCdHunk<'_>,
         shared_streams: Option<&mut CdSharedCompressedStreams>,
     ) -> Result<Vec<u8>> {
+        trace!(
+            codec = ?primary_codec,
+            frames = prepared.frame_count,
+            raw = hunk_len,
+            level = compression_level,
+            "chd cd hunk encode"
+        );
         let sectors = prepared.sectors_for_codec(primary_codec);
         match primary_codec {
             ChdCodec::CD_ZSTD => self.compress_prepared_cd_zstd_payload(

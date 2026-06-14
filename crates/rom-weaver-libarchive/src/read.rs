@@ -1,4 +1,5 @@
 use super::*;
+use tracing::trace;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ReadFilter {
@@ -100,6 +101,7 @@ impl ReadArchive {
             output.write_all(&buffer[..read])?;
             copied = copied.saturating_add(read as u64);
         }
+        trace!(decoded_bytes = copied, "libarchive read entry to writer");
         Ok(copied)
     }
 

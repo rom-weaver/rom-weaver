@@ -885,6 +885,14 @@ impl ChdContainerHandler {
         }
 
         let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
+        debug!(
+            tracks = layout.tracks.len(),
+            media = ?chd.media_kind(),
+            expected_frames = DiscFrameRouter::expected_frames(&layout.tracks),
+            logical_bytes = header.logical_bytes,
+            threads = execution.effective_threads,
+            "chd extract cd start"
+        );
         fs::create_dir_all(&request.out_dir)?;
         let stem = request
             .source
@@ -1253,6 +1261,10 @@ impl ChdContainerHandler {
             .iter()
             .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
             .sum::<u64>();
+        debug!(
+            files = file_count,
+            written_bytes, omitted_subcode, "chd extract cd done"
+        );
         let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
@@ -1283,6 +1295,14 @@ impl ChdContainerHandler {
         }
 
         let layout = self.read_disc_tracks(&chd, DiscKind::GdRom)?;
+        debug!(
+            tracks = layout.tracks.len(),
+            media = ?chd.media_kind(),
+            expected_frames = DiscFrameRouter::expected_frames(&layout.tracks),
+            logical_bytes = header.logical_bytes,
+            threads = execution.effective_threads,
+            "chd extract gd start"
+        );
         fs::create_dir_all(&request.out_dir)?;
         let stem = request
             .source
@@ -1466,6 +1486,10 @@ impl ChdContainerHandler {
             .iter()
             .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
             .sum::<u64>();
+        debug!(
+            files = file_count,
+            written_bytes, omitted_subcode, "chd extract gd done"
+        );
         let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),

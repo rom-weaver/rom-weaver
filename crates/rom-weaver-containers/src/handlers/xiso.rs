@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::debug;
 
 type XisoSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
 type XisoSourceFilesystem = XdvdfsFilesystem<io::Error, XisoSourceDevice>;
@@ -117,6 +118,11 @@ impl ContainerHandlerOperations for XisoContainerHandler {
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let mut source_fs = self.open_source_filesystem(&request.source)?;
+        debug!(
+            format = XISO.name,
+            source = %request.source.display(),
+            "xiso extract start (rebuild XDVDFS image)"
+        );
         let output_path = request.out_dir.join(&output_name);
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
@@ -194,6 +200,13 @@ impl ContainerHandlerOperations for XisoContainerHandler {
         }
         output.flush()?;
         let output_bytes = fs::metadata(&output_path)?.len();
+        debug!(
+            format = XISO.name,
+            output_bytes,
+            files = listed_entries,
+            directories = listed_directories,
+            "xiso extract complete"
+        );
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,

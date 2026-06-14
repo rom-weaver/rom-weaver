@@ -818,6 +818,17 @@ pub(super) fn read_window_sections<R: Read + Seek>(
     let inst = read_section(patch_reader, window.inst_start, window.inst_len)?;
     let addr = read_section(patch_reader, window.addr_start, window.addr_len)?;
 
+    trace!(
+        output_offset = window.output_offset,
+        target = window.target_window_size,
+        data = data.len(),
+        inst = inst.len(),
+        addr = addr.len(),
+        delta_indicator = window.delta_indicator,
+        secondary = secondary_compressor_id,
+        "xdelta apply window sections read"
+    );
+
     if window.delta_indicator == 0 {
         return Ok((data, inst, addr));
     }

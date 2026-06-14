@@ -14,3 +14,4 @@ write-extra = ["write-archives", "rom-weaver-libarchive-sys/write-extra"]
 akv = "0.1.0"
 rom-weaver-core = { path = "../rom-weaver-core" }
 rom-weaver-libarchive-sys = { workspace = true, default-features = false }
+tracing = { workspace = true }

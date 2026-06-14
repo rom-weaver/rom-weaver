@@ -12,4 +12,5 @@ lzma-rust2.workspace = true
 rayon.workspace = true
 rom-weaver-core = { path = "../rom-weaver-core" }
 rom-weaver-libarchive = { workspace = true, default-features = false }
+tracing = { workspace = true }
 zstd.workspace = true

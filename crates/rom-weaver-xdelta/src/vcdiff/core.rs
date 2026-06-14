@@ -192,8 +192,20 @@ impl PatchHandler for VcdiffPatchHandler {
         let uses_xdelta_lzma_sections = patch.secondary_compressor_id
             == Some(XDELTA_LZMA_SECONDARY_ID)
             && patch_uses_xdelta_lzma_sections(&patch, &patch_path)?;
+        debug!(
+            format = self.descriptor.name,
+            windows = patch.windows.len(),
+            secondary = patch.secondary_compressor_id,
+            input_len,
+            validate_checksums,
+            "xdelta apply start"
+        );
 
         if uses_xdelta_lzma_sections {
+            trace!(
+                windows = patch.windows.len(),
+                "xdelta apply path: serial xdelta-lzma sections"
+            );
             apply_windows_with_xdelta_lzma_sections(
                 &patch,
                 &patch_path,
@@ -229,6 +241,10 @@ impl PatchHandler for VcdiffPatchHandler {
             .iter()
             .any(|window| matches!(window.source_kind, Some(WindowSourceKind::Target)))
         {
+            trace!(
+                windows = patch.windows.len(),
+                "xdelta apply path: serial target-referencing windows"
+            );
             apply_windows_with_target_sources(
                 &patch,
                 &patch_path,
@@ -279,6 +295,12 @@ impl PatchHandler for VcdiffPatchHandler {
         let validate_checksums_for_tasks = validate_checksums;
         let secondary_compressor_id = patch.secondary_compressor_id;
 
+        trace!(
+            windows = tasks.len(),
+            requested_threads,
+            used_parallelism = planned_execution.used_parallelism,
+            "xdelta apply path: per-window decode fan-out"
+        );
         let (execution, mut decoded) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
             let decoded = pool.install(|| {
@@ -387,6 +409,14 @@ impl PatchHandler for VcdiffPatchHandler {
         let create_progress = CreateProgress::new(context, self.descriptor.name);
         let will_run_secondary =
             compare_secondary && !xdelta_secondary_candidates_for_mode(secondary_mode).is_empty();
+        debug!(
+            format = self.descriptor.name,
+            compare_secondary,
+            secondary_candidates = xdelta_secondary_candidates_for_mode(secondary_mode).len(),
+            will_run_secondary,
+            include_checksums,
+            "xdelta create start"
+        );
         let encode_band_end = if will_run_secondary {
             // Leave room for the secondary recode band that follows the diff.
             CREATE_ENCODE_BAND_END
@@ -488,6 +518,11 @@ impl PatchHandler for VcdiffPatchHandler {
                 secondary_candidate_paths
                     .extend(candidate_specs.iter().map(|(_, path)| path.clone()));
                 let app_header = xdelta_app_header.as_deref();
+                trace!(
+                    candidates = candidate_specs.len(),
+                    parallel = secondary_pool.is_some(),
+                    "xdelta create secondary recode fan-out"
+                );
                 let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
                     // Candidates run concurrently on worker threads, so they can't share the
                     // (main-thread) progress tracker; the band is reported around the batch below.
@@ -1590,6 +1625,14 @@ pub(super) fn encode_windows_parallel<W: Write>(
     let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(inputs.target_path)?);
     let mut target_offset = 0_u64;
     let batch_size = execution.effective_threads.max(1);
+    debug!(
+        effective_threads = execution.effective_threads,
+        batch_size,
+        window_size = inputs.window_size,
+        source_len = inputs.source_len,
+        target_len = inputs.target_len,
+        "xdelta create parallel window encode start"
+    );
 
     loop {
         let mut batch: Vec<(u64, Vec<u8>, Vec<u8>)> = Vec::with_capacity(batch_size);
@@ -1612,6 +1655,11 @@ pub(super) fn encode_windows_parallel<W: Write>(
         if batch.is_empty() {
             break;
         }
+        trace!(
+            windows = batch.len(),
+            target_offset_end = target_offset,
+            "xdelta create encoding window batch"
+        );
 
         let encoded_windows = pool.install(|| {
             batch

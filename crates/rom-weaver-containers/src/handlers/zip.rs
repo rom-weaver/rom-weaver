@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::debug;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ZipContainerFlavor {
@@ -153,6 +154,15 @@ impl ZipContainerHandler {
         let total_bytes = sum_input_file_bytes(entries);
         let execution =
             context.plan_threads(self.create_thread_capability(method, total_bytes, level));
+        debug!(
+            format = self.descriptor.name,
+            method = self.method_name(method),
+            level,
+            entries = entries.len(),
+            total_bytes,
+            effective_threads = execution.effective_threads,
+            "zip create start"
+        );
 
         let method_name = self.libarchive_method_name(method).ok_or_else(|| {
             RomWeaverError::Unsupported(UnsupportedOp::LibarchiveCodec {

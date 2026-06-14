@@ -21,4 +21,5 @@ rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 sha1.workspace = true
+tracing.workspace = true
 zstd.workspace = true

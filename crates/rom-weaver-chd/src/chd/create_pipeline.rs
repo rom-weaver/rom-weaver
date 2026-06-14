@@ -508,6 +508,18 @@ impl ChdContainerHandler {
             })?;
 
         let effective_threads = thread_count.max(1).min(hunk_count_usize.max(1));
+        debug!(
+            primary_codec = ?primary_codec,
+            encodable_codecs = encodable_codecs.len(),
+            hunk_count,
+            hunk_bytes,
+            unit_bytes,
+            level = compression_level,
+            requested_threads = thread_count,
+            effective_threads,
+            has_parent = parent_reuse.is_some(),
+            "chd compressed create start"
+        );
 
         let mut entries = Vec::with_capacity(hunk_count_usize);
         let mut current_offset = Self::CHD_V5_HEADER_BYTES;
@@ -524,6 +536,7 @@ impl ChdContainerHandler {
             // Sequential path: no worker threads are spawned, so this also serves targets
             // without thread support. Hunks are read,
             // hashed, compressed, and appended in order on the calling thread.
+            trace!(hunk_count, "chd compressed create sequential path");
             let mut raw_sha1 = Sha1::new();
             let mut remaining = logical_bytes;
             let mut scratch = ChdCompressionScratch::default();
@@ -576,6 +589,10 @@ impl ChdContainerHandler {
             // stay on the coordinator thread, so browser workers never open OPFS paths. Worker
             // threads only hash + compress in-memory hunks, while the shared helper bounds
             // inflight work and drains producers on error before the scoped threads join.
+            trace!(
+                hunk_count,
+                effective_threads, "chd compressed create streaming pipeline path"
+            );
             let mut raw_sha1 = Sha1::new();
             let mut remaining = logical_bytes;
             ordered_streaming_compress(
@@ -705,6 +722,13 @@ impl ChdContainerHandler {
         output_file.flush().map_err(|error| {
             RomWeaverError::Validation(format!("failed to flush `{}`: {error}", output.display()))
         })?;
+        debug!(
+            hunk_count,
+            unique_hunks = self_hunks_by_hash.len(),
+            map_offset,
+            map_bytes,
+            "chd compressed create done"
+        );
 
         Ok(ChdHeader {
             version: 5,

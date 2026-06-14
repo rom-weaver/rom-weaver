@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
@@ -915,6 +916,15 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
         let mut execution = context.plan_threads(ThreadCapability::parallel(None));
+        debug!(
+            format = PBP.name,
+            discs = archive.discs.len(),
+            outputs = extract_plan.len(),
+            total_extract_bytes,
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            "pbp extract start"
+        );
 
         let mut produced_outputs = Vec::new();
         let mut total_written = 0u64;
@@ -928,6 +938,15 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 let extract_capability = ThreadCapability::parallel(Some(tasks.len().max(1)));
                 let (disc_execution, pool) = context.build_pool(extract_capability)?;
                 execution = disc_execution;
+                trace!(
+                    format = PBP.name,
+                    disc = disc.disc_number,
+                    tracks = disc.toc_tracks.len(),
+                    iso_size = disc.iso_size,
+                    tasks = tasks.len(),
+                    used_parallelism = execution.used_parallelism,
+                    "pbp extract disc"
+                );
 
                 if let Some(parent) = bin_path.parent() {
                     fs::create_dir_all(parent)?;

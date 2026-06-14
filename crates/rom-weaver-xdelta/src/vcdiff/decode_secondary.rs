@@ -1,5 +1,11 @@
 use super::*;
 pub(super) fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+    trace!(
+        secondary = "djw",
+        packed = input.len(),
+        output_size,
+        "xdelta secondary decode"
+    );
     if output_size == 0 {
         return Err(RomWeaverError::Validation(
             "xdelta djw secondary decoder invalid output size".into(),
@@ -1398,6 +1404,12 @@ impl FgkState {
 }
 
 pub(super) fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+    trace!(
+        secondary = "fgk",
+        packed = input.len(),
+        output_size,
+        "xdelta secondary decode"
+    );
     let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
     let mut output = Vec::with_capacity(output_size);
     let mut input_pos = 0usize;

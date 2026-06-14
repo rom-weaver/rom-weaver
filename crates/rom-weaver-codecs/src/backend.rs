@@ -1,4 +1,6 @@
 use super::*;
+use tracing::{debug, trace};
+
 impl NativeCodecBackend {
     const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
     const LIBARCHIVE_IO_BUFFER_BYTES: usize = 128 * 1024;
@@ -225,6 +227,13 @@ impl NativeCodecBackend {
         })?;
         let policy = Self::io_policy(execution);
         let chunks = Self::file_chunks(&request.input, &policy)?;
+        trace!(
+            codec = self.descriptor.name,
+            input_len,
+            chunks = chunks.len(),
+            used_parallelism = execution.used_parallelism,
+            "store payload copy plan"
+        );
 
         if execution.used_parallelism {
             if input_len < Self::STORE_COPY_MIN_PARALLEL_BYTES {
@@ -272,6 +281,12 @@ impl NativeCodecBackend {
         level: Option<i32>,
         execution: &mut ThreadExecution,
     ) -> Result<u64> {
+        trace!(
+            codec = self.descriptor.name,
+            kind = ?self.kind,
+            level,
+            "codec encode path selected"
+        );
         let bytes = match self.kind {
             NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
             NativeCodecKind::Deflate
@@ -295,6 +310,11 @@ impl NativeCodecBackend {
         request: &CodecOperationRequest,
         execution: &mut ThreadExecution,
     ) -> Result<u64> {
+        trace!(
+            codec = self.descriptor.name,
+            kind = ?self.kind,
+            "codec decode path selected"
+        );
         let bytes = match self.kind {
             NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
             NativeCodecKind::Deflate
@@ -313,7 +333,19 @@ impl NativeCodecBackend {
         let level = self.resolve_encode_level(request)?;
         Self::ensure_output_parent(&request.output)?;
         let mut execution = context.plan_threads(self.encode_thread_capability());
+        debug!(
+            codec = self.descriptor.name,
+            kind = ?self.kind,
+            level,
+            input = %request.input.display(),
+            "codec encode start"
+        );
         let bytes = self.encode_impl(request, level, &mut execution)?;
+        debug!(
+            codec = self.descriptor.name,
+            output_bytes = bytes,
+            "codec encode complete"
+        );
         Ok(OperationReport::succeeded(
             OperationFamily::Codec,
             Some(self.descriptor.name.to_string()),
@@ -338,7 +370,18 @@ impl NativeCodecBackend {
         self.validate_decode_level(request)?;
         Self::ensure_output_parent(&request.output)?;
         let mut execution = context.plan_threads(self.decode_thread_capability());
+        debug!(
+            codec = self.descriptor.name,
+            kind = ?self.kind,
+            input = %request.input.display(),
+            "codec decode start"
+        );
         let bytes = self.decode_impl(request, &mut execution)?;
+        debug!(
+            codec = self.descriptor.name,
+            output_bytes = bytes,
+            "codec decode complete"
+        );
         Ok(OperationReport::succeeded(
             OperationFamily::Codec,
             Some(self.descriptor.name.to_string()),

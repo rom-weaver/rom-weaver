@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 pub(crate) struct Z3dsContainerHandler;
 
@@ -807,6 +808,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let output_path = request.out_dir.join(&output_name);
 
         let execution = context.plan_threads(ThreadCapability::parallel(Some(tasks.len().max(1))));
+        debug!(
+            format = Z3DS.name,
+            compressed_size = header.compressed_size,
+            uncompressed_size = header.uncompressed_size,
+            tasks = tasks.len(),
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            read_on_main = execution.used_parallelism && container_reads_source_on_main_thread(),
+            "z3ds extract start"
+        );
         let extract_progress_label = format!("extracting `{}`", Z3DS.name);
         // Hash the decompressed output as it is written so a requested `--checksum` is computed
         // during extract (overlapping the work) instead of forcing the caller into a second full
@@ -840,6 +851,12 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                     payload_file.seek(SeekFrom::Start(payload_start))?;
                     payload_file.read_exact(&mut payload)?;
                 }
+                trace!(
+                    format = Z3DS.name,
+                    payload_bytes = payload_len,
+                    payload_start,
+                    "z3ds read-on-main payload buffered"
+                );
                 let payload = payload.as_slice();
 
                 decode_tasks_ordered(
@@ -939,6 +956,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         // threads it needs, which avoids double-booking the bounded wasm worker pool.
         let execution =
             context.plan_threads(ThreadCapability::parallel(Some(create_tasks.len().max(1))));
+        debug!(
+            format = Z3DS.name,
+            input = %input_path.display(),
+            input_size,
+            level,
+            frames = create_tasks.len(),
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            "z3ds create start"
+        );
         let create_progress_label = format!("creating `{}`", Z3DS.name);
         let create_progress_bytes = Arc::new(AtomicU64::new(0));
         let create_progress_bucket = Arc::new(AtomicU8::new(0));

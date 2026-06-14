@@ -24,6 +24,7 @@ use rom_weaver_core::{
 };
 use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};
+use tracing::{debug, trace};
 use zstd::bulk::compress as zstd_compress;
 
 pub const CHD: FormatDescriptor = FormatDescriptor {

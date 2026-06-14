@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 const CSO_EXTRACT_TASK_BYTES: u64 = 8 * 1024 * 1024;
 
@@ -318,6 +319,10 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         let compressed_bytes = fs::metadata(&request.source)?.len();
         let reader = self.open_reader(&request.source)?;
         let logical_bytes = reader.file_size();
+        trace!(
+            format = self.descriptor.name,
+            compressed_bytes, logical_bytes, "cso probe"
+        );
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
@@ -369,6 +374,15 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         let tasks = self.build_extract_tasks(logical_bytes);
         let extract_capability = ThreadCapability::parallel(Some(tasks.len().max(1)));
         let execution = context.plan_threads(extract_capability);
+        debug!(
+            format = self.descriptor.name,
+            logical_bytes,
+            tasks = tasks.len(),
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            read_on_main = execution.used_parallelism && container_reads_source_on_main_thread(),
+            "cso extract start"
+        );
         let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
 
         if let Some(parent) = output_path.parent() {
@@ -400,6 +414,11 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                     source.display()
                 ))
             })?);
+            trace!(
+                format = self.descriptor.name,
+                source_bytes = source_bytes.len(),
+                "cso read-on-main source buffered"
+            );
             decode_tasks_ordered(
                 &tasks,
                 execution.effective_threads,

@@ -1676,6 +1676,7 @@ dependencies = [
  "rom-weaver-libarchive-sys",
  "serde_json",
  "sha1",
+ "tracing",
  "zstd",
 ]
 
@@ -1727,6 +1728,7 @@ dependencies = [
  "rayon",
  "rom-weaver-core",
  "rom-weaver-libarchive",
+ "tracing",
  "zstd",
 ]
 
@@ -1793,6 +1795,7 @@ dependencies = [
  "akv",
  "rom-weaver-core",
  "rom-weaver-libarchive-sys",
+ "tracing",
 ]
 
 [[package]]

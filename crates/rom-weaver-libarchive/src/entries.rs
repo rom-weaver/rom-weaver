@@ -1,4 +1,5 @@
 use super::*;
+use tracing::trace;
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Clone, Debug)]
@@ -104,6 +105,11 @@ pub fn probe_regular_archive(
     source: &Path,
     format_name: &str,
 ) -> Result<RegularArchiveProbeSummary> {
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        "regular archive probe start"
+    );
     let mut reader = open_regular_archive_reader(source, format_name)?;
     let result = (|| -> Result<RegularArchiveProbeSummary> {
         let mut summary = RegularArchiveProbeSummary {
@@ -148,6 +154,15 @@ pub fn probe_regular_archive(
             index = index.saturating_add(1);
         }
 
+        trace!(
+            format = format_name,
+            entries = summary.entries_total,
+            files = summary.files,
+            directories = summary.directories,
+            archive_bytes = summary.archive_bytes,
+            logical_bytes = summary.logical_bytes,
+            "regular archive probe result"
+        );
         Ok(summary)
     })();
 
@@ -162,6 +177,11 @@ pub fn list_regular_archive_entries(
     source: &Path,
     format_name: &str,
 ) -> Result<Vec<RegularArchiveEntryMetadata>> {
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        "regular archive list start"
+    );
     let mut reader = open_regular_archive_reader(source, format_name)?;
     let result = (|| -> Result<Vec<RegularArchiveEntryMetadata>> {
         let mut entries = Vec::new();
@@ -192,6 +212,11 @@ pub fn list_regular_archive_entries(
             index = index.saturating_add(1);
         }
 
+        trace!(
+            format = format_name,
+            entries = entries.len(),
+            "regular archive list result"
+        );
         Ok(entries)
     })();
 
@@ -255,6 +280,11 @@ fn visit_selected_regular_archive_entries_with_reader<F>(
 where
     F: FnMut(SelectedRegularArchiveEntry<'_>) -> Result<()>,
 {
+    trace!(
+        format = format_name,
+        selected = selected_indices.len(),
+        "regular archive visit-selected start"
+    );
     let result = (|| -> Result<usize> {
         let mut index = 0usize;
         let mut matched = 0usize;
@@ -286,6 +316,14 @@ where
                 path: entry_path,
                 size: entry.size(),
             };
+            trace!(
+                format = format_name,
+                index = entry_info.index,
+                name = %entry_info.path,
+                is_dir = entry_info.is_dir,
+                size = entry_info.size.unwrap_or(0),
+                "regular archive visit entry"
+            );
 
             if entry_info.is_dir {
                 visit_entry(SelectedRegularArchiveEntry::Directory { entry: entry_info })?;

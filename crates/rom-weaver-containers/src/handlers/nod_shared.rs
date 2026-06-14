@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 #[derive(Clone, Copy)]
 pub(crate) struct NodHandlerCore {
@@ -253,6 +254,12 @@ impl NodHandlerCore {
         let meta = self.validate_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
+        trace!(
+            format = self.format_name(),
+            disc_size,
+            compression = %compression_label,
+            "nod disc probe"
+        );
         let block_label = meta
             .block_size
             .map(|size| format!("{size} bytes"))
@@ -356,6 +363,15 @@ impl NodHandlerCore {
         let meta = self.validate_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
+        debug!(
+            format = self.format_name(),
+            disc_size,
+            compression = %compression_label,
+            preloader_threads,
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            "nod disc extract prepared"
+        );
 
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(output_name);
@@ -474,6 +490,13 @@ impl NodHandlerCore {
         F: FnMut(u64, u64),
     {
         let thread_plan = self.create_thread_plan(execution);
+        debug!(
+            format = self.format_name(),
+            input = %input.display(),
+            preloader_threads = thread_plan.preloader_threads,
+            processor_threads = thread_plan.processor_threads,
+            "nod disc create start"
+        );
         let read_options = self.read_options(thread_plan.preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
@@ -519,7 +542,12 @@ impl NodHandlerCore {
             output.write_all(finalization.header.as_ref())?;
         }
         output.flush()?;
-        Ok(fs::metadata(output_path)?.len())
+        let output_bytes = fs::metadata(output_path)?.len();
+        debug!(
+            format = self.format_name(),
+            output_bytes, "nod disc create complete"
+        );
+        Ok(output_bytes)
     }
 
     pub(crate) fn process_create_dry_run_size_with_progress<F>(

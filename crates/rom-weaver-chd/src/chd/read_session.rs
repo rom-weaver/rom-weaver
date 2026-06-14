@@ -406,6 +406,13 @@ impl ChdReadSession {
         let batch_hunks = target_batch_hunks
             .max(effective_threads.saturating_mul(16))
             .max(effective_threads);
+        debug!(
+            hunk_count,
+            hunk_bytes = hunk_bytes_usize,
+            effective_threads,
+            batch_hunks,
+            "chd wasm parallel decode start"
+        );
 
         // Browser wasi-threads guard against a V8 shared-memory growth race.
         //
@@ -438,6 +445,12 @@ impl ChdReadSession {
                 .saturating_add(effective_threads.saturating_mul(STACK_RESERVE_PER_THREAD))
                 .saturating_add(HEAP_RESERVE_MARGIN)
                 .min(HEAP_RESERVE_MAX);
+            trace!(
+                reserve,
+                batch_bytes,
+                effective_threads,
+                "chd wasm decode pregrow heap to avoid memory.grow race"
+            );
             // Touch the allocation so the compiler cannot elide the grow, then drop it; wasm
             // memory never shrinks, so the committed pages stay in dlmalloc's free list for the
             // decode threads to reuse without growing.
@@ -671,6 +684,10 @@ impl ChdReadSession {
 
         let mut chd = Self::open_rust_chd(source, parent_source)
             .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
+        debug!(
+            hunk_count = chd.header().hunk_count(),
+            logical_bytes, "chd single-thread decode start"
+        );
         let mut remaining = logical_bytes;
         let mut hunk_buffer = chd.get_hunksized_buffer();
         let mut compressed_buffer = Vec::new();
@@ -733,6 +750,15 @@ impl ChdReadSession {
             );
         }
 
+        debug!(
+            hunk_count,
+            hunk_bytes,
+            requested_threads = thread_count,
+            effective_threads,
+            logical_bytes,
+            "chd parallel decode start"
+        );
+
         let source = source.to_path_buf();
         let parent_source = parent_source.map(Path::to_path_buf);
 
@@ -741,6 +767,10 @@ impl ChdReadSession {
         #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
         let result = {
             let _ = hunk_bytes;
+            trace!(
+                effective_threads,
+                "chd parallel decode using wasm read-on-main producer/consumer path"
+            );
             Self::wasm_parallel_decode_hunks(
                 &source,
                 parent_source.as_deref(),
@@ -767,6 +797,12 @@ impl ChdReadSession {
             let batch_hunks = target_batch_hunks
                 .max(effective_threads.saturating_mul(16))
                 .max(effective_threads);
+            trace!(
+                batch_hunks,
+                target_batch_hunks,
+                effective_threads,
+                "chd parallel decode native scoped-reader batch sizing"
+            );
             let mut remaining = logical_bytes;
 
             for batch in hunk_indices.chunks(batch_hunks) {

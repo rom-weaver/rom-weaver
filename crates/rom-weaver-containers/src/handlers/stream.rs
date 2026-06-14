@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum StreamCompression {
@@ -54,6 +55,13 @@ impl StreamContainerHandler {
         let format_name = self.descriptor.name;
         let total_bytes =
             probe_stream_with_libarchive(source, format_name, self.libarchive_read_filter())?;
+        debug!(
+            format = format_name,
+            compression = ?self.compression,
+            total_bytes,
+            used_parallelism = execution.used_parallelism,
+            "stream extract start"
+        );
         let mut archive =
             libarchive_open_read_stream(source, format_name, self.libarchive_read_filter())?;
         let result = (|| -> Result<u64> {
@@ -176,6 +184,13 @@ impl ContainerHandlerOperations for StreamContainerHandler {
             self.descriptor.name,
             self.libarchive_read_filter(),
         )?;
+        trace!(
+            format = self.descriptor.name,
+            compression = ?self.compression,
+            compressed_bytes,
+            logical_bytes,
+            "stream probe"
+        );
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,

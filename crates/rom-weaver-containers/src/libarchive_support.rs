@@ -29,7 +29,7 @@ use rom_weaver_libarchive::{
     probe_regular_archive_format, visit_selected_regular_archive_entries,
     visit_selected_regular_archive_entries_from_memory,
 };
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
@@ -602,6 +602,11 @@ pub(crate) fn probe_stream_with_libarchive(
     format_name: &str,
     filter: LibarchiveReadFilter,
 ) -> Result<u64> {
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        "libarchive stream probe start"
+    );
     let mut archive = libarchive_open_read_stream(source, format_name, filter)?;
     let result = (|| -> Result<u64> {
         if !archive.next_header(&format!("{format_name} probe failed while reading header"))? {
@@ -631,6 +636,11 @@ pub(crate) fn probe_stream_with_libarchive(
                 ))
             })?;
         }
+        trace!(
+            format = format_name,
+            logical_bytes = total,
+            "libarchive stream probe result"
+        );
         Ok(total)
     })();
 
@@ -868,6 +878,13 @@ where
                     if task.is_dir {
                         fs::create_dir_all(&task.output_path)?;
                     } else {
+                        trace!(
+                            format = format_name,
+                            index = task.index,
+                            name = %task.archive_name,
+                            size = task.logical_bytes.unwrap_or(0),
+                            "libarchive extract entry"
+                        );
                         if let Some(parent) = task.output_path.parent() {
                             fs::create_dir_all(parent)?;
                         }
@@ -989,6 +1006,13 @@ fn extract_libarchive_task_chunk_to_sender(
                         format_name,
                     )?;
                 } else {
+                    trace!(
+                        format = format_name,
+                        index = task.index,
+                        name = %task.archive_name,
+                        size = task.logical_bytes.unwrap_or(0),
+                        "libarchive extract entry (parallel)"
+                    );
                     send_libarchive_extract_output(
                         sender,
                         LibarchiveExtractOutput::FileStart {
@@ -1074,6 +1098,14 @@ pub(crate) fn extract_regular_archive_with_libarchive(
     )?;
     let total_tasks = tasks.len();
     let total_file_bytes = libarchive_extract_total_file_bytes(&tasks).filter(|total| *total > 0);
+    debug!(
+        format = format_name,
+        tasks = total_tasks,
+        total_file_bytes = total_file_bytes.unwrap_or(0),
+        selections = request.selections.len(),
+        nested = request.containing_archive.is_some(),
+        "libarchive archive extract start"
+    );
 
     let mut output_paths = BTreeSet::new();
     let mut duplicate_output_paths = false;
@@ -1158,6 +1190,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
             } else {
                 None
             };
+        trace!(
+            format = format_name,
+            used_parallelism = execution.used_parallelism,
+            effective_threads = execution.effective_threads,
+            read_on_main = source_bytes.is_some(),
+            "libarchive parallel extract path selected"
+        );
 
         let mut output_checksums = Vec::new();
         let written_bytes = if execution.used_parallelism {
@@ -1424,6 +1463,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
     };
 
     let file_count = tasks.iter().filter(|task| !task.is_dir).count();
+    debug!(
+        format = format_name,
+        files = file_count,
+        written_bytes,
+        used_parallelism = execution.used_parallelism,
+        "libarchive archive extract complete"
+    );
     let report = OperationReport::succeeded(
         OperationFamily::Container,
         Some(format_name.to_string()),

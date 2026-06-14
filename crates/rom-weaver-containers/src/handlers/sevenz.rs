@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::debug;
 
 pub(crate) struct SevenZContainerHandler {
     descriptor: &'static FormatDescriptor,
@@ -296,6 +297,16 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
             .min(lzma2_memory_thread_cap(total_bytes, settings.level))
             .max(1);
         let execution = context.plan_threads(ThreadCapability::parallel(Some(achievable)));
+        debug!(
+            format = self.descriptor.name,
+            method = Self::method_name(settings.method),
+            level = settings.level,
+            entries = entries.len(),
+            total_bytes,
+            achievable_blocks = achievable,
+            effective_threads = execution.effective_threads,
+            "7z create start"
+        );
         let logical_bytes =
             self.create_with_libarchive(request, &entries, &settings, &execution, context)?;
 

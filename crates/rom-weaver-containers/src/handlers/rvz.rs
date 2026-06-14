@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 use super::*;
+use tracing::{debug, trace};
 
 const RVZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
 const RVZ_INITIAL_EXTRACT_PROGRESS_DIVISOR: u64 = 1000;
@@ -304,6 +305,13 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             RVZ_NOD_CORE.prepare_extract_with(request, context, |source, preloader_threads| {
                 self.open_disc_with_threads(source, preloader_threads)
             })?;
+        trace!(
+            format = RVZ.name,
+            disc_size = plan.disc_size,
+            compression = %plan.compression_label,
+            effective_threads = plan.execution.effective_threads,
+            "rvz extract begin output copy"
+        );
         let mut output_file = self.create_extract_output(&plan.output_path, request.overwrite)?;
         if plan.disc_size > 0 {
             output_file.seek(SeekFrom::Start(0))?;
@@ -359,6 +367,15 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             NodCompression::Zstandard(level) => Some(i32::from(*level)),
             _ => None,
         };
+        debug!(
+            format = RVZ.name,
+            input = %input.display(),
+            input_bytes,
+            compression = %compression_label,
+            block_size = options.block_size,
+            effective_threads = execution.effective_threads,
+            "rvz create start"
+        );
 
         RVZ_NOD_CORE.ensure_create_output_parent(&request.output)?;
 
