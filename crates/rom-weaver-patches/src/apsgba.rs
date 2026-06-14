@@ -17,6 +17,7 @@ use rom_weaver_core::{
 use tracing::{debug, trace};
 
 use crate::checksum_validation_suffix;
+use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
     parallel_per_record_capability, pool_map, run_with_optional_pool,
@@ -344,7 +345,12 @@ fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {
         ));
     }
 
-    let mut parser = ApsGbaFileParser::new(BufReader::new(File::open(path)?), file_len);
+    let mut parser = LabeledFileParser::new(
+        BufReader::new(File::open(path)?),
+        file_len,
+        "APSGBA",
+        "addressable range",
+    );
     let header = parser.read_exact(APS_GBA_HEADER_SIZE, "APSGBA header")?;
     if &header[..APS_GBA_MAGIC.len()] != APS_GBA_MAGIC {
         return Err(crate::coded_validation(
@@ -928,55 +934,6 @@ fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
         RomWeaverError::Validation("APSGBA patch ended unexpectedly while reading u16".into())
     })?;
     Ok(u16::from_le_bytes([window[0], window[1]]))
-}
-
-struct ApsGbaFileParser<R> {
-    reader: R,
-    file_len: u64,
-    offset: u64,
-}
-
-impl<R: Read> ApsGbaFileParser<R> {
-    fn new(reader: R, file_len: u64) -> Self {
-        Self {
-            reader,
-            file_len,
-            offset: 0,
-        }
-    }
-
-    fn remaining(&self) -> u64 {
-        self.file_len.saturating_sub(self.offset)
-    }
-
-    fn read_exact(&mut self, len: usize, label: &str) -> Result<Vec<u8>> {
-        let len_u64 = u64::try_from(len).map_err(|_| {
-            RomWeaverError::Validation(format!("{label} length overflowed addressable range"))
-        })?;
-        if len_u64 > self.remaining() {
-            return Err(RomWeaverError::Validation(format!(
-                "APSGBA patch ended unexpectedly while reading {label}"
-            )));
-        }
-
-        let mut bytes = vec![0u8; len];
-        self.reader.read_exact(&mut bytes)?;
-        self.offset = self
-            .offset
-            .checked_add(len_u64)
-            .ok_or_else(|| RomWeaverError::Validation(format!("{label} offset overflowed")))?;
-        Ok(bytes)
-    }
-
-    fn read_u16_le(&mut self, label: &str) -> Result<u16> {
-        let bytes = self.read_exact(2, label)?;
-        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
-    }
-
-    fn read_u32_le(&mut self, label: &str) -> Result<u32> {
-        let bytes = self.read_exact(4, label)?;
-        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-    }
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {

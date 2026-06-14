@@ -14,6 +14,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
@@ -322,7 +323,8 @@ fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
         ));
     }
 
-    let mut parser = ApsFileParser::new(BufReader::new(File::open(path)?), file_len);
+    let mut parser =
+        LabeledFileParser::new(BufReader::new(File::open(path)?), file_len, "APS", "u64");
     let prefix = parser.read_exact(APS_N64_PREFIX_SIZE, "APS header")?;
     if !prefix.starts_with(APS_N64_MAGIC) {
         return Err(crate::coded_validation(
@@ -1074,53 +1076,6 @@ fn decode_description(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .trim_end_matches(['\0', ' '])
         .to_string()
-}
-
-struct ApsFileParser<R> {
-    reader: R,
-    file_len: u64,
-    offset: u64,
-}
-
-impl<R: Read> ApsFileParser<R> {
-    fn new(reader: R, file_len: u64) -> Self {
-        Self {
-            reader,
-            file_len,
-            offset: 0,
-        }
-    }
-
-    fn remaining(&self) -> u64 {
-        self.file_len.saturating_sub(self.offset)
-    }
-
-    fn read_exact(&mut self, len: usize, label: &str) -> Result<Vec<u8>> {
-        let len_u64 = u64::try_from(len)
-            .map_err(|_| RomWeaverError::Validation(format!("{label} length overflowed u64")))?;
-        if len_u64 > self.remaining() {
-            return Err(RomWeaverError::Validation(format!(
-                "APS patch ended unexpectedly while reading {label}"
-            )));
-        }
-
-        let mut bytes = vec![0u8; len];
-        self.reader.read_exact(&mut bytes)?;
-        self.offset = self
-            .offset
-            .checked_add(len_u64)
-            .ok_or_else(|| RomWeaverError::Validation(format!("{label} offset overflowed")))?;
-        Ok(bytes)
-    }
-
-    fn read_u8(&mut self, label: &str) -> Result<u8> {
-        Ok(self.read_exact(1, label)?[0])
-    }
-
-    fn read_u32_le(&mut self, label: &str) -> Result<u32> {
-        let bytes = self.read_exact(4, label)?;
-        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-    }
 }
 
 #[cfg(test)]
