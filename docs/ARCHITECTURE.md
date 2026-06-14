@@ -250,6 +250,7 @@ checks pre-commit, scoped by changed paths.
 ## Other docs
 
 - `docs/browser-concurrency.md` — browser thread/worker rules
+- `docs/env-vars.md` — every `ROM_WEAVER_*` runtime/test/build knob
 - `docs/mobile-safari-verification.md` — iOS Safari/WebKit verification steps
 - `docs/chd-native-rust-migration.md` — history of the native CHD backend
 - `docs/trim-revert-footer.md` — trim revert footer format
