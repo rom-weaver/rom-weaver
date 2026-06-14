@@ -192,6 +192,19 @@ run = "cargo run -p rom-weaver-typegen -- --write"
 description = "Verify TypeScript bindings are up to date"
 run = "cargo run -p rom-weaver-typegen -- --check"
 
+[tasks.licenses]
+description = "Regenerate third-party license inventory and texts"
+run = "node {{ config_root }}/scripts/gen-third-party-licenses.mjs"
+
+[tasks.licenses-check]
+description = "Verify the third-party license inventory is up to date"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+node "{{ config_root }}/scripts/gen-third-party-licenses.mjs"
+git -C "{{ config_root }}" diff --exit-code -- THIRD_PARTY_LICENSES.md third_party/licenses
+'''
+
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
 run = "cargo test --workspace"

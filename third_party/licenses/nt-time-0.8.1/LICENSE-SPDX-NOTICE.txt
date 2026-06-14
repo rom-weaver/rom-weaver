@@ -1,6 +1,0 @@
-No top-level LICENSE/COPYING/NOTICE file was found in the published crate package for nt-time 0.8.1.
-
-Declared SPDX license expression from Cargo metadata:
-Apache-2.0 OR MIT
-
-For distribution compliance, treat the SPDX expression above as authoritative metadata for this crate.

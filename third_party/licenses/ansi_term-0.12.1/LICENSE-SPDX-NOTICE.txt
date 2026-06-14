@@ -1,6 +1,0 @@
-No top-level LICENSE/COPYING/NOTICE file was found in the published crate package for ansi_term 0.12.1.
-
-Declared SPDX license expression from Cargo metadata:
-MIT
-
-For distribution compliance, treat the SPDX expression above as authoritative metadata for this crate.
