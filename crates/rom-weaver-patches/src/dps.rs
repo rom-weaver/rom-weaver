@@ -5,14 +5,14 @@ use std::{
     sync::Arc,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
     ProbeConfidence, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
-    ThreadCapability, ValidationCodeError,
+    ValidationCodeError,
 };
 
 use crate::checksum_validation_suffix;
@@ -141,6 +141,15 @@ impl PatchHandler for DpsPatchHandler {
             .truncate(true)
             .open(&request.output)?;
         output.set_len(parsed.output_size)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            records = parsed.records.len(),
+            source_len,
+            output_len,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "dps patch apply start; prepares via worker pool unless read-on-main"
+        );
         let thread_capability = parallel_per_record_capability(parsed.records.len());
         let (execution, prepared) = run_with_optional_pool(
             context,
@@ -260,7 +269,7 @@ impl PatchHandler for DpsPatchHandler {
                 parsed.records.len(),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -280,10 +289,20 @@ impl PatchHandler for DpsPatchHandler {
             )
         })?;
         let target_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            source_len, target_len, "dps patch create start"
+        );
         let (execution, pool) = context.build_pool(parallel_chunked_capability(
             target_len,
             CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "dps create thread plan"
+        );
 
         let records = create_dps_records(
             &request.original,

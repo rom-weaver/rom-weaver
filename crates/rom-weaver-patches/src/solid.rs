@@ -11,7 +11,7 @@ use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
     PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
-    ThreadCapability, ValidationCodeError,
+    ValidationCodeError,
 };
 
 use crate::checksum_validation_suffix;
@@ -184,7 +184,7 @@ impl PatchHandler for SolidPatchHandler {
                 pluralize(parsed.primitives.len(), "primitive", "primitives"),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 

@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use crate::checksum_validation_suffix;
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
@@ -69,6 +69,11 @@ impl PatchHandler for UpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "ups patch apply start"
+        );
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let patch = parse_ups_file_with_checksum_validation(patch_path, validate_checksums)?;
@@ -77,6 +82,15 @@ impl PatchHandler for UpsPatchHandler {
         let (output_size, output_checksum) =
             resolve_apply_target(&patch, input_len, input_checksum, validate_checksums)?;
         let working_size = max(patch.source_size, patch.target_size);
+        trace!(
+            format = self.descriptor.name,
+            changes = patch.changes.len(),
+            source_size = patch.source_size,
+            target_size = patch.target_size,
+            output_size,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "ups parsed; apply prepares via worker pool unless read-on-main"
+        );
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -153,11 +167,22 @@ impl PatchHandler for UpsPatchHandler {
     ) -> Result<OperationReport> {
         let source_size = fs::metadata(&request.original)?.len();
         let target_size = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            source_size, target_size, "ups patch create start"
+        );
         let scan_size = max(source_size, target_size);
         let (execution, pool) = context.build_pool(parallel_chunked_capability(
             scan_size,
             CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            scan_size,
+            "ups create thread plan"
+        );
         let created = create_ups_patch(
             &request.original,
             &request.modified,

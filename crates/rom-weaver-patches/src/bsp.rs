@@ -11,6 +11,7 @@ use rom_weaver_core::{
     PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
     UnsupportedOp,
 };
+use tracing::{debug, trace};
 
 use crate::shared::threading::parallel_chunked_capability;
 
@@ -43,6 +44,11 @@ impl BspPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "bsp patch apply start"
+        );
         let input_len = usize::try_from(fs::metadata(&request.input)?.len()).map_err(|_| {
             RomWeaverError::Validation("BSP input exceeded addressable memory".into())
         })?;
@@ -51,6 +57,14 @@ impl BspPatchHandler {
         })?;
         let (execution, pool) =
             context.build_pool(bsp_apply_thread_capability(input_len, patch_len))?;
+        trace!(
+            format = self.descriptor.name,
+            input_len,
+            patch_len,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "bsp apply thread plan (VM edits output in place)"
+        );
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -67,6 +81,10 @@ impl BspPatchHandler {
         // failure. Otherwise the partial output is removed so callers never see a
         // half-applied file (the VM can exit non-zero mid-run).
         let in_place = request.input == request.output;
+        trace!(
+            format = self.descriptor.name,
+            in_place, "bsp apply output seeding decision"
+        );
         if !in_place {
             fs::copy(&request.input, &request.output)?;
         }

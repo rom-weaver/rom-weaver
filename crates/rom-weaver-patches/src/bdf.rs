@@ -1,7 +1,7 @@
 /* jscpd:ignore-start */
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write},
+    io::{BufWriter, Cursor, Read, Write},
     path::Path,
     sync::Arc,
 };
@@ -9,6 +9,8 @@ use std::{
 use bzip2::read::MultiBzDecoder;
 use qbsdiff::ParallelScheme;
 use rom_weaver_codecs::decode_bzip2_exact;
+use tracing::{debug, trace};
+
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
@@ -17,7 +19,7 @@ use rom_weaver_core::{
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;
-use crate::shared::threading::pool_map;
+use crate::shared::threading::{PreparedWrite, apply_prepared_writes, pool_map};
 
 const BSDIFF40_HEADER_BYTES: usize = 32;
 const BSDIFF40_MAGIC: &[u8] = b"BSDIFF40";
@@ -48,6 +50,11 @@ impl BdfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "bdf patch apply start"
+        );
         let patch_layout = parse_bsdiff_patch_layout_from_path(patch_path)?;
 
         if let Some(parent) = request.output.parent() {
@@ -59,6 +66,14 @@ impl BdfPatchHandler {
             RomWeaverError::Validation("BSDIFF40 source exceeded addressable memory".into())
         })?;
         let plan = parse_bsdiff_parallel_plan_with_layout(patch_path, &patch_layout, source_len)?;
+        trace!(
+            format = self.descriptor.name,
+            writes = plan.writes.len(),
+            source_len,
+            output_len = plan.output_len,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "bdf parsed; apply prepares via worker pool unless read-on-main"
+        );
         let mut output = OpenOptions::new()
             .write(true)
             .create(true)
@@ -103,7 +118,7 @@ impl BdfPatchHandler {
             )?;
             (planned_execution, writes)
         };
-        apply_prepared_bsdiff_writes(&mut output, &writes)?;
+        apply_prepared_writes(&mut output, &writes)?;
         output.flush()?;
         let written = fs::metadata(&request.output)?.len();
 
@@ -156,7 +171,7 @@ impl PatchHandler for BdfPatchHandler {
                 "validated {} patch source; output would be {} byte(s)",
                 self.descriptor.name, plan.output_len
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -173,6 +188,10 @@ impl PatchHandler for BdfPatchHandler {
             )));
         }
         let target_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            source_len, target_len, "bdf patch create start"
+        );
         let target_len_usize = usize::try_from(target_len).map_err(|_| {
             RomWeaverError::Validation("BSDIFF40 target exceeded addressable memory".into())
         })?;
@@ -189,10 +208,19 @@ impl PatchHandler for BdfPatchHandler {
         // (qbsdiff is deterministic, so the patch still round-trips). Native keeps
         // the parallel suffix sort.
         if crate::patches_reads_source_on_main_thread() {
+            trace!(
+                format = self.descriptor.name,
+                "bdf create: read-on-main, running qbsdiff serially on main thread"
+            );
             create_qbsdiff_patch(request, context, 1)?;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
         } else {
+            trace!(
+                format = self.descriptor.name,
+                threads = execution.effective_threads,
+                "bdf create: running qbsdiff on worker pool"
+            );
             pool.install(|| create_qbsdiff_patch(request, context, execution.effective_threads))?;
         }
         let patch_len = fs::metadata(&request.output)?.len();
@@ -249,12 +277,6 @@ enum BsdiffWritePlanKind {
         extra_offset: u64,
         len: u64,
     },
-}
-
-#[derive(Clone, Debug)]
-struct PreparedBsdiffWrite {
-    output_offset: u64,
-    data: Vec<u8>,
 }
 
 fn qbsdiff_apply_thread_capability(target_len: u64) -> ThreadCapability {
@@ -562,7 +584,7 @@ fn prepare_bsdiff_writes_parallel(
     extra_payload: &[u8],
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedBsdiffWrite>> {
+) -> Result<Vec<PreparedWrite>> {
     pool_map(pool, plans, |plan| {
         context.cancel().check()?;
         let data = match &plan.kind {
@@ -615,8 +637,8 @@ fn prepare_bsdiff_writes_parallel(
                     .to_vec()
             }
         };
-        Ok(PreparedBsdiffWrite {
-            output_offset: plan.output_offset,
+        Ok(PreparedWrite {
+            offset: plan.output_offset,
             data,
         })
     })
@@ -629,7 +651,7 @@ fn prepare_bsdiff_writes_sequential(
     delta_payload: &[u8],
     extra_payload: &[u8],
     context: &OperationContext,
-) -> Result<Vec<PreparedBsdiffWrite>> {
+) -> Result<Vec<PreparedWrite>> {
     let mut source = BlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
@@ -650,7 +672,7 @@ fn prepare_bsdiff_write(
     source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
-) -> Result<PreparedBsdiffWrite> {
+) -> Result<PreparedWrite> {
     let data = match &plan.kind {
         BsdiffWritePlanKind::Add {
             source_offset,
@@ -699,8 +721,8 @@ fn prepare_bsdiff_write(
                 .to_vec()
         }
     };
-    Ok(PreparedBsdiffWrite {
-        output_offset: plan.output_offset,
+    Ok(PreparedWrite {
+        offset: plan.output_offset,
         data,
     })
 }
@@ -780,17 +802,6 @@ fn add_source_slice(data: &mut [u8], data_offset: usize, source_slice: &[u8]) {
     for (data_byte, source_byte) in data[data_offset..].iter_mut().zip(source_slice.iter()) {
         *data_byte = data_byte.wrapping_add(*source_byte);
     }
-}
-
-fn apply_prepared_bsdiff_writes(output: &mut File, writes: &[PreparedBsdiffWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        output.seek(SeekFrom::Start(write.output_offset))?;
-        output.write_all(&write.data)?;
-    }
-    Ok(())
 }
 
 fn decompress_bzip_stream_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {

@@ -6,13 +6,13 @@ use std::{
     path::Path,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool,
 };
 
 use crate::shared::threading::{
@@ -74,9 +74,22 @@ impl PatchHandler for GdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "gdiff patch apply start"
+        );
         let source_len = fs::metadata(&request.input)?.len();
         let (summary, commands) = parse_gdiff_apply_plan(patch_path)?;
         let thread_capability = parallel_per_record_capability(commands.len());
+        trace!(
+            format = self.descriptor.name,
+            commands = commands.len(),
+            source_len,
+            output_bytes = summary.output_bytes,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "gdiff parsed; apply prepares via worker pool unless read-on-main"
+        );
 
         let (execution, ()) = run_with_optional_pool(
             context,
@@ -146,7 +159,7 @@ impl PatchHandler for GdiffPatchHandler {
                 summary.data_commands,
                 summary.output_bytes
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -157,10 +170,20 @@ impl PatchHandler for GdiffPatchHandler {
     ) -> Result<OperationReport> {
         let _ = fs::metadata(&request.original)?;
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            modified_len, "gdiff patch create start"
+        );
         let (execution, pool) = context.build_pool(parallel_chunked_capability(
             modified_len,
             CREATE_COMMAND_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "gdiff create thread plan"
+        );
         let mut output = crate::create_buffered_output(&request.output)?;
         let (command_count, output_bytes) = create_gdiff_patch(
             &request.modified,

@@ -14,8 +14,10 @@ use rom_weaver_core::{
     format_human_bytes,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
+use tracing::{debug, trace};
 
 use crate::shared::labels::append_warning_labels;
+use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     chunk_count_for_len_checked, run_with_optional_pool, scan_create_chunks,
 };
@@ -132,12 +134,31 @@ impl PatchHandler for IpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "ips patch apply start"
+        );
         let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
         let input_len = fs::metadata(&request.input)?.len();
         let output_size = patch.resolved_output_size(input_len);
+        trace!(
+            format = self.descriptor.name,
+            records = patch.records.len(),
+            input_len,
+            output_size,
+            "ips parsed"
+        );
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
         let thread_capability = ThreadCapability::parallel(Some(max_parallel_chunks));
         let tasks = build_chunk_tasks(&patch, output_size, context)?;
+        trace!(
+            format = self.descriptor.name,
+            chunk_tasks = tasks.len(),
+            max_parallel_chunks,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "ips apply chunk plan"
+        );
 
         let render_result = run_with_optional_pool(
             context,
@@ -198,6 +219,10 @@ impl PatchHandler for IpsPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "ips patch create start"
+        );
         validate_ips_create_flips_limits(
             original_len,
             modified_len,
@@ -240,6 +265,13 @@ impl PatchHandler for IpsPatchHandler {
             },
         )?;
         output.into_inner().flush()?;
+        trace!(
+            format = self.descriptor.name,
+            records = create_result.record_count,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "ips create complete"
+        );
         let warnings = ips_create_warning_labels(
             self.descriptor.name,
             original_len,
@@ -333,6 +365,20 @@ impl IpsDiffRun {
         self.offset
             .checked_add(self.bytes.len() as u64)
             .ok_or_else(|| RomWeaverError::Validation("IPS diff run offset overflowed".into()))
+    }
+}
+
+impl AdjacentRun for IpsDiffRun {
+    fn start(&self) -> u64 {
+        self.offset
+    }
+
+    fn end(&self) -> Result<u64> {
+        IpsDiffRun::end(self)
+    }
+
+    fn append(&mut self, next: Self) {
+        self.bytes.extend_from_slice(&next.bytes);
     }
 }
 
@@ -818,6 +864,12 @@ fn create_ips_patch_parallel(
         );
     }
     let chunk_count = ips_create_chunk_count(modified_len)?;
+    trace!(
+        chunk_count,
+        modified_len,
+        pool_threads = pool.size(),
+        "ips create parallel scan"
+    );
     let chunk_runs = scan_create_chunks(
         sources,
         modified_len,
@@ -840,7 +892,7 @@ fn create_ips_patch_parallel(
             )
         },
     )?;
-    let runs = merge_ips_diff_runs(chunk_runs)?;
+    let runs = merge_adjacent_runs(chunk_runs)?;
     let runs = coalesce_ips_diff_runs(runs, modified_path, flavor)?;
     write_ips_runs_to_output(runs, original_len, modified_len, output, flavor)
 }
@@ -891,70 +943,14 @@ fn collect_ips_diff_runs_for_chunk(
     let end = start
         .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
         .min(modified_len);
-    let mut original = File::open(original_path)?;
-    let mut modified = File::open(modified_path)?;
-    if start < original_len {
-        original.seek(SeekFrom::Start(start))?;
-    }
-    modified.seek(SeekFrom::Start(start))?;
-
-    let mut original_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
-    let mut modified_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
-    let mut runs = Vec::new();
-    let mut pending_start: Option<u64> = None;
-    let mut pending_bytes = Vec::<u8>::new();
-    let mut cursor = start;
-
-    while cursor < end {
-        let chunk_len =
-            usize::try_from((end - cursor).min(COMPARE_BUFFER_SIZE as u64)).map_err(|_| {
-                RomWeaverError::Validation("IPS compare chunk exceeded addressable memory".into())
-            })?;
-        modified.read_exact(&mut modified_buffer[..chunk_len])?;
-
-        let original_chunk_len = if cursor >= original_len {
-            0
-        } else {
-            usize::try_from((original_len - cursor).min(chunk_len as u64)).map_err(|_| {
-                RomWeaverError::Validation("IPS original chunk exceeded addressable memory".into())
-            })?
-        };
-        if original_chunk_len > 0 {
-            original.read_exact(&mut original_buffer[..original_chunk_len])?;
-        }
-        if original_chunk_len < chunk_len {
-            original_buffer[original_chunk_len..chunk_len].fill(0);
-        }
-
-        for index in 0..chunk_len {
-            let source = original_buffer[index];
-            let target = modified_buffer[index];
-            if cursor < original_len && source == target {
-                if !pending_bytes.is_empty() {
-                    runs.push(IpsDiffRun {
-                        offset: pending_start.expect("pending start exists"),
-                        bytes: std::mem::take(&mut pending_bytes),
-                    });
-                    pending_start = None;
-                }
-            } else {
-                if pending_start.is_none() {
-                    pending_start = Some(cursor);
-                }
-                pending_bytes.push(target);
-            }
-            cursor = checked_add(cursor, 1, "IPS create scan offset")?;
-        }
-    }
-
-    if !pending_bytes.is_empty() {
-        runs.push(IpsDiffRun {
-            offset: pending_start.expect("pending start exists"),
-            bytes: pending_bytes,
-        });
-    }
-
-    Ok(runs)
+    let (original_bytes, modified_bytes) = crate::read_original_modified_chunk(
+        original_path,
+        original_len,
+        modified_path,
+        start,
+        end,
+    )?;
+    collect_ips_diff_runs_from_bytes(start, &original_bytes, &modified_bytes, original_len)
 }
 
 fn collect_ips_diff_runs_from_bytes(
@@ -995,22 +991,6 @@ fn collect_ips_diff_runs_from_bytes(
     }
 
     Ok(runs)
-}
-
-fn merge_ips_diff_runs(chunk_runs: Vec<Vec<IpsDiffRun>>) -> Result<Vec<IpsDiffRun>> {
-    let mut merged = Vec::<IpsDiffRun>::new();
-    for runs in chunk_runs {
-        for run in runs {
-            if let Some(last) = merged.last_mut()
-                && last.end()? == run.offset
-            {
-                last.bytes.extend_from_slice(&run.bytes);
-                continue;
-            }
-            merged.push(run);
-        }
-    }
-    Ok(merged)
 }
 
 fn coalesce_ips_diff_runs(

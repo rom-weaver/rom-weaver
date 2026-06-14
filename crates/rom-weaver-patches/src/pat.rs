@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -45,6 +45,11 @@ impl PatPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "pat patch apply start"
+        );
         let parsed = parse_pat_file(patch_path)?;
         let grouped_records = group_pat_records_by_offset(&parsed.records);
 
@@ -55,75 +60,84 @@ impl PatPatchHandler {
         validate_pat_record_offsets(&grouped_records, output_len)?;
         let thread_capability = parallel_per_record_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
+        let in_memory = crate::can_apply_in_memory_on_apply(context, output_len, output_len);
+        trace!(
+            format = self.descriptor.name,
+            records = parsed.records.len(),
+            grouped = grouped_records.len(),
+            output_len,
+            in_memory,
+            parallel = planned_execution.used_parallelism,
+            "pat parsed; apply path chosen"
+        );
 
-        let (execution, writes) =
-            if crate::can_apply_in_memory_on_apply(context, output_len, output_len) {
-                let output_len_usize = usize::try_from(output_len).map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "input `{}` is too large to process in memory",
-                        request.input.display()
-                    ))
-                })?;
-                let mut output_bytes = vec![0u8; output_len_usize];
-                let mut input = File::open(&request.input)?;
-                input.read_exact(&mut output_bytes)?;
-                let current_bytes: Vec<u8> = grouped_records
-                    .iter()
-                    .map(|g| output_bytes[g.offset as usize])
-                    .collect();
-                let writes = grouped_records
-                    .iter()
-                    .enumerate()
-                    .map(|(index, group)| {
-                        prepare_pat_offset_write(group, current_bytes[index], context)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                for write in &writes {
-                    output_bytes[write.offset as usize] = write.byte;
-                }
-                fs::write(&request.output, &output_bytes)?;
-                let mut execution = planned_execution;
-                execution.effective_threads = 1;
-                execution.used_parallelism = false;
-                (execution, writes)
-            } else {
-                fs::copy(&request.input, &request.output)?;
-                let input_bytes =
-                    read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
-                let (execution, mut writes) = if planned_execution.used_parallelism {
-                    let (execution, pool) = context.build_pool(thread_capability)?;
-                    let writes = pool.install(|| {
-                        grouped_records
-                            .par_iter()
-                            .enumerate()
-                            .map(|(index, group)| {
-                                prepare_pat_offset_write(group, input_bytes[index], context)
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-                    (execution, writes)
-                } else {
-                    let writes = grouped_records
-                        .iter()
+        let (execution, writes) = if in_memory {
+            let output_len_usize = usize::try_from(output_len).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "input `{}` is too large to process in memory",
+                    request.input.display()
+                ))
+            })?;
+            let mut output_bytes = vec![0u8; output_len_usize];
+            let mut input = File::open(&request.input)?;
+            input.read_exact(&mut output_bytes)?;
+            let current_bytes: Vec<u8> = grouped_records
+                .iter()
+                .map(|g| output_bytes[g.offset as usize])
+                .collect();
+            let writes = grouped_records
+                .iter()
+                .enumerate()
+                .map(|(index, group)| {
+                    prepare_pat_offset_write(group, current_bytes[index], context)
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for write in &writes {
+                output_bytes[write.offset as usize] = write.byte;
+            }
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+            (execution, writes)
+        } else {
+            fs::copy(&request.input, &request.output)?;
+            let input_bytes =
+                read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
+            let (execution, mut writes) = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let writes = pool.install(|| {
+                    grouped_records
+                        .par_iter()
                         .enumerate()
                         .map(|(index, group)| {
                             prepare_pat_offset_write(group, input_bytes[index], context)
                         })
-                        .collect::<Result<Vec<_>>>()?;
-                    (planned_execution, writes)
-                };
-                writes.sort_by_key(|write| write.offset);
-                let mut output = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&request.output)?;
-                for write in &writes {
-                    output.seek(SeekFrom::Start(write.offset))?;
-                    output.write_all(&[write.byte])?;
-                }
-                output.flush()?;
+                        .collect::<Result<Vec<_>>>()
+                })?;
                 (execution, writes)
+            } else {
+                let writes = grouped_records
+                    .iter()
+                    .enumerate()
+                    .map(|(index, group)| {
+                        prepare_pat_offset_write(group, input_bytes[index], context)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (planned_execution, writes)
             };
+            writes.sort_by_key(|write| write.offset);
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            for write in &writes {
+                output.seek(SeekFrom::Start(write.offset))?;
+                output.write_all(&[write.byte])?;
+            }
+            output.flush()?;
+            (execution, writes)
+        };
 
         let mut forward_applied = 0usize;
         let mut reverse_applied = 0usize;
@@ -190,6 +204,10 @@ impl PatchHandler for PatPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "pat patch create start"
+        );
         if original_len != modified_len {
             return Err(RomWeaverError::Validation(format!(
                 "PAT create requires equal input lengths (original: {original_len}, modified: {modified_len})"
@@ -200,6 +218,12 @@ impl PatchHandler for PatPatchHandler {
             original_len,
             CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "pat create thread plan"
+        );
         let created = create_pat_patch(
             &request.original,
             &request.modified,
@@ -603,41 +627,9 @@ fn collect_pat_chunk_records_for_chunk(
         .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES as u64)
         .min(input_len);
 
-    let mut original = BufReader::new(File::open(original_path)?);
-    let mut modified = BufReader::new(File::open(modified_path)?);
-    original.seek(SeekFrom::Start(start))?;
-    modified.seek(SeekFrom::Start(start))?;
-
-    let mut original_buffer = vec![0u8; PAT_SCAN_BUFFER_SIZE];
-    let mut modified_buffer = vec![0u8; PAT_SCAN_BUFFER_SIZE];
-    let mut records = Vec::new();
-    let mut cursor = start;
-    while cursor < end {
-        let chunk_len =
-            usize::try_from((end - cursor).min(PAT_SCAN_BUFFER_SIZE as u64)).map_err(|_| {
-                RomWeaverError::Validation("PAT compare chunk exceeded addressable memory".into())
-            })?;
-        original.read_exact(&mut original_buffer[..chunk_len])?;
-        modified.read_exact(&mut modified_buffer[..chunk_len])?;
-
-        for index in 0..chunk_len {
-            let source_byte = original_buffer[index];
-            let modified_byte = modified_buffer[index];
-            if source_byte != modified_byte {
-                let offset = cursor.checked_add(index as u64).ok_or_else(|| {
-                    RomWeaverError::Validation("PAT create offset overflowed".into())
-                })?;
-                records.push(PatRecord {
-                    offset,
-                    source_byte,
-                    modified_byte,
-                });
-            }
-        }
-        cursor = cursor.saturating_add(chunk_len as u64);
-    }
-
-    Ok(records)
+    let (original_bytes, modified_bytes) =
+        crate::read_original_modified_chunk(original_path, input_len, modified_path, start, end)?;
+    collect_pat_chunk_records_from_bytes(start, &original_bytes, &modified_bytes)
 }
 
 fn collect_pat_chunk_records_from_bytes(

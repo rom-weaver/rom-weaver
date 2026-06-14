@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
@@ -17,6 +17,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     chunk_count_for_len_checked, parallel_per_record_capability, run_with_optional_pool,
     scan_create_chunks,
@@ -70,6 +71,11 @@ impl PatchHandler for PmsrPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "pmsr patch apply start"
+        );
         let patch = parse_pmsr_file(patch_path)?;
         let validate_source =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
@@ -86,7 +92,18 @@ impl PatchHandler for PmsrPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
-        let execution = if crate::can_apply_in_memory_on_apply(context, source_len, output_len) {
+        let in_memory = crate::can_apply_in_memory_on_apply(context, source_len, output_len);
+        trace!(
+            format = self.descriptor.name,
+            records = patch.records.len(),
+            source_len,
+            output_len,
+            in_memory,
+            records_non_overlapping,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "pmsr parsed; apply path chosen"
+        );
+        let execution = if in_memory {
             let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(output_len as usize, 0);
@@ -178,7 +195,7 @@ impl PatchHandler for PmsrPatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -189,6 +206,10 @@ impl PatchHandler for PmsrPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "pmsr patch create start"
+        );
         if modified_len < original_len {
             return Err(RomWeaverError::Validation(format!(
                 "MOD create does not support shrinking outputs (original: {}, modified: {})",
@@ -248,6 +269,20 @@ impl PmsrRecord {
                 .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?,
             "MOD record end",
         )
+    }
+}
+
+impl AdjacentRun for PmsrRecord {
+    fn start(&self) -> u64 {
+        self.offset
+    }
+
+    fn end(&self) -> Result<u64> {
+        PmsrRecord::end(self)
+    }
+
+    fn append(&mut self, next: Self) {
+        self.data.extend_from_slice(&next.data);
     }
 }
 
@@ -676,6 +711,12 @@ fn create_pmsr_patch_parallel(
     }
 
     let chunk_count = pmsr_create_chunk_count(modified_len)?;
+    trace!(
+        chunk_count,
+        modified_len,
+        pool_threads = pool.size(),
+        "pmsr create parallel scan"
+    );
     let chunk_records = scan_create_chunks(
         crate::PatchCreateSources {
             original_path,
@@ -702,7 +743,7 @@ fn create_pmsr_patch_parallel(
             )
         },
     )?;
-    let records = merge_pmsr_records(chunk_records)?;
+    let records = merge_adjacent_runs(chunk_records)?;
     finalize_created_pmsr_patch(records, modified_len)
 }
 
@@ -723,69 +764,14 @@ fn collect_pmsr_records_for_chunk(
     let end = start
         .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
         .min(modified_len);
-    let mut original = BufReader::new(File::open(original_path)?);
-    let mut modified = BufReader::new(File::open(modified_path)?);
-    if start < original_len {
-        original.seek(SeekFrom::Start(start))?;
-    }
-    modified.seek(SeekFrom::Start(start))?;
-    let mut original_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
-    let mut modified_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
-    let mut records = Vec::new();
-    let mut pending_start: Option<u64> = None;
-    let mut pending_data = Vec::new();
-    let mut cursor = start;
-
-    while cursor < end {
-        let chunk_len =
-            usize::try_from((end - cursor).min(PMSR_IO_BUFFER_SIZE as u64)).map_err(|_| {
-                RomWeaverError::Validation("MOD compare chunk exceeded addressable memory".into())
-            })?;
-        modified.read_exact(&mut modified_buffer[..chunk_len])?;
-        let original_chunk_len = if cursor >= original_len {
-            0
-        } else {
-            usize::try_from((original_len - cursor).min(chunk_len as u64)).map_err(|_| {
-                RomWeaverError::Validation("MOD source chunk exceeded addressable memory".into())
-            })?
-        };
-        if original_chunk_len > 0 {
-            original.read_exact(&mut original_buffer[..original_chunk_len])?;
-        }
-
-        for index in 0..chunk_len {
-            let source = if index < original_chunk_len {
-                original_buffer[index]
-            } else {
-                0
-            };
-            let target = modified_buffer[index];
-            if source == target {
-                if !pending_data.is_empty() {
-                    records.push(PmsrRecord {
-                        offset: pending_start.expect("pending start exists"),
-                        data: std::mem::take(&mut pending_data),
-                    });
-                    pending_start = None;
-                }
-            } else {
-                if pending_start.is_none() {
-                    pending_start = Some(cursor);
-                }
-                pending_data.push(target);
-            }
-            cursor = checked_add(cursor, 1, "MOD scan offset")?;
-        }
-    }
-
-    if !pending_data.is_empty() {
-        records.push(PmsrRecord {
-            offset: pending_start.expect("pending start exists"),
-            data: pending_data,
-        });
-    }
-
-    Ok(records)
+    let (original_bytes, modified_bytes) = crate::read_original_modified_chunk(
+        original_path,
+        original_len,
+        modified_path,
+        start,
+        end,
+    )?;
+    collect_pmsr_records_from_bytes(start, &original_bytes, &modified_bytes)
 }
 
 fn collect_pmsr_records_from_bytes(
@@ -825,22 +811,6 @@ fn collect_pmsr_records_from_bytes(
     }
 
     Ok(records)
-}
-
-fn merge_pmsr_records(chunk_records: Vec<Vec<PmsrRecord>>) -> Result<Vec<PmsrRecord>> {
-    let mut merged = Vec::<PmsrRecord>::new();
-    for records in chunk_records {
-        for record in records {
-            if let Some(last) = merged.last_mut()
-                && last.end()? == record.offset
-            {
-                last.data.extend_from_slice(&record.data);
-                continue;
-            }
-            merged.push(record);
-        }
-    }
-    Ok(merged)
 }
 
 fn finalize_created_pmsr_patch(

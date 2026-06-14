@@ -18,6 +18,8 @@ use rom_weaver_core::{
     ValidationCodeError,
 };
 
+use tracing::{debug, trace};
+
 use crate::shared::threading::run_with_optional_pool;
 
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
@@ -91,6 +93,11 @@ impl PatchHandler for HdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "hdiffpatch apply start"
+        );
         let (output_bytes, execution) =
             render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
 
@@ -136,7 +143,7 @@ impl PatchHandler for HdiffPatchHandler {
         _request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        let execution = context.single_thread_execution();
         Ok(OperationReport::unsupported(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -183,6 +190,13 @@ fn render_hdiff_patch_to_memory(
                         .with_field("actual", old_len),
                 ));
             }
+            trace!(
+                variant = "HDIFF13",
+                old_len,
+                new_len = header.new_data_size,
+                cover_count = header.cover_count,
+                "hdiffpatch render; chunk-parallel apply via worker pool"
+            );
 
             let thread_capability = hdiff13_apply_thread_capability(&header);
             let (execution, output) = run_with_optional_pool(
@@ -225,6 +239,13 @@ fn render_hdiff_patch_to_memory(
                         .with_field("actual", old_len),
                 ));
             }
+            trace!(
+                variant = "HDIFFSF20",
+                old_len,
+                new_len = header.new_data_size,
+                cover_count = header.cover_count,
+                "hdiffpatch render; step-parallel apply via worker pool"
+            );
 
             let thread_capability = hdiffsf20_apply_thread_capability(&header);
             // The serial branch never reports a step-parallelism fallback, so

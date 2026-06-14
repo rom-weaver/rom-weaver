@@ -5,6 +5,8 @@ use std::{
 };
 
 use rayon::join;
+use tracing::{debug, trace};
+
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -94,6 +96,11 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "dldi patch apply start"
+        );
         let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch", true)?;
         let patch_file_len = fs::metadata(patch_path)?.len();
         let patch_read_len = usize::try_from(
@@ -105,6 +112,14 @@ impl PatchHandler for DldiPatchHandler {
         let input_len_usize = usize::try_from(input_len).unwrap_or(usize::MAX);
         let (execution, _pool) =
             context.build_pool(dldi_apply_thread_capability(input_len_usize))?;
+        trace!(
+            format = self.descriptor.name,
+            driver = %patch_header.friendly_name,
+            driver_size = patch_header.driver_size_bytes,
+            input_len,
+            parallel = execution.used_parallelism,
+            "dldi parsed; apply patches DLDI slot in place"
+        );
         let apply =
             match apply_dldi_patch_to_file(&request.input, &request.output, &patch, input_len) {
                 Ok(apply) => apply,
@@ -149,6 +164,10 @@ impl PatchHandler for DldiPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "dldi patch create start"
+        );
         let original_len_usize = usize::try_from(original_len).unwrap_or(usize::MAX);
         let modified_len_usize = usize::try_from(modified_len).unwrap_or(usize::MAX);
         let (execution, pool) = context.build_pool(dldi_create_thread_capability(
@@ -160,6 +179,12 @@ impl PatchHandler for DldiPatchHandler {
         // worker threads, which cannot open OPFS files in wasm (os error 44). Scan on
         // the main thread there; native keeps the parallel scan.
         let scan_on_main = crate::patches_reads_source_on_main_thread();
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            scan_on_main,
+            "dldi create slot scan plan"
+        );
         let (original_slot, modified_slot) = if execution.used_parallelism && !scan_on_main {
             let (left, right) = pool.install(|| {
                 join(

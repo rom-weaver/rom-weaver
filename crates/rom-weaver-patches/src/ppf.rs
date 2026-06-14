@@ -4,13 +4,12 @@ use std::{
     path::Path,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
     PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
-    ThreadCapability,
 };
 
 use crate::checksum_validation_suffix;
@@ -88,10 +87,23 @@ impl PatchHandler for PpfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "ppf patch apply start"
+        );
         let parsed = parse_ppf_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = fs::metadata(&request.input)?.len();
+        trace!(
+            format = self.descriptor.name,
+            version = parsed.version.label(),
+            records = parsed.records.len(),
+            input_len,
+            has_undo = parsed.has_undo_data(),
+            "ppf parsed"
+        );
 
         if let Some(expected_len) = parsed.expected_input_len
             && input_len != expected_len
@@ -125,7 +137,12 @@ impl PatchHandler for PpfPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
         let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
-        let execution = if crate::can_apply_in_memory(input_len, ppf_output_len) {
+        let in_memory = crate::can_apply_in_memory(input_len, ppf_output_len);
+        trace!(
+            format = self.descriptor.name,
+            in_memory, ppf_output_len, "ppf apply path chosen"
+        );
+        let execution = if in_memory {
             let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(ppf_output_len as usize, 0);
@@ -207,7 +224,7 @@ impl PatchHandler for PpfPatchHandler {
                 parsed.records.len(),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -218,10 +235,20 @@ impl PatchHandler for PpfPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "ppf patch create start (PPF3)"
+        );
         let (execution, pool) = context.build_pool(parallel_chunked_capability(
             modified_len,
             CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "ppf create thread plan"
+        );
 
         let mut output = crate::create_buffered_output(&request.output)?;
         let created = create_ppf3_patch(

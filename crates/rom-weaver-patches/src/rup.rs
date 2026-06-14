@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use md5::{Digest, Md5};
 use rayon::prelude::*;
@@ -105,6 +105,11 @@ impl PatchHandler for RupPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "rup patch apply start"
+        );
         let patch = parse_rup_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
@@ -113,6 +118,16 @@ impl PatchHandler for RupPatchHandler {
         let file = selected.file;
         let undo = selected.undo;
         let normalized_input = selected.normalized_input;
+        trace!(
+            format = self.descriptor.name,
+            variants = patch.files.len(),
+            records = file.records.len(),
+            undo,
+            source_size = file.source_file_size,
+            target_size = file.target_file_size,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "rup parsed; selected variant"
+        );
 
         let output_size = if undo {
             file.source_file_size
@@ -224,11 +239,22 @@ impl PatchHandler for RupPatchHandler {
     ) -> Result<OperationReport> {
         let source_size = fs::metadata(&request.original)?.len();
         let target_size = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            source_size, target_size, "rup patch create start"
+        );
         let shared_len = min(source_size, target_size);
         let (execution, pool) = context.build_pool(parallel_chunked_capability(
             shared_len,
             CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
         ))?;
+        trace!(
+            format = self.descriptor.name,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            shared_len,
+            "rup create thread plan"
+        );
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;

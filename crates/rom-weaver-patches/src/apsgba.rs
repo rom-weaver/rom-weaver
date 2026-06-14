@@ -14,6 +14,7 @@ use rom_weaver_core::{
     ProbeConfidence, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
     ThreadCapability,
 };
+use tracing::{debug, trace};
 
 use crate::checksum_validation_suffix;
 use crate::shared::threading::{
@@ -70,6 +71,11 @@ impl PatchHandler for ApsGbaPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "apsgba patch apply start"
+        );
         let patch = parse_apsgba_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
@@ -87,65 +93,75 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
         let target_size_u64 = u64::from(patch.target_size);
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let execution =
-            if crate::can_apply_in_memory_on_apply(context, actual_input_size, target_size_u64) {
-                let mut execution = context.plan_threads(thread_capability.clone());
-                let source_bytes = fs::read(&request.input)?;
-                let mut output_bytes = vec![0u8; patch.target_size as usize];
-                let copy_len = source_bytes.len().min(output_bytes.len());
-                output_bytes[..copy_len].copy_from_slice(&source_bytes[..copy_len]);
-                apply_apsgba_patch_in_memory(
-                    &patch,
-                    &source_bytes,
-                    &mut output_bytes,
-                    validate_checksums,
-                )?;
-                fs::write(&request.output, &output_bytes)?;
-                execution.effective_threads = 1;
-                execution.used_parallelism = false;
-                execution
-            } else {
-                fs::copy(&request.input, &request.output)?;
-                let mut output = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&request.output)?;
-                output.set_len(target_size_u64)?;
-                let (execution, prepared) = run_with_optional_pool(
-                    context,
-                    thread_capability,
-                    // Parallel prepare reads the source from worker threads, which cannot
-                    // open OPFS files in wasm (os error 44); use the serial main-thread
-                    // path there. Native keeps parallel.
-                    !crate::patches_reads_source_on_main_thread(),
-                    |pool| {
-                        prepare_apsgba_writes_parallel(
-                            &patch,
-                            &request.input,
-                            actual_input_size,
-                            validate_checksums,
-                            pool,
-                            context,
-                        )
-                        .map(Some)
-                    },
-                    || {
-                        let mut source = File::open(&request.input)?;
-                        apply_apsgba_patch_in_place(
-                            &patch,
-                            &mut source,
-                            &mut output,
-                            validate_checksums,
-                        )?;
-                        Ok(None)
-                    },
-                )?;
-                if let Some(prepared) = prepared {
-                    apply_prepared_writes(&mut output, &prepared)?;
-                }
-                output.flush()?;
-                execution
-            };
+        let in_memory =
+            crate::can_apply_in_memory_on_apply(context, actual_input_size, target_size_u64);
+        trace!(
+            format = self.descriptor.name,
+            records = patch.records.len(),
+            source_size = patch.source_size,
+            target_size = patch.target_size,
+            in_memory,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "apsgba parsed; apply path chosen"
+        );
+        let execution = if in_memory {
+            let mut execution = context.plan_threads(thread_capability.clone());
+            let source_bytes = fs::read(&request.input)?;
+            let mut output_bytes = vec![0u8; patch.target_size as usize];
+            let copy_len = source_bytes.len().min(output_bytes.len());
+            output_bytes[..copy_len].copy_from_slice(&source_bytes[..copy_len]);
+            apply_apsgba_patch_in_memory(
+                &patch,
+                &source_bytes,
+                &mut output_bytes,
+                validate_checksums,
+            )?;
+            fs::write(&request.output, &output_bytes)?;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+            execution
+        } else {
+            fs::copy(&request.input, &request.output)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            output.set_len(target_size_u64)?;
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                // Parallel prepare reads the source from worker threads, which cannot
+                // open OPFS files in wasm (os error 44); use the serial main-thread
+                // path there. Native keeps parallel.
+                !crate::patches_reads_source_on_main_thread(),
+                |pool| {
+                    prepare_apsgba_writes_parallel(
+                        &patch,
+                        &request.input,
+                        actual_input_size,
+                        validate_checksums,
+                        pool,
+                        context,
+                    )
+                    .map(Some)
+                },
+                || {
+                    let mut source = File::open(&request.input)?;
+                    apply_apsgba_patch_in_place(
+                        &patch,
+                        &mut source,
+                        &mut output,
+                        validate_checksums,
+                    )?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
+            output.flush()?;
+            execution
+        };
 
         let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
@@ -206,7 +222,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -217,6 +233,13 @@ impl PatchHandler for ApsGbaPatchHandler {
     ) -> Result<OperationReport> {
         let source_size_u64 = fs::metadata(&request.original)?.len();
         let target_size_u64 = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            source_size = source_size_u64,
+            target_size = target_size_u64,
+            read_on_main = crate::patches_reads_source_on_main_thread(),
+            "apsgba patch create start"
+        );
         let thread_capability =
             apsgba_create_thread_capability(source_size_u64.max(target_size_u64))?;
         let (execution, created) = run_with_optional_pool(
@@ -238,6 +261,13 @@ impl PatchHandler for ApsGbaPatchHandler {
             },
             || create_apsgba_patch_streaming(&request.original, &request.modified),
         )?;
+        trace!(
+            format = self.descriptor.name,
+            records = created.record_count,
+            parallel = execution.used_parallelism,
+            threads = execution.effective_threads,
+            "apsgba create complete"
+        );
 
         let mut output = crate::create_buffered_output(&request.output)?;
         for chunk in created.bytes.chunks(APS_GBA_IO_BUFFER_SIZE) {

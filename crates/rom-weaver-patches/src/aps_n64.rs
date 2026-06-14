@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use tracing::info;
+use tracing::{debug, info, trace};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -14,6 +14,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
     parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
@@ -32,7 +33,6 @@ const APS_DEFAULT_ENCODING_METHOD: u8 = 0;
 const APS_N64_CART_ID_OFFSET: u64 = 0x3C;
 const APS_N64_CRC_OFFSET: u64 = 0x10;
 const APS_CREATE_CHUNK_BYTES: usize = 1024 * 1024;
-const APS_CREATE_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct ApsN64PatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -86,6 +86,11 @@ impl PatchHandler for ApsN64PatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        debug!(
+            format = self.descriptor.name,
+            patch = %patch_path.display(),
+            "aps patch apply start"
+        );
         let patch = parse_aps_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
@@ -102,47 +107,50 @@ impl PatchHandler for ApsN64PatchHandler {
         }
         let input_size = fs::metadata(&request.input)?.len();
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let execution =
-            if crate::can_apply_in_memory_on_apply(context, input_size, patch.output_size) {
-                let mut execution = context.plan_threads(thread_capability.clone());
-                let mut output_bytes = fs::read(&request.input)?;
-                output_bytes.resize(patch.output_size as usize, 0);
-                apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
-                fs::write(&request.output, &output_bytes)?;
-                execution.effective_threads = 1;
-                execution.used_parallelism = false;
-                execution
-            } else {
-                fs::copy(&request.input, &request.output)?;
-                let mut output = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&request.output)?;
-                output.set_len(patch.output_size)?;
-                let (execution, prepared) = run_with_optional_pool(
-                    context,
-                    thread_capability,
-                    true,
-                    |pool| {
-                        prepare_aps_writes_parallel(
-                            &patch.records,
-                            patch.output_size,
-                            pool,
-                            context,
-                        )
+        let in_memory = crate::can_apply_in_memory_on_apply(context, input_size, patch.output_size);
+        trace!(
+            format = self.descriptor.name,
+            records = patch.records.len(),
+            input_size,
+            output_size = patch.output_size,
+            in_memory,
+            "aps parsed; apply path chosen"
+        );
+        let execution = if in_memory {
+            let mut execution = context.plan_threads(thread_capability.clone());
+            let mut output_bytes = fs::read(&request.input)?;
+            output_bytes.resize(patch.output_size as usize, 0);
+            apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
+            fs::write(&request.output, &output_bytes)?;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+            execution
+        } else {
+            fs::copy(&request.input, &request.output)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            output.set_len(patch.output_size)?;
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    prepare_aps_writes_parallel(&patch.records, patch.output_size, pool, context)
                         .map(Some)
-                    },
-                    || {
-                        apply_aps_records(&mut output, patch.output_size, &patch.records)?;
-                        Ok(None)
-                    },
-                )?;
-                if let Some(prepared) = prepared {
-                    apply_prepared_writes(&mut output, &prepared)?;
-                }
-                output.flush()?;
-                execution
-            };
+                },
+                || {
+                    apply_aps_records(&mut output, patch.output_size, &patch.records)?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
+            output.flush()?;
+            execution
+        };
 
         let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
@@ -189,7 +197,7 @@ impl PatchHandler for ApsN64PatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(context.plan_threads(ThreadCapability::single_threaded())),
+            context.single_thread_execution(),
         ))
     }
 
@@ -200,6 +208,10 @@ impl PatchHandler for ApsN64PatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        debug!(
+            format = self.descriptor.name,
+            original_len, modified_len, "aps patch create start"
+        );
         let modified_len_usize = usize::try_from(modified_len).unwrap_or(usize::MAX);
         let thread_capability = aps_create_thread_capability(modified_len_usize)?;
         let (execution, created) = run_with_optional_pool(
@@ -735,7 +747,7 @@ fn create_aps_patch_from_files(
             modified_len,
         )?);
     }
-    let runs = merge_diff_runs(chunk_runs)?;
+    let runs = merge_adjacent_runs(chunk_runs)?;
     let records = encode_runs_as_aps_records(runs)?;
     create_aps_patch_with_records(n64_header, modified_len, records)
 }
@@ -887,6 +899,20 @@ impl ApsDiffRun {
     }
 }
 
+impl AdjacentRun for ApsDiffRun {
+    fn start(&self) -> u64 {
+        self.offset
+    }
+
+    fn end(&self) -> Result<u64> {
+        ApsDiffRun::end(self)
+    }
+
+    fn append(&mut self, next: Self) {
+        self.bytes.extend_from_slice(&next.bytes);
+    }
+}
+
 fn create_aps_patch_parallel(
     original_path: &Path,
     original_len: u64,
@@ -919,6 +945,12 @@ fn create_aps_patch_parallel(
         }
     }
 
+    trace!(
+        chunk_count,
+        modified_len,
+        pool_threads = pool.size(),
+        "aps create parallel scan"
+    );
     let chunk_runs = scan_create_chunks(
         crate::PatchCreateSources {
             original_path,
@@ -945,7 +977,7 @@ fn create_aps_patch_parallel(
             )
         },
     )?;
-    let runs = merge_diff_runs(chunk_runs)?;
+    let runs = merge_adjacent_runs(chunk_runs)?;
     let records = encode_runs_as_aps_records(runs)?;
     create_aps_patch_with_records(n64_header, modified_len, records)
 }
@@ -967,69 +999,14 @@ fn collect_diff_runs_for_chunk(
     let end = start
         .saturating_add(APS_CREATE_CHUNK_BYTES as u64)
         .min(modified_len);
-    let mut original = File::open(original_path)?;
-    let mut modified = File::open(modified_path)?;
-    if start < original_len {
-        original.seek(SeekFrom::Start(start))?;
-    }
-    modified.seek(SeekFrom::Start(start))?;
-    let mut original_buffer = vec![0u8; APS_CREATE_IO_BUFFER_SIZE];
-    let mut modified_buffer = vec![0u8; APS_CREATE_IO_BUFFER_SIZE];
-    let mut cursor = start;
-    let mut runs = Vec::new();
-    let mut pending_start: Option<u64> = None;
-    let mut pending_bytes = Vec::<u8>::new();
-
-    while cursor < end {
-        let chunk_len = usize::try_from((end - cursor).min(APS_CREATE_IO_BUFFER_SIZE as u64))
-            .map_err(|_| RomWeaverError::Validation("APS compare chunk exceeded usize".into()))?;
-        modified.read_exact(&mut modified_buffer[..chunk_len])?;
-        let original_chunk_len = if cursor >= original_len {
-            0
-        } else {
-            usize::try_from((original_len - cursor).min(chunk_len as u64))
-                .map_err(|_| RomWeaverError::Validation("APS source chunk exceeded usize".into()))?
-        };
-        if original_chunk_len > 0 {
-            original.read_exact(&mut original_buffer[..original_chunk_len])?;
-        }
-
-        for index in 0..chunk_len {
-            let source = if index < original_chunk_len {
-                original_buffer[index]
-            } else {
-                0
-            };
-            let target = modified_buffer[index];
-            if source == target {
-                if !pending_bytes.is_empty() {
-                    runs.push(ApsDiffRun {
-                        offset: pending_start.expect("pending start exists"),
-                        bytes: std::mem::take(&mut pending_bytes),
-                    });
-                    pending_start = None;
-                }
-            } else {
-                if pending_start.is_none() {
-                    pending_start = Some(cursor + index as u64);
-                }
-                pending_bytes.push(target);
-            }
-        }
-
-        cursor = cursor
-            .checked_add(chunk_len as u64)
-            .ok_or_else(|| RomWeaverError::Validation("APS compare cursor overflowed".into()))?;
-    }
-
-    if !pending_bytes.is_empty() {
-        runs.push(ApsDiffRun {
-            offset: pending_start.expect("pending start exists"),
-            bytes: pending_bytes,
-        });
-    }
-
-    Ok(runs)
+    let (original_bytes, modified_bytes) = crate::read_original_modified_chunk(
+        original_path,
+        original_len,
+        modified_path,
+        start,
+        end,
+    )?;
+    collect_diff_runs_from_bytes(start, &original_bytes, &modified_bytes)
 }
 
 fn collect_diff_runs_from_bytes(
@@ -1067,22 +1044,6 @@ fn collect_diff_runs_from_bytes(
     }
 
     Ok(runs)
-}
-
-fn merge_diff_runs(chunk_runs: Vec<Vec<ApsDiffRun>>) -> Result<Vec<ApsDiffRun>> {
-    let mut merged = Vec::<ApsDiffRun>::new();
-    for runs in chunk_runs {
-        for run in runs {
-            if let Some(last) = merged.last_mut()
-                && last.end()? == run.offset
-            {
-                last.bytes.extend_from_slice(&run.bytes);
-                continue;
-            }
-            merged.push(run);
-        }
-    }
-    Ok(merged)
 }
 
 fn encode_runs_as_aps_records(runs: Vec<ApsDiffRun>) -> Result<Vec<ApsRecord>> {
