@@ -142,7 +142,12 @@ const buildStackViewState = ({
       .filter((input) => input.patchable !== false && input.kind !== "cue" && input.kind !== "gdi")
       .map((input) => ({
         label: input.info.fileName || `Input ${input.order + 1}`,
-        value: input.id,
+        // A disc's primary track row carries the top-level source id (e.g.
+        // `input-1`) instead of its per-asset id, so it cannot be resolved
+        // against the patchable assets by id. Target disc tracks by file name
+        // (which both the select and apply sides resolve); other input kinds
+        // keep their already-resolvable row id.
+        value: input.kind === "track" ? input.info.fileName || input.id : input.id,
       }));
     return {
       archiveFileName: patchInfo?.archiveName || "",
@@ -165,7 +170,10 @@ const buildStackViewState = ({
       sourceChecksumState: patchInfo?.sourceChecksumState || "",
       targetDisabled: disabled || busy || patchStaging || targetOptions.length < 2,
       targetOptions,
-      targetValue: patchInfo?.targetInputId || (targetOptions.length === 1 ? targetOptions[0]?.value : ""),
+      targetValue:
+        targetOptions.find(
+          (option) => option.value === patchInfo?.targetInputFileName || option.value === patchInfo?.targetInputId,
+        )?.value || (targetOptions.length === 1 ? targetOptions[0]?.value : ""),
       validateInputChecksum: patchInfo?.validateInputChecksum || "",
       validateOutputChecksum: patchInfo?.validateOutputChecksum || "",
       validationActualValue: patchInfo?.validationActualValue || "",

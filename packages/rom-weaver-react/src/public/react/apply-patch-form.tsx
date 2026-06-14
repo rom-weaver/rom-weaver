@@ -212,6 +212,7 @@ const toPatchStageInfo = (
     size: patch.size,
     sourceChecksumState: patch.checksumPreflight?.status || "",
     sourceSize: patch.sourceSize,
+    targetInputFileName: patch.targetInputFileName,
     targetInputId: patch.targetInputId,
     targetLabel,
     validateInputChecksum: patch.validateInputChecksum,

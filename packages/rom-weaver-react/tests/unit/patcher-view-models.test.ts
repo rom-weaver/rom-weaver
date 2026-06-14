@@ -159,6 +159,56 @@ describe("buildStackViewState", () => {
     expect(items[0]?.targetOptions).toEqual([]);
   });
 
+  it("targets disc tracks by file name so the primary track's source id still resolves", () => {
+    // A disc's primary track row carries the top-level source id (e.g.
+    // `input-1`) rather than its per-asset id, so an id-keyed option cannot be
+    // resolved against the patchable assets. Disc-track ("track" kind) options
+    // therefore use the file name, and targetValue follows the stored target
+    // file name even though the asset id differs from the row id.
+    const trackInfo = (fileName: string) => ({ ...makeRow().info, fileName });
+    const { items } = buildStackViewState({
+      activePatches: [source("a.ips")],
+      busy: false,
+      disabled: false,
+      getPatchKey,
+      patchInfoByKey: {
+        "a.ips": { targetInputFileName: "game (Track 1).bin", targetInputId: "input-0-game.bin" },
+      },
+      patchProgressByKey: {},
+      patchStaging: false,
+      romInputs: [
+        makeRow({ id: "input-1", info: trackInfo("game (Track 1).bin"), kind: "track" }),
+        makeRow({ id: "input-0-game-track-2-bin", info: trackInfo("game (Track 2).bin"), kind: "track", order: 1 }),
+      ],
+    });
+    expect(items[0]?.targetOptions).toEqual([
+      { label: "game (Track 1).bin", value: "game (Track 1).bin" },
+      { label: "game (Track 2).bin", value: "game (Track 2).bin" },
+    ]);
+    expect(items[0]?.targetValue).toBe("game (Track 1).bin");
+  });
+
+  it("keeps the row id as the target value for non-disc inputs", () => {
+    const { items } = buildStackViewState({
+      activePatches: [source("a.ips")],
+      busy: false,
+      disabled: false,
+      getPatchKey,
+      patchInfoByKey: { "a.ips": { targetInputId: "rom-b" } },
+      patchProgressByKey: {},
+      patchStaging: false,
+      romInputs: [
+        makeRow({ id: "rom-a", info: { ...makeRow().info, fileName: "a.bin" }, kind: "rom" }),
+        makeRow({ id: "rom-b", info: { ...makeRow().info, fileName: "b.bin" }, kind: "rom", order: 1 }),
+      ],
+    });
+    expect(items[0]?.targetOptions).toEqual([
+      { label: "a.bin", value: "rom-a" },
+      { label: "b.bin", value: "rom-b" },
+    ]);
+    expect(items[0]?.targetValue).toBe("rom-b");
+  });
+
   it("disables move/remove while busy", () => {
     const { items } = buildStackViewState({
       activePatches: [source("a.ips"), source("b.ips")],

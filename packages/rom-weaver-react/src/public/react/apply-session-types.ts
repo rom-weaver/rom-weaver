@@ -22,6 +22,7 @@ type StagedInputInfo = {
   parentCompressions?: ArchivePathEntry[];
   patchable?: boolean;
   targetInputId?: string;
+  targetInputFileName?: string;
   targetLabel?: string;
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
