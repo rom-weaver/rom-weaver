@@ -57,20 +57,49 @@ impl FromStr for XdeltaSecondaryMode {
     }
 }
 
+/// The patch-only policy knobs of an [`OperationContext`], grouped so the
+/// container/thread plumbing and the patch-apply/validate-specific settings
+/// stay visibly separate. [`OperationContext`] keeps a getter and a `with_*`
+/// builder per field (so call sites read/set individual settings as before),
+/// and [`OperationContext::with_patch_policy`] swaps the whole group at once.
+#[derive(Clone)]
+pub struct PatchPolicy {
+    /// Checksum algorithms to compute when extracting (drives the extract
+    /// checksum reuse path shared with patch apply/create).
+    pub extract_checksum_algorithms: Vec<String>,
+    /// Whether patch apply/validate enforces the patch's declared input/output
+    /// checksums strictly or ignores mismatches.
+    pub patch_checksum_validation: PatchChecksumValidation,
+    /// When enabled, PPF apply uses the patch's stored undo data to reconstruct
+    /// any validation region a prior application already overwrote.
+    pub ppf_undo_aware: bool,
+    /// Secondary-compression mode for xdelta/vcdiff patch create.
+    pub xdelta_secondary_mode: XdeltaSecondaryMode,
+    /// Per-operation override for the patch-apply in-memory size cap (bytes). `None` uses the
+    /// crate default / `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT`. `Some(0)` forces the streaming fallback
+    /// (used by tests that exercise the parallel streaming path).
+    pub patch_apply_in_memory_limit: Option<u64>,
+}
+
+impl Default for PatchPolicy {
+    fn default() -> Self {
+        Self {
+            extract_checksum_algorithms: Vec::new(),
+            patch_checksum_validation: PatchChecksumValidation::Strict,
+            ppf_undo_aware: false,
+            xdelta_secondary_mode: XdeltaSecondaryMode::default(),
+            patch_apply_in_memory_limit: None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OperationContext {
     thread_budget: ThreadBudget,
     temp_paths: Arc<TempPathAllocator>,
     progress: Arc<dyn ProgressSink>,
     cancel: CancellationToken,
-    extract_checksum_algorithms: Vec<String>,
-    patch_checksum_validation: PatchChecksumValidation,
-    ppf_undo_aware: bool,
-    xdelta_secondary_mode: XdeltaSecondaryMode,
-    /// Per-operation override for the patch-apply in-memory size cap (bytes). `None` uses the
-    /// crate default / `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT`. `Some(0)` forces the streaming fallback
-    /// (used by tests that exercise the parallel streaming path).
-    patch_apply_in_memory_limit: Option<u64>,
+    patch_policy: PatchPolicy,
     /// One operation-scoped worker pool, sized to the full thread budget and reused by every
     /// extract (the primary container and each nested archive). Building a fresh pool per extract
     /// stacked worker threads across sequential/nested extracts and exhausted the browser's fixed
@@ -96,24 +125,32 @@ impl OperationContext {
             temp_paths: Arc::new(TempPathAllocator::new(temp_root)),
             progress,
             cancel,
-            extract_checksum_algorithms: Vec::new(),
-            patch_checksum_validation: PatchChecksumValidation::Strict,
-            ppf_undo_aware: false,
-            xdelta_secondary_mode: XdeltaSecondaryMode::default(),
-            patch_apply_in_memory_limit: None,
+            patch_policy: PatchPolicy::default(),
             operation_pool: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub fn patch_apply_in_memory_limit(&self) -> Option<u64> {
-        self.patch_apply_in_memory_limit
+    /// The grouped patch-only policy knobs. Individual fields are also reachable
+    /// through the per-field getters/builders below.
+    pub fn patch_policy(&self) -> &PatchPolicy {
+        &self.patch_policy
     }
 
-    pub fn with_patch_apply_in_memory_limit(self, limit: u64) -> Self {
+    /// Replace the whole patch-only policy group in one builder step.
+    pub fn with_patch_policy(self, patch_policy: PatchPolicy) -> Self {
         Self {
-            patch_apply_in_memory_limit: Some(limit),
+            patch_policy,
             ..self
         }
+    }
+
+    pub fn patch_apply_in_memory_limit(&self) -> Option<u64> {
+        self.patch_policy.patch_apply_in_memory_limit
+    }
+
+    pub fn with_patch_apply_in_memory_limit(mut self, limit: u64) -> Self {
+        self.patch_policy.patch_apply_in_memory_limit = Some(limit);
+        self
     }
 
     pub fn thread_budget(&self) -> ThreadBudget {
@@ -133,25 +170,21 @@ impl OperationContext {
     }
 
     pub fn extract_checksum_algorithms(&self) -> &[String] {
-        &self.extract_checksum_algorithms
+        &self.patch_policy.extract_checksum_algorithms
     }
 
-    pub fn with_extract_checksum_algorithms(self, algorithms: Vec<String>) -> Self {
-        Self {
-            extract_checksum_algorithms: algorithms,
-            ..self
-        }
+    pub fn with_extract_checksum_algorithms(mut self, algorithms: Vec<String>) -> Self {
+        self.patch_policy.extract_checksum_algorithms = algorithms;
+        self
     }
 
     pub fn patch_checksum_validation(&self) -> PatchChecksumValidation {
-        self.patch_checksum_validation
+        self.patch_policy.patch_checksum_validation
     }
 
-    pub fn with_patch_checksum_validation(self, validation: PatchChecksumValidation) -> Self {
-        Self {
-            patch_checksum_validation: validation,
-            ..self
-        }
+    pub fn with_patch_checksum_validation(mut self, validation: PatchChecksumValidation) -> Self {
+        self.patch_policy.patch_checksum_validation = validation;
+        self
     }
 
     /// When enabled, PPF apply uses the patch's stored undo data to reconstruct the
@@ -160,25 +193,21 @@ impl OperationContext {
     /// validation block) be safely re-applied to an already-patched ROM. For a clean,
     /// unpatched ROM it is a strict no-op.
     pub fn ppf_undo_aware(&self) -> bool {
-        self.ppf_undo_aware
+        self.patch_policy.ppf_undo_aware
     }
 
-    pub fn with_ppf_undo_aware(self, enabled: bool) -> Self {
-        Self {
-            ppf_undo_aware: enabled,
-            ..self
-        }
+    pub fn with_ppf_undo_aware(mut self, enabled: bool) -> Self {
+        self.patch_policy.ppf_undo_aware = enabled;
+        self
     }
 
     pub fn xdelta_secondary_mode(&self) -> XdeltaSecondaryMode {
-        self.xdelta_secondary_mode
+        self.patch_policy.xdelta_secondary_mode
     }
 
-    pub fn with_xdelta_secondary_mode(self, mode: XdeltaSecondaryMode) -> Self {
-        Self {
-            xdelta_secondary_mode: mode,
-            ..self
-        }
+    pub fn with_xdelta_secondary_mode(mut self, mode: XdeltaSecondaryMode) -> Self {
+        self.patch_policy.xdelta_secondary_mode = mode;
+        self
     }
 
     pub fn emit(&self, event: ProgressEvent) {

@@ -20,7 +20,7 @@ pub use common_files::{
     is_container_filter_passthrough_candidate_name, is_patch_filter_candidate_name,
     is_rom_filter_candidate_name, should_ignore_common_container_file,
 };
-pub use context::{OperationContext, PatchChecksumValidation, XdeltaSecondaryMode};
+pub use context::{OperationContext, PatchChecksumValidation, PatchPolicy, XdeltaSecondaryMode};
 pub use disc_sheet::{
     DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs, sibling_gdi_path,
 };
