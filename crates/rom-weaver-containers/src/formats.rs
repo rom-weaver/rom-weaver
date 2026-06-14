@@ -4,7 +4,7 @@ use nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
 use rom_weaver_core::{
     ContainerCapabilities, ContainerHandler, ContainerHandlerOperations,
     ContainerHandlerRegistration, CreateSupport, FormatDescriptor, OperationFamily,
-    ProbeConfidence, RomWeaverError, ThreadCapability, UnsupportedOp,
+    ProbeConfidence, Result, RomWeaverError, ThreadCapability, UnsupportedOp,
 };
 
 use crate::{
@@ -671,6 +671,34 @@ impl ContainerRegistry {
             .iter()
             .find(|handler| handler.descriptor().matches_name(name))
             .cloned()
+    }
+
+    /// Resolve a handler by name that can create archives, bundling the
+    /// "not registered" and "extract-only" guards the compress flows repeated.
+    /// Returns the registered, create-capable handler or a
+    /// [`RomWeaverError::Validation`] whose message matches what those flows
+    /// produced inline: "requested output format is not registered" when no
+    /// handler matches or the match exposes no real capabilities, and the
+    /// [`extract_only_create_validation_message`] when the handler exists but
+    /// cannot create.
+    pub fn find_creatable_by_name(&self, name: &str) -> Result<Arc<dyn ContainerHandler>> {
+        let Some(handler) = self.find_by_name(name) else {
+            return Err(RomWeaverError::Validation(
+                "requested output format is not registered".to_string(),
+            ));
+        };
+        let capabilities = handler.capabilities();
+        if !capabilities.probe_details && !capabilities.extract && !capabilities.create {
+            return Err(RomWeaverError::Validation(
+                "requested output format is not registered".to_string(),
+            ));
+        }
+        if !capabilities.create {
+            return Err(RomWeaverError::Validation(
+                extract_only_create_validation_message(handler.descriptor().name),
+            ));
+        }
+        Ok(handler)
     }
 
     /// Resolve a handler purely from an output path's extension, without opening the file.

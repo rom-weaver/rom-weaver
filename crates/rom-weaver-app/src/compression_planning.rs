@@ -381,22 +381,7 @@ impl CliApp {
             "; or pass --no-compress to write raw patched bytes",
         )?;
 
-        let Some(handler) = self.containers.find_by_name(&resolution.format) else {
-            return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
-            ));
-        };
-        let capabilities = handler.capabilities();
-        if !capabilities.probe_details && !capabilities.extract && !capabilities.create {
-            return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
-            ));
-        }
-        if !capabilities.create {
-            return Err(RomWeaverError::Validation(
-                extract_only_create_validation_message(handler.descriptor().name),
-            ));
-        }
+        let handler = self.containers.find_creatable_by_name(&resolution.format)?;
         let resolved_format = handler.descriptor().name.to_string();
 
         let mut codec = options.codec.clone();
