@@ -38,6 +38,24 @@ pub(super) struct DiscContext {
     pub warnings: Vec<String>,
 }
 
+/// Default cap for buffering a single freshly produced disc track in memory
+/// instead of a temp file during compression.
+const DISC_TRACK_IN_MEMORY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Effective in-memory cap for a single patched/rebuilt disc track. Defaults to
+/// [`DISC_TRACK_IN_MEMORY_LIMIT_BYTES`]; override via
+/// `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` (in bytes, `0` forces the on-disk
+/// path) for regression/parity runs. Only ever bounds one track, never the disc.
+fn disc_track_in_memory_limit_bytes() -> u64 {
+    match std::env::var("ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT") {
+        Ok(value) => value
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(DISC_TRACK_IN_MEMORY_LIMIT_BYTES),
+        Err(_) => DISC_TRACK_IN_MEMORY_LIMIT_BYTES,
+    }
+}
+
 impl CliApp {
     /// Resolve `input` as a disc sheet for patching. Returns `Ok(None)` when
     /// `input` is not a `.cue`/`.gdi` (the caller falls back to the plain
@@ -304,11 +322,62 @@ impl CliApp {
         }
     }
 
+    /// The original disc sheet to feed the compressor when reassembling in
+    /// place: its directory still holds every untouched track (and any sibling
+    /// `.gdi`), so the create handler resolves and reads them where they sit —
+    /// only the patched/rebuilt track is redirected via a create input override.
+    pub(super) fn primary_disc_sheet<'a>(&self, disc: &'a DiscContext) -> &'a Path {
+        &disc.sheet_paths[0]
+    }
+
+    /// Build the single create input override that redirects the disc's target
+    /// track to a freshly produced track at `track_path` (the patched or
+    /// `.dcp`-rebuilt track temp). When the track fits under the in-memory cap
+    /// it is read into memory and its temp deleted — so no whole-disc copy and
+    /// no lingering scratch — otherwise it streams from the temp file. Every
+    /// untouched track stays read in place from the original disc.
+    pub(super) fn disc_target_track_override(
+        &self,
+        disc: &DiscContext,
+        track_path: &Path,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<CreateInputOverride> {
+        let len = fs::metadata(track_path)?.len();
+        let cap = disc_track_in_memory_limit_bytes();
+        let source = if len <= cap {
+            let bytes = fs::read(track_path)?;
+            // The track now lives in memory; drop the transient temp so no disc
+            // scratch lingers through compression.
+            let _ = fs::remove_file(track_path);
+            temp_paths.retain(|path| path != track_path);
+            trace!(
+                track = %track_path.display(),
+                bytes = len,
+                "buffered patched disc track in memory"
+            );
+            CreateInputSource::Bytes(std::sync::Arc::from(bytes))
+        } else {
+            trace!(
+                track = %track_path.display(),
+                bytes = len,
+                cap,
+                "streaming patched disc track from temp (over in-memory cap)"
+            );
+            CreateInputSource::Path(track_path.to_path_buf())
+        };
+        Ok(CreateInputOverride {
+            original_path: disc.target_file.clone(),
+            source,
+        })
+    }
+
     /// Stage the reassembled disc in a temp directory: every sheet copied
     /// verbatim, every untouched track copied under its sheet-referenced name,
     /// and the patched track written under the target's name. Registers the
     /// stage directory in `temp_paths` for cleanup. Returns the path to the
     /// primary sheet inside the stage directory (the input to the compressor).
+    /// Used only for `--no-compress`; the compress path reads tracks in place
+    /// via [`Self::disc_target_track_override`] instead of copying the disc.
     pub(super) fn stage_disc_directory(
         &self,
         disc: &DiscContext,

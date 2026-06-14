@@ -6348,6 +6348,62 @@ fn patch_apply_disc_cue_target_patches_one_track_and_matches_manual_chd() {
 }
 
 #[test]
+fn patch_apply_disc_in_memory_and_on_disk_track_produce_identical_chd() {
+    // The patched track is read in place for untouched tracks and sourced from
+    // the freshly produced track: buffered in memory under the cap by default,
+    // streamed from a temp file when forced over it
+    // (ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT=0). Both must yield a
+    // byte-identical CHD, proving the in-memory track source is byte-for-byte
+    // equivalent to the on-disk one.
+    let temp = setup_temp_dir();
+    let (_track01, _track02) = write_two_track_cd(&temp);
+    let patch = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: DISC_PATCH_OFFSET as u32,
+            data: disc_patch_payload(),
+        }],
+        None,
+    );
+    fs::write(temp.child("update.ips").path(), &patch).expect("patch fixture");
+
+    let run = |out_name: &str, force_on_disk: bool| -> Vec<u8> {
+        let chd = temp.child(out_name);
+        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+        command.args([
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--target",
+            "*track02*",
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--compress-format",
+            "chd",
+            "--compress-codec",
+            "zstd",
+            "--threads",
+            "1",
+            "--output",
+            chd.path().to_str().expect("path"),
+            "--json",
+        ]);
+        if force_on_disk {
+            command.env("ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT", "0");
+        }
+        command.assert().code(0);
+        fs::read(chd.path()).expect("chd output")
+    };
+
+    let in_memory = run("in_memory.chd", false);
+    let on_disk = run("on_disk.chd", true);
+    assert_eq!(
+        in_memory, on_disk,
+        "in-memory and on-disk patched-track sources must produce byte-identical CHD"
+    );
+}
+
+#[test]
 fn patch_apply_disc_target_matching_zero_tracks_fails() {
     let temp = setup_temp_dir();
     write_two_track_cd(&temp);

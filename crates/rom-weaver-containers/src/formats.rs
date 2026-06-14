@@ -457,6 +457,19 @@ impl ContainerHandlerOperations for RegisteredContainerHandler {
         self.inner.create(request, context)
     }
 
+    fn create_with_input_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[rom_weaver_core::CreateInputOverride],
+        context: &rom_weaver_core::OperationContext,
+    ) -> Result<OperationReport> {
+        if !self.registration.capabilities.create {
+            return Err(extract_only_create_error(&request.format));
+        }
+        self.inner
+            .create_with_input_overrides(request, overrides, context)
+    }
+
     fn create_dry_run_size(
         &self,
         request: &ContainerCreateRequest,

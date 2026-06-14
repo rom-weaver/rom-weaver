@@ -29,11 +29,11 @@ use rom_weaver_containers::{
 use rom_weaver_core::{
     ArchiveEntryKindFilter, CancellationToken, ChecksumEngine, ChecksumRequest,
     ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerListEntry,
-    ContainerProbeRequest, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
-    OperationStatus, PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest,
-    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
-    Selection, SelectionList, SelectionMatcher, SelectionPrompter, ThreadBudget, ThreadCapability,
-    ThreadExecution, UnsupportedOp, XdeltaSecondaryMode, detect_disc_sheet,
+    ContainerProbeRequest, CreateInputOverride, CreateInputSource, DiscSheetKind, OperationContext,
+    OperationFamily, OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
+    PatchCreateRequest, PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result,
+    RomWeaverError, Selection, SelectionList, SelectionMatcher, SelectionPrompter, ThreadBudget,
+    ThreadCapability, ThreadExecution, UnsupportedOp, XdeltaSecondaryMode, detect_disc_sheet,
     enumerate_disc_sheet_refs, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
     normalize_archive_name, should_ignore_common_container_file, sibling_gdi_path,
 };

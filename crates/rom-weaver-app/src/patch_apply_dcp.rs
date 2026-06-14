@@ -180,17 +180,6 @@ impl CliApp {
         };
         temp_paths.push(rebuilt_path.clone());
 
-        // Reassemble the full disc with the rebuilt track in place of the data
-        // track.
-        let staged_sheet =
-            match self.stage_disc_directory(disc, &rebuilt_path, context, &mut temp_paths) {
-                Ok(path) => path,
-                Err(error) => {
-                    Self::cleanup_paths(&temp_paths);
-                    return fail("prepare", error.to_string());
-                }
-            };
-
         let boot_note = if rebuilt.boot_sector_replaced {
             "; IP.BIN boot sector replaced"
         } else {
@@ -204,18 +193,38 @@ impl CliApp {
             label = format!("{label}; {warning}");
         }
 
-        // Emit: compress (default) or write the disc beside the output sheet.
+        // Emit: compress (default) reads every untouched track in place from the
+        // source disc and redirects only the rebuilt track via a create override
+        // (no whole-disc scratch copy); --no-compress stages the full disc and
+        // writes it beside the output sheet.
         let report = if compression_options.enabled {
+            let track_override =
+                match self.disc_target_track_override(disc, &rebuilt_path, &mut temp_paths) {
+                    Ok(track_override) => track_override,
+                    Err(error) => {
+                        Self::cleanup_paths(&temp_paths);
+                        return fail("prepare", error.to_string());
+                    }
+                };
             self.compress_dcp_disc(
                 &args.output,
                 &args.input,
-                &staged_sheet,
+                self.primary_disc_sheet(disc),
+                std::slice::from_ref(&track_override),
                 compression_options,
                 context,
                 &mut label,
                 single.clone(),
             )
         } else {
+            let staged_sheet =
+                match self.stage_disc_directory(disc, &rebuilt_path, context, &mut temp_paths) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        Self::cleanup_paths(&temp_paths);
+                        return fail("prepare", error.to_string());
+                    }
+                };
             match self.write_disc_output(disc, &staged_sheet, &args.output) {
                 Ok(note) => {
                     label = format!("{label}; {note}");
@@ -242,7 +251,8 @@ impl CliApp {
         &self,
         output: &Path,
         extension_source: &Path,
-        staged_sheet: &Path,
+        sheet: &Path,
+        overrides: &[CreateInputOverride],
         compression_options: &PatchApplyCompressionOptions,
         context: &OperationContext,
         label: &mut String,
@@ -282,22 +292,24 @@ impl CliApp {
             compress_threads,
         );
         let request = ContainerCreateRequest {
-            inputs: vec![staged_sheet.to_path_buf()],
+            inputs: vec![sheet.to_path_buf()],
             output: plan.output_path.clone(),
             format: plan.format.clone(),
             codec: plan.codec.clone(),
             level: plan.level,
             parent: None,
         };
-        let compress_report = handler.create(&request, context).unwrap_or_else(|error| {
-            OperationReport::failed(
-                OperationFamily::Container,
-                Some(handler.descriptor().name.to_string()),
-                "create",
-                error.to_string(),
-                single.clone(),
-            )
-        });
+        let compress_report = handler
+            .create_with_input_overrides(&request, overrides, context)
+            .unwrap_or_else(|error| {
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "create",
+                    error.to_string(),
+                    single.clone(),
+                )
+            });
         if compress_report.status != OperationStatus::Succeeded {
             return fail(
                 "compress",

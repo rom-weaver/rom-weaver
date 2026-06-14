@@ -1316,6 +1316,7 @@ fn cd_track(number: u32, mode: DiscTrackMode, frames: u32) -> DiscTrack {
         number,
         mode,
         file_path: std::path::PathBuf::new(),
+        memory_source: None,
         file_offset_bytes: 0,
         frames,
         pregap_frames: 0,

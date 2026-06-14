@@ -50,6 +50,7 @@ impl ChdContainerHandler {
                 number: 1,
                 mode,
                 file_path: input.to_path_buf(),
+                memory_source: None,
                 file_offset_bytes: 0,
                 frames,
                 pregap_frames: 0,

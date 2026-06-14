@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::{
     borrow::Cow,
     fs::{self, File},
-    io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -16,11 +16,11 @@ use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ChdMediaScope, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
-    ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, OrderedStreamingMessages,
-    ProbeConfidence, Result, RomWeaverError, SelectionMatcher, ThreadCapability, ThreadExecution,
-    UnsupportedOp, create_extract_output_file, file_starts_with,
-    maybe_emit_container_byte_progress, ordered_streaming_compress,
+    ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
+    CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
+    OperationStatus, OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError,
+    SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, create_extract_output_file,
+    file_starts_with, maybe_emit_container_byte_progress, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};

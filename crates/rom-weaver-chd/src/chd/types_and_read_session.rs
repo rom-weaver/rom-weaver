@@ -58,6 +58,41 @@ impl DiscLayout {
             track.frames = data_frames.saturating_add(pad);
         }
     }
+
+    /// Redirect tracks whose resolved `file_path` matches an override's
+    /// `original_path` to the override's source (an alternate path or in-memory
+    /// bytes), so a freshly produced track is read in place of the original
+    /// while every untouched track still reads from the source disc. A
+    /// shared-bin FILE backing several tracks redirects them all, each keeping
+    /// its own `file_offset_bytes`. Errors if an override matches no track —
+    /// that would silently emit the original (unpatched) bytes and break parity.
+    fn apply_input_overrides(&mut self, overrides: &[CreateInputOverride]) -> Result<()> {
+        for ovr in overrides {
+            let mut matched = false;
+            for track in &mut self.tracks {
+                if track.file_path != ovr.original_path {
+                    continue;
+                }
+                match &ovr.source {
+                    CreateInputSource::Path(path) => {
+                        track.file_path = path.clone();
+                        track.memory_source = None;
+                    }
+                    CreateInputSource::Bytes(bytes) => {
+                        track.memory_source = Some(Arc::clone(bytes));
+                    }
+                }
+                matched = true;
+            }
+            if !matched {
+                return Err(RomWeaverError::Validation(format!(
+                    "disc create track override for `{}` matched no track in the layout",
+                    ovr.original_path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,6 +112,12 @@ struct DiscTrack {
     number: u32,
     mode: DiscTrackMode,
     file_path: PathBuf,
+    /// When set, the track's bytes are read from this in-memory buffer instead
+    /// of `file_path` — used for a freshly produced track (e.g. a patched track)
+    /// sourced from memory rather than a staged file. `file_offset_bytes` still
+    /// indexes into the buffer, matching the file case so the emitted stream is
+    /// byte-identical.
+    memory_source: Option<Arc<[u8]>>,
     file_offset_bytes: u64,
     frames: u32,
     pregap_frames: u32,
@@ -120,11 +161,27 @@ enum FlacSampleByteOrder {
     BigEndian,
 }
 
+/// Per-track byte source for [`DiscImageReader`]: a buffered file (the default)
+/// or an in-memory cursor for a track sourced from memory.
+enum TrackReader {
+    File(BufReader<File>),
+    Memory(Cursor<Arc<[u8]>>),
+}
+
+impl Read for TrackReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::File(reader) => reader.read(buf),
+            Self::Memory(reader) => reader.read(buf),
+        }
+    }
+}
+
 struct DiscImageReader<'a> {
     tracks: &'a [DiscTrack],
     track_index: usize,
     track_initialized: bool,
-    track_reader: Option<BufReader<File>>,
+    track_reader: Option<TrackReader>,
     track_data_frames_remaining: u32,
     track_pad_frames_remaining: u32,
     frame: Vec<u8>,
@@ -173,9 +230,18 @@ impl<'a> DiscImageReader<'a> {
             let track = &self.tracks[self.track_index];
             if self.track_data_frames_remaining > 0 {
                 if self.track_reader.is_none() {
-                    let mut reader = BufReader::new(File::open(&track.file_path)?);
-                    reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
-                    self.track_reader = Some(reader);
+                    self.track_reader = Some(match &track.memory_source {
+                        Some(bytes) => {
+                            let mut reader = Cursor::new(Arc::clone(bytes));
+                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
+                            TrackReader::Memory(reader)
+                        }
+                        None => {
+                            let mut reader = BufReader::new(File::open(&track.file_path)?);
+                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
+                            TrackReader::File(reader)
+                        }
+                    });
                 }
                 let data_len = track.mode.data_bytes();
                 if self.data.len() != data_len {

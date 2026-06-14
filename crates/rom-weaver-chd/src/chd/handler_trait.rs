@@ -275,6 +275,31 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        self.create_with_track_overrides(request, &[], context)
+    }
+
+    fn create_with_input_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[CreateInputOverride],
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.create_with_track_overrides(request, overrides, context)
+    }
+}
+
+impl ChdContainerHandler {
+    /// Shared body for [`Self::create`] and the override-aware trait entry.
+    /// Builds the create kind, redirects any overridden disc tracks in place
+    /// via `DiscLayout::apply_input_overrides` (untouched tracks keep reading
+    /// from the source disc), then streams compression. `overrides` is empty
+    /// for a plain `create`.
+    fn create_with_track_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[CreateInputOverride],
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(
                 "chd create currently requires exactly one input file".into(),
@@ -306,6 +331,16 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         compression_plan = self.resolve_compression_plan(request.codec.as_deref(), &create_kind)?;
         compression_plan =
             self.normalize_compression_plan_for_create_kind(&create_kind, compression_plan);
+        // Redirect any overridden tracks to read in place / from memory. Source
+        // bytes change, not geometry, so the compression plan above still holds
+        // and output stays byte-identical to a fully staged disc.
+        if let ChdCreateKind::Disc(layout) = &mut create_kind {
+            layout.apply_input_overrides(overrides)?;
+        } else if !overrides.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "chd create input overrides are only supported for disc layouts".into(),
+            ));
+        }
         // When the codec is auto-selected (no explicit `--codec`) and resolves to a
         // level-less codec such as avhuff (e.g. an auto-detected A/V stream), the
         // caller's default level profile does not apply — drop it rather than

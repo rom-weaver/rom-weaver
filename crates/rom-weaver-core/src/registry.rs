@@ -203,6 +203,28 @@ pub struct ContainerCreateRequest {
     pub parent: Option<PathBuf>,
 }
 
+/// Where a container create handler should read one input from, when the bytes
+/// are not (or not yet) the file the request would otherwise open.
+#[derive(Clone)]
+pub enum CreateInputSource {
+    /// Read the input from this path on disk.
+    Path(PathBuf),
+    /// Read the input from these in-memory bytes instead of any path.
+    Bytes(Arc<[u8]>),
+}
+
+/// Redirect one resolved create input to alternate bytes without restaging the
+/// rest. Disc-image create handlers (CHD) use this to read every untouched
+/// track in place from the original disc while sourcing only the freshly
+/// produced track from a temp file or memory — avoiding a whole-disc scratch
+/// copy. `original_path` matches the on-disk path the handler would otherwise
+/// open for that input (e.g. a track resolved relative to the disc sheet).
+#[derive(Clone)]
+pub struct CreateInputOverride {
+    pub original_path: PathBuf,
+    pub source: CreateInputSource,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatchApplyRequest {
     pub input: PathBuf,
@@ -332,6 +354,19 @@ pub trait ContainerHandlerOperations: Send + Sync {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport>;
+    /// Create like [`Self::create`], but redirect specific resolved inputs to
+    /// alternate bytes via `overrides`. The default ignores `overrides` and
+    /// delegates to [`Self::create`]; only disc-image handlers that can read
+    /// individual inputs in place honor it. See [`CreateInputOverride`].
+    fn create_with_input_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[CreateInputOverride],
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let _ = overrides;
+        self.create(request, context)
+    }
     fn create_dry_run_size(
         &self,
         request: &ContainerCreateRequest,
@@ -600,6 +635,28 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             "container create start"
         );
         let result = self.inner.create(request, context);
+        trace_operation_result("create", descriptor, &result);
+        result
+    }
+
+    fn create_with_input_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[CreateInputOverride],
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let descriptor = self.inner.descriptor();
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            output = %request.output.display(),
+            input_count = request.inputs.len(),
+            override_count = overrides.len(),
+            "container create (input overrides) start"
+        );
+        let result = self
+            .inner
+            .create_with_input_overrides(request, overrides, context);
         trace_operation_result("create", descriptor, &result);
         result
     }

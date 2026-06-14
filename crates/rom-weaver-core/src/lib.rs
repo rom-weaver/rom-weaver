@@ -47,9 +47,10 @@ pub use registry::{
     ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,
     CodecDescriptor, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
     ContainerExtractRequest, ContainerHandler, ContainerHandlerOperations, ContainerListEntry,
-    ContainerProbeRequest, FormatDescriptor, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, traced_codec_backend,
-    traced_container_handler, traced_patch_handler,
+    ContainerProbeRequest, CreateInputOverride, CreateInputSource, FormatDescriptor,
+    OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, traced_codec_backend, traced_container_handler,
+    traced_patch_handler,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use threads::{

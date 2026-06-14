@@ -698,6 +698,7 @@ impl CliApp {
             }
 
             let mut raw_ready_output = staged_output.clone();
+            let mut disc_track_overrides: Vec<CreateInputOverride> = Vec::new();
             if report.status == OperationStatus::Succeeded && requires_compat_finalize {
                 self.emit_running(
                     OperationLabel {
@@ -776,33 +777,50 @@ impl CliApp {
             }
 
             // Reassemble the full disc from the patched track. When compressing,
-            // the staged sheet feeds the compressor below; otherwise the disc is
-            // written beside `output` directly.
+            // every untouched track is read in place from the original disc and
+            // only the patched track is redirected via a create override (no
+            // whole-disc scratch copy); the original sheet feeds the compressor
+            // below. With --no-compress the disc is staged and written beside
+            // `output` directly.
             if is_disc && report.status == OperationStatus::Succeeded {
                 let disc = disc_context
                     .as_ref()
                     .expect("disc context present for disc input");
-                let staged_sheet = match self.stage_disc_directory(
-                    disc,
-                    &staged_output,
-                    &context,
-                    &mut temp_paths,
-                ) {
-                    Ok(path) => path,
-                    Err(error) => {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            report.format.clone(),
-                            "prepare",
-                            error.to_string(),
-                            context.single_thread_execution(),
-                        );
-                    }
-                };
                 for warning in &disc.warnings {
                     report.label = format!("{}; {}", report.label, warning);
                 }
-                if !compression_options.enabled {
+                if compression_options.enabled {
+                    match self.disc_target_track_override(disc, &staged_output, &mut temp_paths) {
+                        Ok(track_override) => disc_track_overrides.push(track_override),
+                        Err(error) => {
+                            return OperationReport::failed(
+                                OperationFamily::Patch,
+                                report.format.clone(),
+                                "prepare",
+                                error.to_string(),
+                                context.single_thread_execution(),
+                            );
+                        }
+                    }
+                    raw_ready_output = self.primary_disc_sheet(disc).to_path_buf();
+                } else {
+                    let staged_sheet = match self.stage_disc_directory(
+                        disc,
+                        &staged_output,
+                        &context,
+                        &mut temp_paths,
+                    ) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            return OperationReport::failed(
+                                OperationFamily::Patch,
+                                report.format.clone(),
+                                "prepare",
+                                error.to_string(),
+                                context.single_thread_execution(),
+                            );
+                        }
+                    };
                     match self.write_disc_output(disc, &staged_sheet, &output) {
                         Ok(note) => report.label = format!("{}; {}", report.label, note),
                         Err(error) => {
@@ -815,8 +833,8 @@ impl CliApp {
                             );
                         }
                     }
+                    raw_ready_output = staged_sheet;
                 }
-                raw_ready_output = staged_sheet;
             }
 
             if patch_count > 1 {
@@ -924,8 +942,9 @@ impl CliApp {
                         context.single_thread_execution(),
                     );
                 };
-                // A disc was already reassembled into a staged sheet (cue/gdi +
-                // bins); feed that directly to the compressor. Plain inputs
+                // For a disc, feed the original sheet to the compressor: untouched
+                // tracks are read in place from the source disc and the patched
+                // track is redirected via `disc_track_overrides`. Plain inputs
                 // stage the single patched payload under an archive-appropriate
                 // entry name.
                 let archive_input = if is_disc {
@@ -978,7 +997,7 @@ impl CliApp {
                     parent: None,
                 };
                 let compress_report = compress_handler
-                    .create(&compress_request, &context)
+                    .create_with_input_overrides(&compress_request, &disc_track_overrides, &context)
                     .unwrap_or_else(|error| {
                         OperationReport::failed(
                             OperationFamily::Container,
