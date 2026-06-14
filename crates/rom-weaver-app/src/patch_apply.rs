@@ -81,7 +81,8 @@ impl CliApp {
                 PatchChecksumValidation::Strict
             })
             .with_ppf_undo_aware(ppf_undo_aware);
-        let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        let single_thread_plan = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        let probe_threads = single_thread_plan.clone();
         let ParsedPatchApplyInputs {
             compression_options,
             cached_input_checksums,
@@ -371,7 +372,7 @@ impl CliApp {
                         None,
                         "compat",
                         error.to_string(),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     );
                 }
             };
@@ -384,7 +385,7 @@ impl CliApp {
                             None,
                             "validate",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 }
@@ -402,7 +403,7 @@ impl CliApp {
                         expected_input_checksums.len()
                     ),
                     None,
-                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    single_thread_plan.clone(),
                 );
                 match Self::validate_patch_apply_expected_checksums(
                     &apply_input,
@@ -418,7 +419,7 @@ impl CliApp {
                             None,
                             "validate",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 }
@@ -451,7 +452,7 @@ impl CliApp {
                                 None,
                                 "prepare",
                                 error.to_string(),
-                                Some(context.plan_threads(ThreadCapability::single_threaded())),
+                                single_thread_plan.clone(),
                             );
                         }
                     }
@@ -474,7 +475,7 @@ impl CliApp {
                 None,
                 "apply",
                 "patch apply was not executed",
-                Some(context.plan_threads(ThreadCapability::single_threaded())),
+                single_thread_plan.clone(),
             );
 
             for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
@@ -543,7 +544,7 @@ impl CliApp {
                             "failed to prepare output path `{}`: {error}",
                             apply_output.display()
                         ),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     );
                 }
 
@@ -591,14 +592,14 @@ impl CliApp {
                         Some(handler.descriptor().name.to_string()),
                         "apply",
                         op.to_string(),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     ),
                     Err(error) => OperationReport::failed(
                         OperationFamily::Patch,
                         Some(handler.descriptor().name.to_string()),
                         "apply",
                         error.to_string(),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     ),
                 };
                 if report.status != OperationStatus::Succeeded {
@@ -655,7 +656,7 @@ impl CliApp {
                         "finalizing multi-patch output"
                     },
                     None,
-                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    single_thread_plan.clone(),
                 );
                 let finalized_output_path = if compression_options.enabled {
                     match Self::patch_apply_raw_output_path(
@@ -672,7 +673,7 @@ impl CliApp {
                                 report.format.clone(),
                                 "prepare",
                                 error.to_string(),
-                                Some(context.plan_threads(ThreadCapability::single_threaded())),
+                                single_thread_plan.clone(),
                             );
                         }
                     }
@@ -712,7 +713,7 @@ impl CliApp {
                             report.format.clone(),
                             "compat",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 }
@@ -738,7 +739,7 @@ impl CliApp {
                             report.format.clone(),
                             "prepare",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 };
@@ -754,7 +755,7 @@ impl CliApp {
                                 report.format.clone(),
                                 "compat",
                                 error.to_string(),
-                                Some(context.plan_threads(ThreadCapability::single_threaded())),
+                                single_thread_plan.clone(),
                             );
                         }
                     }
@@ -810,7 +811,7 @@ impl CliApp {
                         expected_output_checksums.len()
                     ),
                     None,
-                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    single_thread_plan.clone(),
                 );
                 match Self::validate_patch_apply_expected_checksums(
                     &raw_ready_output,
@@ -826,7 +827,7 @@ impl CliApp {
                             report.format.clone(),
                             "validate",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 }
@@ -853,7 +854,7 @@ impl CliApp {
                             report.format.clone(),
                             "compress",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         );
                     }
                 };
@@ -864,7 +865,7 @@ impl CliApp {
                         report.format.clone(),
                         "compress",
                         "requested output format is not registered",
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     );
                 };
                 // A disc was already reassembled into a staged sheet (cue/gdi +
@@ -886,7 +887,7 @@ impl CliApp {
                                 report.format.clone(),
                                 "compress",
                                 error.to_string(),
-                                Some(context.plan_threads(ThreadCapability::single_threaded())),
+                                single_thread_plan.clone(),
                             );
                         }
                     }
@@ -928,7 +929,7 @@ impl CliApp {
                             Some(compress_handler.descriptor().name.to_string()),
                             "create",
                             error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                            single_thread_plan.clone(),
                         )
                     });
                 if compress_report.status != OperationStatus::Succeeded {
@@ -1057,6 +1058,7 @@ impl CliApp {
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> Result<PreparedApplyInput> {
+        let single_thread_plan = Some(context.plan_threads(ThreadCapability::single_threaded()));
         let mut stripped_header = None;
         let mut stripped_header_match = None;
         let mut restore_n64_order = None;
@@ -1109,7 +1111,7 @@ impl CliApp {
                             target_order.label()
                         ),
                         None,
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     );
                     restore_n64_order = Some(transform);
                     temp_paths.push(transformed_path.clone());
@@ -1136,7 +1138,7 @@ impl CliApp {
                         "compat",
                         "normalizing N64 byte order for header repair",
                         None,
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        single_thread_plan.clone(),
                     );
                     if restore_n64_order.is_none() {
                         restore_n64_order = Some(N64ByteOrderTransform {
