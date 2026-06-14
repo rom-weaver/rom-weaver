@@ -74,84 +74,24 @@ run = "cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib
 [tasks.build-wasm]
 description = "Build the threaded WASM app module (fast local dev build, no wasm-opt/brotli)"
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
+# These mirror build-wasm-prod's flags; scripts/wasm/build-app.sh holds the
+# shared build body so only this CFLAGS block differs between the two tasks.
 env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-target="wasm32-wasip1-threads"
-out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm}"
-pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm"
-artifact="$out_dir/rom-weaver-app.wasm"
-
-command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
-[[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
-[[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
-
-mkdir -p "$out_dir"
-
-echo "building $target -> $artifact"
-cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
-cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
-
-"$WASI_STRIP" "$artifact"
-
-# Sync into the npm package only when built to a separate output directory.
-if [[ "$out_dir" != "$pkg_dir" ]]; then
-  node "$MISE_PROJECT_ROOT/packages/rom-weaver-react/scripts/sync-dist.mjs" "$out_dir"
-fi
-
-echo "artifact written to $out_dir/rom-weaver-app.wasm"
-'''
+run = "bash {{ config_root }}/scripts/wasm/build-app.sh dev"
 
 [tasks.build-wasm-prod]
 description = "Build the threaded WASM app module with wasm-opt and brotli (CI/release)"
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
+# Same flags as build-wasm; the prod-only wasm-opt + brotli tail lives in
+# scripts/wasm/build-app.sh, selected by the `prod` argument.
 env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-target="wasm32-wasip1-threads"
-out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm}"
-pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm"
-artifact="$out_dir/rom-weaver-app.wasm"
-
-command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
-command -v brotli >/dev/null || { echo "missing command: brotli" >&2; exit 1; }
-[[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
-[[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
-
-mkdir -p "$out_dir"
-
-echo "building $target -> $artifact"
-cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
-cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
-
-command -v wasm-opt >/dev/null || { echo "missing command: wasm-opt (install via mise or brew install binaryen)" >&2; exit 1; }
-wasm-opt -O4 --strip-debug --strip-dwarf \
-  --enable-bulk-memory --enable-bulk-memory-opt --enable-mutable-globals \
-  --enable-nontrapping-float-to-int --enable-sign-ext --enable-reference-types \
-  --enable-simd --enable-threads \
-  -o "$artifact.opt" "$artifact"
-mv "$artifact.opt" "$artifact"
-
-"$WASI_STRIP" "$artifact"
-brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artifact"
-
-# Sync into the npm package only when built to a separate output directory.
-if [[ "$out_dir" != "$pkg_dir" ]]; then
-  node "$MISE_PROJECT_ROOT/packages/rom-weaver-react/scripts/sync-dist.mjs" "$out_dir"
-fi
-
-echo "artifacts written to $out_dir (rom-weaver-app.wasm, rom-weaver-app.wasm.br)"
-'''
+run = "bash {{ config_root }}/scripts/wasm/build-app.sh prod"
 
 [tasks.build-wasm-twiggy]
 description = "Build an unoptimized, symbol-rich WASM module for twiggy analysis"

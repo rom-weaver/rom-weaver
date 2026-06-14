@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Shared build body for the `build-wasm` (dev) and `build-wasm-prod` (CI/release)
+# mise tasks. Both tasks set the release `-O3 -flto` CFLAGS in [env] and then
+# delegate here; prod adds the wasm-opt + brotli tail.
+#
+# Mode is selected by the first argument (default: dev):
+#   build-app.sh        # dev: build + cp + strip + sync
+#   build-app.sh prod   # prod: build + cp + wasm-opt + strip + brotli + sync
+#
+# Reads MISE_PROJECT_ROOT and the WASI_* toolchain vars from the [env] block in
+# .mise.toml. Honors ROM_WEAVER_WASM_OUT_DIR (output dir) and, in prod mode,
+# BROTLI_QUALITY (defaults to 11).
+set -euo pipefail
+
+mode="${1:-dev}"
+case "$mode" in
+  dev|prod) ;;
+  *)
+    echo "usage: build-app.sh [dev|prod]" >&2
+    exit 2
+    ;;
+esac
+
+target="wasm32-wasip1-threads"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm"
+artifact="$out_dir/rom-weaver-app.wasm"
+
+command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
+if [[ "$mode" == "prod" ]]; then
+  command -v brotli >/dev/null || { echo "missing command: brotli" >&2; exit 1; }
+fi
+[[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
+[[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
+
+mkdir -p "$out_dir"
+
+echo "building $target -> $artifact"
+cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
+cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
+
+if [[ "$mode" == "prod" ]]; then
+  command -v wasm-opt >/dev/null || { echo "missing command: wasm-opt (install via mise or brew install binaryen)" >&2; exit 1; }
+  wasm-opt -O4 --strip-debug --strip-dwarf \
+    --enable-bulk-memory --enable-bulk-memory-opt --enable-mutable-globals \
+    --enable-nontrapping-float-to-int --enable-sign-ext --enable-reference-types \
+    --enable-simd --enable-threads \
+    -o "$artifact.opt" "$artifact"
+  mv "$artifact.opt" "$artifact"
+fi
+
+"$WASI_STRIP" "$artifact"
+
+if [[ "$mode" == "prod" ]]; then
+  brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artifact"
+fi
+
+# Sync into the npm package only when built to a separate output directory.
+if [[ "$out_dir" != "$pkg_dir" ]]; then
+  node "$MISE_PROJECT_ROOT/packages/rom-weaver-react/scripts/sync-dist.mjs" "$out_dir"
+fi
+
+if [[ "$mode" == "prod" ]]; then
+  echo "artifacts written to $out_dir (rom-weaver-app.wasm, rom-weaver-app.wasm.br)"
+else
+  echo "artifact written to $out_dir/rom-weaver-app.wasm"
+fi
