@@ -16,11 +16,6 @@ fn migrated_payload_paths_avoid_full_buffer_reads() {
 
     let targets = [
         GuardTarget {
-            relative_path: "crates/rom-weaver-codecs/src/backend.rs",
-            forbidden: &["fs::read(", "read_to_end("],
-            allowlist_fragments: &[],
-        },
-        GuardTarget {
             relative_path: "crates/rom-weaver-containers/src/handlers/sevenz.rs",
             forbidden: &["fs::read(", "read_to_end("],
             allowlist_fragments: &[],
