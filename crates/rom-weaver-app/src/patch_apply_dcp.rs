@@ -269,47 +269,21 @@ impl CliApp {
             Ok(plan) => plan,
             Err(error) => return fail("compress", error.to_string()),
         };
-        let Some(handler) = self.containers.find_by_name(&plan.format) else {
-            return fail(
-                "compress",
-                "requested output format is not registered".to_string(),
-            );
-        };
-        let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();
-        let compress_threads = Some(context.plan_threads(handler.capabilities().create_threads));
-        self.emit_running(
-            OperationLabel {
-                command: "patch-apply",
-                family: OperationFamily::Patch,
-                format: Some(plan.format.as_str()),
-            },
-            "compress",
-            format!(
-                "compressing rebuilt disc as {} (codec={codec_label})",
-                plan.format
-            ),
-            Some(0.0),
-            compress_threads,
+        let running_label = format!(
+            "compressing rebuilt disc as {} (codec={})",
+            plan.format,
+            plan.codec.as_deref().unwrap_or("default")
         );
-        let request = ContainerCreateRequest {
-            inputs: vec![sheet.to_path_buf()],
-            output: plan.output_path.clone(),
-            format: plan.format.clone(),
-            codec: plan.codec.clone(),
-            level: plan.level,
-            parent: None,
+        let (compress_report, codec_label) = match self.run_patch_apply_compression(
+            &plan,
+            vec![sheet.to_path_buf()],
+            overrides,
+            running_label,
+            context,
+        ) {
+            Ok(result) => result,
+            Err(error) => return fail("compress", error.to_string()),
         };
-        let compress_report = handler
-            .create_with_input_overrides(&request, overrides, context)
-            .unwrap_or_else(|error| {
-                OperationReport::failed(
-                    OperationFamily::Container,
-                    Some(handler.descriptor().name.to_string()),
-                    "create",
-                    error.to_string(),
-                    single.clone(),
-                )
-            });
         if compress_report.status != OperationStatus::Succeeded {
             return fail(
                 "compress",

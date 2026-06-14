@@ -875,16 +875,6 @@ impl CliApp {
                         );
                     }
                 };
-                let Some(compress_handler) = self.containers.find_by_name(&compression_plan.format)
-                else {
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        report.format.clone(),
-                        "compress",
-                        "requested output format is not registered",
-                        context.single_thread_execution(),
-                    );
-                };
                 // For a disc, feed the original sheet to the compressor: untouched
                 // tracks are read in place from the source disc and the patched
                 // track is redirected via `disc_track_overrides`. Plain inputs
@@ -910,46 +900,29 @@ impl CliApp {
                         }
                     }
                 };
-                let compress_threads =
-                    Some(context.plan_threads(compress_handler.capabilities().create_threads));
-                let codec_label = compression_plan
-                    .codec
-                    .as_deref()
-                    .unwrap_or("default")
-                    .to_string();
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: Some(compression_plan.format.as_str()),
-                    },
-                    "compress",
-                    format!(
-                        "compressing patched output as {} (codec={codec_label})",
-                        compression_plan.format
-                    ),
-                    Some(0.0),
-                    compress_threads,
+                let running_label = format!(
+                    "compressing patched output as {} (codec={})",
+                    compression_plan.format,
+                    compression_plan.codec.as_deref().unwrap_or("default")
                 );
-                let compress_request = ContainerCreateRequest {
-                    inputs: vec![archive_input],
-                    output: compression_plan.output_path.clone(),
-                    format: compression_plan.format.clone(),
-                    codec: compression_plan.codec.clone(),
-                    level: compression_plan.level,
-                    parent: None,
-                };
-                let compress_report = compress_handler
-                    .create_with_input_overrides(&compress_request, &disc_track_overrides, &context)
-                    .unwrap_or_else(|error| {
-                        OperationReport::failed(
-                            OperationFamily::Container,
-                            Some(compress_handler.descriptor().name.to_string()),
-                            "create",
+                let (compress_report, codec_label) = match self.run_patch_apply_compression(
+                    &compression_plan,
+                    vec![archive_input],
+                    &disc_track_overrides,
+                    running_label,
+                    &context,
+                ) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            report.format.clone(),
+                            "compress",
                             error.to_string(),
                             context.single_thread_execution(),
-                        )
-                    });
+                        );
+                    }
+                };
                 if compress_report.status != OperationStatus::Succeeded {
                     return OperationReport::failed(
                         OperationFamily::Patch,
@@ -1031,6 +1004,70 @@ struct PreparedApplyInput {
 }
 
 impl CliApp {
+    /// Shared compress-and-emit core for `patch apply` output compression, used
+    /// by both the plain patch-apply path and the `.dcp` disc rebuild. Resolves
+    /// the create handler for `plan.format`, emits the caller-supplied
+    /// "compressing…" running event, builds the container create request, runs
+    /// it with `overrides`, and returns the create report plus the codec label.
+    ///
+    /// The two callers diverge on the surrounding wording (running noun,
+    /// failure prefix, success label) and on the report family/format/threads
+    /// they attach, so status-check and label assembly stay at the call sites;
+    /// only this byte-for-byte-identical core (handler resolution, codec label,
+    /// thread plan, running event, request build, create + create-error
+    /// fallback) is shared. A missing handler — unreachable once `plan` came
+    /// from [`Self::resolve_patch_apply_compression_plan`], which already
+    /// validated registration/create capability — surfaces as the original
+    /// "requested output format is not registered" validation error for the
+    /// caller to wrap.
+    pub(super) fn run_patch_apply_compression(
+        &self,
+        plan: &PatchApplyCompressionPlan,
+        inputs: Vec<PathBuf>,
+        overrides: &[CreateInputOverride],
+        running_label: String,
+        context: &OperationContext,
+    ) -> Result<(OperationReport, String)> {
+        let Some(handler) = self.containers.find_by_name(&plan.format) else {
+            return Err(RomWeaverError::Validation(
+                "requested output format is not registered".to_string(),
+            ));
+        };
+        let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();
+        let compress_threads = Some(context.plan_threads(handler.capabilities().create_threads));
+        self.emit_running(
+            OperationLabel {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: Some(plan.format.as_str()),
+            },
+            "compress",
+            running_label,
+            Some(0.0),
+            compress_threads,
+        );
+        let request = ContainerCreateRequest {
+            inputs,
+            output: plan.output_path.clone(),
+            format: plan.format.clone(),
+            codec: plan.codec.clone(),
+            level: plan.level,
+            parent: None,
+        };
+        let compress_report = handler
+            .create_with_input_overrides(&request, overrides, context)
+            .unwrap_or_else(|error| {
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "create",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                )
+            });
+        Ok((compress_report, codec_label))
+    }
+
     /// Parse the compression options and the three checksum maps. Parse errors
     /// surface as [`RomWeaverError`]; the caller wraps them into a
     /// `validate`-stage report. Consumes the owned compress-* args (no later
