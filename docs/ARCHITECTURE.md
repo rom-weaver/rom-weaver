@@ -45,7 +45,7 @@ the WASM build over a JSON event protocol.
 | `packages/rom-weaver-react/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-react` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
 | `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `qbsdiff`, `akv`). `nod` is a git submodule pointing at a fork — push changes to the fork remote, not upstream. |
-| `scripts/` | WASM build orchestration (`build-wasm-cli.sh`, `wasm/with-wasi-env.sh`), benches, worktree setup. |
+| `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
 (`checksum`/`codecs`/`containers`/`chd`/`patches`/`xdelta`/`gdrom`/`dcp`) ←
@@ -100,7 +100,9 @@ Patterns that matter when touching this code:
   files in the browser (WASI `os error 44`, worst on Safari). Container and
   patch pipelines therefore read source bytes on the main wasm thread and keep
   only compute on workers. Gated by `ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`
-  (see `rom-weaver-containers/src/constants.rs`).
+  (containers; see `rom-weaver-containers/src/constants.rs`) and
+  `ROM_WEAVER_PATCH_MAIN_THREAD_READER` (patch apply/create; see
+  `rom-weaver-patches/src/lib.rs`).
 - **Browser thread budgets.** "auto" is resolved on the JS side
   (`packages/rom-weaver-react/src/wasm/workers/browser-thread-budget.ts` and the
   React `toThreadBudget` path) before it reaches wasm — the wasm fallback is a
@@ -177,13 +179,13 @@ require reproducing DiscUtils' exact ISO9660 layout and is deferred.
 ```
 cargo build (workspace)                     # native CLI
 cargo run -p rom-weaver-typegen -- --write  # regen TS types when Rust types change
-scripts/build-wasm-cli.sh                   # WASI SDK build → wasm-opt → brotli
+mise run build-wasm-prod                    # WASI SDK build → wasm-opt → brotli
                                             #   → sync into packages/rom-weaver-react/src/wasm
 npm --prefix packages/rom-weaver-react run dev|build
 ```
 
 The WASM build needs a WASI SDK (v33+, auto-detected; see
-`scripts/wasm/with-wasi-env.sh`). Generated wasm artifacts in
+`scripts/wasm/detect-wasi-sdk.sh` and the `build-wasm` task in `.mise.toml`). Generated wasm artifacts in
 `packages/rom-weaver-react/src/wasm` are gitignored; the generated *TypeScript*
 files are
 committed and drift-checked.

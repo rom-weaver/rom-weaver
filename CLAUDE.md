@@ -10,7 +10,7 @@ threading model, and the Rust⇄TypeScript boundary.
 cargo build -p rom-weaver-cli                      # native CLI
 cargo test --workspace                             # full Rust suite
 cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED after Rust type/metadata changes)
-scripts/build-wasm-cli.sh                          # wasm build (needs WASI SDK v33+)
+mise run build-wasm                                # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-react run dev     # webapp dev server
 npm --prefix packages/rom-weaver-react run lint    # biome + tsc + browser-compat + knip
 npm --prefix packages/rom-weaver-react run test:browser:wasm  # wasm-layer browser tests

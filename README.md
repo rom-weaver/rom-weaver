@@ -8,7 +8,7 @@
 - compress into multiple container formats
 - trim or revert trim for supported ROM/disc image families
 - apply and create many ROM patch formats
-- batch-fix supported ROM headers/checksums
+- repair ROM headers/checksums on patch apply (`--repair-checksum`)
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the workspace layout,
 crate graph, threading model, and the Rust⇄TypeScript boundary.
