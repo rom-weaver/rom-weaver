@@ -1,3 +1,12 @@
+/**
+ * On-device format DIAGNOSTIC harness — not part of the core wasm runtime.
+ *
+ * Stands up fixtures and runs every compress/extract/patch round-trip through
+ * the browser OPFS/wasm stack, asserting pass/fail patterns. Reachable only
+ * from the standalone `mobile-safari-matrix.html` page (via
+ * `src/webapp/mobile-safari-matrix.ts`) to verify formats on real iOS Safari /
+ * WebKit. The app itself never imports this module.
+ */
 import {
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,

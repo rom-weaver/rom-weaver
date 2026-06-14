@@ -1,3 +1,9 @@
+/**
+ * Entry script for the standalone `mobile-safari-matrix.html` on-device
+ * DIAGNOSTIC page. Installs `window.ROM_WEAVER_IOS_SAFARI_MATRIX` and drives the
+ * format matrix harness (`../wasm/browser-format-matrix.ts`) on real iOS Safari
+ * / WebKit. Not imported by the app.
+ */
 import {
   type BrowserFormatMatrixStep,
   type BrowserFormatMatrixSummary,
