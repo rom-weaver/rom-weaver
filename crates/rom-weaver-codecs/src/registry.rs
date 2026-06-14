@@ -1,36 +1,16 @@
-use std::{
-    fs::{self, File},
-    io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
-    path::Path,
-};
+use std::io::{BufReader, Cursor, Read, Write};
 
-use bzip2::{Compression as Bzip2Compression, read::MultiBzDecoder, write::BzEncoder};
-use flate2::{
-    Compression as FlateCompression, read::DeflateDecoder, read::ZlibDecoder, write::GzEncoder,
-};
+use bzip2::read::MultiBzDecoder;
+use flate2::{read::DeflateDecoder, read::ZlibDecoder};
 use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzWriter};
-use rayon::prelude::*;
-use rom_weaver_core::{
-    BoundedIoPolicy, ChunkPlanner, CodecBackend, CodecCapabilities, CodecDescriptor,
-    CodecOperationRequest, FileChunk, OperationContext, OperationFamily, OperationReport,
-    OrderedChunkWriter, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
-    ThreadExecution,
-};
-use rom_weaver_libarchive::{ReadArchive, ReadFilter};
-use zstd::stream::{Decoder as ZstdDecoder, write::Encoder as ZstdEncoder};
+use rom_weaver_core::{Result, RomWeaverError};
+use zstd::stream::Decoder as ZstdDecoder;
 
 #[path = "definitions.rs"]
 mod definitions;
-use self::definitions::*;
 pub use self::definitions::{
-    CanonicalCodec, CodecRegistry, RequestedCodec, normalize_codec_label, parse_requested_codec,
+    CanonicalCodec, RequestedCodec, normalize_codec_label, parse_requested_codec,
 };
-
-#[path = "backend.rs"]
-mod backend;
-
-#[path = "backend_trait.rs"]
-mod backend_trait;
 
 #[path = "helpers.rs"]
 mod helpers;

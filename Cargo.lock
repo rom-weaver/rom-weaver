@@ -1734,10 +1734,7 @@ dependencies = [
  "bzip2",
  "flate2",
  "lzma-rust2",
- "rayon",
  "rom-weaver-core",
- "rom-weaver-libarchive",
- "tracing",
  "zstd",
 ]
 
