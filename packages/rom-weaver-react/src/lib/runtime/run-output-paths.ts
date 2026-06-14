@@ -20,13 +20,19 @@ const normalizeAbsolutePosixPath = (pathValue: string): string => {
   return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
 };
 
-const selectRomWeaverOutputPath = (sourcePath: string, outputFileName: string, blockedPaths: string[] = []) => {
+const selectRomWeaverOutputPath = (
+  sourcePath: string,
+  outputFileName: string,
+  // `modifiedFilePath` is optional now that patch-create accepts cheat codes
+  // instead of a modified ROM; undefined entries are coerced/filtered below.
+  blockedPaths: Array<string | undefined> = [],
+) => {
   const outputBaseName = getPathBaseName(outputFileName, "output.bin");
   const preferredPath = joinPath(WORK_ROOT_PATH, outputBaseName);
   const normalizedPreferredPath = normalizeAbsolutePosixPath(preferredPath);
   const normalizedBlocked = new Set(
     [sourcePath, ...blockedPaths]
-      .map((pathValue) => normalizeAbsolutePosixPath(pathValue))
+      .map((pathValue) => normalizeAbsolutePosixPath(pathValue ?? ""))
       .filter((pathValue) => !!pathValue),
   );
   if (normalizedBlocked.has(normalizedPreferredPath)) {

@@ -103,7 +103,12 @@ const selectPreferredExtractedFile = async (input: {
   return selected;
 };
 
-const removeBrowserVfsOutputPaths = async (filePaths: string[], blockedPaths: string[] = []) => {
+const removeBrowserVfsOutputPaths = async (
+  filePaths: string[],
+  // `modifiedFilePath` is optional now that patch-create accepts cheat codes
+  // instead of a modified ROM; the body coerces undefined away below.
+  blockedPaths: Array<string | undefined> = [],
+) => {
   const seen = new Set<string>();
   const blocked = new Set(
     blockedPaths.map((filePath) => String(filePath || "").trim()).filter((filePath) => !!filePath),
