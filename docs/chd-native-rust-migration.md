@@ -16,9 +16,9 @@ This branch now runs CHD through the Rust path directly with no runtime backend 
 
 ## Default create codec plans
 
-- CD/GD: `cdzs,cdzl,cdfl`
-- DVD: `zstd,zlib,huff,flac`
-- Raw/HD: `zstd,zlib,huff,flac`
+- CD/GD: `cdlz,cdzl,cdfl`
+- DVD: `lzma,zlib,huff,flac`
+- Raw/HD: `lzma,zlib,huff,flac`
 
 ## Remaining parity gap
 

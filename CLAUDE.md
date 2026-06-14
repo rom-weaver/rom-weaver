@@ -45,8 +45,8 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - Browser wasm runtime (OPFS, thread pool, worker client):
   `packages/rom-weaver-react/src/wasm`
 - Webapp workflows/forms: `packages/rom-weaver-react/src`
-- Vendored forks: `vendor/` (`nod` is a submodule — push to the fork remote,
-  not upstream)
+- Vendored forks: `vendor/` (`nod` and `libarchive` are submodules; push `nod`
+  changes to the fork remote, not upstream)
 
 ## Worktrees
 
