@@ -88,15 +88,9 @@ impl CliApp {
             label,
             details: Some(Value::Object(details)),
             percent: None,
-            requested_threads: thread_execution.map(|value| value.requested_threads),
-            effective_threads: thread_execution.map(|value| value.effective_threads),
-            thread_mode: thread_execution.map(|value| value.thread_mode),
-            used_parallelism: thread_execution.map(|value| value.used_parallelism),
-            thread_fallback: thread_execution.map(|value| value.thread_fallback),
-            thread_fallback_reason: thread_execution
-                .and_then(|value| value.thread_fallback_reason.clone()),
             elapsed_ms: None,
             status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(thread_execution)
         });
     }
 }

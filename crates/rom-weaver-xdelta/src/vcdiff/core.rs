@@ -1409,14 +1409,9 @@ impl<'a> CreateProgress<'a> {
             label: format!("creating {} patch", self.format),
             details: None,
             percent: Some(percent as f32),
-            requested_threads: Some(execution.requested_threads),
-            effective_threads: Some(execution.effective_threads),
-            thread_mode: Some(execution.thread_mode),
-            used_parallelism: Some(execution.used_parallelism),
-            thread_fallback: Some(execution.thread_fallback),
-            thread_fallback_reason: execution.thread_fallback_reason.clone(),
             elapsed_ms: None,
             status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(Some(&*execution))
         });
     }
 }

@@ -564,14 +564,9 @@ impl<'a> BpsApplyProgress<'a> {
             label: format!("applying patch using {}", self.format_name),
             details: None,
             percent: Some(bucket as f32),
-            requested_threads: None,
-            effective_threads: None,
-            thread_mode: None,
-            used_parallelism: None,
-            thread_fallback: None,
-            thread_fallback_reason: None,
             elapsed_ms: None,
             status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(None)
         });
     }
 }
@@ -1034,14 +1029,9 @@ impl<'a> BpsCreateProgress<'a> {
             label: label.to_string(),
             details: None,
             percent: Some(percent),
-            requested_threads: None,
-            effective_threads: None,
-            thread_mode: None,
-            used_parallelism: None,
-            thread_fallback: None,
-            thread_fallback_reason: None,
             elapsed_ms: None,
             status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(None)
         });
     }
 }

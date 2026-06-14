@@ -72,6 +72,43 @@ pub struct ProgressEvent {
     pub status: OperationStatus,
 }
 
+impl ProgressEvent {
+    /// Base event carrying only the six flattened thread-execution fields,
+    /// derived from `execution` (all `None` when it is `None`). Intended for
+    /// struct-update syntax so each emit site maps a `ThreadExecution` in
+    /// exactly one place — add or rename a thread field here, not at 8 call
+    /// sites:
+    ///
+    /// ```ignore
+    /// ProgressEvent {
+    ///     command, family, format, stage, label, details, percent, status,
+    ///     ..ProgressEvent::from_thread_execution(thread_execution)
+    /// }
+    /// ```
+    ///
+    /// The non-thread fields below are placeholders the caller overrides.
+    pub fn from_thread_execution(execution: Option<&ThreadExecution>) -> Self {
+        Self {
+            command: String::new(),
+            family: OperationFamily::Command,
+            format: None,
+            stage: String::new(),
+            label: String::new(),
+            details: None,
+            percent: None,
+            requested_threads: execution.map(|value| value.requested_threads),
+            effective_threads: execution.map(|value| value.effective_threads),
+            thread_mode: execution.map(|value| value.thread_mode),
+            used_parallelism: execution.map(|value| value.used_parallelism),
+            thread_fallback: execution.map(|value| value.thread_fallback),
+            thread_fallback_reason: execution
+                .and_then(|value| value.thread_fallback_reason.clone()),
+            elapsed_ms: None,
+            status: OperationStatus::Pending,
+        }
+    }
+}
+
 pub fn emit_container_running_progress(
     context: &OperationContext,
     command: &str,
@@ -100,15 +137,9 @@ pub fn emit_container_running_progress(
         label: label.into(),
         details: None,
         percent: Some(clamped_percent),
-        requested_threads: thread_execution.map(|value| value.requested_threads),
-        effective_threads: thread_execution.map(|value| value.effective_threads),
-        thread_mode: thread_execution.map(|value| value.thread_mode),
-        used_parallelism: thread_execution.map(|value| value.used_parallelism),
-        thread_fallback: thread_execution.map(|value| value.thread_fallback),
-        thread_fallback_reason: thread_execution
-            .and_then(|value| value.thread_fallback_reason.clone()),
         elapsed_ms: None,
         status: OperationStatus::Running,
+        ..ProgressEvent::from_thread_execution(thread_execution)
     });
 }
 
