@@ -3,6 +3,7 @@
 /.tmp/
 /.tmp-disc/
 /rom-weaver-out/
+/rom-weaver/
 .claude/
 **/__pycache__/
 
