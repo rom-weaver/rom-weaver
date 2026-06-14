@@ -24,12 +24,6 @@ pre-commit:
     react-types:
       glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:types
-    wasm-lint:
-      glob: "packages/rom-weaver-wasm/**"
-      run: npm --prefix packages/rom-weaver-wasm run lint:code
-    wasm-types:
-      glob: "packages/rom-weaver-wasm/**"
-      run: npm --prefix packages/rom-weaver-wasm run check:types
     whitespace:
       run: git diff --cached --check
     thread-guard-regressions:

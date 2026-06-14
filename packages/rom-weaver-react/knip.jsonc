@@ -16,7 +16,6 @@
     "scripts/**/*.mjs",
     "*.mjs"
   ],
-  "ignoreDependencies": ["@vitest/browser"],
   "ignoreBinaries": ["rg", "openssl"],
   "rules": {
     "exports": "off",

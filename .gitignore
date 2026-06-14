@@ -1,6 +1,7 @@
 /target
 /node_modules/
 /.tmp/
+/.tmp-disc/
 /rom-weaver/
 .claude/
 **/__pycache__/
