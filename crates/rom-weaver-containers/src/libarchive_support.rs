@@ -710,6 +710,37 @@ struct LibarchiveExtractTask {
     logical_bytes: Option<u64>,
 }
 
+// Below this total uncompressed size a multi-file archive extract runs serially instead of spawning a
+// worker per file. Mirrors 7z create's `LZMA2_MT_SPLIT_THRESHOLD_BYTES` floor: standing up the
+// budget-sized worker pool for a tiny archive costs more than it saves — each worker is a thread (a
+// Worker + wasm instantiate + per-thread OPFS fd-build on wasm, ~tens of ms) that trivial decode
+// never uses.
+const LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES: u64 = 4 << 20;
+
+// Total uncompressed bytes of the file (non-directory) entries to extract. Uses the per-entry logical
+// size from the archive header, so a small outer archive wrapping one large nested container still
+// reports a large total and keeps its parallelism.
+fn libarchive_extract_total_logical_bytes(tasks: &[LibarchiveExtractTask]) -> u64 {
+    tasks
+        .iter()
+        .filter(|task| !task.is_dir)
+        .map(|task| task.logical_bytes.unwrap_or(0))
+        .fold(0u64, |total, bytes| total.saturating_add(bytes))
+}
+
+// Worker count for a libarchive extract: serial below the MT floor, otherwise one per file entry (the
+// thread negotiator then clamps to the configured budget). Mirrors 7z create's `lzma2_achievable_blocks`.
+fn libarchive_extract_achievable_threads(
+    total_logical_bytes: u64,
+    file_task_count: usize,
+) -> usize {
+    if total_logical_bytes <= LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES {
+        1
+    } else {
+        file_task_count.max(1)
+    }
+}
+
 #[derive(Debug)]
 enum LibarchiveExtractOutput {
     Directory {
@@ -1168,8 +1199,25 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         (execution, written, output_checksums)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
-        let capability = ThreadCapability::parallel(Some(file_task_count));
-        let (execution, pool) = context.build_pool(capability)?;
+        let total_logical_bytes = libarchive_extract_total_logical_bytes(&tasks);
+        let achievable_threads =
+            libarchive_extract_achievable_threads(total_logical_bytes, file_task_count);
+        // Only stand up the shared worker pool when this extract will actually parallelize. A small
+        // archive (under the MT floor, or a single file) negotiates serial, and building the
+        // budget-sized operation pool for it would spawn a worker per budget thread that the serial
+        // decode never uses (the dominant cost on wasm). Skipping it keeps the operation pool lazy so
+        // a later parallel extract — e.g. a large nested container — still builds and reuses it.
+        // Mirrors 7z create, which skips its pool below the MT floor.
+        let mut execution =
+            context.plan_threads(ThreadCapability::parallel(Some(achievable_threads)));
+        let pool = if execution.used_parallelism {
+            let (pool_execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(achievable_threads)))?;
+            execution = pool_execution;
+            Some(pool)
+        } else {
+            None
+        };
         let source = request.source.clone();
         let progress_context = context.clone();
         let progress_execution = execution.clone();
@@ -1222,25 +1270,27 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                     .name("rom-weaver-libarchive-extract".to_string())
                     .stack_size(PARALLEL_COORDINATOR_STACK_SIZE_BYTES)
                     .spawn_scoped(scope, || {
-                        pool.install(|| {
-                            tasks.par_chunks(chunk_size).try_for_each_with(
-                                sender,
-                                |sender, chunk| {
-                                    let chunk_source = match &source_bytes {
-                                        Some(bytes) => {
-                                            ChunkArchiveSource::Memory(Arc::clone(bytes))
-                                        }
-                                        None => ChunkArchiveSource::Path(&source),
-                                    };
-                                    extract_libarchive_task_chunk_to_sender(
-                                        chunk_source,
-                                        chunk,
-                                        format_name,
-                                        sender,
-                                    )
-                                },
-                            )
-                        })
+                        pool.as_ref()
+                            .expect("parallel extract builds a worker pool")
+                            .install(|| {
+                                tasks.par_chunks(chunk_size).try_for_each_with(
+                                    sender,
+                                    |sender, chunk| {
+                                        let chunk_source = match &source_bytes {
+                                            Some(bytes) => {
+                                                ChunkArchiveSource::Memory(Arc::clone(bytes))
+                                            }
+                                            None => ChunkArchiveSource::Path(&source),
+                                        };
+                                        extract_libarchive_task_chunk_to_sender(
+                                            chunk_source,
+                                            chunk,
+                                            format_name,
+                                            sender,
+                                        )
+                                    },
+                                )
+                            })
                     })
                     .map_err(|error| {
                         RomWeaverError::Validation(format!(

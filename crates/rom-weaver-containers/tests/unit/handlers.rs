@@ -1396,9 +1396,12 @@ mod tests {
             fs::create_dir_all(&temp_dir).expect("temp dir");
             let input_dir = temp_dir.join("input");
             fs::create_dir_all(&input_dir).expect("input dir");
+            // 1 MiB per file (8 MiB total) so the archive is above the extract MT floor and the
+            // multi-file extract still negotiates parallel to match the declared capability; a
+            // smaller total now intentionally runs serially (see libarchive extract MT threshold).
             for index in 0..8 {
                 let path = input_dir.join(format!("file-{index}.bin"));
-                let content = (0..32_768)
+                let content = (0..1_048_576)
                     .map(|offset| (offset as u8).wrapping_add(index as u8))
                     .collect::<Vec<_>>();
                 fs::write(path, content).expect("write fixture");
@@ -1456,7 +1459,7 @@ mod tests {
             for index in 0..8 {
                 let path = output_dir.join(format!("input/file-{index}.bin"));
                 let content = fs::read(path).expect("read extracted file");
-                let expected = (0..32_768)
+                let expected = (0..1_048_576)
                     .map(|offset| (offset as u8).wrapping_add(index as u8))
                     .collect::<Vec<_>>();
                 assert_eq!(content, expected);
