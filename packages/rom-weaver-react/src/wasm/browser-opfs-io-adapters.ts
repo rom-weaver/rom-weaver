@@ -63,6 +63,136 @@ type ReadCacheBlock = {
 
 type RandomAccessFileIoStats = ReturnType<typeof createRandomAccessFileIoStats>;
 
+// Which ioStats counters a read cache bumps. The OPFS-backed and virtual-Blob-backed adapters keep
+// separate counter families (opfsCache*/blobCache*) so the trace can attribute reads to the right
+// backend; the cache logic is otherwise identical.
+type ReadCacheStatKeys = {
+  fillBytes: keyof RandomAccessFileIoStats;
+  hitBytes: keyof RandomAccessFileIoStats;
+  hits: keyof RandomAccessFileIoStats;
+  misses: keyof RandomAccessFileIoStats;
+};
+
+type ReadCacheOptions = {
+  blockBytes: number;
+  blockCount: number;
+  // Reads the backing store into `buf` starting at `blockStart`, returning bytes actually read. The
+  // adapter owns this so the cache stays oblivious to OPFS vs Blob/proxy I/O.
+  fill: (blockStart: number, buf: Uint8Array) => number;
+  reusableBlockErrorMessage: string;
+  statKeys: ReadCacheStatKeys;
+  stats: RandomAccessFileIoStats;
+};
+
+// Fixed-capacity, block-aligned LRU read cache shared by BrowserOpfsRandomAccessFile and
+// BrowserVirtualRandomAccessFile. Behavior (block size/count, LRU eviction, hit/miss accounting, and
+// the fill-on-miss path) is exactly what each adapter open-coded before — only the backing read and
+// the bumped ioStats counters differ, both injected via options. This is a hot path: keep it identical.
+class LruReadCache {
+  private readonly blockBytes: number;
+  private readonly blockCount: number;
+  private readonly blocks: ReadCacheBlock[];
+  private readonly fill: (blockStart: number, buf: Uint8Array) => number;
+  private readonly reusableBlockErrorMessage: string;
+  private readonly statKeys: ReadCacheStatKeys;
+  private readonly stats: RandomAccessFileIoStats;
+  private tick: number;
+
+  constructor(options: ReadCacheOptions) {
+    this.blockBytes = options.blockBytes;
+    this.blockCount = options.blockCount;
+    this.fill = options.fill;
+    this.reusableBlockErrorMessage = options.reusableBlockErrorMessage;
+    this.statKeys = options.statKeys;
+    this.stats = options.stats;
+    this.blocks = [];
+    this.tick = 0;
+  }
+
+  fitsWithinBlock(offset: number, byteLength: number): boolean {
+    return readFitsWithinCacheBlock(offset, byteLength, this.blockBytes);
+  }
+
+  read(offset: number, dst: Uint8Array): number | null {
+    const cached = this.findBlock(offset);
+    if (cached) {
+      const bytesRead = this.copyBlock(cached, offset, dst);
+      this.stats[this.statKeys.hits] += 1;
+      this.stats[this.statKeys.hitBytes] += bytesRead;
+      return bytesRead;
+    }
+
+    const blockStart = Math.floor(offset / this.blockBytes) * this.blockBytes;
+    const block = this.acquireBlock();
+    this.stats[this.statKeys.misses] += 1;
+    const bytesRead = this.fill(blockStart, block.bytes);
+    if (bytesRead <= 0) return bytesRead;
+    this.stats[this.statKeys.fillBytes] += bytesRead;
+    block.start = blockStart;
+    block.length = Math.min(bytesRead, block.bytes.byteLength);
+    block.lastUsed = ++this.tick;
+    return this.copyBlock(block, offset, dst);
+  }
+
+  findBlock(offset: number): ReadCacheBlock | null {
+    for (const block of this.blocks) {
+      if (offset >= block.start && offset < block.start + block.length) {
+        block.lastUsed = ++this.tick;
+        return block;
+      }
+    }
+    return null;
+  }
+
+  acquireBlock(): ReadCacheBlock {
+    if (this.blocks.length < this.blockCount) {
+      const block = {
+        bytes: new Uint8Array(this.blockBytes),
+        lastUsed: 0,
+        length: 0,
+        start: 0,
+      };
+      this.blocks.push(block);
+      return block;
+    }
+    let oldest = this.blocks[0];
+    if (!oldest) throw new Error(this.reusableBlockErrorMessage);
+    for (const block of this.blocks) {
+      if (block.lastUsed < oldest.lastUsed) oldest = block;
+    }
+    return oldest;
+  }
+
+  copyBlock(block: ReadCacheBlock, offset: number, dst: Uint8Array): number {
+    const relativeOffset = offset - block.start;
+    if (relativeOffset < 0 || relativeOffset >= block.length) return 0;
+    const available = block.length - relativeOffset;
+    const length = Math.min(dst.byteLength, available);
+    if (length <= 0) return 0;
+    dst.set(block.bytes.subarray(relativeOffset, relativeOffset + length));
+    return length;
+  }
+
+  clear(): void {
+    this.blocks.length = 0;
+  }
+
+  // Empties any cache block whose [start, start+length) overlaps [start, end). A block is reset to
+  // empty (length 0) rather than removed so its backing buffer can be reused by acquireBlock.
+  invalidateRange(start: number, end: number): void {
+    if (this.blocks.length === 0) return;
+    for (const block of this.blocks) {
+      if (block.length <= 0) continue;
+      const blockEnd = block.start + block.length;
+      if (start < blockEnd && end > block.start) {
+        block.start = 0;
+        block.length = 0;
+        block.lastUsed = 0;
+      }
+    }
+  }
+}
+
 type VirtualFileProxySlot = {
   controlBuffer: SharedArrayBuffer;
   dataBuffer: SharedArrayBuffer;
@@ -84,8 +214,7 @@ class BrowserOpfsRandomAccessFile {
   dirty: boolean;
   ioStats: RandomAccessFileIoStats;
   logicalSize: number | null;
-  readCacheBlocks: ReadCacheBlock[];
-  readCacheTick: number;
+  readCache: LruReadCache;
   scratchName: string | null;
   supportsBufferedSequentialWrite: boolean;
   supportsDirectWasmRead: boolean;
@@ -97,9 +226,21 @@ class BrowserOpfsRandomAccessFile {
     this.dirty = false;
     this.supportsDirectWasmRead = true;
     this.supportsBufferedSequentialWrite = true;
-    this.readCacheBlocks = [];
-    this.readCacheTick = 0;
     this.ioStats = createRandomAccessFileIoStats();
+    this.readCache = new LruReadCache({
+      blockBytes: RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES,
+      blockCount: RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT,
+      fill: (blockStart, buf) =>
+        this.readSyncAccessHandleAt(blockStart, buf, Math.min(buf.byteLength, this.size() - blockStart)),
+      reusableBlockErrorMessage: "OPFS read cache has no reusable blocks",
+      statKeys: {
+        fillBytes: "opfsCacheFillBytes",
+        hitBytes: "opfsCacheHitBytes",
+        hits: "opfsCacheHits",
+        misses: "opfsCacheMisses",
+      },
+      stats: this.ioStats,
+    });
     this.logicalSize = null;
     this.closed = false;
   }
@@ -110,9 +251,9 @@ class BrowserOpfsRandomAccessFile {
     if (!Number.isFinite(start) || start < 0) return 0;
     if (
       dst.byteLength <= RANDOM_ACCESS_READ_CACHE_MAX_REQUEST_BYTES &&
-      readFitsWithinCacheBlock(start, dst.byteLength)
+      this.readCache.fitsWithinBlock(start, dst.byteLength)
     ) {
-      const cachedRead = this.readFromCache(start, dst);
+      const cachedRead = this.readCache.read(start, dst);
       if (cachedRead !== null) return cachedRead;
     }
     return this.readSyncAccessHandleAt(start, dst);
@@ -130,7 +271,7 @@ class BrowserOpfsRandomAccessFile {
       this.logicalSize = Math.max(this.logicalSize ?? 0, start + written);
       // Only drop cache blocks that overlap the bytes just written, so an interleaved
       // read/modify/write workload keeps unrelated cached blocks instead of refetching them all.
-      this.invalidateReadCacheRange(start, start + written);
+      this.readCache.invalidateRange(start, start + written);
     }
     return written;
   }
@@ -150,35 +291,10 @@ class BrowserOpfsRandomAccessFile {
     if (this.syncHandle.getSize() === normalizedSize && this.logicalSize === normalizedSize) return;
     // A shrink drops cached bytes at/after the new end; a grow only zero-fills past the old end.
     // Either way, invalidating [newSize, infinity) is sufficient and leaves earlier cached bytes valid.
-    this.invalidateReadCacheRange(normalizedSize, Number.POSITIVE_INFINITY);
+    this.readCache.invalidateRange(normalizedSize, Number.POSITIVE_INFINITY);
     this.syncHandle.truncate(normalizedSize);
     this.logicalSize = normalizedSize;
     this.dirty = true;
-  }
-
-  readFromCache(offset: number, dst: Uint8Array): number | null {
-    const cached = this.findReadCacheBlock(offset);
-    if (cached) {
-      const bytesRead = this.copyReadCacheBlock(cached, offset, dst);
-      this.ioStats.opfsCacheHits += 1;
-      this.ioStats.opfsCacheHitBytes += bytesRead;
-      return bytesRead;
-    }
-
-    const blockStart = Math.floor(offset / RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES) * RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES;
-    const block = this.acquireReadCacheBlock();
-    this.ioStats.opfsCacheMisses += 1;
-    const bytesRead = this.readSyncAccessHandleAt(
-      blockStart,
-      block.bytes,
-      Math.min(block.bytes.byteLength, this.size() - blockStart),
-    );
-    if (bytesRead <= 0) return bytesRead;
-    this.ioStats.opfsCacheFillBytes += bytesRead;
-    block.start = blockStart;
-    block.length = Math.min(bytesRead, block.bytes.byteLength);
-    block.lastUsed = ++this.readCacheTick;
-    return this.copyReadCacheBlock(block, offset, dst);
   }
 
   readSyncAccessHandleAt(offset: number, dst: Uint8Array, requestedLength = dst.byteLength): number {
@@ -198,64 +314,6 @@ class BrowserOpfsRandomAccessFile {
     return totalRead;
   }
 
-  findReadCacheBlock(offset: number): ReadCacheBlock | null {
-    for (const block of this.readCacheBlocks) {
-      if (offset >= block.start && offset < block.start + block.length) {
-        block.lastUsed = ++this.readCacheTick;
-        return block;
-      }
-    }
-    return null;
-  }
-
-  acquireReadCacheBlock(): ReadCacheBlock {
-    if (this.readCacheBlocks.length < RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT) {
-      const block = {
-        bytes: new Uint8Array(RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES),
-        lastUsed: 0,
-        length: 0,
-        start: 0,
-      };
-      this.readCacheBlocks.push(block);
-      return block;
-    }
-    let oldest = this.readCacheBlocks[0];
-    if (!oldest) throw new Error("OPFS read cache has no reusable blocks");
-    for (const block of this.readCacheBlocks) {
-      if (block.lastUsed < oldest.lastUsed) oldest = block;
-    }
-    return oldest;
-  }
-
-  copyReadCacheBlock(block: ReadCacheBlock, offset: number, dst: Uint8Array): number {
-    const relativeOffset = offset - block.start;
-    if (relativeOffset < 0 || relativeOffset >= block.length) return 0;
-    const available = block.length - relativeOffset;
-    const length = Math.min(dst.byteLength, available);
-    if (length <= 0) return 0;
-    dst.set(block.bytes.subarray(relativeOffset, relativeOffset + length));
-    return length;
-  }
-
-  clearReadCache(): void {
-    this.readCacheBlocks.length = 0;
-  }
-
-  // Empties any cache block whose [start, start+length) overlaps [start, end). A block is reset to
-  // empty (length 0) rather than removed so its backing buffer can be reused by acquireReadCacheBlock.
-  invalidateReadCacheRange(start: number, end: number) {
-    if (this.readCacheBlocks.length === 0) return;
-    for (const block of this.readCacheBlocks) {
-      if (block.length <= 0) continue;
-      const blockEnd = block.start + block.length;
-      if (start < blockEnd && end > block.start) {
-        block.start = 0;
-        block.length = 0;
-        block.lastUsed = 0;
-      }
-    }
-  }
-
   flush(): void {
     if (!this.dirty) return;
     if (this.scratchName) {
@@ -272,7 +330,7 @@ class BrowserOpfsRandomAccessFile {
   close(): void {
     if (this.closed) return;
     try {
-      this.clearReadCache();
+      this.readCache.clear();
       this.syncHandle.close();
     } finally {
       this.closed = true;
@@ -353,8 +411,7 @@ class BrowserVirtualRandomAccessFile {
   ioStats: RandomAccessFileIoStats;
   proxy: VirtualFileProxy | null;
   proxyFailed: boolean;
-  readCacheTick: number;
-  readCacheBlocks: ReadCacheBlock[];
+  readCache: LruReadCache;
   readCount: number;
   reader: FileReaderSyncLike | null;
   slots: VirtualFileProxySlotView[];
@@ -369,9 +426,20 @@ class BrowserVirtualRandomAccessFile {
     this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
     this.trace = typeof options.trace === "function" ? options.trace : null;
     this.readCount = 0;
-    this.readCacheBlocks = [];
-    this.readCacheTick = 0;
     this.ioStats = createRandomAccessFileIoStats();
+    this.readCache = new LruReadCache({
+      blockBytes: VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES,
+      blockCount: VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT,
+      fill: (blockStart, buf) => this.readBlobAt(blockStart, buf, Math.min(buf.byteLength, this.size() - blockStart)),
+      reusableBlockErrorMessage: "virtual read cache has no reusable blocks",
+      statKeys: {
+        fillBytes: "blobCacheFillBytes",
+        hitBytes: "blobCacheHitBytes",
+        hits: "blobCacheHits",
+        misses: "blobCacheMisses",
+      },
+      stats: this.ioStats,
+    });
     this.supportsDirectWasmRead = true;
     this.closed = false;
     // Set once a proxy read times out: the producer may still own a slot, so the proxy stops
@@ -398,9 +466,9 @@ class BrowserVirtualRandomAccessFile {
     }
     if (
       dst.byteLength <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES &&
-      readFitsWithinCacheBlock(start, dst.byteLength, VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES)
+      this.readCache.fitsWithinBlock(start, dst.byteLength)
     ) {
-      const cachedRead = this.readBlobFromCache(start, dst);
+      const cachedRead = this.readCache.read(start, dst);
       if (cachedRead !== null) return cachedRead;
     }
     return this.readBlobAt(start, dst, length);
@@ -417,74 +485,6 @@ class BrowserVirtualRandomAccessFile {
     this.ioStats.blobReadBytes += bytes.byteLength;
     dst.set(bytes);
     return bytes.byteLength;
-  }
-
-  readBlobFromCache(offset: number, dst: Uint8Array): number | null {
-    const cached = this.findReadCacheBlock(offset);
-    if (cached) {
-      const bytesRead = this.copyReadCacheBlock(cached, offset, dst);
-      this.ioStats.blobCacheHits += 1;
-      this.ioStats.blobCacheHitBytes += bytesRead;
-      return bytesRead;
-    }
-
-    const blockStart = Math.floor(offset / VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES) * VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES;
-    const block = this.acquireReadCacheBlock();
-    this.ioStats.blobCacheMisses += 1;
-    const bytesRead = this.readBlobAt(
-      blockStart,
-      block.bytes,
-      Math.min(block.bytes.byteLength, this.size() - blockStart),
-    );
-    if (bytesRead <= 0) return bytesRead;
-    this.ioStats.blobCacheFillBytes += bytesRead;
-    block.start = blockStart;
-    block.length = Math.min(bytesRead, block.bytes.byteLength);
-    block.lastUsed = ++this.readCacheTick;
-    return this.copyReadCacheBlock(block, offset, dst);
-  }
-
-  findReadCacheBlock(offset: number): ReadCacheBlock | null {
-    for (const block of this.readCacheBlocks) {
-      if (offset >= block.start && offset < block.start + block.length) {
-        block.lastUsed = ++this.readCacheTick;
-        return block;
-      }
-    }
-    return null;
-  }
-
-  acquireReadCacheBlock(): ReadCacheBlock {
-    if (this.readCacheBlocks.length < VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT) {
-      const block = {
-        bytes: new Uint8Array(VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES),
-        lastUsed: 0,
-        length: 0,
-        start: 0,
-      };
-      this.readCacheBlocks.push(block);
-      return block;
-    }
-    let oldest = this.readCacheBlocks[0];
-    if (!oldest) throw new Error("virtual read cache has no reusable blocks");
-    for (const block of this.readCacheBlocks) {
-      if (block.lastUsed < oldest.lastUsed) oldest = block;
-    }
-    return oldest;
-  }
-
-  copyReadCacheBlock(block: ReadCacheBlock, offset: number, dst: Uint8Array): number {
-    const relativeOffset = offset - block.start;
-    if (relativeOffset < 0 || relativeOffset >= block.length) return 0;
-    const available = block.length - relativeOffset;
-    const length = Math.min(dst.byteLength, available);
-    if (length <= 0) return 0;
-    dst.set(block.bytes.subarray(relativeOffset, relativeOffset + length));
-    return length;
-  }
-
-  clearReadCache(): void {
-    this.readCacheBlocks.length = 0;
   }
 
   readProxyAt(offset: number, dst: Uint8Array, requestedLength: number, readIndex: number): number {
@@ -636,7 +636,7 @@ class BrowserVirtualRandomAccessFile {
 
   close(): void {
     if (this.closed) return;
-    this.clearReadCache();
+    this.readCache.clear();
     this.reader = null;
     this.closed = true;
   }
