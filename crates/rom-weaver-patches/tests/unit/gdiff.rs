@@ -5,7 +5,7 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 use super::{GdiffPatchHandler, write_gdiff_header};
 use crate::{
     GDIFF,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 enum TestGdiffCommand {
@@ -132,44 +132,18 @@ fn apply_rejects_negative_copy_position() {
 
 #[test]
 fn create_and_apply_round_trip() {
-    let temp = TestDir::new();
-    let source_path = temp.child("source.bin");
-    let target_path = temp.child("target.bin");
-    let patch_path = temp.child("update.gdiff");
-    let output_path = temp.child("output.bin");
-
-    fs::write(&source_path, b"this is the old bytes").expect("fixture");
     let mut target = b"this is a different target with more bytes".to_vec();
     target.extend_from_slice(&[0x01, 0x02, 0x03, 0x04]);
-    fs::write(&target_path, &target).expect("fixture");
 
     let handler = GdiffPatchHandler::new(&GDIFF);
-    handler
-        .create(
-            &PatchCreateRequest {
-                original: source_path.clone(),
-                modified: target_path.clone(),
-                output: patch_path.clone(),
-                format: "gdiff".into(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("create");
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: source_path,
-                patches: vec![patch_path],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 1),
-        )
-        .expect("apply");
-
-    assert_eq!(
-        fs::read(output_path).expect("output"),
-        fs::read(target_path).expect("target")
+    assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "gdiff",
+            create_threads: 4,
+            apply_threads: 1,
+            ..RoundTripCase::new(b"this is the old bytes", &target, "gdiff")
+        },
     );
 }
 

@@ -7,7 +7,7 @@ use rom_weaver_core::{
 use super::{UpsPatchHandler, create_ups_patch_bytes, parse_ups_bytes};
 use crate::{
     UPS,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 #[test]
@@ -55,61 +55,20 @@ fn parse_rejects_invalid_patch_checksum() {
 
 #[test]
 fn create_and_apply_round_trip_in_both_directions() {
-    let temp = TestDir::new();
-    let source_path = temp.child("source.bin");
-    let target_path = temp.child("target.bin");
-    let patch_path = temp.child("update.ups");
-    let output_path = temp.child("output.bin");
-    let reverse_output = temp.child("reverse.bin");
-
-    let source = b"abcabcabcabc";
-    let target = b"abcabcZZabcabc";
-    fs::write(&source_path, source).expect("fixture");
-    fs::write(&target_path, target).expect("fixture");
-
     let handler = UpsPatchHandler::new(&UPS);
-    let create_report = handler
-        .create(
-            &PatchCreateRequest {
-                original: source_path.clone(),
-                modified: target_path.clone(),
-                output: patch_path.clone(),
-                format: "UPS".into(),
-            },
-            &test_context_with_threads(&temp, 8),
-        )
-        .expect("create");
+    let create_report = assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "ups",
+            reverse: true,
+            ..RoundTripCase::new(b"abcabcabcabc", b"abcabcZZabcabc", "UPS")
+        },
+    );
 
     let execution = create_report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
     assert_eq!(execution.effective_threads, 1);
     assert!(!execution.used_parallelism);
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: source_path.clone(),
-                patches: vec![patch_path.clone()],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("apply");
-
-    assert_eq!(fs::read(&output_path).expect("output"), target);
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: output_path,
-                patches: vec![patch_path],
-                output: reverse_output.clone(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("reverse apply");
-
-    assert_eq!(fs::read(reverse_output).expect("reverse output"), source);
 }
 
 #[test]

@@ -8,7 +8,10 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 use super::*;
 use crate::{
     SOLID,
-    test_support::{TestDir, test_context_with_threads_in_root as test_context_with_threads},
+    test_support::{
+        RoundTripCase, TestDir, assert_round_trip,
+        test_context_with_threads_in_root as test_context_with_threads,
+    },
 };
 
 static SOLID_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -56,86 +59,36 @@ fn parse_rejects_invalid_magic() {
 
 #[test]
 fn create_and_apply_round_trip_for_truncate_case() {
-    let temp = TestDir::new();
-    let original = temp.child("old.bin");
-    let modified = temp.child("new.bin");
-    let patch = temp.child("update.solid");
-    let output = temp.child("output.bin");
-
-    fs::write(&original, b"ABCDEFGHIJ").expect("fixture");
-    fs::write(&modified, b"ABCDzzG").expect("fixture");
-
     let handler = SolidPatchHandler::new(&SOLID);
-    handler
-        .create(
-            &PatchCreateRequest {
-                original: original.clone(),
-                modified: modified.clone(),
-                output: patch.clone(),
-                format: "solid".into(),
-            },
-            &test_context_with_threads(&temp, 2),
-        )
-        .expect("create");
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: original,
-                patches: vec![patch],
-                output: output.clone(),
-            },
-            &test_context_with_threads(&temp, 1),
-        )
-        .expect("apply");
-
-    assert_eq!(
-        fs::read(output).expect("output"),
-        fs::read(modified).expect("modified")
+    assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "solid",
+            create_threads: 2,
+            apply_threads: 1,
+            in_root: true,
+            ..RoundTripCase::new(b"ABCDEFGHIJ", b"ABCDzzG", "solid")
+        },
     );
 }
 
 #[test]
 fn create_and_apply_round_trip_for_expand_case() {
-    let temp = TestDir::new();
-    let original = temp.child("old.bin");
-    let modified = temp.child("new.bin");
-    let patch = temp.child("update.solid");
-    let output = temp.child("output.bin");
-
-    fs::write(&original, b"ABCDEF").expect("fixture");
-    fs::write(&modified, b"ABXCDEFZ").expect("fixture");
-
     let handler = SolidPatchHandler::new(&SOLID);
-    handler
-        .create(
-            &PatchCreateRequest {
-                original: original.clone(),
-                modified: modified.clone(),
-                output: patch.clone(),
-                format: "solid".into(),
-            },
-            &test_context_with_threads(&temp, 2),
-        )
-        .expect("create");
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: original,
-                patches: vec![patch.clone()],
-                output: output.clone(),
-            },
-            &test_context_with_threads(&temp, 1),
-        )
-        .expect("apply");
-
-    let patch_bytes = fs::read(&patch).expect("patch bytes");
-    assert_eq!(&patch_bytes[..SOLID_MAGIC.len()], SOLID_MAGIC);
-    let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
-    assert_eq!((addr_param & MOD_ACTION_MASK) >> 4, MOD_ACTION_EXPAND);
-
-    assert_eq!(
-        fs::read(output).expect("output"),
-        fs::read(modified).expect("modified")
+    assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "solid",
+            create_threads: 2,
+            apply_threads: 1,
+            in_root: true,
+            patch_assert: Some(|patch_bytes| {
+                assert_eq!(&patch_bytes[..SOLID_MAGIC.len()], SOLID_MAGIC);
+                let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
+                assert_eq!((addr_param & MOD_ACTION_MASK) >> 4, MOD_ACTION_EXPAND);
+            }),
+            ..RoundTripCase::new(b"ABCDEF", b"ABXCDEFZ", "solid")
+        },
     );
 }
 

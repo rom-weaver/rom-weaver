@@ -7,7 +7,7 @@ use rom_weaver_core::{
 use super::{CREATE_SCAN_CHUNK_BYTES, PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes};
 use crate::{
     MOD,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 #[test]
@@ -69,44 +69,17 @@ fn apply_supports_minimal_mod_patch() {
 
 #[test]
 fn create_and_apply_round_trip_with_growth() {
-    let temp = TestDir::new();
-    let source_path = temp.child("source.bin");
-    let target_path = temp.child("target.bin");
-    let patch_path = temp.child("update.mod");
-    let output_path = temp.child("output.bin");
-
-    let source = b"\x01\x02".to_vec();
-    let target = b"\x01\x02\x00\x00".to_vec();
-
-    fs::write(&source_path, &source).expect("fixture");
-    fs::write(&target_path, &target).expect("fixture");
-
     let handler = PmsrPatchHandler::new(&MOD);
-    handler
-        .create(
-            &PatchCreateRequest {
-                original: source_path.clone(),
-                modified: target_path.clone(),
-                output: patch_path.clone(),
-                format: "MOD".into(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("create");
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: source_path,
-                patches: vec![patch_path],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 1)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
-        )
-        .expect("apply");
-
-    assert_eq!(fs::read(output_path).expect("output"), target);
+    assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "mod",
+            create_threads: 4,
+            apply_threads: 1,
+            apply_checksum_validation: Some(PatchChecksumValidation::Ignore),
+            ..RoundTripCase::new(b"\x01\x02", b"\x01\x02\x00\x00", "MOD")
+        },
+    );
 }
 
 #[test]

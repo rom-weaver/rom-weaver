@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     BPS,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 #[derive(Debug)]
@@ -262,50 +262,23 @@ fn apply_can_ignore_patch_checksum_mismatch() {
 
 #[test]
 fn create_round_trips_for_small_patch() {
-    let temp = TestDir::new();
-    let original_path = temp.child("original.bin");
-    let modified_path = temp.child("modified.bin");
-    let patch_path = temp.child("update.bps");
-    let output_path = temp.child("output.bin");
-    fs::write(&original_path, b"hello old world").expect("fixture");
-    fs::write(&modified_path, b"hello new world").expect("fixture");
-
     let handler = BpsPatchHandler::new(&BPS);
-    let report = handler
-        .create(
-            &PatchCreateRequest {
-                original: original_path.clone(),
-                modified: modified_path.clone(),
-                output: patch_path.clone(),
-                format: "BPS".into(),
-            },
-            &test_context_with_threads(&temp, 8),
-        )
-        .expect("create");
+    let report = assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "bps",
+            patch_assert: Some(|patch| {
+                let parsed = parse_bps_bytes(patch).expect("parse");
+                assert!(!parsed.actions.is_empty());
+            }),
+            ..RoundTripCase::new(b"hello old world", b"hello new world", "BPS")
+        },
+    );
 
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
     assert_eq!(execution.effective_threads, 1);
     assert!(!execution.used_parallelism);
-
-    let patch = parse_bps_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
-    assert!(!patch.actions.is_empty());
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: original_path,
-                patches: vec![patch_path],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("apply");
-
-    assert_eq!(
-        fs::read(output_path).expect("output"),
-        fs::read(modified_path).expect("modified")
-    );
 }
 
 #[test]

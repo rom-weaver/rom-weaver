@@ -11,7 +11,7 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 use super::BdfPatchHandler;
 use crate::{
     BDF_BSDIFF40,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 fn bdf_fixture_paths(temp: &TestDir) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
@@ -38,47 +38,24 @@ fn parse_rejects_invalid_patch_header() {
 
 #[test]
 fn create_and_apply_round_trip() {
-    let temp = TestDir::new();
-    let (source_path, target_path, patch_path, output_path) = bdf_fixture_paths(&temp);
-
-    let source = b"The quick brown fox jumps over the lazy dog.";
-    let target = b"The quick brown cat jumps over two lazy dogs!";
-    fs::write(&source_path, source).expect("fixture");
-    fs::write(&target_path, target).expect("fixture");
-
     let handler = BdfPatchHandler::new(&BDF_BSDIFF40);
-    let create_report = handler
-        .create(
-            &PatchCreateRequest {
-                original: source_path.clone(),
-                modified: target_path.clone(),
-                output: patch_path.clone(),
-                format: "BDF/BSDIFF40".into(),
-            },
-            &test_context_with_threads(&temp, 8),
-        )
-        .expect("create");
+    let create_report = assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "bdf",
+            patch_assert: Some(|patch| assert_eq!(&patch[..8], b"BSDIFF40")),
+            ..RoundTripCase::new(
+                b"The quick brown fox jumps over the lazy dog.",
+                b"The quick brown cat jumps over two lazy dogs!",
+                "BDF/BSDIFF40",
+            )
+        },
+    );
 
     let execution = create_report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
     assert_eq!(execution.effective_threads, 1);
     assert!(!execution.used_parallelism);
-
-    let patch_bytes = fs::read(&patch_path).expect("patch");
-    assert_eq!(&patch_bytes[..8], b"BSDIFF40");
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: source_path,
-                patches: vec![patch_path],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 4),
-        )
-        .expect("apply");
-
-    assert_eq!(fs::read(output_path).expect("output"), target);
 }
 
 #[test]

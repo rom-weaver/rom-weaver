@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     DPS,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
 };
 
 #[test]
@@ -90,42 +90,15 @@ fn apply_supports_copy_and_embedded_data_records() {
 
 #[test]
 fn create_and_apply_round_trip_supports_shrinking_outputs() {
-    let temp = TestDir::new();
-    let source_path = temp.child("source.bin");
-    let target_path = temp.child("target.bin");
-    let patch_path = temp.child("update.dps");
-    let output_path = temp.child("output.bin");
-
-    fs::write(&source_path, b"abcdefgh").expect("fixture");
-    fs::write(&target_path, b"abXY").expect("fixture");
-
     let handler = DpsPatchHandler::new(&DPS);
-    handler
-        .create(
-            &PatchCreateRequest {
-                original: source_path.clone(),
-                modified: target_path.clone(),
-                output: patch_path.clone(),
-                format: "dps".into(),
-            },
-            &test_context_with_threads(&temp, 2),
-        )
-        .expect("create");
-
-    handler
-        .apply(
-            &PatchApplyRequest {
-                input: source_path,
-                patches: vec![patch_path],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 1),
-        )
-        .expect("apply");
-
-    assert_eq!(
-        fs::read(output_path).expect("output"),
-        fs::read(target_path).expect("target")
+    assert_round_trip(
+        &handler,
+        &RoundTripCase {
+            patch_extension: "dps",
+            create_threads: 2,
+            apply_threads: 1,
+            ..RoundTripCase::new(b"abcdefgh", b"abXY", "dps")
+        },
     );
 }
 
