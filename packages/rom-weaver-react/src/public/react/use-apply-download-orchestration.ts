@@ -22,6 +22,7 @@ import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
 import { createIndeterminateWorkflowProgress } from "./workflow-run-hooks.ts";
+import { deriveWorkflowRunTiming } from "./workflow-run-lifecycle.ts";
 
 type SessionState = ReturnType<typeof useLocalPatcherSessionState>;
 
@@ -47,22 +48,13 @@ const deriveApplyCompletion = (
   completedAt: number,
 ): ApplyCompletion => {
   const { applyStartedAt, compressionStartedAt } = timing;
-  const reportedApplyTimeMs =
-    typeof result.sizeSummary?.applyTimeMs === "number" && Number.isFinite(result.sizeSummary.applyTimeMs)
-      ? Math.max(0, Math.round(result.sizeSummary.applyTimeMs))
-      : null;
-  const reportedCompressionTimeMs =
-    typeof result.sizeSummary?.compressionTimeMs === "number" && Number.isFinite(result.sizeSummary.compressionTimeMs)
-      ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
-      : null;
-  const fallbackApplyTimeMs =
-    typeof applyStartedAt === "number"
-      ? Math.max(0, (typeof compressionStartedAt === "number" ? compressionStartedAt : completedAt) - applyStartedAt)
-      : null;
-  const applyTimeMs = reportedApplyTimeMs ?? fallbackApplyTimeMs;
-  const compressionTimeMs =
-    reportedCompressionTimeMs ??
-    (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null);
+  const { compressionTimeMs, operationTimeMs: applyTimeMs } = deriveWorkflowRunTiming({
+    completedAt,
+    compressionStartedAt,
+    operationStartedAt: applyStartedAt,
+    reportedCompressionTimeMs: result.sizeSummary?.compressionTimeMs,
+    reportedOperationTimeMs: result.sizeSummary?.applyTimeMs,
+  });
   const sizeSummary = createOutputSizeSummary({
     inputBytes: result.sizeSummary?.inputSize ?? result.rom.size,
     inputCompressedBytes: result.sizeSummary?.inputCompressedSize,

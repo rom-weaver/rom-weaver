@@ -56,7 +56,6 @@ import {
   getSourceNoticeMessage,
   hasSourceQueueWarning,
   isDismissibleWorkflowError,
-  isUserRequestedCancellation,
   mergeSettingsWithOutput,
 } from "./workflow-form-utils.ts";
 import {
@@ -68,6 +67,7 @@ import {
   useDisposableWorkflowOutput,
   useWorkflowProgressState,
 } from "./workflow-run-hooks.ts";
+import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
 /** Format pills under the 0x01 hero — mirrors TrimInputKind (tail trims, xiso, GC/Wii scrub). */
 const TRIM_HERO_FORMATS = ["nds", "dsi", "gba", "3ds", "xiso", "iso", "gcm", "wbfs", "rvz"] as const;
@@ -262,6 +262,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     [settingsLanguage],
   );
+  const setOutputWorkflowMessage = useCallback(
+    (error: Error) => setWorkflowMessage("output", error),
+    [setWorkflowMessage],
+  );
+  const createInitialProgress = useCallback(
+    () => createIndeterminateWorkflowProgress({ label: "Trimming...", role: "worker", stage: "trim" }),
+    [],
+  );
+  const notifyError = useCallback((error: Error) => onErrorRef.current?.(error), []);
   const uploadDisabled = !!props.disabled || busy;
   const outputDisabled = !!props.disabled || busy;
   const trimSourceReady = !!source && sourceState?.status === "ready";
@@ -341,6 +350,20 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     setCompletedTrimTimeMs(null);
     trimExecutionTimingRef.current = { compressionStartedAt: null, trimStartedAt: null };
   }, [clearCompletedOutput]);
+  const { cancelOutputProgress, runWorkflow } = useWorkflowRunLifecycle({
+    abortActiveOperation,
+    activeAbortControllerRef,
+    clearCompleted: clearCompletedRunState,
+    clearWorkflowMessage,
+    createInitialProgress,
+    disposeActiveOutput,
+    notifyError,
+    rememberAbortController,
+    setBusy,
+    setProgress,
+    setQueued: setTrimQueued,
+    setWorkflowOutputError: setOutputWorkflowMessage,
+  });
 
   const updateSource = (file: BinarySource | null) => {
     setTrimQueued(false);
@@ -540,56 +563,54 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       return;
     }
     if (!trimReady) return;
-    setTrimQueued(false);
-    const abortController = new AbortController();
-    rememberAbortController(abortController);
-    setBusy(true);
-    clearWorkflowMessage();
-    disposeActiveOutput();
-    clearCompletedRunState();
-    setProgress(createIndeterminateWorkflowProgress({ label: "Trimming...", role: "worker", stage: "trim" }));
-    const outputCompression = isCompressionFormat(resolvedOutputFormat) ? resolvedOutputFormat : "none";
-    await stagedTrimWorkflowReadyRef.current?.catch(() => undefined);
-    const trimWorkflow =
-      stagedTrimWorkflowRef.current ||
-      new TrimWorkflowConstructor({
-        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-        id: workflowIdRef.current,
-        selectFile,
-        settings: toCreateWorkflowSettings(
-          { ...settings, output: { ...settings.output, compression: outputCompression } } as CreateSettings,
-          executionOutputName,
-          props.workerThreads,
-        ),
-        signal: abortController.signal,
+    const stagedSource = source;
+    await runWorkflow(async (abortController, registerCleanup) => {
+      const outputCompression = isCompressionFormat(resolvedOutputFormat) ? resolvedOutputFormat : "none";
+      await stagedTrimWorkflowReadyRef.current?.catch(() => undefined);
+      const trimWorkflow =
+        stagedTrimWorkflowRef.current ||
+        new TrimWorkflowConstructor({
+          ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+          id: workflowIdRef.current,
+          selectFile,
+          settings: toCreateWorkflowSettings(
+            { ...settings, output: { ...settings.output, compression: outputCompression } } as CreateSettings,
+            executionOutputName,
+            props.workerThreads,
+          ),
+          signal: abortController.signal,
+        });
+      const usingStagedWorkflow = stagedTrimWorkflowRef.current === trimWorkflow;
+      emitTrimFormTrace(usingStagedWorkflow ? "run.reuse-staged" : "run.fallback-created", {
+        outputName: executionOutputName,
+        sourceName: sourceFileName,
+        workflowId: trimWorkflow.id,
       });
-    const usingStagedWorkflow = stagedTrimWorkflowRef.current === trimWorkflow;
-    emitTrimFormTrace(usingStagedWorkflow ? "run.reuse-staged" : "run.fallback-created", {
-      outputName: executionOutputName,
-      sourceName: sourceFileName,
-      workflowId: trimWorkflow.id,
-    });
-    const handleProgress = (event: WorkflowProgress) => {
-      const details = getProgressDetails(event);
-      if (details.stage === "compress" && trimExecutionTimingRef.current.compressionStartedAt === null) {
-        const now = Date.now();
-        trimExecutionTimingRef.current.compressionStartedAt = now;
-        if (typeof trimExecutionTimingRef.current.trimStartedAt === "number") {
-          setCompletedTrimTimeMs(Math.max(0, now - trimExecutionTimingRef.current.trimStartedAt));
+      const handleProgress = (event: WorkflowProgress) => {
+        const details = getProgressDetails(event);
+        if (details.stage === "compress" && trimExecutionTimingRef.current.compressionStartedAt === null) {
+          const now = Date.now();
+          trimExecutionTimingRef.current.compressionStartedAt = now;
+          if (typeof trimExecutionTimingRef.current.trimStartedAt === "number") {
+            setCompletedTrimTimeMs(Math.max(0, now - trimExecutionTimingRef.current.trimStartedAt));
+          }
         }
-      }
-      reportProgressEvent(event, "trim");
-    };
-    trimWorkflow.on("progress", handleProgress);
-    const abortWorkflow = () => trimWorkflow.abort(abortController.signal.reason);
-    abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
-    try {
+        reportProgressEvent(event, "trim");
+      };
+      trimWorkflow.on("progress", handleProgress);
+      const abortWorkflow = () => trimWorkflow.abort(abortController.signal.reason);
+      abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
+      registerCleanup(async () => {
+        abortController.signal.removeEventListener("abort", abortWorkflow);
+        trimWorkflow.off("progress", handleProgress);
+        if (!usingStagedWorkflow) await trimWorkflow.dispose();
+      });
       if (!usingStagedWorkflow) {
         emitTrimFormTrace("run.fallback-set-input.start", {
           sourceName: sourceFileName,
           workflowId: trimWorkflow.id,
         });
-        await trimWorkflow.setInput(toBrowserPublicBinarySource(source));
+        await trimWorkflow.setInput(toBrowserPublicBinarySource(stagedSource));
         emitTrimFormTrace("run.fallback-set-input.finish", {
           input: trimWorkflow.getInput(),
           workflowId: trimWorkflow.id,
@@ -606,23 +627,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       const result = (await trimWorkflow.run()) as BrowserTrimResult;
       const completedAt = Date.now();
       const { compressionStartedAt, trimStartedAt } = trimExecutionTimingRef.current;
-      const reportedTrimTimeMs =
-        typeof result.sizeSummary?.trimTimeMs === "number" && Number.isFinite(result.sizeSummary.trimTimeMs)
-          ? Math.max(0, Math.round(result.sizeSummary.trimTimeMs))
-          : null;
-      const reportedCompressionTimeMs =
-        typeof result.sizeSummary?.compressionTimeMs === "number" &&
-        Number.isFinite(result.sizeSummary.compressionTimeMs)
-          ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
-          : null;
-      const fallbackTrimTimeMs =
-        typeof trimStartedAt === "number"
-          ? Math.max(0, (typeof compressionStartedAt === "number" ? compressionStartedAt : completedAt) - trimStartedAt)
-          : null;
-      const trimTimeMs = reportedTrimTimeMs ?? fallbackTrimTimeMs;
-      const compressionTimeMs =
-        reportedCompressionTimeMs ??
-        (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null);
+      const { compressionTimeMs, operationTimeMs: trimTimeMs } = deriveWorkflowRunTiming({
+        completedAt,
+        compressionStartedAt,
+        operationStartedAt: trimStartedAt,
+        reportedCompressionTimeMs: result.sizeSummary?.compressionTimeMs,
+        reportedOperationTimeMs: result.sizeSummary?.trimTimeMs,
+      });
       emitTrimFormTrace("run.finish", {
         compressionTimeMs,
         outputName: result.output.fileName,
@@ -644,31 +655,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();
       props.onTrimComplete?.(result);
-    } catch (error) {
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
-      const code = getErrorCode(normalizedError);
-      if (isUserRequestedCancellation(normalizedError, abortController.signal)) {
-        clearWorkflowMessage();
-        setProgress(null);
-        clearCompletedRunState();
-        return;
-      }
-      if (code === "WORKFLOW_SELECTION_SKIPPED") {
-        clearWorkflowMessage();
-        setProgress(null);
-        return;
-      }
-      setWorkflowMessage("output", normalizedError);
-      setProgress(null);
-      clearCompletedRunState();
-      onErrorRef.current?.(normalizedError);
-    } finally {
-      abortController.signal.removeEventListener("abort", abortWorkflow);
-      trimWorkflow.off("progress", handleProgress);
-      if (!usingStagedWorkflow) await trimWorkflow.dispose();
-      if (activeAbortControllerRef.current === abortController) rememberAbortController(null);
-      setBusy(false);
-    }
+    });
   };
 
   const onRunClick = () => {
@@ -724,16 +711,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
-  const cancelTrimOutputProgress = () => {
-    setTrimQueued(false);
-    if (busy) {
-      abortActiveOperation();
-      disposeActiveOutput();
-      clearCompletedRunState();
-      return;
-    }
-    setProgress(null);
-  };
+  const cancelTrimOutputProgress = () => cancelOutputProgress(busy);
   const showInputProgress =
     sourceStaging || (busy && progressProps && progress?.stage === "input" && progress.role === "input");
   const inputProgressProps =

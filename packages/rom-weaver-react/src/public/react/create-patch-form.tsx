@@ -58,7 +58,6 @@ import {
   getSourceNoticeMessage,
   hasSourceQueueWarning,
   isDismissibleWorkflowError,
-  isUserRequestedCancellation,
   mergeSettingsWithOutput,
 } from "./workflow-form-utils.ts";
 import {
@@ -71,6 +70,7 @@ import {
   useWorkflowProgressState,
   type WorkflowFormProgressState,
 } from "./workflow-run-hooks.ts";
+import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
 const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
   const normalizedOutputName = outputName.trim();
@@ -312,6 +312,29 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     },
     [settingsLanguage],
   );
+  const setOutputWorkflowMessage = useCallback(
+    (error: Error) => setWorkflowMessage("output", error),
+    [setWorkflowMessage],
+  );
+  const createInitialProgress = useCallback(
+    () => createIndeterminateWorkflowProgress({ label: "Creating patch...", role: "worker", stage: "create" }),
+    [],
+  );
+  const notifyError = useCallback((error: Error) => props.onError?.(error), [props.onError]);
+  const { cancelOutputProgress, runWorkflow } = useWorkflowRunLifecycle({
+    abortActiveOperation,
+    activeAbortControllerRef,
+    clearCompleted: clearCompletedOutput,
+    clearWorkflowMessage,
+    createInitialProgress,
+    disposeActiveOutput,
+    notifyError,
+    rememberAbortController,
+    setBusy,
+    setProgress,
+    setQueued: setCreateQueued,
+    setWorkflowOutputError: setOutputWorkflowMessage,
+  });
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
@@ -712,41 +735,40 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     if (!canStartCreate) return;
     if (!(original && modified)) return;
-    setCreateQueued(false);
-    const abortController = new AbortController();
-    rememberAbortController(abortController);
-    setBusy(true);
-    clearWorkflowMessage();
-    disposeActiveOutput();
-    clearCompletedOutput();
-    setProgress(createIndeterminateWorkflowProgress({ label: "Creating patch...", role: "worker", stage: "create" }));
-    const createWorkflow =
-      stagedCreateWorkflowRef.current ||
-      new CreateWorkflowConstructor({
-        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-        id: workflowIdRef.current,
-        selectFile: async (request) =>
-          createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
-        settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
-        signal: abortController.signal,
+    const stagedOriginal = original;
+    const stagedModified = modified;
+    await runWorkflow(async (abortController, registerCleanup) => {
+      const createWorkflow =
+        stagedCreateWorkflowRef.current ||
+        new CreateWorkflowConstructor({
+          ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+          id: workflowIdRef.current,
+          selectFile: async (request) =>
+            createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
+          settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
+          signal: abortController.signal,
+        });
+      const usingStagedWorkflow = stagedCreateWorkflowRef.current === createWorkflow;
+      const baseProgressHandler = createProgressHandler("create");
+      const handleProgress: typeof baseProgressHandler = (event) => {
+        if (event.stage === "compress" && createExecutionTimingRef.current.compressionStartedAt === null) {
+          createExecutionTimingRef.current.compressionStartedAt = Date.now();
+        }
+        baseProgressHandler(event);
+      };
+      createWorkflow.on("progress", handleProgress);
+      const abortWorkflow = () => createWorkflow.abort(abortController.signal.reason);
+      abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
+      registerCleanup(async () => {
+        abortController.signal.removeEventListener("abort", abortWorkflow);
+        createWorkflow.off("progress", handleProgress);
+        if (!usingStagedWorkflow) await createWorkflow.dispose();
       });
-    const usingStagedWorkflow = stagedCreateWorkflowRef.current === createWorkflow;
-    const baseProgressHandler = createProgressHandler("create");
-    const handleProgress: typeof baseProgressHandler = (event) => {
-      if (event.stage === "compress" && createExecutionTimingRef.current.compressionStartedAt === null) {
-        createExecutionTimingRef.current.compressionStartedAt = Date.now();
-      }
-      baseProgressHandler(event);
-    };
-    createWorkflow.on("progress", handleProgress);
-    const abortWorkflow = () => createWorkflow.abort(abortController.signal.reason);
-    abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
-    try {
       if (usingStagedWorkflow) {
         await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads));
       } else {
-        await createWorkflow.setOriginal(toBrowserPublicBinarySource(original));
-        await createWorkflow.setModified(toBrowserPublicBinarySource(modified));
+        await createWorkflow.setOriginal(toBrowserPublicBinarySource(stagedOriginal));
+        await createWorkflow.setModified(toBrowserPublicBinarySource(stagedModified));
       }
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
       await createWorkflow.setOutputName(executionOutputName);
@@ -762,28 +784,18 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       const result = (await createWorkflow.run()) as BrowserCreateResult;
       const completedAt = Date.now();
       const { compressionStartedAt, createStartedAt } = createExecutionTimingRef.current;
-      const reportedCreateTimeMs =
-        typeof result.sizeSummary?.createTimeMs === "number" && Number.isFinite(result.sizeSummary.createTimeMs)
-          ? Math.max(0, Math.round(result.sizeSummary.createTimeMs))
-          : undefined;
-      const reportedCompressionTimeMs =
-        typeof result.sizeSummary?.compressionTimeMs === "number" &&
-        Number.isFinite(result.sizeSummary.compressionTimeMs)
-          ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
-          : undefined;
-      const fallbackCreateTimeMs =
-        typeof createStartedAt === "number"
-          ? Math.max(0, (compressionStartedAt ?? completedAt) - createStartedAt)
-          : undefined;
-      const createTimeMs = reportedCreateTimeMs ?? fallbackCreateTimeMs;
-      const compressionTimeMs =
-        reportedCompressionTimeMs ??
-        (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : undefined);
+      const { compressionTimeMs, operationTimeMs: createTimeMs } = deriveWorkflowRunTiming({
+        completedAt,
+        compressionStartedAt,
+        operationStartedAt: createStartedAt,
+        reportedCompressionTimeMs: result.sizeSummary?.compressionTimeMs,
+        reportedOperationTimeMs: result.sizeSummary?.createTimeMs,
+      });
       rememberOutputDispose(result.output.dispose);
       setCompletedOutput({
         compression: createCompression,
-        compressionTimeMs,
-        createTimeMs,
+        compressionTimeMs: compressionTimeMs ?? undefined,
+        createTimeMs: createTimeMs ?? undefined,
         fileName: result.output.fileName,
         patchType,
         rawSize: result.sizeSummary?.rawSize,
@@ -793,31 +805,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();
       props.onCreateComplete?.(result);
-    } catch (error) {
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
-      const code = getErrorCode(normalizedError);
-      if (isUserRequestedCancellation(normalizedError, abortController.signal)) {
-        clearWorkflowMessage();
-        setProgress(null);
-        clearCompletedOutput();
-        return;
-      }
-      if (code === "WORKFLOW_SELECTION_SKIPPED") {
-        clearWorkflowMessage();
-        setProgress(null);
-        return;
-      }
-      setWorkflowMessage("output", normalizedError);
-      setProgress(null);
-      clearCompletedOutput();
-      props.onError?.(normalizedError);
-    } finally {
-      abortController.signal.removeEventListener("abort", abortWorkflow);
-      createWorkflow.off("progress", handleProgress);
-      if (!usingStagedWorkflow) await createWorkflow.dispose();
-      if (activeAbortControllerRef.current === abortController) rememberAbortController(null);
-      setBusy(false);
-    }
+    });
   };
 
   useEffect(
@@ -852,16 +840,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
-  const cancelCreateOutputProgress = () => {
-    setCreateQueued(false);
-    if (busy) {
-      abortActiveOperation();
-      disposeActiveOutput();
-      clearCompletedOutput();
-      return;
-    }
-    setProgress(null);
-  };
+  const cancelCreateOutputProgress = () => cancelOutputProgress(busy);
   const getSourceProgress = (role: "modified" | "original") => {
     const cancelProps = {
       cancelLabel: role === "original" ? "Cancel original ROM staging" : "Cancel modified ROM staging",
