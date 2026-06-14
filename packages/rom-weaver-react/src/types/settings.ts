@@ -2,6 +2,7 @@ import type {
   ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
 } from "../wasm/generated/rom-weaver-format-metadata.ts";
+import type { LogLevel, LogSink } from "./logging.ts";
 
 type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup" | "ups" | "vcdiff" | "xdelta";
 
@@ -38,8 +39,8 @@ type DecompressionLimits = {
 };
 
 type LoggingSettings = {
-  level?: import("./logging.ts").LogLevel;
-  sink?: import("./logging.ts").LogSink;
+  level?: LogLevel;
+  sink?: LogSink;
 };
 
 type CommonSettings = {
@@ -111,20 +112,8 @@ export type {
   ApplySettings,
   CommonSettings,
   CompressionFormat,
-  CompressionProfile,
-  CompressionSettings,
   CreateSettings,
   DecompressionLimits,
-  DefaultCompression,
-  InputSettings,
-  LoggingSettings,
-  OutputSettings,
   PatchFormat,
-  PatchTransformSettings,
-  PatchValidationSettings,
-  SevenZipCodec,
-  StorageSettings,
-  StringNumber,
   WorkerSettings,
-  ZipCodec,
 };

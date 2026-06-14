@@ -5,8 +5,3 @@ export {
 export { __createWasiRandomAccessFileInodeForTest } from "./browser-opfs-mounts.ts";
 export { createRomWeaverBrowserOpfs } from "./browser-opfs-runner.ts";
 export type { RomWeaverBrowserOpfsRunner } from "./browser-opfs-runtime-types.ts";
-export {
-  __disposeRomWeaverBrowserThreadMountCache,
-  __primeRomWeaverBrowserThreadRuntime,
-  __runRomWeaverBrowserWasiThread,
-} from "./browser-opfs-wasi-thread-runtime.ts";

@@ -117,8 +117,6 @@ type RuntimePublicOutputAdapter = {
 };
 
 type RuntimeArchiveCreateInput = Extract<CompressionCreateInput, { entries: unknown }>;
-type RuntimeCompressionExtractInput = CompressionExtractInput;
-type RuntimeCompressionListInput = CompressionListInput;
 type RuntimeRomSpecificCreateInputBase = Extract<CompressionCreateInput, { source: unknown }>;
 type RuntimeRomSpecificCreateOptions = NonNullable<RuntimeRomSpecificCreateInputBase["romSpecific"]>;
 type RuntimeRomSpecificCreateChdOptions = NonNullable<RuntimeRomSpecificCreateOptions["chd"]>;
@@ -483,16 +481,11 @@ type WorkflowRuntime = {
 
 export type {
   RuntimeArchiveCreateInput,
-  RuntimeCompressionExtractInput,
-  RuntimeCompressionListInput,
-  RuntimePatchApplyOptions,
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateCandidatesWorkerInput,
   RuntimePatchCreateFormatCandidates,
   RuntimePatchCreateWorkerInput,
-  RuntimePatchValidateOptions,
   RuntimePatchValidateWorkerInput,
-  RuntimePatchValidationRequirement,
   RuntimePatchWorkerProgress,
   RuntimePublicOutputAdapter,
   RuntimeRomSpecificCreateChdInput,
@@ -501,26 +494,15 @@ export type {
   RuntimeRomSpecificExtractChdInput,
   RuntimeRomSpecificExtractRvzInput,
   RuntimeRomSpecificExtractZ3dsInput,
-  RuntimeRomSpecificHooks,
-  RuntimeRomSpecificProgress,
   RuntimeThreadBudgetInput,
   RuntimeTrimWorkerInput,
   RuntimeWorkerIo,
-  RuntimeWorkerOutput,
   RuntimeWorkerPathSource,
   RuntimeWorkerSourceRequest,
   RuntimeWorkerSourceScope,
-  WorkflowCreatePatchProgress,
   WorkflowRuntime,
-  WorkflowRuntimeBinary,
-  WorkflowRuntimeChecksum,
-  WorkflowRuntimeCompression,
   WorkflowRuntimeLog,
-  WorkflowRuntimeOutput,
-  WorkflowRuntimePatch,
   WorkflowRuntimePreload,
   WorkflowRuntimePreloadEvent,
   WorkflowRuntimeProgress,
-  WorkflowRuntimeSidecars,
-  WorkflowRuntimeTrim,
 };

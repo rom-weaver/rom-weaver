@@ -296,5 +296,4 @@ const trimWorkflowDeps: TrimWorkflowDeps = {
   hasArchiveFileName,
 };
 
-export type { TrimWorkflowDeps };
 export { runTrimWorkflow, trimWorkflowDeps };

@@ -61,11 +61,4 @@ const getVfsRelativePath = (filePath: string, root = DEFAULT_VFS_ROOT) => {
 };
 
 export type { AbsoluteVfsPath };
-export {
-  DEFAULT_VFS_ROOT,
-  getVfsRelativePath,
-  joinVfsPath,
-  normalizeAbsoluteVfsPath,
-  normalizeRelativeVfsPath,
-  normalizeVfsRoot,
-};
+export { DEFAULT_VFS_ROOT, getVfsRelativePath, joinVfsPath, normalizeAbsoluteVfsPath, normalizeVfsRoot };

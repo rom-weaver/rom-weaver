@@ -839,7 +839,7 @@ const emitPreloadLog = (
   });
 };
 
-export type { RomSpecificRuntimeAdapter, TrimRuntimeAdapter };
+export type { RomSpecificRuntimeAdapter };
 export {
   createRuntimePreload,
   createSharedCompressionRuntime,

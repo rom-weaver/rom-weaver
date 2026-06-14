@@ -248,40 +248,4 @@ const ExtractDrawer = ({ decompressionTimeMs, fileName, fileSize, parentCompress
   );
 };
 
-const ExtractPanel = ({
-  decompressionTimeMs,
-  fileName,
-  fileSize,
-  legacyArchiveClassName = "rom-weaver-patch-stack-archive",
-  legacyFileClassName,
-  parentCompressions,
-  timing,
-}: ExtractPanelProps) => (
-  <>
-    <ExtractName
-      fileName={fileName}
-      fileSize={fileSize}
-      legacyArchiveClassName={legacyArchiveClassName}
-      legacyFileClassName={legacyFileClassName}
-      parentCompressions={parentCompressions}
-    />
-    <ExtractDrawer
-      decompressionTimeMs={decompressionTimeMs}
-      fileName={fileName}
-      fileSize={fileSize}
-      parentCompressions={parentCompressions}
-      timing={timing}
-    />
-  </>
-);
-
-export {
-  buildExtractionLevels,
-  ExtractDrawer,
-  type ExtractionLevel,
-  type ExtractionParentLevel,
-  ExtractionTree,
-  ExtractName,
-  ExtractPanel,
-  type ExtractPanelProps,
-};
+export { ExtractDrawer, ExtractionTree, ExtractName, type ExtractPanelProps };

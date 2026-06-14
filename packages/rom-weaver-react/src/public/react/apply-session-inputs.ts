@@ -185,10 +185,7 @@ const formatOperationTiming = (label: string, elapsedMs: number | null) => {
 export {
   createRomInputRow,
   formatOperationTiming,
-  getArchiveNameFromProgressDetails,
-  getArchivePathEntriesFromProgressDetails,
   getChecksumProgressInfoPatch,
-  getInputDisplayFileName,
   getPendingInputDisplayFileName,
   getProgressDetails,
   getProgressStagedInputInfo,

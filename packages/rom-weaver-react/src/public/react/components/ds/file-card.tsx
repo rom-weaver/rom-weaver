@@ -106,4 +106,4 @@ const FileCard = ({
   </div>
 );
 
-export { FileCard, type FileState, FileTargetPill, RemoveButton };
+export { FileCard, FileTargetPill, RemoveButton };

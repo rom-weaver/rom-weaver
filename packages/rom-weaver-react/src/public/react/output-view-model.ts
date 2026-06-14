@@ -282,7 +282,7 @@ const createSectionSizeText = ({
 const combineSectionTimingText = (timingText?: string | null, sizeText?: string | null) =>
   [String(timingText || ""), String(sizeText || "")].filter(Boolean).join(" | ");
 
-export type { OutputOption, OutputOptionLabelMap, SectionSizeSummary };
+export type { OutputOption };
 export {
   combineSectionTimingText,
   createApplyOutputOptions,

@@ -38,4 +38,4 @@ const configureBrowserSourcePrimitives = () => {
   ]);
 };
 
-export { configureBrowserSourcePrimitives, getBrowserSourceBlob, getBrowserSourceHandle, isFileSystemFileHandleLike };
+export { configureBrowserSourcePrimitives, getBrowserSourceBlob, getBrowserSourceHandle };

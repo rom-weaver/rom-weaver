@@ -21,7 +21,7 @@ export function formatErrorForTrace(error: unknown): string {
   return truncateForTrace(String(error));
 }
 
-export function toTraceValue(value: unknown): unknown {
+function toTraceValue(value: unknown): unknown {
   if (typeof value === "string") return basenameForTrace(value);
   if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
   if (!value || typeof value !== "object") return value;
@@ -39,7 +39,7 @@ export function formatCommandForTrace(command: unknown): string {
   }
 }
 
-export function isTraceVirtualFileProxy(value: unknown): value is { id: string; size: unknown; slots: unknown[] } {
+function isTraceVirtualFileProxy(value: unknown): value is { id: string; size: unknown; slots: unknown[] } {
   return Boolean(
     value &&
       typeof value === "object" &&

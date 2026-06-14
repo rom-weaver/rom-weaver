@@ -1,1 +1,1 @@
-export { ProgressActionButton, type ProgressViewModel } from "../../../presentation/react/progress-action-button.tsx";
+export { ProgressActionButton } from "../../../presentation/react/progress-action-button.tsx";

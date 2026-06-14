@@ -52,7 +52,6 @@ const stripCompressionCodecLevelOverrides = (value: string | null | undefined): 
 
 export {
   hasCompressionCodecLevelOverride,
-  type ParsedCompressionCodecEntry,
   parseCompressionCodecEntry,
   splitCompressionCodecEntries,
   stripCompressionCodecLevelOverrides,

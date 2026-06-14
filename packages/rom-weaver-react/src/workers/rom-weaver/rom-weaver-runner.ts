@@ -610,11 +610,6 @@ const getNonTraceStderr = (result: Partial<RomWeaverRunnerRunJsonResult> | null 
   return lines.join("\n").trim();
 };
 
-export type {
-  RomWeaverRunJsonEvent,
-  RomWeaverRunnerRunJsonOptions as RomWeaverRunJsonOptions,
-  RomWeaverRunnerRunJsonResult as RomWeaverRunJsonResult,
-};
 export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,

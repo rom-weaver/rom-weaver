@@ -90,7 +90,6 @@ const classifyDroppedFiles = (files: File[]): DroppedFileClassification => {
   return result;
 };
 
-export type { DroppedFileClass, DroppedFileClassification };
 export {
   ARCHIVE_FILE_EXTENSIONS,
   classifyDroppedFiles,

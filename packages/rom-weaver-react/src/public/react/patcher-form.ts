@@ -96,7 +96,6 @@ type ApplyPatchFormProps = {
 };
 
 export type {
-  ApplyPatchFormControllers,
   ApplyPatchFormProps,
   ApplyPatchFormSettings,
   BinarySource,

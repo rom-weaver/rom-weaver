@@ -18,4 +18,4 @@ type SourceRef = DirectSource | SourceObject;
 type BrowserSourceObject = SourceObject<BrowserDirectSource>;
 type BrowserSourceRef = BrowserDirectSource | BrowserSourceObject;
 
-export type { BrowserDirectSource, BrowserSourceObject, BrowserSourceRef, DirectSource, SourceObject, SourceRef };
+export type { BrowserSourceRef, DirectSource, SourceObject, SourceRef };

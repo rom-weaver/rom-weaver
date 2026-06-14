@@ -65,7 +65,6 @@ export type {
   InternalPatchValidation,
   InternalSourceState,
   SourceRole,
-  SourceStatus,
   SourceValidator,
   StagedSource,
 };

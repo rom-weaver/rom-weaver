@@ -177,4 +177,4 @@ const createServiceWorkerBootGate = ({
   };
 };
 
-export { createServiceWorkerBootGate, type ServiceWorkerBootGate };
+export { createServiceWorkerBootGate };

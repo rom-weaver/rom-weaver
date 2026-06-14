@@ -2,11 +2,11 @@ import type { RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 
 // Default worker thread count when none is configured. Browsers cap concurrency aggressively, so we
 // stay conservative and only scale up to this from `navigator.hardwareConcurrency`.
-export const DEFAULT_BROWSER_THREAD_COUNT = 4;
+const DEFAULT_BROWSER_THREAD_COUNT = 4;
 
 // Upper bound for an explicitly configured browser thread count. Keeps a runaway `defaultThreads`
 // option from oversubscribing the pool.
-export const MAX_BROWSER_THREAD_COUNT = 64;
+const MAX_BROWSER_THREAD_COUNT = 64;
 
 /**
  * Resolve the implicit default thread count from the host environment, clamped to

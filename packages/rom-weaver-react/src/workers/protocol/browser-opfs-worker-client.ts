@@ -90,5 +90,4 @@ const requestBrowserOpfsStorage = async (request: BrowserOpfsStorageRequest): Pr
   });
 };
 
-export type { BrowserOpfsStorageRequest, BrowserOpfsStorageResponse };
 export { requestBrowserOpfsStorage };

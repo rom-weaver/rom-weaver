@@ -254,5 +254,4 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
   );
 };
 
-export type { InputUiControllerContext, PatchStackControllerContext };
 export { useInputUiController, usePatchStackController };

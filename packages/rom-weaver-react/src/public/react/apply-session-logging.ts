@@ -53,4 +53,4 @@ const logUiError = (context: string, error: Error) => {
   logger.error(context, getErrorLogDetails(error));
 };
 
-export { getErrorLogDetails, getTraceSourceKind, getTraceSourceSummaries, getTraceSourceSummary, logUiError };
+export { getTraceSourceSummaries, getTraceSourceSummary, logUiError };

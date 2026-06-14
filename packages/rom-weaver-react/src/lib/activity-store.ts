@@ -37,5 +37,4 @@ const subscribeWorkbenchActivity = (listener: () => void) => {
   };
 };
 
-export type { WorkbenchActivity, WorkbenchActivityState };
 export { getWorkbenchActivity, setWorkbenchActivity, subscribeWorkbenchActivity };

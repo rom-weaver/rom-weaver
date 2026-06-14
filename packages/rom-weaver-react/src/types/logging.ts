@@ -14,19 +14,5 @@ type LogRecord = {
 
 type LogSink = (record: LogRecord) => void;
 
-type Logger = {
-  debug: (message: string, details?: LogDetails) => void;
-  error: (message: string, details?: LogDetails) => void;
-  info: (message: string, details?: LogDetails) => void;
-  trace: (message: string, details?: LogDetails) => void;
-  warn: (message: string, details?: LogDetails) => void;
-};
-
-type LoggingSettings = {
-  level?: LogLevel;
-  namespace?: string;
-  sink?: LogSink;
-};
-
-export type { LogDetails, Logger, LoggingSettings, LogLevel, LogRecord, LogSink };
+export type { LogDetails, LogLevel, LogRecord, LogSink };
 export { LOG_LEVELS };

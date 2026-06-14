@@ -30,13 +30,6 @@ type ProgressViewModelOptions = {
   throughputText?: string;
 };
 
-type WorkflowPresentationEventOptions = ProgressViewModelOptions & {
-  kind?: WorkflowScalar;
-  flow?: WorkflowScalar;
-  message?: WorkflowScalar;
-  details?: WorkflowRecord | null;
-};
-
 type ProgressEventOptions = ProgressViewModelOptions & {
   details?: WorkflowValue;
 };
@@ -46,29 +39,6 @@ type ContextualProgressLabelOptions = {
   fallbackLabel?: WorkflowScalar;
   formatLabel?: WorkflowScalar;
   threads?: string | number | null | undefined;
-};
-
-type CompressionProgressLabelOptions = ContextualProgressLabelOptions & {
-  progress?: WorkflowValue | object | null;
-};
-
-type ValidationViewModelOptions = {
-  severity?: WorkflowScalar;
-  message?: WorkflowScalar;
-  details?: WorkflowValue;
-};
-
-type StageTimingOptions = {
-  stageOrder?: WorkflowValue;
-  stageLabels?: WorkflowRecord | null;
-};
-
-type ResultViewModelOptions = {
-  savedFiles?: WorkflowValue;
-  outputFormat?: WorkflowScalar;
-  compressionSummary?: WorkflowScalar;
-  stageMs?: WorkflowRecord | null;
-  successMessage?: WorkflowScalar;
 };
 
 type OutputSizeSummaryOptions = {
@@ -352,48 +322,6 @@ const createProgressEvent = ({
   };
 };
 
-const createWorkflowPresentationEvent = ({
-  kind,
-  flow,
-  stage,
-  label,
-  fallbackLabel,
-  percent,
-  loaded,
-  total,
-  timing,
-  timingText,
-  separator,
-  message,
-  details,
-}: WorkflowPresentationEventOptions = {}) => {
-  const progress = createProgressViewModel({
-    fallbackLabel,
-    label,
-    loaded,
-    percent,
-    separator,
-    stage,
-    timing,
-    timingText,
-    total,
-  });
-  return {
-    details: {
-      dedupeKey: progress.dedupeKey,
-      indeterminate: progress.indeterminate,
-      label: progress.label,
-      timingText: progress.timingText,
-      ...(details || {}),
-    },
-    flow: typeof flow === "string" ? flow : "patch",
-    kind: typeof kind === "string" ? kind : "progress",
-    message: typeof message === "string" && message ? message : progress.message,
-    percent: progress.percent,
-    stage: progress.stage,
-  };
-};
-
 const stripProgressEllipsis = (label: string): string =>
   String(label || "")
     .trim()
@@ -406,15 +334,6 @@ const labelIncludesProgressFormat = (label: string, formatLabel: string): boolea
     .trim()
     .toLowerCase();
   return !normalizedFormat || normalizedFormat === "archive" || label.toLowerCase().includes(normalizedFormat);
-};
-
-const createThreadedProgressLabel = (label: WorkflowScalar, threads?: string | number | null | undefined): string => {
-  const rawLabel = String(label || "").trim();
-  const normalizedLabel = stripProgressEllipsis(rawLabel);
-  if (hasProgressThreadLabel(normalizedLabel))
-    return TRAILING_ELLIPSIS_REGEX.test(rawLabel) ? `${normalizedLabel}...` : normalizedLabel;
-  const threadLabel = formatProgressThreadCount(threads);
-  return `${normalizedLabel}${threadLabel ? ` - ${threadLabel}` : ""}...`;
 };
 
 const createCompressionProgressLabel = (options: ContextualProgressLabelOptions = {}): string => {
@@ -459,23 +378,6 @@ const formatByteSize = (value: string | number | null | undefined): string => {
     unitIndex++;
   }
   return `${BYTE_SIZE_FORMATTER.format(normalizedValue)} ${units[unitIndex]}`;
-};
-
-const createCompressionProgressLabelFromEvent = (options: CompressionProgressLabelOptions = {}): string => {
-  const formatLabel = String(options.formatLabel || "");
-  const compressedBytesWritten = getCompressedBytesWritten(options.progress);
-  const writtenLabel = formatByteSize(compressedBytesWritten);
-  const fallbackLabel = String(options.fallbackLabel || `Compressing to${formatLabel ? ` ${formatLabel}` : ""}`);
-  const label =
-    writtenLabel && !isCompressionWriteTelemetryProgress(options.progress)
-      ? `Compressing to${formatLabel ? ` ${formatLabel}` : ""} - wrote ${writtenLabel}`
-      : getRawProgressLabel(options.progress || null, String(options.label || ""));
-  return createCompressionProgressLabel({
-    fallbackLabel,
-    formatLabel,
-    label,
-    threads: getProgressEventThreadCount(options.progress) ?? options.threads,
-  });
 };
 
 const formatPercentFixed = (value: string | number | null | undefined, digits = 1): string => {
@@ -539,85 +441,19 @@ const createOutputSizeSummary = ({
   };
 };
 
-const createValidationViewModel = ({ severity, message, details }: ValidationViewModelOptions = {}) => ({
-  details: details || null,
-  message: String(message || ""),
-  severity: typeof severity === "string" && severity ? severity : "error",
-});
-
-const formatStageTimingSummary = (stageMs: WorkflowRecord | null | undefined, options: StageTimingOptions = {}) => {
-  const normalized = stageMs || {};
-  const stageOrder = Array.isArray(options.stageOrder)
-    ? options.stageOrder.map(String)
-    : ["decompress", "apply", "compress"];
-  const stageLabels = options.stageLabels || {};
-  return stageOrder.reduce<
-    Array<{ stage: string; label: string; timing: ReturnType<typeof createTiming>; message: string }>
-  >((entries, stageName) => {
-    const elapsedMs = normalized[stageName];
-    if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return entries;
-    const stageLabel = typeof stageLabels[stageName] === "string" ? stageLabels[stageName] : stageName;
-    entries.push({
-      label: stageLabel,
-      message: `${stageLabel} completed in ${formatTiming(createTiming(elapsedMs))}`,
-      stage: stageName,
-      timing: createTiming(elapsedMs),
-    });
-    return entries;
-  }, []);
-};
-
-const createResultViewModel = ({
-  savedFiles,
-  outputFormat,
-  compressionSummary,
-  stageMs,
-  successMessage,
-}: ResultViewModelOptions = {}) => {
-  const fileList = Array.isArray(savedFiles)
-    ? savedFiles.filter(Boolean).map(String)
-    : (() => {
-        if (savedFiles) {
-          return [String(savedFiles)];
-        }
-        return [];
-      })();
-  const timingEntries = formatStageTimingSummary(stageMs);
-  return {
-    compressionSummary: typeof compressionSummary === "string" ? compressionSummary : "",
-    message:
-      typeof successMessage === "string" && successMessage
-        ? successMessage
-        : `successfully saved to ${fileList.join(", ")}`,
-    outputFormat: typeof outputFormat === "string" ? outputFormat : "",
-    savedFiles: fileList,
-    timingEntries: timingEntries,
-    timingSummary: timingEntries.map((entry) => entry.message).join("\n"),
-  };
-};
-
 export {
   clampProgressPercent,
   createCompressionProgressLabel,
-  createCompressionProgressLabelFromEvent,
   createOutputSizeSummary,
   createProgressEvent,
   createProgressViewModel,
   createProgressViewModelFromEvent,
-  createResultViewModel,
-  createThreadedProgressLabel,
-  createValidationViewModel,
-  createWorkflowPresentationEvent,
   formatByteSize,
   formatPercentFixed,
-  formatProgressThreadCount,
-  formatStageTimingSummary,
   getProgressEventPercent,
   getProgressEventThreadCount,
-  getProgressEventVisualPercent,
   getRawProgressLabel,
   isCompressionWriteTelemetryProgress,
-  normalizeByteCount,
   normalizeProgressDisplayPercent,
   normalizeProgressPercent,
 };

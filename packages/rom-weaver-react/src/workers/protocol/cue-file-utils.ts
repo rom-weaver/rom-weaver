@@ -5,14 +5,6 @@ const CUE_PREGAP_LINE_REGEX = /^PREGAP\b/i;
 const CUE_INDEX_00_LINE_REGEX = /^INDEX\s+00\b/i;
 const CUE_BINARY_FILE_ENTRY_REGEX = /^(\s*)FILE\s+"?.+?"?\s+BINARY\s*$/im;
 const LINE_BREAK_REGEX = /\r?\n/;
-const PATCHABLE_CD_MODES = new Set([
-  "MODE1/2048",
-  "MODE2/2048",
-  "MODE1/2352",
-  "MODE2/2352",
-  "MODE2/2336",
-  "MODE2/2324",
-]);
 
 type ChdCueFileEntry = {
   name: string;
@@ -30,12 +22,6 @@ type ParsedCueFile = {
   tracks: ChdCueTrackEntry[];
   hasPregap: boolean;
   hasIndex00: boolean;
-};
-
-type CdExtractionPlan = {
-  fileName: string;
-  mode: string;
-  extension: "bin";
 };
 
 const parseCueFile = (cueText: string): ParsedCueFile => {
@@ -78,27 +64,6 @@ const parseCueFile = (cueText: string): ParsedCueFile => {
   return result;
 };
 
-const getSingleTrackCdExtractionPlan = (cueText: string): CdExtractionPlan => {
-  const cue = parseCueFile(cueText);
-  if (cue.files.length !== 1 || cue.tracks.length !== 1)
-    throw new Error("CD CHDs with multiple files or tracks are not supported yet");
-  if (cue.hasPregap || cue.hasIndex00) throw new Error("CD CHDs with pregaps are not supported yet");
-  const track = cue.tracks[0];
-  if (!track?.file) throw new Error("CD CHD cue does not reference a binary file");
-  if (track.file.type !== "BINARY") throw new Error("CD CHD cue references a non-binary track file");
-  if (PATCHABLE_CD_MODES.has(track.mode)) {
-    return {
-      extension: "bin",
-      fileName: track.file.name,
-      mode: track.mode,
-    };
-  }
-
-  throw new Error("Only single-track data CD CHDs can be patched right now");
-};
-
-const getSingleTrackCdBinName = (cueText: string) => getSingleTrackCdExtractionPlan(cueText).fileName;
-
 const replaceCuePatchFileName = (cueText: string, binFileName: string) => {
   let replaced = false;
   const safePatchFileName = String(binFileName || "disc.bin").replace(/"/g, "");
@@ -110,5 +75,4 @@ const replaceCuePatchFileName = (cueText: string, binFileName: string) => {
   return updatedCueText;
 };
 
-export type { CdExtractionPlan, ChdCueFileEntry, ChdCueTrackEntry, ParsedCueFile };
-export { getSingleTrackCdBinName, getSingleTrackCdExtractionPlan, parseCueFile, replaceCuePatchFileName };
+export { parseCueFile, replaceCuePatchFileName };

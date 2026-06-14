@@ -254,5 +254,5 @@ window.ROM_WEAVER_CONSOLE_LOGS = {
   size: () => records.length,
 };
 
-export type { ConsoleLogRecord, ConsoleLogReport, ConsoleLogReportMetadata };
+export type { ConsoleLogRecord };
 export { subscribeConsoleLogRecords };

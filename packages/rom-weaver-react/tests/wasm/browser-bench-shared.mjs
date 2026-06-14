@@ -5,7 +5,7 @@ export const MIB = 1024 * 1024;
 export const WORK_GUEST_ROOT = "/work";
 export const COMMAND_PATHS_DEFAULTS = benchmarkDefaults.command_paths;
 export const CHECKSUM_THREADING_DEFAULTS = benchmarkDefaults.checksum_threading;
-export const FIXTURE_CACHE_VERSION = Number(benchmarkDefaults.fixture_cache_version);
+const FIXTURE_CACHE_VERSION = Number(benchmarkDefaults.fixture_cache_version);
 
 export function defaultCsv(values) {
   return Array.isArray(values) ? values.join(",") : String(values);
@@ -95,7 +95,7 @@ export async function ensureGuestGamecubeIsoFixture(rootHandle, guestPath, total
   return { fromCache: false };
 }
 
-export async function guestFileHasSize(rootHandle, guestPath, byteLength) {
+async function guestFileHasSize(rootHandle, guestPath, byteLength) {
   try {
     return (await getGuestFileSize(rootHandle, guestPath)) === byteLength;
   } catch {
@@ -135,7 +135,7 @@ export function readPositiveIntEnv(name, fallback) {
   return parsed;
 }
 
-export function readNonNegativeIntEnv(name, fallback) {
+function readNonNegativeIntEnv(name, fallback) {
   const raw = readEnvValue(name);
   if (raw == null || raw.trim() === "") return fallback;
   const parsed = Number.parseInt(raw, 10);

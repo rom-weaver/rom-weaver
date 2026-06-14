@@ -161,30 +161,16 @@ class CreateWorkflow extends BrowserWorkflowBase<
   }
 }
 
-export type { BrowserSaveDestination, PublicOutput } from "../../types/output.ts";
-export type { ProgressSink, WorkflowProgress } from "../../types/progress.ts";
+export type { BrowserSaveDestination } from "../../types/output.ts";
+export type { WorkflowProgress } from "../../types/progress.ts";
 export type {
-  ApplyResult,
   BrowserApplyResult,
   BrowserCreateResult,
   BrowserTrimResult,
-  CreateResult,
-  TrimResult,
 } from "../../types/public.ts";
-export type {
-  CandidateSelectionRequest,
-  SelectFile,
-  SelectionCandidate,
-  SelectionFileCandidate,
-  SelectionGroupCandidate,
-} from "../../types/selection.ts";
+export type { CandidateSelectionRequest } from "../../types/selection.ts";
 export type { ApplySettings, CreateSettings } from "../../types/settings.ts";
-export type {
-  BrowserSourceObject,
-  BrowserSourceRef,
-  SourceObject,
-  SourceRef,
-} from "../../types/source.ts";
+
 export type { BrowserCreatePatchFormatCandidatesInput, RuntimePatchCreateFormatCandidates };
 
 class ApplyWorkflow extends BrowserWorkflowBase<

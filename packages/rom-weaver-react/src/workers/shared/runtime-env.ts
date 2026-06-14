@@ -17,6 +17,4 @@ const isBrowserWorkerRuntime = () => {
 
 const isBrowserRuntime = () => isBrowserWindowRuntime() || isBrowserWorkerRuntime();
 
-const isNodeRuntime = () => false;
-
-export { isBrowserRuntime, isNodeRuntime };
+export { isBrowserRuntime };

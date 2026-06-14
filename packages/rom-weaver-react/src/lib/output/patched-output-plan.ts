@@ -135,5 +135,5 @@ const createPatchedOutputPlan = ({
   return basePlan;
 };
 
-export type { ChdCompressionCodecs, PatchedOutputPlan };
+export type { PatchedOutputPlan };
 export { createPatchedOutputPlan };

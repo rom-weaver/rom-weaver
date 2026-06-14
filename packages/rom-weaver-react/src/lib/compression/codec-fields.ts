@@ -134,9 +134,7 @@ const validateCompressionCodecValue = (
 };
 
 export {
-  type CompressionCodecFieldKey,
   type CompressionCodecOption,
-  type CompressionCodecValidation,
   getCompressionCodecLevelMax,
   getCompressionCodecLevelMin,
   getCompressionCodecOptions,

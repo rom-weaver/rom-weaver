@@ -2,8 +2,6 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { DialogController } from "./patcher-form.ts";
 import { createInitialDialogState } from "./patcher-ui-state.ts";
 
-export { InfoToggle } from "../../presentation/react/info-toggle.tsx";
-
 /**
  * Legacy archive-entry picker used by the apply workflow when an archive
  * exposes a single choice list (the multi-select flows use the candidate

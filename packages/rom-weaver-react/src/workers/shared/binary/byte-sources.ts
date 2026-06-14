@@ -214,7 +214,7 @@ const isSyncByteSource = (value: unknown): value is SyncByteSource =>
 const isWritableSyncByteSource = (value: unknown): value is WritableSyncByteSource =>
   isSyncByteSource(value) && typeof (value as WritableSyncByteSource).writeBytesAt === "function";
 
-export type { ByteSourceMetadata, SyncByteSource, WritableSyncByteSource };
+export type { SyncByteSource };
 export {
   DEFAULT_FILE_NAME,
   DEFAULT_FILE_TYPE,

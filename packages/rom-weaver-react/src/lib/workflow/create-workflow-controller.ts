@@ -418,5 +418,4 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   }
 }
 
-export type { CreateWorkflowSourceState };
 export { CreateWorkflowController };

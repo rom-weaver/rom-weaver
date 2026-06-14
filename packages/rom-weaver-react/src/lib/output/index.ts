@@ -2,13 +2,6 @@ import type { LogLevel, LogRecord } from "../../types/logging.ts";
 import type { PublicOutput as RuntimePublicOutput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 
-type BrowserSaveDestination =
-  | FileSystemFileHandle
-  | {
-      fileName?: string;
-      fileHandle?: FileSystemFileHandle;
-    };
-
 type PublicOutput<TDestination> = {
   id: string;
   fileName: string;
@@ -127,5 +120,4 @@ const wrapPublicOutput = <TDestination>(
   return publicOutput;
 };
 
-export type { BrowserSaveDestination, OutputTraceOptions, PublicOutput };
 export { wrapPublicOutput };

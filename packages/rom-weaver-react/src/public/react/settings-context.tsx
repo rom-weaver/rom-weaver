@@ -323,8 +323,6 @@ export {
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
   getDefaultCompressionMode,
-  normalizeCreateOutputCompression,
-  normalizeDefaultCompression,
   RomWeaverSettingsProvider,
   toApplyWorkflowSettings,
   toCreateWorkflowSettings,

@@ -421,5 +421,4 @@ const CodecCombobox = ({
   );
 };
 
-export type { CodecComboboxProps };
-export { applyCodecSelection, CodecCombobox, getActiveToken };
+export { CodecCombobox };

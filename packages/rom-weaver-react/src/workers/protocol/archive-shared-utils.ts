@@ -1,10 +1,7 @@
-import { getFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
+import { getFileNameExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
 import { hasReadableBytes, toUint8Array } from "../../storage/shared/binary/binary-source-utils.ts";
-import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type { BlobLike } from "./archive-source-types.ts";
 
-const MACOS_RESOURCE_FORK_ENTRY_REGEX = /(^|\/)\._[^/]+$/i;
-const MACOSX_METADATA_DIRECTORY_REGEX = /^__MACOSX\//i;
 const ARCHIVE_TYPES = {
   AR: "ar",
   ARJ: "arj",
@@ -72,39 +69,6 @@ const MAGIC_SIGNATURES = [
   { bytes: [0x78, 0x61, 0x72, 0x21, 0x00], type: "xar" },
 ];
 
-const WRAPPED_ARCHIVE_TYPE_VALUES = [
-  ARCHIVE_TYPES.BROTLI,
-  "brotli",
-  ARCHIVE_TYPES.BZIP2,
-  "bzip2",
-  ARCHIVE_TYPES.COMPRESS,
-  "compress",
-  ARCHIVE_TYPES.GZIP,
-  "gzip",
-  ARCHIVE_TYPES.LIZARD,
-  ARCHIVE_TYPES.LZ4,
-  ARCHIVE_TYPES.LZ5,
-  ARCHIVE_TYPES.LZIP,
-  "lzip",
-  ARCHIVE_TYPES.LZMA,
-  "lzma86",
-  "mslz",
-  "pmd",
-  "ppmd",
-  ARCHIVE_TYPES.XZ,
-  ARCHIVE_TYPES.ZSTD,
-  "zstd",
-  "zstandard",
-];
-const WRAPPED_ARCHIVE_TYPES = new Set(WRAPPED_ARCHIVE_TYPE_VALUES);
-
-const REGEX_SPECIAL_CHARACTER_PATTERN = /[\\^$.*+?()[\]{}|]/g;
-const escapeRegexSegment = (value: string) => value.replace(REGEX_SPECIAL_CHARACTER_PATTERN, "\\$&");
-const stripLeadingExtensionDot = (extension: string) => extension.replace(/^\./, "");
-const createPatchFilterRegex = (extensions: readonly string[]) =>
-  new RegExp(`\\.(${extensions.map(stripLeadingExtensionDot).map(escapeRegexSegment).join("|")})\\d*$`, "i");
-
-const FILTER_PATCHES = createPatchFilterRegex(ROM_WEAVER_FILE_FILTERS.patchExtensions);
 const ARCHIVE_EXTENSION_ALIASES: Record<string, string> = {
   a: ARCHIVE_TYPES.AR,
   brotli: ARCHIVE_TYPES.BROTLI,
@@ -290,23 +254,6 @@ const SUPPORTED_ARCHIVE_EXTENSION_VALUES = [
   "zstd",
 ];
 const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(SUPPORTED_ARCHIVE_EXTENSION_VALUES);
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const FILTER_NON_ROM_EXTENSIONS = [
-  "txt",
-  "diz",
-  "rtf",
-  "docx?",
-  "xlsx?",
-  "html?",
-  "pdf",
-  "jpe?g",
-  "gif",
-  "png",
-  "bmp",
-  "webp",
-  ...SUPPORTED_ARCHIVE_EXTENSION_VALUES.map(escapeRegex),
-];
-const FILTER_NON_ROMS = new RegExp(`\\.(${FILTER_NON_ROM_EXTENSIONS.join("|")})$`, "i");
 
 type ArchiveSourceObject = {
   _file?: BlobLike;
@@ -314,12 +261,6 @@ type ArchiveSourceObject = {
   name?: string;
   getExtension?: () => string;
 };
-
-type ArchiveEntry = {
-  filename?: string;
-};
-
-type NamedArchiveEntry<TEntry extends ArchiveEntry> = TEntry & { filename: string };
 
 type MagicSignature = {
   type: string;
@@ -386,9 +327,6 @@ const getArchiveMagicType = (u8array: Uint8Array) => {
   return null;
 };
 
-const isWrappedArchiveType = (archiveType: string | null | undefined) =>
-  WRAPPED_ARCHIVE_TYPES.has(String(archiveType || "").toLowerCase());
-
 const getArchiveType = (source: RuntimeValue) => {
   const extension = getExtension(source);
   const fileName = getFileNameLower(source);
@@ -404,58 +342,4 @@ const getArchiveType = (source: RuntimeValue) => {
 
 const isArchiveFile = (source: RuntimeValue) => !!getArchiveType(source);
 
-const isMetadataEntry = (filename: string) =>
-  MACOSX_METADATA_DIRECTORY_REGEX.test(filename) || MACOS_RESOURCE_FORK_ENTRY_REGEX.test(filename);
-
-const sortFileEntries = <TEntry extends ArchiveEntry>(entries: TEntry[]) =>
-  entries
-    .sort((file1, file2) =>
-      getFileNameWithoutExtension((file1.filename || "").toLowerCase()).localeCompare(
-        getFileNameWithoutExtension((file2.filename || "").toLowerCase()),
-      ),
-    )
-    .sort(
-      (file1, file2) =>
-        ((file1.filename || "").indexOf("/") === -1 ? 0 : 1) - ((file2.filename || "").indexOf("/") === -1 ? 0 : 1),
-    );
-
-const filterArchiveEntries = <TEntry extends ArchiveEntry>(
-  entries: TEntry[],
-  includeEntry: (entry: NamedArchiveEntry<TEntry>) => boolean,
-) =>
-  sortFileEntries(
-    entries.filter((entry): entry is NamedArchiveEntry<TEntry> => {
-      if (!entry.filename || isMetadataEntry(entry.filename)) return false;
-      return includeEntry(entry as NamedArchiveEntry<TEntry>);
-    }),
-  );
-
-const filterRomEntries = <TEntry extends ArchiveEntry>(entries: TEntry[]) =>
-  filterArchiveEntries(
-    entries,
-    (entry) => !(FILTER_NON_ROMS.test(entry.filename) || FILTER_PATCHES.test(entry.filename)),
-  );
-
-const filterPatchEntries = <TEntry extends ArchiveEntry>(entries: TEntry[]) =>
-  filterArchiveEntries(entries, (entry) => FILTER_PATCHES.test(entry.filename));
-
-export {
-  ARCHIVE_TYPES,
-  FILTER_NON_ROMS,
-  FILTER_PATCHES,
-  filterPatchEntries,
-  filterRomEntries,
-  getArchiveMagicType,
-  getArchiveType,
-  getBlobSource,
-  getExtension,
-  getFileNameLower,
-  getSupportedArchiveExtension,
-  isArchiveFile,
-  isMetadataEntry,
-  isWrappedArchiveType,
-  MAGIC_SIGNATURES,
-  matchesMagic,
-  SUPPORTED_ARCHIVE_EXTENSION_VALUES,
-  sortFileEntries,
-};
+export { getArchiveMagicType, getArchiveType, isArchiveFile, MAGIC_SIGNATURES };

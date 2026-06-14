@@ -48,20 +48,4 @@ const selectionToArchiveEntry = (request: CandidateSelectionRequest, selection: 
   return selected.path || selected.fileName;
 };
 
-const assertUnambiguousSelection = (request: CandidateSelectionRequest) => {
-  if (resolveAutomaticSelection(request)) return;
-  throw new RomWeaverError(
-    "AMBIGUOUS_SELECTION",
-    `${request.sourceName} contains multiple ${request.role} candidates`,
-    { details: { request } },
-  );
-};
-
-export {
-  assertSelectionExists,
-  assertUnambiguousSelection,
-  getSelectionFiles,
-  getSelectionGroups,
-  resolveAutomaticSelection,
-  selectionToArchiveEntry,
-};
+export { assertSelectionExists, resolveAutomaticSelection, selectionToArchiveEntry };

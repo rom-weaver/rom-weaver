@@ -181,7 +181,7 @@ const attachInputPreparationMetrics = (
 const getInputPreparationMetrics = (assets: InputAsset[]): InputPreparationMetrics | undefined =>
   assets.find((asset) => asset.preparation)?.preparation;
 
-export type { CueCandidateGroup, InputAsset, InputParentCompression, InputPreparationMetrics };
+export type { InputAsset, InputParentCompression };
 export {
   attachInputPreparationMetrics,
   getInputPreparationMetrics,

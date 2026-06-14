@@ -913,5 +913,5 @@ const MESSAGE_CATALOGS: Record<LocaleCode, PartialMessageCatalog> = {
 
 const DEFAULT_LOCALE = "en";
 
-export type { LocaleCode, MessageCatalog, MessageId, PartialMessageCatalog };
-export { DEFAULT_LOCALE, ENGLISH_MESSAGES, MESSAGE_CATALOGS };
+export type { LocaleCode, MessageId, PartialMessageCatalog };
+export { DEFAULT_LOCALE, MESSAGE_CATALOGS };

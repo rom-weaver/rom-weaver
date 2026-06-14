@@ -24,10 +24,4 @@ const getWorkerStorageBucketPath = (
 ) => `${getWorkerStorageBucketRoot(mountPoint, bucket)}/${normalizeRelativeFilePath(relativePath, fallbackFileName)}`;
 
 export type { WorkerStorageBucket };
-export {
-  getWorkerStorageBucketPath,
-  getWorkerStorageBucketRoot,
-  normalizeWorkerStorageMountPoint,
-  WORKER_OPFS_MOUNTPOINT,
-  WORKER_STORAGE_BUCKETS,
-};
+export { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT };

@@ -33,4 +33,4 @@ type TrimWorkflowSourceState = {
   warnings: WorkflowWarning[];
 };
 
-export type { TrimWorkflowChecksums, TrimWorkflowParentCompression, TrimWorkflowSourceState, TrimWorkflowSourceStatus };
+export type { TrimWorkflowChecksums, TrimWorkflowParentCompression, TrimWorkflowSourceState };

@@ -10,7 +10,7 @@ export type ThreadSpawnerRuntime = Omit<BrowserOpfsRuntime, "virtualFiles"> & {
 };
 
 /** Runtime payload forwarded to thread workers; handles are re-resolved inside the worker. */
-export type ThreadWorkerRuntimePayload = ThreadSpawnerRuntime & {
+type ThreadWorkerRuntimePayload = ThreadSpawnerRuntime & {
   resolveMountHandlesInWorker: true;
   virtualOnlyMounts: true;
 };
@@ -24,7 +24,7 @@ export interface SerializedThreadWorkerError {
 }
 
 /** Shared fields posted with both pool-command and standalone thread messages. */
-export interface ThreadWorkerCommandMessageBase {
+interface ThreadWorkerCommandMessageBase {
   __streamBroadcastChannelName?: string;
   __streamRequestId?: number;
   debugWasi: boolean;
@@ -99,14 +99,6 @@ export interface ThreadWorkerErrorReply {
   tid: number | null;
   type: "error";
 }
-
-/** Every message a thread worker posts back to the pool. */
-export type ThreadWorkerReply =
-  | ThreadWorkerCommandDoneReply
-  | ThreadWorkerDoneReply
-  | ThreadWorkerErrorReply
-  | ThreadWorkerReadyReply
-  | ThreadWorkerShellReadyReply;
 
 /** Defensive receive-side view of ThreadWorkerReply (unknown senders, partial clones). */
 export interface ThreadWorkerReplyView {

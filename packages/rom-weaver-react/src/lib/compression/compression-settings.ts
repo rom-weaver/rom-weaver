@@ -154,6 +154,5 @@ export {
   getCompressionProfileFromIndex,
   getCompressionProfileIndex,
   getCompressionProfileLabel,
-  getOptionalCompressionLevel,
   resolveCompressionLevels,
 };

@@ -26,8 +26,6 @@ class RomWeaverError extends Error {
 
 const createAbortError = () => new RomWeaverError("CANCELLED", "Workflow was cancelled");
 
-const isAbortError = (error: unknown) => error instanceof RomWeaverError && error.code === "CANCELLED";
-
 const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const COMPRESSION_FAILURE_MESSAGE_REGEX =
@@ -141,5 +139,4 @@ const withAbortSignal = async <T>(operation: Promise<T>, signal?: AbortSignal): 
   });
 };
 
-export type { RomWeaverErrorCode };
-export { createAbortError, isAbortError, RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal };
+export { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal };

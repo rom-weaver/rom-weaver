@@ -75,7 +75,6 @@ const inertOutputController: PatcherOutputController = {
 
 export {
   createInertState,
-  createStaticStoreController,
   inertDialogController,
   inertOutputController,
   inertStackController,

@@ -61,4 +61,4 @@ const WorkflowRomInputStep = ({
   );
 };
 
-export { WorkflowRomInputStep, type WorkflowRomInputStepItem, type WorkflowRomInputStepProps };
+export { WorkflowRomInputStep, type WorkflowRomInputStepItem };

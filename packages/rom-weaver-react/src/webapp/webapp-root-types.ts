@@ -72,5 +72,5 @@ type WebappRootProps = {
   };
 };
 
-export type { ConfirmationDialogState, WebappRootProps, WorkflowView };
+export type { ConfirmationDialogState, WebappRootProps };
 export { createEmptyConfirmationDialogState };

@@ -1,1 +1,1 @@
-export { combineTimings, createTiming, formatTiming, now, type Timing } from "../../storage/shared/timing.ts";
+export { createTiming, formatTiming, type Timing } from "../../storage/shared/timing.ts";

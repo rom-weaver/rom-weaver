@@ -39,21 +39,4 @@ type WorkflowRomFileLike = WorkflowBinaryBackedFileLike &
   WorkflowRvzSourceMetadata &
   WorkflowZ3dsSourceMetadata;
 
-type PatchFileEntry<TFile = BinaryPayload> = {
-  patchFile?: TFile;
-  patchFormat?: string;
-  patchFilePath?: string;
-  patchFileName?: string;
-};
-
-export type {
-  BinaryPayload,
-  PatchFileEntry,
-  WorkflowBinaryBackedFileLike,
-  WorkflowChdSourceMetadata,
-  WorkflowExtensionFileLike,
-  WorkflowFileNameLike,
-  WorkflowRomFileLike,
-  WorkflowRvzSourceMetadata,
-  WorkflowZ3dsSourceMetadata,
-};
+export type { WorkflowRomFileLike };

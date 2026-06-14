@@ -378,8 +378,6 @@ export {
   COMPRESSION_PROFILE_FIELD_INFO,
   type CompressField,
   type CompressFieldInfo,
-  type CompressFieldLevelMapRow,
-  type CompressFieldOption,
   type CompressPanelModel,
   OUTPUT_FORMAT_INFO,
   OVERRIDDEN_PROFILE_VALUE,

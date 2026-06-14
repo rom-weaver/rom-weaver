@@ -79,4 +79,4 @@ const createPatchedRomSavePlan = ({
   };
 };
 
-export { createCueOutputEntry, createPatchedRomSavePlan, getArchivePatchedRomEntryName, shouldIncludeCueOutput };
+export { createPatchedRomSavePlan };

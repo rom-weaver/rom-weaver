@@ -13,7 +13,7 @@ import type {
 } from "./rom-weaver-types.d.ts";
 import { createBrowserWorkerClient } from "./workers/browser-worker-client.ts";
 
-export const OPFS_GUEST_ROOT = "/work";
+const OPFS_GUEST_ROOT = "/work";
 
 type BrowserFormatMatrixBytes = string | Uint8Array | ArrayBuffer;
 type BrowserFormatMatrixRunOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> &
@@ -115,7 +115,7 @@ const CONTAINER_SUFFIX_BY_FORMAT: ReadonlyMap<string, string> = new Map(
   ]),
 );
 const PATCH_EXTENSION_BY_FORMAT = createPatchExtensionMap();
-export const BROWSER_FORMAT_MATRIX_PATCH_FORMATS = createBrowserFormatMatrixPatchFormats();
+const BROWSER_FORMAT_MATRIX_PATCH_FORMATS = createBrowserFormatMatrixPatchFormats();
 
 export function getBrowserFormatMatrixMetadataCoverage() {
   return {
@@ -719,14 +719,14 @@ async function fetchBytes(url: URL) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export function toBytes(value: BrowserFormatMatrixBytes) {
+function toBytes(value: BrowserFormatMatrixBytes) {
   if (typeof value === "string") return TEXT_ENCODER.encode(value);
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   throw new TypeError("expected string, Uint8Array, or ArrayBuffer");
 }
 
-export function joinGuestPath(...parts: string[]) {
+function joinGuestPath(...parts: string[]) {
   const tokens: string[] = [];
   for (const part of parts) {
     const value = String(part);
@@ -743,7 +743,7 @@ async function readGuestFile(rootHandle: FileSystemDirectoryHandle, guestPath: s
   return new Uint8Array(await file.arrayBuffer());
 }
 
-export async function writeGuestFile(rootHandle: FileSystemDirectoryHandle, guestPath: string, contents: Uint8Array) {
+async function writeGuestFile(rootHandle: FileSystemDirectoryHandle, guestPath: string, contents: Uint8Array) {
   const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(contents as FileSystemWriteChunkType);

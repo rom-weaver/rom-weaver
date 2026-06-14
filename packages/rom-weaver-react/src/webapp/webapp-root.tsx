@@ -98,11 +98,6 @@ const useEntryAnimationLock = () => {
   }, []);
 };
 
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 /* Mode switches crossfade flat — shared with the forms' empty-bench
    transition so all layout swaps use one mechanism. */
 const selectViewWithTransition = (select: () => void) => runFlatViewTransition(select);

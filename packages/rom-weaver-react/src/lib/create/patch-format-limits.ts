@@ -124,12 +124,9 @@ export {
   CREATE_BPS_DEFAULT_LIMIT_BYTES,
   CREATE_IPS_SIZE_LIMIT_BYTES,
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
-  CREATE_PATCH_DEFAULT_FORMAT,
   createPatchFormatSupportsCreateSizes,
   getCreatePatchFormatSizeErrorMessage,
   getCreatePatchFormatsForSizes,
-  getDefaultCreatePatchFormatForSources,
   getPreferredCreatePatchFormat,
-  LARGE_CREATE_PATCH_FORMATS,
   normalizeCreatePatchFormat,
 };

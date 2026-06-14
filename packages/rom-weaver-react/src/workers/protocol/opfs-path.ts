@@ -1,8 +1,6 @@
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { LogRecord } from "../../types/logging.ts";
 
-const OPFS_VERSION_DIRECTORY = "v4";
-
 // Per-call trace gating: a caller with an active run's log level / onLog sink threads it through so the
 // rare not-found-retry trace emits via the shared logger (gated by the actual log level setting) instead
 // of an unconditional console line. Shared low-level callers without a context simply emit nothing.
@@ -46,9 +44,6 @@ const normalizeOpfsPathParts = (filePath: string): string[] => {
   if (LEADING_SLASHES_REGEX.test(raw) && parts.length > 1) parts.shift();
   return parts;
 };
-
-const getManagedOpfsStorageName = (filePath: string): string =>
-  normalizeOpfsPathParts(filePath).join("/") || "output.bin";
 
 const getStorage = (navigatorObject?: Pick<Navigator, "storage"> | null) =>
   navigatorObject?.storage || globalThis.navigator?.storage;
@@ -179,15 +174,4 @@ const removeManagedOpfsPath = async (
   }
 };
 
-const getOpfsFileHandle = getManagedOpfsFileHandle;
-const removeOpfsPath = removeManagedOpfsPath;
-
-export {
-  getManagedOpfsDirectory,
-  getManagedOpfsFileHandle,
-  getManagedOpfsStorageName,
-  getOpfsFileHandle,
-  OPFS_VERSION_DIRECTORY,
-  removeManagedOpfsPath,
-  removeOpfsPath,
-};
+export { getManagedOpfsDirectory, getManagedOpfsFileHandle, removeManagedOpfsPath };

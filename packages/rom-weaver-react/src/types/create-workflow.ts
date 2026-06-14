@@ -31,4 +31,4 @@ type CreateWorkflowSourceState = {
   warnings: WorkflowWarning[];
 };
 
-export type { CreateWorkflowParentCompression, CreateWorkflowSourceState, CreateWorkflowSourceStatus };
+export type { CreateWorkflowParentCompression, CreateWorkflowSourceState };

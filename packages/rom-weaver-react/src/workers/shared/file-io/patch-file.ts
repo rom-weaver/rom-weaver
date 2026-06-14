@@ -11,11 +11,8 @@ import {
   toUint8Array,
 } from "../binary/byte-sources.ts";
 import type {
-  ByteSourceMetadata,
-  ChecksumResult,
   PatchFileChunkIterationResult as ChunkIterationResult,
   PatchFileChunkOptions as ChunkOptions,
-  HashProgressCallback,
   PatchFileCopyTarget,
   PatchFileInit,
   PatchFileInstance,
@@ -24,7 +21,6 @@ import type {
   PatchFileRuntime,
   PatchFileSource,
   SyncByteSource,
-  WritableSyncByteSource,
 } from "../binary/types.ts";
 
 /*
@@ -106,8 +102,6 @@ const initializePatchFile = <TTarget extends object>(target: TTarget, init: Patc
   else delete nextTarget._u8array;
   return target;
 };
-const createPatchFileWithPrototype = <TTarget extends object>(prototype: object, init: PatchFileInit): TTarget =>
-  initializePatchFile(Object.create(prototype) as TTarget, init);
 const _normalizeRange = (
   file: { fileSize: number },
   offset?: number,
@@ -685,21 +679,6 @@ class PatchFile implements PatchFileLike {
   }
 }
 
-const createPatchFile = (source: PatchFileSource, onLoad?: (file: PatchFileInstance) => void): PatchFileInstance =>
-  new PatchFile(source, onLoad);
-
-const createReadView = (source: PatchFileLike, offset?: number, len?: number): ReadablePatchFileViewInstance =>
-  new ReadablePatchFileView(source, offset, len);
-
-const setPatchFileRuntime = (runtime: PatchFileRuntime) => {
-  PatchFile.RUNTIME_ENVIROMENT = runtime;
-};
-
-const getPatchFileRuntime = () => PatchFile.RUNTIME_ENVIROMENT;
-const PATCH_FILE_DEFAULT_CHUNK_SIZE = PatchFile.DEFAULT_CHUNK_SIZE;
-const PATCH_FILE_DEVICE_LITTLE_ENDIAN = PatchFile.DEVICE_LITTLE_ENDIAN;
-const patchFilePrototype = PatchFile.prototype;
-
 class ReadablePatchFileView extends PatchFile implements ReadablePatchFileViewInstance {
   declare _readViewSource: PatchFileLike;
   declare _readViewOffset: number;
@@ -754,34 +733,4 @@ class ReadablePatchFileView extends PatchFile implements ReadablePatchFileViewIn
     return new ReadablePatchFileView(this, range.offset, range.len);
   }
 }
-
-export type {
-  ByteSourceMetadata,
-  ChecksumResult,
-  HashProgressCallback,
-  PatchFileCopyTarget,
-  PatchFileInit,
-  PatchFileInstance,
-  PatchFileLike,
-  PatchFileReader,
-  PatchFileRuntime,
-  PatchFileSource,
-  SyncByteSource,
-  WritableSyncByteSource,
-};
 export default PatchFile;
-export {
-  createPatchFile,
-  createPatchFileWithPrototype,
-  createReadView,
-  getPatchFileRuntime,
-  initializePatchFile,
-  isSyncByteSource,
-  isWritableSyncByteSource,
-  MemoryByteSource,
-  PATCH_FILE_DEFAULT_CHUNK_SIZE,
-  PATCH_FILE_DEVICE_LITTLE_ENDIAN,
-  patchFilePrototype,
-  ReadViewByteSource,
-  setPatchFileRuntime,
-};

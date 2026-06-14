@@ -12,7 +12,6 @@ export {
   basenameForTrace,
   formatCommandForTrace,
   formatErrorForTrace,
-  truncateForTrace,
 } from "./workers/worker-trace-format.ts";
 
 type RandomAccessFileIoStats = ReturnType<typeof createRandomAccessFileIoStats>;
@@ -556,7 +555,7 @@ export function decodeChunks(chunks: Iterable<Uint8Array>): string {
   return output;
 }
 
-export function copyUint8Array(data: Uint8Array): Uint8Array {
+function copyUint8Array(data: Uint8Array): Uint8Array {
   const copied = new Uint8Array(data.byteLength);
   copied.set(data);
   return copied;

@@ -101,5 +101,5 @@ const routeSingleRom = (files: File[]): File | null => {
   return first;
 };
 
-export type { ArchiveRomProbe, ByTypeRouting };
+export type { ArchiveRomProbe };
 export { collectRomDropFiles, routeByOrder, routeByTypeProbed, routeSingleRom };

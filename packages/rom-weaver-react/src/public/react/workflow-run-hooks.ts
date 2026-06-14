@@ -183,7 +183,6 @@ export type { WorkflowFormProgressState };
 export {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
-  createWorkflowFormProgress,
   toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,
   useActiveAbortController,

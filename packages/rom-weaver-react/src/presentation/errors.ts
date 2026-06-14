@@ -6,29 +6,6 @@ type CodedErrorLike = Error & {
   details?: Record<string, unknown>;
 };
 
-const ERROR_MESSAGE_CODES = [
-  "AMBIGUOUS_SELECTION",
-  "CANCELLED",
-  "CHECKSUM_MISMATCH",
-  "COMPRESSION_FAILED",
-  "INVALID_INPUT",
-  "INVALID_SETTINGS",
-  "NO_COMPATIBLE_PATCH",
-  "NO_SELECTABLE_CANDIDATE",
-  "OUTPUT_WRITE_FAILED",
-  "PATCH_APPLY_FAILED",
-  "PATCH_CREATE_FAILED",
-  "PATCH_PARSE_FAILED",
-  "PATCH_TARGET_MISMATCH",
-  "SELECTION_NOT_FOUND",
-  "SOURCE_NOT_FOUND",
-  "SOURCE_UNSUPPORTED",
-  "STORAGE_UNAVAILABLE",
-  "UNSUPPORTED_FORMAT",
-  "WORKER_FAILED",
-  "WORKER_UNAVAILABLE",
-] as const;
-
 const isCodedError = (error: unknown): error is CodedErrorLike =>
   error instanceof Error && typeof (error as { code?: unknown }).code === "string";
 
@@ -111,4 +88,4 @@ const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = creat
   return `${code}: ${message}`;
 };
 
-export { ERROR_MESSAGE_CODES, formatCodedErrorForDisplay, getErrorCode, getUserFacingErrorMessage, isCodedError };
+export { formatCodedErrorForDisplay, getErrorCode };

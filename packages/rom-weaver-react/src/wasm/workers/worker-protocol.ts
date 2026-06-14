@@ -9,20 +9,7 @@ import type {
   RomWeaverWorkerSerializedError,
 } from "../rom-weaver-types.d.ts";
 
-export const WORKER_REQUEST_TYPES = ["init", "run", "runJson", "dispose"];
-
-export const WORKER_RESPONSE_TYPES = [
-  "ready",
-  "result",
-  "event",
-  "nonJsonLine",
-  "traceEvent",
-  "traceNonJsonLine",
-  "disposed",
-  "error",
-] as const;
-
-export interface RomWeaverWorkerStreamChannelOptions {
+interface RomWeaverWorkerStreamChannelOptions {
   __streamBroadcastChannelName?: string;
   __streamRequestId?: number;
 }
@@ -31,14 +18,14 @@ export type RomWeaverWorkerInitOptions = RomWeaverBrowserOpfsOptions;
 
 export type RomWeaverWorkerRunOptions = RomWeaverBrowserOpfsRunOptions & RomWeaverWorkerStreamChannelOptions;
 
-export interface RomWeaverWorkerInitRequest {
+interface RomWeaverWorkerInitRequest {
   type: "init";
   requestId?: number;
   mode?: "browser-opfs";
   options?: RomWeaverWorkerInitOptions;
 }
 
-export interface RomWeaverWorkerRunRequest {
+interface RomWeaverWorkerRunRequest {
   type: "run";
   requestId?: number;
   request: RomWeaverRunInput;
@@ -52,14 +39,14 @@ export type RomWeaverWorkerRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTrace
   RomWeaverBrowserOpfsRunOptions &
   RomWeaverWorkerStreamChannelOptions;
 
-export interface RomWeaverWorkerRunJsonRequest {
+interface RomWeaverWorkerRunJsonRequest {
   type: "runJson";
   requestId?: number;
   request: RomWeaverRunInput;
   options?: RomWeaverWorkerRunJsonOptions<unknown, unknown>;
 }
 
-export interface RomWeaverWorkerDisposeRequest {
+interface RomWeaverWorkerDisposeRequest {
   type: "dispose";
   requestId?: number;
 }
@@ -70,7 +57,7 @@ export type RomWeaverWorkerRequest =
   | RomWeaverWorkerRunJsonRequest
   | RomWeaverWorkerDisposeRequest;
 
-export interface RomWeaverWorkerReadyMessage {
+interface RomWeaverWorkerReadyMessage {
   type: "ready";
   requestId: number | null;
   mode: string;
@@ -78,43 +65,43 @@ export interface RomWeaverWorkerReadyMessage {
   wasmUrl: string | null;
 }
 
-export interface RomWeaverWorkerResultMessage {
+interface RomWeaverWorkerResultMessage {
   type: "result";
   requestId: number | null;
   operation: "run" | "runJson";
   result: RomWeaverRunResult | RomWeaverRunJsonResult<unknown, unknown>;
 }
 
-export interface RomWeaverWorkerProgressEventMessage {
+interface RomWeaverWorkerProgressEventMessage {
   type: "event";
   requestId: number | null;
   event: RomWeaverRunJsonEvent;
 }
 
-export interface RomWeaverWorkerNonJsonLineMessage {
+interface RomWeaverWorkerNonJsonLineMessage {
   type: "nonJsonLine";
   requestId: number | null;
   line: string;
 }
 
-export interface RomWeaverWorkerTraceEventMessage {
+interface RomWeaverWorkerTraceEventMessage {
   type: "traceEvent";
   requestId: number | null;
   event: unknown;
 }
 
-export interface RomWeaverWorkerTraceNonJsonLineMessage {
+interface RomWeaverWorkerTraceNonJsonLineMessage {
   type: "traceNonJsonLine";
   requestId: number | null;
   line: string;
 }
 
-export interface RomWeaverWorkerDisposedMessage {
+interface RomWeaverWorkerDisposedMessage {
   type: "disposed";
   requestId: number | null;
 }
 
-export interface RomWeaverWorkerErrorMessage {
+interface RomWeaverWorkerErrorMessage {
   type: "error";
   requestId: number | null;
   error: RomWeaverWorkerSerializedError;
@@ -128,7 +115,7 @@ export interface RomWeaverWorkerErrorMessage {
  * `mode: "single" | "many"` discriminant that the UI routes on. `request` is the UTF-8 JSON the
  * wasm prompter emitted (`{mode, heading, candidates:[{value,label,size}]}`).
  */
-export interface RomWeaverWorkerSelectRequestMessage {
+interface RomWeaverWorkerSelectRequestMessage {
   type: "selectRequest";
   requestId: number | null;
   request: string;

@@ -582,4 +582,4 @@ const createPwaServiceWorkerClient = ({
   };
 };
 
-export { createPwaServiceWorkerClient, type PwaServiceWorkerClient };
+export { createPwaServiceWorkerClient };

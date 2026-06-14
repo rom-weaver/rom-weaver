@@ -48,13 +48,8 @@ type SelectionChoice = { id: string; ids?: string[] };
 
 type SelectFile = (request: CandidateSelectionRequest) => Promise<SelectionChoice> | SelectionChoice;
 
-type PatchTarget = { kind: "auto" } | { id: string; kind: "inputId" };
-
 export type {
-  CandidateGroupKind,
-  CandidateKind,
   CandidateSelectionRequest,
-  PatchTarget,
   SelectFile,
   SelectionCandidate,
   SelectionChoice,

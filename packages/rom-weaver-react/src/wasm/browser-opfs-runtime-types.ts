@@ -13,7 +13,6 @@ import type {
   RomWeaverRunResult,
 } from "./rom-weaver-types.d.ts";
 
-export type AnyRecord = Record<string, unknown>;
 export type LineHandler = (line: string) => void;
 export type TraceLine = (line: string) => void;
 export type FileReaderSyncLike = {
@@ -52,9 +51,6 @@ export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   virtualFiles?: unknown[];
   virtualOnlyMounts?: boolean;
   writableRoots?: string[];
-};
-export type BrowserOpfsRuntimePayload = AnyRecord & {
-  runtime?: BrowserOpfsRuntime;
 };
 
 export type WasiStartInstance = WebAssembly.Instance & {
@@ -104,23 +100,6 @@ export type ThreadPoolCommandSlot = ThreadWorkerSlot & {
   resolveDone: (() => void) | null;
   resolveReady: (() => void) | null;
   shell: ThreadPoolShell;
-};
-
-export type ThreadPoolCommand = {
-  commandId: number;
-  debugWasi: boolean;
-  envList: unknown;
-  ready: Promise<void> | null;
-  runtime: BrowserOpfsRuntime;
-  shutdown: () => Promise<void>;
-  slots: ThreadPoolCommandSlot[];
-  streamBroadcastChannelName?: string;
-  streamRequestId?: number;
-  threadIdState: unknown;
-  threadWorkerUrl: string;
-  wasiArgs: unknown;
-  wasmMemory: WebAssembly.Memory;
-  wasmModule: WebAssembly.Module;
 };
 
 export interface RomWeaverBrowserOpfsRunner {

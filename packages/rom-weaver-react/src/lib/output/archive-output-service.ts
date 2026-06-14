@@ -303,7 +303,7 @@ const createSingleFileArchiveOutput = async ({
   });
 };
 
-export type { ArchiveCompressionOverrides, ArchiveOutputCompression, ArchiveOutputEntry };
+export type { ArchiveCompressionOverrides, ArchiveOutputEntry };
 export {
   createArchiveEntryInputFromPatchFile,
   createArchiveOutput,
@@ -311,6 +311,5 @@ export {
   createPatchFileFromRuntimeOutput,
   createSingleFileArchiveOutput,
   getArchiveOutputCompression,
-  getOutputName as getArchiveRequestedOutputName,
   hasArchiveFileName,
 };

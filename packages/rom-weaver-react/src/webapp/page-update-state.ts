@@ -63,6 +63,4 @@ export {
   createVitePageUpdateState,
   getPageUpdateState,
   type PageUpdateState,
-  type VitePageUpdateState,
-  type ViteReloadAvailablePayload,
 };

@@ -494,5 +494,4 @@ const useInputStaging = (context: InputStagingContext) => {
   }, [contextRef]);
 };
 
-export type { InputStagingContext };
 export { useInputStaging };

@@ -100,8 +100,6 @@ const materializeByteSourceRecord = (
   return null;
 };
 
-const cloneBytes = (bytes: Uint8Array) => Uint8Array.from(bytes);
-
 const readBinaryObjectRange = async (
   source: BinaryObjectLike,
   offset?: number,
@@ -118,7 +116,6 @@ const readBinaryObjectRange = async (
 
 export type { BinaryObjectLike, ByteSourceRecordLike };
 export {
-  cloneBytes,
   DEFAULT_SOURCE_FILE_NAME,
   getBaseName,
   isBinaryObjectLike,

@@ -95,5 +95,4 @@ const UnifiedDropZone = ({
   );
 };
 
-export type { SupportedFileGroup, UnifiedDropZoneProps };
 export { UnifiedDropZone };

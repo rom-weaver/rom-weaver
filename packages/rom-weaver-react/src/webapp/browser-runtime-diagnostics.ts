@@ -171,4 +171,4 @@ if (typeof window === "object") {
   window.ROM_WEAVER_MOBILE_SAFARI_DIAGNOSTICS = diagnosticsApi;
 }
 
-export { type BrowserRuntimeDiagnostics, type BrowserRuntimeDiagnosticsApi, collectBrowserRuntimeDiagnostics };
+export { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics };

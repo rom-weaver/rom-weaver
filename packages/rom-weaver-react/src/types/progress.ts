@@ -39,13 +39,4 @@ type WorkflowProgress = {
   workflow: WorkflowKind;
 };
 
-type ProgressSink = (event: WorkflowProgress) => void;
-
-export type {
-  ProgressSink,
-  WorkflowKind,
-  WorkflowProgress,
-  WorkflowProgressRole,
-  WorkflowProgressStage,
-  WorkflowProgressUnit,
-};
+export type { WorkflowKind, WorkflowProgress, WorkflowProgressRole, WorkflowProgressStage };

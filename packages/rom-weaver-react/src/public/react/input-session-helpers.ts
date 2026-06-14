@@ -65,7 +65,6 @@ export {
   getBinarySourceFileName,
   getBinarySourceListStableIds,
   getBinarySourceSize,
-  getBinarySourceStableSignature,
   sameBinarySourceLists,
   toApplyButtonProgress,
   toInputProgress,

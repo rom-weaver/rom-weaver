@@ -294,5 +294,4 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 }
 
-export type { TrimWorkflowSourceState };
 export { TrimWorkflowController };

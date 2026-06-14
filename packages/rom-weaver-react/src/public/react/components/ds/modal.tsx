@@ -129,4 +129,4 @@ const ConfirmDialog = ({
   </ModalShell>
 );
 
-export { ConfirmDialog, Modal, ModalShell };
+export { ConfirmDialog, Modal };

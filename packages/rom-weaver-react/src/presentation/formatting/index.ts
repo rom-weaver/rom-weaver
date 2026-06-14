@@ -22,12 +22,6 @@ const formatBytes = (bytes: number, locale: LocaleCode): string => {
   return `${getNumberFormatter(locale, BYTE_FRACTION_DIGITS).format(value)} ${BYTE_UNITS[unitIndex]}`;
 };
 
-const formatPercent = (value: number, locale: LocaleCode, digits = 1): string =>
-  `${getNumberFormatter(locale, {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value)}%`;
-
 const formatDuration = (milliseconds: number, locale: LocaleCode): string => {
   const normalizedMilliseconds = Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : 0;
   if (normalizedMilliseconds < 1000) {
@@ -54,4 +48,4 @@ const formatList = (items: string[], locale: LocaleCode): string => {
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
 };
 
-export { formatBytes, formatCount, formatDuration, formatList, formatPercent };
+export { formatBytes, formatCount, formatDuration, formatList };

@@ -169,7 +169,6 @@ export {
   createRuntimeOutputFromBytes,
   createRuntimeOutputFromSource,
   createRuntimeOutputFromVfs,
-  createRuntimeOutputPath,
   getRuntimeOutputStorage,
   readRuntimeOutputBlob,
   readRuntimeOutputBytes,

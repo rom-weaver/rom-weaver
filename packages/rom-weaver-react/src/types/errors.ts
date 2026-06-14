@@ -26,26 +26,4 @@ type WorkflowErrorCode =
   | "WORKER_FAILED"
   | "WORKER_UNAVAILABLE";
 
-type ErrorSeverity = "error" | "fatal" | "warning";
-
-type RomWeaverErrorDetails = {
-  cause?: unknown;
-  candidateId?: string;
-  expected?: unknown;
-  fileName?: string;
-  operation?: string;
-  received?: unknown;
-  requestId?: string;
-  role?: string;
-  sourceName?: string;
-  workerKind?: string;
-  [key: string]: unknown;
-};
-
-type RomWeaverError = Error & {
-  code: WorkflowErrorCode;
-  details?: RomWeaverErrorDetails;
-  severity?: ErrorSeverity;
-};
-
-export type { ErrorSeverity, RomWeaverError, RomWeaverErrorDetails, WorkflowErrorCode };
+export type { WorkflowErrorCode };

@@ -52,4 +52,4 @@ const OutputRunAction = ({ children, disabled, download, icon, id, onClick, prog
   </>
 );
 
-export { OutputRunAction, type OutputRunActionProps, WorkflowOutputStep, type WorkflowOutputStepProps };
+export { OutputRunAction, WorkflowOutputStep };

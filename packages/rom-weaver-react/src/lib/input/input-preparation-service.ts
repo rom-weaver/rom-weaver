@@ -625,7 +625,6 @@ const prepareInputFile = async (
   return prepared;
 };
 
-export type { InputAsset };
 export {
   getBinarySourceSize,
   getPatchLeafFileForSelection,

@@ -70,4 +70,4 @@ const RomInputPanels = ({
   );
 };
 
-export { type RomInputInfoPanelProps, RomInputPanels, type RomInputPanelsProps };
+export { RomInputPanels };

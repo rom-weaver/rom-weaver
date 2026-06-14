@@ -90,7 +90,4 @@ const reportPublicProgress = (options: ProgressOptions, event: ProgressEvent) =>
 const reportProgress = (options: ApplyWorkflowOptions | CreateWorkflowOptions | undefined, event: ProgressEvent) =>
   reportPublicProgress(options, event);
 
-const reportCompressionProgress = (options: CompressionWorkflowOptions | undefined, event: ProgressEvent) =>
-  reportPublicProgress(options, event);
-
-export { normalizeApplyProgressInput, reportCompressionProgress, reportProgress };
+export { normalizeApplyProgressInput, reportProgress };

@@ -58,25 +58,18 @@ export type {
   SerializedThreadWorkerError,
   ThreadSpawnerRuntime,
   ThreadWorkerCommandDoneReply,
-  ThreadWorkerCommandMessageBase,
   ThreadWorkerDoneReply,
   ThreadWorkerErrorReply,
   ThreadWorkerMessage,
   ThreadWorkerPoolCommandMessage,
-  ThreadWorkerPoolShellMessage,
   ThreadWorkerReadyReply,
-  ThreadWorkerReply,
-  ThreadWorkerRuntimePayload,
   ThreadWorkerShellReadyReply,
-  ThreadWorkerShutdownMessage,
   ThreadWorkerThreadStartMessage,
 } from "./browser-wasi-thread-pool-protocol.ts";
-export { createThreadWorkerRuntimePayload } from "./browser-wasi-thread-pool-protocol.ts";
-export { resolveThreadWorkerUrl } from "./browser-wasi-thread-shell.ts";
+
 export {
   browserThreadRequestOptions,
   DEFAULT_BROWSER_THREAD_COUNT,
-  MAX_BROWSER_THREAD_POOL_SIZE,
   parseRequestedThreadCount,
   resolveBrowserThreadPoolSizeFromCount,
 } from "./browser-wasi-thread-sizing.ts";
@@ -90,7 +83,7 @@ export interface BrowserWasiThreadWorkerPoolOptions {
   threadWorkerUrl?: string | URL;
 }
 
-export interface BrowserWasiThreadPoolCommandOptions {
+interface BrowserWasiThreadPoolCommandOptions {
   debugWasi: boolean;
   envList: unknown;
   poolSize: number;
@@ -105,7 +98,7 @@ export interface BrowserWasiThreadPoolCommandOptions {
   wasmModule: WebAssembly.Module;
 }
 
-export interface BrowserWasiThreadPoolCommand {
+interface BrowserWasiThreadPoolCommand {
   commandId: number;
   debugWasi: boolean;
   envList: unknown;

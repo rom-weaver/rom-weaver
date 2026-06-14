@@ -10,15 +10,7 @@ import type {
   RomWeaverRunRequest,
 } from "./rom-weaver-types.d.ts";
 
-export type {
-  KnownRomWeaverCommandType,
-  KnownRomWeaverPatchCommandType,
-} from "./generated/rom-weaver-command-types.ts";
 export {
-  assertKnownRomWeaverCommandType,
-  assertKnownRomWeaverPatchCommandType,
-  isKnownRomWeaverCommandType,
-  isKnownRomWeaverPatchCommandType,
   KNOWN_COMMAND_TYPES,
   KNOWN_PATCH_COMMAND_TYPES,
 } from "./generated/rom-weaver-command-types.ts";
@@ -42,7 +34,7 @@ type RomWeaverTopLevelCommandBranch = {
 }[RomWeaverTopLevelCommandType];
 
 export type RomWeaverCommandLabel = RomWeaverTopLevelCommandType | RomWeaverPatchCommandLabel;
-export type RomWeaverCommandBranch = RomWeaverTopLevelCommandBranch | RomWeaverPatchCommandBranch;
+type RomWeaverCommandBranch = RomWeaverTopLevelCommandBranch | RomWeaverPatchCommandBranch;
 export type RomWeaverCommandBranchArgs<TType extends RomWeaverCommandLabel> = Extract<
   RomWeaverCommandBranch,
   { type: TType }
@@ -101,7 +93,7 @@ export function normalizeRomWeaverRunRequest(
   return { command, output };
 }
 
-export function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand {
+function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand {
   if (!isObjectRecord(command)) {
     throw new TypeError("rom-weaver typed command must be an object");
   }
@@ -124,7 +116,7 @@ export function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverC
   }
 }
 
-export function normalizeRomWeaverRunOutputOptions(
+function normalizeRomWeaverRunOutputOptions(
   output: Partial<RomWeaverRunOutputOptions> | null | undefined,
 ): RomWeaverRunOutputOptions {
   const normalized: RomWeaverRunOutputOptions = {};
@@ -137,10 +129,6 @@ export function normalizeRomWeaverRunOutputOptions(
   return normalized;
 }
 
-export function isRomWeaverRunRequest(input: RomWeaverRunInput): input is RomWeaverRunRequest {
-  return isRomWeaverRunRequestLike(input);
-}
-
 export function readRomWeaverRunInputCommand(input: RomWeaverRunInput): RomWeaverCommand {
   return isRomWeaverRunRequestLike(input) ? input.command : input;
 }
@@ -149,7 +137,7 @@ export function readRomWeaverRunRequestCommand(request: RomWeaverRunRequest): Ro
   return request.command;
 }
 
-export function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommandBranch {
+function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommandBranch {
   switch (command.type) {
     case "probe":
     case "list":
@@ -168,7 +156,7 @@ export function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaver
   }
 }
 
-export function readRomWeaverCommandArgs(command: RomWeaverCommand): Record<string, unknown> {
+function readRomWeaverCommandArgs(command: RomWeaverCommand): Record<string, unknown> {
   return readRomWeaverCommandBranch(command).args as Record<string, unknown>;
 }
 
@@ -248,7 +236,7 @@ export function readRomWeaverRequestedThreadCount(
   return parseRomWeaverThreadBudgetCount(readRomWeaverCommandArgs(command).threads, options);
 }
 
-export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
+function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
   switch (command.type) {
     case "probe":
     case "list":

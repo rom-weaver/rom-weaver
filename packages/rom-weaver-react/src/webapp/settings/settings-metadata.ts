@@ -618,19 +618,8 @@ const getSettingsFieldValidationLabel = (fieldKey: SettingsFieldKey): string =>
 const isSettingsDraftFieldNumeric = (fieldKey: SettingsFieldKey): boolean =>
   SETTINGS_FIELD_METADATA[fieldKey].kind === "number";
 
-const LANGUAGE_OPTIONS = Array.isArray(SETTINGS_FIELD_METADATA.language.options)
-  ? SETTINGS_FIELD_METADATA.language.options.map((option) => ({ ...option }))
-  : [];
 const SETTINGS_VALID_LANGUAGES = getSettingsChoiceValues("language");
-const SETTINGS_VALID_LOG_LEVELS = getSettingsChoiceValues("logLevel");
 const SETTINGS_VALID_DEFAULT_COMPRESSION = getSettingsChoiceValues("defaultCompression");
-const SETTINGS_VALID_OUTPUT_COMPRESSION = getSettingsChoiceValues("compressionFormat");
-const SETTINGS_VALID_CHD_OUTPUT_MODES = getSettingsChoiceValues("chdOutputMode");
-const SETTINGS_VALID_CHD_CREATECD_CODECS = getSettingsChoiceValues("chdCreateCdCodecs");
-const SETTINGS_VALID_CHD_CREATEDVD_CODECS = getSettingsChoiceValues("chdCreateDvdCodecs");
-const SETTINGS_VALID_SEVEN_ZIP_CODECS = getSettingsChoiceValues("sevenZipCodec");
-const SETTINGS_VALID_ZIP_CODECS = getSettingsChoiceValues("zipCodec");
-const SETTINGS_VALID_RVZ_CODEC = getSettingsChoiceValues("rvzCodec");
 const SETTINGS_VALID_COMPRESSION_PROFILES = getSettingsChoiceValues("compressionProfile");
 
 const SETTINGS_PANEL_FIELD_ORDER: SettingsFieldKey[] = SETTINGS_FIELD_ORDER.filter(
@@ -744,24 +733,15 @@ const getDefaultSettings = (): SettingsState => {
 const copySettings = (source: SettingsState): SettingsState => Object.assign({}, source);
 
 export type {
-  DynamicSettingsBoolean,
-  DynamicSettingsNumber,
-  DynamicSettingsText,
-  NumericDraftValue,
-  SettingsChoiceOption,
   SettingsDraft,
   SettingsDraftState,
-  SettingsFieldContext,
   SettingsFieldKey,
-  SettingsFieldKind,
-  SettingsFieldMetadata,
   SettingsState,
   SettingsUiState,
   SettingsValidation,
   StorageLike,
 };
 export {
-  canUseThreadedWasm,
   copySettings,
   getCompressionProfileFromIndex,
   getDefaultSettings,
@@ -778,7 +758,6 @@ export {
   getSettingsUiState,
   isSettingsDraftFieldNumeric,
   isSettingsFieldDisabled,
-  LANGUAGE_OPTIONS,
   LOCAL_STORAGE_SETTINGS_ID,
   normalizeChoiceSetting,
   SETTINGS_FIELD_ID_TO_KEY,
@@ -786,15 +765,5 @@ export {
   SETTINGS_FIELD_ORDER,
   SETTINGS_LEVEL_OVERRIDE_FIELDS,
   SETTINGS_PANEL_FIELD_ORDER,
-  SETTINGS_VALID_CHD_CREATECD_CODECS,
-  SETTINGS_VALID_CHD_CREATEDVD_CODECS,
-  SETTINGS_VALID_CHD_OUTPUT_MODES,
   SETTINGS_VALID_COMPRESSION_PROFILES,
-  SETTINGS_VALID_DEFAULT_COMPRESSION,
-  SETTINGS_VALID_LANGUAGES,
-  SETTINGS_VALID_LOG_LEVELS,
-  SETTINGS_VALID_OUTPUT_COMPRESSION,
-  SETTINGS_VALID_RVZ_CODEC,
-  SETTINGS_VALID_SEVEN_ZIP_CODECS,
-  SETTINGS_VALID_ZIP_CODECS,
 };

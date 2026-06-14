@@ -161,5 +161,4 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
   };
 };
 
-export type { CandidateSelectionState };
-export { CandidateSelectionDialog, useCandidateSelection };
+export { useCandidateSelection };

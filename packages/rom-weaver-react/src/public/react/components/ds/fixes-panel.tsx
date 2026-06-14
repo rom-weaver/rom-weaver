@@ -75,4 +75,4 @@ const FixesPanel = ({
   </ChecksumList>
 );
 
-export { FixesPanel, type FixesPanelProps, type TrimFixDetails };
+export { FixesPanel, type FixesPanelProps };

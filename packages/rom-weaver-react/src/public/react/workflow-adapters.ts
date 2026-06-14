@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
-import { ApplyWorkflow, type CandidateSelectionRequest, CreateWorkflow } from "../../platform/browser/browser-api.ts";
+import { ApplyWorkflow, CreateWorkflow } from "../../platform/browser/browser-api.ts";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../../presentation/workflow-presentation.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
@@ -8,7 +7,6 @@ import type { ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
 const CREATE_OUTPUT_EXTENSION_REGEX = /\.[^.]*$/;
-type SelectionRole = CandidateSelectionRequest["role"];
 
 const useApplyWorkflow = (options: ConstructorParameters<typeof ApplyWorkflow>[0] = {}): ApplyWorkflow => {
   const workflowRef = useRef<ApplyWorkflow | null>(null);
@@ -91,16 +89,6 @@ const toReactProgressEvent = (event: {
   };
 };
 
-const getWorkflowSourceRole = (
-  source: CreateWorkflowSourceState | ApplyWorkflowInputState | ApplyWorkflowPatchState | undefined,
-): SelectionRole | undefined => {
-  if (!(source && "role" in source) || typeof source.role !== "string") return undefined;
-  if (source.role === "input" || source.role === "patch" || source.role === "original" || source.role === "modified") {
-    return source.role;
-  }
-  return undefined;
-};
-
 const getWorkflowArchiveName = (
   source: CreateWorkflowSourceState | ApplyWorkflowInputState | ApplyWorkflowPatchState | undefined,
   originalName: string,
@@ -167,25 +155,7 @@ const createWorkflowFormError = (code: string, message: string) => {
   return error;
 };
 
-const chooseWorkflowSource = async (
-  source: CreateWorkflowSourceState | ApplyWorkflowInputState | ApplyWorkflowPatchState | undefined,
-  selectFile: (request: CandidateSelectionRequest) => Promise<{ id: string }>,
-  role: SelectionRole = getWorkflowSourceRole(source) || "input",
-) => {
-  if (!source || source.selectedCandidateId || source.status !== "needsSelection") return undefined;
-  const request = {
-    candidates: source.candidates,
-    role,
-    sourceName: source.fileName || source.id,
-    warnings: source.warnings.map((warning) => warning.message),
-  } satisfies CandidateSelectionRequest;
-  const automaticSelection = resolveAutomaticSelection(request);
-  if (automaticSelection) return automaticSelection;
-  return selectFile(request);
-};
-
 export {
-  chooseWorkflowSource,
   createWorkflowFormError,
   getDefaultCreateOutputName,
   getReactBinarySourceFileName,

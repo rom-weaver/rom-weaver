@@ -21,25 +21,6 @@ const getSourceExtension = (source: SourceFileLike | null | undefined, fallback?
   return fallback === undefined ? "" : fallback;
 };
 
-const normalizeOutputCompressionChoice = (
-  value: string | number | boolean | null | undefined,
-  fallback?: string,
-): string => {
-  try {
-    return OutputCompressionManager.normalizeOutputCompression(value);
-  } catch (_err) {
-    return fallback || "7z";
-  }
-};
-
-const resolveOutputCompressionDefault = (
-  source: Parameters<typeof OutputCompressionManager.resolveOutputCompression>[0],
-  compressionFormat: string | null | undefined,
-): string =>
-  OutputCompressionManager.resolveOutputCompression(source, {
-    compressionFormat: typeof compressionFormat === "string" ? compressionFormat : undefined,
-  });
-
 const getOptionalString = (value: string | number | boolean | null | undefined) =>
   typeof value === "string" ? value : undefined;
 const getOptionalCompressionLevel = (value: string | number | boolean | null | undefined) =>
@@ -186,10 +167,4 @@ const getCompressionIntermediateFileName = (
   return getRawIntermediateFileName(fileName, source || null);
 };
 
-export {
-  getArchiveOutputOptions,
-  getCompressedOutputFileName,
-  getCompressionIntermediateFileName,
-  normalizeOutputCompressionChoice,
-  resolveOutputCompressionDefault,
-};
+export { getCompressedOutputFileName, getCompressionIntermediateFileName };

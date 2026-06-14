@@ -1,4 +1,3 @@
-import { toBinarySourceArrayBuffer } from "../../storage/shared/binary/binary-source-utils.ts";
 import { getNamedSource, getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
 import {
   isFileSystemFileHandleLike,
@@ -22,16 +21,6 @@ const assertBrowserBinarySource = (source: SourceRef, context: string) => {
   if (typeof directSource === "string" && directSource.trim())
     throw new Error(`${context} does not accept filesystem paths in browser workflows`);
   throw new Error(`${context} requires a Blob, FileSystemFileHandle, or VFS path in browser workflows`);
-};
-
-const assertNodeBinarySource = (source: SourceRef, context: string) => {
-  const directSource = getDirectSource(source);
-  if (typeof directSource === "string" && directSource.trim()) return;
-  if (typeof Blob !== "undefined" && directSource instanceof Blob) return;
-  if (isVfsFileRef(directSource)) return;
-  if (isFileSystemFileHandleLike(directSource))
-    throw new Error(`${context} does not accept FileSystemFileHandle values in Node workflows`);
-  throw new Error(`${context} requires a filesystem path, Blob, or VFS path in Node workflows`);
 };
 
 const getArchiveEntryArrayBuffer = (
@@ -61,11 +50,8 @@ const toWorkerMetadata = (metadata: JsonObject): Record<string, JsonValue> => {
 
 export {
   assertBrowserBinarySource,
-  assertNodeBinarySource,
   getArchiveEntryArrayBuffer,
   getArchiveEntryUint8Array,
-  getNamedSource,
   getNamedSourceFileName,
-  toBinarySourceArrayBuffer,
   toWorkerMetadata,
 };

@@ -1,5 +1,4 @@
 import type { ChecksumRomProbe, ChecksumVariant } from "./checksum.ts";
-import type { WorkflowProgress } from "./progress.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
 
@@ -108,17 +107,10 @@ type ApplyWorkflowPatchState = {
   ppfUndo?: boolean;
 };
 
-type ApplyWorkflowProgressKind = WorkflowProgress["stage"];
-
-type ApplyWorkflowProgressEvent = WorkflowProgress;
-
 export type {
   ApplyWorkflowChecksums,
   ApplyWorkflowInputState,
   ApplyWorkflowParentCompression,
   ApplyWorkflowPatchState,
-  ApplyWorkflowProgressEvent,
-  ApplyWorkflowProgressKind,
   ApplyWorkflowResolvedInput,
-  ApplyWorkflowSourceStatus,
 };

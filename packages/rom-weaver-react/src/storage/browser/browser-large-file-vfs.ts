@@ -235,5 +235,4 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
   return vfs;
 };
 
-export type { BrowserLargeFileVfsOptions };
 export { createBrowserLargeFileVfs };

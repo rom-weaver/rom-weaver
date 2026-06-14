@@ -1013,5 +1013,4 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 }
 
-export type { ApplyWorkflowInputState, ApplyWorkflowPatchState };
 export { ApplyWorkflowController };

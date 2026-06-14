@@ -106,4 +106,4 @@ const createBrowserLocalizer = (locale?: string): Localizer =>
   createLocalizer(locale || negotiateLocale(getBrowserLocaleCandidates()));
 
 export type { Localizer };
-export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, negotiateLocale, normalizeLocale };
+export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, negotiateLocale };

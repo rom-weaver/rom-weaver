@@ -31,5 +31,4 @@ const createStore = <TState extends object>(initializer: () => TState): StoreApi
   };
 };
 
-export type { StoreApi };
 export { createStore };

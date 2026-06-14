@@ -126,7 +126,7 @@ function isRandomAccessFileInodeLike(entry: unknown): entry is RandomAccessFileI
   return "file" in record && typeof record.path_open === "function" && typeof record.stat === "function";
 }
 
-export async function copyRandomAccessFileToHandle(source: RandomAccessFileLike, fileHandle: OpfsFileHandleLike) {
+async function copyRandomAccessFileToHandle(source: RandomAccessFileLike, fileHandle: OpfsFileHandleLike) {
   const size = Number(source.size());
   if (typeof fileHandle.createSyncAccessHandle === "function") {
     const accessHandle = await openSyncAccessHandle({ fileHandle, mode: "readwrite" });

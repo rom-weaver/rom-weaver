@@ -1,7 +1,5 @@
-import type { InputAsset } from "../lib/input/input-assets.ts";
 import type { PatchFileInstance } from "../workers/protocol/patch-engine.ts";
 import type { JsonValue } from "./runtime.ts";
-import type { CompressionCreateInput, CompressionExtractInput } from "./workflow-runtime.ts";
 
 type SharedProgressEventLike = {
   details?: JsonValue;
@@ -11,43 +9,6 @@ type SharedProgressEventLike = {
   stage?: string;
   loaded?: string | number | boolean | null;
   total?: string | number | boolean | null;
-};
-
-type ArchiveWorkflowDeps = {
-  ArchiveManager: {
-    toArrayBuffer: (
-      data: Blob | ArrayBuffer | Uint8Array | ArrayBufferView,
-    ) => ArrayBuffer | Uint8Array | ArrayBufferView;
-  };
-  createArchiveOutputData: (input: Record<string, unknown>) => Promise<ArrayBuffer | Uint8Array>;
-  extractArchiveSourceEntry: (input: Record<string, unknown>) => Promise<{
-    data?: Uint8Array;
-    u8array?: Uint8Array;
-    file?: Blob;
-    fileName?: string;
-    size?: number;
-    cleanup?: () => Promise<void> | void;
-  }>;
-  getArchiveOutputFileName: (input: Record<string, unknown>) => string;
-  getArchiveSourceTransport: (
-    source: unknown,
-    fallbackFileName: string,
-  ) => {
-    archiveSource: unknown;
-    fileName: string;
-  };
-  listArchiveSourceEntries: (input: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
-  normalizeArchiveEntryBytes: (data: ArrayBuffer | Uint8Array | ArrayBufferView) => Uint8Array;
-  normalizeArchiveEntryInfo: (entry: Record<string, unknown>) => Record<string, unknown> & { filename?: string };
-  reportCompressionProgress: (
-    options: CompressionExtractInput["options"] | CompressionCreateInput["options"],
-    event: {
-      stage: "input" | "output";
-      label: string;
-      percent: number | null;
-      details?: JsonValue;
-    },
-  ) => void;
 };
 
 type PatchWorkflowDeps = {
@@ -75,11 +36,4 @@ type CreateWorkflowDeps = PatchWorkflowDeps & {
   hasArchiveFileName: (fileName: string, compression: string) => boolean;
 };
 
-export type {
-  ArchiveWorkflowDeps,
-  CreateWorkflowDeps,
-  InputAsset,
-  PatchFileInstance,
-  PatchWorkflowDeps,
-  SharedProgressEventLike,
-};
+export type { CreateWorkflowDeps, PatchFileInstance, PatchWorkflowDeps, SharedProgressEventLike };

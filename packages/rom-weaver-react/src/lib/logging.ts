@@ -57,12 +57,6 @@ const normalizeLogLevel = (value: unknown, fallback: LogLevel = "warn"): LogLeve
 
 const isTraceLogEnabled = (value: unknown): boolean => normalizeLogLevel(value, "off") === "trace";
 
-const assertLogLevel = (value: unknown): LogLevel => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (isLogLevel(normalized)) return normalized;
-  throw new Error(`Invalid log level: ${String(value)}. Valid levels: ${LOG_LEVELS.join(", ")}.`);
-};
-
 const shouldLog = (messageLevel: LogRecord["level"], configuredLevel: LogLevel): boolean =>
   configuredLevel !== "off" && LEVEL_PRIORITY[messageLevel] <= LEVEL_PRIORITY[configuredLevel];
 
@@ -212,21 +206,8 @@ const configureLogger = (options: { level?: LogLevel | string | null; sink?: Log
  * capturing sink (the in-app log viewer) can chain to it. */
 const getConsoleLogSink = (): LogSink => getDefaultConsoleSink();
 
-const getLoggerLevel = (): LogLevel => globalLogLevel;
-
 const formatLogRecord = (record: LogRecord): string =>
   `${record.timestamp} ${record.level.toUpperCase()} ${record.namespace}: ${record.message}`;
 
-export type { Logger, LogOptions, LogSink, TraceLogContext };
-export {
-  assertLogLevel,
-  configureLogger,
-  createLogger,
-  emitTraceLog,
-  formatLogRecord,
-  getConsoleLogSink,
-  getLoggerLevel,
-  isTraceLogEnabled,
-  normalizeLogLevel,
-  shouldLog,
-};
+export type { LogSink };
+export { configureLogger, createLogger, emitTraceLog, getConsoleLogSink };

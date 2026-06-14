@@ -166,5 +166,4 @@ const useCompressionResolver = ({
   };
 };
 
-export type { CompressionResolverInput };
-export { resolveCompressionState, useCompressionResolver };
+export { useCompressionResolver };

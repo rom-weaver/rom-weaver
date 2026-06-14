@@ -24,17 +24,6 @@ const cloneValue = <TValue>(value: TValue): TValue => {
   return value;
 };
 
-const mergeValue = <TValue>(current: TValue, next: Partial<TValue>): TValue => {
-  if (!(isPlainObject(current) && isPlainObject(next))) return cloneValue(next as TValue);
-  const merged: Record<string, unknown> = { ...current };
-  for (const [key, value] of Object.entries(next)) {
-    if (value === undefined) continue;
-    const existing = merged[key];
-    merged[key] = isPlainObject(existing) && isPlainObject(value) ? mergeValue(existing, value) : cloneValue(value);
-  }
-  return merged as TValue;
-};
-
 const getSourceFileName = (source: unknown, fallback: string): string => {
   if (typeof source === "string") return getBaseFileName(source);
   if (!isRecord(source)) return fallback;
@@ -166,7 +155,6 @@ const createWorkflowProgress = (
   };
 };
 
-export type { WorkflowOptions } from "../../types/workflow-controller.ts";
 export {
   cloneCandidate,
   cloneValue,
@@ -179,5 +167,4 @@ export {
   getSourceFileName,
   getSourceSize,
   isRecord,
-  mergeValue,
 };

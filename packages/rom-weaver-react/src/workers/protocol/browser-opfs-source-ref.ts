@@ -465,5 +465,4 @@ const createBrowserOpfsSourceRef = async (
   };
 };
 
-export type { BrowserOpfsSourceRef };
 export { createBrowserOpfsSourceRef };

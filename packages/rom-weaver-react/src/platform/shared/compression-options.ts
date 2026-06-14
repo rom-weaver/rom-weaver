@@ -230,11 +230,8 @@ const normalizeBrowserThreadCount = (
 };
 
 export {
-  CHD_CODEC_LEVEL_MAX,
-  CHD_CODEC_LEVEL_MIN,
   canUseThreadedWasm,
   getChdCodecLevelMax,
-  getChdCodecLevelMin,
   getDefaultBrowserThreadCount,
   getDefaultThreadCount,
   isValidChdCodecLevel,

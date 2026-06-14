@@ -27,4 +27,4 @@ type PublicOutput<TDestination> = {
 
 type BrowserSaveDestination = SaveDestination;
 
-export type { BrowserSaveDestination, OutputStorageKind, PublicOutput, RuntimeTiming, SaveDestination };
+export type { BrowserSaveDestination, OutputStorageKind, PublicOutput, RuntimeTiming };

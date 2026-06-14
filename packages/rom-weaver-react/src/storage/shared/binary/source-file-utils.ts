@@ -28,14 +28,6 @@ type NamedSourceOptions = {
   sourceKeys?: string[];
 };
 
-type SeekPositionOptions = {
-  currentPosition: number;
-  offset: number;
-  whence: number;
-  size: number;
-  createRangeError: () => Error;
-};
-
 type SourceReadablePatchFileLike = {
   fileName?: string;
   getExtension?: () => string;
@@ -49,14 +41,6 @@ const getNestedSource = (source: SourceValue, sourceKeys?: string[]): SourceValu
     if (value && typeof value !== "function") return value;
   }
   return source;
-};
-
-const resolveSeekPosition = ({ currentPosition, offset, whence, size, createRangeError }: SeekPositionOptions) => {
-  let position = offset;
-  if (whence === 1) position += currentPosition;
-  else if (whence === 2) position += size;
-  if (position < 0) throw createRangeError();
-  return position;
 };
 
 const getSourceFileName = (source: SourceValue, options?: SourceFileNameOptions): string => {
@@ -158,5 +142,4 @@ export {
   getSourceExtension,
   getSourceFileName,
   replaceFileExtension,
-  resolveSeekPosition,
 };

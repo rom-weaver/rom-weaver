@@ -2,23 +2,17 @@ import type { BrowserOpfsMountAcquireOptions } from "./browser-opfs-mount.ts";
 import { BrowserOpfsMount } from "./browser-opfs-mount.ts";
 import type { FileSystemDirectoryHandleLike, RomWeaverBrowserSyncAccessMode } from "./browser-opfs-runtime-types.ts";
 
-export type { BuildBrowserOpfsWasiFdsOptions } from "./browser-opfs-fd-builder.ts";
 export { buildBrowserOpfsWasiFds } from "./browser-opfs-fd-builder.ts";
 export {
-  isGuestPathWithinMount,
-  isGuestPathWithinRoots,
-  joinGuestPath,
   normalizeKnownInputPaths,
   normalizeMountHandleMap,
   normalizePreopenOutputPaths,
-  normalizeRelativePathParts,
-  normalizeStdin,
   normalizeWritableRoots,
 } from "./browser-opfs-guest-paths.ts";
 export type { BrowserOpfsMountAcquireOptions } from "./browser-opfs-mount.ts";
 export { cleanupBrowserOpfsMounts } from "./browser-opfs-mount.ts";
 export { normalizeScratchFilePoolSize } from "./browser-opfs-scratch-pool.ts";
-export type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
+
 export { normalizeVirtualFiles } from "./browser-opfs-virtual-files.ts";
 export type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 export { __createWasiRandomAccessFileInodeForTest } from "./browser-opfs-wasi-file-inode.ts";

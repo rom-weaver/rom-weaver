@@ -153,9 +153,6 @@ const getFinalPatch = (patches: VerifyPatchedOutputOptions["patches"]): PatchWit
 const getFinalPatchOutputChecksumInfo = (patches: VerifyPatchedOutputOptions["patches"]): OutputChecksumInfo | null =>
   getPatchOutputChecksumInfo(getFinalPatch(patches));
 
-const hasPatchOutputChecksumValidationInfo = (patches: VerifyPatchedOutputOptions["patches"]): boolean =>
-  !!getFinalPatchOutputChecksumInfo(patches);
-
 const getAssetBlob = (asset: VerifyPatchedOutputOptions["patchedAsset"]): Blob | null => {
   const record = isRecord(asset) ? (asset as PatchedAssetLike) : null;
   if (
@@ -313,4 +310,4 @@ const verifyPatchedOutputChecksum = async ({
   return result;
 };
 
-export { hasPatchOutputChecksumValidationInfo, normalizeChecksumValue, verifyPatchedOutputChecksum };
+export { verifyPatchedOutputChecksum };

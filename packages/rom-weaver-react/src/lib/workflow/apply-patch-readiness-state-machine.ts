@@ -207,11 +207,4 @@ const evaluateApplyPatchReadiness = async <TSource>(
   return previousStatus !== stage.state.status;
 };
 
-export {
-  assignApplyPatchTarget,
-  clearApplyPatchTarget,
-  createApplyPatchChecksumPreflight,
-  createApplyPatchValidationKey,
-  evaluateApplyPatchReadiness,
-  resolveApplyPatchTargetForStage,
-};
+export { assignApplyPatchTarget, clearApplyPatchTarget, createApplyPatchValidationKey, evaluateApplyPatchReadiness };

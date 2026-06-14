@@ -59,4 +59,4 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   return displayed;
 };
 
-export { lockEntryAnimations, runFlatViewTransition, useFlatTransitionFlag };
+export { runFlatViewTransition, useFlatTransitionFlag };

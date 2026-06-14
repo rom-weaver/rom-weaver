@@ -4,19 +4,10 @@ import Settings from "lucide-react/dist/esm/icons/settings.js";
 import Sun from "lucide-react/dist/esm/icons/sun.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { createLogger } from "../logging.ts";
 import { useTheme } from "../theme.ts";
-
-/**
- * Loom workbench app-shell primitives: the masthead (brand, workflow mode
- * rail, tool buttons), the reveal banners (update / wake-lock), and the
- * selvage status strip. Composed by the webapp root.
- */
-
-const logger = createLogger("shell");
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
@@ -327,14 +318,4 @@ const Selvage = ({
   );
 };
 
-export {
-  Masthead,
-  ModeRail,
-  Reveal,
-  Selvage,
-  type SelvageState,
-  ThemeToggle,
-  UpdateBanner,
-  WakeLockBanner,
-  type WorkflowTab,
-};
+export { Masthead, Reveal, Selvage, type SelvageState, UpdateBanner, WakeLockBanner };

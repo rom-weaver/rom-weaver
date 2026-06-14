@@ -59,5 +59,4 @@ const clearOpfsOnPageLoad = async ({
   }
 };
 
-export type { ClearOpfsResult };
-export { clearOpfsOnPageLoad, clearOpfsRootDirectory };
+export { clearOpfsOnPageLoad };

@@ -72,22 +72,5 @@ const formatBrowserStorageEstimateState = (state: BrowserStorageEstimateState): 
   return parts.join(" ");
 };
 
-const requestBrowserStoragePersistence = async (
-  storageOverride?: BrowserStorageManagerLike | null,
-): Promise<boolean | undefined> => {
-  const storage = getStorageManager(storageOverride);
-  if (!storage || typeof storage.persist !== "function") return undefined;
-  try {
-    return await storage.persist();
-  } catch (_error) {
-    return undefined;
-  }
-};
-
-export type { BrowserStorageEstimateState, BrowserStorageManagerLike };
-export {
-  formatBrowserStorageEstimateState,
-  formatByteCount,
-  getBrowserStorageEstimateState,
-  requestBrowserStoragePersistence,
-};
+export type { BrowserStorageManagerLike };
+export { formatBrowserStorageEstimateState, formatByteCount, getBrowserStorageEstimateState };

@@ -3,7 +3,6 @@ import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../
 import { createLogger } from "../../lib/logging.ts";
 import {
   getChdCodecsForMode,
-  normalizeArchiveCompressionLevelForFormat,
   normalizeBrowserThreadCount,
   normalizeCodecList,
   normalizeCodecListWithFallback,
@@ -34,23 +33,11 @@ import {
   normalizeChoiceSetting,
   SETTINGS_FIELD_ORDER,
   SETTINGS_LEVEL_OVERRIDE_FIELDS,
-  SETTINGS_VALID_CHD_OUTPUT_MODES,
-  SETTINGS_VALID_OUTPUT_COMPRESSION,
 } from "./settings-metadata.ts";
 
 const logger = createLogger("settings");
 
 const SETTINGS_STORAGE_VERSION = 5;
-
-type RuntimeSharedSettings = Omit<
-  SettingsState,
-  "rvzCompressionLevel" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel"
-> & {
-  rvzCompressionLevel: number;
-  z3dsCompressionLevel: number | "default";
-  sevenZipLevel: number;
-  zipLevel: number;
-};
 
 type GroupedStoredSettings = {
   apply?: {
@@ -196,20 +183,6 @@ const normalizeStoredCodecSetting = (
 ): string => {
   if (isSingleCodecField(fieldKey)) return normalizeCodecSetting(fieldKey, value, fallback, allowLevels);
   return normalizeCodecListWithFallback(value, fallback, createCodecListOptions(fieldKey, allowLevels));
-};
-
-const normalizeIntegerField = (
-  fieldKey: SettingsFieldKey,
-  value: string | number | null | undefined,
-  fallback: number,
-  settings: SettingsState,
-): number => {
-  const { max, min } = getNumericFieldRange(fieldKey, settings);
-  return normalizeIntegerInRange(value, {
-    fallback,
-    max,
-    min,
-  }) as number;
 };
 
 const normalizePositiveIntegerField = (
@@ -696,186 +669,10 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
   );
 };
 
-const createDefaultRuntimeSharedSettings = (): RuntimeSharedSettings =>
-  buildSettingsForWebapp(getDefaultSettings()) as RuntimeSharedSettings;
-
-const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> | null): RuntimeSharedSettings => {
-  const settings = createDefaultRuntimeSharedSettings();
-  const defaultSettings = getDefaultSettings();
-  const rvzCompressionLevelMin = getNumericFieldRange("rvzCompressionLevel", defaultSettings).min;
-  const z3dsCompressionLevelMin = getNumericFieldRange("z3dsCompressionLevel", defaultSettings).min;
-  if (!source || typeof source !== "object") return settings;
-
-  if (typeof source.language === "string")
-    settings.language = normalizeChoiceField("language", source.language, settings.language);
-  if (typeof source.defaultCompression === "string") {
-    settings.defaultCompression = normalizeChoiceField(
-      "defaultCompression",
-      source.defaultCompression,
-      settings.defaultCompression,
-    );
-  }
-  if (typeof source.logLevel === "string")
-    settings.logLevel = normalizeChoiceField("logLevel", source.logLevel, settings.logLevel);
-  if (typeof source.fixChecksum === "boolean") settings.fixChecksum = source.fixChecksum;
-  if (typeof source.requireInputChecksumMatch === "boolean")
-    settings.requireInputChecksumMatch = source.requireInputChecksumMatch;
-  if (typeof source.requireOutputChecksumMatch === "boolean")
-    settings.requireOutputChecksumMatch = source.requireOutputChecksumMatch;
-  if (
-    typeof source.compressionProfile === "string" ||
-    typeof source.compressionProfile === "number" ||
-    typeof source.compressionProfile === "boolean"
-  )
-    settings.compressionProfile = normalizeCompressionProfile(source.compressionProfile, settings.compressionProfile);
-  if (typeof source.compressionFormat === "string")
-    settings.compressionFormat = normalizeChoiceSetting(
-      source.compressionFormat,
-      SETTINGS_VALID_OUTPUT_COMPRESSION,
-      settings.compressionFormat,
-    );
-  if (typeof source.chdOutputMode === "string")
-    settings.chdOutputMode = normalizeChoiceSetting(
-      source.chdOutputMode,
-      SETTINGS_VALID_CHD_OUTPUT_MODES,
-      settings.chdOutputMode,
-    );
-  if (typeof source.chdCreateCdCodecs === "string")
-    settings.chdCreateCdCodecs =
-      source.chdCreateCdCodecs.trim() === ""
-        ? ""
-        : normalizeStoredCodecSetting("chdCreateCdCodecs", source.chdCreateCdCodecs, settings.chdCreateCdCodecs, true);
-  if (typeof source.chdCreateDvdCodecs === "string")
-    settings.chdCreateDvdCodecs =
-      source.chdCreateDvdCodecs.trim() === ""
-        ? ""
-        : normalizeStoredCodecSetting(
-            "chdCreateDvdCodecs",
-            source.chdCreateDvdCodecs,
-            settings.chdCreateDvdCodecs,
-            true,
-          );
-  if (typeof source.rvzCodec === "string")
-    settings.rvzCodec = normalizeStoredCodecSetting("rvzCodec", source.rvzCodec, settings.rvzCodec, true);
-  if (typeof source.rvzCompressionLevel === "number" || typeof source.rvzCompressionLevel === "string")
-    settings.rvzCompressionLevel = normalizeIntegerField(
-      "rvzCompressionLevel",
-      source.rvzCompressionLevel,
-      rvzCompressionLevelMin,
-      defaultSettings,
-    );
-  if (typeof source.rvzBlockSize === "number" || typeof source.rvzBlockSize === "string")
-    settings.rvzBlockSize = normalizePositiveIntegerField(
-      "rvzBlockSize",
-      source.rvzBlockSize,
-      settings.rvzBlockSize,
-      defaultSettings,
-    );
-  if (typeof source.rvzScrub === "boolean") settings.rvzScrub = source.rvzScrub;
-  if (source.z3dsCompressionLevel === "default") settings.z3dsCompressionLevel = "default";
-  else if (typeof source.z3dsCompressionLevel === "number" || typeof source.z3dsCompressionLevel === "string")
-    settings.z3dsCompressionLevel = normalizeIntegerField(
-      "z3dsCompressionLevel",
-      source.z3dsCompressionLevel,
-      z3dsCompressionLevelMin,
-      defaultSettings,
-    );
-  if (typeof source.sevenZipCodec === "string")
-    settings.sevenZipCodec = normalizeStoredCodecSetting(
-      "sevenZipCodec",
-      source.sevenZipCodec,
-      settings.sevenZipCodec,
-      true,
-    );
-  if (typeof source.sevenZipLevel === "number" || typeof source.sevenZipLevel === "string")
-    settings.sevenZipLevel = normalizeArchiveCompressionLevelForFormat(
-      "7z",
-      settings.sevenZipCodec,
-      source.sevenZipLevel,
-      settings.sevenZipLevel,
-    );
-  else
-    settings.sevenZipLevel = normalizeArchiveCompressionLevelForFormat(
-      "7z",
-      settings.sevenZipCodec,
-      settings.sevenZipLevel,
-      settings.sevenZipLevel,
-    );
-  if (typeof source.zipCodec === "string")
-    settings.zipCodec = normalizeStoredCodecSetting("zipCodec", source.zipCodec, settings.zipCodec, true);
-  if (typeof source.zipLevel === "number" || typeof source.zipLevel === "string")
-    settings.zipLevel = normalizeArchiveCompressionLevelForFormat(
-      "zip",
-      settings.zipCodec,
-      source.zipLevel,
-      settings.zipLevel,
-    );
-  else
-    settings.zipLevel = normalizeArchiveCompressionLevelForFormat(
-      "zip",
-      settings.zipCodec,
-      settings.zipLevel,
-      settings.zipLevel,
-    );
-  if (typeof source.workerThreads === "number" || typeof source.workerThreads === "string")
-    settings.workerThreads = normalizeStoredWorkerThreads(
-      source.workerThreads,
-      resolveWorkerThreadsNumericFallback(settings.workerThreads),
-    );
-
-  const compressionLevels = resolveCompressionLevels(settings);
-  settings.rvzCodec = compressionLevels.rvzCodec;
-  settings.rvzCompressionLevel = Number(compressionLevels.rvzCompressionLevel);
-  settings.sevenZipCodec = compressionLevels.sevenZipCodec;
-  settings.sevenZipLevel = Number(compressionLevels.sevenZipLevel);
-  settings.z3dsCompressionLevel =
-    compressionLevels.z3dsCompressionLevel === "default" ? "default" : Number(compressionLevels.z3dsCompressionLevel);
-  settings.zipCodec = compressionLevels.zipCodec;
-  settings.zipLevel = Number(compressionLevels.zipLevel);
-
-  return settings;
-};
-
-const normalizeRuntimeSettingsUpdate = (
-  update?: Record<string, unknown> | null,
-  current?: Record<string, unknown> | null,
-): RuntimeSharedSettings => {
-  const currentSettings = normalizeRuntimeSharedSettingsSource(current);
-  const sanitizedUpdate = Object.fromEntries(Object.entries(update || {}).filter(([, value]) => value !== undefined));
-  const nextSettings = normalizeRuntimeSharedSettingsSource({
-    ...currentSettings,
-    ...sanitizedUpdate,
-  });
-  if (Object.hasOwn(sanitizedUpdate, "compressionProfile")) {
-    const derivedLevels = resolveCompressionLevels({
-      compressionProfile: nextSettings.compressionProfile,
-      rvzCodec: nextSettings.rvzCodec,
-      rvzCompressionLevel: "",
-      sevenZipCodec: nextSettings.sevenZipCodec,
-      sevenZipLevel: "",
-      z3dsCompressionLevel: nextSettings.z3dsCompressionLevel === "default" ? "default" : "",
-      zipCodec: nextSettings.zipCodec,
-      zipLevel: "",
-    });
-    if (!Object.hasOwn(sanitizedUpdate, "rvzCompressionLevel"))
-      nextSettings.rvzCompressionLevel = Number(derivedLevels.rvzCompressionLevel);
-    if (!Object.hasOwn(sanitizedUpdate, "z3dsCompressionLevel"))
-      nextSettings.z3dsCompressionLevel =
-        derivedLevels.z3dsCompressionLevel === "default" ? "default" : Number(derivedLevels.z3dsCompressionLevel);
-    if (!Object.hasOwn(sanitizedUpdate, "sevenZipLevel"))
-      nextSettings.sevenZipLevel = Number(derivedLevels.sevenZipLevel);
-    if (!Object.hasOwn(sanitizedUpdate, "zipLevel")) nextSettings.zipLevel = Number(derivedLevels.zipLevel);
-  }
-  return nextSettings;
-};
-
 export {
   buildSettingsForWebapp,
-  createDefaultRuntimeSharedSettings,
   getDefaultSettings,
-  getDefaultWorkerThreads,
   loadSettings,
-  normalizeRuntimeSettingsUpdate,
   SETTINGS_STORAGE_VERSION,
   serializeSettingsForStorage,
   validateSettingsDraft,

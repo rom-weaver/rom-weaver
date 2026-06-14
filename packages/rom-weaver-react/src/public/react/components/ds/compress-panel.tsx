@@ -197,10 +197,4 @@ const buildOutputCompressionPanel = ({
   timing,
 });
 
-export {
-  buildOutputCompressionPanel,
-  CompressInfoContent,
-  CompressPanelBody,
-  getOutputCompressionFormatLabel,
-  type OutputCompressionPanelConfig,
-};
+export { buildOutputCompressionPanel, CompressInfoContent, CompressPanelBody, getOutputCompressionFormatLabel };

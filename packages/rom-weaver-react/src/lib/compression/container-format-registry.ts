@@ -10,7 +10,7 @@ import {
   replaceFileNameExtension,
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
-import { createRomSpecificExtensionRegex, hasRomSpecificExtension } from "./rom-specific-format-support.ts";
+import { createRomSpecificExtensionRegex } from "./rom-specific-format-support.ts";
 
 type ByteProbeableSource = {
   _chdMode?: string;
@@ -314,8 +314,6 @@ const CREATE_ARCHIVE_COMPRESSION_FORMATS = CREATE_CONTAINER_COMPRESSION_FORMATS.
 const CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS = CREATE_CONTAINER_COMPRESSION_FORMATS.filter(
   isRomSpecificCompressionFormatName,
 );
-const OUTPUT_COMPRESSION_FORMATS = ["none", ...CREATE_CONTAINER_COMPRESSION_FORMATS] as CompressionFormat[];
-const COMPRESSION_FORMATS = Object.keys(COMPRESSION_FORMAT_REGISTRY) as CompressionFormat[];
 
 const isCompressionFormat = (value: unknown): value is CompressionFormat =>
   typeof value === "string" && Object.hasOwn(COMPRESSION_FORMAT_REGISTRY, value);
@@ -343,12 +341,6 @@ const getCompressionOutputExtension = (
 
 const getRomSpecificExtractedFileName = (format: RomSpecificCompressionFormat, source: ByteProbeableSource): string =>
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY[format].extractedFileName(source);
-
-const hasRomSpecificCompressionFormatExtension = (
-  format: RomSpecificCompressionFormat,
-  extension: string | number | boolean | null | undefined,
-): boolean =>
-  hasRomSpecificExtension(ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY[format].decompressionInputExtensions, extension);
 
 const getCompressionFormatForParentKind = (parentKind: string | null | undefined): CompressionFormat | undefined => {
   const normalizedParentKind = String(parentKind || "").toLowerCase();
@@ -416,34 +408,18 @@ const resolveAutomaticCompressionFormat = ({
   return extensionFormat;
 };
 
-export type {
-  ArchiveCompressionFormat,
-  ByteProbeableSource,
-  CompressionFormatRegistration,
-  RomSpecificCompressionFormat,
-  RomSpecificCompressionFormatRegistration,
-};
+export type { ArchiveCompressionFormat, RomSpecificCompressionFormat, RomSpecificCompressionFormatRegistration };
 export {
-  COMPRESSION_FORMAT_REGISTRATIONS,
-  COMPRESSION_FORMAT_REGISTRY,
-  COMPRESSION_FORMATS,
   CREATE_ARCHIVE_COMPRESSION_FORMATS,
-  CREATE_CONTAINER_COMPRESSION_FORMATS,
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
-  getCompressionFormatForFileExtension,
-  getCompressionFormatForParentCompressions,
-  getCompressionFormatForParentKind,
   getCompressionFormatRegistration,
   getCompressionOutputExtension,
-  getFileExtension,
   getRomSpecificCompressionFormatRegistration,
   getRomSpecificExtractedFileName,
-  hasRomSpecificCompressionFormatExtension,
   isArchiveCompressionFormat,
   isCompressionFormat,
   isRomSpecificCompressionFormat,
   normalizeRomSpecificExtractedFileName,
-  OUTPUT_COMPRESSION_FORMATS,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRATIONS,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
   resolveAutomaticCompressionFormat,

@@ -636,4 +636,4 @@ const buildSessionOutputFiles = async (
   };
 };
 
-export { buildSessionOutputFiles, createRuntimeRomSpecificOutputFiles, createSingleFileRomSpecificOutput };
+export { buildSessionOutputFiles, createSingleFileRomSpecificOutput };

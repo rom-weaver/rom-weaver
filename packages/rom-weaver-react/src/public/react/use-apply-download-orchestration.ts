@@ -383,5 +383,4 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
   );
 };
 
-export type { ApplyDownloadOrchestrationContext };
 export { deriveApplyCompletion, useApplyDownloadOrchestration };

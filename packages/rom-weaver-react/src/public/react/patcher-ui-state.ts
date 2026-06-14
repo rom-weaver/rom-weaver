@@ -96,16 +96,6 @@ type EmbeddedPatchSelectOption = {
   label: string;
 };
 
-type EmbeddedPatchOptionState = {
-  id?: string;
-  value?: string;
-  checked?: boolean;
-  disabled?: boolean;
-  label?: string;
-  description?: string;
-  [key: string]: JsonValue | undefined;
-};
-
 type OptionalPatchItem = {
   id: string;
   label: string;
@@ -168,16 +158,6 @@ type PatcherUiState = {
     patch: string;
     output: string;
   };
-};
-
-type EmbeddedPatchUiState = {
-  loadingMessage: string;
-  loadingVisible: boolean;
-  options: EmbeddedPatchSelectOption[];
-  value: string;
-  disabled: boolean;
-  mode: "" | "single" | "multiple";
-  optionalPatches: OptionalPatchItem[];
 };
 
 type PatcherUiSessionState = PatcherUiState & Pick<DialogState, "open" | "title" | "entries"> & NoticeState;
@@ -257,24 +237,12 @@ const createEmptyPatcherUiState = (): PatcherUiState => ({
   },
 });
 
-const createEmptyEmbeddedPatchUiState = (): EmbeddedPatchUiState => ({
-  disabled: true,
-  loadingMessage: "",
-  loadingVisible: false,
-  mode: "",
-  optionalPatches: [],
-  options: [],
-  value: "",
-});
-
 const createInitialDialogState = (selectionType: DialogSelectionType = "rom"): DialogState => ({
   entries: [],
   open: false,
   selectionType,
   title: "",
 });
-
-const createEmptyDialogState = createInitialDialogState;
 
 const createInitialNoticeState = (): NoticeState => ({
   dismissible: false,
@@ -290,9 +258,6 @@ const createInertPatcherUiSessionState = (): PatcherUiSessionState => ({
   ...createInitialDialogState(),
   ...createEmptyPatcherUiState(),
 });
-
-const cloneInputProgressState = (progress: InputProgressState): InputProgressState =>
-  progress ? { ...progress } : null;
 
 const normalizeInputProgress = (progress: JsonValue | object | null | undefined): InputProgress | null => {
   if (!isRecord(progress)) return null;
@@ -552,79 +517,21 @@ const normalizePatcherUiState = (
   };
 };
 
-const clonePatcherUiState = ({
-  patcherUiState,
-  embeddedPatchUiState,
-  translate,
-}: {
-  patcherUiState: PatcherUiState;
-  embeddedPatchUiState: EmbeddedPatchUiState;
-  translate: (value: string) => string;
-}) => ({
-  checksumNotice: { ...patcherUiState.checksumNotice },
-  checksumOverride: {
-    ...patcherUiState.checksumOverride,
-    label: translate("Apply anyway despite checksum mismatch"),
-  },
-  inputNotice: { ...patcherUiState.inputNotice },
-  outputChecksumWarning: {
-    ...patcherUiState.outputChecksumWarning,
-    label: translate("Continue anyway despite output checksum mismatch"),
-  },
-  outputNotice: { ...patcherUiState.outputNotice },
-  patchDetails: { ...patcherUiState.patchDetails },
-  patchInput: {
-    ...patcherUiState.patchInput,
-    embeddedPatchDisabled: !!embeddedPatchUiState.disabled,
-    embeddedPatchLoadingMessage: embeddedPatchUiState.loadingMessage || "",
-    embeddedPatchLoadingVisible: !!embeddedPatchUiState.loadingVisible,
-    embeddedPatchMode: embeddedPatchUiState.mode || "",
-    embeddedPatchOptions: embeddedPatchUiState.options.map((option) => ({ ...option })),
-    embeddedPatchValue: embeddedPatchUiState.value || "",
-    optionalPatches: embeddedPatchUiState.optionalPatches.map((patch) => ({ ...patch })),
-    progress: cloneInputProgressState(patcherUiState.patchInput.progress),
-  },
-  patchNotice: { ...patcherUiState.patchNotice },
-  romInfo: { ...patcherUiState.romInfo },
-  romInput: {
-    ...patcherUiState.romInput,
-    progress: cloneInputProgressState(patcherUiState.romInput.progress),
-  },
-  romInputs: patcherUiState.romInputs.map((entry) => ({
-    ...entry,
-    archivePathEntries: entry.archivePathEntries?.map((pathEntry) => ({ ...pathEntry })),
-    info: { ...entry.info },
-    progress: cloneInputProgressState(entry.progress),
-  })),
-  sectionTimings: { ...patcherUiState.sectionTimings },
-});
-
 export type {
   DialogEntry,
-  DialogState,
-  EmbeddedPatchOptionState,
-  EmbeddedPatchUiState,
   InputProgress,
   InputProgressState,
-  InputUiState,
   NoticeState,
   PatcherSectionNoticeKey,
   PatcherUiSessionState,
   PatcherUiState,
-  RomInputInfoState,
   RomInputRowState,
   StoreController,
 };
 export {
-  clonePatcherUiState,
-  createEmptyDialogState,
-  createEmptyEmbeddedPatchUiState,
-  createEmptyNoticeState,
-  createEmptyPatcherSectionNotices,
   createEmptyPatcherUiState,
   createInertPatcherUiSessionState,
   createInitialDialogState,
-  createInitialNoticeState,
   normalizeDialogState,
   normalizeNoticeState,
   normalizePatcherUiState,

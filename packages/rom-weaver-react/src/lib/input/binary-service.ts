@@ -1,4 +1,3 @@
-import type { ArchiveSourceValue } from "../../storage/browser/archive-source.ts";
 import { createPatchFileFromSource } from "../../storage/shared/binary/binary-source-utils.ts";
 import {
   getNamedSource,
@@ -8,40 +7,15 @@ import {
 } from "../../storage/shared/binary/source-file-utils.ts";
 import { createCleanupOnce as createStorageCleanupOnce } from "../../storage/shared/disposal.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
-import type { ArchiveEntry, ArchiveExtractionResult, ProgressCallback } from "../../types/runtime.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
-import type { CompressionEntryInfo } from "../../types/workflow-runtime.ts";
 import type {
   PatchFileInstance,
   PatchFileConstructor as SharedPatchFileType,
 } from "../../workers/protocol/patch-engine.ts";
 import { PatchFile as SharedPatchFile } from "../../workers/protocol/patch-engine.ts";
-import type { createArchiveOutputData } from "../output/archive-output.ts";
 import { normalizeArchiveEntryBytes } from "../output/archive-output.ts";
-import { extractArchiveBufferEntry, type listArchiveBufferEntries } from "./archive-input.ts";
-import type { filterValidPatchEntries } from "./archive-patch-validation.ts";
 import { getFileNameWithoutExtension } from "./path-utils.ts";
 
-type ArchiveBufferCapabilities = Parameters<typeof listArchiveBufferEntries>[0]["ArchiveManager"];
-type PatchValidationArchiveCapabilities = Parameters<typeof filterValidPatchEntries>[0]["archiveCapabilities"];
-type ArchiveOutputCapabilities = Parameters<typeof createArchiveOutputData>[0]["ArchiveManager"];
-type ArchiveCapabilitiesWithArrayBuffer = ArchiveBufferCapabilities &
-  PatchValidationArchiveCapabilities & {
-    createArchive: ArchiveOutputCapabilities["createArchive"];
-    configure?: ArchiveOutputCapabilities["configure"];
-    extractEntryToFile: (
-      source: string | Blob | FileSystemFileHandle | { _file?: Blob | null },
-      entryName: string,
-      options?: { onProgress?: ProgressCallback },
-    ) => Promise<ArchiveExtractionResult>;
-    filterValidPatchEntriesFromFile: (
-      source: string | Blob | { _file?: Blob | null },
-      entries: ArchiveEntry[],
-    ) => Promise<ArchiveEntry[]>;
-    toArrayBuffer: (
-      data: Blob | ArrayBuffer | Uint8Array | ArrayBufferView,
-    ) => ArrayBuffer | Uint8Array | ArrayBufferView;
-  };
 type ServicePatchFileConstructor = SharedPatchFileType<PatchFileInstance> &
   Parameters<typeof createPatchFileFromSource>[1] &
   (new (
@@ -84,28 +58,6 @@ type PatchFileSourceAccess = {
   getFilePath: () => string | null;
 };
 
-const unsupportedArchiveCapability = () => {
-  throw new Error("Legacy archive wasm runtime has been removed; use the rom-weaver runtime instead");
-};
-
-const toArrayBuffer = (data: Blob | ArrayBuffer | Uint8Array | ArrayBufferView) => {
-  if (data instanceof ArrayBuffer) return data;
-  if (ArrayBuffer.isView(data)) return data;
-  return data as unknown as ArrayBuffer;
-};
-
-const ArchiveCapabilities = {
-  configure: () => undefined,
-  createArchive: unsupportedArchiveCapability,
-  extractEntryFromFile: unsupportedArchiveCapability,
-  extractEntryToFile: unsupportedArchiveCapability,
-  filterValidPatchEntries: (_entries: ArchiveEntry[]) => [],
-  filterValidPatchEntriesFromFile: async (_source: string | Blob | { _file?: Blob | null }, entries: ArchiveEntry[]) =>
-    entries,
-  listEntriesFromFile: unsupportedArchiveCapability,
-  toArrayBuffer,
-  warmup: async () => undefined,
-} as RuntimeValue as ArchiveCapabilitiesWithArrayBuffer;
 const PatchFile = SharedPatchFile as RuntimeValue as ServicePatchFileConstructor;
 
 const createPatchFile = async (
@@ -433,24 +385,6 @@ const getPatchFileBytes = (file: PatchFileInstance): Uint8Array => {
   return copy;
 };
 
-const normalizeArchiveEntryInfo = (entry: ArchiveEntry): CompressionEntryInfo => ({
-  fileName: typeof entry.fileName === "string" ? entry.fileName : undefined,
-  filename: String(entry.filename || entry.fileName || entry.name || ""),
-  fileType: typeof entry.fileType === "string" ? entry.fileType : undefined,
-  lastModified: typeof entry.lastModified === "number" ? entry.lastModified : undefined,
-  mtime: typeof entry.mtime === "number" ? entry.mtime : undefined,
-  name: typeof entry.name === "string" ? entry.name : undefined,
-  size: typeof entry.size === "number" ? entry.size : undefined,
-});
-
-const getArchiveSourceTransport = (
-  source: SourceRef,
-  fallbackFileName: string,
-): { archiveSource: ArchiveSourceValue; fileName: string } => ({
-  archiveSource: getNamedSource(source) as ArchiveSourceValue,
-  fileName: getNamedSourceFileName(source, { fallback: fallbackFileName }) || fallbackFileName,
-});
-
 const createOutputFile = (bytes: Uint8Array, fileName: string): PatchFileInstance => {
   const file = new PatchFile(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   file.fileName = fileName;
@@ -459,7 +393,6 @@ const createOutputFile = (bytes: Uint8Array, fileName: string): PatchFileInstanc
 
 export type { PatchFileInstance };
 export {
-  ArchiveCapabilities,
   attachPatchFileCleanup,
   attachPatchFileSourceRef,
   clonePatchFile,
@@ -469,8 +402,6 @@ export {
   createPatchFile,
   createSourceAccessFromSource,
   decodeUtf8,
-  extractArchiveBufferEntry,
-  getArchiveSourceTransport,
   getDefaultCreatePatchOutputFileName,
   getPatchFileBlob,
   getPatchFileBytes,
@@ -478,10 +409,7 @@ export {
   getPatchFileExternalSource,
   getPatchFileHandle,
   getPatchFileSourceAccess,
-  getPatchFileSourceRef,
   isBlobBackedPatchFile,
   isLazyExternalPatchFile,
   normalizeArchiveEntryBytes,
-  normalizeArchiveEntryInfo,
-  PatchFile,
 };

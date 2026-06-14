@@ -1,6 +1,6 @@
 import type { ArchiveSourceValue } from "../../storage/browser/archive-source.ts";
 import type { ByteSourceRecordLike } from "../../storage/shared/binary/source-shared.ts";
-import type { ArchiveEntry, JsonObject } from "../../types/runtime.ts";
+import type { JsonObject } from "../../types/runtime.ts";
 import type { WorkflowRomFileLike as InputSource } from "../../types/workflow-source.ts";
 import {
   getRomSpecificExtractedFileName,
@@ -19,12 +19,6 @@ type PatcherInputClassification =
       defaultExtractedEntryName: string;
       fileName: string;
     };
-
-type ArchiveEntrySelection = {
-  role: "rom" | "patch";
-  candidates: ArchiveEntry[];
-  action: "extract" | "choose" | "fallback-raw" | "empty";
-};
 
 type InputSourceMetadata = {
   _file?: { name?: string };
@@ -154,29 +148,4 @@ const classifyPatcherInput = (source: InputSourceValue): PatcherInputClassificat
   };
 };
 
-const selectArchiveEntriesForRole = (
-  role: "rom" | "patch" | string | null | undefined,
-  entries: ArchiveEntry[] | null | undefined,
-): ArchiveEntrySelection => {
-  const candidates: ArchiveEntry[] = Array.isArray(entries) ? entries : [];
-  const normalizedRole = role === "patch" ? "patch" : "rom";
-  return {
-    action:
-      candidates.length === 1
-        ? "extract"
-        : (() => {
-            if (candidates.length > 1) {
-              return "choose";
-            }
-            if (normalizedRole === "rom") {
-              return "fallback-raw";
-            }
-            return "empty";
-          })(),
-    candidates: candidates,
-    role: normalizedRole,
-  };
-};
-
-export type { ArchiveEntrySelection, InputSourceValue, PatcherInputClassification };
-export { classifyPatcherInput, getInputSourceFileName, selectArchiveEntriesForRole };
+export { classifyPatcherInput, getInputSourceFileName };

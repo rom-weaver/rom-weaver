@@ -128,4 +128,4 @@ function ProgressActionButton({
   );
 }
 
-export { ProgressActionButton, type ProgressViewModel };
+export { ProgressActionButton };

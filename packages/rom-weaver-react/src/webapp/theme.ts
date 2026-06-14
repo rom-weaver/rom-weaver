@@ -121,4 +121,4 @@ const useTheme = (): { theme: Theme; toggleTheme: () => void } => {
   return { theme, toggleTheme };
 };
 
-export { getTheme, initTheme, setTheme, subscribe as subscribeTheme, type Theme, toggleTheme, useTheme };
+export { useTheme };

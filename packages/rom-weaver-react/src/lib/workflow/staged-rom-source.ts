@@ -659,15 +659,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
 
 export type {
   SharedInternalCandidate,
-  SharedParentCompression,
   SharedRomSourceSession,
-  SharedRomSourceState,
   SharedRomStagedSource,
-  SharedSourceStatus,
 } from "./staged-source-types.ts";
-export {
-  canRecoverWithCandidateSelection,
-  releasePreparedRomSource,
-  releasePreparedRomSourceAndWait,
-  StagedRomSourceController,
-};
+export { StagedRomSourceController };

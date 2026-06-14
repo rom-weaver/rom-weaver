@@ -99,11 +99,6 @@ const installLogStore = () => {
 
 const getLogEntries = (): readonly LogStoreEntry[] => entries;
 
-const clearLogEntries = () => {
-  entries = [];
-  notify();
-};
-
 const subscribeLogEntries = (listener: () => void) => {
   listeners.add(listener);
   return () => {
@@ -112,4 +107,4 @@ const subscribeLogEntries = (listener: () => void) => {
 };
 
 export type { LogStoreEntry };
-export { clearLogEntries, getLogEntries, installLogStore, parseRustTraceRecord, subscribeLogEntries };
+export { getLogEntries, installLogStore, parseRustTraceRecord, subscribeLogEntries };

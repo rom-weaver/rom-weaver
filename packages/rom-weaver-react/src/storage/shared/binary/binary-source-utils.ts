@@ -40,19 +40,13 @@ type BinarySourceReader = {
   type?: string;
 };
 
-type PathBinarySourceReaderFactory = (filePath: string) => Promise<BinarySourceReader>;
 type ObjectBinarySourceReaderFactory = (
   source: unknown,
   name: string,
   fallbackName: string,
 ) => Promise<BinarySourceReader | null> | BinarySourceReader | null;
 
-let pathBinarySourceReaderFactory: PathBinarySourceReaderFactory | null = null;
 let objectBinarySourceReaderFactories: ObjectBinarySourceReaderFactory[] = [];
-
-const configurePathBinarySourceReaderFactory = (factory: PathBinarySourceReaderFactory | null) => {
-  pathBinarySourceReaderFactory = factory;
-};
 
 const configureObjectBinarySourceReaderFactories = (factories: ObjectBinarySourceReaderFactory[]) => {
   objectBinarySourceReaderFactories = factories;
@@ -182,15 +176,11 @@ const createBinaryObjectReader = (source: BinaryObjectLike, name?: string): Bina
   type: source.type,
 });
 
-const createPathReader = async (filePath: string): Promise<BinarySourceReader> => {
-  if (!pathBinarySourceReaderFactory) throw new Error("Path binary source support is not configured");
-  return pathBinarySourceReaderFactory(filePath);
-};
-
 const createRecordReader = async (record: ByteSourceRecord, name = record.fileName || record.name || DEFAULT_NAME) => {
   if (isBinaryObjectLike(record._file)) return createBinaryObjectReader(record._file, name);
   if (record._u8array instanceof Uint8Array) return createByteReader(record._u8array, name);
-  if (typeof record.filePath === "string" && record.filePath) return createPathReader(record.filePath);
+  if (typeof record.filePath === "string" && record.filePath)
+    throw new Error("Path binary source support is not configured");
   if (typeof record.readIntoAt === "function" && typeof record.fileSize === "number") {
     return {
       name,
@@ -273,7 +263,7 @@ const createBinarySourceReader = async (
   const fileName = getNamedSourceFileName(source as Parameters<typeof getNamedSource>[0], { fallback: fallbackName });
 
   const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSource>[0]);
-  if (sourcePath) return createPathReader(sourcePath);
+  if (sourcePath) throw new Error("Path binary source support is not configured");
   if (directSource instanceof ArrayBuffer) return createByteReader(toArrayBufferViewUint8Array(directSource), fileName);
   if (typeof SharedArrayBuffer === "function" && directSource instanceof SharedArrayBuffer)
     return createByteReader(toArrayBufferViewUint8Array(directSource), fileName);
@@ -290,17 +280,6 @@ const createBinarySourceReader = async (
 
   throw new Error("Unsupported binary source");
 };
-
-const readSourceRange = async (source: SourceValue, offset?: number, length?: number): Promise<Uint8Array> =>
-  (await createBinarySourceReader(source)).readRange(offset, length);
-
-const readSourceInto = async (
-  source: SourceValue,
-  target: Uint8Array,
-  targetOffset?: number,
-  length?: number,
-  sourceOffset?: number,
-): Promise<number> => (await createBinarySourceReader(source)).readInto(target, targetOffset, length, sourceOffset);
 
 const copySourceToWriter = async (
   source: SourceValue,
@@ -343,21 +322,6 @@ const materializeSourceArrayBuffer = async (
   const bytes = await materializeSourceBytes(source, options, invalidLabel);
   return toOwnedArrayBuffer(bytes, options.preserveWholeBuffer);
 };
-
-const toArrayBuffer = (source: SourceValue, invalidLabel?: string, preserveWholeBuffer?: boolean): ArrayBuffer => {
-  const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]) as SourceValue;
-  if (directSource instanceof ArrayBuffer && preserveWholeBuffer) return directSource;
-  if (typeof SharedArrayBuffer === "function" && directSource instanceof SharedArrayBuffer)
-    return toOwnedArrayBuffer(toArrayBufferViewUint8Array(directSource));
-  if (ArrayBuffer.isView(directSource))
-    return toOwnedArrayBuffer(toArrayBufferViewUint8Array(directSource), preserveWholeBuffer);
-  if (isRecord(directSource) && directSource._u8array instanceof Uint8Array)
-    return toOwnedArrayBuffer(directSource._u8array, preserveWholeBuffer);
-  throw new Error(invalidLabel || "Invalid byte source");
-};
-
-const toBinarySourceArrayBuffer = (source: SourceValue, invalidLabel?: string): Promise<ArrayBuffer> =>
-  materializeSourceArrayBuffer(source, { allowFullMaterialization: true }, invalidLabel);
 
 const isDirectlyCloneablePatchFile = (
   source: SourceValue,
@@ -405,21 +369,11 @@ const createPatchFileFromSource = async (
   return binFile;
 };
 
-export type { BinarySourceReader, ObjectBinarySourceReaderFactory, PathBinarySourceReaderFactory };
 export {
   configureObjectBinarySourceReaderFactories,
-  configurePathBinarySourceReaderFactory,
   copySourceToWriter,
   createBinaryObjectReader,
-  createBinarySourceReader,
   createPatchFileFromSource,
   hasReadableBytes,
-  materializeSourceArrayBuffer,
-  materializeSourceBytes,
-  normalizeReadIntoRequest,
-  readSourceInto,
-  readSourceRange,
-  toArrayBuffer,
-  toBinarySourceArrayBuffer,
   toUint8Array,
 };

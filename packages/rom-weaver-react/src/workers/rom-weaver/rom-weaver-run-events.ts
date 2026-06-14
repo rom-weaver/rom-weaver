@@ -46,7 +46,6 @@ export {
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
   getRomWeaverRunEventPercent,
-  getRomWeaverRunEventStatus,
   isRomWeaverFailedRunEvent,
   isRomWeaverLiveRunEvent,
   isRomWeaverTerminalRunEvent,

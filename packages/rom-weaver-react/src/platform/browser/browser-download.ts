@@ -4,22 +4,6 @@ type BrowserDownloadTriggerOptions = {
   retainCleanupDelayMs?: number;
 };
 
-const createCleanupOnce = (cleanup?: CleanupCallback) => {
-  if (typeof cleanup !== "function") return undefined;
-  let cleanupComplete = false;
-  return () => {
-    if (cleanupComplete) return;
-    cleanupComplete = true;
-    void Promise.resolve(cleanup()).catch(() => undefined);
-  };
-};
-
-const createBrowserDownload = (data: BlobPart, fileName: string, cleanup?: CleanupCallback): BrowserDownload => ({
-  cleanup: createCleanupOnce(cleanup),
-  data,
-  fileName,
-});
-
 const isBrowserDownload = (value: BrowserDownload | BlobPart): value is BrowserDownload =>
   !!value && typeof value === "object" && "data" in value && "fileName" in value;
 
@@ -58,4 +42,4 @@ const triggerBrowserDownload = (
   }
 };
 
-export { createBrowserDownload, triggerBrowserDownload };
+export { triggerBrowserDownload };

@@ -55,20 +55,14 @@ const replaceFileNameExtension = (fileName: string, extension: FileNameValue): s
 const isCompressionLevelProfile = (value: FileNameValue): boolean =>
   COMPRESSION_LEVEL_PROFILE_REGEX.test(String(value || ""));
 
-export type { FileNameValue };
 export {
   CHD_EXTENSION_REGEX,
-  COMPRESSION_LEVEL_PROFILE_REGEX,
-  FILE_EXTENSION_CAPTURE_REGEX,
-  FILE_EXTENSION_REGEX,
-  FILE_QUERY_OR_HASH_REGEX,
   getFileNameExtension,
   getFileNameParts,
   getFileNameWithoutExtension,
   getPathBaseName,
   hasFileNameExtension,
   isCompressionLevelProfile,
-  PATH_PART_SPLIT_REGEX,
   replaceFileNameExtension,
   stripFileNameQuery,
   stripLeadingExtensionDot,

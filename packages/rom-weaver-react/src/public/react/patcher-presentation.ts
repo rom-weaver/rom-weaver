@@ -140,23 +140,5 @@ const createEmptyPatcherOutputState = ({
   totalTiming: "",
 });
 
-const createEmptyPatchStackState = (): PatchStackState => ({
-  items: [],
-});
-
-export type {
-  ArchivePathEntry,
-  OutputApplyButtonState,
-  OutputOption,
-  PatcherOutputState,
-  PatchStackItemState,
-  PatchStackState,
-  PatchTargetOption,
-};
-export {
-  cloneOutputOptions,
-  createEmptyPatcherOutputState,
-  createEmptyPatchStackState,
-  createOutputSizeSummary,
-  DEFAULT_OUTPUT_OPTIONS,
-};
+export type { PatcherOutputState, PatchStackItemState, PatchStackState };
+export { createEmptyPatcherOutputState, createOutputSizeSummary };

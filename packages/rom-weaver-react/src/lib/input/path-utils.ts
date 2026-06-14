@@ -25,8 +25,6 @@ const getDirectoryPath = (fileName: FileNameValue): string => {
   return index === -1 ? "" : normalized.slice(0, index + 1);
 };
 
-const escapeRegExp = (value: FileNameValue): string => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const hasFileNameExtension = (fileName: FileNameValue): boolean => hasSharedFileNameExtension(fileName);
 
 const replaceFileNameExtension = (fileName: string, extension: FileNameValue): string => {
@@ -46,7 +44,6 @@ const getBaseFileName = (fileName: FileNameValue): string => getBaseName(fileNam
 
 export {
   appendFileNameExtension,
-  escapeRegExp,
   getBaseFileName,
   getDirectoryPath,
   getFileNameWithoutExtension,

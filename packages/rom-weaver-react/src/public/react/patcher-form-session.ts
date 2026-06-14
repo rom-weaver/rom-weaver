@@ -111,7 +111,6 @@ const useLocalApplyPatchFormSession = ({
   const session = useLocalPatcherSessionState();
   const {
     localState,
-    setBusy,
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
@@ -1091,8 +1090,6 @@ const useLocalApplyPatchFormSession = ({
 };
 
 export {
-  getGeneratedOutputName,
-  getRequestedOutputName,
   inertDialogController,
   inertOutputController,
   inertStackController,
