@@ -1,6 +1,6 @@
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{BufWriter, Cursor, Read, Write},
+    fs::{self, OpenOptions},
+    io::{Cursor, Read, Write},
     path::Path,
     sync::Arc,
 };
@@ -299,7 +299,7 @@ fn create_qbsdiff_patch(
     let target = fs::read(&request.modified)?;
     context.cancel().check()?;
 
-    let patch_writer = BufWriter::new(File::create(&request.output)?);
+    let patch_writer = crate::create_buffered_output(&request.output)?;
     qbsdiff::Bsdiff::new(source.as_slice(), target.as_slice())
         .parallel_scheme(qbsdiff_parallel_scheme(effective_threads))
         .compression_level(9)

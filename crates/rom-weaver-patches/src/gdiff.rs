@@ -354,7 +354,7 @@ fn apply_gdiff_plan_sequential(
 
     let mut patch = BufReader::new(File::open(patch_path)?);
     let mut source = File::open(source_path)?;
-    let mut output = BufWriter::new(File::create(output_path)?);
+    let mut output = crate::create_buffered_output(output_path)?;
     let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
     for command in commands {
         output.seek(SeekFrom::Start(command.output_offset))?;
