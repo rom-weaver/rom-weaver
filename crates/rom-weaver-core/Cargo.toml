@@ -18,7 +18,7 @@ ts-rs = { workspace = true, optional = true, features = ["serde-json-impl"] }
 
 # Used only to query physical RAM for memory-bounded parallelism on native hosts.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-libc = "0.2.137"
+libc.workspace = true
 
 [dev-dependencies]
 assert_fs.workspace = true

@@ -14,20 +14,20 @@ write-extra = ["write-archives"]
 
 [dependencies]
 bzip2-sys = { version = "0.1.11", features = ["static"] }
-libc = "0.2.137"
+libc.workspace = true
 libz-sys = { workspace = true, features = ["static"] }
 lz4-sys = "1.9.4"
 zstd-sys.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-liblzma-sys = { version = "0.4.6", features = ["static", "parallel"] }
+liblzma-sys = { workspace = true, features = ["parallel"] }
 zstd-sys = { workspace = true, features = ["zstdmt"] }
 
 [target.wasm32-wasip1.dependencies]
-liblzma-sys = { version = "0.4.6", features = ["static"] }
+liblzma-sys = { workspace = true }
 
 [target.wasm32-wasip1-threads.dependencies]
-liblzma-sys = { version = "0.4.6", features = ["static", "parallel"] }
+liblzma-sys = { workspace = true, features = ["parallel"] }
 zstd-sys = { workspace = true, features = ["zstdmt"] }
 
 [target.'cfg(all(not(target_vendor = "apple"), not(target_arch = "wasm32")))'.dependencies]
