@@ -84,6 +84,41 @@ impl<'a> DiscFrameRouter<'a> {
     }
 }
 
+/// Resolved CD extract plan: which of the cue / single-bin / per-track outputs to
+/// write, computed once up front so [`ChdContainerHandler::extract_cd`] reads as a
+/// clear sequence of steps. `write_split_tracks` and `split_track_names` are
+/// parallel to `layout.tracks` and are only populated when `single_bin` is false.
+struct CdSelectionPlan {
+    single_bin: bool,
+    selection_requested: bool,
+    write_cue: bool,
+    write_single_bin: bool,
+    single_bin_name: String,
+    split_track_names: Vec<String>,
+    write_split_tracks: Vec<bool>,
+}
+
+/// Read-only inputs shared by the CD single-bin and split-track writer paths,
+/// grouped so those helpers take a single borrow instead of a long argument list.
+struct CdExtractInputs<'a> {
+    chd: &'a ChdReadSession,
+    layout: &'a DiscLayout,
+    request: &'a ContainerExtractRequest,
+    context: &'a OperationContext,
+    execution: &'a ThreadExecution,
+    extract_progress: &'a Arc<dyn Fn(u64) + Send + Sync>,
+}
+
+/// Mutable accumulators threaded through the CD writer paths: the shared cue
+/// writer plus the outputs/checksums and flags reported back to `extract_cd`.
+struct CdExtractSink<'a> {
+    cue_writer: &'a mut Option<BufWriter<File>>,
+    produced_outputs: &'a mut Vec<PathBuf>,
+    output_checksums: &'a mut Vec<ExtractedFileChecksum>,
+    omitted_subcode: &'a mut bool,
+    wrote_single_bin_output: &'a mut bool,
+}
+
 impl ChdContainerHandler {
     /// Resolve a cue sheet into unpadded CD-shaped tracks plus the number of the
     /// first track that falls inside a GD-ROM high-density area (when the sheet
@@ -912,283 +947,19 @@ impl ChdContainerHandler {
             header.logical_bytes,
             format!("extracting `{}`", CHD.name),
         );
-        let first_data_bytes = layout
-            .tracks
-            .first()
-            .map(|track| track.mode.data_bytes())
-            .unwrap_or(2352);
-        let natural_single_bin = layout
-            .tracks
-            .iter()
-            .all(|track| track.mode.data_bytes() == first_data_bytes);
-        let single_bin = natural_single_bin && !request.split_bin;
-        let selection_requested = !request.selections.is_empty();
-        let cue_name = format!("{stem}.cue");
-        let mut selections = SelectionMatcher::new(&request.selections);
-        let cue_selected = selections.matches(&cue_name);
-        let write_cue = cue_selected && request.kind_filter.matches_payload_name(&cue_name);
-        let single_bin_name = format!("{stem}.bin");
-        let mut write_single_bin = single_bin
-            && selections.matches(&single_bin_name)
-            && request.kind_filter.matches_payload_name(&single_bin_name);
-        let mut split_track_names = Vec::new();
-        let mut write_split_tracks = Vec::new();
-        if !single_bin {
-            for track in &layout.tracks {
-                let track_name = self.track_output_name(stem, track.number);
-                let track_selected = selections.matches(&track_name);
-                write_split_tracks
-                    .push(track_selected && request.kind_filter.matches_payload_name(&track_name));
-                split_track_names.push(track_name);
-            }
-        }
-        if selection_requested && write_cue {
-            let any_selected = if single_bin {
-                write_single_bin
-            } else {
-                write_split_tracks.iter().any(|selected| *selected)
-            };
-            if !any_selected {
-                if single_bin {
-                    write_single_bin = request.kind_filter.matches_payload_name(&single_bin_name);
-                } else {
-                    for (selected, track_name) in
-                        write_split_tracks.iter_mut().zip(split_track_names.iter())
-                    {
-                        *selected = request.kind_filter.matches_payload_name(track_name);
-                    }
-                }
-            }
-        }
-        selections.ensure_all_matched()?;
+        let plan = self.plan_cd_selection(&layout, request, stem)?;
+        let selection_requested = plan.selection_requested;
 
-        let build_result: Result<(bool, Vec<PathBuf>, bool, Vec<ExtractedFileChecksum>)> = (|| {
-            let mut omitted_subcode = false;
-            let mut produced_outputs = Vec::new();
-            let mut output_checksums = Vec::new();
-            let mut cue_writer = if write_cue {
-                produced_outputs.push(cue_path.clone());
-                Some(BufWriter::new(create_extract_output_file(
-                    &cue_path,
-                    request.overwrite,
-                )?))
-            } else {
-                None
-            };
-            let mut wrote_single_bin_output = false;
-
-            if single_bin {
-                let bin_path = request.out_dir.join(&single_bin_name);
-                let mut bin_writer = if write_single_bin {
-                    wrote_single_bin_output = true;
-                    produced_outputs.push(bin_path.clone());
-                    Some(BufWriter::new(create_extract_output_file(
-                        &bin_path,
-                        request.overwrite,
-                    )?))
-                } else {
-                    None
-                };
-                let mut single_bin_checksum = if write_single_bin {
-                    create_extract_checksum(context)?
-                } else {
-                    None
-                };
-                if let Some(writer) = cue_writer.as_mut() {
-                    writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
-                }
-                let mut output_frame_offset = 0_u32;
-                for track in &layout.tracks {
-                    if let Some(writer) = cue_writer.as_mut() {
-                        writer.write_all(
-                            format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
-                                .as_bytes(),
-                        )?;
-                        if track.pregap_frames > 0 && track.pregap_has_data {
-                            writer.write_all(
-                                format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset))
-                                    .as_bytes(),
-                            )?;
-                            writer.write_all(
-                                format!(
-                                    "    INDEX 01 {}\n",
-                                    self.format_msf(output_frame_offset + track.pregap_frames)
-                                )
-                                .as_bytes(),
-                            )?;
-                        } else if track.pregap_frames > 0 {
-                            writer.write_all(
-                                format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
-                                    .as_bytes(),
-                            )?;
-                            writer.write_all(
-                                format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                                    .as_bytes(),
-                            )?;
-                        } else {
-                            writer.write_all(
-                                format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                                    .as_bytes(),
-                            )?;
-                        }
-                        if track.postgap_frames > 0 {
-                            writer.write_all(
-                                format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                                    .as_bytes(),
-                            )?;
-                        }
-                    }
-                    output_frame_offset = output_frame_offset
-                        .saturating_add(track.frames.saturating_sub(track.pad_frames));
-                }
-
-                let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
-                let mut router = DiscFrameRouter::new(&layout.tracks);
-                self.stream_chd_frames_with_progress(
-                    &chd,
-                    execution.effective_threads,
-                    Some(&extract_progress),
-                    |frame| {
-                        router.route_frame(frame, |_track_index, track, data| {
-                            if write_single_bin && track.has_subcode {
-                                omitted_subcode = true;
-                            }
-                            if let Some(writer) = bin_writer.as_mut() {
-                                let data = cook_disc_frame_payload(track, data);
-                                writer.write_all(data.as_ref())?;
-                                if let Some(checksum) = single_bin_checksum.as_mut() {
-                                    checksum.update(data.as_ref())?;
-                                }
-                            }
-                            Ok(())
-                        })
-                    },
-                )?;
-                if router.processed_frames() != expected_frames || !router.finished() {
-                    return Err(RomWeaverError::Validation(
-                        "cd chd ended before all track frames were decoded".to_string(),
-                    ));
-                }
-                if let Some(writer) = bin_writer.as_mut() {
-                    writer.flush()?;
-                }
-                push_finalized_extract_checksum(
-                    &mut output_checksums,
-                    bin_path,
-                    single_bin_checksum.take(),
-                )?;
-            } else {
-                for (track_index, track) in layout.tracks.iter().enumerate() {
-                    let track_name = &split_track_names[track_index];
-                    let track_selected = write_split_tracks[track_index];
-                    if track_selected && let Some(writer) = cue_writer.as_mut() {
-                        writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
-                        writer.write_all(
-                            format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
-                                .as_bytes(),
-                        )?;
-                        if track.pregap_frames > 0 && track.pregap_has_data {
-                            writer.write_all(b"    INDEX 00 00:00:00\n")?;
-                            writer.write_all(
-                                format!("    INDEX 01 {}\n", self.format_msf(track.pregap_frames))
-                                    .as_bytes(),
-                            )?;
-                        } else if track.pregap_frames > 0 {
-                            writer.write_all(
-                                format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
-                                    .as_bytes(),
-                            )?;
-                            writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                        } else {
-                            writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                        }
-                        if track.postgap_frames > 0 {
-                            writer.write_all(
-                                format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                                    .as_bytes(),
-                            )?;
-                        }
-                    }
-                }
-
-                let mut track_writers = Vec::with_capacity(layout.tracks.len());
-                let mut track_checksums = Vec::with_capacity(layout.tracks.len());
-                for (track_index, track_name) in split_track_names.iter().enumerate() {
-                    if write_split_tracks[track_index] {
-                        let track_path = request.out_dir.join(track_name);
-                        produced_outputs.push(track_path.clone());
-                        track_writers.push(Some(BufWriter::new(create_extract_output_file(
-                            &track_path,
-                            request.overwrite,
-                        )?)));
-                        track_checksums.push(create_extract_checksum(context)?);
-                    } else {
-                        track_writers.push(None);
-                        track_checksums.push(None);
-                    }
-                }
-
-                let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
-                let mut router = DiscFrameRouter::new(&layout.tracks);
-                self.stream_chd_frames_with_progress(
-                    &chd,
-                    execution.effective_threads,
-                    Some(&extract_progress),
-                    |frame| {
-                        router.route_frame(frame, |track_index, track, data| {
-                            if write_split_tracks[track_index] {
-                                if track.has_subcode {
-                                    omitted_subcode = true;
-                                }
-                                let data = cook_disc_frame_payload(track, data);
-                                if let Some(writer) = track_writers[track_index].as_mut() {
-                                    writer.write_all(data.as_ref())?;
-                                    if let Some(checksum) = track_checksums[track_index].as_mut() {
-                                        checksum.update(data.as_ref())?;
-                                    }
-                                }
-                            }
-                            Ok(())
-                        })
-                    },
-                )?;
-                if router.processed_frames() != expected_frames || !router.finished() {
-                    return Err(RomWeaverError::Validation(
-                        "cd chd ended before all track frames were decoded".to_string(),
-                    ));
-                }
-                for writer in &mut track_writers {
-                    if let Some(writer) = writer.as_mut() {
-                        writer.flush()?;
-                    }
-                }
-                for (track_index, checksum) in track_checksums.iter_mut().enumerate() {
-                    if !write_split_tracks[track_index] {
-                        continue;
-                    }
-                    let track_path = request.out_dir.join(&split_track_names[track_index]);
-                    push_finalized_extract_checksum(
-                        &mut output_checksums,
-                        track_path,
-                        checksum.take(),
-                    )?;
-                }
-            }
-
-            if let Some(writer) = cue_writer.as_mut() {
-                writer.flush()?;
-            }
-            Ok((
-                omitted_subcode,
-                produced_outputs,
-                wrote_single_bin_output,
-                output_checksums,
-            ))
-        })(
-        );
-
+        let inputs = CdExtractInputs {
+            chd: &chd,
+            layout: &layout,
+            request,
+            context,
+            execution: &execution,
+            extract_progress: &extract_progress,
+        };
         let (omitted_subcode, produced_outputs, wrote_single_bin_output, output_checksums) =
-            build_result?;
+            self.build_cd_extract_result(&inputs, &plan, &cue_path)?;
         if request.kind_filter.enabled() && produced_outputs.is_empty() {
             return Err(RomWeaverError::Validation(format!(
                 "no extract entries from `{}` matched {}",
@@ -1224,7 +995,7 @@ impl ChdContainerHandler {
         };
 
         let label = if !selection_requested && wrote_single_bin_output {
-            let bin_path = request.out_dir.join(&single_bin_name);
+            let bin_path = request.out_dir.join(&plan.single_bin_name);
             format!(
                 "extracted `{}` to `{}` and `{}` (cd, {}){}{}",
                 request.source.display(),
@@ -1279,6 +1050,362 @@ impl ChdContainerHandler {
         let report =
             attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
+    }
+
+    /// Resolve which CD outputs to write (cue, single combined bin, or per-track
+    /// bins) from the request's split-bin flag, explicit selections, and
+    /// kind-filter. A layout whose tracks all share one data-byte size extracts as
+    /// a single bin unless split-bin was requested; otherwise it splits per track.
+    /// When the cue alone was selected, the matching payload outputs are re-enabled
+    /// so the cue does not reference files that were never written.
+    fn plan_cd_selection(
+        &self,
+        layout: &DiscLayout,
+        request: &ContainerExtractRequest,
+        stem: &str,
+    ) -> Result<CdSelectionPlan> {
+        let first_data_bytes = layout
+            .tracks
+            .first()
+            .map(|track| track.mode.data_bytes())
+            .unwrap_or(2352);
+        let natural_single_bin = layout
+            .tracks
+            .iter()
+            .all(|track| track.mode.data_bytes() == first_data_bytes);
+        let single_bin = natural_single_bin && !request.split_bin;
+        let selection_requested = !request.selections.is_empty();
+        let cue_name = format!("{stem}.cue");
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let cue_selected = selections.matches(&cue_name);
+        let write_cue = cue_selected && request.kind_filter.matches_payload_name(&cue_name);
+        let single_bin_name = format!("{stem}.bin");
+        let mut write_single_bin = single_bin
+            && selections.matches(&single_bin_name)
+            && request.kind_filter.matches_payload_name(&single_bin_name);
+        let mut split_track_names = Vec::new();
+        let mut write_split_tracks = Vec::new();
+        if !single_bin {
+            for track in &layout.tracks {
+                let track_name = self.track_output_name(stem, track.number);
+                let track_selected = selections.matches(&track_name);
+                write_split_tracks
+                    .push(track_selected && request.kind_filter.matches_payload_name(&track_name));
+                split_track_names.push(track_name);
+            }
+        }
+        if selection_requested && write_cue {
+            let any_selected = if single_bin {
+                write_single_bin
+            } else {
+                write_split_tracks.iter().any(|selected| *selected)
+            };
+            if !any_selected {
+                if single_bin {
+                    write_single_bin = request.kind_filter.matches_payload_name(&single_bin_name);
+                } else {
+                    for (selected, track_name) in
+                        write_split_tracks.iter_mut().zip(split_track_names.iter())
+                    {
+                        *selected = request.kind_filter.matches_payload_name(track_name);
+                    }
+                }
+            }
+        }
+        selections.ensure_all_matched()?;
+
+        Ok(CdSelectionPlan {
+            single_bin,
+            selection_requested,
+            write_cue,
+            write_single_bin,
+            single_bin_name,
+            split_track_names,
+            write_split_tracks,
+        })
+    }
+
+    /// Write the planned CD outputs: open the cue writer (when selected), dispatch
+    /// to the single-bin or split-track writer, then flush the cue. Returns
+    /// `(omitted_subcode, produced_outputs, wrote_single_bin_output,
+    /// output_checksums)` in the same order the inline closure did.
+    fn build_cd_extract_result(
+        &self,
+        inputs: &CdExtractInputs<'_>,
+        plan: &CdSelectionPlan,
+        cue_path: &Path,
+    ) -> Result<(bool, Vec<PathBuf>, bool, Vec<ExtractedFileChecksum>)> {
+        let mut omitted_subcode = false;
+        let mut produced_outputs = Vec::new();
+        let mut output_checksums = Vec::new();
+        let mut cue_writer = if plan.write_cue {
+            produced_outputs.push(cue_path.to_path_buf());
+            Some(BufWriter::new(create_extract_output_file(
+                cue_path,
+                inputs.request.overwrite,
+            )?))
+        } else {
+            None
+        };
+        let mut wrote_single_bin_output = false;
+
+        let mut sink = CdExtractSink {
+            cue_writer: &mut cue_writer,
+            produced_outputs: &mut produced_outputs,
+            output_checksums: &mut output_checksums,
+            omitted_subcode: &mut omitted_subcode,
+            wrote_single_bin_output: &mut wrote_single_bin_output,
+        };
+        if plan.single_bin {
+            self.write_cd_single_bin(inputs, plan, &mut sink)?;
+        } else {
+            self.write_cd_split_tracks(inputs, plan, &mut sink)?;
+        }
+
+        if let Some(writer) = cue_writer.as_mut() {
+            writer.flush()?;
+        }
+        Ok((
+            omitted_subcode,
+            produced_outputs,
+            wrote_single_bin_output,
+            output_checksums,
+        ))
+    }
+
+    /// Single combined-bin CD path: emit the cue body (with running output-frame
+    /// MSF offsets), stream every track's cooked frames into one `.bin`, and
+    /// finalize its checksum. Sets `omitted_subcode` when subcode is dropped and
+    /// `wrote_single_bin_output` when the bin is actually written.
+    fn write_cd_single_bin(
+        &self,
+        inputs: &CdExtractInputs<'_>,
+        plan: &CdSelectionPlan,
+        sink: &mut CdExtractSink<'_>,
+    ) -> Result<()> {
+        let CdExtractInputs {
+            chd,
+            layout,
+            request,
+            context,
+            execution,
+            extract_progress,
+        } = *inputs;
+        let single_bin_name = &plan.single_bin_name;
+        let write_single_bin = plan.write_single_bin;
+        let bin_path = request.out_dir.join(single_bin_name);
+        let mut bin_writer = if write_single_bin {
+            *sink.wrote_single_bin_output = true;
+            sink.produced_outputs.push(bin_path.clone());
+            Some(BufWriter::new(create_extract_output_file(
+                &bin_path,
+                request.overwrite,
+            )?))
+        } else {
+            None
+        };
+        let mut single_bin_checksum = if write_single_bin {
+            create_extract_checksum(context)?
+        } else {
+            None
+        };
+        let cue_writer = &mut *sink.cue_writer;
+        if let Some(writer) = cue_writer.as_mut() {
+            writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
+        }
+        let mut output_frame_offset = 0_u32;
+        for track in &layout.tracks {
+            if let Some(writer) = cue_writer.as_mut() {
+                writer.write_all(
+                    format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
+                )?;
+                if track.pregap_frames > 0 && track.pregap_has_data {
+                    writer.write_all(
+                        format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset))
+                            .as_bytes(),
+                    )?;
+                    writer.write_all(
+                        format!(
+                            "    INDEX 01 {}\n",
+                            self.format_msf(output_frame_offset + track.pregap_frames)
+                        )
+                        .as_bytes(),
+                    )?;
+                } else if track.pregap_frames > 0 {
+                    writer.write_all(
+                        format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
+                    )?;
+                    writer.write_all(
+                        format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
+                            .as_bytes(),
+                    )?;
+                } else {
+                    writer.write_all(
+                        format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
+                            .as_bytes(),
+                    )?;
+                }
+                if track.postgap_frames > 0 {
+                    writer.write_all(
+                        format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
+                            .as_bytes(),
+                    )?;
+                }
+            }
+            output_frame_offset =
+                output_frame_offset.saturating_add(track.frames.saturating_sub(track.pad_frames));
+        }
+
+        let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
+        let mut router = DiscFrameRouter::new(&layout.tracks);
+        let omitted_subcode = &mut *sink.omitted_subcode;
+        self.stream_chd_frames_with_progress(
+            chd,
+            execution.effective_threads,
+            Some(extract_progress),
+            |frame| {
+                router.route_frame(frame, |_track_index, track, data| {
+                    if write_single_bin && track.has_subcode {
+                        *omitted_subcode = true;
+                    }
+                    if let Some(writer) = bin_writer.as_mut() {
+                        let data = cook_disc_frame_payload(track, data);
+                        writer.write_all(data.as_ref())?;
+                        if let Some(checksum) = single_bin_checksum.as_mut() {
+                            checksum.update(data.as_ref())?;
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?;
+        if router.processed_frames() != expected_frames || !router.finished() {
+            return Err(RomWeaverError::Validation(
+                "cd chd ended before all track frames were decoded".to_string(),
+            ));
+        }
+        if let Some(writer) = bin_writer.as_mut() {
+            writer.flush()?;
+        }
+        push_finalized_extract_checksum(
+            sink.output_checksums,
+            bin_path,
+            single_bin_checksum.take(),
+        )?;
+        Ok(())
+    }
+
+    /// Per-track CD path: emit one cue FILE entry per selected track, stream each
+    /// selected track's cooked frames into its own `.bin`, flush, and finalize the
+    /// per-track checksums. Sets `omitted_subcode` when subcode is dropped.
+    fn write_cd_split_tracks(
+        &self,
+        inputs: &CdExtractInputs<'_>,
+        plan: &CdSelectionPlan,
+        sink: &mut CdExtractSink<'_>,
+    ) -> Result<()> {
+        let CdExtractInputs {
+            chd,
+            layout,
+            request,
+            context,
+            execution,
+            extract_progress,
+        } = *inputs;
+        let split_track_names = &plan.split_track_names;
+        let write_split_tracks = &plan.write_split_tracks;
+        let cue_writer = &mut *sink.cue_writer;
+        for (track_index, track) in layout.tracks.iter().enumerate() {
+            let track_name = &split_track_names[track_index];
+            let track_selected = write_split_tracks[track_index];
+            if track_selected && let Some(writer) = cue_writer.as_mut() {
+                writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
+                writer.write_all(
+                    format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
+                )?;
+                if track.pregap_frames > 0 && track.pregap_has_data {
+                    writer.write_all(b"    INDEX 00 00:00:00\n")?;
+                    writer.write_all(
+                        format!("    INDEX 01 {}\n", self.format_msf(track.pregap_frames))
+                            .as_bytes(),
+                    )?;
+                } else if track.pregap_frames > 0 {
+                    writer.write_all(
+                        format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
+                    )?;
+                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                } else {
+                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                }
+                if track.postgap_frames > 0 {
+                    writer.write_all(
+                        format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
+                            .as_bytes(),
+                    )?;
+                }
+            }
+        }
+
+        let mut track_writers = Vec::with_capacity(layout.tracks.len());
+        let mut track_checksums = Vec::with_capacity(layout.tracks.len());
+        for (track_index, track_name) in split_track_names.iter().enumerate() {
+            if write_split_tracks[track_index] {
+                let track_path = request.out_dir.join(track_name);
+                sink.produced_outputs.push(track_path.clone());
+                track_writers.push(Some(BufWriter::new(create_extract_output_file(
+                    &track_path,
+                    request.overwrite,
+                )?)));
+                track_checksums.push(create_extract_checksum(context)?);
+            } else {
+                track_writers.push(None);
+                track_checksums.push(None);
+            }
+        }
+
+        let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
+        let mut router = DiscFrameRouter::new(&layout.tracks);
+        let omitted_subcode = &mut *sink.omitted_subcode;
+        self.stream_chd_frames_with_progress(
+            chd,
+            execution.effective_threads,
+            Some(extract_progress),
+            |frame| {
+                router.route_frame(frame, |track_index, track, data| {
+                    if write_split_tracks[track_index] {
+                        if track.has_subcode {
+                            *omitted_subcode = true;
+                        }
+                        let data = cook_disc_frame_payload(track, data);
+                        if let Some(writer) = track_writers[track_index].as_mut() {
+                            writer.write_all(data.as_ref())?;
+                            if let Some(checksum) = track_checksums[track_index].as_mut() {
+                                checksum.update(data.as_ref())?;
+                            }
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?;
+        if router.processed_frames() != expected_frames || !router.finished() {
+            return Err(RomWeaverError::Validation(
+                "cd chd ended before all track frames were decoded".to_string(),
+            ));
+        }
+        for writer in &mut track_writers {
+            if let Some(writer) = writer.as_mut() {
+                writer.flush()?;
+            }
+        }
+        for (track_index, checksum) in track_checksums.iter_mut().enumerate() {
+            if !write_split_tracks[track_index] {
+                continue;
+            }
+            let track_path = request.out_dir.join(&split_track_names[track_index]);
+            push_finalized_extract_checksum(sink.output_checksums, track_path, checksum.take())?;
+        }
+        Ok(())
     }
 
     pub(super) fn extract_gd(
