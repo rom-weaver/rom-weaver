@@ -723,9 +723,8 @@ fn compress_defaults_to_max_global_level_profile() {
         fs::write(temp.child("payload.bin").path(), &payload).expect("fixture");
 
         let default_output = temp.child(format!("default.{extension}"));
-        Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        command_stdout(
+            &[
                 "compress",
                 temp.child("payload.bin").path().to_str().expect("path"),
                 "--format",
@@ -735,14 +734,13 @@ fn compress_defaults_to_max_global_level_profile() {
                 "--codec",
                 codec,
                 "--json",
-            ])
-            .assert()
-            .code(0);
+            ],
+            0,
+        );
 
         let explicit_output = temp.child(format!("explicit-max.{extension}"));
-        Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        command_stdout(
+            &[
                 "compress",
                 temp.child("payload.bin").path().to_str().expect("path"),
                 "--format",
@@ -754,9 +752,9 @@ fn compress_defaults_to_max_global_level_profile() {
                 "--level",
                 "max",
                 "--json",
-            ])
-            .assert()
-            .code(0);
+            ],
+            0,
+        );
 
         assert_eq!(
             fs::read(default_output.path()).expect("default output"),
@@ -1035,18 +1033,17 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
     }));
 
     let out_dir = temp.child("threaded-extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "1",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.path().join("input.bin")).expect("extracted input"),
         payload
@@ -1131,9 +1128,8 @@ fn extract_recursively_handles_nested_containers() {
     fs::write(temp.child("disc.bin").path(), &payload).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
@@ -1143,14 +1139,13 @@ fn extract_recursively_handles_nested_containers() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let zip_path = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             chd_path.path().to_str().expect("path"),
             "--format",
@@ -1158,14 +1153,13 @@ fn extract_recursively_handles_nested_containers() {
             "--output",
             zip_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let seven_z_path = temp.child("outer.7z");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             zip_path.path().to_str().expect("path"),
             "--format",
@@ -1173,9 +1167,9 @@ fn extract_recursively_handles_nested_containers() {
             "--output",
             seven_z_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
     let extract_output = command_stdout(
@@ -1214,9 +1208,8 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
     fs::write(temp.child("leaf.bin").path(), &payload).expect("fixture");
 
     let inner_zip = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("leaf.bin").path().to_str().expect("path"),
             "--format",
@@ -1224,14 +1217,13 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
             "--output",
             inner_zip.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer_7z = temp.child("outer.7z");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner_zip.path().to_str().expect("path"),
             "--format",
@@ -1239,9 +1231,9 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
             "--output",
             outer_7z.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
     let events = run_json_events(
@@ -1327,9 +1319,8 @@ fn extract_nested_scan_ignores_existing_output_archives() {
 
     fs::write(temp.child("fresh.bin").path(), b"fresh payload").expect("fresh fixture");
     let fresh_archive = temp.child("fresh.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("fresh.bin").path().to_str().expect("path"),
             "--format",
@@ -1337,15 +1328,14 @@ fn extract_nested_scan_ignores_existing_output_archives() {
             "--output",
             fresh_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     fs::write(temp.child("stale.bin").path(), b"stale payload").expect("stale fixture");
     let stale_archive = out_dir.child("stale.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("stale.bin").path().to_str().expect("path"),
             "--format",
@@ -1353,9 +1343,9 @@ fn extract_nested_scan_ignores_existing_output_archives() {
             "--output",
             stale_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let extract_output = command_stdout(
         &[

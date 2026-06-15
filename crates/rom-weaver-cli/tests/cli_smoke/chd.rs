@@ -42,9 +42,8 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
     fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
@@ -54,9 +53,9 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let expected_sha1 = checksum_value(temp.child("disc.bin").path(), "sha1");
     let output = command_stdout(
@@ -92,9 +91,8 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -104,9 +102,9 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
             "--codec",
             "cdlz",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let expected_sha1 = checksum_value(temp.child("disc.bin").path(), "sha1");
     let output = command_stdout(
@@ -165,17 +163,16 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.child("disc.avi").path()).expect("extract bytes"),
         source
@@ -257,9 +254,8 @@ fn probe_chd_reports_container_without_extracting() {
     fs::write(temp.child("video.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
@@ -269,9 +265,9 @@ fn probe_chd_reports_container_without_extracting() {
             "--codec",
             "avhuff",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["probe", chd_path.path().to_str().expect("path"), "--json"],
@@ -302,9 +298,8 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     fs::write(temp.child("video.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("auto.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
@@ -312,9 +307,9 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
             "--output",
             chd_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &[
@@ -334,17 +329,16 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.child("auto.avi").path()).expect("extract bytes"),
         source
@@ -359,9 +353,8 @@ fn chd_av_and_ld_overrides_force_av_media() {
 
     for format in ["chd-av", "chd-ld"] {
         let chd_path = temp.child(format!("{format}.chd"));
-        Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        command_stdout(
+            &[
                 "compress",
                 temp.child("video.bin").path().to_str().expect("path"),
                 "--format",
@@ -369,9 +362,9 @@ fn chd_av_and_ld_overrides_force_av_media() {
                 "--output",
                 chd_path.path().to_str().expect("path"),
                 "--json",
-            ])
-            .assert()
-            .code(0);
+            ],
+            0,
+        );
 
         let probe_output = command_stdout(
             &[
@@ -522,9 +515,8 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -534,22 +526,21 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -582,9 +573,8 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -594,9 +584,9 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     // Padded units: (6 + 2) + (4 + 0) = 12 frames of 2448 bytes = 29376 bytes.
     let probe_output = command_stdout(
@@ -619,17 +609,16 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -652,9 +641,8 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -664,9 +652,9 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract-split");
     let extract_output = command_stdout(
@@ -729,9 +717,8 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -741,9 +728,9 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract-selected-cue");
     let extract_output = command_stdout(
@@ -781,9 +768,8 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
     fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
@@ -793,9 +779,9 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("selected");
     let missing_output = command_stdout(
@@ -832,9 +818,8 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -844,22 +829,21 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
             "--codec",
             "zlib",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -876,9 +860,8 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
     fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
     let archive = temp.child("sample.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
@@ -886,9 +869,9 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("out");
 
@@ -941,9 +924,8 @@ fn chd_compress_and_extract_gdi_round_trip() {
         .expect("gdi fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.gdi").path().to_str().expect("path"),
             "--format",
@@ -953,22 +935,21 @@ fn chd_compress_and_extract_gdi_round_trip() {
             "--codec",
             "lzma",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
@@ -1009,9 +990,8 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -1021,9 +1001,9 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &[
@@ -1045,17 +1025,16 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
@@ -1088,9 +1067,8 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -1100,9 +1078,9 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &[
@@ -1133,17 +1111,16 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
@@ -1174,9 +1151,8 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
         )
         .expect("gd cue");
     let gd_chd = temp.child("gd.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("gd.cue").path().to_str().expect("path"),
             "--format",
@@ -1184,9 +1160,9 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
             "--output",
             gd_chd.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     let probe_output = command_stdout(
         &[
             "probe",
@@ -1207,9 +1183,8 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
     temp.child("cd.cue")
         .write_str("FILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
         .expect("cd cue");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("cd.cue").path().to_str().expect("path"),
             "--format",
@@ -1217,9 +1192,9 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
             "--output",
             temp.child("cd.chd").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1);
+        ],
+        1,
+    );
 }
 
 #[test]
@@ -1243,9 +1218,8 @@ fn chd_compress_accepts_cd_codec_aliases() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -1255,9 +1229,9 @@ fn chd_compress_accepts_cd_codec_aliases() {
             "--codec",
             "cdlz",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &[
@@ -1279,17 +1253,16 @@ fn chd_compress_accepts_cd_codec_aliases() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -1310,9 +1283,8 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
         .expect("cue fixture");
     let chd_path = temp.child("disc.chd");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -1322,22 +1294,21 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
             "--codec",
             "cdfl:9",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -1401,17 +1372,16 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
     );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
@@ -1500,9 +1470,8 @@ fn chd_extract_selects_cd_outputs() {
         .expect("cue fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
@@ -1512,14 +1481,13 @@ fn chd_extract_selects_cd_outputs() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let selected_bin_out = temp.child("selected-bin");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--select",
@@ -1527,9 +1495,9 @@ fn chd_extract_selects_cd_outputs() {
             "--out-dir",
             selected_bin_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(selected_bin_out.child("disc.bin").path()).expect("extract bytes"),
@@ -1538,9 +1506,8 @@ fn chd_extract_selects_cd_outputs() {
     assert!(!selected_bin_out.child("disc.cue").path().exists());
 
     let selected_cue_out = temp.child("selected-cue");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--select",
@@ -1548,9 +1515,9 @@ fn chd_extract_selects_cd_outputs() {
             "--out-dir",
             selected_cue_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert!(selected_cue_out.child("disc.cue").path().exists());
     assert_eq!(
@@ -1568,9 +1535,8 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
     fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
@@ -1580,14 +1546,13 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--select",
@@ -1595,9 +1560,9 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
         source
@@ -1642,9 +1607,8 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
         .expect("gdi fixture");
 
     let chd_path = temp.child("disc.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.gdi").path().to_str().expect("path"),
             "--format",
@@ -1654,14 +1618,13 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
             "--codec",
             "lzma",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             chd_path.path().to_str().expect("path"),
             "--select",
@@ -1669,9 +1632,9 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert!(out_dir.child("disc.gdi").path().exists());
     assert_eq!(
@@ -1755,9 +1718,8 @@ fn gcz_extract_supports_single_output_selection() {
     write_gcz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.gcz").path());
 
     let selected_out = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--select",
@@ -1765,9 +1727,9 @@ fn gcz_extract_supports_single_output_selection() {
             "--out-dir",
             selected_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(selected_out.child("disc.iso").path()).expect("extracted iso"),
@@ -1875,9 +1837,8 @@ fn wbfs_extract_supports_single_output_selection() {
     );
 
     let out_dir = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--select",
@@ -1885,9 +1846,9 @@ fn wbfs_extract_supports_single_output_selection() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
@@ -1956,9 +1917,8 @@ fn wia_extract_supports_single_output_selection() {
     write_wia_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.wia").path());
 
     let out_dir = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             temp.child("disc.wia").path().to_str().expect("path"),
             "--select",
@@ -1966,9 +1926,9 @@ fn wia_extract_supports_single_output_selection() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),

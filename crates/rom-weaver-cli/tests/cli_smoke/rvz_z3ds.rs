@@ -194,9 +194,8 @@ fn rvz_extract_supports_single_output_selection() {
     write_rvz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.rvz").path());
 
     let out_dir = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--select",
@@ -204,9 +203,9 @@ fn rvz_extract_supports_single_output_selection() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
@@ -324,9 +323,8 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
     fs::write(temp.child("disc.cci").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cci").path().to_str().expect("path"),
             "--format",
@@ -336,9 +334,9 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
     let extract_output = command_stdout(
@@ -373,9 +371,8 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     fs::write(temp.child("large.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("large.z3ds");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("large.3ds").path().to_str().expect("path"),
             "--format",
@@ -385,9 +382,9 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract");
     let extract_output = command_stdout(
@@ -427,9 +424,8 @@ fn z3ds_extract_supports_single_output_selection() {
     fs::write(temp.child("disc.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.3ds").path().to_str().expect("path"),
             "--format",
@@ -439,14 +435,13 @@ fn z3ds_extract_supports_single_output_selection() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let selected_out = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             z3ds_path.path().to_str().expect("path"),
             "--select",
@@ -454,9 +449,9 @@ fn z3ds_extract_supports_single_output_selection() {
             "--out-dir",
             selected_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(selected_out.child("disc.3ds").path()).expect("extracted 3ds"),

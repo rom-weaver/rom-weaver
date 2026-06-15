@@ -1033,9 +1033,8 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1047,9 +1046,9 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     // Extensionless output requires an explicit --compress-format; the container extension is then
     // appended to the output name.
@@ -1085,17 +1084,16 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
     assert!(!output_base.path().exists());
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             compressed_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.child("patched-output.bin").path()).expect("archive entry"),
         fs::read(modified.path()).expect("modified")
@@ -1122,9 +1120,8 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
         fs::write(original.path(), b"hello old world").expect("fixture");
         fs::write(modified.path(), b"hello new world").expect("fixture");
 
-        Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        command_stdout(
+            &[
                 "patch",
                 "create",
                 "--original",
@@ -1136,9 +1133,9 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
                 "--output",
                 patch.path().to_str().expect("path"),
                 "--json",
-            ])
-            .assert()
-            .code(0);
+            ],
+            0,
+        );
 
         let apply_output = command_stdout(
             &[
@@ -1180,9 +1177,8 @@ fn patch_apply_infers_zip_from_output_extension() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1194,13 +1190,12 @@ fn patch_apply_infers_zip_from_output_extension() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             original.path().to_str().expect("path"),
             "--format",
@@ -1208,9 +1203,9 @@ fn patch_apply_infers_zip_from_output_extension() {
             "--output",
             input_zip.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -1237,17 +1232,16 @@ fn patch_apply_infers_zip_from_output_extension() {
     assert!(compressed_path.path().exists());
 
     let out_dir = temp.child("extract");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             compressed_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         read_single_file_bytes(out_dir.path()),
         fs::read(modified.path()).expect("modified")
@@ -1262,9 +1256,8 @@ fn make_bps_patch_fixture(
     let patch = temp.child("update.bps");
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1276,9 +1269,9 @@ fn make_bps_patch_fixture(
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     (original, patch)
 }
 
@@ -1388,9 +1381,8 @@ fn patch_apply_accepts_explicit_compress_format_and_codec() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1402,9 +1394,9 @@ fn patch_apply_accepts_explicit_compress_format_and_codec() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -1449,9 +1441,8 @@ fn patch_apply_rejects_no_compress_with_compress_flags() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1463,9 +1454,9 @@ fn patch_apply_rejects_no_compress_with_compress_flags() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -1510,9 +1501,8 @@ fn patch_apply_applies_multiple_patches_in_order() {
     fs::write(expected.path(), b"abcabcYYabcabc").expect("fixture");
     fs::write(first_patch.path(), SIMPLE_BPS_PATCH).expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -1524,9 +1514,9 @@ fn patch_apply_applies_multiple_patches_in_order() {
             "--output",
             second_patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -2492,9 +2482,8 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2506,13 +2495,12 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             original.path().to_str().expect("path"),
             "--format",
@@ -2520,9 +2508,9 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -2565,9 +2553,8 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2579,9 +2566,9 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     write_tar_gz_fixture(
         &[
@@ -2625,9 +2612,8 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2639,13 +2625,12 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             original.path().to_str().expect("path"),
             "--format",
@@ -2653,9 +2638,9 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -2697,9 +2682,8 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
     fs::write(beta.path(), b"beta payload").expect("beta fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2711,13 +2695,12 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             alpha.path().to_str().expect("path"),
             beta.path().to_str().expect("path"),
@@ -2726,9 +2709,9 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -2774,9 +2757,8 @@ fn patch_apply_auto_extract_pbp_multi_disc_requires_select() {
     fs::write(source.path(), pbp).expect("pbp fixture");
 
     let patch = temp.child("update.bps");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2788,9 +2770,9 @@ fn patch_apply_auto_extract_pbp_multi_disc_requires_select() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let output = temp.child("output.bin");
     let apply_output = command_stdout(
@@ -2831,9 +2813,8 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
     fs::write(beta.path(), b"beta payload").expect("beta fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2845,13 +2826,12 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             alpha.path().to_str().expect("path"),
             beta.path().to_str().expect("path"),
@@ -2860,9 +2840,9 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -2909,9 +2889,8 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
     fs::write(modified.path(), b"game payload patched").expect("modified fixture");
     fs::write(temp.child("decoy.bin").path(), b"decoy payload").expect("decoy fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -2923,13 +2902,12 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             original.path().to_str().expect("path"),
             patch.path().to_str().expect("path"),
@@ -2938,13 +2916,12 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "--output",
             input_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             patch.path().to_str().expect("path"),
             temp.child("decoy.bin").path().to_str().expect("path"),
@@ -2953,9 +2930,9 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "--output",
             patch_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -3000,9 +2977,8 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
     fs::write(modified_a.path(), b"game payload patched A").expect("fixture");
     fs::write(modified_b.path(), b"game payload patched B").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3014,13 +2990,12 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "--output",
             patch_a.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3032,13 +3007,12 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "--output",
             patch_b.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             patch_a.path().to_str().expect("path"),
             patch_b.path().to_str().expect("path"),
@@ -3047,9 +3021,9 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "--output",
             patch_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -3092,9 +3066,8 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
     fs::write(modified_a.path(), b"game payload patched A").expect("fixture");
     fs::write(modified_b.path(), b"game payload patched B").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3106,13 +3079,12 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "--output",
             patch_a.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3124,13 +3096,12 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "--output",
             patch_b.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             patch_a.path().to_str().expect("path"),
             patch_b.path().to_str().expect("path"),
@@ -3139,9 +3110,9 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "--output",
             patch_archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -3190,9 +3161,8 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(sidecar_txt.path(), b"ignore txt").expect("fixture");
     fs::write(sidecar_json.path(), b"{}").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3204,13 +3174,12 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             original.path().to_str().expect("path"),
             sidecar_txt.path().to_str().expect("path"),
@@ -3220,9 +3189,9 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let default_output = command_stdout(
         &[
@@ -3281,9 +3250,8 @@ fn patch_apply_accepts_multiple_validate_with_checksum_values() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3295,9 +3263,9 @@ fn patch_apply_accepts_multiple_validate_with_checksum_values() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let input_crc32 = checksum_value(original.path(), "crc32");
     let input_sha1 = checksum_value(original.path(), "sha1");
@@ -3344,9 +3312,8 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3358,9 +3325,9 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -3402,9 +3369,8 @@ fn patch_apply_uses_checksum_cache_hint_for_validation() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3416,9 +3382,9 @@ fn patch_apply_uses_checksum_cache_hint_for_validation() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let apply_output = command_stdout(
         &[
@@ -3460,9 +3426,8 @@ fn probe_patch_reports_expected_checksums_for_bps() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3474,9 +3439,9 @@ fn probe_patch_reports_expected_checksums_for_bps() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &["probe", patch.path().to_str().expect("path"), "--json"],
@@ -3503,9 +3468,8 @@ fn probe_patch_reports_structured_summary_for_ups() {
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -3517,9 +3481,9 @@ fn probe_patch_reports_structured_summary_for_ups() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let probe_output = command_stdout(
         &["probe", patch.path().to_str().expect("path"), "--json"],
@@ -4405,9 +4369,8 @@ fn patch_validate_succeeds_with_source_values() {
 
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -4419,9 +4382,9 @@ fn patch_validate_succeeds_with_source_values() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let input_crc32 = checksum_value(original.path(), "crc32");
     let input_size = fs::metadata(original.path())

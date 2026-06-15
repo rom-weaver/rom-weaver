@@ -2,20 +2,12 @@ use super::shared::*;
 
 #[test]
 fn old_inspect_command_is_removed() {
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["inspect", "--help"])
-        .assert()
-        .code(2);
+    command_stdout(&["inspect", "--help"], 2);
 }
 
 #[test]
 fn probe_rejects_list_flag() {
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["probe", "input.bin", "--list", "--json"])
-        .assert()
-        .code(2);
+    command_stdout(&["probe", "input.bin", "--list", "--json"], 2);
 }
 
 #[test]
@@ -26,9 +18,8 @@ fn probe_reports_known_container_as_supported() {
         .expect("fixture");
     let archive = temp.child("sample.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--format",
@@ -36,9 +27,9 @@ fn probe_reports_known_container_as_supported() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -73,9 +64,8 @@ fn list_reports_selectable_zip_entries() {
     fs::write(temp.child("sample.bin").path(), b"payload").expect("fixture");
     let archive = temp.child("sample.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--format",
@@ -83,9 +73,9 @@ fn list_reports_selectable_zip_entries() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["list", archive.path().to_str().expect("path"), "--json"],
@@ -117,9 +107,8 @@ fn probe_auto_extracts_single_payload() {
     fs::write(temp.child("game.nes").path(), with_nes_header(&payload)).expect("fixture");
     let archive = temp.child("game.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
@@ -127,9 +116,9 @@ fn probe_auto_extracts_single_payload() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["probe", archive.path().to_str().expect("path"), "--json"],
@@ -151,9 +140,8 @@ fn probe_auto_extracts_nested_payload() {
     fs::write(temp.child("game.nes").path(), with_nes_header(&payload)).expect("fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
@@ -161,14 +149,13 @@ fn probe_auto_extracts_nested_payload() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("outer.7z");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             "--format",
@@ -176,9 +163,9 @@ fn probe_auto_extracts_nested_payload() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["probe", outer.path().to_str().expect("path"), "--json"],
@@ -199,9 +186,8 @@ fn probe_no_extract_reports_container_bytes() {
     fs::write(temp.child("game.nes").path(), with_nes_header(b"payload")).expect("fixture");
     let archive = temp.child("game.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
@@ -209,9 +195,9 @@ fn probe_no_extract_reports_container_bytes() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -241,9 +227,8 @@ fn list_with_select_reports_selected_nested_container_entries() {
     fs::write(temp.child("notes.txt").path(), b"ignore me").expect("note fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--format",
@@ -251,14 +236,13 @@ fn list_with_select_reports_selected_nested_container_entries() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("outer.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             temp.child("notes.txt").path().to_str().expect("path"),
@@ -267,9 +251,9 @@ fn list_with_select_reports_selected_nested_container_entries() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -302,9 +286,8 @@ fn probe_auto_extract_ambiguity_requires_select() {
     fs::write(temp.child("beta.nes").path(), with_nes_header(b"beta")).expect("beta fixture");
 
     let archive = temp.child("dupe.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("alpha.nes").path().to_str().expect("path"),
             temp.child("beta.nes").path().to_str().expect("path"),
@@ -313,9 +296,9 @@ fn probe_auto_extract_ambiguity_requires_select() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["probe", archive.path().to_str().expect("path"), "--json"],
@@ -341,9 +324,8 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
     let archive = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             temp.child("notes.txt").path().to_str().expect("path"),
@@ -358,9 +340,9 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &["probe", archive.path().to_str().expect("path"), "--json"],
@@ -397,9 +379,8 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
     fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
     fs::write(temp.child("notes.txt").path(), b"notes").expect("notes fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "create",
             "--original",
@@ -411,14 +392,13 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
             "--output",
             patch.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let archive = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             patch.path().to_str().expect("path"),
             temp.child("game.nes").path().to_str().expect("path"),
@@ -428,9 +408,9 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -464,9 +444,8 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
     fs::write(temp.child("__MACOSX/ghost.nes").path(), b"ghost").expect("macosx sidecar");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
@@ -474,14 +453,13 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             temp.child("._game.nes").path().to_str().expect("path"),
@@ -496,9 +474,9 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -528,9 +506,8 @@ fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
     fs::write(temp.child("__MACOSX/ghost.nes").path(), b"ghost").expect("macosx sidecar");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
@@ -538,14 +515,13 @@ fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             temp.child("._game.nes").path().to_str().expect("path"),
@@ -560,9 +536,9 @@ fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -608,9 +584,8 @@ fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
     fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
@@ -618,14 +593,13 @@ fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             "--format",
@@ -633,9 +607,9 @@ fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let json = run_single_json_event(
         &[
@@ -661,9 +635,8 @@ fn extract_rom_filter_extracts_rom_entries_only() {
     fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
@@ -671,14 +644,13 @@ fn extract_rom_filter_extracts_rom_entries_only() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let archive = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             temp.child("update.bps").path().to_str().expect("path"),
@@ -689,9 +661,9 @@ fn extract_rom_filter_extracts_rom_entries_only() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract-rom-filter");
     let json = run_single_json_event(
@@ -729,9 +701,8 @@ fn extract_multi_track_disc_is_one_rom_no_select_needed() {
         .expect("cue fixture");
 
     let archive = temp.child("disc.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.cue").path().to_str().expect("path"),
             temp.child("track01.bin").path().to_str().expect("path"),
@@ -741,9 +712,9 @@ fn extract_multi_track_disc_is_one_rom_no_select_needed() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("extract-disc");
     let json = run_single_json_event(
@@ -914,9 +885,8 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("mac metadata");
 
     let archive = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             temp.child("notes.txt").path().to_str().expect("path"),
@@ -929,9 +899,9 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let default_out = temp.child("default-out");
     let default_output = command_stdout(
@@ -961,18 +931,17 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     assert!(!default_out.child("__MACOSX/ghost.bin").path().exists());
 
     let no_ignore_out = temp.child("no-ignore-out");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--out-dir",
             no_ignore_out.path().to_str().expect("path"),
             "--no-ignore",
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert!(no_ignore_out.child("game.bin").path().exists());
     assert!(no_ignore_out.child("notes.txt").path().exists());
     assert!(no_ignore_out.child("meta.json").path().exists());
@@ -1035,9 +1004,8 @@ fn extract_reports_thread_fallback_in_json() {
     fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
     let archive = temp.child("sample.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
@@ -1045,9 +1013,9 @@ fn extract_reports_thread_fallback_in_json() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("out");
 
@@ -1090,9 +1058,8 @@ fn extract_checksum_emits_requested_output_digests() {
     fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
     let archive = temp.child("sample.zip");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
@@ -1100,9 +1067,9 @@ fn extract_checksum_emits_requested_output_digests() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("out");
     let events = run_json_events(
@@ -1155,9 +1122,8 @@ fn extract_select_supports_glob_patterns() {
     fs::write(temp.child("content/readme.txt").path(), b"notes").expect("sidecar fixture");
 
     let archive = temp.child("sample.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("content").path().to_str().expect("path"),
             "--format",
@@ -1165,14 +1131,13 @@ fn extract_select_supports_glob_patterns() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("selected");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -1180,9 +1145,9 @@ fn extract_select_supports_glob_patterns() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     assert_eq!(
         fs::read(out_dir.child("content/disc.iso").path()).expect("iso extract"),
         payload
@@ -1198,9 +1163,8 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     fs::write(temp.child("decoy.bin").path(), b"decoy payload").expect("decoy fixture");
 
     let inner_first = temp.child("inner-first.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("first.bin").path().to_str().expect("path"),
             "--format",
@@ -1208,14 +1172,13 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
             "--output",
             inner_first.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let inner_second = temp.child("inner-second.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("second.bin").path().to_str().expect("path"),
             "--format",
@@ -1223,14 +1186,13 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
             "--output",
             inner_second.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let inner_decoy = temp.child("inner-decoy.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("decoy.bin").path().to_str().expect("path"),
             "--format",
@@ -1238,14 +1200,13 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
             "--output",
             inner_decoy.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("outer.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner_first.path().to_str().expect("path"),
             inner_second.path().to_str().expect("path"),
@@ -1255,9 +1216,9 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("selected-nested");
     let events = run_json_events(
@@ -1321,9 +1282,8 @@ fn extract_select_glob_reports_missing_match() {
     fs::write(temp.child("content/disc.iso").path(), b"iso").expect("iso fixture");
 
     let archive = temp.child("sample.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("content").path().to_str().expect("path"),
             "--format",
@@ -1331,9 +1291,9 @@ fn extract_select_glob_reports_missing_match() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let out_dir = temp.child("selected");
     let json = run_single_json_event(
@@ -1479,18 +1439,17 @@ fn extract_progress_text_reports_elapsed_and_files() {
     let extract_dir = temp.child("extract");
     fs::write(input.path(), b"extract-progress-check").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             input.path().to_str().expect("path"),
             "--format",
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -1537,18 +1496,17 @@ fn extract_no_overwrite_fails_when_output_exists() {
     let extract_dir = temp.child("extract");
     fs::write(input.path(), b"overwrite-check").expect("fixture");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             input.path().to_str().expect("path"),
             "--format",
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     fs::create_dir_all(extract_dir.path()).expect("extract dir");
     fs::write(extract_dir.child("sample.bin").path(), b"existing").expect("existing output");

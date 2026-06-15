@@ -201,9 +201,8 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
@@ -211,14 +210,13 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("outer.7z");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             "--format",
@@ -226,9 +224,9 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = command_stdout(
@@ -260,9 +258,8 @@ fn checksum_no_extract_hashes_container_bytes() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
@@ -270,14 +267,13 @@ fn checksum_no_extract_hashes_container_bytes() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("outer.7z");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             "--format",
@@ -285,9 +281,9 @@ fn checksum_no_extract_hashes_container_bytes() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
 
@@ -374,9 +370,8 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
@@ -384,9 +379,9 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let outer = temp.child("inner.zip.gz");
     write_gzip_fixture(inner.path(), outer.path());
@@ -498,9 +493,8 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let inner = temp.child("inner.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
@@ -508,9 +502,9 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let archive = temp.child("inner.tar.gz");
     write_tar_gz_fixture(&[(inner.path(), "inner.zip")], archive.path());
@@ -544,9 +538,8 @@ fn checksum_auto_extract_ambiguity_requires_select() {
     fs::write(temp.child("beta.bin").path(), b"beta").expect("beta fixture");
 
     let archive = temp.child("dupe.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("alpha.bin").path().to_str().expect("path"),
             temp.child("beta.bin").path().to_str().expect("path"),
@@ -555,9 +548,9 @@ fn checksum_auto_extract_ambiguity_requires_select() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let output = command_stdout(
         &[
@@ -622,9 +615,8 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
     let archive = temp.child("bundle.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             temp.child("notes.txt").path().to_str().expect("path"),
@@ -639,9 +631,9 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = command_stdout(
@@ -688,9 +680,8 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
     fs::write(temp.child("decoy.rom").path(), b"decoy payload").expect("decoy fixture");
 
     let inner = temp.child("inner.bin");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.bin").path().to_str().expect("path"),
             temp.child("decoy.rom").path().to_str().expect("path"),
@@ -699,15 +690,14 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
             "--output",
             inner.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
     fs::write(temp.child("note.txt").path(), b"ignore me").expect("note fixture");
 
     let outer = temp.child("outer.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             inner.path().to_str().expect("path"),
             temp.child("note.txt").path().to_str().expect("path"),
@@ -716,9 +706,9 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
             "--output",
             outer.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let failed_output = command_stdout(
         &[
@@ -946,9 +936,8 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
     let expected_sha1 = checksum_value(temp.child("plain.bin").path(), "sha1");
 
     let archive = temp.child("game.zip");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
@@ -956,9 +945,9 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     let output = command_stdout(
         &[
@@ -1114,9 +1103,8 @@ fn extract_checksum_variants_match_checksum_command() {
 
         // Same file zipped, then extracted with inline checksums.
         let archive = temp.child(format!("{name}.zip"));
-        Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        command_stdout(
+            &[
                 "compress",
                 temp.child(name).path().to_str().expect("path"),
                 "--format",
@@ -1124,9 +1112,9 @@ fn extract_checksum_variants_match_checksum_command() {
                 "--output",
                 archive.path().to_str().expect("path"),
                 "--json",
-            ])
-            .assert()
-            .code(0);
+            ],
+            0,
+        );
 
         let out_dir = temp.child(format!("out-{name}"));
         let events = run_json_events(

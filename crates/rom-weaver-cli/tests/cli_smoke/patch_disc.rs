@@ -104,9 +104,8 @@ fn patch_apply_disc_cue_target_patches_one_track_and_matches_manual_chd() {
     )
     .expect("copy cue");
     let expected_chd = temp.child("expected.chd");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "compress",
             expected_dir
                 .child("disc.cue")
@@ -122,9 +121,9 @@ fn patch_apply_disc_cue_target_patches_one_track_and_matches_manual_chd() {
             "--output",
             expected_chd.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(patched_chd.path()).expect("patched chd"),
@@ -428,9 +427,8 @@ fn patch_apply_disc_no_compress_writes_full_disc() {
     let out_dir = temp.child("out");
     fs::create_dir_all(out_dir.path()).expect("out dir");
 
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "apply",
             "--input",
@@ -443,9 +441,9 @@ fn patch_apply_disc_no_compress_writes_full_disc() {
             "--output",
             out_dir.child("disc.cue").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert!(out_dir.child("disc.cue").path().is_file());
     assert_eq!(
@@ -531,9 +529,8 @@ fn patch_apply_disc_gdi_target_patches_one_track() {
 
     let out_dir = temp.child("out");
     fs::create_dir_all(out_dir.path()).expect("out dir");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    command_stdout(
+        &[
             "patch",
             "apply",
             "--input",
@@ -546,9 +543,9 @@ fn patch_apply_disc_gdi_target_patches_one_track() {
             "--output",
             out_dir.child("disc.gdi").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0);
+        ],
+        0,
+    );
 
     assert_eq!(
         fs::read(out_dir.child("track01.bin").path()).expect("track01"),
