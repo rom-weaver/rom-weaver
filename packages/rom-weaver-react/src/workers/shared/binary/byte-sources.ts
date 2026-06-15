@@ -223,6 +223,5 @@ export {
   MemoryByteSource,
   normalizeRange,
   normalizeReadInto,
-  ReadViewByteSource,
   toUint8Array,
 };

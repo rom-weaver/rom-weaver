@@ -890,20 +890,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .notice .x:hover { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
 .rw-app .notice .x svg { width: 14px; height: 14px; margin: 0; }
 
+/* `.fault` itself is kept: it is referenced by the entry-animation lock selector in
+   components/ds/flat-transition.ts. The `.fault-*` child rules had zero references and were removed. */
 .rw-app .fault {
   margin-block: 4px 12px; border: 1px solid color-mix(in oklab, var(--fault) 42%, var(--seam));
   border-radius: var(--r-m); background: color-mix(in oklab, var(--fault) 7%, var(--plate));
   overflow: clip; animation: fault-in .4s var(--ease);
 }
-.rw-app .fault-head { display: flex; align-items: center; gap: 9px; padding: 9px 12px; }
-.rw-app .fault-head svg { width: 16px; height: 16px; color: var(--fault); flex: none; }
-.rw-app .fault-title { font-weight: 650; color: var(--fault); font-size: .9rem; flex: 1 1 auto; min-width: 0; }
-.rw-app .fault-code { font-size: .68rem; font-weight: 650; letter-spacing: .05em; color: var(--fault); border: 1px solid color-mix(in oklab, var(--fault) 50%, transparent); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
-.rw-app .fault-body { padding: 0 12px 10px; font-size: .82rem; color: var(--ink-2); }
-.rw-app .fault-remedy { display: flex; gap: 7px; align-items: baseline; margin-block-start: 6px; padding: 7px 9px; border-radius: var(--r-s); background: var(--well); }
-.rw-app .fault-remedy .k { flex: none; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
-.rw-app .fault-remedy .v { font-size: .8rem; color: var(--ink); }
-.rw-app .fault-foot { display: flex; gap: 8px; padding: 0 12px 11px; }
 
 .rw-app .checkrow { display: flex; align-items: center; gap: 8px; margin-block: 2px 10px; font-size: .82rem; color: var(--ink-2); }
 .rw-app .checkrow.warn { color: var(--care); }
@@ -1231,14 +1224,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .dlg-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: 14px 16px; overflow: auto; overscroll-behavior: contain; }
-.dlg-foot { display: flex; justify-content: flex-end; gap: 9px; padding: 12px 16px; border-block-start: 1px solid var(--seam-soft); flex: none; }
-.dlg-copy { margin: 0; font-size: .9rem; color: var(--ink-2); line-height: 1.55; }
-.dlg-note { margin: 12px 0 0; font-size: .76rem; color: var(--ink-3); }
-.rw-app .confirm-dlg { max-width: min(440px, calc(100vw - 32px)); }
-/* settings is the longest dialog — let it use most of the viewport height so
-   the groups don't live behind a short internal scroll */
-.rw-app .settings-dlg { max-width: min(820px, calc(100vw - 32px)); }
-.rw-app .settings-dlg .dlg-frame { max-height: min(94dvh, 1020px); }
 /* with enough width, the groups pack into two masonry columns — content height
    roughly halves, so a tall-enough viewport needs no scrollbar at all */
 @media (min-width: 720px) {
@@ -1261,13 +1246,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border: 0; border-radius: 0; background: var(--well); padding: 12px 14px; font-size: .74rem;
 }
 .rw-app .tracelog-empty { color: var(--ink-4); font-size: .78rem; padding: 4px 2px; }
-.rw-app .update-dlg { max-width: min(520px, calc(100vw - 32px)); }
-.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.rw-app .changelog li { display: flex; gap: 9px; align-items: baseline; font-size: .85rem; color: var(--ink-2); }
-.rw-app .changelog .cl-tag { flex: none; font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--seam-strong); color: var(--ink-3); min-width: 38px; text-align: center; }
-.rw-app .changelog .cl-tag.feat { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 45%, var(--seam-strong)); }
-.rw-app .changelog .cl-tag.fix { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong)); }
-.rw-app .changelog .cl-tag.perf { color: var(--care); border-color: color-mix(in oklab, var(--care) 45%, var(--seam-strong)); }
 
 /* archive candidate picker */
 .rw-app .picklist { display: flex; flex-direction: column; gap: 6px; margin-block-start: 12px; }
@@ -1444,20 +1422,18 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   /* the notice shares the same 6px inset as the cards/headers */
   .rw-app .notice { margin-inline: 6px; }
   .rw-app .selvage { padding-inline: 8px; }
-  .rw-app .confirm-dlg { max-width: min(380px, calc(100vw - 56px)); }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
      dismiss — the text wraps internally, Reload stays an inline slim button */
   .rw-app .updates { gap: 8px; }
-  /* width-hungry dialogs go edge-to-edge on a phone: the log + settings as
-     full-height sheets, the picker + update full width at their own height.
-     only the confirm stays a centered small card. */
-  .rw-app .log-dlg, .rw-app .settings-dlg, .rw-app .picker-dlg, .rw-app .update-dlg { max-width: 100vw; width: 100vw; }
+  /* width-hungry dialogs go edge-to-edge on a phone: the log as a full-height
+     sheet, the picker full width at its own height. */
+  .rw-app .log-dlg, .rw-app .picker-dlg { max-width: 100vw; width: 100vw; }
   /* full-screen sheets must size the <dialog> ITSELF — the UA default
      max-height (100% − 2em − 6px) + auto margins otherwise clip a 100dvh
      frame at the top */
-  .rw-app .log-dlg, .rw-app .settings-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
-  .rw-app .log-dlg .dlg-frame, .rw-app .settings-dlg .dlg-frame { max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; }
-  .rw-app .picker-dlg .dlg-frame, .rw-app .update-dlg .dlg-frame { border-radius: 0; border-inline: 0; }
+  .rw-app .log-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
+  .rw-app .log-dlg .dlg-frame { max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; }
+  .rw-app .picker-dlg .dlg-frame { border-radius: 0; border-inline: 0; }
   /* log header: title + close on the first line, the filter/level/copy strip
      wraps to a full-width second line instead of squeezing beside the title */
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }

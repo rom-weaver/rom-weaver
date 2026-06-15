@@ -5,27 +5,6 @@ export type { SyncByteSource };
 
 export type PatchFileRuntime = "browser" | "webworker" | null;
 
-export type PatchFileChunkIterationResult = {
-  bytes: Uint8Array;
-  offset: number;
-};
-export type PatchFileChunkOptions = {
-  buffer?: Uint8Array | null;
-  chunkSize?: number;
-};
-
-export type PatchFileInit = {
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  filePath?: string;
-  littleEndian?: boolean;
-  offset?: number;
-  _byteSource?: SyncByteSource;
-  _file?: Blob | File;
-  _u8array?: Uint8Array;
-};
-
 export type PatchFileLike = {
   fileName: string;
   fileType: string;
@@ -40,8 +19,6 @@ export type PatchFileLike = {
   _lastRead?: number | string | number[] | null;
   _offsetsStack?: number[];
   _sharedReadScratch?: Uint8Array;
-  _readViewSource?: PatchFileLike;
-  _readViewOffset?: number;
   push?: () => void;
   pop?: () => void;
   _getReadScratch?: (size: number) => Uint8Array;
@@ -51,17 +28,6 @@ export type PatchFileLike = {
     len?: number,
     fileOffset?: number,
   ) => number;
-  forEachChunk?: (
-    start: number | undefined,
-    len: number | undefined,
-    callback: (bytes: Uint8Array, fileOffset: number, loaded: number, total: number) => boolean | undefined,
-    options?: PatchFileChunkOptions,
-  ) => number;
-  iterateChunks?: (
-    start?: number,
-    len?: number,
-    options?: PatchFileChunkOptions,
-  ) => IterableIterator<PatchFileChunkIterationResult>;
   readBytesAt?: (offset: number, len: number) => Uint8Array;
   readU8At?: (offset: number) => number;
   writeU8At?: (offset: number, value: number) => void;
@@ -71,7 +37,6 @@ export type PatchFileLike = {
   readU24: () => number;
   readU32: () => number;
   readU64?: () => number;
-  readBytes: (len: number) => Uint8Array | number[];
   readString: (len: number) => string;
   writeU8?: (value: number) => void;
   writeU16?: (value: number) => void;
@@ -84,20 +49,10 @@ export type PatchFileLike = {
   isEOF: () => boolean;
   slice: (offset?: number, len?: number, doNotClone?: boolean) => PatchFileLike;
   materialize: (offset?: number, len?: number) => PatchFileLike;
-  prependBytes?: (bytes: Uint8Array | number[]) => PatchFileLike;
-  removeLeadingBytes?: (nBytes: number) => number[];
-  copyTo: (
-    target: PatchFileLike | { writeBytesAt: (offset: number, bytes: Uint8Array) => void; _u8array?: Uint8Array },
-    offsetSource?: number,
-    len?: number,
-    offsetTarget?: number,
-  ) => void;
-  save?: () => void;
   getExtension?: () => string;
   getName?: () => string;
   setExtension?: (newExtension: string) => string;
   setName?: (newName: string) => string;
-  swapBytes?: (swapSize?: number, newFile?: boolean) => PatchFileLike;
 };
 
 type CoreRomPatchFileLike = PatchFileLike & {
@@ -124,9 +79,6 @@ export type PatchFileInstance = PatchFileLike & CoreRomPatchFileLike;
 export type PatchFileReader = FileReader & {
   binFile: PatchFileInstance;
 };
-export type PatchFileCopyTarget =
-  | PatchFileLike
-  | { writeBytesAt: (offset: number, bytes: Uint8Array) => void; _u8array?: Uint8Array };
 
 export type PatchFileSource =
   | number

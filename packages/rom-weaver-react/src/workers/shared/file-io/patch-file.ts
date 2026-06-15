@@ -7,14 +7,9 @@ import {
   MemoryByteSource,
   normalizeRange as normalizeByteSourceRange,
   normalizeReadInto as normalizeByteSourceReadInto,
-  ReadViewByteSource,
   toUint8Array,
 } from "../binary/byte-sources.ts";
 import type {
-  PatchFileChunkIterationResult as ChunkIterationResult,
-  PatchFileChunkOptions as ChunkOptions,
-  PatchFileCopyTarget,
-  PatchFileInit,
   PatchFileInstance,
   PatchFileLike,
   PatchFileReader,
@@ -30,6 +25,10 @@ import type {
  * a JS class for reading/writing sequentially binary data from/to a file
  * that allows much more manipulation than simple DataView
  * compatible with both browsers and Node.js
+ *
+ * NOTE: this fork trims upstream helpers unused by rom-weaver (chunk iteration,
+ * copyTo, prepend/removeLeadingBytes, swapBytes, save, and the ReadablePatchFileView
+ * read-view). The seek/read/write primitives the app relies on are unchanged.
  *
  * MIT License
  *
@@ -67,11 +66,6 @@ type ReadIntoResult = {
   len: number;
 };
 
-type ReadablePatchFileViewInstance = PatchFileLike & {
-  _readViewSource: PatchFileLike;
-  _readViewOffset: number;
-};
-
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 
 const _toUint8Array = (source: ArrayBuffer | ArrayBufferView | ArrayLike<number> | null | undefined): Uint8Array =>
@@ -81,25 +75,6 @@ const _copyFileMetadata = <TTarget extends PatchFileLike>(source: PatchFileLike,
   target.fileType = source.fileType;
   target.littleEndian = source.littleEndian;
   if (source.filePath) target.filePath = source.filePath;
-  return target;
-};
-const initializePatchFile = <TTarget extends object>(target: TTarget, init: PatchFileInit): TTarget => {
-  const nextTarget = target as TTarget & PatchFileLike;
-  nextTarget.fileName = init.fileName;
-  nextTarget.fileType = init.fileType;
-  nextTarget.fileSize = init.fileSize;
-  nextTarget.littleEndian = init.littleEndian === true;
-  nextTarget.offset = typeof init.offset === "number" ? init.offset : 0;
-  nextTarget._lastRead = null;
-  nextTarget._offsetsStack = [];
-  if (init.filePath) nextTarget.filePath = init.filePath;
-  else delete nextTarget.filePath;
-  if (init._byteSource) nextTarget._byteSource = init._byteSource;
-  else delete nextTarget._byteSource;
-  if (init._file) nextTarget._file = init._file;
-  else delete nextTarget._file;
-  if (init._u8array) nextTarget._u8array = init._u8array;
-  else delete nextTarget._u8array;
   return target;
 };
 const _normalizeRange = (
@@ -170,10 +145,6 @@ class PatchFile implements PatchFileLike {
   })();
   static DEFAULT_CHUNK_SIZE = DEFAULT_CHUNK_SIZE;
 
-  static createReadView(source: PatchFileLike, offset?: number, len?: number) {
-    return new ReadablePatchFileView(source, offset, len);
-  }
-
   fileName = DEFAULT_FILE_NAME;
   fileType = DEFAULT_FILE_TYPE;
   fileSize = 0;
@@ -187,8 +158,6 @@ class PatchFile implements PatchFileLike {
   _lastRead: number | string | number[] | null = null;
   _offsetsStack: number[] = [];
   _sharedReadScratch?: Uint8Array;
-  _readViewSource?: PatchFileLike;
-  _readViewOffset?: number;
 
   constructor(source: PatchFileSource, onLoad?: (file: PatchFileInstance) => void) {
     if (isSyncByteSource(source)) {
@@ -305,61 +274,6 @@ class PatchFile implements PatchFileLike {
     throw new Error("readIntoAt is not implemented for this PatchFile");
   }
 
-  forEachChunk(
-    start: number | undefined,
-    len: number | undefined,
-    callback: (bytes: Uint8Array, fileOffset: number, loaded: number, total: number) => boolean | undefined,
-    options?: ChunkOptions,
-  ) {
-    if (typeof callback !== "function") return 0;
-
-    const range = _normalizeRange(this, start, len, true);
-    if (!range.len) return 0;
-
-    let loaded = 0;
-    for (const chunk of this.iterateChunks(range.offset, range.len, options)) {
-      loaded += chunk.bytes.byteLength;
-      if (callback(chunk.bytes, chunk.offset, loaded, range.len) === false) return loaded;
-    }
-    return loaded;
-  }
-
-  *iterateChunks(start?: number, len?: number, options?: ChunkOptions): IterableIterator<ChunkIterationResult> {
-    const range = _normalizeRange(this, start, len, true);
-    if (!range.len) return;
-
-    const reusableBuffer = options && options.buffer instanceof Uint8Array ? options.buffer : null;
-    const chunkSize = Math.max(
-      1,
-      reusableBuffer
-        ? reusableBuffer.byteLength
-        : Math.floor(options?.chunkSize ? options.chunkSize : PatchFile.DEFAULT_CHUNK_SIZE),
-    );
-    let loaded = 0;
-    while (loaded < range.len) {
-      const fileOffset = range.offset + loaded;
-      const readLength = Math.min(chunkSize, range.len - loaded);
-      let chunk: Uint8Array;
-      if (reusableBuffer) {
-        const bytesRead = this.readIntoAt(reusableBuffer, 0, readLength, fileOffset);
-        chunk = reusableBuffer.subarray(0, bytesRead);
-      } else if (this._u8array) {
-        chunk = this._u8array.subarray(fileOffset, fileOffset + readLength);
-      } else {
-        const scratch = new Uint8Array(readLength);
-        const bytesRead = this.readIntoAt(scratch, 0, readLength, fileOffset);
-        chunk = scratch.subarray(0, bytesRead);
-      }
-
-      if (!chunk.byteLength) break;
-      loaded += chunk.byteLength;
-      yield {
-        bytes: chunk,
-        offset: fileOffset,
-      };
-    }
-  }
-
   materialize(offset?: number, len?: number) {
     const range = _normalizeRange(this, offset, len, true);
     const materialized = new PatchFile(range.len);
@@ -380,65 +294,6 @@ class PatchFile implements PatchFileLike {
       return slicedFile;
     }
     return this.materialize(range.offset, range.len);
-  }
-
-  prependBytes(bytes: Uint8Array | number[]) {
-    const newFile = new PatchFile(this.fileSize + bytes.length);
-    newFile.seek(0);
-    newFile.writeBytes(bytes);
-    this.copyTo(newFile, 0, this.fileSize, bytes.length);
-
-    this.fileSize = newFile.fileSize;
-    this._u8array = newFile._u8array;
-    if (newFile._byteSource) this._byteSource = newFile._byteSource;
-    return this;
-  }
-
-  removeLeadingBytes(nBytes: number) {
-    this.seek(0);
-    const oldData = this.readBytes(nBytes);
-    const newFile = this.slice(nBytes);
-
-    this.fileSize = newFile.fileSize;
-    this._u8array = newFile._u8array;
-    if (newFile._byteSource) this._byteSource = newFile._byteSource;
-    return oldData;
-  }
-
-  copyTo(target: PatchFileCopyTarget, offsetSource?: number, len?: number, offsetTarget?: number) {
-    if (!(target instanceof PatchFile) && typeof target.writeBytesAt !== "function")
-      throw new Error("target is not a PatchFile object");
-
-    const resolvedOffsetTarget =
-      typeof offsetTarget === "number"
-        ? offsetTarget
-        : (() => {
-            if (typeof offsetSource === "number") return offsetSource;
-            return 0;
-          })();
-    const range = _normalizeRange(this, offsetSource, len, true);
-    if (!range.len) return;
-
-    const writeBytesAt = target.writeBytesAt;
-    if (typeof writeBytesAt === "function") {
-      const copyBuffer = this._u8array
-        ? null
-        : this._getReadScratch(Math.min(PatchFile.DEFAULT_CHUNK_SIZE, Math.max(1, range.len)));
-      this.forEachChunk(
-        range.offset,
-        range.len,
-        (bytes, fileOffset) => {
-          writeBytesAt.call(target, resolvedOffsetTarget + (fileOffset - range.offset), bytes);
-        },
-        {
-          buffer: copyBuffer,
-          chunkSize: PatchFile.DEFAULT_CHUNK_SIZE,
-        },
-      );
-      return;
-    }
-
-    target._u8array?.set(this.readBytesAt(range.offset, range.len), offsetTarget);
   }
 
   readU8At(offset: number) {
@@ -478,35 +333,6 @@ class PatchFile implements PatchFileLike {
     }
     if (!this._u8array) throw new Error("PatchFile is not writable");
     this._u8array.set(_toUint8Array(bytes), offset);
-  }
-
-  save() {
-    if (PatchFile.RUNTIME_ENVIROMENT === "browser") {
-      if (!this._u8array) throw new Error("PatchFile has no data to save");
-      const fileBlob = new Blob(
-        [
-          this._u8array.buffer.slice(
-            this._u8array.byteOffset,
-            this._u8array.byteOffset + this._u8array.byteLength,
-          ) as ArrayBuffer,
-        ],
-        { type: this.fileType },
-      );
-      const blobUrl = URL.createObjectURL(fileBlob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = this.fileName;
-      a.rel = "noopener";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(blobUrl);
-        if (a.parentElement) a.parentElement.removeChild(a);
-      }, 0);
-    } else {
-      throw new Error("invalid runtime environment, can't save file");
-    }
   }
 
   getExtension() {
@@ -573,12 +399,6 @@ class PatchFile implements PatchFileLike {
     this._lastRead = value;
     this.offset += 8;
     return this._lastRead as number;
-  }
-
-  readBytes(len: number) {
-    this._lastRead = Array.from(this.readBytesAt(this.offset, len));
-    this.offset += len;
-    return this._lastRead as number[];
   }
 
   readString(len: number) {
@@ -655,82 +475,6 @@ class PatchFile implements PatchFileLike {
     for (; i < resolvedLength; i++) bytes[i] = 0x00;
     this.writeBytesAt(this.offset, bytes);
     this.offset += resolvedLength;
-  }
-
-  swapBytes(swapSize?: number, newFile?: boolean) {
-    let resolvedSwapSize = swapSize;
-    if (typeof resolvedSwapSize !== "number") resolvedSwapSize = 4;
-
-    if (this.fileSize % resolvedSwapSize !== 0) throw new Error(`file size is not divisible by ${resolvedSwapSize}`);
-
-    const swappedFile = new PatchFile(this.fileSize);
-    this.seek(0);
-    while (!this.isEOF()) swappedFile.writeBytes(this.readBytes(resolvedSwapSize).reverse());
-
-    if (newFile) {
-      swappedFile.fileName = this.fileName;
-      swappedFile.fileType = this.fileType;
-      return swappedFile;
-    }
-
-    this._u8array = swappedFile._u8array;
-    if (swappedFile._byteSource) this._byteSource = swappedFile._byteSource;
-    return this;
-  }
-}
-
-class ReadablePatchFileView extends PatchFile implements ReadablePatchFileViewInstance {
-  declare _readViewSource: PatchFileLike;
-  declare _readViewOffset: number;
-
-  constructor(source: PatchFileLike, offset?: number, len?: number) {
-    super(0);
-    const baseSource = source._readViewSource ? source._readViewSource : source;
-    const baseOffset = typeof source._readViewOffset === "number" ? source._readViewOffset : 0;
-    const range = _normalizeRange(source, offset, len, true);
-    const byteSource = source._byteSource
-      ? new ReadViewByteSource(source._byteSource, range.offset, range.len)
-      : undefined;
-
-    initializePatchFile(this as RuntimeValue as object, {
-      _byteSource: byteSource,
-      fileName: source.fileName,
-      filePath: source.filePath,
-      fileSize: range.len,
-      fileType: source.fileType,
-    });
-    this._readViewSource = baseSource;
-    this._readViewOffset = baseOffset + range.offset;
-    this.littleEndian = source.littleEndian;
-  }
-
-  override readIntoAt(buffer: ArrayBuffer | ArrayBufferView, bufferOffset?: number, len?: number, fileOffset?: number) {
-    const normalized = _normalizeReadInto(this, buffer, bufferOffset, len, fileOffset);
-    if (!normalized.len) return 0;
-    return this._readViewSource.readIntoAt(
-      normalized.buffer,
-      normalized.bufferOffset,
-      normalized.len,
-      this._readViewOffset + normalized.fileOffset,
-    );
-  }
-
-  override readU8At(offset: number) {
-    const scratch = this._getReadScratch(1);
-    return this.readIntoAt(scratch, 0, 1, offset) ? (scratch[0] ?? 0) : 0;
-  }
-
-  override readBytesAt(offset: number, len: number) {
-    const range = _normalizeRange(this, offset, len, true);
-    const bytes = new Uint8Array(range.len);
-    if (range.len) this.readIntoAt(bytes, 0, range.len, range.offset);
-    return bytes;
-  }
-
-  override slice(offset?: number, len?: number, doNotClone?: boolean) {
-    const range = _normalizeRange(this, offset, len, false);
-    if (range.offset === 0 && range.len === this.fileSize && doNotClone) return this;
-    return new ReadablePatchFileView(this, range.offset, range.len);
   }
 }
 export default PatchFile;
