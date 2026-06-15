@@ -2,14 +2,13 @@ import CircleX from "lucide-react/dist/esm/icons/circle-x.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
+import { join } from "./cx.ts";
 
 /**
  * Loom feedback primitives: notices, the weave meter, the recessed progress
  * panels, and the run/download button. Pure presentational components used by
  * every workflow so progress and status rendering is never duplicated.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type NoticeLevel = "error" | "warn";
 

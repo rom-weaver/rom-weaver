@@ -2,14 +2,13 @@ import Info from "lucide-react/dist/esm/icons/info.js";
 import Upload from "lucide-react/dist/esm/icons/upload.js";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
+import { join } from "./cx.ts";
 
 /**
  * Loom layout primitives: the numbered step section (0x01 …), the inline info
  * popover, and the drag-and-drop file affordance (hero / add-row variants).
  * Shared by every workflow so the section/upload chrome is defined once.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 /** A numbered workflow step with an optional help popover and trailing meta. */
 const StepSection = ({

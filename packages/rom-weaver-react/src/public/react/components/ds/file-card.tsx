@@ -2,6 +2,7 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { CSSProperties, ReactNode, Ref } from "react";
+import { join } from "./cx.ts";
 
 /**
  * Loom file card for every workflow's input rows. The header is two columns:
@@ -10,8 +11,6 @@ import type { CSSProperties, ReactNode, Ref } from "react";
  * tree, checksums, options) follow as children. Verdict borders (ok / warn /
  * bad) belong to patches; ROM cards keep the plain seam border.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type FileState = "ok" | "bad" | "warn";
 

@@ -1,6 +1,7 @@
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../../../lib/progress/timing.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
+import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 /**
@@ -9,8 +10,6 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
  * lives in a collapsible Extract drawer rendered as the loom tree. Shared by
  * every workflow's file card.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type ExtractionLevel = {
   name: string;

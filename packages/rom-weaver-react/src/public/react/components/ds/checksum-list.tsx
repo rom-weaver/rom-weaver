@@ -2,6 +2,7 @@ import Check from "lucide-react/dist/esm/icons/check.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
+import { join } from "./cx.ts";
 import { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
@@ -11,8 +12,6 @@ import { useClipboardCopy } from "./use-clipboard-copy.ts";
  * interactive elements. Shared by ROM inputs, patch info, and create-output
  * verification so the copy behaviour lives in one place.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 /** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`. */
 const ChecksumRow = ({

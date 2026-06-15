@@ -1,5 +1,6 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
+import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
@@ -10,8 +11,6 @@ import { useClipboardCopy } from "./use-clipboard-copy.ts";
  * patched or checksummed, so it rides alongside each bin row rather than
  * appearing as its own input.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 const CUE_FILE_ENTRY_REGEX = /^\s*FILE\s+"([^"]+)"/im;
 

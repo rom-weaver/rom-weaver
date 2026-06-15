@@ -1,5 +1,6 @@
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 import { type ReactNode, useId, useState } from "react";
+import { join } from "./cx.ts";
 
 /**
  * Loom collapsible drawer — the "summary-first" card section: a quiet chevron,
@@ -8,8 +9,6 @@ import { type ReactNode, useId, useState } from "react";
  * component only flips `is-open` + aria-expanded. Replaces the old
  * `<details>`-based sections so the open/close animates everywhere.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 /** Recessed readout chip for a drawer header (counts, sizes, timings). */
 const DrawerReadout = ({ children, muted, time }: { children: ReactNode; muted?: boolean; time?: boolean }) => (

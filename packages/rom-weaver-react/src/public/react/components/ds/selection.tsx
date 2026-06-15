@@ -1,12 +1,11 @@
 import { type ReactNode, useState } from "react";
+import { join } from "./cx.ts";
 
 /**
  * Candidate-selection tree. Presentational list of files found inside an
  * archive; selectable rows invoke `onSelect`, non-selectable rows render dimmed
  * with an explanatory note. Used inside the selection modal.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type SelectionItem = {
   id: string;

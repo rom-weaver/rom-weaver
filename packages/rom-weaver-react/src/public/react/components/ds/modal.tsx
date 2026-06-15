@@ -3,6 +3,7 @@ import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { join } from "./cx.ts";
 
 /**
  * Design-system modal primitives. A generic overlay (header + scrollable body)
@@ -12,8 +13,6 @@ import { createPortal } from "react-dom";
  * and overflow are unaffected by where it sits in the tree. Shared by settings,
  * candidate selection, and every confirm flow.
  */
-
-const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 /** The styled app root the design system scopes its rules under; modals portal here so controls inherit it. */
 const getModalPortalTarget = (): Element =>
