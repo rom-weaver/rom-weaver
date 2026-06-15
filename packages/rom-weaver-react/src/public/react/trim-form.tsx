@@ -328,7 +328,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const stagingSettings = useMemo(
     () =>
       toCreateWorkflowSettings(
-        { ...settings, output: { ...settings.output, compression: "none" } } as CreateSettings,
+        {
+          input: settings.input,
+          limits: settings.limits,
+          logging: settings.logging,
+          output: { compression: "none" },
+          workers: settings.workers,
+        } as CreateSettings,
         "",
         props.workerThreads,
       ),
