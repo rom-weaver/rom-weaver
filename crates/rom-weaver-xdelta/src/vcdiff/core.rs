@@ -1098,6 +1098,9 @@ pub(super) fn apply_windows_with_target_sources(
     }
 
     let mut input_reader = BufReader::new(File::open(input_path)?);
+    // The window decoder seeks to each window's absolute patch offsets, so one
+    // reader can serve every window — no need to reopen the patch file per window.
+    let mut patch_reader = BufReader::new(File::open(patch_path)?);
     let mut output = BufWriter::with_capacity(
         APPLY_OUTPUT_BUFFER_BYTES,
         OpenOptions::new()
@@ -1145,7 +1148,6 @@ pub(super) fn apply_windows_with_target_sources(
             }
         };
 
-        let mut patch_reader = BufReader::new(File::open(patch_path)?);
         let target = decode_window_with_native_engine(
             &mut patch_reader,
             window,
