@@ -24,7 +24,7 @@
     "dev": "node scripts/dev-server.mjs",
     "build": "vite build",
     "preview": "node scripts/dev-server.mjs preview",
-    "lint": "npm run lint:code && npm run lint:types && npm run lint:browser-compat && npm run lint:knip",
+    "lint": "npm run lint:code && npm run lint:types && npm run lint:browser-compat && npm run lint:knip && npm run audit:strings",
     "lint:browser-compat": "node scripts/check-browser-compat.mjs",
     "lint:code": "biome check package.json index.html vite.config.mjs vitest.config.base.mjs vitest.browser.config.mjs vitest.unit.config.mjs vitest.wasm.browser.config.mjs tsconfig.base.json tsconfig.json src tests --diagnostic-level=error",
     "lint:knip": "knip --no-progress",

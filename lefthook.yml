@@ -18,6 +18,9 @@ pre-commit:
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
       run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check'
+    licenses-check:
+      glob: "*.{toml,lock}"
+      run: mise run licenses-check
     react-lint:
       glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:code
