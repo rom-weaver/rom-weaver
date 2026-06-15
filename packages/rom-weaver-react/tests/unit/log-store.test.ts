@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
+import { createLogger } from "../../src/lib/logging.ts";
 import type { LogRecord } from "../../src/types/logging.ts";
-import { parseRustTraceRecord } from "../../src/webapp/log-store.ts";
+import {
+  getLogEntries,
+  installLogStore,
+  parseRustTraceRecord,
+  subscribeLogEntries,
+} from "../../src/webapp/log-store.ts";
 
 /**
  * Rust `tracing` lines arrive embedded in log messages; the log dialog's
@@ -32,5 +38,35 @@ describe("parseRustTraceRecord", () => {
   it("leaves ordinary records untouched", () => {
     const plain = record("thread pool command post worker=12 id=1");
     expect(parseRustTraceRecord(plain)).toEqual(plain);
+  });
+});
+
+/**
+ * The buffer is the browser hot path under trace logging: pushes must stay
+ * cheap (no synchronous React notify per line) and bounded (capped ring).
+ */
+describe("log store buffer", () => {
+  it("coalesces notifications instead of firing one per push", () => {
+    installLogStore();
+    let notifications = 0;
+    const unsubscribe = subscribeLogEntries(() => {
+      notifications += 1;
+    });
+    const log = createLogger("test-buffer");
+    for (let i = 0; i < 50; i += 1) log.warn(`line ${i}`);
+    // The flush is deferred to the next frame, so a burst of pushes notifies
+    // listeners zero times synchronously rather than once per line.
+    expect(notifications).toBe(0);
+    unsubscribe();
+  });
+
+  it("caps the buffer and keeps the newest lines in order", () => {
+    installLogStore();
+    const log = createLogger("test-buffer");
+    for (let i = 0; i < 600; i += 1) log.warn(`entry ${i}`);
+    const entries = getLogEntries();
+    expect(entries.length).toBe(500);
+    expect(entries[0]?.message).toBe("entry 100");
+    expect(entries[entries.length - 1]?.message).toBe("entry 599");
   });
 });

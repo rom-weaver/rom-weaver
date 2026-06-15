@@ -8,6 +8,13 @@ import { type ConsoleLogRecord, subscribeConsoleLogRecords } from "./console-log
  * dialog mirrors exactly what reaches the console at the configured level.
  * Subscribe/getSnapshot follow the vanilla-store shape for
  * useSyncExternalStore.
+ *
+ * Pushes are O(1) and never touch React: appends land in a mutable buffer and
+ * a single flush is coalesced onto the next animation frame, which trims to the
+ * cap, rebuilds the immutable snapshot once, and notifies listeners once. Under
+ * trace logging the buffer can take hundreds of lines per frame (each Rust
+ * tracing line is a record); coalescing keeps that a single re-render per frame
+ * instead of one full-array rebuild and render per line.
  */
 
 const MAX_LOG_LINES = 500;
@@ -16,20 +23,45 @@ type LogStoreEntry = LogRecord & { id: number };
 
 const logger = createLogger("log-store");
 
-let entries: readonly LogStoreEntry[] = [];
+// Mutable append buffer; `snapshot` is the immutable view handed to React.
+const buffer: LogStoreEntry[] = [];
+let snapshot: readonly LogStoreEntry[] = [];
+let snapshotDirty = false;
 let nextId = 1;
 let installed = false;
+let flushScheduled = false;
 const listeners = new Set<() => void>();
 
 const notify = () => {
   for (const listener of listeners) listener();
 };
 
+// Trim to the cap and rebuild the immutable snapshot. Trimming here (not per
+// push) keeps push O(1); this runs at most once per frame, or lazily when a
+// reader asks for the snapshot while it is dirty.
+const rebuildSnapshot = () => {
+  if (buffer.length > MAX_LOG_LINES) buffer.splice(0, buffer.length - MAX_LOG_LINES);
+  snapshot = buffer.slice();
+  snapshotDirty = false;
+};
+
+const scheduleFlush = () => {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  const flush = () => {
+    flushScheduled = false;
+    if (snapshotDirty) rebuildSnapshot();
+    notify();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+  else setTimeout(flush, 0);
+};
+
 const push = (record: LogRecord) => {
-  const entry: LogStoreEntry = { ...record, id: nextId };
+  buffer.push({ ...record, id: nextId });
   nextId += 1;
-  entries = entries.length >= MAX_LOG_LINES ? [...entries.slice(-(MAX_LOG_LINES - 1)), entry] : [...entries, entry];
-  notify();
+  snapshotDirty = true;
+  scheduleFlush();
 };
 
 /* Rust `tracing` lines ride inside log messages ("2026-…Z TRACE
@@ -97,7 +129,10 @@ const installLogStore = () => {
   logger.trace("Log store sink installed", { maxLines: MAX_LOG_LINES });
 };
 
-const getLogEntries = (): readonly LogStoreEntry[] => entries;
+const getLogEntries = (): readonly LogStoreEntry[] => {
+  if (snapshotDirty) rebuildSnapshot();
+  return snapshot;
+};
 
 const subscribeLogEntries = (listener: () => void) => {
   listeners.add(listener);
