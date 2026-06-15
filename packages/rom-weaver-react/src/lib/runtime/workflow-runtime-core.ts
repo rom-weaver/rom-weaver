@@ -38,6 +38,7 @@ import {
 } from "../compression/container-format-registry.ts";
 import { emitTraceLog } from "../logging.ts";
 import { getPathBaseName } from "../path-utils.ts";
+import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization.ts";
 import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
 
@@ -169,14 +170,6 @@ const toPatchWorkerFiles = (sources: RuntimeWorkerPathSource[], patchMetadata: A
 
 const attachApplySummary = <TOutput extends PublicOutput>(output: TOutput, summary: PatchApplySummary | null) =>
   summary ? Object.assign(output, { _applySummary: summary }) : output;
-
-const getTimingElapsedMs = (timing: PublicOutput["timing"] | PatchApplySummary["timing"] | undefined) => {
-  if (!timing || typeof timing !== "object") return undefined;
-  const elapsedMs = timing.elapsedMs;
-  return typeof elapsedMs === "number" && Number.isFinite(elapsedMs) && elapsedMs >= 0
-    ? Math.round(elapsedMs)
-    : undefined;
-};
 
 const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime["patch"] => ({
   applyPatch: async ({ input, patches, options, logLevel, onLog, onProgress, signal }) => {
@@ -325,7 +318,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
-      const createTimeMs = getTimingElapsedMs(result.timing);
+      const createTimeMs = roundElapsedMs(result.timing);
       return {
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
@@ -500,7 +493,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
-      const trimTimeMs = getTimingElapsedMs(result.timing);
+      const trimTimeMs = roundElapsedMs(result.timing);
       return {
         output: await adapter.workerIo.createWorkerOutput(
           result,

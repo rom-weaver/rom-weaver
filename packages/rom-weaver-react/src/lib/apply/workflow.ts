@@ -21,6 +21,7 @@ import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runti
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 import {
   normalizePatchOptions,
@@ -32,12 +33,6 @@ import {
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
   _applySummary?: PatchApplySummary;
-};
-
-const getTimingElapsedMs = (timing: PatchApplySummary["timing"] | undefined) => {
-  if (!timing || typeof timing.elapsedMs !== "number" || !Number.isFinite(timing.elapsedMs) || timing.elapsedMs < 0)
-    return undefined;
-  return Math.round(timing.elapsedMs);
 };
 
 const getApplyLogLevel = (options: PatchInput["options"]) => options?.logging?.level;
@@ -501,7 +496,7 @@ const runApplyWorkflow = async (
               patches: selectedPatches,
               signal: options.signal,
             })) as PublicOutputWithApplySummary;
-            const workerApplyTimeMs = getTimingElapsedMs(workerOutput._applySummary?.timing);
+            const workerApplyTimeMs = roundElapsedMs(workerOutput._applySummary?.timing);
             if (workerApplyTimeMs !== undefined) {
               applyTimeMs += workerApplyTimeMs;
               hasApplyTimeMs = true;

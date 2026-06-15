@@ -55,6 +55,15 @@ const replaceFileNameExtension = (fileName: string, extension: FileNameValue): s
 const isCompressionLevelProfile = (value: FileNameValue): boolean =>
   COMPRESSION_LEVEL_PROFILE_REGEX.test(String(value || ""));
 
+const joinPath = (directory: string, fileName: string): string => {
+  const normalizedDirectory = String(directory || "").trim();
+  if (!normalizedDirectory) return fileName;
+  const separator = normalizedDirectory.includes("\\") && !normalizedDirectory.includes("/") ? "\\" : "/";
+  if (normalizedDirectory.endsWith("/") || normalizedDirectory.endsWith("\\"))
+    return `${normalizedDirectory}${fileName}`;
+  return `${normalizedDirectory}${separator}${fileName}`;
+};
+
 export {
   CHD_EXTENSION_REGEX,
   getFileNameExtension,
@@ -63,6 +72,7 @@ export {
   getPathBaseName,
   hasFileNameExtension,
   isCompressionLevelProfile,
+  joinPath,
   replaceFileNameExtension,
   stripFileNameQuery,
   stripLeadingExtensionDot,

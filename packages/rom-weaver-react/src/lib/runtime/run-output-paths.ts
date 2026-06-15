@@ -1,15 +1,6 @@
-import { getFileNameParts, getPathBaseName } from "../path-utils.ts";
+import { getFileNameParts, getPathBaseName, joinPath } from "../path-utils.ts";
 
 const WORK_ROOT_PATH = "/work";
-
-const joinPath = (directory: string, fileName: string): string => {
-  const normalizedDirectory = String(directory || "").trim();
-  if (!normalizedDirectory) return fileName;
-  const separator = normalizedDirectory.includes("\\") && !normalizedDirectory.includes("/") ? "\\" : "/";
-  if (normalizedDirectory.endsWith("/") || normalizedDirectory.endsWith("\\"))
-    return `${normalizedDirectory}${fileName}`;
-  return `${normalizedDirectory}${separator}${fileName}`;
-};
 
 const normalizeAbsolutePosixPath = (pathValue: string): string => {
   const normalized = String(pathValue || "")

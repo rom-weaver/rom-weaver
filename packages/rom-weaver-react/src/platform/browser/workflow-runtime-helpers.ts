@@ -1,6 +1,11 @@
 import { STANDARD_CHECKSUM_ALGORITHMS } from "../../lib/checksum-algorithms.ts";
 import { normalizeRomSpecificExtractedFileName } from "../../lib/compression/container-format-registry.ts";
-import { getFileNameWithoutExtension, getPathBaseName, isCompressionLevelProfile } from "../../lib/path-utils.ts";
+import {
+  getFileNameWithoutExtension,
+  getPathBaseName,
+  isCompressionLevelProfile,
+  joinPath,
+} from "../../lib/path-utils.ts";
 import type { WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
 
 const FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
@@ -11,15 +16,6 @@ const getFileStem = (fileName: string) => getFileNameWithoutExtension(fileName);
 const getPathDirectory = (filePath: string): string => {
   const match = String(filePath || "").match(FILE_CAPTURE_REGEX);
   return match?.[1] || "";
-};
-
-const joinPath = (directory: string, fileName: string): string => {
-  const normalizedDirectory = String(directory || "").trim();
-  if (!normalizedDirectory) return fileName;
-  const separator = normalizedDirectory.includes("\\") && !normalizedDirectory.includes("/") ? "\\" : "/";
-  if (normalizedDirectory.endsWith("/") || normalizedDirectory.endsWith("\\"))
-    return `${normalizedDirectory}${fileName}`;
-  return `${normalizedDirectory}${separator}${fileName}`;
 };
 
 const uniqueNonEmptyStrings = (values: string[]): string[] => {

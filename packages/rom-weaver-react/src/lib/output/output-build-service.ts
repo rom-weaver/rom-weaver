@@ -29,6 +29,7 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
 import { getChdAutoCreateMode, replaceCuePatchFileName } from "../input/rom-specific-file-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
+import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import {
   type ArchiveCompressionOverrides,
   type ArchiveOutputEntry,
@@ -460,11 +461,8 @@ const assertOutputSizeLimit = (rawOutputSize: number, options: ApplyWorkflowOpti
   }
 };
 
-const getPatchFileRuntimeTimingMs = (file: PatchFileInstance | undefined): number | undefined => {
-  const elapsedMs = (file as RuntimeTimedPatchFile | undefined)?._runtimeTiming?.elapsedMs;
-  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return undefined;
-  return Math.round(elapsedMs);
-};
+const getPatchFileRuntimeTimingMs = (file: PatchFileInstance | undefined): number | undefined =>
+  roundElapsedMs((file as RuntimeTimedPatchFile | undefined)?._runtimeTiming);
 
 const getPatchFilesRuntimeTimingMs = (files: PatchFileInstance[]): number | undefined => {
   let total = 0;
