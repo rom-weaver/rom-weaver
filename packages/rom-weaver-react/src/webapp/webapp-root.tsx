@@ -318,7 +318,12 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
           sessionHasInput={sessionHasInput}
           threads={resolveWorkerThreads(workerThreads)}
         />
-        <LogDialog onClose={() => setLogOpen(false)} open={logOpen} />
+        <LogDialog
+          level={state.settings.logLevel}
+          onClose={() => setLogOpen(false)}
+          onLevelChange={actions.onLogLevelChange}
+          open={logOpen}
+        />
         <Modal
           headerActions={
             <>

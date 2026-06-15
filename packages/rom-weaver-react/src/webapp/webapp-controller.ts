@@ -362,6 +362,17 @@ const createWebappRootController = (options: ControllerOptions) => {
     setCreatorSettingsState(settings: unknown) {
       updateCreatorSession({ outputName: getOutputName(settings) });
     },
+    setLogLevel(level: string) {
+      const state = store.getState();
+      if (state.settings.logLevel === level) return;
+      const nextSettings = { ...copySettings(state.settings), logLevel: level };
+      persistSettings(nextSettings);
+      // Commit + persist + re-apply (configureLogger and the per-run logLevel
+      // both read this), while preserving any unsaved settings-panel draft.
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, logLevel: level },
+      });
+    },
     setPatcherInputState(inputs: readonly unknown[]) {
       updatePatcherSession({ romFilePresent: inputs.length > 0 });
     },

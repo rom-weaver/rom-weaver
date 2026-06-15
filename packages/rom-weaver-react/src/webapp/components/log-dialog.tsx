@@ -1,21 +1,23 @@
 import X from "lucide-react/dist/esm/icons/x.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import type { LogLevel } from "../../types/logging.ts";
+import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
 import { getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 import { createLogger } from "../logging.ts";
 
 /**
  * The masthead Log dialog: a native <dialog> trace inspector over the
- * in-app log store, with a level filter, text search, copy-all, and
+ * in-app log store, with a capture-level selector, text search, copy-all, and
  * click-to-copy lines — the loom prototype's inspector wired to the real
- * logger sink.
+ * logger sink. The level selector drives the persisted `logLevel` setting (the
+ * same source `configureLogger` and every workflow run read), so raising it to
+ * debug/trace here makes the next run capture detailed logs for a bug report.
  */
 
 const logger = createLogger("log-dialog");
 
-const LOG_LEVEL_ORDER: Record<string, number> = { debug: 1, error: 4, info: 2, trace: 0, warn: 3 };
-const FILTER_LEVELS = ["trace", "debug", "info", "warn", "error"] as const;
+const normalizeLevel = (value: string | undefined): LogLevel =>
+  value && (LOG_LEVELS as readonly string[]).includes(value) ? (value as LogLevel) : "warn";
 
 const formatTimestamp = (iso: string) => {
   const timePart = iso.split("T")[1] || iso;
@@ -68,11 +70,21 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   );
 };
 
-const LogDialog = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+const LogDialog = ({
+  open,
+  onClose,
+  level,
+  onLevelChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  level?: string;
+  onLevelChange: (level: string) => void;
+}) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const traceRef = useRef<HTMLDivElement | null>(null);
-  const [level, setLevel] = useState<LogLevel>("trace");
+  const currentLevel = normalizeLevel(level);
   const [filter, setFilter] = useState("");
   const [copiedAll, setCopiedAll] = useState(false);
   const entries = useSyncExternalStore(subscribeLogEntries, getLogEntries, getLogEntries);
@@ -85,12 +97,10 @@ const LogDialog = ({ open, onClose }: { open: boolean; onClose: () => void }) =>
   }, [open]);
 
   const visible = useMemo(() => {
-    const minimum = LOG_LEVEL_ORDER[level] ?? 0;
     const query = filter.trim().toLowerCase();
-    return entries
-      .filter((entry) => (LOG_LEVEL_ORDER[entry.level] ?? 0) >= minimum)
-      .filter((entry) => !query || formatLine(entry).toLowerCase().includes(query));
-  }, [entries, filter, level]);
+    if (!query) return entries;
+    return entries.filter((entry) => formatLine(entry).toLowerCase().includes(query));
+  }, [entries, filter]);
 
   // Keep the newest lines in view while the dialog is open.
   useEffect(() => {
@@ -130,10 +140,10 @@ const LogDialog = ({ open, onClose }: { open: boolean; onClose: () => void }) =>
               <span className="sr-only">{localizer.message("settings.logLevel")}</span>
               <select
                 className="select mono"
-                onChange={(event) => setLevel(event.currentTarget.value as LogLevel)}
-                value={level}
+                onChange={(event) => onLevelChange(event.currentTarget.value)}
+                value={currentLevel}
               >
-                {FILTER_LEVELS.map((value) => (
+                {LOG_LEVELS.map((value) => (
                   <option key={value} value={value}>
                     {value}
                   </option>

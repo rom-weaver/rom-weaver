@@ -318,6 +318,7 @@ const renderWebappRoot = (): undefined => {
               field as Parameters<typeof webappController.updateDraftSetting>[0],
               value,
             ),
+          onLogLevelChange: (level) => webappController.setLogLevel(level),
           onOpenSettings: () => webappController.openSettings(),
           onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
           onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
