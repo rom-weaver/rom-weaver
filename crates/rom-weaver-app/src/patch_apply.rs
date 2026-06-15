@@ -259,61 +259,28 @@ impl CliApp {
             };
         let mut temp_paths = input_cleanup_paths;
         temp_paths.extend(discovered_sidecars.cleanup_paths);
-        let mut resolved_patches = Vec::with_capacity(patches.len());
-        let mut extracted_patch_notes = Vec::new();
-        for (index, patch_path) in patches.iter().enumerate() {
-            let patch_source_label = if patches.len() == 1 {
-                "patch apply patch source".to_string()
-            } else {
-                format!("patch apply patch {}/{} source", index + 1, patches.len())
-            };
-            let resolved_patch = match self.resolve_source_with_auto_extract(
-                patch_path,
-                &select,
-                &context,
-                AutoExtractResolutionLabels {
-                    command: "patch-apply",
-                    family: OperationFamily::Patch,
-                    format: None,
-                    source_label: patch_source_label.as_str(),
-                    temp_prefix: "patch-apply-patch-extract",
-                },
-                AutoExtractResolutionFlags {
-                    no_extract,
-                    no_ignore,
-                    kind_filter: patch_kind_filter,
-                    stop_on_disc_image_codec: false,
-                },
-            ) {
-                Ok(resolved) => resolved,
-                Err(error) => {
-                    return self.finish("patch-apply", fail("prepare", error.to_string()));
-                }
-            };
-            let ResolvedChecksumSource {
-                source: resolved_patch_source,
-                extracted_archives: resolved_patch_extracted_archives,
-                cleanup_paths: resolved_patch_cleanup_paths,
-            } = resolved_patch;
-            if resolved_patch_extracted_archives > 0 {
-                let note = if patches.len() == 1 {
-                    format!(
-                        "patch apply patch source resolved via {} container extract step(s)",
-                        resolved_patch_extracted_archives
-                    )
-                } else {
-                    format!(
-                        "patch {}/{} source resolved via {} container extract step(s)",
-                        index + 1,
-                        patches.len(),
-                        resolved_patch_extracted_archives
-                    )
-                };
-                extracted_patch_notes.push(note);
+        let (mut resolved_patches, extracted_patch_notes) = match self.resolve_patches(
+            &patches,
+            &select,
+            &context,
+            AutoExtractResolutionFlags {
+                no_extract,
+                no_ignore,
+                kind_filter: patch_kind_filter,
+                stop_on_disc_image_codec: false,
+            },
+            PatchResolveLabels {
+                command: "patch-apply",
+                noun: "patch apply",
+                temp_prefix: "patch-apply-patch-extract",
+            },
+            &mut temp_paths,
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish("patch-apply", fail("prepare", error.to_string()));
             }
-            temp_paths.extend(resolved_patch_cleanup_paths);
-            resolved_patches.push((patch_path.clone(), resolved_patch_source));
-        }
+        };
 
         // Bake cheat codes into a synthetic IPS patch applied before the explicit
         // patches. Resolved against the resolved input ROM bytes (header strip /
@@ -824,6 +791,126 @@ impl CliApp {
         Self::cleanup_temp_paths(&temp_paths);
         self.finish("patch-apply", report)
     }
+
+    /// Resolve each requested patch path through auto-extract, returning the
+    /// `(original, resolved)` pairs plus any "resolved via N container extract
+    /// step(s)" notes. Shared by patch-apply and patch-validate, which differ
+    /// only in the command name, the label noun, and the temp-file prefix.
+    /// Cleanup paths from each extract are pushed onto `temp_paths` as they are
+    /// produced, matching the previous inline loops.
+    pub(super) fn resolve_patches(
+        &self,
+        patches: &[PathBuf],
+        select: &[String],
+        context: &OperationContext,
+        flags: AutoExtractResolutionFlags,
+        labels: PatchResolveLabels<'_>,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<ResolvedPatchList> {
+        let PatchResolveLabels {
+            command,
+            noun,
+            temp_prefix,
+        } = labels;
+        let mut resolved_patches = Vec::with_capacity(patches.len());
+        let mut extracted_patch_notes = Vec::new();
+        for (index, patch_path) in patches.iter().enumerate() {
+            let patch_source_label = if patches.len() == 1 {
+                format!("{noun} patch source")
+            } else {
+                format!("{noun} patch {}/{} source", index + 1, patches.len())
+            };
+            let ResolvedChecksumSource {
+                source: resolved_patch_source,
+                extracted_archives: resolved_patch_extracted_archives,
+                cleanup_paths: resolved_patch_cleanup_paths,
+            } = self.resolve_source_with_auto_extract(
+                patch_path,
+                select,
+                context,
+                AutoExtractResolutionLabels {
+                    command,
+                    family: OperationFamily::Patch,
+                    format: None,
+                    source_label: patch_source_label.as_str(),
+                    temp_prefix,
+                },
+                flags,
+            )?;
+            if resolved_patch_extracted_archives > 0 {
+                let note = if patches.len() == 1 {
+                    format!(
+                        "{noun} patch source resolved via {} container extract step(s)",
+                        resolved_patch_extracted_archives
+                    )
+                } else {
+                    format!(
+                        "patch {}/{} source resolved via {} container extract step(s)",
+                        index + 1,
+                        patches.len(),
+                        resolved_patch_extracted_archives
+                    )
+                };
+                extracted_patch_notes.push(note);
+            }
+            temp_paths.extend(resolved_patch_cleanup_paths);
+            resolved_patches.push((patch_path.clone(), resolved_patch_source));
+        }
+        Ok((resolved_patches, extracted_patch_notes))
+    }
+
+    /// Probe a resolved patch path for a handler, or build the standard
+    /// "patch i/n: ... is explicitly not supported / no registered patch handler
+    /// matched ..." failure report shared by patch-apply and patch-validate.
+    pub(super) fn probe_patch_handler(
+        &self,
+        patch_path: &Path,
+        resolved_patch_path: &Path,
+        index: usize,
+        patch_count: usize,
+        probe_threads: Option<ThreadExecution>,
+    ) -> std::result::Result<Arc<dyn rom_weaver_core::PatchHandler>, Box<OperationReport>> {
+        if let Some(handler) = self.patches.probe(resolved_patch_path) {
+            return Ok(handler);
+        }
+        let patch_label = if patch_path == resolved_patch_path {
+            format!("`{}`", patch_path.display())
+        } else {
+            format!(
+                "`{}` (resolved from `{}`)",
+                resolved_patch_path.display(),
+                patch_path.display()
+            )
+        };
+        let unsupported_reason = explicitly_unsupported_patch_reason_for_path(resolved_patch_path);
+        let (format_name, label) = match unsupported_reason {
+            Some(reason) => (
+                Some("PDS".to_string()),
+                format!(
+                    "patch {}/{}: {} is explicitly not supported: {reason}",
+                    index + 1,
+                    patch_count,
+                    patch_label
+                ),
+            ),
+            None => (
+                None,
+                format!(
+                    "patch {}/{}: no registered patch handler matched {}",
+                    index + 1,
+                    patch_count,
+                    patch_label
+                ),
+            ),
+        };
+        Err(Box::new(OperationReport::failed(
+            OperationFamily::Patch,
+            format_name,
+            "probe",
+            label,
+            probe_threads,
+        )))
+    }
 }
 
 /// Parsed-and-validated patch-apply inputs: the compression options and the
@@ -884,46 +971,13 @@ impl CliApp {
         );
 
         for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-            let Some(handler) = self.patches.probe(resolved_patch_path) else {
-                let patch_label = if patch_path == resolved_patch_path {
-                    format!("`{}`", patch_path.display())
-                } else {
-                    format!(
-                        "`{}` (resolved from `{}`)",
-                        resolved_patch_path.display(),
-                        patch_path.display()
-                    )
-                };
-                let unsupported_reason =
-                    explicitly_unsupported_patch_reason_for_path(resolved_patch_path);
-                let (format_name, label) = match unsupported_reason {
-                    Some(reason) => (
-                        Some("PDS".to_string()),
-                        format!(
-                            "patch {}/{}: {} is explicitly not supported: {reason}",
-                            index + 1,
-                            patch_count,
-                            patch_label
-                        ),
-                    ),
-                    None => (
-                        None,
-                        format!(
-                            "patch {}/{}: no registered patch handler matched {}",
-                            index + 1,
-                            patch_count,
-                            patch_label
-                        ),
-                    ),
-                };
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    format_name,
-                    "probe",
-                    label,
-                    probe_threads.clone(),
-                )));
-            };
+            let handler = self.probe_patch_handler(
+                patch_path,
+                resolved_patch_path,
+                index,
+                patch_count,
+                probe_threads.clone(),
+            )?;
             applied_formats.push(handler.descriptor().name);
             let patch_start_percent = patch_progress_segment_start(index, patch_count);
 

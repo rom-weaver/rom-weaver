@@ -141,65 +141,28 @@ impl CliApp {
             cleanup_paths,
         } = resolved_input;
         let mut temp_paths = cleanup_paths;
-        let mut resolved_patches = Vec::with_capacity(patches.len());
-        let mut extracted_patch_notes = Vec::new();
-        for (index, patch_path) in patches.iter().enumerate() {
-            let patch_source_label = if patches.len() == 1 {
-                "patch validate patch source".to_string()
-            } else {
-                format!(
-                    "patch validate patch {}/{} source",
-                    index + 1,
-                    patches.len()
-                )
-            };
-            let resolved_patch = match self.resolve_source_with_auto_extract(
-                patch_path,
-                &select,
-                &context,
-                AutoExtractResolutionLabels {
-                    command: "patch-validate",
-                    family: OperationFamily::Patch,
-                    format: None,
-                    source_label: patch_source_label.as_str(),
-                    temp_prefix: "patch-validate-patch-extract",
-                },
-                AutoExtractResolutionFlags {
-                    no_extract,
-                    no_ignore,
-                    kind_filter: patch_kind_filter,
-                    stop_on_disc_image_codec: false,
-                },
-            ) {
-                Ok(resolved) => resolved,
-                Err(error) => {
-                    return self.finish("patch-validate", fail("prepare", error.to_string()));
-                }
-            };
-            let ResolvedChecksumSource {
-                source: resolved_patch_source,
-                extracted_archives: resolved_patch_extracted_archives,
-                cleanup_paths: resolved_patch_cleanup_paths,
-            } = resolved_patch;
-            if resolved_patch_extracted_archives > 0 {
-                let note = if patches.len() == 1 {
-                    format!(
-                        "patch validate patch source resolved via {} container extract step(s)",
-                        resolved_patch_extracted_archives
-                    )
-                } else {
-                    format!(
-                        "patch {}/{} source resolved via {} container extract step(s)",
-                        index + 1,
-                        patches.len(),
-                        resolved_patch_extracted_archives
-                    )
-                };
-                extracted_patch_notes.push(note);
+        let (resolved_patches, extracted_patch_notes) = match self.resolve_patches(
+            &patches,
+            &select,
+            &context,
+            AutoExtractResolutionFlags {
+                no_extract,
+                no_ignore,
+                kind_filter: patch_kind_filter,
+                stop_on_disc_image_codec: false,
+            },
+            PatchResolveLabels {
+                command: "patch-validate",
+                noun: "patch validate",
+                temp_prefix: "patch-validate-patch-extract",
+            },
+            &mut temp_paths,
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish("patch-validate", fail("prepare", error.to_string()));
             }
-            temp_paths.extend(resolved_patch_cleanup_paths);
-            resolved_patches.push((patch_path.clone(), resolved_patch_source));
-        }
+        };
 
         let report = (|| {
             if patches.is_empty() {
@@ -341,45 +304,15 @@ impl CliApp {
             let mut current_input = validate_input;
             let mut formats = Vec::with_capacity(patch_count);
             for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-                let Some(handler) = self.patches.probe(resolved_patch_path) else {
-                    let patch_label = if patch_path == resolved_patch_path {
-                        format!("`{}`", patch_path.display())
-                    } else {
-                        format!(
-                            "`{}` (resolved from `{}`)",
-                            resolved_patch_path.display(),
-                            patch_path.display()
-                        )
-                    };
-                    let unsupported_reason =
-                        explicitly_unsupported_patch_reason_for_path(resolved_patch_path);
-                    let (format_name, label) = match unsupported_reason {
-                        Some(reason) => (
-                            Some("PDS".to_string()),
-                            format!(
-                                "patch {}/{}: {} is explicitly not supported: {reason}",
-                                index + 1,
-                                patch_count,
-                                patch_label
-                            ),
-                        ),
-                        None => (
-                            None,
-                            format!(
-                                "patch {}/{}: no registered patch handler matched {}",
-                                index + 1,
-                                patch_count,
-                                patch_label
-                            ),
-                        ),
-                    };
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        format_name,
-                        "probe",
-                        label,
-                        probe_threads.clone(),
-                    );
+                let handler = match self.probe_patch_handler(
+                    patch_path,
+                    resolved_patch_path,
+                    index,
+                    patch_count,
+                    probe_threads.clone(),
+                ) {
+                    Ok(handler) => handler,
+                    Err(report) => return *report,
                 };
                 if !handler.capabilities().apply {
                     return OperationReport::unsupported(
