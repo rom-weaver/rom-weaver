@@ -9,7 +9,6 @@ import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-fi
 import { isCueEntryFileName, isGdiEntryFileName } from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
 import {
-  attachPatchFileCleanup,
   attachPatchFileSourceRef,
   createPatchFile,
   decodeUtf8,
@@ -21,6 +20,7 @@ import {
   isLazyExternalPatchFile,
   normalizeArchiveEntryBytes,
 } from "./binary-service.ts";
+import { buildDescentParentCompressions, type DescentExtractStep } from "./input-archive-descent-chain.ts";
 import {
   probeCompressionRomEntriesForSource,
   resolveArchiveDiscGroupEntryNames,
@@ -33,10 +33,11 @@ import {
   getPatchLeafParentCompressionsForSelection,
   resolvePatchArchiveLeaf,
 } from "./input-archive-patch-leaves.ts";
+import { filterValidPatchArchiveEntriesForSource } from "./input-archive-patch-validity.ts";
+import { getZ3dsOutputPathFileName } from "./input-archive-z3ds-paths.ts";
 import {
   attachInputPreparationMetrics,
   type InputAsset,
-  type InputParentCompression,
   makeCueAsset,
   makeGdiAsset,
   makeInputId,
@@ -95,17 +96,9 @@ type ArchiveFileBackedSource = Blob | FileSystemFileHandle | string;
 type ArchiveFileBackedPatchFile = PatchFileInstance & {
   _archiveFileBackedSource?: ArchiveFileBackedSource | null;
 };
-type ValidatedPatchArchiveEntryCache = Map<string, PatchFileInstance>;
-const PATCH_MAGIC_BY_EXTENSION = {
-  bps: "BPS1",
-  ips: "PATCH",
-  ups: "UPS1",
-} as const;
 const PATH_BACKED_COMPRESSION_FORMATS = new Set<string>(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS);
 const SYNC_READ_ARCHIVE_ENTRY_REGEX =
   /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
-const validatedPatchArchiveEntriesByFile = new WeakMap<PatchFileInstance, ValidatedPatchArchiveEntryCache>();
-const patchArchiveValidationCleanupAttached = new WeakSet<PatchFileInstance>();
 const describeArchiveFileForTrace = (file: PatchFileInstance) => ({
   fileName: file.fileName || "input.bin",
   filePath: typeof file.filePath === "string" ? file.filePath : "",
@@ -195,29 +188,6 @@ const getCompressionFormat = (file: PatchFileInstance) => {
 };
 
 const isCompressionFile = (file: PatchFileInstance) => classifyPatcherInput(file).kind === "compression";
-
-const getZ3dsCompressedExtensionForExtractedFileName = (
-  fileName: string | number | boolean | null | undefined,
-): string | null => {
-  const normalizedFileName = getBaseFileName(fileName).toLowerCase();
-  if (/\.cia$/i.test(normalizedFileName)) return "zcia";
-  if (/\.cci$/i.test(normalizedFileName)) return "zcci";
-  if (/\.cxi$/i.test(normalizedFileName)) return "zcxi";
-  if (/\.3dsx$/i.test(normalizedFileName)) return "z3dsx";
-  if (/\.3ds$/i.test(normalizedFileName)) return "z3ds";
-  return null;
-};
-
-const getZ3dsOutputPathFileName = (
-  output: { fileName?: string; filePath?: string; path?: string },
-  fallbackFileName: string,
-): string => {
-  const outputPathFileName = getBaseFileName(output.path || output.filePath || "");
-  if (outputPathFileName && getZ3dsCompressedExtensionForExtractedFileName(outputPathFileName)) {
-    return outputPathFileName;
-  }
-  return fallbackFileName;
-};
 
 const getCompressionRuntimeSource = (file: PatchFileInstance): SourceRef => {
   const source = getArchiveFileBackedSource(file);
@@ -445,107 +415,6 @@ const normalizeSelectedEntryNames = (entryNames: readonly string[] | undefined):
 const findArchiveEntryByName = (entries: ArchiveEntryLike[], entryName: string) =>
   entries.find((entry) => entry.filename === entryName || getBaseFileName(entry.filename) === entryName);
 
-const getValidatedPatchArchiveEntryCache = (archiveFile: PatchFileInstance): ValidatedPatchArchiveEntryCache => {
-  const existing = validatedPatchArchiveEntriesByFile.get(archiveFile);
-  if (existing) return existing;
-  const created = new Map<string, PatchFileInstance>();
-  validatedPatchArchiveEntriesByFile.set(archiveFile, created);
-  return created;
-};
-
-const releaseValidatedPatchArchiveEntries = async (archiveFile: PatchFileInstance) => {
-  const cache = validatedPatchArchiveEntriesByFile.get(archiveFile);
-  if (!cache?.size) {
-    validatedPatchArchiveEntriesByFile.delete(archiveFile);
-    return;
-  }
-  validatedPatchArchiveEntriesByFile.delete(archiveFile);
-  await Promise.all(
-    [...cache.values()].map((file) => Promise.resolve(getPatchFileCleanup(file)?.()).catch(() => undefined)),
-  );
-};
-
-const ensureValidatedPatchArchiveEntryCleanup = (archiveFile: PatchFileInstance) => {
-  if (patchArchiveValidationCleanupAttached.has(archiveFile)) return;
-  patchArchiveValidationCleanupAttached.add(archiveFile);
-  attachPatchFileCleanup(archiveFile, async () => {
-    patchArchiveValidationCleanupAttached.delete(archiveFile);
-    await releaseValidatedPatchArchiveEntries(archiveFile);
-  });
-};
-
-const isValidPatchPatchFile = async (patchFile: PatchFileInstance): Promise<boolean> => {
-  try {
-    patchFile.littleEndian = false;
-    patchFile.seek(0);
-    const header = patchFile.readString(8);
-    patchFile.seek(0);
-    const extension = String(patchFile.fileName || "")
-      .match(/\.([^.]+?)(?:\d+)?$/)?.[1]
-      ?.toLowerCase();
-    if (!extension) return false;
-    const expectedMagic = PATCH_MAGIC_BY_EXTENSION[extension as keyof typeof PATCH_MAGIC_BY_EXTENSION];
-    return expectedMagic ? header.startsWith(expectedMagic) : true;
-  } catch (_error) {
-    return false;
-  }
-};
-
-const filterValidPatchArchiveEntriesForSource = async (
-  archiveFile: PatchFileInstance,
-  options: InputPreparationOptions,
-  runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
-) => {
-  const listedPatchEntries = await listCompressionEntries(archiveFile, options, runtime, { patchFilter: true }).catch(
-    () => [],
-  );
-  // Skip nested-container entries up front: extracting them only to discard them (they fail the
-  // `isCompressionFile` check below) is a wasteful re-extraction of every nested archive level, and
-  // patches inside nested archives are not auto-discovered anyway.
-  const nestedContainerNames = new Set(filterNestedContainerEntries(listedPatchEntries).map((entry) => entry.filename));
-  const patchEntries = listedPatchEntries.filter((entry) => !nestedContainerNames.has(entry.filename));
-  const cache = getValidatedPatchArchiveEntryCache(archiveFile);
-  const validEntries: ArchiveEntryLike[] = [];
-  for (const entry of patchEntries) {
-    if (cache.has(entry.filename)) {
-      validEntries.push(entry);
-      continue;
-    }
-    const patchFile = await extractArchiveEntry(archiveFile, entry.filename, undefined, options, runtime, [], {
-      patchFilter: true,
-    }).catch(() => null);
-    if (!patchFile) continue;
-    try {
-      if (isCompressionFile(patchFile)) continue;
-      if (!(await isValidPatchPatchFile(patchFile))) continue;
-      ensureValidatedPatchArchiveEntryCleanup(archiveFile);
-      cache.set(entry.filename, patchFile);
-      validEntries.push(entry);
-    } finally {
-      if (!cache.has(entry.filename)) await Promise.resolve(getPatchFileCleanup(patchFile)?.()).catch(() => undefined);
-    }
-  }
-  return validEntries;
-};
-
-// Loose multi-track discs (a `.cue`/`.gdi` sheet plus its track `.bin`s) ship inside plain
-// archives too, not only CHDs. The descent auto-resolves a SINGLE payload, which drops the
-// sheet and sibling tracks; when the resolved entry belongs to a complete disc group, return
-// the whole group (every sheet + track) so they extract together and group into one disc.
-/** Compute a leaf's archive-nesting breadcrumbs by stripping the extraction root (`/work`): a direct
- * patch yields `[]`, a nested patch yields its chain of containing nested-archive directories (named
- * after each archive, e.g. `["B_disc1"]`, `["C_set", "C_sub"]`). Stripping the fixed root (rather
- * than the prefix shared across leaves) keeps the nesting visible even when every patch sits under
- * the same nested archive. */
-/** Extract EVERY patch across all (nested) branches of a patch archive in one recursive descent with
- * interactive selection OFF, so an ambiguous multi-branch container fully unpacks instead of
- * prompting for a single branch. Each valid leaf patch is cached by its unique extracted path so the
- * re-entrant selection (and the multi-select fan-out) can reuse it without re-extracting — essential
- * because two sibling patches in one branch cannot be addressed by a primary-container `--select`. */
-/** Resolve one patch leaf from a (possibly nested) patch archive. Returns the cached/extracted leaf
- * for an explicit selection, auto-picks a lone leaf, prompts (flat multi-select across all branches)
- * when several exist, and returns `null` when no valid patch is discovered so the caller can fall
- * back to the generic single-payload descent. */
 /** Resolve a single compressed input/patch FILE with one recursive `extract` (no `list`): the Rust
  * core descends nested containers and resolves a single payload per level via the interactive
  * callback, returning the bottom leaf file. Used by the patch (and rom file-staging) path. */
@@ -685,14 +554,7 @@ const resolveArchiveInputAssetsByDescent = async (
   // extraction-tree UI can show the nested archive chain. Each step carries its full `source` path
   // and the `out_dir` it extracted into; the UI relativizes each level's source (and the final leaf)
   // against the longest matching `out_dir` to show the path *inside* its immediate parent archive.
-  const steps: Array<{
-    depth: number;
-    sourceName: string;
-    source: string;
-    outDir: string;
-    outputSize: number;
-    format: string;
-  }> = [];
+  const steps: DescentExtractStep[] = [];
   let totalDescentOutputBytes = 0;
   const runtimeOptions = getCompressionRuntimeOptions(
     options,
@@ -792,46 +654,7 @@ const resolveArchiveInputAssetsByDescent = async (
       makeRomAsset(makeInputId(sourceIndex, file.fileName, normalizeArchiveEntryName), file),
     );
   }
-  // Build the archive chain for the UI. Each level's displayed size is the container's OWN size
-  // (depth 0 = the input file, depth N = the output the previous level produced). The displayed name
-  // is the path *inside the immediate parent archive*: a full work path relativized against the
-  // longest level `out_dir` that contains it (depth 0 is the input archive itself, shown by name).
-  const orderedSteps = [...steps].sort((left, right) => left.depth - right.depth);
-  const outDirs = orderedSteps.map((step) => step.outDir).filter(Boolean);
-  const inArchivePath = (fullPath: string): string => {
-    let longestContainer = "";
-    for (const dir of outDirs) {
-      if (fullPath.startsWith(`${dir}/`) && dir.length > longestContainer.length) longestContainer = dir;
-    }
-    return longestContainer ? fullPath.slice(longestContainer.length + 1) : getBaseFileName(fullPath);
-  };
-  const parentCompressions: InputParentCompression[] = orderedSteps.map((step, index) => {
-    const sourceSize = index === 0 ? archiveFile.fileSize : orderedSteps[index - 1]?.outputSize;
-    // Depth 0 is the dropped archive itself: show its ORIGINAL name, not the OPFS-staged
-    // source path (e.g. "/work/disc-bincue-5.7z"), whose collision-avoidance "-N" suffix
-    // would otherwise leak into the disc title and output filename.
-    const fileName =
-      index === 0 ? getBaseFileName(archiveFile.fileName || step.sourceName) : inArchivePath(step.source);
-    return {
-      depth: index,
-      fileName,
-      kind: step.format,
-      ...(typeof sourceSize === "number" && sourceSize > 0 ? { sourceSize } : {}),
-      ...(step.outputSize > 0 ? { outputSize: step.outputSize } : {}),
-    };
-  });
-  // Append the extracted payload itself as the final chain level, showing its path inside its
-  // immediate parent archive. Only for a single payload; cue groups display their primary entry.
-  const leafOutput = outputs.length === 1 ? outputs[0] : undefined;
-  const leafFile = files.length === 1 ? files[0] : undefined;
-  if (leafOutput && leafFile) {
-    parentCompressions.push({
-      depth: parentCompressions.length,
-      fileName: inArchivePath(leafOutput.path),
-      kind: "rom",
-      ...(leafFile.fileSize > 0 ? { sourceSize: leafFile.fileSize } : {}),
-    });
-  }
+  const parentCompressions = buildDescentParentCompressions({ archiveFile, files, outputs, steps });
   return attachInputPreparationMetrics(assets, {
     sourceSize: archiveFile.fileSize,
     wasDecompressed: true,
@@ -956,7 +779,6 @@ export type {
 export {
   archiveContainsRomEntry,
   describeArchiveFileForTrace,
-  ensureValidatedPatchArchiveEntryCleanup,
   extractArchiveEntry,
   extractArchiveEntryBytes,
   filterNestedContainerEntries,
@@ -966,11 +788,9 @@ export {
   getCompressionRuntimeSource,
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
-  getValidatedPatchArchiveEntryCache,
   isCompressionEntryFileName,
   isCompressionFile,
   isRecord,
-  isValidPatchPatchFile,
   listCompressionEntries,
   listCompressionEntryResult,
   normalizeSelectedEntryNames,

@@ -12,7 +12,11 @@ import {
   makeRomAsset,
 } from "./input-assets.ts";
 import { classifyPatcherInput } from "./input-classification.ts";
-import { resolveArchiveInput, resolveArchiveInputAssets } from "./input-preparation-archive.ts";
+import {
+  describeArchiveFileForTrace,
+  resolveArchiveInput,
+  resolveArchiveInputAssets,
+} from "./input-preparation-archive.ts";
 import type { InputPreparationRuntime } from "./input-preparation-compression.ts";
 import { normalizeArchiveEntryName, stripFileNameQuery } from "./path-utils.ts";
 
@@ -28,14 +32,6 @@ type PreparedInputFileResult = {
 };
 
 const MAX_DECOMPRESSION_PASSES = 12;
-
-const describeFileForTrace = (file: PatchFileInstance) => ({
-  fileName: file.fileName || "input.bin",
-  filePath: typeof file.filePath === "string" ? file.filePath : "",
-  fileSize: typeof file.fileSize === "number" && Number.isFinite(file.fileSize) ? file.fileSize : 0,
-  isLazyExternal: isLazyExternalPatchFile(file),
-  romSpecificOutput: !!(file as { _romSpecificDecompressionOutput?: boolean })._romSpecificDecompressionOutput,
-});
 
 const traceInputDecompression = (
   options: InputPreparationOptions,
@@ -205,7 +201,7 @@ const resolveCompressedInputFile = async (
   for (let pass = 0; pass < MAX_DECOMPRESSION_PASSES; pass += 1) {
     if (options?.input?.containerInputsEnabled === false) {
       traceInputDecompression(options, "input.decompression.finalize", {
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "container-inputs-disabled",
         role,
@@ -217,7 +213,7 @@ const resolveCompressedInputFile = async (
     traceInputDecompression(options, "input.decompression.pass", {
       classificationKind: classification.kind,
       compressionFormat: classification.kind === "compression" ? classification.compressionFormat : "raw",
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       role,
       selectedEntryName: selectedEntryName || "",
@@ -227,7 +223,7 @@ const resolveCompressedInputFile = async (
     if (finalizeReason) {
       traceInputDecompression(options, "input.decompression.finalize", {
         classificationKind: classification.kind,
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: finalizeReason,
         role,
@@ -238,7 +234,7 @@ const resolveCompressedInputFile = async (
     if (classification.kind !== "compression") {
       traceInputDecompression(options, "input.decompression.finalize", {
         classificationKind: classification.kind,
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "not-compression",
         role,
@@ -250,7 +246,7 @@ const resolveCompressedInputFile = async (
     if (seenCompressedInputs.has(compressedIdentity)) {
       traceInputDecompression(options, "input.decompression.stall", {
         compressedIdentity,
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "repeat-compressed-identity",
         role,
@@ -262,7 +258,7 @@ const resolveCompressedInputFile = async (
     reportInputDecompressionStart(current, options);
     traceInputDecompression(options, "input.decompression.extract.start", {
       compressedIdentity,
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       role,
       selectedEntryName: selectedEntryName || "",
@@ -270,7 +266,7 @@ const resolveCompressedInputFile = async (
     });
     traceInputDecompression(options, "input.decompression.before", {
       compressedIdentity,
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       role,
       selectedEntryName: selectedEntryName || "",
@@ -282,7 +278,7 @@ const resolveCompressedInputFile = async (
     traceInputDecompression(options, "input.decompression.after", {
       compressedIdentity,
       decompressionTimeMs: durationMs,
-      extracted: describeFileForTrace(extracted),
+      extracted: describeArchiveFileForTrace(extracted),
       pass,
       role,
       sourceIndex,
@@ -290,7 +286,7 @@ const resolveCompressedInputFile = async (
     traceInputDecompression(options, "input.decompression.extract.finish", {
       compressedIdentity,
       decompressionTimeMs: durationMs,
-      extracted: describeFileForTrace(extracted),
+      extracted: describeArchiveFileForTrace(extracted),
       pass,
       role,
       sourceIndex,
@@ -307,7 +303,7 @@ const resolveCompressedInputFile = async (
     });
     if (hasSameFileIdentity(current, extracted)) {
       traceInputDecompression(options, "input.decompression.stall", {
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "extracted-same-file-identity",
         role,
@@ -319,7 +315,7 @@ const resolveCompressedInputFile = async (
     selectedEntryName = undefined;
   }
   traceInputDecompression(options, "input.decompression.limit", {
-    file: describeFileForTrace(current),
+    file: describeArchiveFileForTrace(current),
     maxPasses: MAX_DECOMPRESSION_PASSES,
     role,
     sourceIndex,
@@ -344,7 +340,7 @@ const resolveCompressedInputAssets = async (
   for (let pass = 0; pass < MAX_DECOMPRESSION_PASSES; pass += 1) {
     if (options?.input?.containerInputsEnabled === false) {
       traceInputDecompression(options, "input.decompression.assets.finalize", {
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "container-inputs-disabled",
         sourceIndex,
@@ -361,7 +357,7 @@ const resolveCompressedInputAssets = async (
     traceInputDecompression(options, "input.decompression.assets.pass", {
       classificationKind: classification.kind,
       compressionFormat: classification.kind === "compression" ? classification.compressionFormat : "raw",
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       selectedEntryName: selectedEntryName || "",
       sourceIndex,
@@ -370,7 +366,7 @@ const resolveCompressedInputAssets = async (
     if (finalizeReason) {
       traceInputDecompression(options, "input.decompression.assets.finalize", {
         classificationKind: classification.kind,
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: finalizeReason,
         sourceIndex,
@@ -395,7 +391,7 @@ const resolveCompressedInputAssets = async (
     if (seenCompressedInputs.has(compressedIdentity)) {
       traceInputDecompression(options, "input.decompression.assets.stall", {
         compressedIdentity,
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "repeat-compressed-identity",
         sourceIndex,
@@ -406,14 +402,14 @@ const resolveCompressedInputAssets = async (
     reportInputDecompressionStart(current, options);
     traceInputDecompression(options, "input.decompression.assets.extract.start", {
       compressedIdentity,
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       selectedEntryName: selectedEntryName || "",
       sourceIndex,
     });
     traceInputDecompression(options, "input.decompression.assets.before", {
       compressedIdentity,
-      file: describeFileForTrace(current),
+      file: describeArchiveFileForTrace(current),
       pass,
       selectedEntryName: selectedEntryName || "",
       sourceIndex,
@@ -480,7 +476,7 @@ const resolveCompressedInputAssets = async (
     }
     if (hasSameFileIdentity(current, assets[0].file)) {
       traceInputDecompression(options, "input.decompression.assets.stall", {
-        file: describeFileForTrace(current),
+        file: describeArchiveFileForTrace(current),
         pass,
         reason: "extracted-same-file-identity",
         sourceIndex,
@@ -490,7 +486,7 @@ const resolveCompressedInputAssets = async (
     current = assets[0].file;
   }
   traceInputDecompression(options, "input.decompression.assets.limit", {
-    file: describeFileForTrace(current),
+    file: describeArchiveFileForTrace(current),
     maxPasses: MAX_DECOMPRESSION_PASSES,
     sourceIndex,
   });

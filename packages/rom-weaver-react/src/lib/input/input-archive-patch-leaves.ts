@@ -5,18 +5,20 @@ import { RomWeaverError } from "../errors.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { getPatchFileCleanup, type PatchFileInstance } from "./binary-service.ts";
 import { preflightArchiveLimitsForDescent } from "./input-archive-limits.ts";
+import {
+  ensureValidatedPatchArchiveEntryCleanup,
+  getValidatedPatchArchiveEntryCache,
+  isValidPatchPatchFile,
+} from "./input-archive-patch-validity.ts";
 import { type InputParentCompression, makeInputId } from "./input-assets.ts";
 import {
   describeArchiveFileForTrace,
-  ensureValidatedPatchArchiveEntryCleanup,
   getCompressionFormat,
   getCompressionRuntimeOptions,
   getCompressionRuntimeSource,
-  getValidatedPatchArchiveEntryCache,
   type InputPreparationOptions,
   type InputPreparationRuntimeLike,
   isCompressionFile,
-  isValidPatchPatchFile,
   traceArchivePreparation,
 } from "./input-preparation-archive.ts";
 import { resolveInputPreparationRuntime } from "./input-preparation-compression.ts";
