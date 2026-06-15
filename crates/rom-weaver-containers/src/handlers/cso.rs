@@ -351,21 +351,7 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         fs::create_dir_all(&request.out_dir)?;
 
         let output_name = self.output_name(&request.source);
-        let mut selections = SelectionMatcher::new(&request.selections);
-        // Record the single output against the requested selections (matches() marks them),
-        // then verify every requested selection matched it.
-        selections.matches(&output_name);
-        selections.ensure_all_matched()?;
-        if !request
-            .kind_filter
-            .matches_payload_or_container_name(&output_name)
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
-        }
+        request.ensure_single_output_selected(&output_name)?;
 
         let output_path = request.out_dir.join(&output_name);
         let reader = self.open_reader(&request.source)?;

@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::{
     ArchiveEntryKindFilter, FormatOperationKind, OperationContext, OperationFamily,
-    OperationStatus, Result, RomWeaverError, ThreadCapability, ThreadExecution, UnsupportedOp,
+    OperationStatus, Result, RomWeaverError, SelectionMatcher, ThreadCapability, ThreadExecution,
+    UnsupportedOp,
 };
 use tracing::trace;
 
@@ -185,6 +186,30 @@ pub struct ContainerExtractRequest {
     /// runner thread can open such a file, so a parallel extract must read it on the main thread and
     /// hand the bytes to workers (a top-level input is already synced to workers).
     pub containing_archive: Option<PathBuf>,
+}
+
+impl ContainerExtractRequest {
+    /// Validate the single-output extract case: record the lone `output_name`
+    /// against the requested selections, require that every selection matched it,
+    /// and apply the kind filter. Shared by the seekable single-file extract
+    /// handlers (cso/z3ds/xiso/nod/chd), which all emit exactly one output and
+    /// previously inlined this same selection + kind-filter preamble.
+    pub fn ensure_single_output_selected(&self, output_name: &str) -> Result<()> {
+        let mut selections = SelectionMatcher::new(&self.selections);
+        selections.matches(output_name);
+        selections.ensure_all_matched()?;
+        if !self
+            .kind_filter
+            .matches_payload_or_container_name(output_name)
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "no extract entries from `{}` matched {}",
+                self.source.display(),
+                self.kind_filter.flag_label()
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

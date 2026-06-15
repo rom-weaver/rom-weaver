@@ -770,21 +770,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let header = self.read_header(&request.source, &mut file)?;
         let output_name =
             self.extract_name_with_underlying_magic(&request.source, Some(header.underlying_magic));
-        let mut selections = SelectionMatcher::new(&request.selections);
-        // Record the single output against the requested selections (matches() marks them),
-        // then verify every requested selection matched it.
-        selections.matches(&output_name);
-        selections.ensure_all_matched()?;
-        if !request
-            .kind_filter
-            .matches_payload_or_container_name(&output_name)
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
-        }
+        request.ensure_single_output_selected(&output_name)?;
 
         let payload_start = header.payload_offset();
         drop(file);

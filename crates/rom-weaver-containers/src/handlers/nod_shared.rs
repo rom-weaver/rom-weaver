@@ -324,21 +324,7 @@ impl NodHandlerCore {
         open_disc: impl FnOnce(&Path, usize) -> Result<NodDiscReader>,
     ) -> Result<NodExtractPlan> {
         let output_name = self.extract_name(&request.source);
-        let mut selections = SelectionMatcher::new(&request.selections);
-        if !selections.matches(&output_name) {
-            selections.ensure_all_matched()?;
-        }
-        selections.ensure_all_matched()?;
-        if !request
-            .kind_filter
-            .matches_payload_or_container_name(&output_name)
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
-        }
+        request.ensure_single_output_selected(&output_name)?;
 
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let preloader_threads = self.negotiated_preloader_threads(&execution);
