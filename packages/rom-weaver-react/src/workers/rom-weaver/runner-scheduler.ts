@@ -38,6 +38,8 @@ export type OperationScheduler = {
   setMemoryCeiling(memoryCeiling: number): void;
   setTotalThreadBudget(totalThreadBudget: number): void;
   readonly inFlightCount: number;
+  /** In-flight operations that requested at least one worker thread (excludes 0-thread probe/list). */
+  readonly inFlightThreadedCount: number;
   readonly waitingCount: number;
 };
 
@@ -173,6 +175,13 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   return {
     get inFlightCount(): number {
       return inFlight.size;
+    },
+    get inFlightThreadedCount(): number {
+      let count = 0;
+      for (const entry of inFlight) {
+        if (entry.threads > 0) count += 1;
+      }
+      return count;
     },
     schedule<TResult>(operation: ScheduledOperation, run: () => Promise<TResult>): Promise<TResult> {
       return new Promise<TResult>((resolve, reject) => {

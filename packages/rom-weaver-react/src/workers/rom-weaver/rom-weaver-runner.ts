@@ -504,13 +504,16 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           removeAbortListener = () => signal.removeEventListener("abort", abortRun);
         }
         // Hand this operation its fair slice of the shared thread budget. By the time dispatch runs,
-        // every sibling fired in the same tick has already been admitted (acquire is async), so
-        // inFlightCount reflects the true concurrency: a lone op keeps the whole budget, but K
-        // concurrent ops each cap to budget/K so their WASI thread pools sum to the budget instead of
-        // each grabbing it whole (which oversubscribed the pool → `os error 6` → single-thread fallback).
-        // This is the browser counterpart of the Rust planner's fair_thread_allotment; the scheduler's
-        // memory/concurrency gates above already decided *which* ops may overlap.
-        const concurrency = getOperationScheduler().inFlightCount;
+        // every sibling fired in the same tick has already been admitted (acquire is async), so the
+        // count reflects the true concurrency: a lone op keeps the whole budget, but K concurrent ops
+        // each cap to budget/K so their WASI thread pools sum to the budget instead of each grabbing it
+        // whole (which oversubscribed the pool → `os error 6` → single-thread fallback). Divide only
+        // across *thread-requesting* ops: a concurrent 0-thread op (a probe, or a single-threaded patch
+        // validate/apply staged alongside a heavy extract) competes for a runner but not for the thread
+        // pool, so counting it would needlessly halve the heavy op's threads. This is the browser
+        // counterpart of the Rust planner's fair_thread_allotment; the scheduler's memory/concurrency
+        // gates above already decided *which* ops may overlap.
+        const concurrency = Math.max(1, getOperationScheduler().inFlightThreadedCount);
         const dispatchInput =
           romWeaverCommandSupportsThreads(command) && concurrency > 1
             ? withRomWeaverForcedThreads(commandOrRequest, Math.max(1, Math.floor(threadBudget / concurrency)))
