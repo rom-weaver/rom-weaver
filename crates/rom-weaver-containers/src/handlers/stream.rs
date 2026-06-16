@@ -252,7 +252,7 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         };
         selections.ensure_all_matched()?;
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
             "extract",
@@ -264,7 +264,8 @@ impl ContainerHandlerOperations for StreamContainerHandler {
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
     fn create(

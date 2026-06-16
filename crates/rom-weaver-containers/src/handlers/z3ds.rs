@@ -919,7 +919,8 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             Some(execution.clone()),
         );
         let report = attach_extraction_details(report, 1, 1, header.uncompressed_size, &execution);
-        Ok(attach_extract_checksum_details(report, output_checksums))
+        let report = attach_extract_checksum_details(report, output_checksums);
+        Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
     fn create(

@@ -1122,14 +1122,15 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             )
         };
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(PBP.name.to_string()),
             "extract",
             label,
             Some(100.0),
             Some(execution),
-        ))
+        );
+        Ok(attach_emitted_file_paths(report, &produced_outputs))
     }
 
     fn create(

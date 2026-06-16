@@ -252,8 +252,13 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         );
         let report = attach_extraction_details(report, 1, 1, header.logical_bytes, &execution);
         let mut output_checksums = Vec::new();
-        push_finalized_extract_checksum(&mut output_checksums, output_path, output_checksum)?;
-        Ok(attach_extract_checksum_details(report, output_checksums))
+        push_finalized_extract_checksum(
+            &mut output_checksums,
+            output_path.clone(),
+            output_checksum,
+        )?;
+        let report = attach_extract_checksum_details(report, output_checksums);
+        Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
     fn create(

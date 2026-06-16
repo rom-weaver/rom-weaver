@@ -458,7 +458,8 @@ impl ContainerHandlerOperations for CsoContainerHandler {
             Some(100.0),
             Some(execution),
         );
-        Ok(attach_extract_checksum_details(report, output_checksums))
+        let report = attach_extract_checksum_details(report, output_checksums);
+        Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
     fn create(

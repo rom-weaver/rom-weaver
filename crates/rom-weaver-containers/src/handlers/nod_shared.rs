@@ -440,7 +440,8 @@ impl NodHandlerCore {
             Some(100.0),
             Some(execution.clone()),
         );
-        attach_extraction_details(report, 1, 1, bytes_written, &execution)
+        let report = attach_extraction_details(report, 1, 1, bytes_written, &execution);
+        attach_emitted_file_paths(report, &[output_path])
     }
 
     pub(crate) fn ensure_single_create_input<'a>(

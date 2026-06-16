@@ -30,7 +30,6 @@ impl CliApp {
             threads,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
-        let out_dir_before = Self::snapshot_file_tree(&out_dir).unwrap_or_default();
         let context = self
             .context(threads)
             .with_extract_checksum_algorithms(checksum);
@@ -159,33 +158,17 @@ impl CliApp {
         if !warnings.is_empty() {
             report.label = format!("{}; warning={}", report.label, warnings.join("; "));
         }
-        let mut primary_emitted_files = Vec::new();
-        if report.status == OperationStatus::Succeeded {
-            match Self::collect_changed_files(&out_dir, &out_dir_before) {
-                Ok(emitted_files) => {
-                    primary_emitted_files = emitted_files;
-                }
-                Err(error) => {
-                    trace!(
-                        out_dir = %out_dir.display(),
-                        error = %error,
-                        "failed to collect primary extract emitted output metadata"
-                    );
-                }
-            }
-            // The scan above compares (size, mtime) against a pre-extract baseline to discover what
-            // this extract wrote. On filesystems that do not bump mtime on rewrite — notably the
-            // browser's OPFS, where a prior probe may have left an identical-sized file (e.g. a disc
-            // `.cue` sheet) in the shared out dir — a re-extracted file reads as "unchanged" and is
-            // missed, dropping it from the emitted set. The handler reports exactly the entries it
-            // extracted, so union those in: a file the handler emitted was written by this extract
-            // regardless of what the mtime-based diff inferred. (Native already lists everything, so
-            // this is a no-op there.)
-            primary_emitted_files = Self::merge_scanned_and_reported_emitted_files(
-                primary_emitted_files,
-                Self::emitted_file_detail_paths(report.details.as_ref()),
-            );
-        }
+        // Container handlers report their COMPLETE output set in `report.details["emitted_files"]`, so
+        // that report is authoritative: it is exactly what THIS extract wrote. There is deliberately no
+        // out_dir filesystem scan — a scan can't tell this op's outputs from a concurrent sibling op's
+        // files written into a shared out_dir, so a blind diff would mis-claim a sibling's file as an
+        // emitted output and feed it to the nested-extract candidate list. Trusting the handler report
+        // removes that whole class (and the need for callers to isolate out_dirs to defend against it).
+        let primary_emitted_files = if report.status == OperationStatus::Succeeded {
+            Self::emitted_file_detail_paths(report.details.as_ref())
+        } else {
+            Vec::new()
+        };
         if report.status == OperationStatus::Succeeded {
             let format_name = handler.descriptor().name;
             // Level 0 (the input container itself). Its outputs carry the inline checksums computed

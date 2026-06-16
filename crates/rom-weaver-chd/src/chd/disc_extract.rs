@@ -1049,7 +1049,8 @@ impl ChdContainerHandler {
         );
         let report =
             attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
-        Ok(attach_extract_checksum_details(report, output_checksums))
+        let report = attach_extract_checksum_details(report, output_checksums);
+        Ok(attach_emitted_file_paths(report, &produced_outputs))
     }
 
     /// Resolve which CD outputs to write (cue, single combined bin, or per-track
@@ -1630,6 +1631,7 @@ impl ChdContainerHandler {
         );
         let report =
             attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
-        Ok(attach_extract_checksum_details(report, output_checksums))
+        let report = attach_extract_checksum_details(report, output_checksums);
+        Ok(attach_emitted_file_paths(report, &produced_outputs))
     }
 }

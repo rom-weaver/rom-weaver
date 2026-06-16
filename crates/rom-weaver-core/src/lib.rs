@@ -63,7 +63,8 @@ pub use registry::{
     traced_codec_backend, traced_container_handler, traced_patch_handler,
 };
 pub use report_details::{
-    attach_extraction_details, insert_thread_execution_details, operation_report_details,
+    attach_emitted_file_paths, attach_extraction_details, insert_thread_execution_details,
+    operation_report_details,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use threads::{

@@ -19,9 +19,10 @@ use rom_weaver_core::{
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OperationStatus, OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError,
-    SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, attach_extraction_details,
-    create_extract_output_file, file_starts_with, insert_thread_execution_details,
-    maybe_emit_container_byte_progress, operation_report_details, ordered_streaming_compress,
+    SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, attach_emitted_file_paths,
+    attach_extraction_details, create_extract_output_file, file_starts_with,
+    insert_thread_execution_details, maybe_emit_container_byte_progress, operation_report_details,
+    ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};

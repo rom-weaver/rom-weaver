@@ -197,13 +197,12 @@ impl CliApp {
             let step_elapsed_ms = step_started.elapsed().as_millis().min(u32::MAX as u128) as u32;
             descended.insert(canonical_source_key);
             nested_count = nested_count.saturating_add(1);
-            // Snapshot this level's freshly-extracted outputs (the nested dir is created empty),
-            // merging in any inline checksums the handler attached, then surface them as a
-            // succeeded step event and accumulate them for leaf selection by the caller. Tag each
-            // output with this step's elapsed time so the caller can report per-file extract timing
-            // (each leaf carries the time of the archive level that produced it).
-            let nested_emitted =
-                Self::collect_changed_files(&nested_out_dir, &HashMap::new()).unwrap_or_default();
+            // Take this level's outputs from the handler's authoritative report (every container
+            // handler records its full emitted set), then surface them as a succeeded step event and
+            // accumulate them for leaf selection by the caller. Tag each output with this step's elapsed
+            // time so the caller can report per-file extract timing (each leaf carries the time of the
+            // archive level that produced it).
+            let nested_emitted = Self::emitted_file_detail_paths(nested_report.details.as_ref());
             let mut nested_details = Self::build_emitted_file_detail_values(
                 nested_report.details.as_ref(),
                 &nested_emitted,

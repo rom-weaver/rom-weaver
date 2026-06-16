@@ -193,7 +193,7 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             "xiso extract complete"
         );
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(XISO.name.to_string()),
             "extract",
@@ -205,7 +205,8 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
     fn create(

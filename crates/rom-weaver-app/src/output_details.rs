@@ -11,79 +11,7 @@ pub(super) const EMITTED_ROM_EXTENSIONS: &[&str] = &[
     ".gb", ".gbc", ".pce", ".a78", ".lnx", ".msx",
 ];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct FileSnapshot {
-    size_bytes: u64,
-    modified_unix_nanos: Option<u128>,
-}
-
 impl CliApp {
-    pub(super) fn snapshot_file_tree(root: &Path) -> Result<HashMap<PathBuf, FileSnapshot>> {
-        if !root.exists() {
-            return Ok(HashMap::new());
-        }
-
-        if root.is_file() {
-            let mut snapshot = HashMap::new();
-            snapshot.insert(root.to_path_buf(), Self::file_snapshot_for_path(root)?);
-            return Ok(snapshot);
-        }
-        if !root.is_dir() {
-            return Ok(HashMap::new());
-        }
-
-        let mut snapshot = HashMap::new();
-        let mut directories = vec![root.to_path_buf()];
-        while let Some(directory) = directories.pop() {
-            let mut entries =
-                fs::read_dir(&directory)?.collect::<std::result::Result<Vec<_>, _>>()?;
-            entries.sort_by_key(|entry| entry.path());
-
-            for entry in entries {
-                let path = entry.path();
-                let file_type = entry.file_type()?;
-                if file_type.is_dir() {
-                    directories.push(path);
-                    continue;
-                }
-                if !file_type.is_file() {
-                    continue;
-                }
-                snapshot.insert(path.clone(), Self::file_snapshot_for_path(&path)?);
-            }
-        }
-        Ok(snapshot)
-    }
-
-    pub(super) fn file_snapshot_for_path(path: &Path) -> Result<FileSnapshot> {
-        let metadata = fs::metadata(path)?;
-        let modified_unix_nanos = metadata
-            .modified()
-            .ok()
-            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-            .map(|value| value.as_nanos());
-        Ok(FileSnapshot {
-            size_bytes: metadata.len(),
-            modified_unix_nanos,
-        })
-    }
-
-    pub(super) fn collect_changed_files(
-        root: &Path,
-        baseline: &HashMap<PathBuf, FileSnapshot>,
-    ) -> Result<Vec<PathBuf>> {
-        let after = Self::snapshot_file_tree(root)?;
-        let mut changed = after
-            .into_iter()
-            .filter_map(|(path, snapshot)| match baseline.get(&path) {
-                Some(previous) if previous == &snapshot => None,
-                _ => Some(path),
-            })
-            .collect::<Vec<_>>();
-        changed.sort();
-        Ok(changed)
-    }
-
     pub(super) fn attach_emitted_files_details(
         report: OperationReport,
         emitted_files: Vec<PathBuf>,
@@ -173,26 +101,6 @@ impl CliApp {
             },
             _ => Vec::new(),
         }
-    }
-
-    /// Union the change-detection scan results with the paths the handler reported it extracted,
-    /// de-duplicating and sorting. The scan compares `(size, mtime)` against a pre-extract baseline
-    /// to infer what was written, but misses a re-extracted file whose snapshot matches a
-    /// pre-existing baseline entry — e.g. on the browser's OPFS, which does not bump mtime on
-    /// rewrite, so a disc `.cue` sheet a prior probe already left in the shared out dir is dropped.
-    /// Any path the handler explicitly reports was written by this extract, so it is added back.
-    pub(super) fn merge_scanned_and_reported_emitted_files(
-        mut scanned: Vec<PathBuf>,
-        reported: Vec<PathBuf>,
-    ) -> Vec<PathBuf> {
-        for path in reported {
-            if !scanned.contains(&path) {
-                scanned.push(path);
-            }
-        }
-        scanned.sort();
-        scanned.dedup();
-        scanned
     }
 
     pub(super) fn emitted_file_detail_paths(report_details: Option<&Value>) -> Vec<PathBuf> {
@@ -294,43 +202,36 @@ impl CliApp {
 }
 
 #[cfg(test)]
-mod emitted_files_merge_tests {
-    use std::path::PathBuf;
+mod emitted_files_tests {
+    use serde_json::json;
 
     use super::CliApp;
 
-    fn paths(names: &[&str]) -> Vec<PathBuf> {
-        names.iter().map(PathBuf::from).collect()
-    }
-
     #[test]
-    fn reported_only_files_are_unioned_back_in() {
-        // The change-detection scan missed the re-extracted `disc.cue` (its OPFS snapshot matched a
-        // probe-left baseline entry), but the handler reported it. The merge must restore it so the
-        // disc arrives complete (sheet + tracks) rather than as bare, ungrouped tracks.
-        let scanned = paths(&["/work/track01.bin", "/work/track02.bin"]);
-        let reported = paths(&["/work/disc.cue", "/work/track01.bin", "/work/track02.bin"]);
-        let merged = CliApp::merge_scanned_and_reported_emitted_files(scanned, reported);
+    fn reported_emitted_paths_are_read_from_report_details() {
+        // Handlers report their full output set here; the extract command now trusts it verbatim
+        // (no out_dir scan) so a sibling op's file in a shared out dir can never join the set.
+        let details = json!({
+            "emitted_files": [
+                { "path": "/work/disc.cue" },
+                { "path": "/work/track01.bin" },
+                { "path": "" },
+                { "not_a_path": true },
+            ]
+        });
+        let reported = CliApp::emitted_file_detail_paths(Some(&details));
         assert_eq!(
-            merged,
-            paths(&["/work/disc.cue", "/work/track01.bin", "/work/track02.bin"])
+            reported,
+            vec![
+                std::path::PathBuf::from("/work/disc.cue"),
+                std::path::PathBuf::from("/work/track01.bin"),
+            ]
         );
     }
 
     #[test]
-    fn scan_only_files_are_preserved_and_deduped() {
-        // A scan that already captured every file (the native filesystem case) is unchanged: the
-        // reported set is a subset, so the union is a no-op apart from sorting.
-        let scanned = paths(&["/work/b.bin", "/work/a.bin"]);
-        let reported = paths(&["/work/a.bin"]);
-        let merged = CliApp::merge_scanned_and_reported_emitted_files(scanned, reported);
-        assert_eq!(merged, paths(&["/work/a.bin", "/work/b.bin"]));
-    }
-
-    #[test]
-    fn empty_scan_falls_back_to_reported() {
-        let merged =
-            CliApp::merge_scanned_and_reported_emitted_files(Vec::new(), paths(&["/work/rom.nes"]));
-        assert_eq!(merged, paths(&["/work/rom.nes"]));
+    fn missing_emitted_files_detail_reports_nothing() {
+        assert!(CliApp::emitted_file_detail_paths(None).is_empty());
+        assert!(CliApp::emitted_file_detail_paths(Some(&json!({}))).is_empty());
     }
 }

@@ -33,7 +33,7 @@ use tracing::{debug, trace};
 
 use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
-    attach_extraction_details,
+    attach_emitted_file_paths, attach_extraction_details,
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
     container_reads_source_on_main_thread,
     extract_support::{
@@ -1524,5 +1524,12 @@ pub(crate) fn extract_regular_archive_with_libarchive(
     );
     let report =
         attach_extraction_details(report, tasks.len(), file_count, written_bytes, &execution);
-    Ok(attach_extract_checksum_details(report, output_checksums))
+    let report = attach_extract_checksum_details(report, output_checksums);
+    // Report every file this extract wrote (path-attach skips directory tasks via its is_file gate),
+    // so the app treats this report as authoritative and never infers outputs from an out_dir scan.
+    let produced_outputs = tasks
+        .iter()
+        .map(|task| task.output_path.clone())
+        .collect::<Vec<_>>();
+    Ok(attach_emitted_file_paths(report, &produced_outputs))
 }
