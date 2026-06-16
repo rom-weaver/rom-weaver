@@ -48,10 +48,17 @@ export const createStaticController = (state, methods = {}) => ({
 
 const fileNameFromPath = (filePath) => filePath.replace(POSIX_DIRECTORY_PREFIX_REGEX, "");
 
+// Cache raw bytes per path so repeated tests don't re-fetch the same fixture over HTTP.
+const fixtureByteCache = new Map();
+
 export const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
-  const response = await fetch(`/${filePath}`);
-  if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
-  const bytes = await response.arrayBuffer();
+  let bytes = fixtureByteCache.get(filePath);
+  if (!bytes) {
+    const response = await fetch(`/${filePath}`);
+    if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
+    bytes = await response.arrayBuffer();
+    fixtureByteCache.set(filePath, bytes);
+  }
   return new File([bytes], fileNameFromPath(filePath), { type });
 };
 
