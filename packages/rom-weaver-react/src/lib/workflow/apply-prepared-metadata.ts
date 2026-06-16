@@ -55,17 +55,22 @@ const applyPreparedPatchMetadata = <TSource>(
   // the chain (and its root extract time) carried on the implicit leaf source so the row keeps its
   // extract section, parent-archive size, and elapsed time across re-stages.
   const usingCarried = !prepared.parentCompressions?.length && !!carried?.length;
-  stage.parentCompressions = normalizeParentCompressions(usingCarried ? carried : prepared.parentCompressions);
+  const activeChain = usingCarried ? carried : prepared.parentCompressions;
+  stage.parentCompressions = normalizeParentCompressions(activeChain);
   stage.state.fileName = getBaseFileName(prepared.file.fileName || stage.state.fileName || stage.state.id);
   stage.state.size = prepared.file.fileSize;
   stage.state.sourceSize = prepared.sourceSize || prepared.file.fileSize;
-  const carriedTime = usingCarried ? carried?.[0]?.decompressionTimeMs : undefined;
+  // The leaf patch itself often isn't decompressed (an already-extracted multi-select pick, or a
+  // re-staged raw leaf) — its extract time lives on the nesting chain's root archive. Surface that
+  // root time from whichever chain is active (prepared or the carried side-channel) so the patch
+  // row's "extract:" timing renders instead of going blank.
+  const chainRootTime = activeChain?.[0]?.decompressionTimeMs;
   stage.state.decompressionTimeMs = prepared.wasDecompressed
     ? prepared.decompressionTimeMs
-    : typeof carriedTime === "number"
-      ? carriedTime
+    : typeof chainRootTime === "number"
+      ? chainRootTime
       : undefined;
-  stage.state.wasDecompressed = prepared.wasDecompressed || (usingCarried && typeof carriedTime === "number");
+  stage.state.wasDecompressed = prepared.wasDecompressed || typeof chainRootTime === "number";
 };
 
 export { applyPreparedInputMetadata, applyPreparedPatchMetadata, normalizeParentCompressions };
