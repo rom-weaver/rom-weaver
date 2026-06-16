@@ -1,5 +1,6 @@
 mod cancel;
 mod common_files;
+mod concurrency;
 mod context;
 mod disc_sheet;
 mod env;
@@ -20,6 +21,10 @@ pub use common_files::{
     PATCH_FILTER_FILE_EXTENSIONS, ROM_FILTER_FILE_EXTENSIONS,
     is_container_filter_passthrough_candidate_name, is_patch_filter_candidate_name,
     is_rom_filter_candidate_name, should_ignore_common_container_file,
+};
+pub use concurrency::{
+    BatchPlan, BatchWave, ConcurrencyLimits, JobDemand, plan_batch, plan_waves,
+    resolve_memory_ceiling, working_set_estimate,
 };
 pub use context::{OperationContext, PatchChecksumValidation, PatchPolicy, XdeltaSecondaryMode};
 pub use disc_sheet::{
@@ -65,3 +70,5 @@ pub use threads::{
     SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode,
     physical_memory_bytes,
 };
+#[cfg(target_arch = "wasm32")]
+pub use threads::{WASM_MEMORY_BUDGET_BYTES, wasm_linear_memory_used_bytes};

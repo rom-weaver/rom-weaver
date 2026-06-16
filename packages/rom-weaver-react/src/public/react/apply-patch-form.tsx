@@ -728,6 +728,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           await workflow.clearPatches();
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches finish");
         }
+        // Start the input operation but DON'T await it yet. addPatch fires its archive extraction
+        // eagerly (outside the controller's mutation queue), so leaving setInput un-awaited lets the
+        // ROM-archive extraction and the patch-archive extraction run at the same time instead of one
+        // after the other. setInput is still *called* before the patches below, so its mutation body is
+        // enqueued first and every patch's readiness still evaluates against a fully staged input.
+        let inputPromise: Promise<void> | null = null;
         if (!inputsChanged) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input skipped", {
             reason: "unchanged",
@@ -736,37 +742,64 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput start", {
             inputCount: snapshot.inputs.length,
           });
-          await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput failed", {
-              code: getErrorCode(error),
-              message: error instanceof Error ? error.message : String(error),
+          inputPromise = workflow
+            .setInput(snapshot.inputs.map(toBrowserPublicBinarySource))
+            .then(() => {
+              emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
+                input: workflow.getInput(),
+              });
+            })
+            .catch((error) => {
+              emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput failed", {
+                code: getErrorCode(error),
+                message: error instanceof Error ? error.message : String(error),
+              });
+              if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
             });
-            if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
-          });
-          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
-            input: workflow.getInput(),
-          });
-          handlers.onInputState?.(workflow.getInput());
-          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input state emitted", {
-            input: workflow.getInput(),
-          });
         } else {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput start");
-          await workflow.clearInput();
-          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput finish");
+          inputPromise = workflow.clearInput().then(() => {
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput finish");
+          });
+        }
+
+        // Fire every addPatch synchronously (no await between iterations) so each source's staging — the
+        // archive extraction inside stageSource — starts at once, overlapping the input extraction above
+        // and any sibling patch. The controller still applies each patch's readiness through its
+        // serialized mutation queue in call order (after setInput's), so order/state is preserved; only
+        // the heavy extraction now runs concurrently.
+        const patchAdditions = patchesChanged
+          ? (patchesAppended ? snapshot.patches.slice(previousPatches.length) : snapshot.patches).map((patch) =>
+              workflow
+                .addPatch(toBrowserPublicBinarySource(patch))
+                .catch((error) => {
+                  if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
+                })
+                .finally(() => {
+                  handlers.onPatchState?.(workflow.getPatches());
+                }),
+            )
+          : [];
+
+        // Await the input first so its state is emitted before the patches', matching the previous order
+        // of UI updates; the heavy extraction already overlapped above. On input failure, drain the
+        // concurrently-fired patch promises before surfacing the error so none leak as unhandled.
+        if (inputPromise) {
+          try {
+            await inputPromise;
+          } catch (inputError) {
+            await Promise.allSettled(patchAdditions);
+            throw inputError;
+          }
           handlers.onInputState?.(workflow.getInput());
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input state emitted", {
             input: workflow.getInput(),
           });
         }
-        if (patchesChanged) {
-          const patchesToAdd = patchesAppended ? snapshot.patches.slice(previousPatches.length) : snapshot.patches;
-          for (const patch of patchesToAdd) {
-            await workflow.addPatch(toBrowserPublicBinarySource(patch)).catch((error) => {
-              if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
-            });
-            handlers.onPatchState?.(workflow.getPatches());
-          }
+        if (patchAdditions.length) {
+          const settled = await Promise.allSettled(patchAdditions);
+          const firstFailure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+          if (firstFailure) throw firstFailure.reason;
         }
 
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, executionSettingsChanged, {

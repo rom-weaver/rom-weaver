@@ -1,5 +1,10 @@
 import { OUT_OF_MEMORY_MESSAGE_REGEX } from "../../lib/errors.ts";
 import { createLogger } from "../../lib/logging.ts";
+import {
+  estimateOpWorkingSetBytes,
+  estimateScheduledThreads,
+  resolveMemoryCeilingBytes,
+} from "../../lib/runtime/op-memory-estimate.ts";
 import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import type {
   RomWeaverBrowserOpfsRunOptions,
@@ -8,7 +13,13 @@ import type {
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
 } from "../../wasm/index.ts";
-import { collectRomWeaverRunInputPaths, readRomWeaverRunInputCommand } from "../../wasm/index.ts";
+import {
+  collectRomWeaverRunInputPaths,
+  readRomWeaverRequestedThreadCount,
+  readRomWeaverRunInputCommand,
+  romWeaverCommandSupportsThreads,
+  withRomWeaverForcedThreads,
+} from "../../wasm/index.ts";
 import browserWasmUrl from "../../wasm/rom-weaver-app.wasm?url";
 import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?worker&url";
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
@@ -18,6 +29,8 @@ import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protoc
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 import { getRomWeaverRunEventLabel, isRomWeaverFailedRunEvent } from "./rom-weaver-run-events.ts";
+import { createRunnerPool, type RunnerPool } from "./runner-pool.ts";
+import { createOperationScheduler, type OperationScheduler } from "./runner-scheduler.ts";
 
 type RomWeaverRunnerRunJsonOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
   RomWeaverBrowserOpfsRunOptions & { signal?: AbortSignal };
@@ -54,10 +67,22 @@ type BrowserWasmAssetSelection = {
   wasmUrl?: string;
 };
 
-let browserThreadedRunnerPromise: Promise<RomWeaverRunner> | null = null;
-let browserThreadedRunnerStale = false;
-let activeRunnerRunCount = 0;
-let runnerRunQueue: Promise<void> = Promise.resolve();
+type RunnerCreateOptions = { workerThreads?: RuntimeValue };
+
+// Warm idle runners kept for reuse between operations, scaled to the machine: about half the thread
+// budget, floored at 2 so reuse always works and capped so a high-core machine doesn't hold an
+// unbounded number of idle wasm heaps. How many operations actually run at once is bounded separately
+// by the thread budget (the scheduler's maxConcurrency below).
+const MAX_WARM_IDLE_RUNNERS = 8;
+const resolveWarmIdleRunners = (): number =>
+  Math.max(2, Math.min(MAX_WARM_IDLE_RUNNERS, Math.ceil(getDefaultBrowserThreadCount() / 2)));
+
+// Seed forwarded to freshly created runners so their initial worker-shell pool matches the resolved
+// "auto" thread count; set by warmup and reused for on-demand runner creation.
+let runnerCreateWorkerThreads: RuntimeValue | undefined;
+
+let runnerPool: RunnerPool<RomWeaverRunner, RunnerCreateOptions> | null = null;
+let operationScheduler: OperationScheduler | null = null;
 
 // Upper bound on waiting for a worker to acknowledge a graceful dispose before terminating it
 // anyway. A worker stuck in a synchronous wait (abandoned selection prompt, wedged op) never
@@ -272,15 +297,29 @@ const summarizeInputSelectionRequest = (request: string): Record<string, unknown
   }
 };
 
+// With concurrent operations two runners can request a candidate selection at the same moment, but the
+// single host handler drives one dialog at a time. Serialize prompt invocations through a chain so the
+// second prompt only opens once the first resolves; the operations themselves keep running in parallel.
+let inputSelectionChain: Promise<unknown> = Promise.resolve();
+
 const resolveInputSelection: InputSelectionHandler = (request) => {
-  if (!inputSelectionHandler) {
-    logger.trace("input selection requested but no handler registered — cancelling", {
-      requestBytes: typeof request === "string" ? request.length : 0,
+  const run = inputSelectionChain
+    .catch(() => undefined)
+    .then(() => {
+      if (!inputSelectionHandler) {
+        logger.trace("input selection requested but no handler registered — cancelling", {
+          requestBytes: typeof request === "string" ? request.length : 0,
+        });
+        return [];
+      }
+      logger.trace("forwarding input selection request to UI handler", summarizeInputSelectionRequest(request));
+      return inputSelectionHandler(request);
     });
-    return [];
-  }
-  logger.trace("forwarding input selection request to UI handler", summarizeInputSelectionRequest(request));
-  return inputSelectionHandler(request);
+  inputSelectionChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 };
 
 const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): Promise<RomWeaverRunner> => {
@@ -320,50 +359,53 @@ const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): 
   };
 };
 
-const createRomWeaverRunner = async (options?: { workerThreads?: RuntimeValue }) => {
-  if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
-  if (browserThreadedRunnerStale && activeRunnerRunCount === 0) await resetRomWeaverRunner();
-  const workerThreads = options?.workerThreads;
-  if (!browserThreadedRunnerPromise)
-    browserThreadedRunnerPromise = createBrowserRunner({ workerThreads }).catch((error) => {
-      browserThreadedRunnerPromise = null;
-      throw error;
+const getRunnerPool = (): RunnerPool<RomWeaverRunner, RunnerCreateOptions> => {
+  if (!runnerPool) {
+    runnerPool = createRunnerPool<RomWeaverRunner, RunnerCreateOptions>({
+      create: (createOptions) => createBrowserRunner(createOptions),
+      dispose: (runner) => runner.dispose?.() ?? Promise.resolve(),
+      maxIdle: resolveWarmIdleRunners(),
+      terminate: (runner) => runner.terminate?.(),
     });
-  return browserThreadedRunnerPromise;
+  }
+  return runnerPool;
+};
+
+const getOperationScheduler = (): OperationScheduler => {
+  if (!operationScheduler) {
+    // Bound the operation count by the available thread budget: every operation needs at least one
+    // thread, and the thread gate already keeps the summed request within the budget, so this scales
+    // concurrency with the machine's cores without oversubscribing them. Heavy (full-budget) operations
+    // still run alone; only light operations pack together.
+    const threadBudget = getDefaultBrowserThreadCount();
+    operationScheduler = createOperationScheduler({
+      maxConcurrency: threadBudget,
+      memoryCeiling: resolveMemoryCeilingBytes(),
+      totalThreadBudget: threadBudget,
+    });
+  }
+  return operationScheduler;
 };
 
 const resetRomWeaverRunner = async (options: { terminate?: boolean } = {}) => {
-  const activeRunnerPromises = [browserThreadedRunnerPromise].filter(
-    (entry): entry is Promise<RomWeaverRunner> => !!entry,
-  );
-  browserThreadedRunnerPromise = null;
-  browserThreadedRunnerStale = false;
-  if (!activeRunnerPromises.length) return;
-  const disposedRunners = new Set<RomWeaverRunner>();
-  for (const activeRunnerPromise of activeRunnerPromises) {
-    const runner = await activeRunnerPromise.catch(() => null);
-    if (!runner || disposedRunners.has(runner)) continue;
-    disposedRunners.add(runner);
-    if (options.terminate) runner.terminate?.();
-    else await runner.dispose?.().catch(() => undefined);
-  }
+  if (!runnerPool) return;
+  await runnerPool.disposeAll(options);
 };
 
 const markRomWeaverRunnerStale = () => {
-  browserThreadedRunnerStale = true;
-  if (activeRunnerRunCount === 0) void resetRomWeaverRunner();
+  runnerPool?.markAllStale();
 };
 
-// #1: Drop the current (post-warmup, heap-dirtied) runner and stand up a fresh clean-heap one. Meant
-// to run during idle (right after warmup) so the user's first real op starts on a clean heap and never
-// pays an out-of-memory worker recycle on the critical path. No-op while a run is active. Uses graceful
-// dispose (not terminate) because the warm worker is healthy — its OPFS handles should close cleanly.
+// #1: Drop heap-dirtied idle runners and stand up a fresh clean-heap one. Meant to run during idle
+// (right after warmup) so the user's first real op starts on a clean heap and never pays an
+// out-of-memory worker recycle on the critical path. No-op while any runner has work in flight.
 const recycleWarmRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
   if (!PRE_EXTRACT_GAP.recycleRunnerAfterWarmup) return;
   if (!isBrowserRuntime()) return;
-  if (activeRunnerRunCount !== 0) return;
-  await resetRomWeaverRunner();
-  await createRomWeaverRunner({ workerThreads });
+  const pool = getRunnerPool();
+  if (pool.busyCount !== 0) return;
+  await pool.disposeAll();
+  await warmupRomWeaverRunner(workerThreads ?? runnerCreateWorkerThreads);
 };
 
 // The wasm runner's linear memory only ever grows, so the browser surfaces an exhausted heap as an
@@ -382,15 +424,6 @@ const createRunnerAbortError = () => {
   error.name = "AbortError";
   error.code = "CANCELLED";
   return error;
-};
-
-const enqueueRunnerRun = <T>(callback: () => Promise<T>): Promise<T> => {
-  const queued = runnerRunQueue.catch(() => undefined).then(callback);
-  runnerRunQueue = queued.then(
-    () => undefined,
-    () => undefined,
-  );
-  return queued;
 };
 
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
@@ -428,85 +461,127 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       describeVirtualFilesForTrace(scopedActiveVirtualFiles),
     )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0} invalidateMountCacheAfterRun=${String(runOptions.invalidateMountCacheAfterRun)}`,
   );
-  const dispatchRun = async () => {
+  const command = readRomWeaverRunInputCommand(commandOrRequest);
+  const operationPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
+  const threadBudget = getDefaultBrowserThreadCount();
+  // probe/list spawn no workers (0 budget). Threaded commands request "auto" (the full budget), but
+  // most do not use every core — gate the scheduler on the threads the operation will realistically use
+  // (a single-threaded apply reserves 1, not all of them) so light operations can overlap.
+  const requestedThreads = readRomWeaverRequestedThreadCount(commandOrRequest, { defaultThreads: threadBudget });
+  const requested = romWeaverCommandSupportsThreads(command) ? (requestedThreads ?? threadBudget) : 0;
+  const inputBytes = describeVirtualFilesForTrace(scopedActiveVirtualFiles).totalBytes;
+  const operationThreads = estimateScheduledThreads(command, inputBytes, requested);
+  // Estimate the working set from the staged input sizes so the scheduler can refuse to overlap two
+  // operations whose combined memory would exhaust the device.
+  const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
+
+  const dispatchRun = async (): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
-    const runner = await createRomWeaverRunner();
-    if (signal?.aborted) throw createRunnerAbortError();
+    const lease = await getRunnerPool().acquire({ workerThreads: runnerCreateWorkerThreads });
+    if (signal?.aborted) {
+      lease.terminate();
+      throw createRunnerAbortError();
+    }
     emitRunnerTraceLine(
       options,
-      `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`,
+      `runJson dispatch mode=${lease.runner.ready.mode} threaded=${String(lease.runner.ready.threaded)}`,
     );
-    activeRunnerRunCount += 1;
+    let removeAbortListener: (() => void) | undefined;
     try {
-      return await runner.runJson(commandOrRequest, runOptions);
-    } finally {
-      activeRunnerRunCount = Math.max(0, activeRunnerRunCount - 1);
-      if (activeRunnerRunCount === 0 && browserThreadedRunnerStale) void resetRomWeaverRunner();
-    }
-  };
-  const dispatchRunWithAbort = () => {
-    if (!signal) return dispatchRun();
-    if (signal.aborted) {
-      emitRunnerTraceLine(options, "runJson aborted before dispatch; terminating active runner");
-      browserThreadedRunnerStale = true;
-      void resetRomWeaverRunner({ terminate: true });
-      return Promise.reject(createRunnerAbortError());
-    }
-    return new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
-      let settled = false;
-      const abortRun = () => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener("abort", abortRun);
-        emitRunnerTraceLine(options, "runJson aborted; terminating active runner");
-        browserThreadedRunnerStale = true;
-        void resetRomWeaverRunner({ terminate: true });
-        reject(createRunnerAbortError());
-      };
-      signal.addEventListener("abort", abortRun, { once: true });
-      dispatchRun().then(
-        (result) => {
+      return await new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
+        let settled = false;
+        const abortRun = () => {
           if (settled) return;
           settled = true;
-          signal.removeEventListener("abort", abortRun);
-          resolve(result);
-        },
-        (error) => {
-          if (settled) return;
-          settled = true;
-          signal.removeEventListener("abort", abortRun);
-          reject(error);
-        },
-      );
-    });
-  };
-  try {
-    return await enqueueRunnerRun(dispatchRunWithAbort);
-  } catch (error) {
-    // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
-    // fail a later run with an out-of-memory error. Flag the exhausted worker stale so the next
-    // dispatch recycles it onto a clean heap, then surface the error rather than retrying the run.
-    if (isRunnerOutOfMemoryError(error)) {
-      emitRunnerTraceLine(options, "runJson out-of-memory; flagging worker stale for recycle on next dispatch");
-      browserThreadedRunnerStale = true;
-      // #2: eagerly hard-terminate the exhausted worker now (in the background), rather than letting the
-      // next dispatch gracefully dispose it on the critical path. dispatchRun's finally has already
-      // decremented activeRunnerRunCount for this run, so count===0 means no other run is in flight.
-      if (PRE_EXTRACT_GAP.hardTerminateStaleOnOom && activeRunnerRunCount === 0) {
-        void resetRomWeaverRunner({ terminate: true });
+          // Terminate only this operation's runner — a sibling operation on another pooled runner keeps
+          // running, unlike the previous singleton where any abort tore down the shared worker.
+          emitRunnerTraceLine(options, "runJson aborted; terminating active runner");
+          lease.terminate();
+          reject(createRunnerAbortError());
+        };
+        if (signal) {
+          signal.addEventListener("abort", abortRun, { once: true });
+          removeAbortListener = () => signal.removeEventListener("abort", abortRun);
+        }
+        // Hand this operation its fair slice of the shared thread budget. By the time dispatch runs,
+        // every sibling fired in the same tick has already been admitted (acquire is async), so
+        // inFlightCount reflects the true concurrency: a lone op keeps the whole budget, but K
+        // concurrent ops each cap to budget/K so their WASI thread pools sum to the budget instead of
+        // each grabbing it whole (which oversubscribed the pool → `os error 6` → single-thread fallback).
+        // This is the browser counterpart of the Rust planner's fair_thread_allotment; the scheduler's
+        // memory/concurrency gates above already decided *which* ops may overlap.
+        const concurrency = getOperationScheduler().inFlightCount;
+        const dispatchInput =
+          romWeaverCommandSupportsThreads(command) && concurrency > 1
+            ? withRomWeaverForcedThreads(commandOrRequest, Math.max(1, Math.floor(threadBudget / concurrency)))
+            : commandOrRequest;
+        if (dispatchInput !== commandOrRequest) {
+          emitRunnerTraceLine(
+            options,
+            `runJson thread allotment concurrency=${concurrency} threadBudget=${threadBudget} threadsPerOp=${Math.max(1, Math.floor(threadBudget / concurrency))}`,
+          );
+        }
+        lease.runner.runJson(dispatchInput, runOptions).then(
+          (result) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+          },
+          (error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+          },
+        );
+      });
+    } catch (error) {
+      // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
+      // fail with an out-of-memory error. Only this runner's heap is affected; the pool stands up a
+      // fresh clean-heap runner on the next acquire.
+      if (isRunnerOutOfMemoryError(error)) {
+        if (PRE_EXTRACT_GAP.hardTerminateStaleOnOom) {
+          // #2: hard-terminate the exhausted worker now to release its OPFS handles immediately.
+          emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
+          lease.terminate();
+        } else {
+          emitRunnerTraceLine(options, "runJson out-of-memory; flagging exhausted runner for recycle");
+          lease.markStale();
+        }
       }
+      throw error;
+    } finally {
+      removeAbortListener?.();
+      // No-op if the runner was terminated above; otherwise returns the warm runner to the pool (or
+      // disposes it when marked stale).
+      lease.release();
     }
-    throw error;
-  }
+  };
+
+  return getOperationScheduler().schedule(
+    { bytes: operationBytes, label: command.type, paths: operationPaths, threads: operationThreads },
+    dispatchRun,
+  );
 };
 
 const warmupRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
-  const runner = await createRomWeaverRunner({ workerThreads });
-  return runner.ready;
+  if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
+  runnerCreateWorkerThreads = workerThreads;
+  const lease = await getRunnerPool().acquire({ workerThreads });
+  try {
+    return lease.runner.ready;
+  } finally {
+    lease.release();
+  }
 };
 
 const getRomWeaverRunnerMetadata = async () => {
-  return (await createRomWeaverRunner()).ready;
+  if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
+  const lease = await getRunnerPool().acquire({ workerThreads: runnerCreateWorkerThreads });
+  try {
+    return lease.runner.ready;
+  } finally {
+    lease.release();
+  }
 };
 
 const publishRomWeaverWasmDiagnostic = (message: {

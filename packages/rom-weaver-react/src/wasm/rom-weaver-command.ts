@@ -61,6 +61,7 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
     case "checksum":
     case "compress":
     case "trim":
+    case "plan-extract-batch":
       return { args, type } as RomWeaverCommand;
     case "patch-apply":
       return { args: { args, type: "apply" }, type: "patch" } as RomWeaverCommand;
@@ -110,6 +111,7 @@ function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand 
     case "checksum":
     case "compress":
     case "trim":
+    case "plan-extract-batch":
       return { args, type } as RomWeaverCommand;
     default:
       return assertNever(type);
@@ -145,6 +147,7 @@ function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommand
     case "checksum":
     case "compress":
     case "trim":
+    case "plan-extract-batch":
       return {
         args: command.args,
         type: command.type,
@@ -187,6 +190,9 @@ export function collectRomWeaverRunInputPaths(
     case "patch":
       collectRomWeaverPatchInputPaths(paths, command.args);
       break;
+    case "plan-extract-batch":
+      // Pure planning over sizes passed in the args — no file inputs to reference.
+      break;
     default:
       assertNever(command);
   }
@@ -227,6 +233,25 @@ export function clampRomWeaverBrowserThreadRequest(
   });
 }
 
+/**
+ * Force a thread-supporting command to use exactly `threads` worker threads, returning the input
+ * unchanged for thread-less commands (probe/list) or when it already requests that count. Used to
+ * hand each concurrently-dispatched operation its fair slice of the shared thread budget so K
+ * operations running at once never collectively oversubscribe the WASI thread-worker pool (which
+ * surfaces as `EAGAIN`/`os error 6` and a silent single-thread fallback).
+ */
+export function withRomWeaverForcedThreads(input: RomWeaverRunInput, threads: number): RomWeaverRunInput {
+  const command = readRomWeaverRunInputCommand(input);
+  if (!romWeaverCommandSupportsThreads(command)) return input;
+  const safeThreads = Math.max(1, Math.floor(threads));
+  const args = readRomWeaverCommandArgs(command);
+  if (args.threads === safeThreads) return input;
+  const nextArgs = { ...args, threads: safeThreads };
+  return isRomWeaverRunRequestLike(input)
+    ? replaceRomWeaverRunRequestCommandArgs(input, nextArgs)
+    : replaceRomWeaverCommandArgs(command, nextArgs);
+}
+
 export function readRomWeaverRequestedThreadCount(
   commandOrRequest: RomWeaverRunInput,
   options: RomWeaverBrowserThreadRequestOptions = {},
@@ -236,7 +261,7 @@ export function readRomWeaverRequestedThreadCount(
   return parseRomWeaverThreadBudgetCount(readRomWeaverCommandArgs(command).threads, options);
 }
 
-function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
+export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
   switch (command.type) {
     case "probe":
     case "list":
@@ -256,6 +281,10 @@ function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
         default:
           return assertNever(command.args);
       }
+    case "plan-extract-batch":
+      // Pure planning: the `threads` field is the budget to plan for, not a worker spawn, so it is
+      // passed through untouched (no clamp/inject/force).
+      return false;
     default:
       return assertNever(command);
   }
@@ -339,6 +368,7 @@ function replaceRomWeaverCommandArgs(command: RomWeaverCommand, args: Record<str
     case "checksum":
     case "compress":
     case "trim":
+    case "plan-extract-batch":
       return {
         ...command,
         args,

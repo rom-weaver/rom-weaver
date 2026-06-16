@@ -3,8 +3,9 @@ use std::{env, fs, path::Path};
 use rom_weaver_app::{
     ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand,
     ListCommand, N64ByteOrder, PatchApplyCommand, PatchCommands, PatchCreateCandidatesCommand,
-    PatchCreateCommand, PatchValidateCommand, ProbeCommand, RomWeaverRunOutputOptions,
-    RomWeaverRunRequest, TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand, ProbeCommand,
+    RomWeaverRunOutputOptions, RomWeaverRunRequest, TrimCommand, compression_metadata,
+    patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ContainerDefaultOutputMetadata, ContainerFormatMetadata, ContainerOutputExtensionStrategy,
@@ -155,6 +156,7 @@ fn render_types() -> String {
         export_decl::<PatchCreateCandidatesCommand>(&config),
         export_decl::<PatchCreateCommand>(&config),
         export_decl::<PatchCommands>(&config),
+        export_decl::<PlanExtractBatchCommand>(&config),
         export_decl::<Commands>(&config),
         export_decl::<RomWeaverRunOutputOptions>(&config),
         export_decl::<RomWeaverRunRequest>(&config),

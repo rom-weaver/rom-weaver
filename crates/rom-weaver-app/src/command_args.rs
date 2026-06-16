@@ -955,3 +955,49 @@ pub struct PatchCreateCandidatesCommand {
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
+
+/// Compute a memory-/thread-aware concurrent extraction schedule from per-job source sizes, without
+/// touching any files. The result (an `extract_batch_plan` in the report details) groups the jobs
+/// into concurrent waves with a per-job thread allotment, so the host can run a batch of extractions
+/// at a safe concurrency for the device. Pure planning — no I/O — so it runs the same on native and
+/// in the browser: one Rust policy schedules both.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PlanExtractBatchCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "job-size",
+            value_name = "BYTES",
+            help = "Source size in bytes for one job; repeat once per job, in input order"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub job_sizes: Vec<u64>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub threads: ThreadBudget,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "max-concurrency",
+            help = "Hard cap on jobs running at once; defaults to the thread budget"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub max_concurrency: Option<usize>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "total-memory-bytes",
+            help = "Total memory budget concurrent jobs may reserve (e.g. browser device memory); defaults to the platform's physical memory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub total_memory_bytes: Option<u64>,
+}

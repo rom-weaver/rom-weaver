@@ -34,6 +34,7 @@ impl CliApp {
                 PatchCommands::CreateCandidates(args) => self.run_patch_create_candidates(args),
                 PatchCommands::Create(args) => self.run_patch_create(*args),
             },
+            Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
         }
     }
 
@@ -49,6 +50,7 @@ impl CliApp {
             Commands::Patch(PatchCommands::Validate(_)) => "patch-validate",
             Commands::Patch(PatchCommands::CreateCandidates(_)) => "patch-create-candidates",
             Commands::Patch(PatchCommands::Create(_)) => "patch-create",
+            Commands::PlanExtractBatch(_) => "plan-extract-batch",
         }
     }
 

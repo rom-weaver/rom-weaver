@@ -63,7 +63,35 @@ pub fn physical_memory_bytes() -> Option<u64> {
     (rc == 0 && value > 0).then_some(value)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+/// Realistic memory budget for a single wasm instance, in bytes.
+///
+/// The link-time `--max-memory` in `.cargo/config.toml` caps linear memory at 2 GiB, but that is
+/// the hard address-space ceiling, not what the runtime can actually use: mobile browsers —
+/// notably iOS Safari — terminate a tab whose memory grows well before that, around ~1 GiB. So the
+/// budget the concurrency planner (and memory-hungry per-op parallelism) reasons about is set to
+/// what the constrained platform actually sustains. A single operation can still grow toward the 2
+/// GiB hard cap; this only governs how aggressively independent work is overlapped.
+#[cfg(target_arch = "wasm32")]
+pub const WASM_MEMORY_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// On wasm, "physical" memory is the realistic instance budget ([`WASM_MEMORY_BUDGET_BYTES`]): the
+/// whole instance — main thread plus every spawned WASI thread — shares one growable linear memory,
+/// so that budget bounds how much concurrent work can be resident at once.
+#[cfg(target_arch = "wasm32")]
+pub fn physical_memory_bytes() -> Option<u64> {
+    Some(WASM_MEMORY_BUDGET_BYTES)
+}
+
+/// Bytes of wasm linear memory currently committed. The heap only ever grows and is never
+/// returned, so this is an upper bound on live usage; `physical_memory_bytes() - this` is a
+/// conservative estimate of the headroom available to admit more concurrent work.
+#[cfg(target_arch = "wasm32")]
+pub fn wasm_linear_memory_used_bytes() -> u64 {
+    const WASM_PAGE_BYTES: u64 = 64 * 1024;
+    (core::arch::wasm32::memory_size(0) as u64).saturating_mul(WASM_PAGE_BYTES)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_arch = "wasm32")))]
 pub fn physical_memory_bytes() -> Option<u64> {
     None
 }

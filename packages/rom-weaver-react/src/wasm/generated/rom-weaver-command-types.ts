@@ -8,7 +8,8 @@ export const KNOWN_COMMAND_TYPES = [
   "checksum",
   "compress",
   "trim",
-  "patch"
+  "patch",
+  "plan-extract-batch"
 ] as const;
 
 export const KNOWN_PATCH_COMMAND_TYPES = [

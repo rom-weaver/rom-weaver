@@ -41,7 +41,9 @@ export type PatchCreateCommand = { original: string, modified?: string, format?:
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create-candidates", "args": PatchCreateCandidatesCommand } | { "type": "create", "args": PatchCreateCommand };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "list", "args": ListCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands };
+export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, };
+
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "list", "args": ListCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
 

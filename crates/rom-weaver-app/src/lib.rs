@@ -78,6 +78,14 @@ pub enum Commands {
     Trim(TrimCommand),
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     Patch(PatchCommands),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            name = "plan-extract-batch",
+            about = "Plan a memory-/thread-aware concurrent extraction schedule from per-job source sizes (no I/O)"
+        )
+    )]
+    PlanExtractBatch(PlanExtractBatchCommand),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -915,6 +923,18 @@ use extract_progress::*;
 #[path = "compress_trim_batch.rs"]
 mod compress_trim_batch;
 
+// Pure planning (no threads/fs), so it compiles on wasm too — the browser calls `plan-extract-batch`
+// to schedule its multi-worker pool with the same Rust policy the native executor uses.
+#[path = "extract_batch_plan.rs"]
+mod extract_batch_plan;
+
+// Native-only: the executor spawns OS threads (`std::thread::scope`) per job. The wasm runtime's
+// concurrency model differs (WASI threads via the JS spawner, plus the OPFS read-on-main rule), so
+// the browser drives the shared planner (above) over its existing multi-worker pool instead.
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "extract_batch.rs"]
+mod extract_batch;
+
 mod cheats_apply;
 mod patch_apply;
 mod patch_apply_dcp;
@@ -932,9 +952,12 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 mod command_args;
 pub use command_args::{
     ChecksumCommand, CompressCommand, ExtractCommand, ListCommand, PatchApplyCommand,
-    PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand, ProbeCommand,
-    TrimCommand,
+    PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, ProbeCommand, TrimCommand,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use extract_batch::{ExtractBatchOptions, ExtractBatchReport, run_extract_batch};
 
 mod compression;
 pub use compression::{
