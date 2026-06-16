@@ -1,4 +1,5 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
+import { SCRATCH_DIRECTORY_NAME } from "./browser-opfs-constants.ts";
 import {
   isGuestPathWithinMount,
   isGuestPathWithinRoots,
@@ -332,17 +333,32 @@ async function buildOpfsInodeMap({
   const entries = new Map<string, wasiShim.Inode>();
 
   for await (const [entryName, rawEntryHandle] of directoryHandle.entries()) {
+    // The OPFS scratch pool (`.rom-weaver-opfs-scratch`) is per-runner backing storage handed to the
+    // guest as pre-opened fds via takeScratchFile() — it is never resolved by guest path, so it must
+    // not appear in the wasm-visible tree. Concurrent runners share one OPFS root, so without this skip
+    // a sibling runner's 0-byte scratch placeholder leaks into this run's `/work` listing and the Rust
+    // extract output scan (collect_changed_files) reports it as a phantom emitted file — surfacing a
+    // bogus empty ROM candidate. Mirrors the same exclusion in browser-runtime-warmup's OPFS sweep.
+    if (entryName === SCRATCH_DIRECTORY_NAME) continue;
     // entries() yields handles typed as unknown; kind discriminates directory vs file handles.
     const entryHandle = rawEntryHandle as FileSystemDirectoryHandleLike;
     const entryGuestPath = joinGuestPath(guestPath, entryName);
     if (entryHandle.kind === "directory") {
-      const nested = await buildOpfsInodeMap({
-        closeables,
-        directoryHandle: entryHandle,
-        guestPath: entryGuestPath,
-        syncAccessMode,
-        writableRoots,
-      });
+      // A sibling op concurrently extracting into the shared /work root can be removing/rewriting a
+      // subtree while this mount is built; that subtree is not this op's input, so skip it on failure
+      // rather than aborting the whole mount build (which surfaces as InvalidStateError → no extract).
+      let nested: WasiDirectoryContents;
+      try {
+        nested = await buildOpfsInodeMap({
+          closeables,
+          directoryHandle: entryHandle,
+          guestPath: entryGuestPath,
+          syncAccessMode,
+          writableRoots,
+        });
+      } catch {
+        continue;
+      }
       entries.set(entryName, new wasiShim.Directory(nested));
       continue;
     }
@@ -350,10 +366,18 @@ async function buildOpfsInodeMap({
     if (entryHandle.kind !== "file") continue;
 
     const writable = isGuestPathWithinRoots(entryGuestPath, writableRoots);
-    const syncHandle = await openSyncAccessHandle({
-      fileHandle: entryHandle,
-      mode: writable ? syncAccessMode : "read-only",
-    });
+    // Same race as above at the file level: opening a sync-access handle on a file a concurrent op is
+    // mid-removing/rewriting throws (InvalidStateError / NotFoundError). It is not this op's source, so
+    // skip it — this op's own freshly-staged input is held by nobody and opens fine.
+    let syncHandle: Awaited<ReturnType<typeof openSyncAccessHandle>>;
+    try {
+      syncHandle = await openSyncAccessHandle({
+        fileHandle: entryHandle,
+        mode: writable ? syncAccessMode : "read-only",
+      });
+    } catch {
+      continue;
+    }
     const file = new BrowserOpfsRandomAccessFile(syncHandle);
     closeables.push(file);
     entries.set(entryName, new WasiRandomAccessFileInode(file, { readonly: !writable }));
