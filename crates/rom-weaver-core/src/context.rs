@@ -223,7 +223,11 @@ impl OperationContext {
             family = ?event.family,
             format = ?event.format,
             stage = %event.stage,
+            label = %event.label,
+            percent = ?event.percent,
+            elapsed_ms = ?event.elapsed_ms,
             status = ?event.status,
+            details = ?event.details,
             "emitting progress event"
         );
         self.progress.emit(event);

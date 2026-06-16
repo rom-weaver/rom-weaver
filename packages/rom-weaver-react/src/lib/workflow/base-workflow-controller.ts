@@ -94,10 +94,6 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
     if (!this.abortController.signal.aborted) this.abortController.abort(reason);
   }
 
-  protected traceTriggerEvent(event: "progress", payload: WorkflowProgress, listenerCount: number): void {
-    this.trace("trigger", { event, listenerCount, payload });
-  }
-
   protected trace(message: string, details: Record<string, unknown> = {}): void {
     traceWorkflowControllerEvent(this.traceContext(), message, details);
   }

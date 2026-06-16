@@ -16,7 +16,6 @@ abstract class WorkflowController<TEvents extends Record<string, unknown>> {
 
   protected trigger<TEvent extends keyof TEvents & string>(event: TEvent, payload: TEvents[TEvent]): void {
     const listeners = this.listeners.get(event);
-    this.traceTriggerEvent(event, payload, listeners?.size || 0);
     if (!listeners?.size) return;
     for (const listener of [...listeners]) listener(payload);
   }
@@ -36,12 +35,6 @@ abstract class WorkflowController<TEvents extends Record<string, unknown>> {
     assertSelectionExists(request, selection);
     return selection;
   }
-
-  protected abstract traceTriggerEvent<TEvent extends keyof TEvents & string>(
-    event: TEvent,
-    payload: TEvents[TEvent],
-    listenerCount: number,
-  ): void;
 }
 
 export { WorkflowController };
