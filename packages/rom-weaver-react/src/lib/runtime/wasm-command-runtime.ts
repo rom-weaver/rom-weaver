@@ -417,9 +417,18 @@ const invokeRomWeaverPatchValidateWorker = async (
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
-  const disableDefaultThreadArgInjection = singleThreadNoPool || (hasBpsPatch && !threadArg);
+  // Some validates fan worker threads across the source: bps block-check CRCs, xdelta's per-window
+  // decode, or a caller-requested source-checksum verification. Those MUST keep the runner's worker
+  // pool — without it the engine spawns from an empty pool and panics (os error 6). The rest (PPF/
+  // IPS/UPS structural + block checks) read a few hundred bytes single-threaded, so the pool + 64-file
+  // scratch seed is pure setup/teardown (~150 ms for a tiny PPF against a multi-hundred-MB disc) and
+  // is skipped. The apply path keeps its own input-size gate since it always reads+writes the source.
+  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || validateWithChecksums.length > 0;
+  const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
+  const effectiveThreadArg = noWorkerPool ? null : threadArg;
+  const disableDefaultThreadArgInjection = noWorkerPool || (hasBpsPatch && !effectiveThreadArg);
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch || singleThreadNoPool ? 8 : 64;
+  const scratchFilePoolSize = hasBpsPatch || noWorkerPool ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-validate", {
     ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
@@ -431,7 +440,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     patches: input.patchFiles.map((patch) => patch.patchFilePath),
     rom_filter: true,
     strip_header: removeHeader,
-    ...(threadArg ? { threads: threadArg } : {}),
+    ...(effectiveThreadArg ? { threads: effectiveThreadArg } : {}),
     ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
     ...(validateWithMinSize === undefined ? {} : { validate_with_min_size: BigInt(validateWithMinSize) }),
     ...(validateWithSize === undefined ? {} : { validate_with_size: BigInt(validateWithSize) }),
@@ -448,9 +457,9 @@ const invokeRomWeaverPatchValidateWorker = async (
     requestedThreadArg,
     romFilePath: input.romFilePath,
     scratchFilePoolSize,
-    singleThreadNoPool,
+    singleThreadNoPool: noWorkerPool,
     syncAccessMode: syncAccessMode || "",
-    threadArg,
+    threadArg: effectiveThreadArg,
     validateWithChecksums,
     validateWithMinSize,
     validateWithSize,
