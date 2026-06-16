@@ -23,8 +23,8 @@ mod core;
 use self::core::*;
 pub use self::core::{
     ChecksumProgress, ChecksumValues, NativeChecksumEngine, StreamingChecksum,
-    checksum_file_values, checksum_reader_values_with_progress, crc16_ccitt_bytes, crc32_bytes,
-    md5_bytes, md5_file,
+    StreamingChecksumTiming, checksum_file_values, checksum_reader_values_with_progress,
+    crc16_ccitt_bytes, crc32_bytes, md5_bytes, md5_file,
 };
 
 #[path = "planning.rs"]

@@ -9,6 +9,7 @@ use std::{
         mpsc,
     },
     thread,
+    time::{Duration, SystemTime},
 };
 
 use rayon::prelude::*;
@@ -37,7 +38,7 @@ use crate::{
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
     container_reads_source_on_main_thread,
     extract_support::{
-        ContainerProgressContext, ExtractHasher, ExtractedFileChecksum,
+        ContainerProgressContext, ExtractChecksumTiming, ExtractHasher, ExtractedFileChecksum,
         attach_extract_checksum_details, emit_container_step_progress,
         ensure_extract_output_available,
     },
@@ -925,23 +926,36 @@ where
                             ExtractHasher::new(context, task.logical_bytes, &task.output_path)?;
                         let mut copied = 0u64;
                         let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                        // Split this entry's wall time into decode (libarchive read), output write, and
+                        // inline checksum feed so the trace below shows whether hashing overlaps decoding
+                        // or runs serially on this thread. `SystemTime` is the wasm-supported clock here.
+                        let entry_started = SystemTime::now();
+                        let mut decode = Duration::ZERO;
+                        let mut write = Duration::ZERO;
+                        let mut hash_feed = Duration::ZERO;
                         loop {
+                            let read_at = SystemTime::now();
                             let read = reader.read(&mut buffer).map_err(|error| {
                                 RomWeaverError::Validation(format!(
                                     "{format_name} extract failed while reading entry {} (`{}`): {error}",
                                     task.index, task.archive_name
                                 ))
                             })?;
+                            decode += read_at.elapsed().unwrap_or_default();
                             if read == 0 {
                                 break;
                             }
+                            let write_at = SystemTime::now();
                             output.write_all(&buffer[..read]).map_err(|error| {
                                 RomWeaverError::Validation(format!(
                                     "{format_name} extract failed while writing entry {} (`{}`): {error}",
                                     task.index, task.archive_name
                                 ))
                             })?;
+                            write += write_at.elapsed().unwrap_or_default();
+                            let hash_at = SystemTime::now();
                             hasher.update(&buffer[..read])?;
+                            hash_feed += hash_at.elapsed().unwrap_or_default();
                             let read_u64 = read as u64;
                             copied = copied.saturating_add(read_u64);
                             on_bytes_written(read_u64);
@@ -949,7 +963,21 @@ where
                         output.flush()?;
                         drop(output);
                         written_bytes = written_bytes.saturating_add(copied);
-                        if let Some(entry) = hasher.finish(&task.output_path)? {
+                        let finalize_at = SystemTime::now();
+                        let (finished, checksum_timing) = hasher.finish_timed(&task.output_path)?;
+                        ExtractChecksumTimingSample {
+                            format: format_name,
+                            file: task.archive_name.as_str(),
+                            bytes: copied,
+                            decode,
+                            write,
+                            hash_feed,
+                            drain: finalize_at.elapsed().unwrap_or_default(),
+                            total: entry_started.elapsed().unwrap_or_default(),
+                            checksum: checksum_timing,
+                        }
+                        .emit_trace();
+                        if let Some(entry) = finished {
                             output_checksums.push(entry);
                         }
                     }
@@ -967,6 +995,60 @@ where
     }
 
     Ok((written_bytes, output_checksums))
+}
+
+/// One extracted entry's wall-time split, emitted as a single trace line so the checksum/extract
+/// overlap is visible in trace captures (the primary wasm/browser debugging tool). Grouping the
+/// fields in a struct keeps the trace call at the loop site to one statement.
+struct ExtractChecksumTimingSample<'a> {
+    format: &'a str,
+    file: &'a str,
+    bytes: u64,
+    decode: Duration,
+    write: Duration,
+    hash_feed: Duration,
+    drain: Duration,
+    total: Duration,
+    checksum: ExtractChecksumTiming,
+}
+
+impl ExtractChecksumTimingSample<'_> {
+    fn emit_trace(&self) {
+        // Microsecond-rounded milliseconds keep sub-millisecond chunks from collapsing to zero.
+        let ms = |duration: Duration| (duration.as_secs_f64() * 1_000_000.0).round() / 1000.0;
+        let decode_ms = ms(self.decode);
+        let write_ms = ms(self.write);
+        // The checksum's own cost: the parallel worker hashing wall when threaded, otherwise the
+        // inline per-chunk feed time measured on the extract thread.
+        let checksum_ms = if self.checksum.threaded {
+            (self.checksum.hash_busy_ns as f64) / 1_000_000.0
+        } else {
+            ms(self.hash_feed)
+        };
+        // How much of the checksum ran while decoding was still in flight. The synchronous fan-out
+        // hashes inline between reads, so it never overlaps (its cost is already serial in the total);
+        // the worker-backed path overlaps up to the decode+write window, any remainder paid as drain.
+        let overlap_ms = if self.checksum.threaded {
+            checksum_ms.min(decode_ms + write_ms)
+        } else {
+            0.0
+        };
+        trace!(
+            format = self.format,
+            file = self.file,
+            bytes = self.bytes,
+            total_ms = ms(self.total),
+            decode_ms,
+            opfs_write_ms = write_ms,
+            checksum_ms,
+            checksum_feed_ms = ms(self.hash_feed),
+            checksum_drain_ms = ms(self.drain),
+            overlap_ms,
+            threaded = self.checksum.threaded,
+            workers = self.checksum.workers,
+            "extract+checksum timing"
+        );
+    }
 }
 
 fn send_libarchive_extract_output(

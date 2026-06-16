@@ -13,6 +13,7 @@ use std::{
 use std::{
     sync::{Arc, mpsc},
     thread,
+    time::{Duration, SystemTime},
 };
 
 use adler2::Adler32;
@@ -67,6 +68,18 @@ pub struct ChecksumValues {
     pub values: BTreeMap<String, String>,
 }
 
+/// How much wall time a [`StreamingChecksum`] spent hashing, and whether it ran on its own worker
+/// threads. `hash_busy_ns` is the max across workers — their parallel hashing wall — so a caller can
+/// report how much of the checksum cost overlapped a concurrent producer (extraction) versus ran on
+/// its own. It is zero for the synchronous fan-out, where hashing happens inline on the caller's
+/// thread and is captured by that caller's own feed timing instead.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StreamingChecksumTiming {
+    pub hash_busy_ns: u128,
+    pub threaded: bool,
+    pub workers: usize,
+}
+
 pub struct StreamingChecksum {
     inner: StreamingChecksumInner,
 }
@@ -79,7 +92,7 @@ pub(super) enum StreamingChecksumInner {
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
 pub(super) struct AsyncStreamingChecksumWorker {
-    handle: thread::JoinHandle<BTreeMap<String, String>>,
+    handle: thread::JoinHandle<(BTreeMap<String, String>, u128)>,
     sender: Option<mpsc::SyncSender<Arc<[u8]>>>,
 }
 
@@ -152,15 +165,22 @@ impl StreamingChecksum {
                         .into_iter()
                         .map(|algorithm| (algorithm, HasherState::new(algorithm)))
                         .collect::<Vec<_>>();
+                    // Accumulate only the wall time spent hashing (not the time blocked waiting on the
+                    // next chunk), so the caller can tell how much of the checksum overlapped the
+                    // producer versus ran on its own. `SystemTime` is the wasm-supported clock here.
+                    let mut hash_busy = Duration::ZERO;
                     while let Ok(bytes) = receiver.recv() {
+                        let hashed_at = SystemTime::now();
                         for (_, state) in &mut states {
                             state.update(&bytes);
                         }
+                        hash_busy += hashed_at.elapsed().unwrap_or_default();
                     }
-                    states
+                    let values = states
                         .into_iter()
                         .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-                        .collect()
+                        .collect::<BTreeMap<String, String>>();
+                    (values, hash_busy.as_nanos())
                 }) {
                 Ok(handle) => handle,
                 Err(_) => {
@@ -214,25 +234,45 @@ impl StreamingChecksum {
     }
 
     pub fn finalize(self) -> Result<BTreeMap<String, String>> {
+        Ok(self.finalize_timed()?.0)
+    }
+
+    /// Like [`finalize`](Self::finalize) but also returns how much wall time the hashing took and
+    /// whether it ran on worker threads, so an inline-extract caller can log the checksum/extract
+    /// overlap.
+    pub fn finalize_timed(self) -> Result<(BTreeMap<String, String>, StreamingChecksumTiming)> {
         match self.inner {
             #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(mut workers) => {
+                let workers_count = workers.len();
                 for worker in &mut workers {
                     drop(worker.sender.take());
                 }
                 let mut results = BTreeMap::new();
+                let mut hash_busy_ns = 0u128;
                 for worker in workers {
-                    let worker_results = worker.handle.join().map_err(|_| {
+                    let (worker_results, worker_busy_ns) = worker.handle.join().map_err(|_| {
                         RomWeaverError::Validation("streaming checksum worker panicked".to_string())
                     })?;
                     results.extend(worker_results);
+                    hash_busy_ns = hash_busy_ns.max(worker_busy_ns);
                 }
-                Ok(results)
+                Ok((
+                    results,
+                    StreamingChecksumTiming {
+                        hash_busy_ns,
+                        threaded: true,
+                        workers: workers_count,
+                    },
+                ))
             }
-            StreamingChecksumInner::Sync(states) => Ok(states
-                .into_iter()
-                .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-                .collect()),
+            StreamingChecksumInner::Sync(states) => Ok((
+                states
+                    .into_iter()
+                    .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
+                    .collect(),
+                StreamingChecksumTiming::default(),
+            )),
         }
     }
 }

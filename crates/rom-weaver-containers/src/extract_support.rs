@@ -156,6 +156,18 @@ pub(crate) fn create_extract_checksum(
     StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
 }
 
+/// Timing for an inline extract checksum, surfaced from [`ExtractHasher::finish_timed`] so the
+/// extract loop can log how much of the hashing overlapped decoding. `threaded`/`workers` describe a
+/// worker-backed [`StreamingChecksum`]; the synchronous variant engine hashes inline on the extract
+/// thread (its cost is the loop's own per-chunk feed timing) and reports the default — not threaded,
+/// zero busy.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ExtractChecksumTiming {
+    pub(crate) threaded: bool,
+    pub(crate) workers: usize,
+    pub(crate) hash_busy_ns: u128,
+}
+
 /// Inline extract hasher that folds output bytes into either a plain checksum or
 /// the full streaming variant engine (when the output's total length is known),
 /// so archive extracts emit the same `checksum_variants` as the `checksum`
@@ -208,13 +220,34 @@ impl ExtractHasher {
     /// `fix-header` (repair dependency over the in-memory cap) is completed with
     /// one extra read of the just-written output.
     pub(crate) fn finish(self, output_path: &Path) -> Result<Option<ExtractedFileChecksum>> {
+        Ok(self.finish_timed(output_path)?.0)
+    }
+
+    /// Like [`finish`](Self::finish) but also returns the hashing timing so the caller can log how
+    /// much of the checksum overlapped extraction. The worker-backed plain checksum reports its
+    /// parallel hashing wall; the inline variant engine reports the default (its cost is the caller's
+    /// own per-chunk feed timing).
+    pub(crate) fn finish_timed(
+        self,
+        output_path: &Path,
+    ) -> Result<(Option<ExtractedFileChecksum>, ExtractChecksumTiming)> {
         match self {
-            Self::None => Ok(None),
-            Self::Plain(checksum) => Ok(Some(ExtractedFileChecksum {
-                path: output_path.to_path_buf(),
-                values: checksum.finalize()?,
-                variants: Vec::new(),
-            })),
+            Self::None => Ok((None, ExtractChecksumTiming::default())),
+            Self::Plain(checksum) => {
+                let (values, timing) = checksum.finalize_timed()?;
+                Ok((
+                    Some(ExtractedFileChecksum {
+                        path: output_path.to_path_buf(),
+                        values,
+                        variants: Vec::new(),
+                    }),
+                    ExtractChecksumTiming {
+                        threaded: timing.threaded,
+                        workers: timing.workers,
+                        hash_busy_ns: timing.hash_busy_ns,
+                    },
+                ))
+            }
             Self::Variants { engine, algorithms } => {
                 let VariantOutput {
                     mut rows,
@@ -236,11 +269,14 @@ impl ExtractHasher {
                     .find(|row| row.id == "raw")
                     .map(|row| row.checksums.clone())
                     .unwrap_or_default();
-                Ok(Some(ExtractedFileChecksum {
-                    path: output_path.to_path_buf(),
-                    values,
-                    variants: rows,
-                }))
+                Ok((
+                    Some(ExtractedFileChecksum {
+                        path: output_path.to_path_buf(),
+                        values,
+                        variants: rows,
+                    }),
+                    ExtractChecksumTiming::default(),
+                ))
             }
         }
     }
