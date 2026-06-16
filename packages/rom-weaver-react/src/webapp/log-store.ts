@@ -17,7 +17,7 @@ import { type ConsoleLogRecord, subscribeConsoleLogRecords } from "./console-log
  * instead of one full-array rebuild and render per line.
  */
 
-const MAX_LOG_LINES = 500;
+const MAX_LOG_LINES = 2500;
 
 type LogStoreEntry = LogRecord & { id: number };
 
