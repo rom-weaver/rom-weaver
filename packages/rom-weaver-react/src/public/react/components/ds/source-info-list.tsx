@@ -114,10 +114,10 @@ const SourceInfoList = ({
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present, the base
   // checksums become one of several groups, so they get their own labeled head
-  // ("Raw") to match — an unlabeled block alongside labeled variants reads as if
-  // it belonged to the first variant.
+  // ("Unchanged") to match — an unlabeled block alongside labeled variants reads
+  // as if it belonged to the first variant.
   const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
-  const rawLabel = checksumVariants?.find((variant) => variant.id === "raw")?.label ?? "Raw";
+  const baseGroupLabel = "Unchanged";
   const baseRows = (
     <>
       <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
@@ -138,7 +138,7 @@ const SourceInfoList = ({
       {discType ? <ChecksumRow copyValue={discType} label="DISC" value={discType} /> : null}
       {variantRows.length ? (
         <div className="ck-group">
-          <div className="ck-group-head">{rawLabel}</div>
+          <div className="ck-group-head">{baseGroupLabel}</div>
           {baseRows}
         </div>
       ) : (
