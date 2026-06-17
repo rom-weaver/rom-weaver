@@ -322,7 +322,13 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           : [...EXTRACT_CHECKSUM_ALGORITHMS];
         const extracted = await invokeRomWeaverExtractWorker(
           {
-            ...(extractChecksumAlgorithms.length ? { checksumAlgorithms: extractChecksumAlgorithms } : {}),
+            // ROM/general extraction hashes only ROM-like outputs (safe to always run, skips
+            // sidecars); patch extraction keeps full per-output checksums.
+            ...(extractChecksumAlgorithms.length
+              ? workflowInput.options?.patchFilter
+                ? { checksumAlgorithms: extractChecksumAlgorithms }
+                : { checksumRomAlgorithms: extractChecksumAlgorithms }
+              : {}),
             ...(typeof workflowInput.options?.interactiveSelectionEnabled === "boolean"
               ? { interactiveSelectionEnabled: workflowInput.options.interactiveSelectionEnabled }
               : {}),
@@ -409,7 +415,13 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           const runExtract = () =>
             invokeRomWeaverExtractWorker(
               {
-                ...(extractChecksumAlgorithms.length ? { checksumAlgorithms: extractChecksumAlgorithms } : {}),
+                // ROM/general extraction hashes only ROM-like outputs (safe to always run, skips
+                // sidecars); patch extraction keeps full per-output checksums.
+                ...(extractChecksumAlgorithms.length
+                  ? workflowInput.options?.patchFilter
+                    ? { checksumAlgorithms: extractChecksumAlgorithms }
+                    : { checksumRomAlgorithms: extractChecksumAlgorithms }
+                  : {}),
                 logLevel: workflowInput.options?.logLevel,
                 outDirPath,
                 patchFilter: workflowInput.options?.patchFilter,

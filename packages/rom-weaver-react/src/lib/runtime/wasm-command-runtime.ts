@@ -205,6 +205,12 @@ const invokeRomWeaverExtractWorker = async (
     romFilter?: boolean;
     patchFilter?: boolean;
     checksumAlgorithms?: string[];
+    /** Like `checksumAlgorithms` but only ROM-like outputs are hashed (sidecar/non-ROM entries
+     * are skipped). Safe to always pass; ignored when `checksumAlgorithms` is also set. */
+    checksumRomAlgorithms?: string[];
+    /** Fold container/platform probe metadata into the result (and fail a single-payload
+     * disc image that resolves to no known platform). Lets a caller skip a separate probe. */
+    probe?: boolean;
     sourcePath: string;
     signal?: AbortSignal;
     splitBin?: boolean;
@@ -237,6 +243,11 @@ const invokeRomWeaverExtractWorker = async (
     const value = String(algorithm || "").trim();
     if (value) checksum.push(value);
   }
+  const checksumRom: string[] = [];
+  for (const algorithm of Array.isArray(input.checksumRomAlgorithms) ? input.checksumRomAlgorithms : []) {
+    const value = String(algorithm || "").trim();
+    if (value) checksumRom.push(value);
+  }
   const threadArg = toThreadBudget(input.workerThreads);
   const command = createRomWeaverCommand("extract", {
     checksum,
@@ -247,6 +258,8 @@ const invokeRomWeaverExtractWorker = async (
     select,
     source: sourcePath,
     ...(input.splitBin ? { split_bin: true } : {}),
+    ...(checksumRom.length ? { checksum_rom: checksumRom } : {}),
+    ...(input.probe ? { probe: true } : {}),
     ...(threadArg ? { threads: threadArg } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
@@ -813,6 +826,9 @@ const runRomWeaverChecksumWorker = async (
     filePath?: string;
     fileSize?: number;
     logLevel?: string;
+    /** Fail the checksum unless the source resolves to a known platform. Off by default —
+     * plain checksum happily hashes unidentified bytes. */
+    probe?: boolean;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -841,6 +857,7 @@ const runRomWeaverChecksumWorker = async (
     no_extract: true,
     source: filePath,
     ...(checksumStart === undefined ? {} : { start: checksumStart }),
+    ...(input.probe ? { probe: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson checksum dispatch", {
     algorithms,
