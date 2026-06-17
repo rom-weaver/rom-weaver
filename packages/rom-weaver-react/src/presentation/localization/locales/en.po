@@ -1,0 +1,1394 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-06-16 18:56-0400\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.threads"
+msgstr "“auto” resolves to the browser-reported core count of {n}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.threadsHint"
+msgstr "“auto” resolves to the browser-reported core count of {n}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.faultMsg"
+msgstr "{code} at stage {stage}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.off"
+msgstr "{count, plural, one {# disabled} other {# disabled}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.roms.files"
+msgstr "{count, plural, one {# file} other {# files}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.offCount"
+msgstr "{count, plural, one {# patch is off — tick it to include it} other {# patches are off — tick them to include them}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.roms.tracks"
+msgstr "{count, plural, one {# track} other {# tracks}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.run.apply"
+msgstr "{count, plural, one {Weave # patch} other {Weave # patches}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.warningCount"
+msgstr "{count} warning(s)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.trim.savings"
+msgstr "{from} → {to} ({p} smaller)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.records"
+msgstr "{n} delta records"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.progress.threads"
+msgstr "{n} threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "output.sizeChange"
+msgstr "{percent} {direction}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "output.sizeRatio"
+msgstr "{percent} of raw"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.archive"
+msgstr "{t} archive"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.patchType"
+msgstr "{t} patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.sevenZipCodec"
+msgstr "7z"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.sevenZipCodec"
+msgstr "7z codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.sevenZipCodec"
+msgstr "7z output currently uses LZMA2."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.needs.rom"
+msgstr "a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.needs.source"
+msgstr "a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.empty.needsInputNoun"
+msgstr "Add {noun} in {loc} above"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.addCreate"
+msgstr "Add or replace a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.empty.needsInput"
+msgstr "Add your files in {loc} above to begin"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.sizeGrowth"
+msgstr "Allow size growth (truncation record)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.mode.apply"
+msgstr "Apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.apply"
+msgstr "Apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.apply"
+msgstr "Apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.dryRunDesc"
+msgstr "Apply to a scratch copy and re-hash — no source bytes touched"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.apply"
+msgstr "Applying patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.romInput"
+msgstr "Archives are decompressed and the ROM is located automatically; chd/rvz/z3ds containers are unpacked before patching; nested archives resolve recursively. RetroArch softpatch naming is supported."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.autoTrimShort"
+msgstr "auto-trim"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.autoTrim"
+msgstr "Auto-trim before hashing (→ {size})"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.variant.autoTrimmed"
+msgstr "Auto-trimmed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.rvzBlockSize"
+msgstr "Block size"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.verification"
+msgstr "Block the run when input or output hashes don’t match the patch requirements."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.trimPad"
+msgstr "Byte expected in the tail run; auto detects 0x00 or 0xFF."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.running.cancel"
+msgstr "Cancel job"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.cancelStage"
+msgstr "Cancel reading"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.chdCd"
+msgstr "CD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.chdCreateCdCodecs"
+msgstr "CD Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.checksum"
+msgstr "Checking checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.cks.label"
+msgstr "Checks"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.checksum"
+msgstr "Checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.CHECKSUM_MISMATCH"
+msgstr "Checksum validation failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.ambiguous"
+msgstr "Choose which {role} to use from {sourceName}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.hint"
+msgstr "click or drop files anywhere on the page — archives, containers, cue sheets and softpatches resolve automatically"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.anywhereShort"
+msgstr "click to browse — or drop files anywhere on the page"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.outputOptions"
+msgstr "Codec and level defaults come from Settings › Compression; changes here affect only this job."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.codecs"
+msgstr "Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.compress"
+msgstr "Compress"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.compress"
+msgstr "Compressing output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.compression"
+msgstr "Compression"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.COMPRESSION_FAILED"
+msgstr "Compression failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.announce.copied"
+msgstr "Copied to clipboard"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.copy"
+msgstr "Copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.fault.copy"
+msgstr "Copy report"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.ckHint"
+msgstr "CRC32, MD5, or SHA-1"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.mode.create"
+msgstr "Create"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.run.create"
+msgstr "Create patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "output.created"
+msgstr "Created {fileName}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.create"
+msgstr "Creating patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.cue.label"
+msgstr "Cue"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.decompress"
+msgstr "Decompressing input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.rvzBlock"
+msgstr "Default 128 KiB. Larger blocks compress better but seek slower."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.defaultCompression"
+msgstr "Default format"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.rvzCodec"
+msgstr "Default zstd. Optional level: zstd:-7 through zstd:22."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.detect"
+msgstr "Detect"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.detect"
+msgstr "Detecting files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.diff"
+msgstr "Diff"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.window"
+msgstr "Diff window"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.window"
+msgstr "Diff window for create — larger spans find moved data but use more memory."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.dismiss"
+msgstr "Dismiss"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Donate"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.done"
+msgstr "done"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.download"
+msgstr "Download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.reorder"
+msgstr "Drag to reorder — arrow keys move"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.hero"
+msgstr "Drop a ROM or patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.heroTrim"
+msgstr "Drop a ROM to trim"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.addPatches"
+msgstr "Drop patch files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.modified"
+msgstr "Drop the modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.heroCreate"
+msgstr "Drop the original and modified ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.original"
+msgstr "Drop the original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.dryRun"
+msgstr "Dry-run"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.chdDvd"
+msgstr "DVD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.chdCreateDvdCodecs"
+msgstr "DVD Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.embed"
+msgstr "Embed source crc32 in the output filename"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.embeddedSizes"
+msgstr "embedded sizes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.encode"
+msgstr "Encode"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.expIn"
+msgstr "Expected input checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.expOut"
+msgstr "Expected output checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drawer.extract"
+msgstr "Extract"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.extract"
+msgstr "Extract"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.roms.extracting"
+msgstr "Extracting {name}…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.failed"
+msgstr "failed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.dryRunFail"
+msgstr "Failed — scratch output differs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.file"
+msgstr "file"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.variant.asDumped"
+msgstr "File — as dumped"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.variant.withHeader"
+msgstr "File — as dumped (with 512 B header)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.filter"
+msgstr "Filter"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.filterLabel"
+msgstr "Filter log"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.fixChecksum"
+msgstr "Fix ROM header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.fixHeader"
+msgstr "Fix ROM header before diff (512 B copier header)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.fixes"
+msgstr "Fixes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.format"
+msgstr "Format"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.gdi.label"
+msgstr "GDI"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.general"
+msgstr "General"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.group"
+msgstr "group {kind}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.fixHeaderShort"
+msgstr "header fix"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.high"
+msgstr "High"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.idle"
+msgstr "idle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.sizesInOut"
+msgstr "in {in} → out {out}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.toggle"
+msgstr "Include {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.input"
+msgstr "Input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.inputs"
+msgstr "Inputs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.warn.ipsNoChecksum"
+msgstr "IPS carries no embedded checksums — gated by the filename hint only."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.language"
+msgstr "Language"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.later"
+msgstr "Later"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.compressionProfile"
+msgstr "Level"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.rvzCompressionLevel"
+msgstr "Level override"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.sevenZipLevel"
+msgstr "Level override"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.z3dsCompressionLevel"
+msgstr "Level override"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.zipLevel"
+msgstr "Level override"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.log"
+msgstr "Log"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.logLevel"
+msgstr "Log level"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.low"
+msgstr "Low"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.max"
+msgstr "Max"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.units"
+msgstr "MB counts in decimal (10⁶ bytes), MiB in binary (2²⁰ bytes). Sizes everywhere follow this choice."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.medium"
+msgstr "Medium"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.min"
+msgstr "Min"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verdict.mismatch"
+msgstr "Mismatch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.modified"
+msgstr "Modified"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.aria"
+msgstr "More info"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.AMBIGUOUS_SELECTION"
+msgstr "Multiple matching files were found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.NO_COMPATIBLE_PATCH"
+msgstr "No compatible patch was found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.emptyFilter"
+msgstr "No lines match “{q}”"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.NO_SELECTABLE_CANDIDATE"
+msgstr "No selectable file was found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.stateOff"
+msgstr "Off"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.on"
+msgstr "On"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.compressType"
+msgstr "Optionally wrap the output in a compressed container — “none” writes the raw file."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.output"
+msgstr "Options"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.patch"
+msgstr "Options"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.rom"
+msgstr "Options"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.title"
+msgstr "Options"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.original"
+msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.output"
+msgstr "Output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.output"
+msgstr "Output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.OUTPUT_WRITE_FAILED"
+msgstr "Output could not be written."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.out.placeholder"
+msgstr "Output filename (no extension)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.trimPad"
+msgstr "Padding byte"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.parsing"
+msgstr "Parsing {name}…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.parse"
+msgstr "Parsing patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.verify.dryRunPass"
+msgstr "Passed — scratch output re-hash matches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.patch"
+msgstr "Patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_APPLY_FAILED"
+msgstr "Patch application failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.created"
+msgstr "Patch created & verified"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_CREATE_FAILED"
+msgstr "Patch creation failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.announce.reordered"
+msgstr "Patch moved to position {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_PARSE_FAILED"
+msgstr "Patch parsing failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.done"
+msgstr "Patched & verified"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.patchedCrc32"
+msgstr "patched crc32"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.needs.patches"
+msgstr "patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.patches"
+msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.patches"
+msgstr "Patches apply top to bottom — drag the handle to reorder. Filename hints (crc32 / size) are checked before the run."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.present"
+msgstr "present"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.level"
+msgstr "Profile → level: Min 0/−7 · Medium 5/11 · Max 9/22 (standard / zstd). A codec:level entry in a codec list overrides this."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.raw"
+msgstr "raw {t}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.staging"
+msgstr "Reading dropped files…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.ready"
+msgstr "ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.rebuildGdi"
+msgstr "Rebuild .gdi index for the patched output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.rebuildCueShort"
+msgstr "rebuild cue"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.rebuildCue"
+msgstr "Rebuild cue sheet for the patched output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.rebuildGdiShort"
+msgstr "rebuild gdi"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.rebuiltCue"
+msgstr "rebuilt cue"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.rebuiltGdi"
+msgstr "rebuilt gdi"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.fixHeader"
+msgstr "Recalculates internal header checksums after patching so clean dumps verify again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.release"
+msgstr "Release to stage files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.reload"
+msgstr "Reload"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.reloadNow"
+msgstr "Reload now"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.note"
+msgstr "Reloading swaps the cached app. Running jobs are finished first."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.fault.remedyK"
+msgstr "Remedy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.confirm"
+msgstr "Remove all"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.title"
+msgstr "Remove all inputs?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.addTrim"
+msgstr "Replace the ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.add"
+msgstr "Replace the ROM or add patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.requireInputChecksumMatch"
+msgstr "Require input match"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.requireOutputChecksumMatch"
+msgstr "Require output match"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.WORKER_UNAVAILABLE"
+msgstr "Required worker support is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.rerun"
+msgstr "Rerun with {optionName} <id>."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.reset"
+msgstr "Reset"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.retry"
+msgstr "Retry"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.rom"
+msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.doneMsg"
+msgstr "rom-weaver finished in {t}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.running"
+msgstr "running"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.rvz"
+msgstr "RVZ"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.rvzCodec"
+msgstr "RVZ"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.rvzBlockSize"
+msgstr "RVZ block size"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.rvzCodec"
+msgstr "RVZ codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.save"
+msgstr "Save"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.scan"
+msgstr "Scan"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.wakelock.text"
+msgstr "Screen stays awake while a job is running."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "candidate.selectable"
+msgstr "Selectable {role} files:"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.select"
+msgstr "Selecting file"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.output"
+msgstr "Set the filename without an extension — the format select controls it. Containers (zip, 7z, chd, rvz) are written directly."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.title"
+msgstr "Settings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.sizeGrowthShort"
+msgstr "size growth"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.units"
+msgstr "Size units"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.picker.skipped"
+msgstr "skipped"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.sourceWindow"
+msgstr "Source window"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.staging"
+msgstr "staging"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.STORAGE_UNAVAILABLE"
+msgstr "Storage is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "output.saved"
+msgstr "successfully saved to {path}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.swap"
+msgstr "Swap"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.toDark"
+msgstr "Switch to dark theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.toLight"
+msgstr "Switch to light theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.trimRom"
+msgstr "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) — the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.tapAnywhere"
+msgstr "Tap anywhere to choose files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.tap"
+msgstr "Tap to choose files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.target"
+msgstr "Target"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.targetBlockcheck"
+msgstr "target blockcheck"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.picker.hint"
+msgstr "The archive contains more than one candidate — pick the ones to stage."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.createOriginal"
+msgstr "The clean, unmodified dump that players already own; its checksum is embedded in the patch as the apply requirement; archives and containers resolve automatically."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.needs.modified"
+msgstr "the modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.needs.original"
+msgstr "the original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_TARGET_MISMATCH"
+msgstr "The patch target did not match the selected input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.UNSUPPORTED_FORMAT"
+msgstr "The selected file format is not supported."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.SELECTION_NOT_FOUND"
+msgstr "The selected file was not found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.INVALID_INPUT"
+msgstr "The selected input is not valid."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.INVALID_SETTINGS"
+msgstr "The selected settings are not valid."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.SOURCE_NOT_FOUND"
+msgstr "The selected source could not be found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.SOURCE_UNSUPPORTED"
+msgstr "The selected source type is not supported."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.body"
+msgstr "This clears every staged ROM and patch from the workbench. Files on disk are not touched."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.env.threads"
+msgstr "threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.track.word"
+msgstr "Track"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.roms.track"
+msgstr "Track {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drawer.tracks"
+msgstr "Tracks & checks"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.trim.detected"
+msgstr "Trailing padding detected"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.mode.trim"
+msgstr "Trim"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.trim"
+msgstr "Trim"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.trimConfirm"
+msgstr "Trim ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.run.trim"
+msgstr "Trim ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.trimTitle"
+msgstr "Trim ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.result.trimmed"
+msgstr "Trimmed & verified"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.trim"
+msgstr "Trimming ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.confirm.trimBody"
+msgstr "Trimming writes a new, smaller ROM — this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.req.undoData"
+msgstr "undo data"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.undo"
+msgstr "Undo-aware re-apply (revalidates patched blocks)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.dialogTitle"
+msgstr "Update"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.ready"
+msgstr "Update ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.picker.use"
+msgstr "Use selection"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.chdCd"
+msgstr "Valid: cdlz, cdzl, cdfl. Entries without a level use the Level profile."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.zipCodec"
+msgstr "Valid: deflate, zstd, store. zstd writes ZIP-compatible output; store ignores Level."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.chdDvd"
+msgstr "Valid: lzma, zlib, huff, flac. huff has no level."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.verification"
+msgstr "Verification"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drawer.verifications"
+msgstr "Verify"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.verify"
+msgstr "Verify"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opts.trimVerify"
+msgstr "Verify output after trim"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.verify"
+msgstr "Verifying output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.veryHigh"
+msgstr "Very High"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.scale.veryLow"
+msgstr "Very Low"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.run.applyEmpty"
+msgstr "Weave patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.whatsNew"
+msgstr "What’s new"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.opt.sourceWindowShort"
+msgstr "window"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.variant.noHeader"
+msgstr "Without copier header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.WORKER_FAILED"
+msgstr "Worker execution failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.workerThreads"
+msgstr "Worker threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.validation"
+msgstr "Worker threads must be “auto” or a number between 1 and 64."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.CANCELLED"
+msgstr "Workflow was cancelled."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.stage.write"
+msgstr "Write"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "progress.write"
+msgstr "Writing output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.info.createModified"
+msgstr "Your edited build — the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported)."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.zipCodec"
+msgstr "ZIP"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.zipCodec"
+msgstr "ZIP codec"

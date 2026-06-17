@@ -284,7 +284,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       serveRootStaticAssets(),
       deferDevHotUpdates(),
-      react(),
+      react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       writeWebappStaticAssets(),
       VitePWA({
         devOptions: {

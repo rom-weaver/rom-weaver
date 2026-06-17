@@ -8,7 +8,11 @@
     "scripts/version.mjs",
     "tests/wasm/*.test.mjs",
     "tests/wasm/*.bench.mjs",
-    "vitest.config.base.mjs"
+    "vitest.config.base.mjs",
+    "lingui.config.ts",
+    // Source-of-truth message catalog; consumed by `lingui extract` via static
+    // analysis (not a JS import), so its exports are externally used.
+    "src/presentation/localization/messages.ts"
   ],
   "project": [
     "src/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,css}",
