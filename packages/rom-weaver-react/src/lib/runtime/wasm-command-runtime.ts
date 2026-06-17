@@ -27,7 +27,12 @@ import {
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { getRomWeaverFailureMessage, runRomWeaverJson } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
-import { parseChecksumDetails, parseChecksumLabel, parseChecksumRomProbeLabel } from "./checksum-output-parsing.ts";
+import {
+  parseChecksumDetails,
+  parseChecksumLabel,
+  parseChecksumRomProbeLabel,
+  parseChecksumRomType,
+} from "./checksum-output-parsing.ts";
 import {
   isChdCompressionFormat,
   normalizeChdCodecArgs,
@@ -864,6 +869,7 @@ const runRomWeaverChecksumWorker = async (
     ...parseChecksumDetails(details),
   };
   const variants = parseChecksumVariants(details);
+  const romType = parseChecksumRomType(details);
   return {
     checksums: {
       crc32: checksums.crc32 || 0,
@@ -871,6 +877,7 @@ const runRomWeaverChecksumWorker = async (
       romProbe: parseChecksumRomProbeLabel(label),
       sha1: checksums.sha1 || "",
       ...(checksums.adler32 === undefined ? {} : { adler32: checksums.adler32 }),
+      ...(romType ? { romType } : {}),
       ...(variants ? { variants } : {}),
     } as ChecksumResult,
   };

@@ -1,5 +1,5 @@
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
-import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -60,6 +60,7 @@ type RomInputInfoState = {
   checksumVariants?: ChecksumVariant[];
   romInfo: string;
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   validationPhase: string;
   checksumsExpanded: boolean;
   checksumTiming: string;
@@ -367,6 +368,12 @@ const normalizePatcherUiState = (
                 typeof trim.preservedDownloadPlayCert === "boolean" ? trim.preservedDownloadPlayCert : undefined,
               trimmedInputBytes: typeof trim.trimmedInputBytes === "number" ? trim.trimmedInputBytes : undefined,
             },
+          }
+        : undefined,
+      romType: isRecord(source.romType)
+        ? {
+            discFormat: typeof source.romType.discFormat === "string" ? source.romType.discFormat : undefined,
+            platform: typeof source.romType.platform === "string" ? source.romType.platform : undefined,
           }
         : undefined,
       sha1: typeof source.sha1 === "string" ? source.sha1 : "",

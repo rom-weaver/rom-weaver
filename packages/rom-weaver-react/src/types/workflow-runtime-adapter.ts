@@ -6,7 +6,7 @@ import type {
   PatchValidateCommand,
   ThreadBudget,
 } from "../wasm/index.ts";
-import type { ChecksumResult, ChecksumVariant } from "./checksum.ts";
+import type { ChecksumResult, ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
 import type { OutputStorageKind } from "./output.ts";
 import type { JsonObject, JsonValue } from "./runtime.ts";
@@ -84,6 +84,7 @@ type RuntimeWorkerOutput = {
   patchFile?: Blob;
   patchFileName?: string;
   patchFilePath?: string;
+  romType?: RomTypeTag;
   size?: number;
   timing?: PublicOutput["timing"];
 };

@@ -356,6 +356,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     if (selectedOwner && "checksumTimeMs" in selectedOwner.state)
       view.state.checksumTimeMs = selectedOwner.state.checksumTimeMs;
     if (selectedOwner && "romProbe" in selectedOwner.state) view.state.romProbe = selectedOwner.state.romProbe;
+    if (selectedOwner && "romType" in selectedOwner.state) view.state.romType = selectedOwner.state.romType;
   }
 
   getSelectedOwner(
@@ -414,6 +415,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     stage.state.decompressionTimeMs = undefined;
     stage.state.parentCompressions = [];
     stage.state.romProbe = undefined;
+    stage.state.romType = undefined;
     stage.state.selectedCandidateId = undefined;
     stage.state.status = "needsSelection";
     stage.state.wasDecompressed = undefined;

@@ -1,4 +1,4 @@
-import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
 import type { SelectionGroupCandidate } from "../../types/selection.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 
@@ -27,6 +27,7 @@ type InputAsset = {
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   preparation?: InputPreparationMetrics;
   file: PatchFileInstance;
   groupId?: string;

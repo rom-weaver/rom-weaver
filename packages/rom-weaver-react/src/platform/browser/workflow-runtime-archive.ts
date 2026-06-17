@@ -1,5 +1,6 @@
 import { isRomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractWorker,
@@ -368,6 +369,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 cleanup: () => cleanupExtractedFiles([entry.path]),
                 fileName,
                 filePath: entry.path,
+                romType: romTypeFromEmittedFile(entry),
                 size: entry.sizeBytes,
                 // Per-file extract time (the step that produced this leaf); falls back to the whole
                 // extract's elapsed time when the runtime did not report a per-file value.
@@ -460,8 +462,10 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           };
           const createOutput = (matched: {
             checksums?: Record<string, string>;
+            discFormat?: string;
             fileName: string;
             path: string;
+            platform?: string;
             sizeBytes?: number;
           }) =>
             workerIo.createWorkerOutput(
@@ -470,6 +474,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 cleanup: () => cleanupExtractedFiles([matched.path]),
                 fileName: entryName,
                 filePath: matched.path,
+                romType: romTypeFromEmittedFile(matched),
                 size: matched.sizeBytes,
               },
               entryName,

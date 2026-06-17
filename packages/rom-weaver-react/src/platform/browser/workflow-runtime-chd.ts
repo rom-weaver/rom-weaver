@@ -4,6 +4,7 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import { replaceCuePatchFileName } from "../../lib/input/rom-specific-file-utils.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractWorker,
@@ -430,6 +431,7 @@ const createBrowserChdRuntime = (
                 cleanup: cleanupAllOutputs,
                 fileName: fileNameForOutput,
                 filePath: entry.path,
+                romType: isCue ? undefined : romTypeFromEmittedFile(entry),
                 size: entry.sizeBytes,
               },
               fileNameForOutput,

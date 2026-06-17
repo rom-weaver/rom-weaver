@@ -270,6 +270,7 @@ const createBrowserRuntimeVfsIo = ({
           timing: result.timing,
         });
         if (result.checksumVariants?.length) output.checksumVariants = result.checksumVariants;
+        if (result.romType) output.romType = result.romType;
         return output;
       }
       throw new Error(failureMessage || "Worker did not return browser output");

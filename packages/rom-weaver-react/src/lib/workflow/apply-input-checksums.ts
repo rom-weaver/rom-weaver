@@ -7,12 +7,14 @@ import {
   calculateStandardInputChecksumsForFile,
   cloneChecksumRomProbe,
   cloneChecksumVariants,
+  cloneRomType,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
+  getPatchFilePrecomputedRomType,
   getPrimaryInputAsset,
   isChecksummableInputAsset,
 } from "./staged-source-checksums.ts";
@@ -53,6 +55,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       if (precomputed) {
         asset.checksums = precomputed;
         asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
+        asset.romType = getPatchFilePrecomputedRomType(asset.file);
         asset.checksumTimeMs = 0;
         continue;
       }
@@ -83,6 +86,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       asset.checksums = checksumResult.checksums;
       asset.checksumVariants = checksumResult.variants;
       asset.romProbe = checksumResult.romProbe;
+      asset.romType = checksumResult.romType;
       asset.checksumTimeMs = Date.now() - checksumStartedAt;
     }
     const primaryAsset = getPrimaryInputAsset(assets);
@@ -92,6 +96,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       stage.state.checksumVariants = cloneChecksumVariants(primaryAsset?.checksumVariants);
       stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
       stage.state.romProbe = cloneChecksumRomProbe(primaryAsset?.romProbe);
+      stage.state.romType = cloneRomType(primaryAsset?.romType);
     }
   }
   if (session.synthetic) adapters.syncInputSessionView();

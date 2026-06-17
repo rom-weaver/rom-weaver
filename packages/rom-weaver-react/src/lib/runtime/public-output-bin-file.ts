@@ -65,6 +65,7 @@ const createPatchFileFromPublicOutput = async (
     if (output.checksumVariants?.length)
       (file as TFile & { checksumVariants?: PublicOutput["checksumVariants"] }).checksumVariants =
         output.checksumVariants;
+    if (output.romType) (file as TFile & { romType?: PublicOutput["romType"] }).romType = output.romType;
     if (output.chdCuePath) file._chdCuePath = output.chdCuePath;
     if (output.timing) (file as TFile & { _runtimeTiming?: PublicOutput["timing"] })._runtimeTiming = output.timing;
     return file;

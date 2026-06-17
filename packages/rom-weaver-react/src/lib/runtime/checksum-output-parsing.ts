@@ -1,4 +1,4 @@
-import type { ChecksumResult, ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ChecksumResult, ChecksumRomProbe, RomTypeTag } from "../../types/checksum.ts";
 import { asRecord, readChecksumMap } from "./run-result-parsing.ts";
 
 const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
@@ -55,6 +55,16 @@ const parseChecksumRomProbeLabel = (label: string): ChecksumRomProbe => {
   };
 };
 
+const parseChecksumRomType = (details: unknown): RomTypeTag | undefined => {
+  const record = asRecord(details);
+  if (!record) return undefined;
+  const platform = typeof record.platform === "string" && record.platform.trim() ? record.platform.trim() : undefined;
+  const discFormat =
+    typeof record.disc_format === "string" && record.disc_format.trim() ? record.disc_format.trim() : undefined;
+  if (!(platform || discFormat)) return undefined;
+  return { ...(platform ? { platform } : {}), ...(discFormat ? { discFormat } : {}) };
+};
+
 const parseChecksumDetails = (details: unknown): Partial<ChecksumResult> => {
   const checksums = readChecksumMap(asRecord(details)?.checksums);
   if (!checksums) return {};
@@ -65,4 +75,4 @@ const parseChecksumDetails = (details: unknown): Partial<ChecksumResult> => {
   return out;
 };
 
-export { parseChecksumDetails, parseChecksumLabel, parseChecksumRomProbeLabel };
+export { parseChecksumDetails, parseChecksumLabel, parseChecksumRomProbeLabel, parseChecksumRomType };

@@ -1,4 +1,4 @@
-import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { WorkflowKind, WorkflowProgress, WorkflowProgressRole } from "../../types/progress.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -92,6 +92,9 @@ const cloneChecksumRomProbe = (romProbe: ChecksumRomProbe | undefined): Checksum
       }
     : undefined;
 
+const cloneRomType = (romType: RomTypeTag | undefined): RomTypeTag | undefined =>
+  romType ? { ...romType } : undefined;
+
 const cloneChecksumVariants = (variants: ChecksumVariant[] | undefined): ChecksumVariant[] | undefined =>
   variants?.map((variant) => ({
     ...variant,
@@ -105,6 +108,11 @@ const getPatchFilePrecomputedChecksumVariants = (
 ): ChecksumVariant[] | undefined => {
   const variants = (file as (PatchFileInstance & { checksumVariants?: unknown }) | undefined)?.checksumVariants;
   return Array.isArray(variants) ? cloneChecksumVariants(variants as ChecksumVariant[]) : undefined;
+};
+
+const getPatchFilePrecomputedRomType = (file: PatchFileInstance | undefined): RomTypeTag | undefined => {
+  const romType = (file as (PatchFileInstance & { romType?: unknown }) | undefined)?.romType;
+  return romType && typeof romType === "object" ? cloneRomType(romType as RomTypeTag) : undefined;
 };
 
 const createChecksumProgressDetails = (state: StandardChecksumState) => ({
@@ -131,6 +139,7 @@ const calculateStandardInputChecksumsForFile = async ({
 }: StandardChecksumOptions): Promise<{
   checksums: StandardWorkflowChecksums;
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   variants?: ChecksumVariant[];
 }> => {
   if (!runtime.checksum.calculate) return { checksums: {} as StandardWorkflowChecksums };
@@ -170,6 +179,7 @@ const calculateStandardInputChecksumsForFile = async ({
       sha1: result.sha1 || "",
     },
     romProbe: cloneChecksumRomProbe(result.romProbe),
+    romType: cloneRomType(result.romType),
     variants: cloneChecksumVariants(result.variants),
   };
 };
@@ -179,12 +189,14 @@ export {
   calculateStandardInputChecksumsForFile,
   cloneChecksumRomProbe,
   cloneChecksumVariants,
+  cloneRomType,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
+  getPatchFilePrecomputedRomType,
   getPrimaryInputAsset,
   isChecksummableInputAsset,
 };

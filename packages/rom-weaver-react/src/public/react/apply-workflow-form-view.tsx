@@ -53,6 +53,40 @@ const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
 const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
 
+/** Compact platform abbreviations for the ROM type tag (e.g. "Sony PlayStation" → "PSX"). */
+const PLATFORM_ABBREVIATIONS: Record<string, string> = {
+  "Atari 7800": "A7800",
+  "Atari Lynx": "LYNX",
+  "NEC PC-Engine CD & TurboGrafx-16 CD": "PCE-CD",
+  "Neo Geo Pocket": "NGP",
+  "Nintendo 3DS": "3DS",
+  "Nintendo 64": "N64",
+  "Nintendo DS": "NDS",
+  "Nintendo Entertainment System": "NES",
+  "Nintendo Famicom Disk System": "FDS",
+  "Nintendo Game Boy": "GB",
+  "Nintendo Game Boy Advance": "GBA",
+  "Nintendo GameCube": "GC",
+  "Nintendo Super Nintendo Entertainment System": "SNES",
+  "Nintendo Wii": "WII",
+  "Sega Dreamcast": "DC",
+  "Sega Master System": "SMS",
+  "Sega Mega CD _ Sega CD": "SCD",
+  "Sega Mega Drive _ Genesis": "GEN",
+  "Sega Saturn": "SAT",
+  "Sony PlayStation": "PSX",
+  "Sony PlayStation 2": "PS2",
+  "Sony Playstation Portable": "PSP",
+  "TurboGrafx-16_PC Engine": "PCE",
+};
+
+/** Render a backend ROM type tag as "PLATFORM · DISC" (e.g. "PSX · CD"); empty when unknown. */
+const formatRomTypeTag = (romType: { platform?: string; discFormat?: string } | undefined): string => {
+  if (!romType) return "";
+  const platform = romType.platform ? (PLATFORM_ABBREVIATIONS[romType.platform] ?? romType.platform) : "";
+  return [platform, romType.discFormat].filter(Boolean).join(" · ");
+};
+
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
   if (!state.visible) return null;
   return (
@@ -180,6 +214,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   }
   const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
   const romBytes = romInput.size ?? romInput.sourceSize;
+  const romTypeTag = formatRomTypeTag(romInput.info.romType);
   return {
     card: {
       extract: {
@@ -189,7 +224,13 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
       },
-      meta: typeof romBytes === "number" ? <span className="fsize mono">{formatByteSize(romBytes)}</span> : undefined,
+      meta:
+        typeof romBytes === "number" || romTypeTag ? (
+          <>
+            {typeof romBytes === "number" ? <span className="fsize mono">{formatByteSize(romBytes)}</span> : null}
+            {romTypeTag ? <span className="meta-fmt mono">{romTypeTag}</span> : null}
+          </>
+        ) : undefined,
       onRemove: () => {
         if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
         else ui.removeRomInput?.(romInput.id);
@@ -266,6 +307,8 @@ const renderDiscGroup = (
   const cueText = groupRows.find((row) => Boolean(row.cueText))?.cueText;
   const gdiText = groupRows.find((row) => Boolean(row.gdiText))?.gdiText;
   const totalBytes = trackRows.reduce((sum, row) => sum + (row.size ?? row.sourceSize ?? 0), 0);
+  const discRomType = groupRows.find((row) => row.info.romType?.platform || row.info.romType?.discFormat)?.info.romType;
+  const discRomTypeTag = formatRomTypeTag(discRomType);
   const firstTrackName = trackRows[0]?.info.fileName;
   const discName = discGroupDisplayName(groupRows, cueRow, firstTrackName);
   // Any verified-bad track marks the disc bad; otherwise ok once any track verifies.
@@ -300,7 +343,13 @@ const renderDiscGroup = (
         fileSize: totalBytes || undefined,
         legacyFileClassName: "rom-weaver-input-stack-file",
       },
-      meta: totalBytes ? <span className="fsize mono">{formatByteSize(totalBytes)}</span> : undefined,
+      meta:
+        totalBytes || discRomTypeTag ? (
+          <>
+            {totalBytes ? <span className="fsize mono">{formatByteSize(totalBytes)}</span> : null}
+            {discRomTypeTag ? <span className="meta-fmt mono">{discRomTypeTag}</span> : null}
+          </>
+        ) : undefined,
       onRemove: removeDisc,
       panels: {
         tracks,

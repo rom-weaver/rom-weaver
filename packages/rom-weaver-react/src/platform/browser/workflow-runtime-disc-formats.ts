@@ -4,6 +4,7 @@ import {
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
 } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractWorker,
@@ -244,6 +245,7 @@ const createBrowserDiscFormatsRuntime = (
           checksums: primaryFile?.checksums,
           fileName: outputFileName,
           filePath: primaryFile?.path || outputPath,
+          romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },
         outputFileName,
@@ -346,6 +348,7 @@ const createBrowserDiscFormatsRuntime = (
           checksums: primaryFile?.checksums,
           fileName: outputFileName,
           filePath: primaryFile?.path || outputPath,
+          romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },
         outputFileName,

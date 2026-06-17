@@ -28,6 +28,7 @@ type StagedInputInfo = {
   checksumVariants?: ChecksumVariant[];
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
+  romType?: RomInputRowState["info"]["romType"];
   decompressionTimeMs?: number;
   fileName?: string;
   size?: number;

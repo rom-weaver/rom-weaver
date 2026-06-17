@@ -425,6 +425,7 @@ const useInputStaging = (context: InputStagingContext) => {
                     fileName: info.fileName || getBinarySourceFileName(snapshot.inputs[index], `Input ${index + 1}`),
                     md5: info.checksums?.md5 || "",
                     romProbe: info.romProbe || byId.get(stableId)?.info.romProbe,
+                    romType: info.romType || byId.get(stableId)?.info.romType,
                     sha1: info.checksums?.sha1 || "",
                     validationPhase: "idle",
                   },

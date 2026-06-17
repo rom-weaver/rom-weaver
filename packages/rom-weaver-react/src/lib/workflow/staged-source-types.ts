@@ -40,6 +40,7 @@ type SharedRomSourceState<TRole extends SharedRomSourceRole = SharedRomSourceRol
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: unknown;
+  romType?: unknown;
 };
 
 type SharedInternalCandidate<TSource, TState extends SharedRomSourceState> = {

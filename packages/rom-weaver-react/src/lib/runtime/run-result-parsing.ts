@@ -1,4 +1,4 @@
-import type { ChecksumMap, ChecksumVariant, ExtractTiming } from "../../types/checksum.ts";
+import type { ChecksumMap, ChecksumVariant, ExtractTiming, RomTypeTag } from "../../types/checksum.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime-types.ts";
 import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
@@ -82,6 +82,8 @@ const getEmittedFileDetails = (
 type RomWeaverEmittedFile = {
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
+  /** Disc image format (e.g. "CD" | "GD-ROM" | "DVD"); see Rust `emitted_files[].disc_format`. */
+  discFormat?: string;
   /** Elapsed time (ms) of the extract step that produced this file; see Rust `extract_time_ms`. */
   extractTimeMs?: number;
   /** Decode/checksum/overlap split for this file; see Rust `emitted_files[].timing`. */
@@ -89,6 +91,8 @@ type RomWeaverEmittedFile = {
   fileName: string;
   kind?: string;
   path: string;
+  /** ROM platform label (e.g. "Sony PlayStation"); see Rust `emitted_files[].platform`. */
+  platform?: string;
   sizeBytes?: number;
 };
 
@@ -167,6 +171,15 @@ const parseChecksumVariants = (details: unknown): ChecksumVariant[] | undefined 
   return variants.length ? variants : undefined;
 };
 
+const romTypeFromEmittedFile = (
+  entry: { platform?: string; discFormat?: string } | undefined,
+): RomTypeTag | undefined => {
+  const platform = entry?.platform?.trim() ? entry.platform.trim() : undefined;
+  const discFormat = entry?.discFormat?.trim() ? entry.discFormat.trim() : undefined;
+  if (!(platform || discFormat)) return undefined;
+  return { ...(platform ? { platform } : {}), ...(discFormat ? { discFormat } : {}) };
+};
+
 const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[] => {
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
@@ -182,6 +195,8 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
     output.push({
       checksums: normalizeEmittedFileChecksums(entry.checksums),
       checksumVariants: parseChecksumVariants(entry),
+      discFormat:
+        typeof entry.disc_format === "string" && entry.disc_format.trim() ? entry.disc_format.trim() : undefined,
       extractTimeMs:
         typeof entry.extract_time_ms === "number" && Number.isFinite(entry.extract_time_ms)
           ? entry.extract_time_ms
@@ -190,6 +205,7 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
       fileName,
       kind: typeof entry.kind === "string" && entry.kind ? entry.kind : undefined,
       path,
+      platform: typeof entry.platform === "string" && entry.platform.trim() ? entry.platform.trim() : undefined,
       sizeBytes:
         typeof entry.size_bytes === "number" && Number.isFinite(entry.size_bytes) ? entry.size_bytes : undefined,
     });
@@ -285,5 +301,6 @@ export {
   getTerminalEvent,
   parseChecksumVariants,
   readChecksumMap,
+  romTypeFromEmittedFile,
   toSimpleProgress,
 };

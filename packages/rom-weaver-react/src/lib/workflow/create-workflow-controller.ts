@@ -342,6 +342,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         asset.checksums = checksumResult.checksums;
         asset.checksumVariants = checksumResult.variants;
         asset.romProbe = checksumResult.romProbe;
+        asset.romType = checksumResult.romType;
         asset.checksumTimeMs = Date.now() - checksumStartedAt;
       }
       const primaryAsset = getPrimaryInputAsset(assets);

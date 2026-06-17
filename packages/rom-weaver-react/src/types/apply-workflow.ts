@@ -1,4 +1,4 @@
-import type { ChecksumRomProbe, ChecksumVariant } from "./checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
 
@@ -24,6 +24,7 @@ type ApplyWorkflowResolvedInput = {
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   parentCompressions: ApplyWorkflowParentCompression[];
   selected: boolean;
   selectedCandidateId?: string;
@@ -48,6 +49,7 @@ type ApplyWorkflowInputState = {
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   resolvedInputs?: ApplyWorkflowResolvedInput[];
   selectedCandidateId?: string;
   size?: number;

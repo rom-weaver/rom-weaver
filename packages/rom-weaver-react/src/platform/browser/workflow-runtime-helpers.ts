@@ -170,10 +170,12 @@ const replaceProgressSourceLabel = <TProgress extends { label?: string; message?
 
 type ExtractedFileEntry = {
   checksums?: Record<string, string>;
+  discFormat?: string;
   extractTimeMs?: number;
   fileName: string;
   kind?: string;
   path: string;
+  platform?: string;
   sizeBytes?: number;
 };
 

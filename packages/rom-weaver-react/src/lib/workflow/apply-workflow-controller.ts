@@ -892,6 +892,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     if (!session?.synthetic) return;
     this.inputStages.syncSessionView(session);
     session.view.state.romProbe = cloneChecksumRomProbe(session.view.state.romProbe);
+    session.view.state.romType = session.view.state.romType ? { ...session.view.state.romType } : undefined;
   }
 
   private getSelectedInputOwner(): StagedSource<TSource> | undefined {

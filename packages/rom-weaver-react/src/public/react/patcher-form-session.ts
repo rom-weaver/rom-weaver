@@ -715,6 +715,7 @@ const useLocalApplyPatchFormSession = ({
             fileName,
             md5: info.checksums?.md5 ?? patch.info?.md5 ?? existing.info.md5,
             romProbe: info.romProbe ?? patch.info?.romProbe ?? existing.info.romProbe,
+            romType: info.romType ?? existing.info.romType,
             sha1: info.checksums?.sha1 ?? patch.info?.sha1 ?? existing.info.sha1,
             validationPhase: patch.info?.validationPhase ?? existing.info.validationPhase,
           },
