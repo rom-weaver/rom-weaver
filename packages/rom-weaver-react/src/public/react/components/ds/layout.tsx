@@ -2,7 +2,14 @@ import Info from "lucide-react/dist/esm/icons/info.js";
 import Upload from "lucide-react/dist/esm/icons/upload.js";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
+import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { join } from "./cx.ts";
+
+// Stamp the perceived-latency start for each incoming file so the eventual
+// command can emit a drop -> done measure. Shared by the drop and picker paths.
+const stampDroppedFiles = (files: readonly File[], atMs: number): void => {
+  for (const file of files) recordDrop(file.name, atMs);
+};
 
 /**
  * Loom layout primitives: the numbered step section (0x01 …), the inline info
@@ -131,7 +138,9 @@ const DropZone = ({
 
   const emit = (list: FileList | null) => {
     if (!list || list.length === 0) return;
-    onFiles(Array.from(list));
+    const files = Array.from(list);
+    stampDroppedFiles(files, perfNow());
+    onFiles(files);
   };
 
   // A <label> wrapping the hidden file input is natively clickable and
@@ -152,6 +161,9 @@ const DropZone = ({
         event.preventDefault();
         setDragging(false);
         if (disabled) return;
+        // Stamp the drop instant now; folder reads below are async, but the
+        // perceived latency starts the moment the user let go of the files.
+        const droppedAtMs = perfNow();
         // Read synchronously so folder entries are captured before the
         // DataTransfer is cleared; folders are flattened into the file list.
         // Surface a "reading" hint only if the traversal runs long enough to
@@ -160,7 +172,10 @@ const DropZone = ({
         void readDataTransferFiles(event.dataTransfer).then((files) => {
           clearTimeout(readingTimer);
           setReading(false);
-          if (files.length) onFiles(files);
+          if (files.length) {
+            stampDroppedFiles(files, droppedAtMs);
+            onFiles(files);
+          }
         });
       }}
     >

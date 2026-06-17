@@ -5,6 +5,7 @@ import {
   estimateScheduledThreads,
   resolveMemoryCeilingBytes,
 } from "../../lib/runtime/op-memory-estimate.ts";
+import { perfNow, recordCommandLatency } from "../../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import type {
   RomWeaverBrowserOpfsRunOptions,
@@ -28,7 +29,12 @@ import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
-import { getRomWeaverRunEventLabel, isRomWeaverFailedRunEvent } from "./rom-weaver-run-events.ts";
+import {
+  getRomWeaverRunEventElapsedMs,
+  getRomWeaverRunEventLabel,
+  isRomWeaverFailedRunEvent,
+  isRomWeaverTerminalRunEvent,
+} from "./rom-weaver-run-events.ts";
 import { createRunnerPool, type RunnerPool } from "./runner-pool.ts";
 import { createOperationScheduler, type OperationScheduler } from "./runner-scheduler.ts";
 
@@ -475,6 +481,21 @@ const createRunnerAbortError = () => {
   return error;
 };
 
+// The wasm-reported command duration we surface in the UI: the elapsed time
+// carried by the run's terminal event. Used to compare against the main-thread
+// round-trip wall clock so the JS/worker/OPFS overhead is visible.
+const readWasmReportedElapsedMs = (result: RomWeaverRunnerRunJsonResult): number | undefined => {
+  const events = Array.isArray(result?.events) ? result.events : [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event && isRomWeaverTerminalRunEvent(event)) {
+      const elapsed = getRomWeaverRunEventElapsedMs(event);
+      return typeof elapsed === "number" ? elapsed : undefined;
+    }
+  }
+  return undefined;
+};
+
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
   const { signal, ...runOptionOverrides } = options || {};
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
@@ -612,10 +633,23 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     }
   };
 
-  return getOperationScheduler().schedule(
+  // Stamp the perceived-latency start on the main thread: `submittedAtMs` is when
+  // the command enters the scheduler; the measure fires when the worker replies.
+  // A thread-capable command is the heavy work the user is waiting on, so it (not
+  // a preceding probe `list`) closes the drop -> done arc.
+  const submittedAtMs = perfNow();
+  const threadCapable = romWeaverCommandSupportsThreads(command);
+  const result = await getOperationScheduler().schedule(
     { bytes: operationBytes, label: command.type, paths: operationPaths, threads: operationThreads },
     dispatchRun,
   );
+  recordCommandLatency({
+    commandType: command.type,
+    submittedAtMs,
+    threadCapable,
+    wasmElapsedMs: readWasmReportedElapsedMs(result),
+  });
+  return result;
 };
 
 // Normalize a worker-threads seed so "auto"/numbers/undefined compare by surface value; used only to
