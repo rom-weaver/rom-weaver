@@ -23,11 +23,8 @@ import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
-import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
-import { ConfirmDialog } from "./components/ds/modal.tsx";
-import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
-import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
-import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
+import { InfoPopover } from "./components/ds/layout.tsx";
+import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
@@ -45,6 +42,7 @@ import {
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
+import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
 import { routeSingleRom } from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
@@ -757,192 +755,178 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity({ busy, completed: !!completedOutput, queued: trimQueued });
 
-  return (
-    <section className="panel" id="trim-builder-container">
-      <UnifiedDropZone
-        accept={getFileInputAcceptAttributes().unifiedRom}
-        archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
-        big={trimSourceEmpty}
-        disabled={uploadDisabled}
-        formats={TRIM_HERO_FORMATS}
-        id="trim-builder-row-unified-drop"
-        inputId="trim-builder-input-file-unified"
-        label={source ? "Replace the ROM" : "Drop a ROM to trim"}
-        onFiles={handleUnifiedDrop}
-        romHint={`roms (${TRIM_INPUT_HINT})`}
-        supported={TRIM_SUPPORTED_FILES}
-      />
-      {trimSourceEmpty ? (
-        <StepSection num="0x02" title="ROM">
-          <NeedsInput onClick={openUnifiedPicker}>
-            Add a ROM in <b className="hexref mono">0x01</b> above
-          </NeedsInput>
-        </StepSection>
-      ) : null}
-      {trimSourceEmpty ? null : (
-        <>
-          <WorkflowRomInputStep
-            id="trim-builder-row-source"
-            info={
-              <InfoPopover title="ROM input">
-                <strong>ROM</strong>
-                <ul>
-                  <li>Drop an over-dumped ROM (NDS/N64 and similar) to remove trailing padding.</li>
-                  <li>Archives are extracted; pick the ROM if several candidates are found.</li>
-                </ul>
-              </InfoPopover>
-            }
-            items={
-              source
-                ? [
-                    inputProgressProps
-                      ? {
-                          id: "trim-input-progress",
-                          progress: inputProgressProps,
-                        }
-                      : {
-                          card: {
-                            extract: {
-                              fileName: resolvedSourceFileName,
-                              fileSize: sourceState?.size,
-                              parentCompressions: sourceState?.parentCompressions,
-                              timing: formatOptionalElapsedMs(sourceState?.decompressionTimeMs),
-                            },
-                            onRemove: () => updateSource(null),
-                            panels: {
-                              fixes: {
-                                trim: sourceState?.romProbe?.trim,
-                              },
-                              info: {
-                                bytes: sourceState?.size ?? sourceState?.sourceSize,
-                                checksums: sourceState?.checksums,
-                                defaultOpen: false,
-                                progress: toWorkflowChecksumProgressProps(checksumProgress),
-                                timing: formatOptionalElapsedMs(sourceState?.checksumTimeMs),
-                              },
-                            },
-                            removeLabel: "Clear ROM",
-                            state: hasSourceQueueWarning(sourceState)
-                              ? "bad"
-                              : sourceState?.status === "ready"
-                                ? "ok"
-                                : undefined,
-                          },
-                          id: "trim-input-card",
-                        },
-                  ]
-                : []
-            }
-            notice={sourceNotice}
-            num="0x02"
-            title="ROM"
-          />
-        </>
-      )}
-      <WorkflowOutputStep
-        action={
-          <OutputRunAction
-            disabled={actionDisabled}
-            download={
-              completedOutput
-                ? getCompletedDownloadMeta(
-                    completedOutput.fileName,
-                    completedOutput.size,
-                    completedOutput.inputSize ?? sourceState?.size,
-                    completedOutput.rawSize,
-                  )
-                : undefined
-            }
-            icon={
-              completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />
-            }
-            id="trim-builder-button-run"
-            onClick={() => (completedOutput ? void runTrim() : onRunClick())}
-            progress={
-              trimQueued
-                ? waitingProgressProps
-                  ? {
-                      ...waitingProgressProps,
-                      cancelLabel: "Cancel queued trim",
-                      onCancel: cancelTrimOutputProgress,
-                    }
-                  : null
-                : busy && progressProps && progress?.stage !== "input"
-                  ? {
-                      ...progressProps,
-                      cancelLabel: "Cancel trim",
-                      onCancel: cancelTrimOutputProgress,
-                    }
-                  : null
-            }
+  const model: TrimPatchFormViewModel = {
+    confirm: {
+      body: `The trimmed copy of ${sourceFileName} is saved as a new download — your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
+      cancelLabel: "Cancel",
+      confirmLabel: "Trim ROM",
+      onCancel: () => setConfirmOpen(false),
+      onConfirm: onConfirmTrim,
+      open: confirmOpen,
+      title: "Trim this ROM?",
+    },
+    dialog: candidateSelectionDialog,
+    dropZone: {
+      accept: getFileInputAcceptAttributes().unifiedRom,
+      archiveHint: `archives (${ARCHIVE_INPUT_HINT})`,
+      big: trimSourceEmpty,
+      disabled: uploadDisabled,
+      formats: TRIM_HERO_FORMATS,
+      id: "trim-builder-row-unified-drop",
+      inputId: "trim-builder-input-file-unified",
+      label: source ? "Replace the ROM" : "Drop a ROM to trim",
+      onFiles: handleUnifiedDrop,
+      romHint: `roms (${TRIM_INPUT_HINT})`,
+      supported: TRIM_SUPPORTED_FILES,
+    },
+    onAddInput: openUnifiedPicker,
+    output: {
+      action: (
+        <OutputRunAction
+          disabled={actionDisabled}
+          download={
+            completedOutput
+              ? getCompletedDownloadMeta(
+                  completedOutput.fileName,
+                  completedOutput.size,
+                  completedOutput.inputSize ?? sourceState?.size,
+                  completedOutput.rawSize,
+                )
+              : undefined
+          }
+          icon={completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />}
+          id="trim-builder-button-run"
+          onClick={() => (completedOutput ? void runTrim() : onRunClick())}
+          progress={
+            trimQueued
+              ? waitingProgressProps
+                ? {
+                    ...waitingProgressProps,
+                    cancelLabel: "Cancel queued trim",
+                    onCancel: cancelTrimOutputProgress,
+                  }
+                : null
+              : busy && progressProps && progress?.stage !== "input"
+                ? {
+                    ...progressProps,
+                    cancelLabel: "Cancel trim",
+                    onCancel: cancelTrimOutputProgress,
+                  }
+                : null
+          }
+        >
+          TRIM & DOWNLOAD
+        </OutputRunAction>
+      ),
+      compress: buildOutputCompressionPanel({
+        disabled: outputDisabled,
+        fields: trimCompressPanel?.fields,
+        format: compressHeaderFormat,
+        formatId: "trim-builder-select-output-compression",
+        formatOptions: compressFormatOptions,
+        formatValue: resolvedOutputFormat,
+        onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
+        onFormatChange: updateOutputFormat,
+        summary: trimCompressPanel?.summary,
+        timing: compressTimingText,
+      }),
+      disabled: outputDisabled,
+      fileName: resolvedOutputName,
+      fileNameId: "trim-builder-output-file",
+      fileNamePlaceholder: "Trimmed filename (no extension)",
+      format: resolvedOutputFormat,
+      formatId: "trim-builder-select-output-format",
+      formatOptions: formatOptions,
+      info: (
+        <InfoPopover title="Output options">
+          <strong>Output</strong>
+          <ul>
+            <li>Set the filename without an extension — the format selector controls it.</li>
+            <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
+            <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
+          </ul>
+        </InfoPopover>
+      ),
+      meta: trimTimingText ? <span className="t">{trimTimingText}</span> : undefined,
+      notice:
+        message && messagePlacement === "output" ? (
+          <Notice
+            id="trim-builder-row-error-message"
+            level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+            onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
           >
-            TRIM & DOWNLOAD
-          </OutputRunAction>
-        }
-        compress={buildOutputCompressionPanel({
-          disabled: outputDisabled,
-          fields: trimCompressPanel?.fields,
-          format: compressHeaderFormat,
-          formatId: "trim-builder-select-output-compression",
-          formatOptions: compressFormatOptions,
-          formatValue: resolvedOutputFormat,
-          onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
-          onFormatChange: updateOutputFormat,
-          summary: trimCompressPanel?.summary,
-          timing: compressTimingText,
-        })}
-        disabled={outputDisabled}
-        fileName={resolvedOutputName}
-        fileNameId="trim-builder-output-file"
-        fileNamePlaceholder="Trimmed filename (no extension)"
-        format={resolvedOutputFormat}
-        formatId="trim-builder-select-output-format"
-        formatOptions={formatOptions}
-        info={
-          <InfoPopover title="Output options">
-            <strong>Output</strong>
-            <ul>
-              <li>Set the filename without an extension — the format selector controls it.</li>
-              <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
-              <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
-            </ul>
-          </InfoPopover>
-        }
-        meta={trimTimingText ? <span className="t">{trimTimingText}</span> : undefined}
-        notice={
-          message && messagePlacement === "output" ? (
-            <Notice
-              id="trim-builder-row-error-message"
-              level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-              onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-            >
-              {message}
-            </Notice>
-          ) : null
-        }
-        num="0x03"
-        onFileNameChange={(value) => {
-          setOutputName(value);
-          updateSettings({
-            ...settings,
-            output: { ...settings.output, outputName: value.trim() || undefined },
-          });
-        }}
-        onFormatChange={updateOutputFormat}
-        title="Trim"
-      />
-      <ConfirmDialog
-        body={`The trimmed copy of ${sourceFileName} is saved as a new download — your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`}
-        cancelLabel="Cancel"
-        confirmLabel="Trim ROM"
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={onConfirmTrim}
-        open={confirmOpen}
-        title="Trim this ROM?"
-      />
-      {candidateSelectionDialog}
-    </section>
-  );
+            {message}
+          </Notice>
+        ) : null,
+      num: "0x03",
+      onFileNameChange: (value) => {
+        setOutputName(value);
+        updateSettings({
+          ...settings,
+          output: { ...settings.output, outputName: value.trim() || undefined },
+        });
+      },
+      onFormatChange: updateOutputFormat,
+      title: "Trim",
+    },
+    sourceEmpty: trimSourceEmpty,
+    sourceStep: {
+      id: "trim-builder-row-source",
+      info: (
+        <InfoPopover title="ROM input">
+          <strong>ROM</strong>
+          <ul>
+            <li>Drop an over-dumped ROM (NDS/N64 and similar) to remove trailing padding.</li>
+            <li>Archives are extracted; pick the ROM if several candidates are found.</li>
+          </ul>
+        </InfoPopover>
+      ),
+      items: source
+        ? [
+            inputProgressProps
+              ? {
+                  id: "trim-input-progress",
+                  progress: inputProgressProps,
+                }
+              : {
+                  card: {
+                    extract: {
+                      fileName: resolvedSourceFileName,
+                      fileSize: sourceState?.size,
+                      parentCompressions: sourceState?.parentCompressions,
+                      timing: formatOptionalElapsedMs(sourceState?.decompressionTimeMs),
+                    },
+                    onRemove: () => updateSource(null),
+                    panels: {
+                      fixes: {
+                        trim: sourceState?.romProbe?.trim,
+                      },
+                      info: {
+                        bytes: sourceState?.size ?? sourceState?.sourceSize,
+                        checksums: sourceState?.checksums,
+                        defaultOpen: false,
+                        progress: toWorkflowChecksumProgressProps(checksumProgress),
+                        timing: formatOptionalElapsedMs(sourceState?.checksumTimeMs),
+                      },
+                    },
+                    removeLabel: "Clear ROM",
+                    state: hasSourceQueueWarning(sourceState)
+                      ? "bad"
+                      : sourceState?.status === "ready"
+                        ? "ok"
+                        : undefined,
+                  },
+                  id: "trim-input-card",
+                },
+          ]
+        : [],
+      notice: sourceNotice,
+      num: "0x02",
+      title: "ROM",
+    },
+  };
+
+  return <TrimPatchFormView {...model} />;
 }
 
 export { TrimPatchForm };

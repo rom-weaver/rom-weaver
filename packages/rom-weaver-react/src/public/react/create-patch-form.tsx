@@ -20,11 +20,10 @@ import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
-import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
-import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
-import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
-import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
+import { InfoPopover } from "./components/ds/layout.tsx";
+import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
+import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { ARCHIVE_INPUT_HINT, ROM_INPUT_HINT } from "./input-helper-text.ts";
@@ -847,7 +846,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     onClear: () => void;
     sourceProgress?: typeof progressProps;
     checksumProgress?: WorkflowFormProgressState | null;
-  }) => {
+  }): CreatePatchFormViewModel["originalStep"] => {
     const displayInfo = getDisplaySourceInfo(sourceState, fileName);
     const sourceChecksumProgress = isChecksumProgress(checksumProgress) ? checksumProgress : null;
     const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
@@ -865,53 +864,49 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         {sourceNoticeMessage}
       </Notice>
     ) : null;
-    return (
-      <WorkflowRomInputStep
-        id={`patch-builder-row-${role}`}
-        items={
-          file
-            ? [
-                sourceProgress
-                  ? {
-                      id: `${num}:progress`,
-                      progress: sourceProgress,
-                    }
-                  : {
-                      card: {
-                        extract: {
-                          fileName,
-                          fileSize: displayInfo?.size,
-                          parentCompressions: displayInfo?.parentCompressions,
-                          timing: formatElapsedMs(displayInfo?.decompressionTimeMs),
-                        },
-                        onRemove: onClear,
-                        panels: {
-                          fixes: {},
-                          info: {
-                            bytes: displayInfo?.size ?? displayInfo?.sourceSize,
-                            checksums: getDisplaySourceChecksums(sourceState),
-                            defaultOpen: false,
-                            progress: toWorkflowChecksumProgressProps(sourceChecksumProgress),
-                            timing: getChecksumTimingLabel(getDisplaySourceChecksumTiming(sourceState)) || undefined,
-                          },
-                        },
-                        removeLabel,
-                        state: hasSourceQueueWarning(sourceState)
-                          ? "bad"
-                          : sourceState?.status === "ready"
-                            ? "ok"
-                            : undefined,
-                      },
-                      id: `${num}:card`,
+    return {
+      id: `patch-builder-row-${role}`,
+      items: file
+        ? [
+            sourceProgress
+              ? {
+                  id: `${num}:progress`,
+                  progress: sourceProgress,
+                }
+              : {
+                  card: {
+                    extract: {
+                      fileName,
+                      fileSize: displayInfo?.size,
+                      parentCompressions: displayInfo?.parentCompressions,
+                      timing: formatElapsedMs(displayInfo?.decompressionTimeMs),
                     },
-              ]
-            : []
-        }
-        notice={notice}
-        num={num}
-        title={title}
-      />
-    );
+                    onRemove: onClear,
+                    panels: {
+                      fixes: {},
+                      info: {
+                        bytes: displayInfo?.size ?? displayInfo?.sourceSize,
+                        checksums: getDisplaySourceChecksums(sourceState),
+                        defaultOpen: false,
+                        progress: toWorkflowChecksumProgressProps(sourceChecksumProgress),
+                        timing: getChecksumTimingLabel(getDisplaySourceChecksumTiming(sourceState)) || undefined,
+                      },
+                    },
+                    removeLabel,
+                    state: hasSourceQueueWarning(sourceState)
+                      ? "bad"
+                      : sourceState?.status === "ready"
+                        ? "ok"
+                        : undefined,
+                  },
+                  id: `${num}:card`,
+                },
+          ]
+        : [],
+      notice,
+      num,
+      title,
+    };
   };
 
   const createFileInputAccept = getFileInputAcceptAttributes();
@@ -921,175 +916,143 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity({ busy, completed: !!completedOutput, queued: createQueued });
 
-  return (
-    <section className="panel" id="patch-builder-container">
-      <UnifiedDropZone
-        accept={createFileInputAccept.unifiedRom}
-        archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
-        big={createSourcesEmpty}
-        disabled={uploadDisabled}
-        formats={CREATE_HERO_FORMATS}
-        id="patch-builder-row-unified-drop"
-        inputId="patch-builder-input-file-unified"
-        label={createSourcesEmpty ? "Drop the original and modified ROMs" : "Add or replace a ROM"}
-        onFiles={handleUnifiedDrop}
-        romHint={`roms (${ROM_INPUT_HINT})`}
-        supported={CREATE_SUPPORTED_FILES}
-      />
-      {createSourcesEmpty ? (
-        <>
-          <StepSection num="0x02" title="Original">
-            <NeedsInput onClick={openUnifiedPicker}>
-              Add the original ROM in <b className="hexref mono">0x01</b> above
-            </NeedsInput>
-          </StepSection>
-          <StepSection num="0x03" title="Modified">
-            <NeedsInput onClick={openUnifiedPicker}>
-              Add the modified ROM in <b className="hexref mono">0x01</b> above
-            </NeedsInput>
-          </StepSection>
-        </>
-      ) : (
-        <>
-          {renderSourceStep({
-            checksumProgress: getSourceChecksumProgress("original"),
-            file: original,
-            fileName: displayedOriginalFileName,
-            num: "0x02",
-            onClear: () => updateOriginal(null),
-            removeLabel: "Clear original ROM",
-            role: "original",
-            sourceProgress: getSourceProgress("original"),
-            sourceState: originalState,
-            title: "Original",
-          })}
-          {createInputsSelected ? (
-            <div className="swap-row">
-              <button
-                className="btn swap-btn"
-                disabled={uploadDisabled}
-                id="patch-builder-button-swap-sources"
-                onClick={swapCreateSources}
-                title="Swap original and modified"
-                type="button"
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M16 4.5 20 8.5l-4 4M20 8.5H7M8 19.5l-4-4 4-4M4 15.5h13" />
-                </svg>
-                Swap
-              </button>
-            </div>
-          ) : null}
-          {renderSourceStep({
-            checksumProgress: getSourceChecksumProgress("modified"),
-            file: modified,
-            fileName: displayedModifiedFileName,
-            num: "0x03",
-            onClear: () => updateModified(null),
-            removeLabel: "Clear modified ROM",
-            role: "modified",
-            sourceProgress: getSourceProgress("modified"),
-            sourceState: modifiedState,
-            title: "Modified",
-          })}
-        </>
-      )}
-      <WorkflowOutputStep
-        action={
-          <OutputRunAction
-            disabled={actionDisabled}
-            download={completedOutput ? getCompletedDownloadMeta(completedOutput) : undefined}
-            icon={
-              completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <GitCompare aria-hidden="true" />
-            }
-            id="patch-builder-button-create"
-            onClick={() => void runCreate()}
-            progress={
-              createQueued
-                ? waitingProgressProps
-                  ? {
-                      ...waitingProgressProps,
-                      cancelLabel: "Cancel queued create",
-                      onCancel: cancelCreateOutputProgress,
-                    }
-                  : null
-                : busy && progressProps && progress?.role !== "input"
-                  ? {
-                      ...progressProps,
-                      cancelLabel: "Cancel patch creation",
-                      onCancel: cancelCreateOutputProgress,
-                    }
-                  : null
-            }
-          >
-            CREATE & DOWNLOAD PATCH
-          </OutputRunAction>
-        }
-        compress={buildOutputCompressionPanel({
-          disabled: outputDisabled,
-          fields: createCompressPanel?.fields,
-          format:
-            createCompression === "none"
-              ? getOutputCompressionFormatLabel(createCompression, createCompressionOptions)
-              : `patch in ${getOutputCompressionFormatLabel(createCompression, createCompressionOptions)}`,
-          formatId: "patch-builder-select-output-compression",
-          formatOptions: createCompressionOptions,
-          formatValue: createCompression,
-          onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
-          onFormatChange: (value) =>
-            updateSettings({
-              ...settings,
-              output: { ...settings.output, compression: value as "7z" | "none" | "zip" },
-            }),
-          summary: createCompression === "none" ? undefined : createCompressPanel?.summary,
-          timing: compressTimingText || undefined,
-        })}
-        disabled={outputDisabled}
-        fileName={resolvedOutputName}
-        fileNameId="patch-builder-output-file"
-        fileNamePlaceholder="Patch filename"
-        format={patchType}
-        formatId="patch-builder-select-patch-type"
-        formatOptions={patchFormatOptions}
-        info={
-          <InfoPopover title="Output options">
-            <strong>Output</strong>
-            <ul>
-              <li>Set the filename without an extension — the format selector controls the patch type.</li>
-              <li>BPS records source &amp; target checksums so applies can be verified.</li>
-              <li>
-                The patch is packaged in an archive by default; set Options &rarr; Type to None to download the raw
-                patch file.
-              </li>
-            </ul>
-          </InfoPopover>
-        }
-        meta={createTimingText ? <span className="t">{createTimingText}</span> : undefined}
-        notice={
-          message && messagePlacement === "output" ? (
-            <Notice
-              id="patch-builder-row-error-message"
-              level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-              onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-            >
-              {message}
-            </Notice>
-          ) : null
-        }
-        num="0x04"
-        onFileNameChange={(value) => {
-          setOutputName(value);
+  const model: CreatePatchFormViewModel = {
+    dialog: candidateSelectionDialog,
+    dropZone: {
+      accept: createFileInputAccept.unifiedRom,
+      archiveHint: `archives (${ARCHIVE_INPUT_HINT})`,
+      big: createSourcesEmpty,
+      disabled: uploadDisabled,
+      formats: CREATE_HERO_FORMATS,
+      id: "patch-builder-row-unified-drop",
+      inputId: "patch-builder-input-file-unified",
+      label: createSourcesEmpty ? "Drop the original and modified ROMs" : "Add or replace a ROM",
+      onFiles: handleUnifiedDrop,
+      romHint: `roms (${ROM_INPUT_HINT})`,
+      supported: CREATE_SUPPORTED_FILES,
+    },
+    modifiedStep: renderSourceStep({
+      checksumProgress: getSourceChecksumProgress("modified"),
+      file: modified,
+      fileName: displayedModifiedFileName,
+      num: "0x03",
+      onClear: () => updateModified(null),
+      removeLabel: "Clear modified ROM",
+      role: "modified",
+      sourceProgress: getSourceProgress("modified"),
+      sourceState: modifiedState,
+      title: "Modified",
+    }),
+    onAddInput: openUnifiedPicker,
+    originalStep: renderSourceStep({
+      checksumProgress: getSourceChecksumProgress("original"),
+      file: original,
+      fileName: displayedOriginalFileName,
+      num: "0x02",
+      onClear: () => updateOriginal(null),
+      removeLabel: "Clear original ROM",
+      role: "original",
+      sourceProgress: getSourceProgress("original"),
+      sourceState: originalState,
+      title: "Original",
+    }),
+    output: {
+      action: (
+        <OutputRunAction
+          disabled={actionDisabled}
+          download={completedOutput ? getCompletedDownloadMeta(completedOutput) : undefined}
+          icon={
+            completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <GitCompare aria-hidden="true" />
+          }
+          id="patch-builder-button-create"
+          onClick={() => void runCreate()}
+          progress={
+            createQueued
+              ? waitingProgressProps
+                ? {
+                    ...waitingProgressProps,
+                    cancelLabel: "Cancel queued create",
+                    onCancel: cancelCreateOutputProgress,
+                  }
+                : null
+              : busy && progressProps && progress?.role !== "input"
+                ? {
+                    ...progressProps,
+                    cancelLabel: "Cancel patch creation",
+                    onCancel: cancelCreateOutputProgress,
+                  }
+                : null
+          }
+        >
+          CREATE & DOWNLOAD PATCH
+        </OutputRunAction>
+      ),
+      compress: buildOutputCompressionPanel({
+        disabled: outputDisabled,
+        fields: createCompressPanel?.fields,
+        format:
+          createCompression === "none"
+            ? getOutputCompressionFormatLabel(createCompression, createCompressionOptions)
+            : `patch in ${getOutputCompressionFormatLabel(createCompression, createCompressionOptions)}`,
+        formatId: "patch-builder-select-output-compression",
+        formatOptions: createCompressionOptions,
+        formatValue: createCompression,
+        onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
+        onFormatChange: (value) =>
           updateSettings({
             ...settings,
-            output: { ...settings.output, outputName: value.trim() || undefined },
-          });
-        }}
-        onFormatChange={updatePatchType}
-        title="Patch"
-      />
-      {candidateSelectionDialog}
-    </section>
-  );
+            output: { ...settings.output, compression: value as "7z" | "none" | "zip" },
+          }),
+        summary: createCompression === "none" ? undefined : createCompressPanel?.summary,
+        timing: compressTimingText || undefined,
+      }),
+      disabled: outputDisabled,
+      fileName: resolvedOutputName,
+      fileNameId: "patch-builder-output-file",
+      fileNamePlaceholder: "Patch filename",
+      format: patchType,
+      formatId: "patch-builder-select-patch-type",
+      formatOptions: patchFormatOptions,
+      info: (
+        <InfoPopover title="Output options">
+          <strong>Output</strong>
+          <ul>
+            <li>Set the filename without an extension — the format selector controls the patch type.</li>
+            <li>BPS records source &amp; target checksums so applies can be verified.</li>
+            <li>
+              The patch is packaged in an archive by default; set Options &rarr; Type to None to download the raw patch
+              file.
+            </li>
+          </ul>
+        </InfoPopover>
+      ),
+      meta: createTimingText ? <span className="t">{createTimingText}</span> : undefined,
+      notice:
+        message && messagePlacement === "output" ? (
+          <Notice
+            id="patch-builder-row-error-message"
+            level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+            onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+          >
+            {message}
+          </Notice>
+        ) : null,
+      num: "0x04",
+      onFileNameChange: (value) => {
+        setOutputName(value);
+        updateSettings({
+          ...settings,
+          output: { ...settings.output, outputName: value.trim() || undefined },
+        });
+      },
+      onFormatChange: updatePatchType,
+      title: "Patch",
+    },
+    sourcesEmpty: createSourcesEmpty,
+    swap: createInputsSelected ? { disabled: uploadDisabled, onSwap: swapCreateSources } : null,
+  };
+
+  return <CreatePatchFormView {...model} />;
 }
 
 export { CreatePatchForm };
