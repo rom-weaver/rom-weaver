@@ -816,6 +816,26 @@ const useLocalApplyPatchFormSession = ({
   // first and every patch's readiness evaluates against a fully staged input.
   useEffect(() => {
     if (!(stageInput || stagePatches)) return;
+    // Reflect "preparation pending" synchronously the moment sources change, so a click landing in
+    // the coalesce window below queues instead of starting against not-yet-staged sources. Only the
+    // pending flags move earlier here; the staging *work* stays debounced in the timeout. (syncRomInput
+    // otherwise sets inputStaging inside the deferred callback, leaving a window where the form looks
+    // ready.) The conditions mirror the debounced decisions: a fresh/changed input, or a genuinely new
+    // patch (reorders/removals don't re-stage), or a settings change that re-stages.
+    if (
+      stageInput &&
+      effectiveInputs.length > 0 &&
+      (!sameBinarySourceLists(inputStageSyncRef.current.inputs, effectiveInputs) ||
+        inputStageSyncRef.current.settingsKey !== stageSettingsKey)
+    ) {
+      setInputStaging(true);
+    }
+    if (stagePatches && activePatches.length > 0) {
+      const previousPatchIds = new Set(getBinarySourceListStableIds(patchStageSyncRef.current.patches));
+      const hasNewPatch = getBinarySourceListStableIds(activePatches).some((id) => !previousPatchIds.has(id));
+      const patchSettingsChanged = patchStageSyncRef.current.settingsKey !== stageSettingsKey;
+      if (hasNewPatch || patchSettingsChanged) setPatchStaging(true);
+    }
     const handle = setTimeout(() => {
       if (stageInput) {
         const previousSync = inputStageSyncRef.current;
