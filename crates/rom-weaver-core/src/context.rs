@@ -67,6 +67,10 @@ pub struct PatchPolicy {
     /// Checksum algorithms to compute when extracting (drives the extract
     /// checksum reuse path shared with patch apply/create).
     pub extract_checksum_algorithms: Vec<String>,
+    /// When set, the extract checksum (and its inline identity) is computed only for
+    /// ROM-like outputs; non-ROM entries in a multi-entry archive are skipped. Lets a
+    /// caller always request extract checksums without paying for sidecar files.
+    pub extract_checksum_rom_only: bool,
     /// Whether patch apply/validate enforces the patch's declared input/output
     /// checksums strictly or ignores mismatches.
     pub patch_checksum_validation: PatchChecksumValidation,
@@ -85,6 +89,7 @@ impl Default for PatchPolicy {
     fn default() -> Self {
         Self {
             extract_checksum_algorithms: Vec::new(),
+            extract_checksum_rom_only: false,
             patch_checksum_validation: PatchChecksumValidation::Strict,
             ppf_undo_aware: false,
             xdelta_secondary_mode: XdeltaSecondaryMode::default(),
@@ -175,6 +180,16 @@ impl OperationContext {
 
     pub fn with_extract_checksum_algorithms(mut self, algorithms: Vec<String>) -> Self {
         self.patch_policy.extract_checksum_algorithms = algorithms;
+        self
+    }
+
+    /// Whether the extract checksum should be limited to ROM-like outputs.
+    pub fn extract_checksum_rom_only(&self) -> bool {
+        self.patch_policy.extract_checksum_rom_only
+    }
+
+    pub fn with_extract_checksum_rom_only(mut self, rom_only: bool) -> Self {
+        self.patch_policy.extract_checksum_rom_only = rom_only;
         self
     }
 

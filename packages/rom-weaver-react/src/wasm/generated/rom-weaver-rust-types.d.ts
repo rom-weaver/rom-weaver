@@ -23,9 +23,9 @@ export type ProbeCommand = { source: string, select?: Array<string>, rom_filter?
 
 export type ListCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_ignore?: boolean, split_bin?: boolean, };
 
-export type ExtractCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+export type ExtractCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
-export type ChecksumCommand = { source: string, algo: Array<string>, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, threads?: ThreadBudget, };
+export type ChecksumCommand = { source: string, algo: Array<string>, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, threads?: ThreadBudget, };
 

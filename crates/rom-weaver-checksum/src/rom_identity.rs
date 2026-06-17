@@ -77,6 +77,22 @@ impl RomIdentity {
     pub fn is_empty(&self) -> bool {
         self.platform.is_none() && self.disc_format.is_none()
     }
+
+    /// Write the detected `platform` and `disc_format` (uppercase label) into a
+    /// JSON object. The single source of truth for how identity is serialized so
+    /// the probe, checksum, and extract surfaces all emit byte-identical keys.
+    /// Absent fields are left out entirely (never written as `null`).
+    pub fn write_into(&self, map: &mut serde_json::Map<String, serde_json::Value>) {
+        if let Some(platform) = self.platform {
+            map.insert("platform".to_string(), serde_json::Value::from(platform));
+        }
+        if let Some(disc_format) = self.disc_format {
+            map.insert(
+                "disc_format".to_string(),
+                serde_json::Value::from(disc_format.label()),
+            );
+        }
+    }
 }
 
 /// A [`DiscSectorSource`] backed by an in-memory prefix, de-framing 2352-byte
@@ -371,5 +387,33 @@ mod tests {
         let identity = detect_rom_identity(&image, image.len() as u64, Some(".bin"));
         assert_eq!(identity.platform, None);
         assert_eq!(identity.disc_format, Some(DiscFormat::Cd));
+    }
+
+    #[test]
+    fn write_into_emits_present_fields_only() {
+        let mut full = serde_json::Map::new();
+        RomIdentity {
+            platform: Some(platform::GAMECUBE),
+            disc_format: Some(DiscFormat::Dvd),
+        }
+        .write_into(&mut full);
+        assert_eq!(full["platform"], serde_json::json!("Nintendo GameCube"));
+        assert_eq!(full["disc_format"], serde_json::json!("DVD"));
+
+        let mut cartridge = serde_json::Map::new();
+        RomIdentity {
+            platform: Some(platform::NES),
+            disc_format: None,
+        }
+        .write_into(&mut cartridge);
+        assert_eq!(
+            cartridge["platform"],
+            serde_json::json!("Nintendo Entertainment System")
+        );
+        assert!(!cartridge.contains_key("disc_format"));
+
+        let mut empty = serde_json::Map::new();
+        RomIdentity::default().write_into(&mut empty);
+        assert!(empty.is_empty());
     }
 }

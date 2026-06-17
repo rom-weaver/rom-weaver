@@ -71,6 +71,8 @@ fn main() {
                 no_nested_extract: false,
                 no_overwrite: false,
                 checksum: Vec::new(),
+                checksum_rom: Vec::new(),
+                probe: false,
                 // Overwritten per job by the executor's fair thread allotment.
                 threads,
             }

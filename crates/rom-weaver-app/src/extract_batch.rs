@@ -225,6 +225,8 @@ mod tests {
                 no_nested_extract: false,
                 no_overwrite: false,
                 checksum: Vec::new(),
+                checksum_rom: Vec::new(),
+                probe: false,
                 threads: ThreadBudget::Auto,
             })
             .collect()

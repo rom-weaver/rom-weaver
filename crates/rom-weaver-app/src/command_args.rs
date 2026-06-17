@@ -224,6 +224,27 @@ pub struct ExtractCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksum: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "checksum-rom",
+            value_name = "ALGO",
+            help = "Like --checksum but only ROM-like outputs are hashed (sidecar/non-ROM entries are skipped); safe to always pass. Ignored if --checksum is also set"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub checksum_rom: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Fold container/platform probe metadata into the result and fail when a single-payload source resolves to no known platform"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub probe: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -297,6 +318,16 @@ pub struct ChecksumCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub length: Option<u64>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Fold platform probe metadata into the result and fail when the checksummed bytes resolve to no known platform"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub probe: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]

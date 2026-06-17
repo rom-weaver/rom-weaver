@@ -114,12 +114,7 @@ impl CliApp {
             "checksum_variants": rows_json,
         });
         if let Some(map) = details.as_object_mut() {
-            if let Some(platform) = rom_identity.platform {
-                map.insert("platform".to_string(), json!(platform));
-            }
-            if let Some(disc_format) = rom_identity.disc_format {
-                map.insert("disc_format".to_string(), json!(disc_format.label()));
-            }
+            rom_identity.write_into(map);
         }
         report.details = Some(details);
         Ok(report)

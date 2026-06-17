@@ -120,6 +120,11 @@ impl CliApp {
             }
             report =
                 Self::attach_container_probe_details(report, None, probe_recommendation.as_ref());
+            // Console + optical medium of the resolved (decoded) source, from a bounded
+            // prefix read — the same identity detection checksum/extract surface, now in
+            // the probe path so platform identify lives with probe (no-op for archives
+            // and other inputs with no on-disc signature).
+            Self::attach_rom_identity_details(&mut report, &probe_source);
             return self.finish_probe(report, extracted_archives, cleanup_paths);
         }
 

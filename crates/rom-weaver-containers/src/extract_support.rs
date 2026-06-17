@@ -17,8 +17,8 @@ use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
     SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
-    create_extract_output_file, emit_container_running_progress,
-    maybe_emit_container_byte_progress, ordered_streaming_compress,
+    create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
+    is_rom_filter_candidate_name, maybe_emit_container_byte_progress, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 
@@ -230,6 +230,23 @@ impl ExtractHasher {
         if algorithms.is_empty() {
             return Ok(Self::None);
         }
+        // `--checksum-rom` only hashes ROM-like outputs; skip sidecar/non-ROM entries entirely
+        // (no checksum and no identity for them). Single-payload disc-image handlers use a
+        // different writer and always emit a ROM, so this gate only affects multi-entry archives.
+        //
+        // A `.cue`/`.gdi` disc sheet still counts as part of the ROM (it stays a ROM-filter
+        // candidate and is extracted alongside its tracks) but is itself a text index, not data —
+        // so it is never hashed here; only its referenced data tracks are.
+        if context.extract_checksum_rom_only() {
+            let is_rom = output_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(is_rom_filter_candidate_name);
+            let is_disc_sheet = detect_disc_sheet(output_path).is_some();
+            if !is_rom || is_disc_sheet {
+                return Ok(Self::None);
+            }
+        }
         let Some(total_len) = total_len else {
             return Ok(match create_extract_checksum(context)? {
                 Some(checksum) => Self::Plain {
@@ -409,12 +426,7 @@ fn build_extract_checksum_emitted_file_detail(
     entry.insert("checksums".to_string(), json!(checksums));
     // Console + optical medium of this decoded entry (no exact-title lookup), detected
     // from the streamed output by the producing path — no extra read here.
-    if let Some(platform) = rom_identity.platform {
-        entry.insert("platform".to_string(), json!(platform));
-    }
-    if let Some(disc_format) = rom_identity.disc_format {
-        entry.insert("disc_format".to_string(), json!(disc_format.label()));
-    }
+    rom_identity.write_into(&mut entry);
     if let Some(timing) = timing {
         entry.insert(
             "timing".to_string(),

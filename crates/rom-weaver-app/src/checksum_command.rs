@@ -3,6 +3,18 @@ use super::*;
 
 impl CliApp {
     pub(super) fn run_checksum(&self, args: ChecksumCommand) -> AppRunOutcome {
+        let probe = args.probe;
+        let mut report = self.run_checksum_inner(args);
+        if probe {
+            report = Self::apply_checksum_probe_gate(report);
+        }
+        self.finish("checksum", report)
+    }
+
+    /// Compute the checksum report (every path returns the report instead of finishing,
+    /// so [`run_checksum`](Self::run_checksum) can apply the `--probe` fail-on-unidentified
+    /// gate before the single terminal `finish`).
+    fn run_checksum_inner(&self, args: ChecksumCommand) -> OperationReport {
         trace!(
             source = %args.source.display(),
             algorithm_count = args.algo.len(),
@@ -28,6 +40,8 @@ impl CliApp {
             no_trim_fix,
             start,
             length,
+            // Consumed by the `run_checksum` wrapper before the inner body runs.
+            probe: _,
             threads,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
@@ -41,7 +55,7 @@ impl CliApp {
             &source,
             thread_execution.clone(),
         ) {
-            return self.finish("checksum", report);
+            return report;
         }
 
         let invalid = algo.iter().find(|algo| {
@@ -50,15 +64,12 @@ impl CliApp {
                 .any(|supported| supported.eq_ignore_ascii_case(algo))
         });
         if let Some(invalid) = invalid {
-            return self.finish(
-                "checksum",
-                OperationReport::failed(
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name().to_string()),
-                    "validate",
-                    format!("unsupported checksum algorithm `{invalid}`"),
-                    thread_execution,
-                ),
+            return OperationReport::failed(
+                OperationFamily::Checksum,
+                Some(self.checksum.name().to_string()),
+                "validate",
+                format!("unsupported checksum algorithm `{invalid}`"),
+                thread_execution,
             );
         }
 
@@ -79,18 +90,15 @@ impl CliApp {
             &context,
             thread_execution.clone(),
         ) {
-            Ok(Some(report)) => return self.finish("checksum", report),
+            Ok(Some(report)) => return report,
             Ok(None) => {}
             Err(error) => {
-                return self.finish(
+                return OperationReport::failed(
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name().to_string()),
                     "checksum",
-                    OperationReport::failed(
-                        OperationFamily::Checksum,
-                        Some(self.checksum.name().to_string()),
-                        "checksum",
-                        error.to_string(),
-                        thread_execution.clone(),
-                    ),
+                    error.to_string(),
+                    thread_execution.clone(),
                 );
             }
         }
@@ -101,18 +109,15 @@ impl CliApp {
             &context,
             thread_execution.clone(),
         ) {
-            Ok(Some(report)) => return self.finish("checksum", report),
+            Ok(Some(report)) => return report,
             Ok(None) => {}
             Err(error) => {
-                return self.finish(
+                return OperationReport::failed(
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name().to_string()),
                     "checksum",
-                    OperationReport::failed(
-                        OperationFamily::Checksum,
-                        Some(self.checksum.name().to_string()),
-                        "checksum",
-                        error.to_string(),
-                        thread_execution.clone(),
-                    ),
+                    error.to_string(),
+                    thread_execution.clone(),
                 );
             }
         }
@@ -120,9 +125,8 @@ impl CliApp {
         if let Some(stream_format) =
             self.select_streamed_checksum_auto_extract_format(&source, &checksum_options)
         {
-            return self.finish(
-                "checksum",
-                self.run_checksum_stream_auto_extract(
+            return self
+                .run_checksum_stream_auto_extract(
                     &source,
                     stream_format,
                     &algo,
@@ -137,8 +141,7 @@ impl CliApp {
                         error.to_string(),
                         thread_execution.clone(),
                     )
-                }),
-            );
+                });
         }
 
         let resolved = match self.resolve_source_with_auto_extract(
@@ -161,15 +164,12 @@ impl CliApp {
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
-                return self.finish(
-                    "checksum",
-                    OperationReport::failed(
-                        OperationFamily::Checksum,
-                        Some(self.checksum.name().to_string()),
-                        "prepare",
-                        error.to_string(),
-                        thread_execution,
-                    ),
+                return OperationReport::failed(
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name().to_string()),
+                    "prepare",
+                    error.to_string(),
+                    thread_execution,
                 );
             }
         };
@@ -283,7 +283,33 @@ impl CliApp {
             Self::attach_rom_identity_details(&mut report, &request.source);
         }
         Self::cleanup_temp_paths(&temp_paths);
-        self.finish("checksum", report)
+        report
+    }
+
+    /// `--probe` gate: a succeeded checksum whose details carry no resolved platform
+    /// (`platform`/`disc_format`) is failed. Plain checksum happily hashes unidentified
+    /// bytes; `--probe` callers (the input section) want unknown inputs rejected. Identity
+    /// is already attached during the run (streamed on the variant path, fallback read on
+    /// the range path), so this never reads the source again.
+    fn apply_checksum_probe_gate(report: OperationReport) -> OperationReport {
+        if report.status != OperationStatus::Succeeded {
+            return report;
+        }
+        let has_identity = report
+            .details
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|map| map.contains_key("platform") || map.contains_key("disc_format"));
+        if has_identity {
+            return report;
+        }
+        OperationReport::failed(
+            report.family,
+            report.format.clone(),
+            "probe",
+            "probe: source did not resolve to a known platform",
+            report.thread_execution.clone(),
+        )
     }
 
     /// Augment a succeeded checksum report's `details` with the resolved source's
@@ -310,15 +336,7 @@ impl CliApp {
             }
             None => serde_json::Map::new(),
         };
-        if let Some(platform) = identity.platform {
-            details.insert("platform".to_string(), serde_json::json!(platform));
-        }
-        if let Some(disc_format) = identity.disc_format {
-            details.insert(
-                "disc_format".to_string(),
-                serde_json::json!(disc_format.label()),
-            );
-        }
+        identity.write_into(&mut details);
         report.details = Some(serde_json::Value::Object(details));
     }
 }

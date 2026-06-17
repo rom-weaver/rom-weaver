@@ -486,6 +486,8 @@ fn nested_extract_auto_extracts_all_branches_body() {
         no_nested_extract: false,
         no_overwrite: false,
         checksum: Vec::new(),
+        checksum_rom: Vec::new(),
+        probe: false,
         threads: ThreadBudget::Fixed(1),
     }));
 
