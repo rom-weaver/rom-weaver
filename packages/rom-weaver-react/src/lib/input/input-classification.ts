@@ -2,11 +2,11 @@ import type { ArchiveSourceValue } from "../../storage/browser/archive-source.ts
 import type { ByteSourceRecordLike } from "../../storage/shared/binary/source-shared.ts";
 import type { JsonObject } from "../../types/runtime.ts";
 import type { WorkflowRomFileLike as InputSource } from "../../types/workflow-source.ts";
+import { getArchiveType } from "../../workers/protocol/archive-shared-utils.ts";
 import {
   getRomSpecificExtractedFileName,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRATIONS,
 } from "../compression/container-format-registry.ts";
-import { getArchiveType } from "../input/archive-type-utils.ts";
 
 type PatcherInputClassification =
   | {

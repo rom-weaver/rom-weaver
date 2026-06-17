@@ -1,4 +1,4 @@
-import { createTiming, formatTiming, type Timing } from "../lib/progress/timing.ts";
+import { createTiming, formatTiming, type Timing } from "../storage/shared/timing.ts";
 import type { JsonObject, JsonValue } from "../types/runtime.ts";
 
 const TRAILING_ELLIPSIS_REGEX = /\.\.\.$/;

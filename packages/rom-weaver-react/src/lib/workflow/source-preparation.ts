@@ -4,11 +4,11 @@
 
 import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
+import { isArchiveFile } from "../../workers/protocol/archive-shared-utils.ts";
 import {
   createRomSpecificExtensionRegex,
   ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "../compression/rom-specific-format-support.ts";
-import { isArchiveFile } from "../input/archive-type-utils.ts";
 import { classifyPatcherInput, getInputSourceFileName } from "../input/input-classification.ts";
 
 const ROM_SPECIFIC_INPUT_EXTENSION_REGEX = createRomSpecificExtensionRegex(ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS);

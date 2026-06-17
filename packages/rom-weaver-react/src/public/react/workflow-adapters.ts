@@ -49,8 +49,6 @@ const useWorkflowSnapshot = <TSnapshot>(workflow: {
   return useSyncExternalStore(subscribe, getSnapshot);
 };
 
-const toBrowserPublicBinarySource = (source: BinarySource) => source;
-
 const getReactBinarySourceFileName = (source: BinarySource | null | undefined, fallback: string) => {
   if (!source) return "";
   if (source instanceof File && source.name) return source.name;
@@ -174,7 +172,6 @@ export {
   createWorkflowFormError,
   getDefaultCreateOutputName,
   getReactBinarySourceFileName,
-  toBrowserPublicBinarySource,
   toReactProgressEvent,
   toStagedInputInfo,
   useApplyWorkflow,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { createLogger } from "../logging.ts";
 import { WakeLockBanner } from "./shell.tsx";
 
 const logger = createLogger("wake-lock-notice");

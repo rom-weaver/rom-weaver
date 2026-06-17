@@ -1,6 +1,6 @@
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
-import { createTiming, formatTiming } from "../../../../lib/progress/timing.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
+import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 

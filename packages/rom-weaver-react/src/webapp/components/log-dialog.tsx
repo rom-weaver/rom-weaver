@@ -1,9 +1,9 @@
 import X from "lucide-react/dist/esm/icons/x.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
 import { getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
-import { createLogger } from "../logging.ts";
 
 /**
  * The masthead Log dialog: a native <dialog> trace inspector over the

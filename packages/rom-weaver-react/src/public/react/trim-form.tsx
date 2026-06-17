@@ -46,7 +46,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { routeSingleRom } from "./unified-drop-routing.ts";
-import { getReactBinarySourceFileName, toBrowserPublicBinarySource } from "./workflow-adapters.ts";
+import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
   usePageDropForwarder,
@@ -469,7 +469,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     });
 
     const stagedReady = workflow
-      .setInput(toBrowserPublicBinarySource(source))
+      .setInput(source)
       .then(() => {
         if (stagedTrimWorkflowGenerationRef.current !== generation) return;
         emitTrimFormTrace("stage.set-input.finish", {
@@ -606,7 +606,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           sourceName: sourceFileName,
           workflowId: trimWorkflow.id,
         });
-        await trimWorkflow.setInput(toBrowserPublicBinarySource(stagedSource));
+        await trimWorkflow.setInput(stagedSource);
         emitTrimFormTrace("run.fallback-set-input.finish", {
           input: trimWorkflow.getInput(),
           workflowId: trimWorkflow.id,

@@ -42,12 +42,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { routeByOrder } from "./unified-drop-routing.ts";
-import {
-  getDefaultCreateOutputName,
-  getReactBinarySourceFileName,
-  toBrowserPublicBinarySource,
-  toStagedInputInfo,
-} from "./workflow-adapters.ts";
+import { getDefaultCreateOutputName, getReactBinarySourceFileName, toStagedInputInfo } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
   usePageDropForwarder,
@@ -411,8 +406,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     let cancelled = false;
     void resolveCreatePatchFormatCandidates({
       ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-      modified: toBrowserPublicBinarySource(modified),
-      original: toBrowserPublicBinarySource(original),
+      modified,
+      original,
       settings: {
         logging: settings.logging,
         workers: settings.workers,
@@ -621,7 +616,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       try {
         if (originalChanged && original) {
           activeRole = "original";
-          await enqueueSourceStage("original", () => activeWorkflow.setOriginal(toBrowserPublicBinarySource(original)));
+          await enqueueSourceStage("original", () => activeWorkflow.setOriginal(original));
           if (!isCurrentStaging()) return;
           if (isCurrentRoleStaging("original", originalGeneration)) {
             setOriginalState(activeWorkflow.getOriginal());
@@ -631,7 +626,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         }
         if (modifiedChanged && modified) {
           activeRole = "modified";
-          await enqueueSourceStage("modified", () => activeWorkflow.setModified(toBrowserPublicBinarySource(modified)));
+          await enqueueSourceStage("modified", () => activeWorkflow.setModified(modified));
           if (!isCurrentStaging()) return;
           if (isCurrentRoleStaging("modified", modifiedGeneration)) {
             setModifiedState(activeWorkflow.getModified());
@@ -747,8 +742,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       if (usingStagedWorkflow) {
         await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads));
       } else {
-        await createWorkflow.setOriginal(toBrowserPublicBinarySource(stagedOriginal));
-        await createWorkflow.setModified(toBrowserPublicBinarySource(stagedModified));
+        await createWorkflow.setOriginal(stagedOriginal);
+        await createWorkflow.setModified(stagedModified);
       }
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
       await createWorkflow.setOutputName(executionOutputName);

@@ -1,4 +1,11 @@
 import {
+  getCompressionProfileFromIndex,
+  getCompressionProfileIndex,
+  getCompressionProfileLabel,
+  resolveCompressionLevels,
+} from "../../lib/compression/compression-settings.ts";
+import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
+import {
   canUseThreadedWasm,
   getDefaultBrowserThreadCount,
   normalizeBrowserThreadCount,
@@ -6,14 +13,7 @@ import {
   normalizeCodecListWithFallback,
   normalizeIntegerInRange,
   parseIntegerInRange,
-} from "../../lib/compression/compression-option-utils.ts";
-import {
-  getCompressionProfileFromIndex,
-  getCompressionProfileIndex,
-  getCompressionProfileLabel,
-  resolveCompressionLevels,
-} from "../../lib/compression/compression-settings.ts";
-import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
+} from "../../platform/shared/compression-options.ts";
 
 const { COMPRESSION_PROFILES, getChdCodecsForMode, normalizeCompressionProfile } = OutputCompressionManager;
 

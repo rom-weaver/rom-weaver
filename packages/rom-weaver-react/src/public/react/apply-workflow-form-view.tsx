@@ -1,8 +1,8 @@
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import { useEffect, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import { probeApplyArchiveHasRom } from "./apply-archive-probe.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";

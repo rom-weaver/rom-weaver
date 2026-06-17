@@ -1,4 +1,4 @@
-import { parseIntegerInRange } from "../compression/compression-option-utils.ts";
+import { parseIntegerInRange } from "../../platform/shared/compression-options.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {

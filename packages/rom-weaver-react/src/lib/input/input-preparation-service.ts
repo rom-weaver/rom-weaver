@@ -7,13 +7,12 @@ import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../ty
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import { getArchiveMagicType, getArchiveType, MAGIC_SIGNATURES } from "../../workers/protocol/archive-shared-utils.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";
 import { emitTraceLog } from "../logging.ts";
 import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGdiFileReferences } from "./archive.ts";
-import { getArchiveType } from "./archive-type-utils.ts";
-import { getArchiveMagicType, MAGIC_SIGNATURES } from "./archive-utils.ts";
 import {
   createBlobBackedPatchFile,
   createLazyExternalPatchFile,

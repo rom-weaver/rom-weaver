@@ -3,11 +3,11 @@
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { beginOpfsCleanupGate, markOpfsCleanupSettled } from "../storage/browser/opfs-cleanup-gate.ts";
 import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { installLogStore } from "./log-store.ts";
-import { configureLogger, createLogger } from "./logging.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";

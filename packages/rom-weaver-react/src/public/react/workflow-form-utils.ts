@@ -1,5 +1,5 @@
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
+import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 
 type SettingsWithOutput = {
   output?: Record<string, unknown>;

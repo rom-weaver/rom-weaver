@@ -1,5 +1,5 @@
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
+import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ArchivePathEntry, StagedInputInfo } from "./apply-session-types.ts";
 import { getBinarySourceFileName } from "./input-session-helpers.ts";

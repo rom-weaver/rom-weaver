@@ -4,9 +4,9 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
+import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
 import {

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { createLogger } from "./logging.ts";
+import { createLogger } from "../lib/logging.ts";
 
 /**
  * Theme store for the redesigned UI. Persists the user's explicit choice to

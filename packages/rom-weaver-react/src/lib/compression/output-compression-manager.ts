@@ -4,6 +4,14 @@
  */
 
 import {
+  getChdCodecLevelMax,
+  getDefaultThreadCount,
+  isValidChdCodecLevel,
+  normalizeCodecList,
+  normalizeThreadCount,
+  parseIntegerInRange,
+} from "../../platform/shared/compression-options.ts";
+import {
   getSourceExtension,
   getSourceFileName,
   replaceFileExtension,
@@ -25,14 +33,6 @@ import {
   getGeneratedCompressionProfileLevel,
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
-import {
-  getChdCodecLevelMax,
-  getDefaultThreadCount,
-  isValidChdCodecLevel,
-  normalizeCodecList,
-  normalizeThreadCount,
-  parseIntegerInRange,
-} from "./compression-option-utils.ts";
 import {
   CHD_COMPRESSION_INPUT_EXTENSIONS,
   CHD_DECOMPRESSION_INPUT_EXTENSIONS,

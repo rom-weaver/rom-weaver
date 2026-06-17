@@ -31,12 +31,7 @@ import type {
 } from "./public-types.ts";
 import { toApplyWorkflowSettings, useApplySettings, useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
 import { routeByTypeProbed } from "./unified-drop-routing.ts";
-import {
-  createWorkflowFormError,
-  getReactBinarySourceFileName,
-  toBrowserPublicBinarySource,
-  toReactProgressEvent,
-} from "./workflow-adapters.ts";
+import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressEvent } from "./workflow-adapters.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId, formatChecksumTiming } from "./workflow-form-utils.ts";
 
@@ -752,7 +747,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             inputCount: snapshot.inputs.length,
           });
           inputPromise = workflow
-            .setInput(snapshot.inputs.map(toBrowserPublicBinarySource))
+            .setInput(snapshot.inputs)
             .then(() => {
               emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
                 input: workflow.getInput(),
@@ -780,7 +775,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const patchAdditions = patchesChanged
           ? (patchesAppended ? snapshot.patches.slice(previousPatches.length) : snapshot.patches).map((patch) =>
               workflow
-                .addPatch(toBrowserPublicBinarySource(patch))
+                .addPatch(patch)
                 .catch((error) => {
                   if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
                 })
