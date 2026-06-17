@@ -668,12 +668,6 @@ struct NdsTrimPlan {
     preserved_download_play_cert: bool,
 }
 
-struct ChecksumTrimPlan {
-    trimmed_size: u64,
-    mode: &'static str,
-    preserved_download_play_cert: bool,
-}
-
 struct NdsTrimOutcome {
     original_size: u64,
     result_size: u64,

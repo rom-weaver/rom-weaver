@@ -1199,7 +1199,10 @@ fn checksum_n64_byte_order_variants_cover_all_target_orders() {
 }
 
 #[test]
-fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
+fn checksum_nds_hashes_full_file_and_includes_variants() {
+    // The checksum command hashes the full file (no auto-trim) so its output matches the inline
+    // checksum extract computes; a trim-eligible NDS therefore differs from its explicitly-trimmed
+    // counterpart and still gets the streaming variant set (at least `raw`).
     let temp = setup_temp_dir();
     let source = temp.child("downloadplay.nds");
     let trimmed = temp.child("downloadplay-trimmed.nds");
@@ -1207,7 +1210,7 @@ fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
     fs::write(source.path(), &rom).expect("fixture");
     fs::write(trimmed.path(), &rom[..0x3200 + 0x88]).expect("trimmed fixture");
 
-    let trimmed_output = command_stdout(
+    let full_output = command_stdout(
         &[
             "checksum",
             source.path().to_str().expect("path"),
@@ -1233,29 +1236,33 @@ fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
         0,
     );
 
-    let trimmed_json = parse_single_json_line(&trimmed_output);
+    let full_json = parse_single_json_line(&full_output);
     let explicit_json = parse_single_json_line(&explicit_output);
-    assert_eq!(trimmed_json["status"], "succeeded");
+    assert_eq!(full_json["status"], "succeeded");
     assert_eq!(explicit_json["status"], "succeeded");
 
-    let trimmed_label = trimmed_json["label"].as_str().expect("trimmed label");
+    let full_label = full_json["label"].as_str().expect("full label");
     let explicit_label = explicit_json["label"].as_str().expect("explicit label");
-    assert_eq!(
-        label_digest_value(trimmed_label, "crc32"),
+    // Full-file hashing: no trim boundary applied, and the value differs from the trimmed file.
+    assert!(!full_label.contains("trimmed_input_bytes="));
+    assert!(!full_label.contains("range="));
+    assert_ne!(
+        label_digest_value(full_label, "crc32"),
         label_digest_value(explicit_label, "crc32")
     );
+    // The streaming variant engine runs for trim-eligible inputs too (previously suppressed):
+    // the `raw` variant is always present and mirrors the primary checksum.
+    assert!(checksum_variant_ids(&full_json).contains(&"raw"));
     assert_eq!(
-        label_digest_value(trimmed_label, "sha1"),
-        label_digest_value(explicit_label, "sha1")
+        checksum_variant_row(&full_json, "raw")["checksums"]["crc32"],
+        full_json["details"]["checksums"]["crc32"]
     );
-    assert!(trimmed_label.contains("range=0..12936"));
-    assert!(trimmed_label.contains("trimmed_input_bytes=12936"));
-    assert!(trimmed_label.contains("mode=ds"));
-    assert!(trimmed_label.contains("preserved_download_play_cert=true"));
 }
 
 #[test]
-fn checksum_no_trim_fix_disables_trimmed_boundary_fix() {
+fn checksum_nds_default_matches_no_trim_fix() {
+    // `--no-trim-fix` is a no-op for the primary value now that the command never auto-trims, so the
+    // default and `--no-trim-fix` outputs are byte-identical.
     let temp = setup_temp_dir();
     let source = temp.child("downloadplay.nds");
     let rom = build_test_nds_rom(0x00, 0x3200, 0x3200, 0x6000, true);
@@ -1291,9 +1298,9 @@ fn checksum_no_trim_fix_disables_trimmed_boundary_fix() {
 
     let auto_label = auto_json["label"].as_str().expect("auto label");
     let no_fix_label = no_fix_json["label"].as_str().expect("no-fix label");
-    assert!(auto_label.contains("trimmed_input_bytes=12936"));
+    assert!(!auto_label.contains("trimmed_input_bytes="));
     assert!(!no_fix_label.contains("trimmed_input_bytes="));
-    assert_ne!(
+    assert_eq!(
         label_digest_value(auto_label, "crc32"),
         label_digest_value(no_fix_label, "crc32")
     );

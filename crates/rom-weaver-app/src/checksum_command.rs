@@ -192,30 +192,11 @@ impl CliApp {
         );
 
         let mut temp_paths = Vec::new();
-        let mut trimmed_plan = None;
+        // The checksum command always hashes the full file so its output matches the inline checksum
+        // computed during extract (extract has no trim step). A trimmed-boundary checksum is a
+        // separate concern handled by the `trim` command, not folded into the primary value here.
         let user_requested_range = start.is_some() || length.is_some();
-        let mut start = start;
-        let mut length = length;
-        let should_auto_trim_fix = !no_trim_fix && !user_requested_range;
         let checksum_source = resolved_source.clone();
-        if should_auto_trim_fix {
-            self.emit_running(
-                OperationLabel {
-                    command: "checksum",
-                    family: OperationFamily::Checksum,
-                    format: Some(self.checksum.name()),
-                },
-                "prepare",
-                "resolving trim boundary before checksum",
-                None,
-                thread_execution.clone(),
-            );
-            if let Ok(plan) = self.read_checksum_trim_plan_with_offset(&checksum_source, 0) {
-                start = Some(0);
-                length = Some(plan.trimmed_size);
-                trimmed_plan = Some(plan);
-            }
-        }
         temp_paths.append(&mut cleanup_paths);
         let request = ChecksumRequest {
             source: checksum_source,
@@ -232,7 +213,7 @@ impl CliApp {
             "checksum"
         };
         let checksum_algorithm_count = request.algorithms.len();
-        let variants_enabled = !user_requested_range && trimmed_plan.is_none();
+        let variants_enabled = !user_requested_range;
         let mut report = if variants_enabled {
             self.run_checksum_variants_with_progress(
                 &request,
@@ -290,19 +271,11 @@ impl CliApp {
                 ),
             )
         });
-        if report.status == OperationStatus::Succeeded {
-            if let Some(plan) = trimmed_plan {
-                report.label = format!(
-                    "{}; trimmed_input_bytes={} mode={} preserved_download_play_cert={}",
-                    report.label, plan.trimmed_size, plan.mode, plan.preserved_download_play_cert
-                );
-            }
-            if extracted_archives > 0 {
-                report.label = format!(
-                    "{}; checksum source resolved via {extracted_archives} container extract step(s)",
-                    report.label
-                );
-            }
+        if report.status == OperationStatus::Succeeded && extracted_archives > 0 {
+            report.label = format!(
+                "{}; checksum source resolved via {extracted_archives} container extract step(s)",
+                report.label
+            );
         }
         Self::cleanup_temp_paths(&temp_paths);
         self.finish("checksum", report)
