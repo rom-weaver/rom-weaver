@@ -12,10 +12,12 @@
  *     OPEN (axe skips visibility:hidden content) plus the progress / error /
  *     fault primitives.
  *  4. Full-page scans (WCAG A/AA + best-practice incl. landmarks) of the Apply
- *     (staged), Create (empty) and Trim (empty) pages, in the production shell
- *     (Masthead + <main> + Selvage).
+ *     (staged/empty/verdict/done), Create (empty + staged) and Trim (empty +
+ *     staged) pages, in the production shell (Masthead + <main> + Selvage).
  *
- * Forms render inert (controllers-as-stores / empty bench), so no wasm/OPFS/
+ * Forms render inert: Apply via controllers-as-stores, Create/Trim via their
+ * presentational views (Create/TrimPatchFormView) fed a staged model, the empty
+ * benches via the real forms (wasm only boots on a file action). No wasm/OPFS/
  * worker boot. Runs in-browser via axe-core (same engine as prototype/a11y.js)
  * rather than @axe-core/playwright, because vitest browser mode's `page` is not
  * a Playwright Page.
@@ -32,10 +34,12 @@ import { FileCard } from "../../src/public/react/components/ds/file-card.tsx";
 import { FixesPanel } from "../../src/public/react/components/ds/fixes-panel.tsx";
 import { ConfirmDialog, Modal } from "../../src/public/react/components/ds/modal.tsx";
 import { DiscTracksPanel, SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
+import { CreatePatchFormView } from "../../src/public/react/create-patch-form-view.tsx";
 import { CreatePatchForm, TrimPatchForm } from "../../src/public/react/index.tsx";
 import { ArchiveDialog } from "../../src/public/react/patcher-react-shared.tsx";
 import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { Masthead, Selvage, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
 import {
@@ -502,6 +506,111 @@ const emptyTrimPage = () =>
     createElement(TrimPatchForm, { onOutputFormatChange: noop, onSettingsChange: noop, onSourceChange: noop }),
   );
 
+// Create/Trim are stateful forms with no inert controller, but their markup is
+// owned by presentational views (Create/TrimPatchFormView) that the controllers
+// feed prop bundles. Mounting those views directly with a staged model exercises
+// the loaded source cards (Extract + Info open + Fixes) + swap row + output step
+// without booting wasm — the coverage gap the empty-bench pages can't reach.
+const stagedSourceStep = ({ fixes = {}, id, num, title }) => ({
+  id,
+  items: [
+    {
+      card: {
+        extract: { fileName: "Pokemon Emerald.gba", fileSize: 8_388_608, timing: "8 ms" },
+        onRemove: noop,
+        panels: {
+          fixes,
+          info: { bytes: 8_388_608, checksums: ROM_CHECKSUMS, defaultOpen: true, timing: "Checksum 12 ms" },
+        },
+        removeLabel: `Clear ${title} ROM`,
+        state: "ok",
+      },
+      id: `${id}:card`,
+    },
+  ],
+  num,
+  title,
+});
+
+const stagedOutputStep = ({ fileNameId, format, formatId, formatOptions, label, num, title }) => ({
+  action: createElement(RunButton, { onClick: noop }, label),
+  disabled: false,
+  fileName: "Pokemon Emerald (patched)",
+  fileNameId,
+  fileNamePlaceholder: "Output filename",
+  format,
+  formatId,
+  formatOptions,
+  num,
+  onFileNameChange: noop,
+  onFormatChange: noop,
+  title,
+});
+
+const stagedCreatePage = () =>
+  Shell(
+    "creator",
+    "creator",
+    createElement(CreatePatchFormView, {
+      dropZone: { label: "Add or replace a ROM", onFiles: noop },
+      modifiedStep: stagedSourceStep({ id: "patch-builder-row-modified", num: "0x03", title: "Modified" }),
+      onAddInput: noop,
+      originalStep: stagedSourceStep({ id: "patch-builder-row-original", num: "0x02", title: "Original" }),
+      output: stagedOutputStep({
+        fileNameId: "patch-builder-output-file",
+        format: "bps",
+        formatId: "patch-builder-select-patch-type",
+        formatOptions: [
+          { label: "BPS", value: "bps" },
+          { label: "UPS", value: "ups" },
+        ],
+        label: "CREATE & DOWNLOAD PATCH",
+        num: "0x04",
+        title: "Patch",
+      }),
+      sourcesEmpty: false,
+      swap: { disabled: false, onSwap: noop },
+    }),
+  );
+
+const stagedTrimPage = () =>
+  Shell(
+    "trim",
+    "trim",
+    createElement(TrimPatchFormView, {
+      confirm: {
+        body: "The trimmed copy is saved as a new download — your original file is not changed.",
+        cancelLabel: "Cancel",
+        confirmLabel: "Trim ROM",
+        onCancel: noop,
+        onConfirm: noop,
+        open: false,
+        title: "Trim this ROM?",
+      },
+      dropZone: { label: "Replace the ROM", onFiles: noop },
+      onAddInput: noop,
+      output: stagedOutputStep({
+        fileNameId: "trim-builder-output-file",
+        format: "none",
+        formatId: "trim-builder-select-output-format",
+        formatOptions: [
+          { label: ".gba", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+        label: "TRIM & DOWNLOAD",
+        num: "0x03",
+        title: "Trim",
+      }),
+      sourceEmpty: false,
+      sourceStep: stagedSourceStep({
+        fixes: { defaultOpen: true, trim: { detected: true, mode: "auto", trimmedInputBytes: 1_048_576 } },
+        id: "trim-builder-row-source",
+        num: "0x02",
+        title: "ROM",
+      }),
+    }),
+  );
+
 describe("webapp page accessibility", () => {
   const PAGES = [
     { factory: stagedApplyPage, name: "staged apply" },
@@ -509,7 +618,9 @@ describe("webapp page accessibility", () => {
     { factory: verdictApplyPage, name: "apply (bad + disabled patch verdicts)" },
     { factory: doneApplyPage, name: "apply (completed/download)" },
     { factory: emptyCreatePage, name: "empty create" },
+    { factory: stagedCreatePage, name: "staged create" },
     { factory: emptyTrimPage, name: "empty trim" },
+    { factory: stagedTrimPage, name: "staged trim" },
   ];
   for (const { factory, name } of PAGES) {
     for (const theme of THEMES) {
