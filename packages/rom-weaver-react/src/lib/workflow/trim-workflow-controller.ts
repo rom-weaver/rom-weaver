@@ -15,7 +15,7 @@ import { RomWeaverError, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { runTrimWorkflow, trimWorkflowDeps } from "../trim/workflow.ts";
-import { BaseWorkflowController, type SourceValidator } from "./base-workflow-controller.ts";
+import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 
@@ -78,7 +78,19 @@ const getFileNameExtension = (fileName: string) => {
   return match ? match[0].slice(1) : "";
 };
 
-class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, CreateSettings> {
+/** Reactive snapshot of the trim workflow's staged state (see {@link BaseWorkflowController.getSnapshot}). */
+type TrimWorkflowSnapshot = BaseWorkflowSnapshot & {
+  input: TrimWorkflowSourceState | null;
+  outputName: string;
+  outputFormat: CompressionFormat;
+  manualOutputName: boolean;
+};
+
+class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowController<
+  TSource,
+  CreateSettings,
+  TrimWorkflowSnapshot
+> {
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private outputFormat: CompressionFormat = "none";
   private outputExtension = "";
@@ -197,6 +209,26 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     return this.runExclusiveMutation(operation, callback);
   }
 
+  protected computeSnapshot(): TrimWorkflowSnapshot {
+    return {
+      busy: this.isBusy(),
+      id: this.id,
+      input: this.getInput(),
+      manualOutputName: this.manualOutputName,
+      outputFormat: this.outputFormat,
+      outputName: this.outputName,
+      ready: this.computeReady(),
+    };
+  }
+
+  /** Mirror the preconditions enforced by {@link run}: input ready+selected and an output name resolved. */
+  private computeReady(): boolean {
+    const stage = this.inputStage;
+    if (!stage) return false;
+    if (stage.state.status !== "ready" || !stage.state.selectedCandidateId) return false;
+    return !!this.outputName.trim();
+  }
+
   private async releaseInputStage() {
     const stage = this.inputStage;
     this.inputStage = undefined;
@@ -294,4 +326,5 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 }
 
+export type { TrimWorkflowSnapshot };
 export { TrimWorkflowController };

@@ -62,7 +62,7 @@ import type {
   SourceValidator,
   StagedSource,
 } from "./apply-workflow-state.ts";
-import { BaseWorkflowController } from "./base-workflow-controller.ts";
+import { BaseWorkflowController, type BaseWorkflowSnapshot } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
 import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
@@ -71,7 +71,23 @@ import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
 type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
 
-class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, ApplySettings> {
+/** Reactive snapshot of the apply workflow's staged state (see {@link BaseWorkflowController.getSnapshot}). */
+type ApplyWorkflowSnapshot = BaseWorkflowSnapshot & {
+  input: ApplyWorkflowInputState | null;
+  patches: ApplyWorkflowPatchState[];
+  output: {
+    manualOutputFormat: boolean;
+    manualOutputName: boolean;
+    outputFormat: CompressionFormat;
+    outputName: string;
+  };
+};
+
+class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowController<
+  TSource,
+  ApplySettings,
+  ApplyWorkflowSnapshot
+> {
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
@@ -931,6 +947,32 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     for (const patch of this.patches) await this.evaluatePatchReadiness(patch);
   }
 
+  protected computeSnapshot(): ApplyWorkflowSnapshot {
+    return {
+      busy: this.isBusy(),
+      id: this.id,
+      input: this.getInput(),
+      output: {
+        manualOutputFormat: this.outputState.manualOutputFormat,
+        manualOutputName: this.outputState.manualOutputName,
+        outputFormat: this.outputState.outputFormat,
+        outputName: this.outputState.outputName,
+      },
+      patches: this.getPatches(),
+      ready: this.computeReady(),
+    };
+  }
+
+  /** Mirror the preconditions enforced by {@link run}: input ready+selected, every patch ready,
+   * and an output name resolved. */
+  private computeReady(): boolean {
+    const input = this.inputSession;
+    if (!input) return false;
+    if (input.view.state.status !== "ready" || !input.view.state.selectedCandidateId) return false;
+    if (this.patches.some((patch) => patch.state.status !== "ready")) return false;
+    return !!this.outputState.outputName;
+  }
+
   private recomputeOutputState() {
     recomputeApplyOutputState(this.outputState, this.settings, {
       input: this.getInput(),
@@ -1013,4 +1055,5 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 }
 
+export type { ApplyWorkflowSnapshot };
 export { ApplyWorkflowController };

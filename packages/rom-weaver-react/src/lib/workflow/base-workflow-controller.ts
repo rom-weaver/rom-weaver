@@ -50,13 +50,29 @@ type WarnableStagedSource = {
   };
 };
 
+/** Fields every workflow snapshot exposes; each controller extends this with its source/output state. */
+type BaseWorkflowSnapshot = {
+  /** Stable workflow id (mirrors {@link BaseWorkflowController.id}). */
+  id: string;
+  /** True while any mutation (a `set...` call or `run`) is queued or executing. */
+  busy: boolean;
+  /** True when {@link BaseWorkflowController.run} can be called without a validation error. */
+  ready: boolean;
+};
+
 /**
  * Shared machinery for the trim/create/apply workflow controllers: identity, settings,
- * abort/dispose lifecycle, progress emission, tracing, mutation queuing, and the common
- * staged-source-controller wiring. Subclasses keep only their workflow-specific source
- * cardinality, output naming, execution options, and run logic.
+ * abort/dispose lifecycle, progress emission, tracing, mutation queuing, the common
+ * staged-source-controller wiring, and a `useSyncExternalStore`-friendly reactive snapshot
+ * ({@link subscribe} + {@link getSnapshot}). Subclasses keep only their workflow-specific source
+ * cardinality, output naming, execution options, run logic, and {@link computeSnapshot}.
  */
-abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings> extends WorkflowController<{
+abstract class BaseWorkflowController<
+  TSource,
+  TSettings extends CommonSettings,
+  TSnapshot extends BaseWorkflowSnapshot,
+> extends WorkflowController<{
+  change: void;
   progress: WorkflowProgress;
 }> {
   readonly id: string;
@@ -71,6 +87,8 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
   protected mutationQueue: Promise<void> | null = null;
   protected progressSequence = 0;
   protected settings: Partial<TSettings>;
+  private cachedSnapshot?: TSnapshot;
+  private snapshotDirty = true;
 
   constructor(
     workflow: WorkflowKind,
@@ -92,6 +110,42 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
 
   abort(reason?: unknown): void {
     if (!this.abortController.signal.aborted) this.abortController.abort(reason);
+  }
+
+  /**
+   * Subscribe to staged-state changes (the `change` event fires whenever a mutation starts or
+   * settles). Returns an unsubscribe function. Pair with {@link getSnapshot} for
+   * `useSyncExternalStore`. Note: high-frequency run progress is delivered via the separate
+   * `progress` event, not `change`, so the snapshot identity stays stable during a run.
+   */
+  subscribe(listener: () => void): () => void {
+    this.on("change", listener);
+    return () => this.off("change", listener);
+  }
+
+  /** Immutable view of the current staged state. The same object identity is returned until the
+   * next `change`, so it is safe as a `useSyncExternalStore` snapshot. */
+  getSnapshot(): TSnapshot {
+    if (!this.snapshotDirty && this.cachedSnapshot !== undefined) return this.cachedSnapshot;
+    const snapshot = this.computeSnapshot();
+    this.cachedSnapshot = snapshot;
+    this.snapshotDirty = false;
+    return snapshot;
+  }
+
+  /** Build the controller-specific snapshot. Called lazily by {@link getSnapshot} and recomputed
+   * after each `change`. */
+  protected abstract computeSnapshot(): TSnapshot;
+
+  /** Invalidate the cached snapshot and notify subscribers. */
+  protected emitChange(): void {
+    this.snapshotDirty = true;
+    this.trigger("change", undefined);
+  }
+
+  /** True while a mutation is queued or executing. */
+  protected isBusy(): boolean {
+    return this.activeMutation !== null || this.mutationQueue !== null;
   }
 
   protected trace(message: string, details: Record<string, unknown> = {}): void {
@@ -143,10 +197,12 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
       });
     }
     this.activeMutation = operation;
+    this.emitChange();
     try {
       return await callback();
     } finally {
       this.activeMutation = null;
+      this.emitChange();
     }
   }
 
@@ -168,6 +224,7 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
       } finally {
         this.activeMutation = null;
         if (opts.rearmAbort) this.rearmAbortController(operationSignal);
+        this.emitChange();
       }
     };
     const previousMutation = this.mutationQueue;
@@ -177,8 +234,12 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
       () => undefined,
     );
     this.mutationQueue = queued;
+    this.emitChange();
     queued.finally(() => {
-      if (this.mutationQueue === queued) this.mutationQueue = null;
+      if (this.mutationQueue === queued) {
+        this.mutationQueue = null;
+        this.emitChange();
+      }
     });
     return run;
   }
@@ -216,5 +277,5 @@ abstract class BaseWorkflowController<TSource, TSettings extends CommonSettings>
   }
 }
 
-export type { SourceValidator };
+export type { BaseWorkflowSnapshot, SourceValidator };
 export { BaseWorkflowController };

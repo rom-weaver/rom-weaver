@@ -17,7 +17,7 @@ import { createWorkflowDeps, runCreateWorkflow } from "../create/workflow.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
-import { BaseWorkflowController, type SourceValidator } from "./base-workflow-controller.ts";
+import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomSourceSession, SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 import {
@@ -85,7 +85,20 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
       } satisfies CreateWorkflowSourceState)
     : null;
 
-class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, CreateSettings> {
+/** Reactive snapshot of the create workflow's staged state (see {@link BaseWorkflowController.getSnapshot}). */
+type CreateWorkflowSnapshot = BaseWorkflowSnapshot & {
+  original: CreateWorkflowSourceState | null;
+  modified: CreateWorkflowSourceState | null;
+  patchType: string;
+  outputName: string;
+  manualOutputName: boolean;
+};
+
+class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowController<
+  TSource,
+  CreateSettings,
+  CreateWorkflowSnapshot
+> {
   private readonly sourceStages: StagedRomSourceController<TSource, InternalSourceState>;
   private patchType?: PatchFormat | string;
   private outputName = "";
@@ -223,6 +236,30 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
     return this.runQueuedMutation(operation, callback);
+  }
+
+  protected computeSnapshot(): CreateWorkflowSnapshot {
+    return {
+      busy: this.isBusy(),
+      id: this.id,
+      manualOutputName: this.manualOutputName,
+      modified: this.getModified(),
+      original: this.getOriginal(),
+      outputName: this.outputName,
+      patchType: this.getPatchType(),
+      ready: this.computeReady(),
+    };
+  }
+
+  /** Mirror the preconditions enforced by {@link run}: both sources ready+selected and an output
+   * name resolved. */
+  private computeReady(): boolean {
+    const original = this.getSelectedSourceOwner(this.originalSession);
+    const modified = this.getSelectedSourceOwner(this.modifiedSession);
+    if (!(original && modified)) return false;
+    if (original.state.status !== "ready" || !original.state.selectedCandidateId) return false;
+    if (modified.state.status !== "ready" || !modified.state.selectedCandidateId) return false;
+    return !!this.outputName.trim();
   }
 
   private async setSource(operation: string, role: SourceRole, source: TSource | TSource[]): Promise<void> {
@@ -418,4 +455,5 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   }
 }
 
+export type { CreateWorkflowSnapshot };
 export { CreateWorkflowController };
