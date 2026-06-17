@@ -1,4 +1,4 @@
-import type { ChecksumMap, ChecksumVariant } from "../../types/checksum.ts";
+import type { ChecksumMap, ChecksumVariant, ExtractTiming } from "../../types/checksum.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime-types.ts";
 import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
@@ -84,10 +84,29 @@ type RomWeaverEmittedFile = {
   checksumVariants?: ChecksumVariant[];
   /** Elapsed time (ms) of the extract step that produced this file; see Rust `extract_time_ms`. */
   extractTimeMs?: number;
+  /** Decode/checksum/overlap split for this file; see Rust `emitted_files[].timing`. */
+  extractTiming?: ExtractTiming;
   fileName: string;
   kind?: string;
   path: string;
   sizeBytes?: number;
+};
+
+const normalizeExtractTiming = (value: unknown): ExtractTiming | undefined => {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const num = (input: unknown): number | undefined =>
+    typeof input === "number" && Number.isFinite(input) ? input : undefined;
+  const timing: ExtractTiming = {
+    checksumMs: num(record.checksum_ms),
+    decodeMs: num(record.decode_ms),
+    opfsWriteMs: num(record.opfs_write_ms),
+    overlapMs: num(record.overlap_ms),
+    threaded: typeof record.threaded === "boolean" ? record.threaded : undefined,
+    totalMs: num(record.total_ms),
+    workers: num(record.workers),
+  };
+  return Object.values(timing).some((entry) => entry !== undefined) ? timing : undefined;
 };
 
 const normalizeEmittedFileChecksums = (value: unknown): Record<string, string> | undefined => {
@@ -167,6 +186,7 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
         typeof entry.extract_time_ms === "number" && Number.isFinite(entry.extract_time_ms)
           ? entry.extract_time_ms
           : undefined,
+      extractTiming: normalizeExtractTiming(entry.timing),
       fileName,
       kind: typeof entry.kind === "string" && entry.kind ? entry.kind : undefined,
       path,

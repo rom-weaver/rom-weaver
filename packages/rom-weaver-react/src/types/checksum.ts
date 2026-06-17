@@ -35,4 +35,17 @@ type ChecksumRomProbe = {
   };
 };
 
-export type { ChecksumMap, ChecksumResult, ChecksumRomProbe, ChecksumVariant };
+/** Per-file extract wall-time split (ms), from the Rust `emitted_files[].timing` report detail.
+ * `decodeMs` is the extract decode, `checksumMs` the hashing cost, `overlapMs` how much of the
+ * checksum ran concurrently with decode. Surfaced on the workflow cards. */
+type ExtractTiming = {
+  totalMs?: number;
+  decodeMs?: number;
+  opfsWriteMs?: number;
+  checksumMs?: number;
+  overlapMs?: number;
+  threaded?: boolean;
+  workers?: number;
+};
+
+export type { ChecksumMap, ChecksumResult, ChecksumRomProbe, ChecksumVariant, ExtractTiming };

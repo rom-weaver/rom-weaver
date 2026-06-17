@@ -1,7 +1,31 @@
 import type { ReactNode } from "react";
-import type { ChecksumVariant } from "../../../../types/checksum.ts";
+import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
 import { FileProgress } from "./feedback.tsx";
+
+const formatExtractTimingMs = (ms?: number): string | undefined =>
+  typeof ms === "number" && Number.isFinite(ms) ? `${Math.round(ms)}ms` : undefined;
+
+/* Decode/checksum/overlap split for the extract that produced this file, shown as a
+   labeled sub-group inside the same Checks drawer as the checksums. */
+const ExtractTimingGroup = ({ timing }: { timing?: ExtractTiming }) => {
+  if (!timing) return null;
+  const decode = formatExtractTimingMs(timing.decodeMs);
+  const checksum = formatExtractTimingMs(timing.checksumMs);
+  const overlap = formatExtractTimingMs(timing.overlapMs);
+  const total = formatExtractTimingMs(timing.totalMs);
+  if (!(decode || checksum || overlap)) return null;
+  const head = timing.threaded && timing.workers ? `Extract timing (${timing.workers} threads)` : "Extract timing";
+  return (
+    <div className="ck-group">
+      <div className="ck-group-head">{head}</div>
+      {decode ? <ChecksumRow label="DECODE" value={decode} /> : null}
+      {checksum ? <ChecksumRow label="CHECKSUM" value={checksum} /> : null}
+      {overlap ? <ChecksumRow label="OVERLAP" value={overlap} /> : null}
+      {total ? <ChecksumRow label="TOTAL" value={total} /> : null}
+    </div>
+  );
+};
 
 type SourceInfoChecksums = {
   crc32?: string;
@@ -63,6 +87,7 @@ const SourceInfoList = ({
   checksumVariants,
   defaultOpen = false,
   discType,
+  extractTiming,
   label = "Checks",
   lead,
   onToggle,
@@ -75,6 +100,7 @@ const SourceInfoList = ({
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
   discType?: string;
+  extractTiming?: ExtractTiming;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
   lead?: ReactNode;
@@ -119,6 +145,7 @@ const SourceInfoList = ({
         baseRows
       )}
       <VariantGroups bytes={bytes} variants={checksumVariants} />
+      <ExtractTimingGroup timing={extractTiming} />
     </ChecksumList>
   );
 };

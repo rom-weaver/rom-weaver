@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { getDiscKind, getDiscKindLabel } from "../../../../lib/input/rom-specific-file-utils.ts";
-import type { ChecksumVariant } from "../../../../types/checksum.ts";
+import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
 import { FixesPanel, type FixesPanelProps } from "./fixes-panel.tsx";
 import {
@@ -17,6 +17,7 @@ type RomInputInfoPanelProps = {
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
   discType?: string;
+  extractTiming?: ExtractTiming;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
   open?: boolean;
