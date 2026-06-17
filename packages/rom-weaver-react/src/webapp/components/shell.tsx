@@ -82,9 +82,11 @@ const ModeRail = ({
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
         {tabs.map((tab) => (
           <button
+            aria-controls={`panel-${tab.id}`}
             aria-selected={tab.id === current}
             className="mode"
             data-mode={tab.id}
+            id={`tab-${tab.id}`}
             key={tab.id}
             onClick={() => onSelect(tab.id)}
             role="tab"

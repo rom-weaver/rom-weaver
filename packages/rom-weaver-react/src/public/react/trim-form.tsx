@@ -758,7 +758,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   useWorkbenchActivity({ busy, completed: !!completedOutput, queued: trimQueued });
 
   return (
-    <main aria-labelledby="tab-trim" className="panel" id="trim-builder-container">
+    <section className="panel" id="trim-builder-container">
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
@@ -941,7 +941,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         title="Trim this ROM?"
       />
       {candidateSelectionDialog}
-    </main>
+    </section>
   );
 }
 

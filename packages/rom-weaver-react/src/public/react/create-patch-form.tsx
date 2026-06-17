@@ -922,7 +922,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   useWorkbenchActivity({ busy, completed: !!completedOutput, queued: createQueued });
 
   return (
-    <main aria-labelledby="tab-creator" className="panel" id="patch-builder-container">
+    <section className="panel" id="patch-builder-container">
       <UnifiedDropZone
         accept={createFileInputAccept.unifiedRom}
         archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
@@ -1088,7 +1088,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         title="Patch"
       />
       {candidateSelectionDialog}
-    </main>
+    </section>
   );
 }
 

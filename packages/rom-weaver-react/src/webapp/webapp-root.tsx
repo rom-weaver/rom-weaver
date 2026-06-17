@@ -251,7 +251,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
 
   const workflowPanel = (view: WorkflowView, form: React.ReactNode) =>
     isViewMounted(view) ? (
-      <section className="panel workflow" hidden={state.currentView !== view} id={`panel-${view}`}>
+      <section
+        aria-labelledby={`tab-${view}`}
+        className="panel workflow"
+        hidden={state.currentView !== view}
+        id={`panel-${view}`}
+        role="tabpanel"
+      >
         <div className="workflow-body">{form}</div>
       </section>
     ) : null;

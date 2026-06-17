@@ -435,16 +435,16 @@ function ApplyWorkflowFormView({
 
   if (startup.status === "error") {
     return (
-      <main className="panel" id="rom-weaver-container">
+      <section className="panel" id="rom-weaver-container">
         <div className="step-body">
           <Notice level="error">{startup.message || "RomWeaver failed to load."}</Notice>
         </div>
-      </main>
+      </section>
     );
   }
 
   return (
-    <main aria-labelledby="tab-patcher" className="panel" id="rom-weaver-container">
+    <section className="panel" id="rom-weaver-container">
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
@@ -673,7 +673,7 @@ function ApplyWorkflowFormView({
       />
 
       <SharedArchiveDialog controller={controllers.dialog} />
-    </main>
+    </section>
   );
 }
 
