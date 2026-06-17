@@ -1,0 +1,694 @@
+/**
+ * Accessibility automation for the loom webapp. Every scan runs against real
+ * computed styles in BOTH light and dark themes.
+ *
+ *  1. Component WCAG 2.1 A/AA scan of the checksum card (text contrast, roles,
+ *     names, ARIA) — the broad "are we meeting our goals" gate.
+ *  2. A surface-separation guard for the bug this suite was added for: the
+ *     *opened* checksum drawer must stay a distinct recessed well, not wash
+ *     into the card. axe's contrast rules only cover text vs background (WCAG
+ *     1.4.3), never surface vs surface, so it's asserted from getComputedStyle.
+ *  3. An expanded-sections + states gallery: every collapsible section rendered
+ *     OPEN (axe skips visibility:hidden content) plus the progress / error /
+ *     fault primitives.
+ *  4. Full-page scans (WCAG A/AA + best-practice incl. landmarks) of the Apply
+ *     (staged), Create (empty) and Trim (empty) pages, in the production shell
+ *     (Masthead + <main> + Selvage).
+ *
+ * Forms render inert (controllers-as-stores / empty bench), so no wasm/OPFS/
+ * worker boot. Runs in-browser via axe-core (same engine as prototype/a11y.js)
+ * rather than @axe-core/playwright, because vitest browser mode's `page` is not
+ * a Playwright Page.
+ */
+import axeModule from "axe-core";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
+import { CandidateSelectionDialog } from "../../src/public/react/candidate-selection.tsx";
+import { ChecksumList, ChecksumRow } from "../../src/public/react/components/ds/checksum-list.tsx";
+import { FileProgress, InlineProgress, Notice, RunButton } from "../../src/public/react/components/ds/feedback.tsx";
+import { FileCard } from "../../src/public/react/components/ds/file-card.tsx";
+import { FixesPanel } from "../../src/public/react/components/ds/fixes-panel.tsx";
+import { ConfirmDialog, Modal } from "../../src/public/react/components/ds/modal.tsx";
+import { DiscTracksPanel, SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
+import { CreatePatchForm, TrimPatchForm } from "../../src/public/react/index.tsx";
+import { ArchiveDialog } from "../../src/public/react/patcher-react-shared.tsx";
+import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/public/react/patcher-ui-state.ts";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
+import { Masthead, Selvage, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
+import {
+  getDefaultSettings,
+  getSettingsUiState,
+  validateSettingsDraft,
+} from "../../src/webapp/settings/settings-state.ts";
+import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
+// Load the real design system so axe + getComputedStyle see production colours.
+import "../../src/webapp/design-system.css";
+
+const axe = axeModule.default ?? axeModule;
+const THEMES = ["light", "dark"];
+
+let mountedRoot = null;
+let host = null;
+let noMotion = null;
+
+// Kill entrance/expand animation + transition timing so colours are sampled at
+// their settled values, never a mid-fade frame (mirrors prototype/a11y.js).
+beforeAll(() => {
+  noMotion = document.createElement("style");
+  noMotion.textContent =
+    "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}";
+  document.head.appendChild(noMotion);
+});
+
+beforeEach(() => {
+  mountedRoot?.unmount?.();
+  host = document.createElement("div");
+  document.body.replaceChildren(host);
+  mountedRoot = createRoot(host);
+});
+
+afterEach(() => {
+  mountedRoot?.unmount?.();
+  mountedRoot = null;
+  document.documentElement.removeAttribute("data-theme");
+});
+
+// two RAFs so React's commit + layout settle before reading styles / running axe
+const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+/** A representative input card: name + meta, an OPEN checksum drawer, a CLOSED one. */
+const Sample = () =>
+  createElement(
+    "div",
+    { className: "rw-app", style: { background: "var(--chassis)", padding: "24px", width: "560px" } },
+    createElement(
+      FileCard,
+      { meta: "8.00 MiB · GBA ROM", name: "Pokemon Emerald.gba" },
+      createElement(
+        ChecksumList,
+        { defaultOpen: true, label: "Checksums", timing: "12 ms" },
+        createElement(ChecksumRow, { copyValue: "1F1E33A0", label: "CRC32", value: "1F1E33A0" }),
+        createElement(ChecksumRow, {
+          copyValue: "0123abcd0123abcd0123abcd0123abcd",
+          label: "MD5",
+          value: "0123ABCD0123ABCD0123ABCD0123ABCD",
+        }),
+        createElement(ChecksumRow, {
+          copyValue: "0123abcd0123abcd0123abcd0123abcd0123abcd",
+          label: "SHA-1",
+          value: "0123ABCD0123ABCD0123ABCD0123ABCD0123ABCD",
+        }),
+      ),
+      createElement(
+        ChecksumList,
+        { defaultOpen: false, label: "Verification" },
+        createElement(ChecksumRow, { copyValue: "1F1E33A0", label: "CRC32", value: "1F1E33A0" }),
+      ),
+    ),
+  );
+
+const renderSample = async (theme) => {
+  document.documentElement.dataset.theme = theme;
+  mountedRoot.render(createElement(Sample));
+  await settle();
+};
+
+const parseColor = (value) => {
+  const match = value.match(/rgba?\(([^)]+)\)/);
+  if (!match) throw new Error(`Cannot parse colour "${value}"`);
+  const parts = match[1].split(",").map((part) => Number.parseFloat(part.trim()));
+  return { a: parts[3] ?? 1, b: parts[2] ?? 0, g: parts[1] ?? 0, r: parts[0] ?? 0 };
+};
+
+const relativeLuminance = ({ r, g, b }) => {
+  const channel = (raw) => {
+    const c = raw / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+
+const contrastRatio = (a, b) => {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+const bgString = (selector) => getComputedStyle(host.querySelector(selector)).backgroundColor;
+
+// Run axe over `context` and return readable violation strings (with the
+// contrast diagnostic inlined when present). `bestPractice` adds the
+// best-practice ruleset (landmark relationships, dialog names, …); `region`
+// enables the region rule (only meaningful for a full page — an isolated mount
+// or lone modal has no landmarks). Always assert against [] so failures show
+// exactly what broke.
+const scanViolations = async (context, { bestPractice = false, region = false } = {}) => {
+  const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+  if (bestPractice) tags.push("best-practice");
+  const results = await axe.run(context, {
+    resultTypes: ["violations"],
+    rules: region ? {} : { region: { enabled: false } },
+    runOnly: { type: "tag", values: tags },
+  });
+  return results.violations.map((v) => {
+    const sample = v.nodes[0]?.any?.[0]?.data ?? v.nodes[0]?.all?.[0]?.data;
+    const detail =
+      sample && sample.contrastRatio !== undefined
+        ? ` [ratio ${sample.contrastRatio} need ${sample.expectedContrastRatio}, fg ${sample.fgColor} on ${sample.bgColor}]`
+        : "";
+    return `${v.id} (${v.impact}): ${v.help}${detail} — ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`;
+  });
+};
+
+describe("design-system accessibility", () => {
+  for (const theme of THEMES) {
+    test(`checksum card passes WCAG 2.1 A/AA (${theme} theme)`, async () => {
+      await renderSample(theme);
+      expect(await scanViolations(host)).toEqual([]);
+    });
+  }
+
+  test("light: opened checksum drawer stays a distinct recessed well", async () => {
+    await renderSample("light");
+
+    // The opened drawer must keep the solid well fill it has when collapsed —
+    // the bug was the open state diluting to a near-transparent tint that read
+    // as the card behind it. Opening must not change the recess colour.
+    expect(bgString(".cks.is-open")).toBe(bgString(".cks:not(.is-open)"));
+
+    const openBg = parseColor(bgString(".cks.is-open"));
+    expect(openBg.a).toBe(1);
+
+    // …and that well must be perceptibly separated from the card. The washed
+    // out tint measured ~1.01:1 against the card (≈invisible); the solid well
+    // clears a small but real margin.
+    const ratio = contrastRatio(openBg, parseColor(bgString(".card")));
+    expect(ratio).toBeGreaterThan(1.05);
+  });
+
+  for (const theme of THEMES) {
+    test(`opened checksum drawer is separable from its card (${theme} theme)`, async () => {
+      await renderSample(theme);
+      // Compare raw computed strings — dark fills serialize as oklab(), which
+      // need no parsing for a distinctness check. Either the fill differs from
+      // the card, or a visible seam does the separation work.
+      const open = getComputedStyle(host.querySelector(".cks.is-open"));
+      const cardBg = getComputedStyle(host.querySelector(".card")).backgroundColor;
+      const transparent = (color) => color === "rgba(0, 0, 0, 0)" || color === "transparent";
+      const fillDiffers = open.backgroundColor !== cardBg;
+      const borderVisible =
+        !transparent(open.borderTopColor) &&
+        open.borderTopColor !== cardBg &&
+        Number.parseFloat(open.borderTopWidth) > 0;
+      expect(fillDiffers || borderVisible).toBe(true);
+    });
+  }
+});
+
+// ── Shared mount helpers ─────────────────────────────────────────────────────
+const noop = () => undefined;
+
+// Inert controller: a store with the live shape but no subscriptions/mutations.
+const storeOf = (state) => ({ getState: () => state, subscribe: () => () => undefined });
+
+const renderNode = async (node, theme) => {
+  document.documentElement.dataset.theme = theme;
+  mountedRoot.render(node);
+  await settle();
+};
+
+const renderPage = async (node, theme) => {
+  document.documentElement.lang = "en";
+  await renderNode(node, theme);
+};
+
+// ── Expanded design-system sections + states gallery ─────────────────────────
+// Every collapsible section, rendered OPEN, plus the progress / error / fault
+// primitives, so axe sees the *contents* of each section and each status state
+// in both themes — a collapsed drawer is visibility:hidden and axe skips it.
+
+const ROM_CHECKSUMS = {
+  crc32: "C6FB1252",
+  md5: "D7E7F3D6A4B2C9E1F8A0B1C2D3E4F5A6",
+  sha1: "E7D6C5B4A3F2E1D0C9B8A7F6E5D4C3B2A1F0E9D8",
+};
+
+const SectionsGallery = () =>
+  createElement(
+    "div",
+    { className: "rw-app", style: { background: "var(--chassis)", padding: "24px", width: "640px" } },
+    createElement(
+      Notice,
+      { level: "error", onDismiss: noop },
+      "Patch checksum mismatch: expected C6FB1252, got 00000000.",
+    ),
+    createElement(Notice, { level: "warn", onDismiss: noop }, "Header looks unusual — double-check the source ROM."),
+    createElement(RunButton, {
+      download: {
+        format: "ZIP",
+        name: "Pokemon Emerald (patched).gba",
+        ratio: "62%",
+        savedSize: "3.1 MiB",
+        size: "5.0 MiB",
+        total: "1.2 s",
+      },
+      onClick: noop,
+    }),
+    createElement(InlineProgress, {
+      cancelLabel: "Cancel operation",
+      label: "Compressing",
+      onCancel: noop,
+      percent: 42,
+      value: "42%",
+    }),
+    createElement(FileProgress, {
+      cancelLabel: "Cancel operation",
+      indeterminate: true,
+      label: "Extracting",
+      onCancel: noop,
+      value: "working",
+    }),
+    createElement(
+      FileCard,
+      { meta: "8.00 MiB · GBA ROM", name: "Pokemon Emerald.gba", state: "ok" },
+      createElement(
+        ChecksumList,
+        { defaultOpen: true, label: "Checksums", timing: "12 ms" },
+        createElement(ChecksumRow, { copyValue: ROM_CHECKSUMS.crc32, label: "CRC32", value: ROM_CHECKSUMS.crc32 }),
+        createElement(ChecksumRow, { bad: true, copyValue: "00000000", label: "MD5", value: "MISMATCH" }),
+        createElement(ChecksumRow, { copyValue: ROM_CHECKSUMS.sha1, label: "SHA-1", value: ROM_CHECKSUMS.sha1 }),
+      ),
+      createElement(SourceInfoList, {
+        bytes: 8_388_608,
+        checksums: ROM_CHECKSUMS,
+        defaultOpen: true,
+        discType: "GBA",
+        label: "Source",
+        timing: "8 ms",
+      }),
+      createElement(DiscTracksPanel, {
+        open: true,
+        tracks: [
+          {
+            bytes: 12_345_678,
+            checksums: { crc32: "AAAA1111", md5: ROM_CHECKSUMS.md5, sha1: ROM_CHECKSUMS.sha1 },
+            id: "t1",
+            label: "Track 01",
+            timing: "3 ms",
+          },
+          { bytes: 2_345_678, checksums: { crc32: "BBBB2222" }, id: "t2", label: "Track 02" },
+        ],
+      }),
+      createElement(FixesPanel, {
+        defaultOpen: true,
+        headerValue: "No change",
+        romInfoText: "GBA ROM",
+        trim: { detected: true, mode: "auto", trimmedInputBytes: 1_048_576 },
+      }),
+    ),
+  );
+
+describe("design-system sections + states (expanded)", () => {
+  for (const theme of THEMES) {
+    test(`every section open + progress/error primitives pass WCAG 2.1 A/AA (${theme} theme)`, async () => {
+      await renderNode(createElement(SectionsGallery), theme);
+      // sanity: the sections really are open (axe skips visibility:hidden content)
+      expect(host.querySelectorAll(".cks.is-open").length).toBeGreaterThanOrEqual(4);
+      expect(await scanViolations(host)).toEqual([]);
+    });
+  }
+});
+
+// ── Full-page scans ──────────────────────────────────────────────────────────
+// Mounts the production page shell — Masthead + <main> + Selvage — around each
+// workflow. Apply uses the inert ApplyWorkflowFormView (controllers-as-stores,
+// no wasm) with a staged ROM card. Create/Trim are stateful forms with no inert
+// view, but render fine EMPTY (wasm only boots on a file action), so we scan
+// their empty bench. All page scans add best-practice + landmark rules.
+
+const outputState = () => ({
+  applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
+  applyTiming: "",
+  compress: null,
+  compressionFormat: "zip",
+  compressTiming: "",
+  disabled: true,
+  displayFileName: "",
+  downloadSummary: null,
+  options: [{ label: ".zip", value: "zip" }],
+  pendingDownloadFileName: null,
+  resolvedOutputName: "",
+  sizeSummary: {},
+  totalTiming: "",
+});
+
+// A staged ROM row with checksums computed and the checksum drawer EXPANDED.
+const stagedRomRow = (fileName) => {
+  const base = createEmptyPatcherUiState();
+  return {
+    ...base.romInput,
+    groupId: "",
+    id: `rom:${fileName}`,
+    info: {
+      ...base.romInfo,
+      checksumsExpanded: true,
+      crc32: "C6FB1252",
+      fileName,
+      md5: "D7E7F3D6A4B2C9E1F8A0B1C2D3E4F5A6",
+      sha1: "E7D6C5B4A3F2E1D0C9B8A7F6E5D4C3B2A1F0E9D8",
+    },
+    kind: "rom",
+    order: 0,
+    size: 8_388_608,
+  };
+};
+
+const stagedPatchItem = (fileName) => ({
+  archiveFileName: "",
+  fileName,
+  fileSize: 1024,
+  format: "IPS",
+  index: 0,
+  sourceChecksumState: "valid",
+  validationActualValue: "",
+  validationLabel: "Expected",
+  validationMessage: "",
+  validationState: "valid",
+  validationValues: [],
+});
+
+const PAGE_TABS = [
+  { icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
+  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
+  { icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+];
+
+// Production page chrome (single <main className="workbench"> + one tabpanel)
+// around an arbitrary workflow form node, mirroring webapp-root.tsx.
+const Shell = (currentTab, panelView, formNode) =>
+  createElement(
+    RomWeaverSettingsProvider,
+    { settings: {} },
+    createElement(
+      "div",
+      { className: "rw-app", id: "column" },
+      createElement(
+        "div",
+        { className: "app" },
+        createElement(Masthead, {
+          currentTab,
+          logoSrc: "./logo.webp",
+          onOpenLog: noop,
+          onOpenSettings: noop,
+          onSelectTab: noop,
+          tabs: PAGE_TABS,
+        }),
+        createElement(
+          "main",
+          { className: "workbench" },
+          createElement(
+            "section",
+            {
+              "aria-labelledby": `tab-${panelView}`,
+              className: "panel workflow",
+              id: `panel-${panelView}`,
+              role: "tabpanel",
+            },
+            createElement("div", { className: "workflow-body" }, formNode),
+          ),
+        ),
+      ),
+      createElement(Selvage, {
+        cacheLabel: "cache v1",
+        donateHref: "https://example.invalid/donate",
+        githubHref: "https://example.invalid/repo",
+        state: "ready",
+        threads: 8,
+        version: "0.1.0",
+      }),
+    ),
+  );
+
+const applyControllers = (ui, patches, output) => ({
+  dialog: storeOf({ ...createInitialDialogState() }),
+  output: storeOf(output ?? outputState()),
+  patchStack: { ...storeOf({ items: patches }), removeItem: noop, reorder: noop },
+  ui: storeOf(ui),
+});
+
+const applyPage = (ui, patches, { output, patchEnablement } = {}) =>
+  Shell(
+    "patcher",
+    "patcher",
+    createElement(ApplyWorkflowFormView, { controllers: applyControllers(ui, patches, output), patchEnablement }),
+  );
+
+const stagedUi = () => ({ ...createEmptyPatcherUiState(), romInputs: [stagedRomRow("Pokemon Emerald.gba")] });
+
+const badPatchItem = (fileName) => ({
+  ...stagedPatchItem(fileName),
+  sourceChecksumState: "invalid",
+  validationMessage: "Source ROM not found in this patch.",
+  validationState: "invalid",
+});
+
+// Completed run: enabled download button + a from→to size summary.
+const doneOutput = () => ({
+  ...outputState(),
+  applyButton: {
+    disabled: false,
+    label: "DOWNLOAD",
+    loading: false,
+    progress: null,
+    title: "Pokemon Emerald (patched).gba",
+  },
+  applyTiming: "0.8 s",
+  compressTiming: "0.4 s",
+  disabled: false,
+  displayFileName: "Pokemon Emerald (patched).gba",
+  downloadSummary: { format: "ZIP", fromSize: "8.0 MiB", ratio: "62%", size: "5.0 MiB" },
+  resolvedOutputName: "Pokemon Emerald (patched).gba",
+  totalTiming: "1.2 s",
+});
+
+const stagedApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ips")]);
+const emptyApplyPage = () => applyPage(createEmptyPatcherUiState(), []);
+const verdictApplyPage = () =>
+  applyPage(stagedUi(), [badPatchItem("broken.ips"), stagedPatchItem("ok.ips")], {
+    patchEnablement: { disabledIds: new Set(["p1"]), getPatchIds: () => ["p0", "p1"], onToggle: noop },
+  });
+const doneApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ips")], { output: doneOutput() });
+
+const emptyCreatePage = () =>
+  Shell(
+    "creator",
+    "creator",
+    createElement(CreatePatchForm, {
+      onModifiedChange: noop,
+      onOriginalChange: noop,
+      onPatchTypeChange: noop,
+      onSettingsChange: noop,
+    }),
+  );
+
+const emptyTrimPage = () =>
+  Shell(
+    "trim",
+    "trim",
+    createElement(TrimPatchForm, { onOutputFormatChange: noop, onSettingsChange: noop, onSourceChange: noop }),
+  );
+
+describe("webapp page accessibility", () => {
+  const PAGES = [
+    { factory: stagedApplyPage, name: "staged apply" },
+    { factory: emptyApplyPage, name: "empty apply" },
+    { factory: verdictApplyPage, name: "apply (bad + disabled patch verdicts)" },
+    { factory: doneApplyPage, name: "apply (completed/download)" },
+    { factory: emptyCreatePage, name: "empty create" },
+    { factory: emptyTrimPage, name: "empty trim" },
+  ];
+  for (const { factory, name } of PAGES) {
+    for (const theme of THEMES) {
+      test(`${name} page passes WCAG 2.1 A/AA + best-practice (${theme} theme)`, async () => {
+        await renderPage(factory(), theme);
+        expect(await scanViolations(host, { bestPractice: true, region: true })).toEqual([]);
+      });
+    }
+  }
+});
+
+// ── Banners ──────────────────────────────────────────────────────────────────
+const Banners = () =>
+  createElement(
+    RomWeaverSettingsProvider,
+    { settings: {} },
+    createElement(
+      "div",
+      { className: "rw-app" },
+      createElement(UpdateBanner, { onDismiss: noop, onReload: noop, open: true, title: "v0.2.0" }),
+      createElement(WakeLockBanner, { onDismiss: noop, open: true }, "Keeping the screen awake while this job runs."),
+    ),
+  );
+
+describe("webapp banner accessibility", () => {
+  for (const theme of THEMES) {
+    test(`update + wake-lock banners pass WCAG 2.1 A/AA + best-practice (${theme} theme)`, async () => {
+      await renderNode(createElement(Banners), theme);
+      expect(await scanViolations(host, { bestPractice: true })).toEqual([]);
+    });
+  }
+});
+
+// ── Modals / dialogs ─────────────────────────────────────────────────────────
+// Modals portal into the first `.rw-app` (modal.tsx getModalPortalTarget), so a
+// wrapping .rw-app host keeps them inside `host` for the scan. region stays off
+// (a lone dialog has no page landmarks); best-practice is on for dialog-name.
+const settingsDraft = getDefaultSettings();
+const candidateRequest = (multiSelect) => ({
+  candidates: [
+    {
+      breadcrumbs: ["games.zip"],
+      fileName: "Pokemon Emerald.gba",
+      id: "c0",
+      selectable: true,
+      size: 8_388_608,
+      type: "file",
+    },
+    {
+      breadcrumbs: ["games.zip"],
+      fileName: "Pokemon Ruby.gba",
+      id: "c1",
+      selectable: true,
+      size: 8_388_608,
+      type: "file",
+    },
+  ],
+  multiSelect,
+  role: "rom",
+  sourceName: "games.zip",
+  warnings: [],
+});
+const candidateDialog = (multiSelect) =>
+  createElement(CandidateSelectionDialog, {
+    onCancel: noop,
+    onSelect: noop,
+    onSelectMany: noop,
+    state: { reject: noop, request: candidateRequest(multiSelect), resolve: noop },
+  });
+const DIALOGS = {
+  archive: () =>
+    createElement(ArchiveDialog, {
+      controller: {
+        ...storeOf({
+          entries: [
+            { id: "r0", label: "Pokemon_Emerald.gba" },
+            { id: "r1", label: "Pokemon_Ruby.gba" },
+          ],
+          open: true,
+          selectionType: "rom",
+          title: "Select a ROM from archive.zip",
+        }),
+        selectEntry: noop,
+      },
+    }),
+  candidate: () => candidateDialog(false),
+  "candidate (multi-select)": () => candidateDialog(true),
+  confirm: () =>
+    createElement(ConfirmDialog, {
+      body: "This overwrites the existing output file. Continue?",
+      cancelLabel: "Cancel",
+      confirmLabel: "Overwrite",
+      danger: true,
+      onCancel: noop,
+      onConfirm: noop,
+      open: true,
+      title: "Overwrite output?",
+    }),
+  log: () => createElement(LogDialog, { onClose: noop, open: true }),
+  settings: () =>
+    createElement(
+      Modal,
+      { onClose: noop, open: true, title: "Settings", variant: "settings-modal" },
+      createElement(SettingsPanel, {
+        draftSettings: settingsDraft,
+        onClose: noop,
+        onDraftChange: noop,
+        onRestoreDefaults: noop,
+        onSaveClose: noop,
+        uiState: getSettingsUiState(settingsDraft),
+        validation: validateSettingsDraft(settingsDraft),
+      }),
+    ),
+};
+
+const ModalHost = (node) =>
+  createElement(RomWeaverSettingsProvider, { settings: {} }, createElement("div", { className: "rw-app" }, node));
+
+describe("webapp modal accessibility", () => {
+  for (const [name, factory] of Object.entries(DIALOGS)) {
+    for (const theme of THEMES) {
+      test(`${name} dialog passes WCAG 2.1 A/AA + best-practice (${theme} theme)`, async () => {
+        await renderNode(ModalHost(factory()), theme);
+        expect(await scanViolations(host, { bestPractice: true })).toEqual([]);
+      });
+    }
+  }
+});
+
+// ── Keyboard navigation ──────────────────────────────────────────────────────
+// axe can't verify focus movement / roving tabindex, so this drives the real
+// masthead tablist (ModeRail) with arrow / Home / End keys and asserts focus
+// lands on the right tab and the select callback fires. (Theme-independent.)
+describe("webapp keyboard navigation", () => {
+  const renderMasthead = async (onSelectTab) =>
+    renderNode(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings: {} },
+        createElement(
+          "div",
+          { className: "rw-app" },
+          createElement(Masthead, {
+            currentTab: "patcher",
+            logoSrc: "./logo.webp",
+            onOpenLog: noop,
+            onOpenSettings: noop,
+            onSelectTab,
+            tabs: PAGE_TABS,
+          }),
+        ),
+      ),
+      "light",
+    );
+
+  test("mode rail: arrow / Home / End move roving focus and select the tab", async () => {
+    const selected = [];
+    await renderMasthead((id) => selected.push(id));
+    const tablist = host.querySelector('[role="tablist"]');
+    const tabAt = (id) => host.querySelector(`.mode[data-mode="${id}"]`);
+
+    // roving tabindex: only the current tab is in the tab order
+    expect(tabAt("patcher").getAttribute("tabindex")).toBe("0");
+    expect(tabAt("creator").getAttribute("tabindex")).toBe("-1");
+
+    tabAt("patcher").focus();
+    const press = (key) =>
+      tablist.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+
+    // currentTab stays "patcher" in isolation, so each key resolves from there
+    press("ArrowRight");
+    expect(document.activeElement).toBe(tabAt("creator"));
+    press("End");
+    expect(document.activeElement).toBe(tabAt("trim"));
+    press("Home");
+    expect(document.activeElement).toBe(tabAt("patcher"));
+    press("ArrowLeft"); // wraps to the last tab
+    expect(document.activeElement).toBe(tabAt("trim"));
+
+    expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
+  });
+});
