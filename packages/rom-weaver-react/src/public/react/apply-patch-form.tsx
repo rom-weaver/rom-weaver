@@ -117,30 +117,14 @@ const getApplyOutputCompression = (
   });
 };
 
-// A multi-track disc's "primary" resolved file is a track (e.g. "track01.bin"), a poor output
-// name. Use the disc's own name instead: the dropped archive (depth 0 of the archive chain) for
-// an archived disc, otherwise the `.cue`/`.gdi` sheet for a loose disc.
-const getDiscInputOutputFileName = (input: ApplyWorkflowInputState | null): string | undefined => {
-  const resolved = input?.resolvedInputs;
-  if (!resolved?.length) return undefined;
-  const isDisc = resolved.some((entry) => entry.kind === "track" || entry.kind === "cue" || entry.kind === "gdi");
-  if (!isDisc) return undefined;
-  return (
-    input?.parentCompressions?.[0]?.fileName ||
-    resolved.find((entry) => entry.kind === "cue" || entry.kind === "gdi")?.fileName ||
-    undefined
-  );
-};
-
+// Pre-stage estimate only (the controller owns the post-stage resolved name, including the
+// disc-name special-casing). Pre-stage there is no staged input, so the dropped file name is used.
 const getAutomaticApplyOutputName = (
   snapshot: ApplyWorkflowSessionInput,
   input: ApplyWorkflowInputState | null,
   patches: ApplyWorkflowPatchState[],
 ) => {
-  const inputFileName =
-    getDiscInputOutputFileName(input) ||
-    input?.fileName ||
-    getReactBinarySourceFileName(snapshot.inputs[0], "patched.bin");
+  const inputFileName = input?.fileName || getReactBinarySourceFileName(snapshot.inputs[0], "patched.bin");
   const inputBase = getFileNameWithoutExtension(inputFileName) || "patched";
   const patchNames = patches
     .map((patch, index) => {
@@ -841,15 +825,20 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const input = workflow.getInput();
         const patches = workflow.getPatches();
         const checksums = input?.checksums || null;
-        const outputCompression = getApplyOutputCompression(snapshot, input);
-        setResolvedOutputCompression(outputCompression);
-        setResolvedOutputNameForSnapshot(snapshot, getAutomaticApplyOutputName(snapshot, input, patches));
+        // Post-stage, the controller's output state is the authoritative resolved name + format
+        // (it owns the auto-naming, including the disc-name special-casing, and the manual overrides
+        // applied above). The form keeps only the eager pre-stage estimate for instant feedback.
+        const resolvedOutput = workflow.getSnapshot().output;
+        setResolvedOutputCompression(resolvedOutput.outputFormat);
+        setResolvedOutputNameForSnapshot(snapshot, resolvedOutput.outputName);
         handlers.onInputState?.(input);
         handlers.onPatchState?.(patches);
         if (input?.checksums) handlers.onChecksumReady?.(input);
+        // The controller's snapshot is the authoritative readiness source (it mirrors run()'s
+        // preconditions: input ready+selected, every patch ready, output name resolved). The form
+        // adds only the UI-side gate that every *requested* patch finished staging.
         setApplyReady(
-          !getWorkflowReadinessError(input, patches) &&
-            (!snapshot.patches.length || patches.length === snapshot.patches.length),
+          workflow.getSnapshot().ready && (!snapshot.patches.length || patches.length === snapshot.patches.length),
         );
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
           hasChecksums: !!input?.checksums,
@@ -1229,10 +1218,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           await workflow.setPatchTarget(patchIndex, targetInputId || "auto");
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
-          setApplyReady(
-            !getWorkflowReadinessError(refreshedInput, refreshedPatches) &&
-              refreshedPatches.length === input.patches.length,
-          );
+          setApplyReady(workflow.getSnapshot().ready && refreshedPatches.length === input.patches.length);
           const inputLabelById = new Map(
             toStagedInputInfos(refreshedInput || stagedInput, input.inputs).map((entry) => [
               entry.id || "",
