@@ -526,9 +526,10 @@ pub struct StreamingVariantChecksums {
     consumed: u64,
     header_buf: Vec<u8>,
     state: State,
-    /// Worker-thread budget for the `raw` variant's hasher so its crc32/md5/sha1 run
-    /// in parallel and overlap the producer. 1 (or non-threaded wasm) → synchronous.
-    raw_hash_threads: usize,
+    /// Total worker-thread budget split across the active variants' hashers so their
+    /// crc32/md5/sha1 run in parallel and overlap the producer. 1 (or non-threaded wasm)
+    /// → every variant hashes synchronously.
+    hash_thread_budget: usize,
 }
 
 impl StreamingVariantChecksums {
@@ -542,7 +543,7 @@ impl StreamingVariantChecksums {
         algorithms: &[String],
         total_len: u64,
         name_hint: Option<&str>,
-        raw_hash_threads: usize,
+        hash_thread_budget: usize,
     ) -> Result<Self> {
         let extension = name_hint
             .and_then(extension_with_dot)
@@ -554,7 +555,7 @@ impl StreamingVariantChecksums {
             consumed: 0,
             header_buf: Vec::new(),
             state: State::Buffering,
-            raw_hash_threads: raw_hash_threads.max(1),
+            hash_thread_budget: hash_thread_budget.max(1),
         })
     }
 
@@ -652,16 +653,16 @@ impl StreamingVariantChecksums {
     /// then replay the buffered bytes through it.
     fn plan(&mut self, _offset: u64) -> Result<()> {
         let header = std::mem::take(&mut self.header_buf);
-        // The raw variant is the file's primary checksum and is always present; give it the worker
-        // budget so crc32/md5/sha1 hash in parallel and overlap the producer. Other variants stay
-        // synchronous for now (bounded thread use); they are the follow-up.
-        let Some(raw_checksum) =
-            StreamingChecksum::new_parallel(&self.algorithms, self.raw_hash_threads)?
-        else {
+        // Build every applicable variant with a synchronous hasher first so the active count is
+        // known, then split the worker budget across them and upgrade each to a parallel hasher.
+        // Each variant only differs from `raw` by its transform and is fed the same bytes (one
+        // read), but the hashing is independent — giving each its own workers lets them overlap the
+        // producer instead of serializing on the decode thread.
+        let Some(raw_checksum) = StreamingChecksum::new(&self.algorithms)? else {
             self.state = State::Empty;
             return Ok(());
         };
-        let raw = VariantHasher {
+        let mut raw = VariantHasher {
             id: "raw".to_string(),
             label: "Raw".to_string(),
             apply_compatibility: json!({}),
@@ -670,9 +671,37 @@ impl StreamingVariantChecksums {
             checksum: raw_checksum,
         };
 
-        let remove_header = self.plan_remove_header(&header)?;
-        let fix = self.plan_fix_header(&header)?;
-        let n64_orders = self.plan_n64_orders(&header)?;
+        let mut remove_header = self.plan_remove_header(&header)?;
+        let mut fix = self.plan_fix_header(&header)?;
+        let mut n64_orders = self.plan_n64_orders(&header)?;
+
+        // Split the budget evenly across the active variants. `raw` is always active; a `fix-header`
+        // only counts when it hashes in-pass (it carries no hasher when deferred over the prefix
+        // cap). `new_parallel` internally caps each variant at its algorithm count, so a share
+        // larger than the algorithm count is harmless. A share of 1 leaves the synchronous hasher
+        // in place, so an over-subscribed case (many variants, small budget) degrades to the prior
+        // fully-inline behavior rather than spawning more workers than the op budgeted.
+        let active = 1
+            + usize::from(remove_header.is_some())
+            + usize::from(fix.as_ref().is_some_and(|fix| fix.checksum.is_some()))
+            + n64_orders.len();
+        let per_variant = (self.hash_thread_budget / active).max(1);
+        Self::upgrade_variant_checksum(&mut raw.checksum, &self.algorithms, per_variant)?;
+        if let Some(remove_header) = remove_header.as_mut() {
+            Self::upgrade_variant_checksum(
+                &mut remove_header.checksum,
+                &self.algorithms,
+                per_variant,
+            )?;
+        }
+        for variant in &mut n64_orders {
+            Self::upgrade_variant_checksum(&mut variant.checksum, &self.algorithms, per_variant)?;
+        }
+        if let Some(fix) = fix.as_mut()
+            && let Some(checksum) = fix.checksum.as_mut()
+        {
+            Self::upgrade_variant_checksum(checksum, &self.algorithms, per_variant)?;
+        }
 
         self.state = State::Planned(Box::new(Planned {
             raw,
@@ -686,6 +715,23 @@ impl StreamingVariantChecksums {
         self.feed_planned(0, &header)?;
         // `consumed` already counted the header bytes during buffering.
         let _ = header_len;
+        Ok(())
+    }
+
+    /// Replace a freshly-built synchronous variant hasher with a parallel one when the variant's
+    /// thread share allows it. No bytes have been fed yet, so swapping the hasher is safe; a share
+    /// of 1 (or the non-threaded wasm build) leaves the synchronous hasher untouched.
+    fn upgrade_variant_checksum(
+        checksum: &mut StreamingChecksum,
+        algorithms: &[String],
+        per_variant: usize,
+    ) -> Result<()> {
+        if per_variant <= 1 {
+            return Ok(());
+        }
+        if let Some(parallel) = StreamingChecksum::new_parallel(algorithms, per_variant)? {
+            *checksum = parallel;
+        }
         Ok(())
     }
 

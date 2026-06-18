@@ -257,14 +257,17 @@ impl ExtractHasher {
             });
         };
         let name_hint = output_path.file_name().and_then(|name| name.to_str());
-        // Plan the checksum's own worker budget against the full op budget, independent of the
-        // extract's decode-threading decision (negotiate is pure, so this does not consume it). A
-        // lone small ROM still parallelizes its hashing as long as the op has spare threads.
-        let raw_hash_threads = context
-            .plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1))))
+        // Plan the variant hashers' worker budget against the full op budget, independent of the
+        // extract's decode-threading decision (negotiate is pure, so this does not consume it). The
+        // engine splits this budget across the active variants so each one's crc32/md5/sha1 hash in
+        // parallel and overlap the producer instead of serializing on the decode thread. A lone ROM
+        // with only the `raw` variant gets the whole budget (capped at the algorithm count); a ROM
+        // with several variants (e.g. raw + fix-header) gives each a share so they run concurrently.
+        let hash_thread_budget = context
+            .plan_threads(ThreadCapability::parallel(None))
             .effective_threads;
         let engine =
-            StreamingVariantChecksums::new(algorithms, total_len, name_hint, raw_hash_threads)?;
+            StreamingVariantChecksums::new(algorithms, total_len, name_hint, hash_thread_budget)?;
         Ok(Self::Variants {
             engine,
             algorithms: algorithms.to_vec(),
