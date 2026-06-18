@@ -290,7 +290,6 @@ const SectionsGallery = () =>
         bytes: 8_388_608,
         checksums: ROM_CHECKSUMS,
         defaultOpen: true,
-        discType: "GBA",
         label: "Source",
         timing: "8 ms",
       }),

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { getDiscKind, getDiscKindLabel } from "../../../../lib/input/rom-specific-file-utils.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
 import { FixesPanel, type FixesPanelProps } from "./fixes-panel.tsx";
@@ -16,7 +15,6 @@ type RomInputInfoPanelProps = {
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
-  discType?: string;
   extractTiming?: ExtractTiming;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
@@ -51,13 +49,10 @@ const RomInputPanels = ({
   showInfo = true,
   showCue = true,
 }: RomInputPanelsProps) => {
-  // Derive the disc type from the cue sheet so it appears in the source Info
-  // panel; an explicit info.discType (e.g. from a non-cue source) wins.
-  const discType = info.discType ?? getDiscKindLabel(getDiscKind({ cueText: cue?.cueText })) ?? undefined;
   const isDisc = Array.isArray(tracks) && tracks.length > 0;
   const renderInfo = () => {
     if (isDisc) return <DiscTracksPanel tracks={tracks} />;
-    if (showInfo) return <SourceInfoList {...info} discType={discType} />;
+    if (showInfo) return <SourceInfoList {...info} />;
     return null;
   };
   // Shared card drawer order: Options first, then the disc index sheets, then

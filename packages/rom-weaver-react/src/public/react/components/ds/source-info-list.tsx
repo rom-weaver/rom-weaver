@@ -86,7 +86,6 @@ const SourceInfoList = ({
   checksums,
   checksumVariants,
   defaultOpen = false,
-  discType,
   extractTiming,
   label = "Checks",
   lead,
@@ -99,7 +98,6 @@ const SourceInfoList = ({
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
-  discType?: string;
   extractTiming?: ExtractTiming;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
@@ -110,7 +108,7 @@ const SourceInfoList = ({
   timing?: ReactNode;
 }) => {
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
-  if (!(hasBytes || checksums || discType || lead || progress)) return null;
+  if (!(hasBytes || checksums || lead || progress)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present, the base
   // checksums become one of several groups, so they get their own labeled head
@@ -135,7 +133,6 @@ const SourceInfoList = ({
       open={open}
       timing={timing}
     >
-      {discType ? <ChecksumRow copyValue={discType} label="DISC" value={discType} /> : null}
       {variantRows.length ? (
         <div className="ck-group">
           <div className="ck-group-head">{baseGroupLabel}</div>
