@@ -500,7 +500,7 @@ function ApplyWorkflowFormView({
           pendingDrops.length ? (
             <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
               {pendingDrops.map((drop) => (
-                <div className={drop.leaving ? "rw-pending rw-pending-leaving" : "rw-pending"} key={drop.id}>
+                <div className="rw-pending" key={drop.id}>
                   <FileProgress
                     id={`rom-weaver-pending-${drop.id}`}
                     indeterminate

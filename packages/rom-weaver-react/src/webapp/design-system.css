@@ -1372,14 +1372,10 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 @keyframes card-in { from { opacity: 0; translate: 0 8px; } }
 @keyframes panel-in { from { opacity: 0; translate: 0 6px; } }
 @keyframes chip-in { from { opacity: 0; translate: 0 5px; scale: .9; } }
-/* The instant "identifying…" drop placeholder: drops in on appear, then — once its real staging
-   card has taken over — slides DOWN toward its bucket (0x02 ROM / 0x03 Patches sit below 0x01) and
-   shrinks away, reading as the chip moving into place while the real card rises in. The swap never
-   blocks staging (the exit runs on its own timeline). */
-.rw-app .rw-pending { animation: drop-in .2s var(--ease); }
-.rw-app .rw-pending-leaving { animation: rw-pending-out .26s var(--ease) forwards; pointer-events: none; transform-origin: top center; }
-@keyframes rw-pending-out { to { opacity: 0; translate: 0 28px; scale: .94; } }
-@media (prefers-reduced-motion: reduce) { .rw-app .rw-pending, .rw-app .rw-pending-leaving { animation: none; } }
+/* The instant "identifying…" drop placeholder: shown the moment an archive lands, then dropped (no
+   animation) once its bucket resolves and the real staging card takes over. The swap never blocks
+   staging. The list gets breathing room so the chip doesn't crowd the drop zone above it. */
+.rw-app #rom-weaver-pending-drops { margin-block: 14px 6px; }
 @keyframes target-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 60%, transparent); }
   100% { box-shadow: 0 0 0 16px transparent; }
