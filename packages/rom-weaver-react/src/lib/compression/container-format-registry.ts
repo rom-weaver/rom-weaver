@@ -3,6 +3,7 @@ import type { RuntimeWorkerSourceScope } from "../../types/workflow-runtime-adap
 import {
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+  ROM_WEAVER_DISC_IMAGE_POLICY,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import {
   getFileNameExtension,
@@ -11,6 +12,11 @@ import {
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
 import { createRomSpecificExtensionRegex } from "./rom-specific-format-support.ts";
+import {
+  z3dsCompressedExtensionForSourceExtension,
+  z3dsUnderlyingExtensionForCompressedExtension,
+  z3dsUnderlyingExtensionForMagic,
+} from "./z3ds-subtypes.ts";
 
 type ByteProbeableSource = {
   _chdMode?: string;
@@ -58,7 +64,6 @@ type RomSpecificCompressionFormatRegistration = CompressionFormatRegistrationBas
   extensionRegex: RegExp;
   fallbackFileName: string;
   list: RomSpecificRuntimeListMethod;
-  magic: string;
   magicBytes: readonly number[];
   pathPrefix: {
     create: string;
@@ -74,7 +79,6 @@ type RomSpecificRuntimeRegistration = {
   extractedFileName: (source: ByteProbeableSource) => string;
   fallbackFileName: string;
   list: RomSpecificRuntimeListMethod;
-  magic: string;
   pathPrefix: {
     create: string;
     extract: string;
@@ -105,21 +109,14 @@ const getSourceFileExtension = (fileName: string | undefined) => getFileNameExte
 const normalizeExtension = (extension: string | number | boolean | null | undefined) =>
   stripLeadingExtensionDot(extension).toLowerCase();
 
-const createMagicBytes = (magic: string): readonly number[] =>
-  Array.from(magic, (character) => character.charCodeAt(0));
+const getGeneratedContainerMagic = (format: RomSpecificCompressionFormat): readonly number[] =>
+  ROM_WEAVER_CONTAINER_FORMATS.find((entry) => entry.name === format)?.magic ?? [];
 
 const getOriginalOutputExtension = ({ inputFileName }: CompressionOutputExtensionContext) =>
   getSourceFileExtension(inputFileName);
 
-const getZ3dsOutputExtension = ({ inputFileName }: CompressionOutputExtensionContext) => {
-  const extension = getSourceFileExtension(inputFileName);
-  if (extension === "cia" || extension === "zcia") return "zcia";
-  if (extension === "3ds" || extension === "z3ds") return "z3ds";
-  if (extension === "cci" || extension === "zcci") return "zcci";
-  if (extension === "cxi" || extension === "app" || extension === "zcxi") return "zcxi";
-  if (extension === "3dsx" || extension === "z3dsx") return "z3dsx";
-  return "z3ds";
-};
+const getZ3dsOutputExtension = ({ inputFileName }: CompressionOutputExtensionContext) =>
+  z3dsCompressedExtensionForSourceExtension(getSourceFileExtension(inputFileName)) ?? "z3ds";
 
 const getChdExtractedFileName = (source: ByteProbeableSource): string =>
   replaceFileExtension(source.fileName || "input.chd", source._chdMode === "cd" ? "bin" : "iso");
@@ -127,23 +124,13 @@ const getChdExtractedFileName = (source: ByteProbeableSource): string =>
 const getRvzExtractedFileName = (source: ByteProbeableSource): string =>
   replaceFileExtension(source.fileName || "input.rvz", "iso");
 
-const getZ3dsExtractedExtensionForMagic = (magic: string): string | null => {
-  if (magic === "CIA\u0000") return "cia";
-  if (magic === "NCSD") return "cci";
-  if (magic === "NCCH") return "cxi";
-  if (magic === "3DSX") return "3dsx";
-  return null;
-};
-
 const getZ3dsExtractedExtension = (source: ByteProbeableSource): string => {
   const extension = getFileExtension(source);
-  if (extension === "zcia") return "cia";
-  if (extension === "zcci") return "cci";
-  if (extension === "zcxi") return "cxi";
-  if (extension === "z3dsx") return "3dsx";
-  const magicExtension = getZ3dsExtractedExtensionForMagic(source._z3dsUnderlyingMagic || "");
-  if (extension === "z3ds") return magicExtension || "3ds";
-  return magicExtension || "3ds";
+  // A specific compressed subtype (`.zcia`/`.zcci`/`.zcxi`/`.z3dsx`) fixes the
+  // payload type by extension; the generic `.z3ds` resolves from the payload magic.
+  const specific = z3dsUnderlyingExtensionForCompressedExtension(extension);
+  if (specific) return specific;
+  return z3dsUnderlyingExtensionForMagic(source._z3dsUnderlyingMagic || "") || "3ds";
 };
 
 const getZ3dsExtractedFileName = (source: ByteProbeableSource): string => {
@@ -205,7 +192,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extractedFileName: getChdExtractedFileName,
     fallbackFileName: "input.chd",
     list: "listChd",
-    magic: "MComprHD",
     pathPrefix: {
       create: "chd-image",
       extract: "chd-input",
@@ -219,7 +205,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extractedFileName: getRvzExtractedFileName,
     fallbackFileName: "input.rvz",
     list: "listRvz",
-    magic: "RVZ\u0000",
     pathPrefix: {
       create: "rvz-image",
       extract: "rvz-input",
@@ -232,7 +217,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extractedFileName: getZ3dsExtractedFileName,
     fallbackFileName: "input.z3ds",
     list: "listZ3ds",
-    magic: "Z3DS",
     pathPrefix: {
       create: "z3ds-image",
       extract: "z3ds-input",
@@ -262,8 +246,7 @@ const createRomSpecificCompressionFormatRegistration = (
     extractedFileName: runtime.extractedFileName,
     fallbackFileName: runtime.fallbackFileName,
     list: runtime.list,
-    magic: runtime.magic,
-    magicBytes: createMagicBytes(runtime.magic),
+    magicBytes: getGeneratedContainerMagic(format),
     pathPrefix: runtime.pathPrefix,
     scope: runtime.scope,
   };
@@ -371,12 +354,13 @@ const getCompressionFormatForFileExtension = (
   )?.format;
 };
 
-// `.bin` is ambiguous: CD images (bin/cue) should auto-resolve to chd, but
-// bare console ROM dumps use the same extension. CD sectors are 2352 bytes
-// raw or 2048 cooked, so a .bin whose size is not sector-aligned is not a
-// disc image. An unknown size keeps the extension-based resolution.
-const AMBIGUOUS_DISC_IMAGE_EXTENSIONS: readonly string[] = ["bin"];
-const CD_SECTOR_SIZES: readonly number[] = [2352, 2048];
+// `.bin` is ambiguous: CD images (bin/cue) should auto-resolve to chd, but bare
+// console ROM dumps use the same extension. A `.bin` whose size is not a whole
+// number of CD/DVD sectors is not a disc image; an unknown size keeps the
+// extension-based resolution. The sector sizes and ambiguous-extension list are
+// the canonical Rust disc-image policy (surfaced via typegen).
+const AMBIGUOUS_DISC_IMAGE_EXTENSIONS: readonly string[] = ROM_WEAVER_DISC_IMAGE_POLICY.ambiguousDiscImageExtensions;
+const CD_SECTOR_SIZES: readonly number[] = ROM_WEAVER_DISC_IMAGE_POLICY.cdSectorSizes;
 
 const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
   if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return true;

@@ -45,13 +45,13 @@ import {
   Z3DS_COMPRESSION_INPUT_EXTENSIONS,
   Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "./rom-specific-format-support.ts";
+import { z3dsCompressedExtensionForMagic, z3dsCompressedExtensionForSourceExtension } from "./z3ds-subtypes.ts";
 
 type OutputCompressionValue = "auto" | (typeof ROM_WEAVER_CREATE_CONTAINER_FORMATS)[number] | "none";
 type CompressionProfile = GeneratedCompressionProfile;
 type ArchiveCodec =
   | (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["zipCodec"]["codecs"][number]
   | (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["sevenZipCodec"]["codecs"][number];
-type Z3dsUnderlyingMagic = "CIA\u0000" | "NCSD" | "NCCH" | "3DSX";
 type CompressionSourceInput =
   | CompressionSource
   | string
@@ -80,7 +80,7 @@ type CompressionSource = {
   _chdCuePath?: string;
   _chdMode?: "cd" | "dvd" | string;
   _rvzMode?: "iso" | "rvz" | string;
-  _z3dsUnderlyingMagic?: Z3dsUnderlyingMagic | string;
+  _z3dsUnderlyingMagic?: string;
 };
 
 type OutputCompressionOptions = {
@@ -409,16 +409,13 @@ const OutputCompressionManager = (() => {
   };
   const _getZ3dsOutputExtension = (source: CompressionSource | null | undefined) => {
     const extension = _getExtension(source);
-    if (extension === "cia" || extension === "zcia") return "zcia";
-    if (extension === "3ds" || extension === "z3ds") return "z3ds";
-    if (extension === "cci" || extension === "zcci") return "zcci";
-    if (extension === "cxi" || extension === "app" || extension === "zcxi") return "zcxi";
-    if (extension === "3dsx" || extension === "z3dsx") return "z3dsx";
-    if (source?._z3dsUnderlyingMagic === "CIA\u0000") return "zcia";
-    if (source?._z3dsUnderlyingMagic === "NCSD") return "zcci";
-    if (source?._z3dsUnderlyingMagic === "NCCH") return "zcxi";
-    if (source?._z3dsUnderlyingMagic === "3DSX") return "z3dsx";
-    throw new Error(`Unsupported Z3DS source extension: ${extension || "(missing)"}`);
+    return (
+      z3dsCompressedExtensionForSourceExtension(extension) ??
+      z3dsCompressedExtensionForMagic(source?._z3dsUnderlyingMagic) ??
+      (() => {
+        throw new Error(`Unsupported Z3DS source extension: ${extension || "(missing)"}`);
+      })()
+    );
   };
 
   const _getArchiveLevelOption = (compression: CompressionChoiceInput, options?: OutputCompressionOptions) => {

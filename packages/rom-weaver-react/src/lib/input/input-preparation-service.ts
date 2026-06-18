@@ -7,6 +7,7 @@ import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../ty
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getArchiveMagicType, getArchiveType, MAGIC_SIGNATURES } from "../../workers/protocol/archive-shared-utils.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";
@@ -56,11 +57,11 @@ type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
 };
 
 const ROM_SPECIFIC_DECOMPRESSION_EXTENSIONS = new Set(ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS);
-const ROM_SPECIFIC_MAGIC_PREFIXES = [
-  { extension: "chd", magic: [0x4d, 0x43, 0x6f, 0x6d, 0x70, 0x72, 0x48, 0x44] },
-  { extension: "rvz", magic: [0x52, 0x56, 0x5a, 0x00] },
-  { extension: "z3ds", magic: [0x5a, 0x33, 0x44, 0x53] },
-];
+// Rom-specific codec containers detected by their leading file magic. Sourced from
+// the canonical Rust container metadata (via typegen) so the bytes never drift.
+const ROM_SPECIFIC_MAGIC_PREFIXES = ROM_WEAVER_CONTAINER_FORMATS.filter((entry) => entry.magic.length > 0).map(
+  (entry) => ({ extension: entry.name, magic: entry.magic }),
+);
 const MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH = Math.max(
   ...ROM_SPECIFIC_MAGIC_PREFIXES.map((entry) => entry.magic.length),
 );

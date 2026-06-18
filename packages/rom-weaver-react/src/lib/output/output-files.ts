@@ -6,6 +6,10 @@ import {
   hasRomSpecificExtension,
   RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "../compression/rom-specific-format-support.ts";
+import {
+  z3dsUnderlyingExtensionForCompressedExtension,
+  z3dsUnderlyingExtensionForMagic,
+} from "../compression/z3ds-subtypes.ts";
 import { appendFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
 import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
 
@@ -117,21 +121,11 @@ const getRvzIntermediateFileName = (fileName: string, source: SourceFileLike | n
   return fileName;
 };
 
-const getZ3dsDecompressedExtensionForMagic = (magic: string | null | undefined): string | null => {
-  if (magic === "CIA\u0000") return "cia";
-  if (magic === "NCSD") return "cci";
-  if (magic === "NCCH") return "cxi";
-  if (magic === "3DSX") return "3dsx";
-  return null;
-};
-
 const getZ3dsDecompressedSourceExtension = (source: SourceFileLike | null | undefined): string => {
   const sourceExtension = getSourceExtension(source, "");
-  if (sourceExtension === "zcia") return "cia";
-  if (sourceExtension === "zcci") return "cci";
-  if (sourceExtension === "zcxi") return "cxi";
-  if (sourceExtension === "z3dsx") return "3dsx";
-  const magicExtension = getZ3dsDecompressedExtensionForMagic(source?._z3dsUnderlyingMagic);
+  const specific = z3dsUnderlyingExtensionForCompressedExtension(sourceExtension);
+  if (specific) return specific;
+  const magicExtension = z3dsUnderlyingExtensionForMagic(source?._z3dsUnderlyingMagic);
   if (sourceExtension === "z3ds") return magicExtension || "3ds";
   return sourceExtension || magicExtension || "3ds";
 };
