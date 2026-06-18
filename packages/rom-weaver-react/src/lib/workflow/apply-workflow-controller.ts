@@ -20,6 +20,7 @@ import {
 } from "../input/input-preparation-service.ts";
 import { selectionToArchiveEntry } from "../input/selection.ts";
 import { wrapPublicOutput } from "../output/index.ts";
+import { startStageSpan } from "../runtime/perf-latency.ts";
 import { finalizeApplyInputChecksums } from "./apply-input-checksums.ts";
 import {
   type ApplyOutputState,
@@ -160,24 +161,32 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           fileName: initial.state.fileName,
           inputCount: this.inputs.length,
         });
+        const endStage = startStageSpan("setInput:stageInputSession");
         this.inputSession = await this.stageInputSession(this.inputs);
+        endStage();
         this.trace("input.set.staged", {
           selectedCandidateId: this.inputSession.view.state.selectedCandidateId,
           stageCount: this.inputSession.stages.length,
           status: this.inputSession.view.state.status,
           synthetic: this.inputSession.synthetic,
         });
+        const endSelection = startStageSpan("setInput:resolveSelection");
         await this.maybeResolveBlockingInputSelection();
+        endSelection();
         this.trace("input.set.selection-resolved", {
           selectedCandidateId: this.inputSession.view.state.selectedCandidateId,
           status: this.inputSession.view.state.status,
         });
+        const endFinalize = startStageSpan("setInput:finalizeStableState");
         await this.finalizeInputStableState();
+        endFinalize();
         this.trace("input.set.finalized", {
           hasChecksums: !!this.inputSession.view.state.checksums,
           status: this.inputSession.view.state.status,
         });
+        const endImplicit = startStageSpan("setInput:discoverImplicitPatches");
         await this.discoverImplicitPatches();
+        endImplicit();
         await this.refreshPatchReadiness();
         this.recomputeOutputState();
         this.trace("input.set.finish", {

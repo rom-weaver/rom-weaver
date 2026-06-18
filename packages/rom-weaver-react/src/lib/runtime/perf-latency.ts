@@ -63,6 +63,22 @@ const measureBetween = (name: string, startMs: number, endMs: number, detail?: u
   }
 };
 
+// Bracket one main-thread orchestration stage (e.g. an input-prep async hop) so
+// the JS-sequencing floor between probe-done and extract-dispatch becomes
+// visible per-stage in the same `romweaver:` measure stream. Returns a closer
+// that emits `romweaver:stage:<name>`; call it (idempotently) when the stage
+// settles. No-op when User Timing is unavailable, so it is safe in unit tests.
+export const startStageSpan = (name: string, detail?: unknown): (() => void) => {
+  if (!canEmitUserTiming()) return () => undefined;
+  const startMs = perfNow();
+  let closed = false;
+  return () => {
+    if (closed) return;
+    closed = true;
+    measureBetween(`${MARK_PREFIX}:stage:${name}`, startMs, perfNow(), detail);
+  };
+};
+
 const finiteNonNegative = (value: number | null | undefined): number | undefined =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 
