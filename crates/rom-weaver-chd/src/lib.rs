@@ -12,7 +12,7 @@ use std::{
 
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{Compression as GzipCompression, write::DeflateEncoder};
-use rom_weaver_checksum::StreamingChecksum;
+use rom_weaver_checksum::{StreamingChecksum, detect_rom_identity_for_path};
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ChdMediaScope, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
@@ -127,6 +127,10 @@ fn build_extract_checksum_emitted_file_detail(
     entry.insert("file_name".to_string(), json!(file_name));
     entry.insert("size_bytes".to_string(), json!(metadata.len()));
     entry.insert("checksums".to_string(), json!(checksums));
+    // Detect the decoded disc's platform/medium from the extracted track (a bounded prefix read of
+    // the just-written output — no re-decode of the CHD) so a CHD's emitted_files carry the same
+    // platform tag as other formats. A `.cue` sheet / non-disc track simply yields nothing.
+    detect_rom_identity_for_path(&canonical).write_into(&mut entry);
     Some(Value::Object(entry))
 }
 
