@@ -804,15 +804,11 @@ const archiveContainsRomEntry = async (
   const directRomEntries = romEntries.filter(
     (entry) => !(typeof entry.filename === "string" && isCompressionEntryFileName(entry.filename)),
   );
-  if (!directRomEntries.length) return false;
-  const romProbe = await probeCompressionRomEntriesForSource(archiveFile, romEntries, options, runtime);
-  try {
-    return !!resolveCompressionRomAutoPickEntryName(archiveFile.fileName, romProbe, "");
-  } catch {
-    // Multiple competing ROM candidates: the archive still HOLDS a ROM, so route it to the ROM
-    // bucket. The single-payload descent then prompts the user to keep exactly one.
-    return true;
-  }
+  // A direct (non-nested-container) ROM entry means the archive HOLDS a ROM, so it routes to the ROM
+  // bucket — exactly the `is_rom` classification Rust streams in the probe-manifest. The single-payload
+  // descent then auto-resolves a lone ROM or prompts the user to keep one of several; routing no longer
+  // duplicates that disc-grouping/auto-pick probe just to answer a yes/no question.
+  return directRomEntries.length > 0;
 };
 
 // Shared low-level archive primitives consumed by the sibling modules split out of this orchestrator
