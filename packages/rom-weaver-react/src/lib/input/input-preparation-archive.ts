@@ -23,7 +23,6 @@ import {
 import { buildDescentParentCompressions, type DescentExtractStep } from "./input-archive-descent-chain.ts";
 import {
   probeCompressionRomEntriesForSource,
-  resolveArchiveDiscGroupEntryNames,
   resolveChdSplitBinSelection,
   resolveCompressionRomAutoPickEntryName,
 } from "./input-archive-disc-groups.ts";
@@ -569,16 +568,13 @@ const resolveArchiveInputAssetsByDescent = async (
     runtime,
     selectedEntryName: selectedInputEntryName,
   });
-  const baseSelectedEntries = normalizeSelectedEntryNames(
+  // With no pinned entry the Rust descend keeps a loose bin+cue/gdi disc whole on its own (a disc
+  // is one logical payload, so the sheet + every track extract together — see the
+  // `extract_emits_disc_group_structure` cli_smoke proof), so the host no longer pre-expands the
+  // disc group itself.
+  const selectedEntries = normalizeSelectedEntryNames(
     chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
   );
-  // When the auto-resolved entry is part of a loose bin+cue/gdi disc, select the whole disc
-  // group so the sheet and every track extract together (otherwise only the single bin lands
-  // and the cue/gdi sidecar is silently dropped).
-  const discGroupEntries = chdSelection.chdSplitBin
-    ? []
-    : await resolveArchiveDiscGroupEntryNames(archiveFile, options, runtime, chdSelection.selectedEntryName || "");
-  const selectedEntries = discGroupEntries.length > 1 ? discGroupEntries : baseSelectedEntries;
   await preflightArchiveLimitsForDescent(archiveFile, options, runtime, { romFilter: true }, selectedEntries);
   traceArchivePreparation(options, "input.archive.descent.start", {
     compressionFormat,
@@ -850,7 +846,6 @@ export {
   listCompressionEntries,
   listCompressionEntryResult,
   normalizeSelectedEntryNames,
-  PATH_BACKED_COMPRESSION_FORMATS,
   prepareAutoPatchInputs,
   resolveArchiveInput,
   resolveArchiveInputAssets,
