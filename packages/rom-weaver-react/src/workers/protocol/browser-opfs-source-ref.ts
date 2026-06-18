@@ -79,6 +79,27 @@ const nextVirtualInputPathSuffix = new Map<string, number>();
 // virtual-Blob path. See the trade-off note at the use site in createBrowserOpfsSourceRef.
 const STAGE_INPUT_TO_OPFS_MAX_BYTES = 400 * 1024 * 1024;
 
+// WebKit (desktop Safari + every iOS/iPadOS browser, which are all WebKit) is excluded from OPFS
+// input staging. Two reasons:
+//   1. The OPFS staging worker writes the file, but the *separate* spawned runner worker that mounts
+//      /work cannot see it — its OPFS directory handle is resolved before the staging write and does
+//      not observe the new entry — so the run fails with "input path does not exist". Reproduced on
+//      iOS Safari 2026-06-18.
+//   2. Even if it were visible, Safari permits only one SyncAccessHandle per OPFS file (proven
+//      2026-06-17), so the per-thread parallel-read win the staging targets is impossible there.
+// So on WebKit the input stays on the zero-copy virtual-Blob path (read on the wasm main thread),
+// which is the behavior that shipped before OPFS input staging was added. Chromium/Firefox keep the
+// staged copy. Detection mirrors isMobileSafariLike in browser-runtime-diagnostics.ts.
+const isWebKitInputRuntime = () => {
+  const nav = typeof navigator === "object" ? navigator : null;
+  const userAgent = nav?.userAgent || "";
+  if (!userAgent) return false;
+  const maxTouchPoints = typeof nav?.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
+  const isAppleMobile = /iP(hone|ad|od)/.test(userAgent) || (nav?.platform === "MacIntel" && maxTouchPoints > 1);
+  const isDesktopSafari = /Safari/.test(userAgent) && !/(Chrome|Chromium|Edg|OPR|SamsungBrowser)/.test(userAgent);
+  return isAppleMobile || isDesktopSafari;
+};
+
 // Reference-counted registry of inputs already staged into OPFS this session, keyed by a content
 // signature (mount + normalized name + size + a head/tail byte fingerprint). Re-staging an identical
 // source — e.g. re-uploading the same archive to pick a different entry — reuses the existing staged
@@ -343,8 +364,16 @@ const createBrowserOpfsSourceRef = async (
   // name + size + content fingerprint). Re-uploading the same archive to pick another entry then keeps
   // its original name and skips the re-stage instead of landing on a "-N" suffix. Only OPFS-staged
   // inputs are shared; the large-input virtual-Blob path below stays per-instance.
+  const opfsStagingEligible = stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES;
+  const webKitRuntime = isWebKitInputRuntime();
+  if (opfsStagingEligible && webKitRuntime) {
+    emitBrowserSourceRefTrace(options.trace, "input OPFS staging skipped on WebKit, using virtual blob", {
+      fileName: virtualFileName,
+      size: stageBytes,
+    });
+  }
   const stagedContentKey =
-    stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES
+    opfsStagingEligible && !webKitRuntime
       ? createStagedInputContentKey(
           String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, ""),
           virtualFileName,
