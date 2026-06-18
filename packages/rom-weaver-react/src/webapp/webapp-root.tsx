@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
+import { markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
@@ -138,6 +139,15 @@ const ActivitySelvage = ({
 }) => {
   const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
   const selvageState: SelvageState = activity.state === "idle" && sessionHasInput ? "ready" : activity.state;
+  // The status strip re-renders when the bench settles out of a run (running/staging → ready for a ROM
+  // load, → done for an apply/create/trim) — the commit batched with the result render. Close the
+  // perceived-latency tail (romweaver:after-finish) on the paint that reveals the result; staying off the
+  // workbench keeps the measure from perturbing the run, and skipping the in-progress states avoids
+  // firing on an intermediate step of a multi-step action (e.g. a ROM load's extract before its checksum).
+  const settled = activity.state !== "running" && activity.state !== "staging";
+  useEffect(() => {
+    if (settled) markResultPaintedAfterFinish();
+  });
   return (
     <Selvage
       cacheLabel={cacheLabel}

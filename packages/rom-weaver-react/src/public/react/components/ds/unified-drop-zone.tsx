@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
+import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import { DropZone, InfoPopover, StepSection } from "./layout.tsx";
 
 /**
@@ -62,6 +63,9 @@ const UnifiedDropZone = ({
   ...dropZoneProps
 }: UnifiedDropZoneProps) => {
   const emit = (files: File[]) => {
+    // Open the perceived-latency window: a drop/selection just began, measured against the first wasm
+    // progress event (see lib/perf/op-perf-marks.ts → romweaver:before-start).
+    markDropReceived();
     logger.trace("unified drop zone received files", {
       count: files.length,
       names: files.map((file) => file.name),

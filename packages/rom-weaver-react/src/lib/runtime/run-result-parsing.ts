@@ -12,6 +12,7 @@ import {
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { getRomWeaverFailureMessage } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
+import { markWasmFirstProgress } from "../perf/op-perf-marks.ts";
 
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
@@ -284,6 +285,8 @@ const withEffectiveThreads = (details: RuntimeValue, event: RomWeaverRunJsonEven
 
 const toSimpleProgress = (event: RomWeaverRunJsonEvent): SimpleRuntimeProgress | null => {
   if (!isLiveProgressEvent(event)) return null;
+  // First live progress event from wasm closes the perceived-latency lead-in (romweaver:before-start).
+  markWasmFirstProgress();
   const label = getRomWeaverRunEventLabel(event);
   const details = withEffectiveThreads(getRomWeaverRunEventDetails(event) as RuntimeValue, event);
   return {
