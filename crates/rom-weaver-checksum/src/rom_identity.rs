@@ -181,6 +181,14 @@ impl IdentityPrefix {
         detect_rom_identity(&self.buf, self.consumed, extension)
     }
 
+    /// Like [`detect`](Self::detect) but uses a caller-supplied `total_len` instead of the bytes
+    /// consumed so far. A streaming producer that already knows the final output size (e.g. a disc
+    /// extract with a fixed decoded length) can fill the prefix early and still resolve
+    /// size-dependent media correctly (e.g. PS2 CD vs DVD) without waiting for EOF.
+    pub fn detect_with_total_len(&self, total_len: u64, extension: Option<&str>) -> RomIdentity {
+        detect_rom_identity(&self.buf, total_len, extension)
+    }
+
     /// Whether the bounded prefix has filled to [`DETECT_PREFIX_BYTES`] — i.e. enough bytes have
     /// streamed through to detect every disc/cartridge signature without waiting for EOF. Lets a
     /// streaming producer surface identity mid-extraction (once it is fully determinable) instead of
@@ -335,9 +343,9 @@ mod tests {
         assert_eq!(identity.disc_format, Some(DiscFormat::Dvd));
     }
 
-    #[test]
-    fn classifies_ps2_medium_by_size() {
-        // Minimal ISO 9660 with SYSTEM.CNF naming BOOT2 (PS2).
+    /// Minimal ISO 9660 logical image with a SYSTEM.CNF naming BOOT2 — detected as PS2, whose
+    /// optical medium then depends on the total length (CD below the DVD threshold, DVD above).
+    fn ps2_iso_image() -> Vec<u8> {
         let mut image = logical_image(32);
         write(&mut image, PVD_LBA * USER_SECTOR_BYTES, &[1]);
         write(&mut image, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
@@ -363,6 +371,12 @@ mod tests {
             20 * USER_SECTOR_BYTES,
             b"BOOT2 = cdrom0:\\SLUS_200.01;1\r\n",
         );
+        image
+    }
+
+    #[test]
+    fn classifies_ps2_medium_by_size() {
+        let image = ps2_iso_image();
 
         let small = detect_rom_identity(&image, 600 * 1024 * 1024, Some(".iso"));
         assert_eq!(small.platform, Some(platform::PS2));
@@ -370,6 +384,25 @@ mod tests {
 
         let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
         assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
+    }
+
+    #[test]
+    fn prefix_detect_with_total_len_overrides_consumed_length() {
+        // A streaming producer fills the prefix from only the head of the stream, so the prefix's
+        // own consumed length is far below the DVD threshold; `detect` would call it a CD. Passing
+        // the known final length resolves the PS2 medium correctly mid-extraction.
+        let image = ps2_iso_image();
+        let mut prefix = IdentityPrefix::new();
+        prefix.push(&image);
+        assert!((image.len() as u64) < PS2_DVD_THRESHOLD_BYTES);
+
+        let consumed = prefix.detect(Some(".iso"));
+        assert_eq!(consumed.platform, Some(platform::PS2));
+        assert_eq!(consumed.disc_format, Some(DiscFormat::Cd));
+
+        let with_total = prefix.detect_with_total_len(2 * 1024 * 1024 * 1024, Some(".iso"));
+        assert_eq!(with_total.platform, Some(platform::PS2));
+        assert_eq!(with_total.disc_format, Some(DiscFormat::Dvd));
     }
 
     #[test]

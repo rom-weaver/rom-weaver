@@ -87,6 +87,40 @@ pub(crate) fn emit_extract_identity(
     });
 }
 
+/// Fold the next ordered slice of a decoded output into `identity` and, the moment the prefix
+/// fills, emit the streaming `probe-identity` event exactly ONCE (tracked by `emitted`). Used by
+/// the disc-image extract handlers that decode their own stream (rvz, cso, z3ds) so the ROM-type
+/// tag pops mid-extraction instead of only in `emitted_files` at completion. Detection uses the
+/// KNOWN final output length these handlers already have — more accurate than the bytes-consumed
+/// length the prefix tracks, since it resolves size-dependent media (e.g. PS2 CD vs DVD) correctly.
+pub(crate) fn stream_extract_identity(
+    context: &OperationContext,
+    format: &str,
+    identity: &mut IdentityPrefix,
+    emitted: &mut bool,
+    total_len: u64,
+    extension: Option<&str>,
+    bytes: &[u8],
+) {
+    identity.push(bytes);
+    if *emitted || !identity.is_full() {
+        return;
+    }
+    *emitted = true;
+    let detected = identity.detect_with_total_len(total_len, extension);
+    if !detected.is_empty() {
+        emit_extract_identity(context, format, &detected);
+    }
+}
+
+/// The output file extension (with leading dot, lowercased by the caller's path) used to
+/// disambiguate cartridge identity. Disc handlers pass their decoded output's extension.
+fn output_extension(output_path: &Path) -> Option<String> {
+    output_path
+        .extension()
+        .map(|ext| format!(".{}", ext.to_string_lossy()))
+}
+
 /// The stable descriptor of a container progress stream: everything that stays constant across
 /// per-step or per-byte progress calls for one create/extract operation.
 #[derive(Clone, Copy)]
@@ -229,10 +263,7 @@ pub(crate) struct ExtractChecksumTiming {
 /// Detect a decoded output's identity from an [`IdentityPrefix`] using the output
 /// file's extension, mirroring how the file-based detection derives it.
 fn detect_emitted_identity(identity: &IdentityPrefix, output_path: &Path) -> RomIdentity {
-    let extension = output_path
-        .extension()
-        .map(|ext| format!(".{}", ext.to_string_lossy()));
-    identity.detect(extension.as_deref())
+    identity.detect(output_extension(output_path).as_deref())
 }
 
 pub(crate) enum ExtractHasher {
@@ -584,6 +615,11 @@ pub(crate) struct ExtractChunkWriter<'a> {
     /// Identity prefix captured from the decoded output for detection at finish (the
     /// plain checksum here doesn't retain bytes). No extra read.
     identity: IdentityPrefix,
+    /// Output extension (with leading dot) for identity detection; cached so each chunk write
+    /// doesn't re-derive it.
+    identity_extension: Option<String>,
+    /// Whether the mid-extract `probe-identity` event has already fired for this output.
+    identity_emitted: bool,
     progress_bytes: AtomicU64,
     progress_bucket: AtomicU8,
 }
@@ -612,6 +648,8 @@ impl<'a> ExtractChunkWriter<'a> {
             writer,
             checksum,
             identity: IdentityPrefix::new(),
+            identity_extension: output_extension(output_path),
+            identity_emitted: false,
             progress_bytes: AtomicU64::new(0),
             progress_bucket: AtomicU8::new(0),
         })
@@ -642,7 +680,17 @@ impl<'a> ExtractChunkWriter<'a> {
         // ordered writer below.
         if let Some(checksum) = self.checksum.as_mut() {
             checksum.update(&data)?;
-            self.identity.push(&data);
+            // Surface the platform/medium tag the instant enough bytes have decoded, using the
+            // known final output length so size-dependent media resolves correctly.
+            stream_extract_identity(
+                self.context,
+                self.format,
+                &mut self.identity,
+                &mut self.identity_emitted,
+                self.total_bytes,
+                self.identity_extension.as_deref(),
+                &data,
+            );
         }
         self.writer.write_chunk(ordered_index, data)?;
         if self.total_bytes > 0 {
