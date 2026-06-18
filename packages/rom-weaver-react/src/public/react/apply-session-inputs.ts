@@ -67,6 +67,19 @@ const getArchiveNameFromProgressDetails = (details: Record<string, unknown>) => 
   return archivePathEntries.map((entry) => entry.fileName).join(" > ");
 };
 
+// The early `extract --probe` manifest (Rust `stage: "probe-manifest"`) carries the
+// detected platform/disc-format before extraction finishes, so the ROM type tag can
+// light up on the loading card mid-extract instead of only at checksum time. Snake-case
+// keys come straight from the Rust `RomIdentity` serialization.
+const getRomTypeFromProgressDetails = (details: Record<string, unknown>): StagedInputInfo["romType"] => {
+  const manifest = details.probe_manifest;
+  if (!manifest || typeof manifest !== "object") return undefined;
+  const record = manifest as Record<string, unknown>;
+  const platform = typeof record.platform === "string" ? record.platform : undefined;
+  const discFormat = typeof record.disc_format === "string" ? record.disc_format : undefined;
+  return platform || discFormat ? { discFormat, platform } : undefined;
+};
+
 const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
   const details = getProgressDetails(event);
   const fileName = typeof details.fileName === "string" ? details.fileName : "";
@@ -81,6 +94,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
     id: typeof details.sourceId === "string" ? details.sourceId : "",
     order: typeof details.order === "number" ? details.order : undefined,
     parentCompressions: getArchivePathEntriesFromProgressDetails(details),
+    romType: getRomTypeFromProgressDetails(details),
     size: typeof details.size === "number" ? details.size : undefined,
     sourceSize: typeof details.sourceSize === "number" ? details.sourceSize : undefined,
     wasDecompressed: typeof details.wasDecompressed === "boolean" ? details.wasDecompressed : undefined,

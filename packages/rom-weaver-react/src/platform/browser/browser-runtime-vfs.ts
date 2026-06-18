@@ -283,6 +283,10 @@ const createBrowserRuntimeVfsIo = ({
         });
         if (result.checksumVariants?.length) output.checksumVariants = result.checksumVariants;
         if (result.romType) output.romType = result.romType;
+        if (result.cueText) output.cueText = result.cueText;
+        if (result.gdiText) output.gdiText = result.gdiText;
+        if (result.discGroupId) output.discGroupId = result.discGroupId;
+        if (typeof result.trackNumber === "number") output.trackNumber = result.trackNumber;
         return output;
       }
       throw new Error(failureMessage || "Worker did not return browser output");

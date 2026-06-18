@@ -373,13 +373,19 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 checksums: entry.checksums,
                 checksumVariants: entry.checksumVariants,
                 cleanup: () => cleanupExtractedFiles([entry.path]),
+                // Disc structure folded in by Rust so the host groups + renders a disc without
+                // re-parsing the sheet (see `attach_disc_group_details`).
+                cueText: entry.cueText,
+                discGroupId: entry.discGroupId,
                 fileName,
                 filePath: entry.path,
+                gdiText: entry.gdiText,
                 romType: romTypeFromEmittedFile(entry),
                 size: entry.sizeBytes,
                 // Per-file extract time (the step that produced this leaf); falls back to the whole
                 // extract's elapsed time when the runtime did not report a per-file value.
                 timing: typeof entry.extractTimeMs === "number" ? { elapsedMs: entry.extractTimeMs } : extracted.timing,
+                trackNumber: entry.trackNumber,
               },
               fileName,
               "archive descend extract worker did not return browser output",

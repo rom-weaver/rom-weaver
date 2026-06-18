@@ -77,9 +77,12 @@ type RuntimeWorkerOutput = {
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
   cleanup?: () => Promise<void> | void;
+  cueText?: string;
+  discGroupId?: string;
   file?: Blob;
   fileName?: string;
   filePath?: string;
+  gdiText?: string;
   outputRef?: WorkerOutputRef;
   patchFile?: Blob;
   patchFileName?: string;
@@ -87,6 +90,7 @@ type RuntimeWorkerOutput = {
   romType?: RomTypeTag;
   size?: number;
   timing?: PublicOutput["timing"];
+  trackNumber?: number;
 };
 
 type RuntimeWorkerIo = {

@@ -138,6 +138,13 @@ type PublicOutput = VfsOutputRef & {
   cleanup?: () => Promise<void> | void;
   romType?: RomTypeTag;
   timing?: RuntimeTiming | null;
+  /** Disc structure folded into the extract output by Rust `emitted_files` so the host renders a
+   * multi-track disc as one card without parsing the sheet: the sheet carries its `cueText`/`gdiText`,
+   * and every file in the disc shares a `discGroupId` (tracks also carry their 1-based `trackNumber`). */
+  cueText?: string;
+  gdiText?: string;
+  discGroupId?: string;
+  trackNumber?: number;
 };
 
 type CompressionEntryInfo = {

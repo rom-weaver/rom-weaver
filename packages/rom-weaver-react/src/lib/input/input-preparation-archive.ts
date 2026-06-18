@@ -664,8 +664,15 @@ const resolveArchiveInputAssetsByDescent = async (
   const trackFiles = files.filter((file) => !sheetFiles.includes(file));
   let assets: InputAsset[];
   if (sheetFiles.length && trackFiles.length) {
-    const cueText = cueFile ? decodeUtf8(getPatchFileBytes(cueFile)) : undefined;
-    const gdiText = gdiFile ? decodeUtf8(getPatchFileBytes(gdiFile)) : undefined;
+    // Prefer the sheet text Rust extract folded into the output (`attach_disc_group_details`); only
+    // fall back to reading + decoding the extracted sheet when it is absent (e.g. a non-libarchive
+    // container that does not carry it).
+    const cueText = cueFile
+      ? ((cueFile as { _cueText?: string })._cueText ?? decodeUtf8(getPatchFileBytes(cueFile)))
+      : undefined;
+    const gdiText = gdiFile
+      ? ((gdiFile as { _gdiText?: string })._gdiText ?? decodeUtf8(getPatchFileBytes(gdiFile)))
+      : undefined;
     const primarySheet = cueFile ?? (gdiFile as PatchFileInstance);
     const groupId = makeInputId(sourceIndex, primarySheet.fileName, normalizeArchiveEntryName, "-group");
     const splitBinAvailable = cueText ? isChdSplitBinCue(archiveFile, cueText) : true;

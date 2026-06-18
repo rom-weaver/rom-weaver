@@ -94,6 +94,13 @@ type RomWeaverEmittedFile = {
   /** ROM platform label (e.g. "Sony PlayStation"); see Rust `emitted_files[].platform`. */
   platform?: string;
   sizeBytes?: number;
+  /** Disc structure (see Rust `attach_disc_group_details`): the cue/gdi sheet text, the shared
+   * disc group id, and a track's 1-based number — so the host groups + renders a disc without
+   * parsing the sheet itself. */
+  cueText?: string;
+  gdiText?: string;
+  discGroupId?: string;
+  trackNumber?: number;
 };
 
 const normalizeExtractTiming = (value: unknown): ExtractTiming | undefined => {
@@ -195,19 +202,24 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
     output.push({
       checksums: normalizeEmittedFileChecksums(entry.checksums),
       checksumVariants: parseChecksumVariants(entry),
+      cueText: typeof entry.cue_text === "string" && entry.cue_text ? entry.cue_text : undefined,
       discFormat:
         typeof entry.disc_format === "string" && entry.disc_format.trim() ? entry.disc_format.trim() : undefined,
+      discGroupId: typeof entry.disc_group_id === "string" && entry.disc_group_id ? entry.disc_group_id : undefined,
       extractTimeMs:
         typeof entry.extract_time_ms === "number" && Number.isFinite(entry.extract_time_ms)
           ? entry.extract_time_ms
           : undefined,
       extractTiming: normalizeExtractTiming(entry.timing),
       fileName,
+      gdiText: typeof entry.gdi_text === "string" && entry.gdi_text ? entry.gdi_text : undefined,
       kind: typeof entry.kind === "string" && entry.kind ? entry.kind : undefined,
       path,
       platform: typeof entry.platform === "string" && entry.platform.trim() ? entry.platform.trim() : undefined,
       sizeBytes:
         typeof entry.size_bytes === "number" && Number.isFinite(entry.size_bytes) ? entry.size_bytes : undefined,
+      trackNumber:
+        typeof entry.track_number === "number" && Number.isFinite(entry.track_number) ? entry.track_number : undefined,
     });
   }
   return output;
