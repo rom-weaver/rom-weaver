@@ -21,6 +21,13 @@ type CachedStagedSource = {
   staged: StagedBrowserSource;
 };
 
+// How long a staged source survives after its last reference is released. One input load stages the
+// same source independently for each pass (drop-routing probe -> descent listings -> extract, then a
+// post-extract listing), and each pass otherwise re-copies the whole compressed file into OPFS. A
+// short retention lets the next pass reuse the existing copy; a re-stage within the window cancels the
+// timer (see stageSource), and an explicit session release (releaseSources) still cleans immediately.
+const STAGED_SOURCE_RETENTION_MS = 3000;
+
 const emitBrowserRuntimeVfsTrace = (
   trace: RuntimeWorkerSourceRequest["trace"],
   message: string,
@@ -73,7 +80,12 @@ const createBrowserRuntimeVfsIo = ({
       void cleanupCachedStagedSource(key, cached);
       return;
     }
-    void cleanupCachedStagedSource(key, cached);
+    // Defer cleanup so the next pass of the same input reuses this staged copy instead of re-staging
+    // the whole compressed file. A re-stage within the window clears this timer and re-references it.
+    cached.cleanupTimer = setTimeout(() => {
+      cached.cleanupTimer = undefined;
+      void cleanupCachedStagedSource(key, cached);
+    }, STAGED_SOURCE_RETENTION_MS);
   };
   const releaseSources: RuntimeWorkerIo["releaseSources"] = async (sources) => {
     const cleanups: Array<Promise<void>> = [];
