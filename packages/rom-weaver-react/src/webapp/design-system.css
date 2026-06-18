@@ -411,19 +411,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .step.is-input.is-empty .drop.hero { min-height: clamp(190px, 28dvh, 280px); padding-block: 30px; }
 
 /* secondary input sections (patches, modified), when empty, don't offer their
-   own drop target — they point the user UP to the 0x01 hero. a quiet, non-boxy
-   directive so it never competes with 0x01 for "the place to add files". */
+   own drop target — they point the user UP to the 0x01 hero. they share the
+   hero's framing (solid seam, tinted fill, large radius) so the empty bench
+   reads as one consistent family, while still routing taps back to 0x01. */
 .rw-app .needs-input {
   display: flex; align-items: center; justify-content: center; gap: 9px;
   width: 100%; min-height: 104px; padding: 24px 20px; margin: 0;
-  appearance: none; border: 1px dashed var(--seam); border-radius: var(--r-m);
-  background: none; cursor: pointer;
+  appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
+  background: color-mix(in oklab, var(--thread) 4%, var(--plate-2)); cursor: pointer;
   color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center;
   transition: color .15s, background .15s, border-color .15s;
 }
 .rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
-  color: var(--ink-2); background: color-mix(in oklab, var(--thread) 5%, transparent);
-  border-color: color-mix(in oklab, var(--thread) 32%, var(--seam-strong));
+  color: var(--ink-2); background: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
+  border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
 }
 .rw-app .needs-input svg { width: 16px; height: 16px; flex: none; color: var(--thread-text); }
 .rw-app .needs-input .hexref { color: var(--thread-text); font-weight: 700; letter-spacing: .04em; }
