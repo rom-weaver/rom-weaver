@@ -80,6 +80,16 @@ impl CliApp {
                 (split_bin, None)
             };
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
+        // Stream an early identity/type manifest the moment the container is listed — before the
+        // heavy descent below — so the host can route the drop and render its card immediately.
+        // Best-effort and streaming-only; the authoritative identity still rides the terminal report.
+        self.emit_probe_manifest(
+            handler.as_ref(),
+            &source,
+            extract_split_bin,
+            !no_ignore,
+            &context,
+        );
         // When interactive selection is enabled and the caller did not pin entries, extract selected
         // payload paths instead of every entry: keep unambiguous payloads whole, otherwise prompt the
         // host (the same resolution is applied per nested level during the descent below). This is
@@ -259,6 +269,9 @@ impl CliApp {
                         }
                     })
                     .collect::<Vec<_>>();
+                // Fold disc structure (sheet text + per-track grouping) into the leaves so the host
+                // renders a multi-track disc as one card without re-parsing the cue/gdi itself.
+                let leaves = Self::attach_disc_group_details(leaves);
                 report = Self::set_emitted_files_detail(report, leaves);
             }
         }

@@ -177,6 +177,98 @@ impl CliApp {
         Some(Value::Object(entry))
     }
 
+    /// Annotate the leaf `emitted_files` with disc-group structure so the host can render a
+    /// multi-track disc as one card without parsing the sheet itself: each `.cue`/`.gdi` sheet
+    /// gets its full text (`cue_text`/`gdi_text`) and a `disc_group_id`, and every referenced
+    /// track gets the same `disc_group_id` plus its 1-based `track_number`. Non-disc outputs are
+    /// untouched. Sheet/ref resolution reuses the core disc-sheet parser, so it matches the
+    /// grouping the selection resolver already applies.
+    pub(super) fn attach_disc_group_details(mut leaves: Vec<Value>) -> Vec<Value> {
+        let base_name = |name: &str| -> String {
+            Path::new(name)
+                .file_name()
+                .map(|file| file.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_else(|| name.to_ascii_lowercase())
+        };
+        // Map every leaf's basename → its index, so a sheet's referenced files resolve to the
+        // emitted track entries to annotate.
+        let index_by_name: std::collections::HashMap<String, usize> = leaves
+            .iter()
+            .enumerate()
+            .filter_map(|(index, leaf)| {
+                let name = leaf.as_object()?.get("file_name")?.as_str()?;
+                Some((base_name(name), index))
+            })
+            .collect();
+
+        struct DiscGroupPlan {
+            sheet_index: usize,
+            sheet_text_key: &'static str,
+            sheet_text: String,
+            group_id: String,
+            tracks: Vec<(usize, usize)>,
+        }
+
+        let mut plans = Vec::new();
+        for (index, leaf) in leaves.iter().enumerate() {
+            let Some(map) = leaf.as_object() else {
+                continue;
+            };
+            let Some(path) = map.get("path").and_then(Value::as_str) else {
+                continue;
+            };
+            let sheet_path = Path::new(path);
+            let Some(kind) = detect_disc_sheet(sheet_path) else {
+                continue;
+            };
+            let (Ok(refs), Ok(text)) = (
+                enumerate_disc_sheet_refs(sheet_path),
+                std::fs::read_to_string(sheet_path),
+            ) else {
+                continue;
+            };
+            let group_id = map
+                .get("file_name")
+                .and_then(Value::as_str)
+                .unwrap_or(path)
+                .to_string();
+            let tracks = refs
+                .referenced_files
+                .iter()
+                .enumerate()
+                .filter_map(|(order, reference)| {
+                    index_by_name
+                        .get(&base_name(reference))
+                        .map(|&track_index| (track_index, order + 1))
+                })
+                .collect::<Vec<_>>();
+            plans.push(DiscGroupPlan {
+                sheet_index: index,
+                sheet_text_key: match kind {
+                    DiscSheetKind::Cue => "cue_text",
+                    DiscSheetKind::Gdi => "gdi_text",
+                },
+                sheet_text: text,
+                group_id,
+                tracks,
+            });
+        }
+
+        for plan in plans {
+            if let Some(map) = leaves[plan.sheet_index].as_object_mut() {
+                map.insert("disc_group_id".to_string(), json!(plan.group_id));
+                map.insert(plan.sheet_text_key.to_string(), json!(plan.sheet_text));
+            }
+            for (track_index, track_number) in plan.tracks {
+                if let Some(map) = leaves[track_index].as_object_mut() {
+                    map.insert("disc_group_id".to_string(), json!(plan.group_id));
+                    map.insert("track_number".to_string(), json!(track_number));
+                }
+            }
+        }
+        leaves
+    }
+
     pub(super) fn infer_emitted_file_kind(path: &Path) -> Option<&'static str> {
         let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
         if file_name.ends_with(".cue") {

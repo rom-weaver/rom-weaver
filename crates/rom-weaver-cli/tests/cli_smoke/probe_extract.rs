@@ -1001,6 +1001,143 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
 }
 
 #[test]
+fn extract_emits_early_probe_manifest_for_rom_archive() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("game.nes").path(),
+        with_nes_header(b"rom payload"),
+    )
+    .expect("rom fixture");
+    fs::write(temp.child("readme.txt").path(), b"not a rom").expect("sidecar fixture");
+
+    let archive = temp.child("bundle.zip");
+    command_stdout(
+        &[
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("readme.txt").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let out_dir = temp.child("extract");
+    let events = run_json_events(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    // The manifest streams before the terminal report so the host can route + render immediately.
+    let manifest_index = events
+        .iter()
+        .position(|event| event["stage"] == "probe-manifest")
+        .expect("expected an early probe-manifest event");
+    let terminal_index = events
+        .iter()
+        .rposition(|event| event["status"] == "succeeded")
+        .expect("expected a terminal succeeded event");
+    assert!(
+        manifest_index < terminal_index,
+        "probe-manifest must precede the terminal report"
+    );
+    let manifest = &events[manifest_index]["details"]["probe_manifest"];
+    assert_eq!(
+        manifest["is_rom"], true,
+        "ROM archive routes to the input bucket"
+    );
+    assert_eq!(events[manifest_index]["format"], "zip");
+    let entries = manifest["entries"]
+        .as_array()
+        .expect("manifest entries array");
+    let rom_entry = entries
+        .iter()
+        .find(|entry| entry["file_name"] == "game.nes")
+        .expect("rom entry present in manifest");
+    assert_eq!(rom_entry["kind"], "rom");
+    // The early manifest reads a bounded prefix of the single ROM payload inside the archive, so its
+    // platform is identified before the full extraction runs — not just for bare dropped ROMs.
+    assert_eq!(manifest["platform"], "Nintendo Entertainment System");
+}
+
+#[test]
+fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("game-modified.bin");
+    let patch = temp.child("update.bps");
+    fs::write(original.path(), b"game payload").expect("original fixture");
+    fs::write(modified.path(), b"game payload patched").expect("modified fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("notes fixture");
+
+    let archive = temp.child("patches.zip");
+    command_stdout(
+        &[
+            "compress",
+            patch.path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let out_dir = temp.child("extract-patch");
+    let events = run_json_events(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let manifest = events
+        .iter()
+        .find(|event| event["stage"] == "probe-manifest")
+        .map(|event| &event["details"]["probe_manifest"])
+        .expect("expected an early probe-manifest event");
+    // A bundle that carries a patch and no ROM payload routes to the patch bucket.
+    assert_eq!(manifest["is_rom"], false);
+    let entries = manifest["entries"]
+        .as_array()
+        .expect("manifest entries array");
+    let patch_entry = entries
+        .iter()
+        .find(|entry| entry["file_name"] == "update.bps")
+        .expect("patch entry present in manifest");
+    assert_eq!(patch_entry["kind"], "patch");
+}
+
+#[test]
 fn extract_checksum_rom_skips_disc_sheet_but_hashes_tracks() {
     let temp = setup_temp_dir();
     fs::write(temp.child("track01.bin").path(), vec![0x11u8; 64]).expect("track01 fixture");
@@ -1056,6 +1193,60 @@ fn extract_checksum_rom_skips_disc_sheet_but_hashes_tracks() {
     // The `.cue` sheet still lands with the disc (counts as ROM) but is never hashed.
     assert!(out_dir.child("disc.cue").path().exists());
     assert!(emitted_file_entry(&json, "disc.cue")["checksums"].is_null());
+}
+
+#[test]
+fn extract_emits_disc_group_structure_in_emitted_files() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("track01.bin").path(), vec![0x11u8; 64]).expect("track01 fixture");
+    fs::write(temp.child("track02.bin").path(), vec![0x22u8; 64]).expect("track02 fixture");
+    let cue_text = "FILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n";
+    temp.child("disc.cue")
+        .write_str(cue_text)
+        .expect("cue fixture");
+
+    let archive = temp.child("disc.zip");
+    command_stdout(
+        &[
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            temp.child("track01.bin").path().to_str().expect("path"),
+            temp.child("track02.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let out_dir = temp.child("extract-disc-group");
+    let json = run_single_json_event(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded");
+    // The sheet carries its full text + a disc group id so the host renders one disc card without
+    // re-parsing the cue itself.
+    let sheet = emitted_file_entry(&json, "disc.cue");
+    assert_eq!(sheet["cue_text"].as_str(), Some(cue_text));
+    let group_id = sheet["disc_group_id"]
+        .as_str()
+        .expect("sheet disc_group_id");
+    // Each referenced track shares the sheet's group id and gets its 1-based track number.
+    let track01 = emitted_file_entry(&json, "track01.bin");
+    let track02 = emitted_file_entry(&json, "track02.bin");
+    assert_eq!(track01["disc_group_id"].as_str(), Some(group_id));
+    assert_eq!(track02["disc_group_id"].as_str(), Some(group_id));
+    assert_eq!(track01["track_number"], 1);
+    assert_eq!(track02["track_number"], 2);
 }
 
 #[test]
