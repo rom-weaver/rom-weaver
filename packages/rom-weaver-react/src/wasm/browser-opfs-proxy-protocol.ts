@@ -115,8 +115,17 @@ export const OPFS_PROXY_STATUS_EIO = 29;
 export const OPFS_PROXY_HANDLE_BY_PATH = 0;
 
 /**
- * Size of each slot's data buffer. Large transfers chunk over this unit; the proxy may fill a full
- * cache block per read round-trip. 64 KiB comfortably holds any guest path pair and amortises the
- * Atomics round-trip across a useful read/write payload.
+ * Size of each slot's data buffer. Large transfers chunk over this unit, so each chunk costs one
+ * consumer↔proxy Atomics round-trip plus one SyncAccessHandle write; the runner thread streams the
+ * whole decoded image through one slot during a bulk extract. At the original 64 KiB a 1.5 GiB ISO
+ * needed ~22k round-trips (~11s of pure latency); pairing this with the write-back coalescing in
+ * browser-opfs-proxy-file.ts collapses both the per-write and per-sector cases to bandwidth-bound.
+ *
+ * 2 MiB is empirically the knee (Safari, 1.5 GiB RVZ extract + 632 MB CHD extract): 1 MiB regressed
+ * badly (an extract that runs ~2.8s ballooned to ~36s — not in the write path, writeMs stayed ~700ms,
+ * so a smaller slot perturbs decode-thread scheduling/allocation), while 4 MiB was within noise of
+ * 2 MiB (~2.8s, ~2300 MiBps writes) for double the SAB. Cost is slotCount × this; slotCount ≈
+ * threadPool + 4, so ~48 MiB on a ~10-thread desktop. Must also hold any guest path pair (rename
+ * serializes two paths here).
  */
-export const OPFS_PROXY_DATA_BUFFER_BYTES = 64 * 1024;
+export const OPFS_PROXY_DATA_BUFFER_BYTES = 2 * 1024 * 1024;

@@ -20,6 +20,15 @@ import type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 const PROXY_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 /** Requests larger than this are streamed directly rather than cached. */
 const PROXY_READ_CACHE_MAX_REQUEST_BYTES = 256 * 1024;
+/**
+ * Consumer-side write-back buffer for sequential output. Decoders like CHD emit their image as tens of
+ * thousands of tiny (~per-sector) writes; one proxy round-trip each would dominate the run (≈90k hops
+ * for a CD image). Contiguous writes coalesce into this buffer and flush as one large `client.write`,
+ * collapsing the round-trips to `bytes / slot-buffer`. A write at a non-contiguous offset, or any
+ * read/size/truncate/flush/close, flushes first so the proxy (and this file's reads) always see
+ * committed bytes. 4 MiB amortises the per-flush overhead while bounding the per-writable-file cost.
+ */
+const PROXY_WRITE_BUFFER_BYTES = 4 * 1024 * 1024;
 
 export interface BrowserProxyRandomAccessFileOptions {
   /** Create the file if it does not exist (output files). */
@@ -45,6 +54,10 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   private cacheStart = -1;
   private cacheLen = 0;
   private cacheVersion = -1;
+  // Sequential write-back buffer: coalesces contiguous writes before hitting the proxy.
+  private wbuf: Uint8Array | null = null;
+  private wbufStart = 0;
+  private wbufLen = 0;
 
   constructor(client: OpfsProxyClient, guestPath: string, options: BrowserProxyRandomAccessFileOptions = {}) {
     this.client = client;
@@ -69,6 +82,9 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   readAt(offset: number | bigint, dst: Uint8Array): number {
     if (dst.byteLength <= 0) return 0;
     const handleId = this.ensureOpen();
+    // Reads must see bytes still sitting in the write-back buffer (and the read cache validates against
+    // the proxy version stamp, which only bumps once the write actually lands), so commit first.
+    this.flushWriteBuffer();
     const start = Number(offset);
     if (dst.byteLength > PROXY_READ_CACHE_MAX_REQUEST_BYTES) {
       // Large read: stream directly; don't pollute the small-block cache.
@@ -100,19 +116,41 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   }
 
   writeAt(offset: number | bigint, data: Uint8Array): number {
-    return this.client.write(this.ensureOpen(), Number(offset), data);
+    if (data.byteLength <= 0) return 0;
+    const handleId = this.ensureOpen();
+    const start = Number(offset);
+    // Writes at least the buffer's size gain nothing from coalescing: commit any pending bytes and
+    // stream straight through (client.write still chunks over the slot buffer).
+    if (data.byteLength >= PROXY_WRITE_BUFFER_BYTES) {
+      this.flushWriteBuffer();
+      return this.client.write(handleId, start, data);
+    }
+    if (!this.wbuf) this.wbuf = new Uint8Array(PROXY_WRITE_BUFFER_BYTES);
+    // Append only when this write continues the buffered run and still fits; otherwise commit and
+    // restart the run at this offset.
+    const contiguous = this.wbufLen > 0 && start === this.wbufStart + this.wbufLen;
+    if (!contiguous || this.wbufLen + data.byteLength > this.wbuf.byteLength) {
+      this.flushWriteBuffer();
+      this.wbufStart = start;
+    }
+    this.wbuf.set(data, this.wbufLen);
+    this.wbufLen += data.byteLength;
+    return data.byteLength;
   }
 
   size(): number {
+    this.flushWriteBuffer();
     return this.client.size(this.ensureOpen());
   }
 
   truncate(size: number): void {
+    this.flushWriteBuffer();
     this.client.truncate(this.ensureOpen(), Number(size));
   }
 
   flush(): void {
     if (this.handleId === null || this.closed) return;
+    this.flushWriteBuffer();
     this.client.flush(this.handleId);
   }
 
@@ -121,8 +159,23 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       this.closed = true;
       return;
     }
+    this.flushWriteBuffer();
     this.client.close(this.handleId);
     this.handleId = null;
     this.closed = true;
+  }
+
+  /** Commit any buffered sequential writes to the proxy in one (slot-chunked) call. */
+  private flushWriteBuffer(): void {
+    if (this.wbufLen === 0 || !this.wbuf || this.handleId === null) return;
+    const pending = this.wbufLen;
+    this.wbufLen = 0;
+    const written = this.client.write(this.handleId, this.wbufStart, this.wbuf.subarray(0, pending));
+    if (written !== pending) {
+      throw new OpfsProxyError(
+        `proxy short write flushing ${this.guestPath}: wrote ${written} of ${pending}`,
+        29 /* EIO */,
+      );
+    }
   }
 }
