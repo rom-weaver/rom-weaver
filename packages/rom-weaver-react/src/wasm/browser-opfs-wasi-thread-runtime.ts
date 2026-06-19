@@ -4,7 +4,6 @@ import {
   cleanupBrowserOpfsMounts,
   createBrowserOpfsMountCache,
   normalizeMountHandleMap,
-  normalizeVirtualFiles,
 } from "./browser-opfs-mounts.ts";
 import { attachOpfsProxyChannel } from "./browser-opfs-proxy-channel.ts";
 import { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
@@ -144,7 +143,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       stdoutLineHandler,
       syncAccessMode: runtime?.syncAccessMode,
       trace,
-      virtualFiles: normalizeVirtualFiles(runtime?.virtualFiles),
+      virtualFiles: runtime?.virtualFiles,
       virtualOnlyMounts: resolveThreadVirtualOnlyMounts(runtime),
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
     });

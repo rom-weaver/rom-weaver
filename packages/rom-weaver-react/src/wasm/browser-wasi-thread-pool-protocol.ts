@@ -1,12 +1,14 @@
 import type { BrowserOpfsRuntime } from "./browser-opfs-runtime-types.ts";
+import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
 
 /**
  * Runtime options accepted by the thread spawner. Identical to the shared BrowserOpfsRuntime
- * except `virtualFiles` is widened to `unknown[]` so callers can pass normalized virtual files;
- * workers re-normalize them defensively anyway.
+ * except `virtualFiles` is the already-normalized shape: the runner normalizes once on the main
+ * thread and structured clone (postMessage) preserves Uint8Array/ArrayBuffer/Blob/File intact,
+ * so workers consume them directly without re-normalizing.
  */
 export type ThreadSpawnerRuntime = Omit<BrowserOpfsRuntime, "virtualFiles"> & {
-  virtualFiles?: unknown[];
+  virtualFiles?: NormalizedVirtualFile[];
 };
 
 /** Runtime payload forwarded to thread workers; handles are re-resolved inside the worker. */
