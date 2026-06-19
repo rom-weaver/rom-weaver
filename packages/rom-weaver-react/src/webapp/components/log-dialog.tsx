@@ -1,5 +1,6 @@
 import X from "lucide-react/dist/esm/icons/x.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
@@ -24,10 +25,17 @@ const formatTimestamp = (iso: string) => {
   return timePart.replace("Z", "").slice(0, 12);
 };
 
+// Detail objects are untyped (Record<string, unknown>); a single oversized
+// payload would otherwise be stringified on render, on every filter keystroke,
+// and on copy-all, which can spike memory enough to OOM-crash the tab. Cap the
+// serialized length well past anything useful to read inline.
+const MAX_DETAILS_CHARS = 4096;
+
 const formatDetails = (details: LogStoreEntry["details"]) => {
   if (!details || Object.keys(details).length === 0) return "";
   try {
-    return JSON.stringify(details);
+    const json = JSON.stringify(details);
+    return json.length > MAX_DETAILS_CHARS ? `${json.slice(0, MAX_DETAILS_CHARS)}… (${json.length} chars)` : json;
   } catch {
     return "";
   }
@@ -38,10 +46,13 @@ const formatLine = (entry: LogStoreEntry) => {
   return `${entry.timestamp} ${entry.level.toUpperCase()} ${entry.namespace}: ${entry.message}${details ? ` ${details}` : ""}`;
 };
 
-const copyText = (text: string) =>
-  navigator.clipboard?.writeText
-    ? navigator.clipboard.writeText(text)
-    : Promise.reject(new Error("Clipboard unavailable"));
+const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
+// While the dialog is closed there is nothing to show, so subscribe to a no-op
+// store: otherwise useSyncExternalStore re-renders the whole list every
+// animation frame during trace-heavy operations even though it is off-screen.
+const getEmptyEntries = () => EMPTY_ENTRIES;
+const noopUnsubscribe = () => undefined;
+const noopSubscribe = () => noopUnsubscribe;
 
 const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   const [copied, setCopied] = useState(false);
@@ -50,7 +61,7 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
     <button
       className={copied ? "ln copied" : "ln"}
       onClick={() => {
-        copyText(formatLine(entry))
+        copyToClipboard(formatLine(entry))
           .then(() => {
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1200);
@@ -87,7 +98,11 @@ const LogDialog = ({
   const currentLevel = normalizeLevel(level);
   const [filter, setFilter] = useState("");
   const [copiedAll, setCopiedAll] = useState(false);
-  const entries = useSyncExternalStore(subscribeLogEntries, getLogEntries, getLogEntries);
+  const entries = useSyncExternalStore(
+    open ? subscribeLogEntries : noopSubscribe,
+    open ? getLogEntries : getEmptyEntries,
+    getEmptyEntries,
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -153,7 +168,7 @@ const LogDialog = ({
             <button
               className="btn slim ghost"
               onClick={() => {
-                copyText(visible.map(formatLine).join("\n"))
+                copyToClipboard(visible.map(formatLine).join("\n"))
                   .then(() => {
                     setCopiedAll(true);
                     window.setTimeout(() => setCopiedAll(false), 1300);
