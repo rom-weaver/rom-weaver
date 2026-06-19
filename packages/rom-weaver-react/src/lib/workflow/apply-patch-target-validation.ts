@@ -76,6 +76,27 @@ const validateApplyPatchTarget = async <TSource>(
     targetInputId: target.id,
     validationKey,
   };
+  const validateProgressId = `${adapters.workflowId}:${stage.state.id}:patch-validate`;
+  const validateProgressDetails = {
+    fileName: stage.state.fileName,
+    order: stage.state.order,
+    sourceId: stage.state.id,
+    targetInputId: target.id,
+    targetInputName: target.fileName,
+  };
+  // Most patch formats validate via a dry-run apply that reports no incremental
+  // percent (only 100% at completion), so a numeric percent would pin the bar at
+  // 0% until done. Start indeterminate and only switch to a determinate bar once
+  // real forward progress (> 0%) actually arrives (e.g. BPS).
+  adapters.emitProgress({
+    details: validateProgressDetails,
+    id: validateProgressId,
+    label: "Validating patch against selected target",
+    percent: null,
+    role: "patch",
+    stage: "verify",
+    workflow: "apply",
+  });
   try {
     const result = await validatePatch({
       input: inputSource as never,
@@ -83,16 +104,13 @@ const validateApplyPatchTarget = async <TSource>(
       onLog: adapters.settings.logging?.sink,
       onProgress: (progress) =>
         adapters.emitProgress({
-          details: {
-            fileName: stage.state.fileName,
-            order: stage.state.order,
-            sourceId: stage.state.id,
-            targetInputId: target.id,
-            targetInputName: target.fileName,
-          },
-          id: `${adapters.workflowId}:${stage.state.id}:patch-validate`,
+          details: validateProgressDetails,
+          id: validateProgressId,
           label: String(progress.label || progress.message || "Validating patch..."),
-          percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
+          percent:
+            typeof progress.percent === "number" && Number.isFinite(progress.percent) && progress.percent > 0
+              ? progress.percent
+              : null,
           role: "patch",
           stage: "verify",
           workflow: "apply",
