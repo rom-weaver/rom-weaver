@@ -2,7 +2,6 @@ import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import {
   addRandomAccessFileIoStats,
   createRandomAccessFileIoStats,
-  isVirtualFileProxy,
   randomAccessFileIoStatsHaveData,
 } from "./browser-opfs-io-adapters.ts";
 import type { LineHandler, TraceLine } from "./browser-opfs-runtime-types.ts";
@@ -105,12 +104,11 @@ export function summarizeRawVirtualFiles(value: unknown): string {
           bytes?: unknown;
           data?: unknown;
           file?: unknown;
-          proxy?: unknown;
           source?: unknown;
         }
       | null
       | undefined;
-    return record?.source ?? record?.file ?? record?.blob ?? record?.bytes ?? record?.data ?? record?.proxy;
+    return record?.source ?? record?.file ?? record?.blob ?? record?.bytes ?? record?.data;
   });
 }
 
@@ -127,15 +125,15 @@ function summarizeVirtualFileEntries(value: ReadonlyArray<unknown>, readSource: 
   let directCount = 0;
   let totalBytes = 0;
   for (const entry of value) {
+    const record = entry && typeof entry === "object" ? (entry as { useProxyHandle?: unknown }) : null;
     const source = readSource(entry);
-    if (isVirtualFileProxy(source)) {
+    const direct = source as { byteLength?: unknown; size?: unknown } | null | undefined;
+    totalBytes += Number(direct?.size ?? direct?.byteLength ?? 0) || 0;
+    if (record?.useProxyHandle) {
       proxyCount += 1;
-      totalBytes += Number(source.size) || 0;
       continue;
     }
-    const direct = source as { byteLength?: unknown; size?: unknown } | null | undefined;
     directCount += 1;
-    totalBytes += Number(direct?.size ?? direct?.byteLength ?? 0) || 0;
   }
   return `count=${value.length} proxy=${proxyCount} direct=${directCount} bytes=${totalBytes}`;
 }

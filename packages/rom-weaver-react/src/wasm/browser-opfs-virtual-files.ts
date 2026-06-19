@@ -5,7 +5,7 @@ import {
   normalizeKnownInputPaths,
   normalizeRelativePathParts,
 } from "./browser-opfs-guest-paths.ts";
-import { BrowserVirtualRandomAccessFile, isBlobLike, isVirtualFileProxy } from "./browser-opfs-io-adapters.ts";
+import { BrowserVirtualRandomAccessFile, isBlobLike } from "./browser-opfs-io-adapters.ts";
 import type { BrowserOpfsMount } from "./browser-opfs-mount.ts";
 import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
@@ -119,7 +119,7 @@ function addVirtualFileEntry(
   // path it would force an open round-trip at mount-build time (per thread).
   const file: RandomAccessFileLike = proxyOptions.useProxyHandle
     ? new BrowserProxyRandomAccessFile(proxyOptions.proxyClient, proxyOptions.guestPath, { writable: false })
-    : new BrowserVirtualRandomAccessFile(source, { trace });
+    : new BrowserVirtualRandomAccessFile(source);
   trace?.(`[browser-opfs] virtual file mounted name=${name} proxyHandle=${proxyOptions.useProxyHandle}`);
   const existingValue = entries.get(name);
   restores.push(
@@ -313,9 +313,6 @@ function normalizeVirtualFile(entry: unknown, index: number): NormalizedVirtualF
   const record = entry as Record<string, unknown>;
   const path = normalizeGuestPath(record.path, { label: `virtualFiles[${index}].path` });
   const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data;
-  const proxy = record.proxy;
-  if (isVirtualFileProxy(proxy)) return { path, source: proxy };
-  if (isVirtualFileProxy(source)) return { path, source };
   if (isBlobLike(source)) {
     // useProxyHandle reads through the proxy worker (blob.arrayBuffer), so it does not need a
     // per-thread FileReaderSync; only the direct virtual-Blob path does.

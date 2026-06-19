@@ -1,31 +1,7 @@
-import {
-  VIRTUAL_FILE_CONTROL_BYTES_READ_INDEX,
-  VIRTUAL_FILE_CONTROL_LENGTH_INDEX,
-  VIRTUAL_FILE_CONTROL_OFFSET_HIGH_INDEX,
-  VIRTUAL_FILE_CONTROL_OFFSET_LOW_INDEX,
-  VIRTUAL_FILE_CONTROL_STATE_INDEX,
-  VIRTUAL_FILE_CONTROL_STATUS_INDEX,
-  VIRTUAL_FILE_CONTROL_WORD_COUNT,
-  VIRTUAL_FILE_STATE_CONSUMER_LOCKED,
-  VIRTUAL_FILE_STATE_DONE,
-  VIRTUAL_FILE_STATE_IDLE,
-  VIRTUAL_FILE_STATE_REQUESTED,
-  VIRTUAL_FILE_STATUS_OK,
-} from "./browser-virtual-file-protocol.ts";
-import { formatErrorForTrace } from "./workers/worker-trace-format.ts";
-
 const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
 const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
-const ATOMICS_WAIT_SLICE_MS = 100;
-const ATOMICS_WAIT_TIMEOUT_MS = 8000;
-const VIRTUAL_FILE_PROXY_TRACE_READ_LIMIT = 12;
-const VIRTUAL_FILE_PROXY_READ_TIMEOUT_MS = 12_000;
-const VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS = ATOMICS_WAIT_TIMEOUT_MS;
-
-type TraceLine = (line: string) => void;
-type AtomicsWaitResult = "changed" | "timed-out";
 
 type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
@@ -33,10 +9,6 @@ type FileReaderSyncLike = {
 
 declare const FileReaderSync: {
   new (): FileReaderSyncLike;
-};
-
-type BrowserVirtualRandomAccessFileOptions = {
-  trace?: TraceLine | null;
 };
 
 type ReadCacheBlock = {
@@ -177,42 +149,17 @@ class LruReadCache {
   }
 }
 
-type VirtualFileProxySlot = {
-  controlBuffer: SharedArrayBuffer;
-  dataBuffer: SharedArrayBuffer;
-};
-
-type VirtualFileProxy = {
-  id: string;
-  size: number;
-  slots: VirtualFileProxySlot[];
-};
-
-type VirtualFileProxySlotView = {
-  control: Int32Array<SharedArrayBuffer>;
-  data: Uint8Array<SharedArrayBuffer>;
-};
-
 class BrowserVirtualRandomAccessFile {
   closed: boolean;
   ioStats: RandomAccessFileIoStats;
-  proxy: VirtualFileProxy | null;
-  proxyFailed: boolean;
   readCache: LruReadCache;
-  readCount: number;
   reader: FileReaderSyncLike | null;
-  slots: VirtualFileProxySlotView[];
   source: unknown;
   supportsDirectWasmRead: boolean;
-  trace: TraceLine | null;
 
-  constructor(source: unknown, options: BrowserVirtualRandomAccessFileOptions = {}) {
+  constructor(source: unknown) {
     this.source = source;
-    this.proxy = isVirtualFileProxy(source) ? source : null;
     this.reader = isBlobLike(source) ? new FileReaderSync() : null;
-    this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
-    this.trace = typeof options.trace === "function" ? options.trace : null;
-    this.readCount = 0;
     this.ioStats = createRandomAccessFileIoStats();
     this.readCache = new LruReadCache({
       blockBytes: VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES,
@@ -229,20 +176,14 @@ class BrowserVirtualRandomAccessFile {
     });
     this.supportsDirectWasmRead = true;
     this.closed = false;
-    // Set once a proxy read times out: the producer may still own a slot, so the proxy stops
-    // recycling slots and fails fast instead of risking a stale-data read on a reused slot.
-    this.proxyFailed = false;
   }
 
   readAt(offset: unknown, dst: Uint8Array): number {
     if (this.closed) return 0;
-    this.readCount += 1;
-    const readIndex = this.readCount;
     const start = Number(offset);
     if (!Number.isFinite(start) || start < 0 || start >= this.size()) return 0;
     const length = Math.min(dst.byteLength, this.size() - start);
     if (length <= 0) return 0;
-    if (this.proxy) return this.readProxyAt(start, dst, length, readIndex);
     if (this.source instanceof Uint8Array) {
       dst.set(this.source.subarray(start, start + length));
       return length;
@@ -274,139 +215,11 @@ class BrowserVirtualRandomAccessFile {
     return bytes.byteLength;
   }
 
-  readProxyAt(offset: number, dst: Uint8Array, requestedLength: number, readIndex: number): number {
-    const proxy = this.proxy;
-    if (!proxy) return 0;
-    const shouldTrace = this.shouldTraceRead(readIndex);
-    if (shouldTrace) {
-      this.trace?.(`[browser-opfs] virtual proxy slot acquire start id=${proxy.id} read=${readIndex}`);
-    }
-    let slot: VirtualFileProxySlotView | null = null;
-    let abandonedSlot = false;
-    try {
-      slot = this.acquireProxySlot();
-      if (shouldTrace) {
-        this.trace?.(`[browser-opfs] virtual proxy slot acquired id=${proxy.id} read=${readIndex}`);
-      }
-      const length = Math.min(requestedLength, slot.data.byteLength);
-      if (length <= 0) return 0;
-      if (shouldTrace) {
-        this.trace?.(
-          `[browser-opfs] virtual proxy read request id=${proxy.id} read=${readIndex} offset=${offset} length=${length}`,
-        );
-      }
-      const low = offset >>> 0;
-      const high = Math.floor(offset / 2 ** 32) >>> 0;
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_OFFSET_LOW_INDEX, low);
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_OFFSET_HIGH_INDEX, high);
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_LENGTH_INDEX, length);
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_BYTES_READ_INDEX, 0);
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_STATUS_INDEX, VIRTUAL_FILE_STATUS_OK);
-      Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, VIRTUAL_FILE_STATE_REQUESTED);
-      Atomics.notify(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, 1);
-      const deadline = createWaitDeadline(VIRTUAL_FILE_PROXY_READ_TIMEOUT_MS);
-      while (true) {
-        const state = Atomics.load(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX);
-        if (state === VIRTUAL_FILE_STATE_DONE) break;
-        const result = waitForAtomicsStateChange(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, state, { deadline });
-        if (result === "timed-out") {
-          // The producer may still own this slot (mid read). Poison the proxy and do not recycle
-          // the slot below, so a stale producer completion can never satisfy a later request.
-          abandonedSlot = true;
-          this.proxyFailed = true;
-          throw new Error(`virtual file read timed out for ${proxy.id}`);
-        }
-      }
-      if (Atomics.load(slot.control, VIRTUAL_FILE_CONTROL_STATUS_INDEX) !== VIRTUAL_FILE_STATUS_OK) {
-        throw new Error(`virtual file read failed for ${proxy.id}`);
-      }
-      const bytesRead = Math.max(
-        0,
-        Math.min(Atomics.load(slot.control, VIRTUAL_FILE_CONTROL_BYTES_READ_INDEX), length),
-      );
-      if (bytesRead > 0) dst.set(slot.data.subarray(0, bytesRead));
-      if (shouldTrace) {
-        this.trace?.(`[browser-opfs] virtual proxy read done id=${proxy.id} read=${readIndex} bytes=${bytesRead}`);
-      }
-      return bytesRead;
-    } catch (error) {
-      this.trace?.(
-        `[browser-opfs] virtual proxy read failed id=${proxy.id} read=${readIndex} ${formatErrorForTrace(error)}`,
-      );
-      throw error;
-    } finally {
-      if (slot && !abandonedSlot) this.releaseProxySlot(slot);
-    }
-  }
-
-  shouldTraceRead(readIndex: number): boolean {
-    return readIndex <= VIRTUAL_FILE_PROXY_TRACE_READ_LIMIT || readIndex % 128 === 0;
-  }
-
-  acquireProxySlot(): VirtualFileProxySlotView {
-    if (this.proxyFailed) {
-      throw new Error(`virtual file proxy is no longer usable for ${this.proxy?.id ?? "unknown"}`);
-    }
-    const deadline = createWaitDeadline(VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS);
-    while (true) {
-      for (const slot of this.slots) {
-        const state = Atomics.load(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX);
-        if (state === VIRTUAL_FILE_STATE_DONE) {
-          this.reclaimStaleDoneProxySlot(slot);
-          continue;
-        }
-        if (
-          Atomics.compareExchange(
-            slot.control,
-            VIRTUAL_FILE_CONTROL_STATE_INDEX,
-            VIRTUAL_FILE_STATE_IDLE,
-            VIRTUAL_FILE_STATE_CONSUMER_LOCKED,
-          ) === VIRTUAL_FILE_STATE_IDLE
-        ) {
-          return slot;
-        }
-      }
-      const first = this.slots[0];
-      if (!first) throw new Error(`virtual file proxy has no read slots for ${this.proxy?.id ?? "unknown"}`);
-      const state = Atomics.load(first.control, VIRTUAL_FILE_CONTROL_STATE_INDEX);
-      if (state === VIRTUAL_FILE_STATE_DONE) {
-        this.reclaimStaleDoneProxySlot(first);
-        continue;
-      }
-      const waitResult = waitForAtomicsStateChange(first.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, state, {
-        deadline,
-      });
-      if (waitResult === "timed-out") {
-        this.proxyFailed = true;
-        throw new Error(`virtual file read slot acquisition timed out for ${this.proxy?.id ?? "unknown"}`);
-      }
-    }
-  }
-
-  reclaimStaleDoneProxySlot(slot: VirtualFileProxySlotView): void {
-    if (
-      Atomics.compareExchange(
-        slot.control,
-        VIRTUAL_FILE_CONTROL_STATE_INDEX,
-        VIRTUAL_FILE_STATE_DONE,
-        VIRTUAL_FILE_STATE_IDLE,
-      ) === VIRTUAL_FILE_STATE_DONE
-    ) {
-      Atomics.notify(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, 1);
-    }
-  }
-
-  releaseProxySlot(slot: VirtualFileProxySlotView): void {
-    Atomics.store(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, VIRTUAL_FILE_STATE_IDLE);
-    Atomics.notify(slot.control, VIRTUAL_FILE_CONTROL_STATE_INDEX, 1);
-  }
-
   writeAt(): number {
     return 0;
   }
 
   size(): number {
-    if (this.proxy) return Number(this.proxy.size || 0);
     if (this.source instanceof Uint8Array || this.source instanceof ArrayBuffer) {
       return this.source.byteLength;
     }
@@ -476,43 +289,6 @@ function randomAccessFileIoStatsHaveData(stats: RandomAccessFileIoStats): boolea
   return Object.values(stats).some((value) => value > 0);
 }
 
-function isVirtualFileProxy(value: unknown): value is VirtualFileProxy {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Partial<VirtualFileProxy>;
-  return Boolean(
-    typeof record.id === "string" &&
-      Array.isArray(record.slots) &&
-      Number.isFinite(Number(record.size)) &&
-      Number(record.size) >= 0,
-  );
-}
-
-function normalizeVirtualFileProxySlots(proxy: VirtualFileProxy): VirtualFileProxySlotView[] {
-  const slots: VirtualFileProxySlotView[] = [];
-  for (const slot of proxy.slots) {
-    if (!(isSharedArrayBufferLike(slot?.controlBuffer) && isSharedArrayBufferLike(slot?.dataBuffer))) continue;
-    const control = new Int32Array(slot.controlBuffer);
-    if (control.length < VIRTUAL_FILE_CONTROL_WORD_COUNT) continue;
-    slots.push({
-      control,
-      data: new Uint8Array(slot.dataBuffer),
-    });
-  }
-  if (slots.length === 0) {
-    throw new TypeError(`virtual file proxy has no usable shared read slots: ${proxy.id}`);
-  }
-  return slots;
-}
-
-function isSharedArrayBufferLike(value: unknown): value is SharedArrayBuffer {
-  return Boolean(
-    typeof SharedArrayBuffer === "function" &&
-      value &&
-      typeof value === "object" &&
-      Object.prototype.toString.call(value) === "[object SharedArrayBuffer]",
-  );
-}
-
 function isBlobLike(value: unknown): value is Blob {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<Blob>;
@@ -535,37 +311,10 @@ function monotonicNowMs(): number {
   return Date.now();
 }
 
-function createWaitDeadline(timeoutMs: unknown): number {
-  const normalized = Math.max(0, Number(timeoutMs) || 0);
-  return normalized > 0 ? monotonicNowMs() + normalized : Number.POSITIVE_INFINITY;
-}
-
-function waitForAtomicsStateChange(
-  control: Int32Array<SharedArrayBuffer>,
-  index: number,
-  expectedState: number,
-  options: { deadline?: number; timeoutMs?: number } = {},
-): AtomicsWaitResult {
-  const deadline =
-    typeof options.deadline === "number"
-      ? options.deadline
-      : createWaitDeadline(options.timeoutMs ?? ATOMICS_WAIT_TIMEOUT_MS);
-  while (Atomics.load(control, index) === expectedState) {
-    const remainingMs = deadline - monotonicNowMs();
-    if (remainingMs <= 0) return "timed-out";
-    const waitMs = Math.min(ATOMICS_WAIT_SLICE_MS, remainingMs);
-    const result = Atomics.wait(control, index, expectedState, waitMs);
-    if (result === "not-equal") return "changed";
-    if (result === "timed-out" && monotonicNowMs() >= deadline) return "timed-out";
-  }
-  return "changed";
-}
-
 export {
   addRandomAccessFileIoStats,
   BrowserVirtualRandomAccessFile,
   createRandomAccessFileIoStats,
   isBlobLike,
-  isVirtualFileProxy,
   randomAccessFileIoStatsHaveData,
 };

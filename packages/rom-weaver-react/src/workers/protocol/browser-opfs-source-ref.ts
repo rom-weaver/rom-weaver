@@ -280,7 +280,6 @@ const createBrowserOpfsSourceRef = async (
       path: virtualPath,
       source: virtualSource,
       trace: options.trace,
-      useProxyHandle: true,
     });
   } catch (error) {
     releaseVirtualInputPath(virtualPath);

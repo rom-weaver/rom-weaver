@@ -200,16 +200,11 @@ const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly
 };
 
 const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
-  let directCount = 0;
   let proxyCount = 0;
   let totalBytes = 0;
   for (const file of files) {
-    if (file.proxy) {
-      proxyCount += 1;
-      totalBytes += file.proxy.size || 0;
-    }
+    if (file.useProxyHandle) proxyCount += 1;
     if (file.source) {
-      directCount += 1;
       const source = file.source as Blob | Uint8Array | ArrayBuffer;
       totalBytes +=
         source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size || 0;
@@ -217,7 +212,6 @@ const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
   }
   return {
     count: files.length,
-    directCount,
     proxyCount,
     totalBytes,
   };

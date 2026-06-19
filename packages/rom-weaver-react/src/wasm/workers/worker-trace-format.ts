@@ -39,16 +39,6 @@ export function formatCommandForTrace(command: unknown): string {
   }
 }
 
-function isTraceVirtualFileProxy(value: unknown): value is { id: string; size: unknown; slots: unknown[] } {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      typeof (value as TraceRecord).id === "string" &&
-      Array.isArray((value as TraceRecord).slots) &&
-      Number.isFinite(Number((value as TraceRecord).size)),
-  );
-}
-
 export function summarizeVirtualFiles(value: unknown): string {
   if (!Array.isArray(value) || value.length === 0) return "count=0";
   let proxyCount = 0;
@@ -56,16 +46,14 @@ export function summarizeVirtualFiles(value: unknown): string {
   let totalBytes = 0;
   for (const entry of value) {
     const record = entry && typeof entry === "object" ? (entry as TraceRecord) : {};
-    const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data ?? record.proxy;
-    const proxy = record.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
-    if (isTraceVirtualFileProxy(proxy)) {
+    const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data;
+    const sourceRecord = source && typeof source === "object" ? (source as TraceRecord) : {};
+    totalBytes += Number(sourceRecord.size ?? sourceRecord.byteLength ?? 0) || 0;
+    if (record.useProxyHandle) {
       proxyCount += 1;
-      totalBytes += Number(proxy.size) || 0;
       continue;
     }
     directCount += 1;
-    const sourceRecord = source && typeof source === "object" ? (source as TraceRecord) : {};
-    totalBytes += Number(sourceRecord.size ?? sourceRecord.byteLength ?? 0) || 0;
   }
   return `count=${value.length},proxy=${proxyCount},direct=${directCount},bytes=${totalBytes}`;
 }
