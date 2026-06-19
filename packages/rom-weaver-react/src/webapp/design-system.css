@@ -665,7 +665,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* opened content sits inside the plate, inset from its border. The bottom
    inset is a MARGIN on the last child, not padding — border-box height can't
    collapse below its own padding, which left a 9px lip on closed drawers */
-.rw-app .cks .cks-inner { padding-inline: 10px; }
+/* round the body's bottom corners (it already clips) to match the drawer, so a
+   full-bleed last row's hover highlight follows the rounded corner instead of
+   poking a square past it */
+.rw-app .cks .cks-inner { padding-inline: 10px; border-end-start-radius: calc(var(--r-s) - 1px); border-end-end-radius: calc(var(--r-s) - 1px); }
 .rw-app .cks .cks-inner > :last-child { margin-block-end: 9px; }
 /* chevron is a quiet affordance — lights to thread when the section is open */
 .rw-app .cks .chev { width: .82rem; height: .82rem; flex: none; color: var(--ink-4); opacity: .6; transition: transform .22s var(--ease), color .18s, opacity .18s; }
@@ -701,30 +704,50 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .cks > .cks-head .rb-mark.ok { color: var(--verified); }
 .rw-app .cks > .cks-head .rb-mark.bad { color: var(--fault); }
 /* verified mark in the Details header (a verified known-good game) */
-/* checksum + verify rows are a contiguous TABLE: the group is framed once and the
-   rows sit flush (no gap), split only by hairline dividers */
-/* frameless on every size — the drawer plate is the container; rows divide
-   with hairlines, and the sub-headers get clear air instead of touching an
-   inner table border */
+/* checksum rows are a full-bleed block: each row fills the drawer body edge to
+   edge (cancelling the .cks-inner inline inset and its block insets), rows sit
+   flush with their top/bottom borders collapsed into shared hairlines, and the
+   drawer frames the sides. (The .ck.req verification rows keep their own table —
+   reset below.) */
 .rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
-.rw-app .ck-group { display: flex; flex-direction: column; gap: 2px; }
+.rw-app .cks > .cks-body > .cks-inner > .ckrows { margin-block: 0; }
+.rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
+/* first heading gets clear air under the drawer header; later headings sit a
+   touch tighter so the sections still read as one stack */
+.rw-app .ckrows > .ck-group:first-child { margin-block-start: 13px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
-.rw-app .ck-group-head { font-size: .64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 2px 1px; }
+/* section header for a checksum group — a brand accent tick + brighter, bolder
+   label so each block (Unchanged / Fix header / variants) reads as its own
+   labelled section, distinct from the grey row labels below it */
+.rw-app .ck-group-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink); padding: 2px 0; margin-block-end: 6px;
+}
+.rw-app .ck-group-head::before {
+  content: ""; flex: none; width: 3px; height: .74rem; border-radius: 2px; background: var(--thread);
+}
 .rw-app .ck {
   /* label column sized just to the widest label (CRC32/SHA-1) so values still
      line up in a column, but without the old wide gap — leaves room for a
      larger value. Each row is its own grid, so this width must be fixed. */
   margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
-  border: 0; border-block-end: 1px solid var(--seam-soft); transition: background .15s;
+  border-block: 1px solid var(--seam-soft); border-inline: 0; transition: background .15s, border-color .15s;
 }
+/* rows bleed past the .cks-inner inline inset (10px) so the dividers run edge to
+   edge; the width is widened to match (flex-stretch alone leaves a fixed width =
+   container, so the negative end-margin would only shift, not extend, the row).
+   The drawer border frames the sides. Verification rows keep their inset. */
+.rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
+/* rows touch: overlap the shared edge so adjacent borders read as one hairline */
+.rw-app .ck:not(.req) + .ck:not(.req) { margin-block-start: -1px; }
 /* the whole row is a copy button — ON TOUCH, block text selection / the iOS
    callout so tapping the hash fires a clean click instead of starting a
    selection. Mouse/keyboard users keep normal select-to-copy. */
 @media (pointer: coarse) {
   .rw-app .ck { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 }
-.rw-app .ckrows > .ck:last-child { border-block-end: 0; }
 .rw-app .ck:hover { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
 .rw-app .ck .ck-k { font-size: .76rem; color: var(--ink-3); margin: 0; }
@@ -760,7 +783,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    dt labels size column 1 — otherwise the long dry-run line inflates it */
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
-.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 10px; }
+/* verification rows stay a contiguous subgrid table — hairline dividers, not boxed */
+.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 10px; border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
 .rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
 .rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); font-size: .97rem; word-break: break-word; }
 .rw-app .ck.req .reqstat { display: inline-flex; align-items: center; }
