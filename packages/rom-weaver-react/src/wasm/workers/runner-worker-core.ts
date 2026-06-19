@@ -104,18 +104,6 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
         return;
       }
 
-      case "run": {
-        const activeRunner = requireRunner();
-        const result = await activeRunner.run(message.request, message.options ?? {});
-        postMessage({
-          operation: "run",
-          requestId,
-          result,
-          type: "result",
-        });
-        return;
-      }
-
       case "runJson": {
         postTraceLine(requestId, `[runner-worker] runJson received ${summarizeRunRequest(message)}`);
         const activeRunner = requireRunner();
@@ -385,7 +373,7 @@ function readRequestContext(message: unknown): RomWeaverWorkerErrorContext {
     context.stage = `worker.${record.type}`;
   }
 
-  if (record.type === "run" || record.type === "runJson") {
+  if (record.type === "runJson") {
     const command = readPayloadCommand(record.request) as UnknownRecord | null;
     if (typeof command?.type === "string" && command.type.length > 0) {
       context.command = command.type;

@@ -3,7 +3,6 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunResult,
   RomWeaverWorkerError,
   RomWeaverWorkerErrorKind,
   RomWeaverWorkerSerializedError,
@@ -102,10 +101,6 @@ export class RomWeaverWorkerClientCore {
    */
   setSelectionHandler(handler?: (request: string) => Promise<number[]> | number[]) {
     this._onSelect = handler;
-  }
-
-  run(request: RomWeaverRunInput, options: RomWeaverWorkerRunOptions = {}) {
-    return this._send<RomWeaverRunResult>({ options, request, type: "run" });
   }
 
   runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(

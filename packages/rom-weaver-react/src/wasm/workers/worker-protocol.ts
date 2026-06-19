@@ -5,7 +5,6 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunResult,
   RomWeaverWorkerSerializedError,
 } from "../rom-weaver-types.d.ts";
 
@@ -23,13 +22,6 @@ interface RomWeaverWorkerInitRequest {
   requestId?: number;
   mode?: "browser-opfs";
   options?: RomWeaverWorkerInitOptions;
-}
-
-interface RomWeaverWorkerRunRequest {
-  type: "run";
-  requestId?: number;
-  request: RomWeaverRunInput;
-  options?: RomWeaverWorkerRunOptions;
 }
 
 export type RomWeaverWorkerRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> = Omit<
@@ -53,7 +45,6 @@ interface RomWeaverWorkerDisposeRequest {
 
 export type RomWeaverWorkerRequest =
   | RomWeaverWorkerInitRequest
-  | RomWeaverWorkerRunRequest
   | RomWeaverWorkerRunJsonRequest
   | RomWeaverWorkerDisposeRequest;
 
@@ -68,8 +59,8 @@ interface RomWeaverWorkerReadyMessage {
 interface RomWeaverWorkerResultMessage {
   type: "result";
   requestId: number | null;
-  operation: "run" | "runJson";
-  result: RomWeaverRunResult | RomWeaverRunJsonResult<unknown, unknown>;
+  operation: "runJson";
+  result: RomWeaverRunJsonResult<unknown, unknown>;
 }
 
 interface RomWeaverWorkerProgressEventMessage {

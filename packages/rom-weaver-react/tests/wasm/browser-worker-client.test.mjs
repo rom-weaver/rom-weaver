@@ -633,9 +633,11 @@ describe("rom-weaver-wasm browser runner parity", () => {
     });
   });
 
-  it("run reports typed request errors for unknown commands", async () => {
+  it("runJson reports typed request errors for unknown commands", async () => {
     await withTempFixture(async ({ worker }) => {
-      await expect(worker.run(["definitely-not-a-command"])).rejects.toThrow(/typed command has unsupported.*type/i);
+      await expect(worker.runJson(["definitely-not-a-command"])).rejects.toThrow(
+        /typed command has unsupported.*type/i,
+      );
     });
   });
 
@@ -1254,11 +1256,11 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
   it("runner typed input normalization rejects invalid command objects", async () => {
     await withTempFixture(async ({ worker }) => {
-      await expect(worker.run({ args: {}, type: "definitely-not-a-command" })).rejects.toThrow(
+      await expect(worker.runJson({ args: {}, type: "definitely-not-a-command" })).rejects.toThrow(
         /typed command has unsupported.*type/i,
       );
 
-      await expect(worker.run({ args: {} })).rejects.toThrow(/typed command requires a string `type` field/i);
+      await expect(worker.runJson({ args: {} })).rejects.toThrow(/typed command requires a string `type` field/i);
     });
   });
 

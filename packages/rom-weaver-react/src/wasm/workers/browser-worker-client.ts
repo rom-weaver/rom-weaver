@@ -7,7 +7,6 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunResult,
 } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
@@ -54,14 +53,6 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     options = options ?? {};
     const initOptions = this._createInitOptions(options);
     return this._sendInit(initOptions);
-  }
-
-  override async run(
-    commandOrRequest: RomWeaverRunInput,
-    options: RomWeaverBrowserOpfsRunOptions = {},
-  ): Promise<RomWeaverRunResult> {
-    await whenOpfsCleanupSettled();
-    return super.run(commandOrRequest, options);
   }
 
   override async runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(

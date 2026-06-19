@@ -31,9 +31,6 @@ export function toTypedRunInput(input) {
 function wrapTypedTestWorker(worker) {
   return new Proxy(worker, {
     get(target, property, receiver) {
-      if (property === "run") {
-        return (input, options) => target.run(toTypedRunInput(input), options);
-      }
       if (property === "runJson") {
         return (input, options) => target.runJson(toTypedRunInput(input), options);
       }
