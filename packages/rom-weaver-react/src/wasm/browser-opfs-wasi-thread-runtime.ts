@@ -196,12 +196,8 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       threadWasi.fds,
       `[browser-opfs-thread] flush fd write buffers tid=${tid ?? "unknown"}`,
     );
-    traceDirectWasiFileIoStats(trace, threadWasi, `[browser-opfs-thread] direct file io tid=${tid ?? "unknown"}`);
-    traceRandomAccessFileIoStats(
-      trace,
-      built.fds,
-      `[browser-opfs-thread] random access file io tid=${tid ?? "unknown"}`,
-    );
+    traceDirectWasiFileIoStats(trace, threadWasi, `[perf] direct file io tid=${tid ?? "unknown"}`);
+    traceRandomAccessFileIoStats(trace, built.fds, `[perf] random access file io tid=${tid ?? "unknown"}`);
     // Output files are written straight to OPFS through the proxy during the run; no materialization.
     runSucceeded = true;
   } catch (error) {

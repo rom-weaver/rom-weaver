@@ -323,11 +323,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         trace("[browser-opfs] thread spawner ready");
         try {
           setupDoneAtMs = nowMs();
-          trace(`[browser-opfs] wasi.start start setupMs=${(setupDoneAtMs - runStartedAtMs).toFixed(1)}`);
+          trace(`[perf] wasi.start start setupMs=${(setupDoneAtMs - runStartedAtMs).toFixed(1)}`);
           exitCode = wasi.start(instance);
           computeDoneAtMs = nowMs();
           trace(
-            `[browser-opfs] wasi.start returned exitCode=${String(exitCode)} computeMs=${(computeDoneAtMs - setupDoneAtMs).toFixed(1)}`,
+            `[perf] wasi.start returned exitCode=${String(exitCode)} computeMs=${(computeDoneAtMs - setupDoneAtMs).toFixed(1)}`,
           );
         } catch (error) {
           trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
@@ -341,8 +341,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         threadSpawnerDrained = true;
         trace("[browser-opfs] waitForWorkers done");
         traceFlushOpenWasiFileDescriptors(trace, wasi.fds, "[browser-opfs] flush fd write buffers");
-        traceDirectWasiFileIoStats(trace, wasi, "[browser-opfs] direct file io");
-        traceRandomAccessFileIoStats(trace, fds, "[browser-opfs] random access file io");
+        traceDirectWasiFileIoStats(trace, wasi, "[perf] direct file io");
+        traceRandomAccessFileIoStats(trace, fds, "[perf] random access file io");
         // Output files are real OPFS files written through the proxy during the run, so there is no
         // end-of-run materialization step: the bytes are already persisted by the time wasi.start returns.
         runSucceeded = true;
@@ -396,7 +396,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         // runner); `exitCode`/`succeeded` are the outcome. setup = dispatch→wasi.start, compute =
         // wasi.start, teardown = drain/flush/cleanup after it.
         trace(
-          `[browser-opfs] command timings command=${formatCommandForTrace(command)}` +
+          `[perf] command timings command=${formatCommandForTrace(command)}` +
             ` threads=${parseRequestedThreadCount(request) ?? 1} exitCode=${exitCode === null ? "n/a" : exitCode}` +
             ` setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
             ` totalMs=${(runEndedAtMs - runStartedAtMs).toFixed(1)} succeeded=${runSucceeded}`,

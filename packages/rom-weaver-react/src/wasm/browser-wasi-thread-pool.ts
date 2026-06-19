@@ -525,7 +525,7 @@ export function createBrowserWasiThreadWorkerPool({
       const postMs = monotonicNowMs() - postStartMs;
       await Promise.all(command.slots.map((slot) => slot.ready));
       trace?.(
-        `[browser-opfs] thread pool command ready id=${commandId} slots=${command.slots.length}` +
+        `[perf] thread pool command ready id=${commandId} slots=${command.slots.length}` +
           ` ensureMs=${ensureMs.toFixed(1)} selectMs=${selectMs.toFixed(1)} postMs=${postMs.toFixed(1)}` +
           ` readyMs=${(monotonicNowMs() - commandStartMs).toFixed(1)}`,
       );
