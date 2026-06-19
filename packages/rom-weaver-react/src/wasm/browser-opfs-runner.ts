@@ -395,10 +395,13 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         // pre-warm; >1 = the thread pool was engaged, which is what setupMs mostly measures on a cold
         // runner); `exitCode`/`succeeded` are the outcome. setup = dispatch→wasi.start, compute =
         // wasi.start, teardown = drain/flush/cleanup after it.
+        // stagingMs = how long this command's OPFS inputs took to copy in (preCommand, recorded on the
+        // main thread); 0 = already on OPFS, n/a = nothing referenced was staged (e.g. virtual-Blob input).
+        const stagingMsFmt = typeof runOptions.stagingMs === "number" ? runOptions.stagingMs.toFixed(1) : "n/a";
         trace(
           `[perf] command timings command=${formatCommandForTrace(command)}` +
             ` threads=${parseRequestedThreadCount(request) ?? 1} exitCode=${exitCode === null ? "n/a" : exitCode}` +
-            ` setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
+            ` stagingMs=${stagingMsFmt} setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
             ` totalMs=${(runEndedAtMs - runStartedAtMs).toFixed(1)} succeeded=${runSucceeded}`,
         );
       }

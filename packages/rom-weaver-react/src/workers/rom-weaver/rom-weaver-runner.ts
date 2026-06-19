@@ -28,6 +28,7 @@ import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
+import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
@@ -543,6 +544,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   );
   const command = readRomWeaverRunInputCommand(commandOrRequest);
   const operationPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
+  // Surface how long this command's OPFS inputs took to stage (recorded on the main thread by
+  // createBrowserOpfsSourceRef) so it lands on the runner's [perf] command timings line alongside
+  // setup/compute/teardown. Undefined when no referenced input was staged (e.g. virtual-Blob inputs).
+  const stagedInputMs = getStagedInputMs(operationPaths);
+  if (typeof stagedInputMs === "number") {
+    (runOptions as { stagingMs?: number }).stagingMs = stagedInputMs;
+  }
   const threadBudget = getDefaultBrowserThreadCount();
   // probe/list spawn no workers (0 budget). Threaded commands request "auto" (the full budget), but
   // most do not use every core — gate the scheduler on the threads the operation will realistically use

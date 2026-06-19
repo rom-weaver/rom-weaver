@@ -173,6 +173,31 @@ const emitBrowserSourceRefTrace = (
     details || {},
   );
 
+const nowMs = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+
+// Main-thread ledger of how long each input took to stage into OPFS, keyed by its staged OPFS path.
+// Staging runs on the main thread (the runtime adapter calls stageSource before dispatching the
+// command), so the main-thread command dispatcher (rom-weaver-runner) can read it back to surface
+// stagingMs on the [perf] command timings line. Already-on-OPFS inputs record 0 (no copy needed);
+// inputs left on the virtual-Blob path are never recorded (no staging happened).
+const stagedInputMsByPath = new Map<string, number>();
+const recordStagedInputMs = (filePath: string, ms: number) => {
+  if (filePath) stagedInputMsByPath.set(filePath, Math.max(0, Math.round(ms)));
+};
+const getStagedInputMs = (paths: Iterable<string>): number | undefined => {
+  let total = 0;
+  let found = false;
+  for (const path of paths) {
+    const ms = stagedInputMsByPath.get(path);
+    if (typeof ms === "number") {
+      total += ms;
+      found = true;
+    }
+  }
+  return found ? total : undefined;
+};
+
 const normalizeVirtualFileName = (fileName: string | null | undefined, fallback = "input.bin") =>
   String(fileName || fallback)
     .replace(PATH_SEPARATOR_REGEX, "_")
@@ -311,11 +336,13 @@ const createBrowserOpfsSourceRef = async (
     getStringRecordValue(directSource, "filePath") ||
     getStringRecordValue(source, "filePath");
   if (filePath) {
-    emitBrowserSourceRefTrace(options.trace, "using existing OPFS path source", {
+    emitBrowserSourceRefTrace(options.trace, "[perf] using existing OPFS path source (no staging needed)", {
       fileName,
       filePath,
       sizeHint,
+      stagingMs: 0,
     });
+    recordStagedInputMs(filePath, 0);
     return {
       cleanup: async () => undefined,
       fileName,
@@ -416,6 +443,7 @@ const createBrowserOpfsSourceRef = async (
     // Register the in-flight stage before awaiting it so a concurrent re-stage of the same input
     // reuses this one copy instead of writing its own. The promise rejects on a failed stage, which
     // reuseStagedInput treats as "no reusable copy" so the waiter falls through to its own attempt.
+    const stageStartedAtMs = nowMs();
     const stagePromise = requestBrowserOpfsStorage({
       action: "stage",
       file: virtualSource,
@@ -433,15 +461,23 @@ const createBrowserOpfsSourceRef = async (
         emitBrowserSourceRefTrace(options.trace, "input OPFS staging failed, using virtual blob", {
           error: error instanceof Error ? error.message : String(error),
           filePath: virtualPath,
+          stagingMs: Math.round(nowMs() - stageStartedAtMs),
         });
         return null;
       },
     );
     if (staged) {
-      emitBrowserSourceRefTrace(options.trace, "staged input to OPFS", {
+      const stagingMs = Math.round(nowMs() - stageStartedAtMs);
+      recordStagedInputMs(staged.stagedPath, stagingMs);
+      emitBrowserSourceRefTrace(options.trace, "[perf] staged input to OPFS", {
         fileName: virtualFileName,
         filePath: staged.stagedPath,
         size: staged.size,
+        stagingMs,
+        throughputMiBs:
+          stagingMs > 0 && typeof staged.size === "number"
+            ? Math.round((staged.size / (1024 * 1024) / (stagingMs / 1000)) * 10) / 10
+            : undefined,
       });
       return {
         cleanup: async () => releaseStagedInput(stagedContentKey, options.trace),
@@ -494,4 +530,4 @@ const createBrowserOpfsSourceRef = async (
   };
 };
 
-export { createBrowserOpfsSourceRef };
+export { createBrowserOpfsSourceRef, getStagedInputMs };

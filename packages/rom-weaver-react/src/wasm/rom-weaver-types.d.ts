@@ -212,6 +212,13 @@ export interface RomWeaverBrowserOpfsOptions {
 export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
   virtualFiles?: RomWeaverBrowserVirtualFile[];
+  /**
+   * How long this command's OPFS inputs took to stage (ms), recorded on the main thread by
+   * createBrowserOpfsSourceRef and forwarded so the runner can print it on the [perf] command timings
+   * line. 0 means the input was already on OPFS; omitted when nothing referenced was staged (e.g.
+   * virtual-Blob inputs).
+   */
+  stagingMs?: number;
   /** Extra guest input paths that threaded virtual-only mounts must hydrate before a run. */
   knownInputPaths?: string[];
   /** Writable guest output paths to create/truncate inside the cached OPFS mount before a run. */
