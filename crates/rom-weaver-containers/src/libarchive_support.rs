@@ -28,7 +28,6 @@ use rom_weaver_libarchive::{
     ZeroWriteBehavior, list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
     probe_regular_archive_format, visit_selected_regular_archive_entries,
-    visit_selected_regular_archive_entries_from_memory,
 };
 use tracing::{debug, trace};
 
@@ -36,7 +35,6 @@ use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
     attach_emitted_file_paths, attach_extraction_details,
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
-    container_exceeds_main_thread_cap, container_reads_source_on_main_thread,
     extract_support::{
         ContainerProgressContext, ExtractChecksumTiming, ExtractHasher, ExtractTiming,
         ExtractedFileChecksum, attach_extract_checksum_details, emit_container_step_progress,
@@ -1079,16 +1077,8 @@ fn send_libarchive_extract_output(
     })
 }
 
-/// Where a worker chunk reads the archive image. `Memory` carries the source bytes read once on the
-/// main thread (the only thread that can open an OPFS-backed intermediate in the browser), so worker
-/// threads read from shared memory instead of re-`open`ing the file and failing with `os error 44`.
-enum ChunkArchiveSource<'a> {
-    Path(&'a Path),
-    Memory(Arc<[u8]>),
-}
-
 fn extract_libarchive_task_chunk_to_sender(
-    source: ChunkArchiveSource<'_>,
+    source: &Path,
     chunk: &[LibarchiveExtractTask],
     format_name: &str,
     sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
@@ -1182,20 +1172,8 @@ fn extract_libarchive_task_chunk_to_sender(
         }
         Ok(())
     };
-    let matched_tasks = match source {
-        ChunkArchiveSource::Path(path) => visit_selected_regular_archive_entries(
-            path,
-            format_name,
-            &selected_indices,
-            &mut visit,
-        )?,
-        ChunkArchiveSource::Memory(bytes) => visit_selected_regular_archive_entries_from_memory(
-            bytes,
-            format_name,
-            &selected_indices,
-            &mut visit,
-        )?,
-    };
+    let matched_tasks =
+        visit_selected_regular_archive_entries(source, format_name, &selected_indices, &mut visit)?;
 
     if matched_tasks != tasks_by_index.len() {
         return Err(RomWeaverError::Validation(format!(
@@ -1242,30 +1220,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
     }
 
-    // Over-cap serial fallback (browser/wasm): when the source must be read on the main thread and
-    // is too large to buffer whole (the parallel path below does `fs::read` of the entire archive),
-    // extract single-pass from the file path on the calling thread instead. libarchive reads the
-    // archive sequentially with a bounded I/O buffer, so peak memory is one entry's working set
-    // rather than the whole archive — at the cost of parallelism for inputs that could not be
-    // buffered anyway. Output is identical (same libarchive decode, same entry order).
-    let force_serial_over_cap = {
-        let compressed_len = fs::metadata(&request.source)
-            .map(|meta| meta.len())
-            .unwrap_or(0);
-        let over_cap = container_exceeds_main_thread_cap(compressed_len);
-        if over_cap {
-            trace!(
-                format = format_name,
-                compressed_len,
-                limit = crate::constants::container_in_memory_limit_bytes(),
-                "libarchive read-on-main serial fallback (source exceeds buffer cap)"
-            );
-        }
-        over_cap
-    };
-    let (execution, written_bytes, output_checksums) = if tasks.is_empty()
-        || duplicate_output_paths
-        || force_serial_over_cap
+    let (execution, written_bytes, output_checksums) = if tasks.is_empty() || duplicate_output_paths
     {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let emitted_progress_bucket = AtomicU8::new(0);
@@ -1338,28 +1293,15 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         let source = request.source.clone();
         let progress_context = context.clone();
         let progress_execution = execution.clone();
-        // In the browser only the main runner thread can open an OPFS-backed source; read the whole
-        // archive image here (on the calling thread) so the parallel workers extract from shared
-        // bytes instead of re-opening the file, which fails with `os error 44`. This applies to any
-        // OPFS-staged source, not just nested intermediates a prior extract step wrote: a top-level
-        // extract (e.g. a patch archive staged to OPFS, `parent=None`) hits the same worker-open
-        // wall on Safari iOS. Gated by `container_reads_source_on_main_thread()` (always true on
-        // wasm; native opts in via env for tests), so native still opens per-worker for overlap.
-        let source_bytes: Option<Arc<[u8]>> =
-            if execution.used_parallelism && container_reads_source_on_main_thread() {
-                Some(Arc::from(fs::read(&source).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} extract failed while reading source on the main thread: {error}"
-                ))
-            })?))
-            } else {
-                None
-            };
+        // Each worker opens its own reader over the source and extracts its assigned entries. In
+        // the browser the OPFS proxy worker owns every SyncAccessHandle, so a spawned wasm thread's
+        // `path_open` is marshalled to it and succeeds — the old "read the whole archive on the main
+        // thread first" workaround for `os error 44` is no longer needed. Peak memory is one entry's
+        // working set per worker rather than the whole compressed archive.
         trace!(
             format = format_name,
             used_parallelism = execution.used_parallelism,
             effective_threads = execution.effective_threads,
-            read_on_main = source_bytes.is_some(),
             "libarchive parallel extract path selected"
         );
 
@@ -1393,14 +1335,8 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                 tasks.par_chunks(chunk_size).try_for_each_with(
                                     sender,
                                     |sender, chunk| {
-                                        let chunk_source = match &source_bytes {
-                                            Some(bytes) => {
-                                                ChunkArchiveSource::Memory(Arc::clone(bytes))
-                                            }
-                                            None => ChunkArchiveSource::Path(&source),
-                                        };
                                         extract_libarchive_task_chunk_to_sender(
-                                            chunk_source,
+                                            &source,
                                             chunk,
                                             format_name,
                                             sender,

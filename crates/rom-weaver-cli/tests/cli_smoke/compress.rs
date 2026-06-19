@@ -856,23 +856,37 @@ fn archive_container_formats_round_trip() {
     }
 }
 
-// On wasm/browser, a compressed archive too large to buffer whole on the main runner thread
-// falls back to a single-pass serial extract straight from the file path (bounded memory).
-// Default CI exercises the buffered+parallel read-on-main path; this forces the fallback via a
-// zero in-memory cap and asserts it (a) runs serially and (b) extracts byte-for-byte identically.
+// libarchive extract no longer buffers the whole archive on the main thread: each worker opens
+// its own reader over the source and extracts its assigned entries (the OPFS proxy makes worker
+// `path_open` work in the browser). So the legacy read-on-main knobs — forcing the main-thread
+// reader (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`) and a zero buffer cap
+// (`ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT`) that used to demote an over-cap archive to a serial
+// single-pass extract — are now no-ops here. This compresses a multi-file archive over the MT
+// floor and asserts that, even with those knobs set, the extract still runs in parallel
+// per-worker and is byte-for-byte identical to a default extract.
 #[test]
-fn archive_extract_serial_fallback_matches_default() {
+fn archive_extract_parallel_over_cap_matches_default() {
     let temp = setup_temp_dir();
-    let payload = (0..8192)
-        .map(|index| ((index * 7) % 251) as u8)
+    // Three ~1.6 MiB files clear the 4 MiB MT threshold and give the per-file parallel path
+    // multiple entries to fan across workers.
+    let payloads = (0..3)
+        .map(|file| {
+            let name = format!("part{file}.bin");
+            let payload = (0..1_600_000usize)
+                .map(|index| (((index + file * 31) * 7) % 251) as u8)
+                .collect::<Vec<u8>>();
+            fs::write(temp.child(&name).path(), &payload).expect("fixture");
+            (name, payload)
+        })
         .collect::<Vec<_>>();
-    fs::write(temp.child("source.bin").path(), &payload).expect("fixture");
 
     let archive = temp.child("sample.7z");
     let mut compress = Command::cargo_bin("rom-weaver").expect("binary");
+    compress.arg("compress");
+    for (name, _) in &payloads {
+        compress.arg(temp.child(name).path());
+    }
     compress
-        .arg("compress")
-        .arg(temp.child("source.bin").path())
         .arg("--format")
         .arg("7z")
         .arg("--output")
@@ -882,37 +896,54 @@ fn archive_extract_serial_fallback_matches_default() {
         .arg("--json");
     compress.assert().code(0);
 
-    let out_dir = temp.child("extract");
-    let extract_output = command_stdout_with_env(
-        &[
-            "extract",
-            archive.path().to_str().expect("path"),
-            "--select",
-            "source.bin",
-            "--out-dir",
-            out_dir.path().to_str().expect("path"),
-            "--threads",
-            "8",
-            "--json",
-        ],
+    let extract = |out_dir: &Path, env: &[(&str, &str)]| -> Value {
+        let output = command_stdout_with_env(
+            &[
+                "extract",
+                archive.path().to_str().expect("path"),
+                "--out-dir",
+                out_dir.to_str().expect("path"),
+                "--threads",
+                "8",
+                "--json",
+            ],
+            env,
+            0,
+        );
+        parse_json_lines(&output)
+            .last()
+            .cloned()
+            .expect("extract terminal event")
+    };
+
+    let default_dir = temp.child("default");
+    let default_json = extract(default_dir.path(), &[]);
+    assert_eq!(default_json["status"], "succeeded");
+
+    let legacy_dir = temp.child("legacy-env");
+    let legacy_json = extract(
+        legacy_dir.path(),
         &[
             ("ROM_WEAVER_CONTAINER_MAIN_THREAD_READER", "1"),
             ("ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT", "0"),
         ],
-        0,
+    );
+    assert_eq!(legacy_json["status"], "succeeded");
+    // The legacy knobs no longer force a serial main-thread read: the extract still parallelizes.
+    assert_eq!(legacy_json["used_parallelism"], true);
+    assert!(
+        legacy_json["effective_threads"]
+            .as_u64()
+            .expect("effective_threads")
+            >= 2
     );
 
-    let extract_json = parse_json_lines(&extract_output)
-        .last()
-        .cloned()
-        .expect("extract terminal event");
-    assert_eq!(extract_json["status"], "succeeded");
-    // Over-cap fallback gives up worker parallelism for the single-pass main-thread read.
-    assert_eq!(extract_json["used_parallelism"], false);
-    assert_eq!(extract_json["effective_threads"], 1);
-
-    let extracted = fs::read(out_dir.child("source.bin").path()).expect("read extract");
-    assert_eq!(extracted, payload);
+    for (name, payload) in &payloads {
+        let default_bytes = fs::read(default_dir.child(name).path()).expect("default extract");
+        let legacy_bytes = fs::read(legacy_dir.child(name).path()).expect("legacy extract");
+        assert_eq!(&default_bytes, payload);
+        assert_eq!(&legacy_bytes, payload);
+    }
 }
 
 #[test]

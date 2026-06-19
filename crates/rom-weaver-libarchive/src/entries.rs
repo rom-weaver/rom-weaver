@@ -248,29 +248,6 @@ where
     )
 }
 
-/// Same as [`visit_selected_regular_archive_entries`] but reads the archive image from shared bytes
-/// (the main-thread reader path) so worker threads never `open` the OPFS-backed source file.
-pub fn visit_selected_regular_archive_entries_from_memory<F>(
-    bytes: Arc<[u8]>,
-    format_name: &str,
-    selected_indices: &BTreeSet<usize>,
-    visit_entry: F,
-) -> Result<usize>
-where
-    F: FnMut(SelectedRegularArchiveEntry<'_>) -> Result<()>,
-{
-    if selected_indices.is_empty() {
-        return Ok(0);
-    }
-    let reader = open_regular_archive_reader_from_memory(bytes, format_name)?;
-    visit_selected_regular_archive_entries_with_reader(
-        reader,
-        format_name,
-        selected_indices,
-        visit_entry,
-    )
-}
-
 fn visit_selected_regular_archive_entries_with_reader<F>(
     mut reader: RegularArchiveReader<'static>,
     format_name: &str,
@@ -433,17 +410,6 @@ fn open_regular_archive_reader(
     format_name: &str,
 ) -> Result<RegularArchiveReader<'static>> {
     open_regular_archive_reader_from_io(File::open(source)?, format_name)
-}
-
-/// Open a reader over an in-memory archive image. Used by the main-thread reader path: the source
-/// bytes are read once on the thread that wrote them (the only one that can open an OPFS-backed
-/// intermediate in the browser) and then handed to worker threads as shared bytes, so each worker
-/// reads from memory instead of re-`open`ing the file and failing with `os error 44`.
-fn open_regular_archive_reader_from_memory(
-    bytes: Arc<[u8]>,
-    format_name: &str,
-) -> Result<RegularArchiveReader<'static>> {
-    open_regular_archive_reader_from_io(Cursor::new(bytes), format_name)
 }
 
 fn close_regular_archive_reader(

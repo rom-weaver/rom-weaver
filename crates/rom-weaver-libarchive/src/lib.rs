@@ -5,10 +5,9 @@ use std::{
     collections::BTreeSet,
     ffi::{CStr, CString},
     fs::{self, File},
-    io::{self, Cursor, Read, Seek, Write},
+    io::{self, Read, Seek, Write},
     path::Path,
     ptr::{self, NonNull},
-    sync::Arc,
 };
 
 use akv::reader::ArchiveReader as RegularArchiveReader;
@@ -56,8 +55,7 @@ pub use entries::{
     RegularArchiveEntryMetadata, RegularArchiveFileEntry, RegularArchiveProbeFormat,
     RegularArchiveProbeSummary, SelectedRegularArchiveEntry, list_regular_archive_entries,
     list_regular_archive_file_entries, probe_regular_archive, probe_regular_archive_format,
-    visit_selected_regular_archive_entries, visit_selected_regular_archive_entries_from_memory,
-    with_regular_archive_file_entry_reader,
+    visit_selected_regular_archive_entries, with_regular_archive_file_entry_reader,
 };
 pub use read::{ReadArchive, ReadFilter, with_raw_stream_reader};
 #[cfg(feature = "write-archives")]
