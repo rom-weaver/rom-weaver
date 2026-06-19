@@ -49,10 +49,26 @@ pub(crate) fn parse_single_json_line(output: &[u8]) -> Value {
 }
 
 pub(crate) fn command_stdout(args: &[&str], expected_code: i32) -> Vec<u8> {
+    command_stdout_with_env(args, &[], expected_code)
+}
+
+/// Like [`command_stdout`] but sets environment variables on the spawned `rom-weaver`
+/// subprocess only (not this test process), so env-gated code paths — e.g. the container
+/// read-on-main streaming path (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`) and its serial
+/// fallback cap (`ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT`) — can be exercised without racing
+/// other tests that read the same variables.
+pub(crate) fn command_stdout_with_env(
+    args: &[&str],
+    env: &[(&str, &str)],
+    expected_code: i32,
+) -> Vec<u8> {
     let normalized_args = normalize_cli_args(args);
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(&normalized_args)
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command.args(&normalized_args);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    command
         .assert()
         .code(expected_code)
         .get_output()

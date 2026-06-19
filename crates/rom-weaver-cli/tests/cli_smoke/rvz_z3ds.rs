@@ -447,6 +447,67 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     );
 }
 
+// The wasm/browser path reads the compressed payload on the main runner thread and streams each
+// task's frame-group bytes to the decode workers (bounded memory). Default CI exercises the
+// per-worker-open path, so this forces the read-on-main streaming path via the env override and
+// asserts it decodes byte-for-byte identically to the default extraction.
+#[test]
+fn z3ds_extract_streaming_read_on_main_matches_default() {
+    let temp = setup_temp_dir();
+    let source = (0..(10 * 1024 * 1024))
+        .map(|index| ((index * 7) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("large.3ds").path(), &source).expect("fixture");
+
+    let z3ds_path = temp.child("large.z3ds");
+    command_stdout(
+        &[
+            "compress",
+            temp.child("large.3ds").path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--output",
+            z3ds_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ],
+        0,
+    );
+
+    let extract_args = |out_dir: &str| {
+        vec![
+            "extract".to_string(),
+            z3ds_path.path().to_str().expect("path").to_string(),
+            "--out-dir".to_string(),
+            out_dir.to_string(),
+            "--threads".to_string(),
+            "8".to_string(),
+            "--json".to_string(),
+        ]
+    };
+
+    let default_dir = temp.child("default");
+    let default_args = extract_args(default_dir.path().to_str().expect("path"));
+    command_stdout(
+        &default_args.iter().map(String::as_str).collect::<Vec<_>>(),
+        0,
+    );
+
+    let streamed_dir = temp.child("streamed");
+    let streamed_args = extract_args(streamed_dir.path().to_str().expect("path"));
+    command_stdout_with_env(
+        &streamed_args.iter().map(String::as_str).collect::<Vec<_>>(),
+        &[("ROM_WEAVER_CONTAINER_MAIN_THREAD_READER", "1")],
+        0,
+    );
+
+    let default_bytes = fs::read(default_dir.child("large.3ds").path()).expect("default 3ds");
+    let streamed_bytes = fs::read(streamed_dir.child("large.3ds").path()).expect("streamed 3ds");
+    assert_eq!(default_bytes, source);
+    assert_eq!(streamed_bytes, source);
+}
+
 #[test]
 fn z3ds_extract_supports_single_output_selection() {
     let temp = setup_temp_dir();

@@ -856,6 +856,65 @@ fn archive_container_formats_round_trip() {
     }
 }
 
+// On wasm/browser, a compressed archive too large to buffer whole on the main runner thread
+// falls back to a single-pass serial extract straight from the file path (bounded memory).
+// Default CI exercises the buffered+parallel read-on-main path; this forces the fallback via a
+// zero in-memory cap and asserts it (a) runs serially and (b) extracts byte-for-byte identically.
+#[test]
+fn archive_extract_serial_fallback_matches_default() {
+    let temp = setup_temp_dir();
+    let payload = (0..8192)
+        .map(|index| ((index * 7) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("source.bin").path(), &payload).expect("fixture");
+
+    let archive = temp.child("sample.7z");
+    let mut compress = Command::cargo_bin("rom-weaver").expect("binary");
+    compress
+        .arg("compress")
+        .arg(temp.child("source.bin").path())
+        .arg("--format")
+        .arg("7z")
+        .arg("--output")
+        .arg(archive.path())
+        .arg("--codec")
+        .arg("lzma2")
+        .arg("--json");
+    compress.assert().code(0);
+
+    let out_dir = temp.child("extract");
+    let extract_output = command_stdout_with_env(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "source.bin",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ],
+        &[
+            ("ROM_WEAVER_CONTAINER_MAIN_THREAD_READER", "1"),
+            ("ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT", "0"),
+        ],
+        0,
+    );
+
+    let extract_json = parse_json_lines(&extract_output)
+        .last()
+        .cloned()
+        .expect("extract terminal event");
+    assert_eq!(extract_json["status"], "succeeded");
+    // Over-cap fallback gives up worker parallelism for the single-pass main-thread read.
+    assert_eq!(extract_json["used_parallelism"], false);
+    assert_eq!(extract_json["effective_threads"], 1);
+
+    let extracted = fs::read(out_dir.child("source.bin").path()).expect("read extract");
+    assert_eq!(extracted, payload);
+}
+
 #[test]
 fn extract_zst_reports_parallel_decode_threads() {
     let temp = setup_temp_dir();
