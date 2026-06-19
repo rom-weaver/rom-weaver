@@ -101,12 +101,18 @@ export interface OpfsProxyServerHandle {
   /** Resolves once the servicing loop has fully stopped. */
   readonly done: Promise<void>;
   stop(): void;
+  /** Register a read-only Blob input servable by guest path (no OPFS staging copy). See opOpen. */
+  registerBlobSource(path: string, blob: Blob): void;
+  unregisterBlobSource(path: string): void;
 }
 
 interface HandleEntry {
   id: number;
   path: string;
-  handle: SyncAccessHandleLike;
+  /** Null for Blob-backed (read-only input) entries, which read via `blob` instead of an OPFS handle. */
+  handle: SyncAccessHandleLike | null;
+  /** Set for read-only Blob-backed input entries; reads slice this instead of an OPFS sync handle. */
+  blob: Blob | null;
   writable: boolean;
   refcount: number;
   /** Set when the path was unlinked while this handle was still open; the OPFS entry is removed on the
@@ -125,7 +131,9 @@ export function startOpfsProxyServer(options: OpfsProxyServerOptions): OpfsProxy
   const done = server.run();
   return {
     done,
+    registerBlobSource: (path, blob) => server.registerBlobSource(path, blob),
     stop: () => server.stop(),
+    unregisterBlobSource: (path) => server.unregisterBlobSource(path),
   };
 }
 
@@ -137,6 +145,9 @@ class OpfsProxyServer {
   private readonly byId = new Map<number, HandleEntry>();
   private readonly byPath = new Map<string, number>();
   private readonly freeIds: number[] = [];
+  // Read-only Blob inputs registered by guest path. opOpen resolves these to Blob-backed handles so a
+  // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
+  private readonly blobSources = new Map<string, Blob>();
   private running = true;
 
   constructor(options: OpfsProxyServerOptions) {
@@ -152,6 +163,16 @@ class OpfsProxyServer {
     // Wake the loop so it observes the stop flag promptly.
     Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
     Atomics.notify(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+  }
+
+  registerBlobSource(path: string, blob: Blob): void {
+    this.blobSources.set(path, blob);
+  }
+
+  unregisterBlobSource(path: string): void {
+    // Drop the source mapping; any handle still open on it keeps working (its entry holds the Blob ref)
+    // until the last close, mirroring OPFS unlink-while-open.
+    this.blobSources.delete(path);
   }
 
   async run(): Promise<void> {
@@ -229,13 +250,16 @@ class OpfsProxyServer {
       case OPFS_PROXY_OP_TRUNCATE:
         return this.opTruncate(slot);
       case OPFS_PROXY_OP_FLUSH:
-        this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX)).handle.flush();
+        // Blob inputs are read-only with nothing to flush; the handle is null for them.
+        this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX)).handle?.flush();
         return 0;
       case OPFS_PROXY_OP_CLOSE:
         this.releaseHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX));
         return 0;
-      case OPFS_PROXY_OP_SIZE:
-        return this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX)).handle.getSize();
+      case OPFS_PROXY_OP_SIZE: {
+        const entry = this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX));
+        return entry.blob ? entry.blob.size : (entry.handle?.getSize() ?? 0);
+      }
       case OPFS_PROXY_OP_UNLINK:
         await this.opUnlink(this.readPath(data, control, 0));
         return 0;
@@ -264,31 +288,64 @@ class OpfsProxyServer {
         return entry.id;
       }
     }
+    // A registered Blob input is served as a read-only handle: no OPFS namespace lookup, no
+    // SyncAccessHandle. Reads slice the Blob on this (dedicated, free) worker (see opRead).
+    const blob = this.blobSources.get(guestPath);
+    if (blob) {
+      const id = this.allocId();
+      const entry: HandleEntry = {
+        blob,
+        handle: null,
+        id,
+        path: guestPath,
+        pendingRemoval: null,
+        refcount: 1,
+        writable: false,
+      };
+      this.byId.set(id, entry);
+      this.byPath.set(guestPath, id);
+      return id;
+    }
     const location = this.locate(guestPath);
     const writable = writableRequested || isGuestPathWithinRoots(guestPath, location.mount.writableRoots);
     const fileHandle = await this.resolveFileHandle(location, { create });
     const mode = writable ? writableSyncAccessMode(this.syncAccessMode) : "read-only";
     const handle = await openSyncAccessHandle({ fileHandle, mode });
     const id = this.allocId();
-    const entry: HandleEntry = { handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable };
+    const entry: HandleEntry = { blob: null, handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable };
     this.byId.set(id, entry);
     this.byPath.set(guestPath, id);
     return id;
   }
 
-  private opRead(slot: OpfsProxyChannelSlot): number {
+  private opRead(slot: OpfsProxyChannelSlot): number | Promise<number> {
     const { control, data } = slot;
     const entry = this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX));
     const offset = readOffset(control);
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const target = data.subarray(0, Math.min(length, data.byteLength));
+    // Blob-backed input: slice asynchronously (the servicing loop awaits this). The dedicated worker's
+    // free event loop is what makes this safe — consumers block synchronously on the SAB while we yield.
+    if (entry.blob) return this.readBlobAt(entry.blob, offset, target);
+    if (!entry.handle) throw new ProxyErrno(ERRNO_IO);
     return entry.handle.read(target, { at: offset });
+  }
+
+  // Slice a read range out of a Blob input into the (SAB-backed) slot buffer. Async — only the dedicated
+  // proxy worker runs it, so yielding here never blocks a consumer (they wait synchronously on the SAB).
+  private async readBlobAt(blob: Blob, offset: number, target: Uint8Array): Promise<number> {
+    const end = Math.min(offset + target.byteLength, blob.size);
+    if (end <= offset) return 0;
+    const bytes = new Uint8Array(await blob.slice(offset, end).arrayBuffer());
+    const copyLength = Math.min(bytes.byteLength, target.byteLength);
+    target.set(bytes.subarray(0, copyLength));
+    return copyLength;
   }
 
   private opWrite(slot: OpfsProxyChannelSlot): number {
     const { control, data } = slot;
     const entry = this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX));
-    if (!entry.writable) throw new ProxyErrno(ERRNO_ROFS);
+    if (!(entry.writable && entry.handle)) throw new ProxyErrno(ERRNO_ROFS);
     const offset = readOffset(control);
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const source = data.subarray(0, Math.min(length, data.byteLength));
@@ -300,7 +357,7 @@ class OpfsProxyServer {
   private opTruncate(slot: OpfsProxyChannelSlot): number {
     const { control } = slot;
     const entry = this.requireHandle(Atomics.load(control, OPFS_PROXY_CONTROL_HANDLE_INDEX));
-    if (!entry.writable) throw new ProxyErrno(ERRNO_ROFS);
+    if (!(entry.writable && entry.handle)) throw new ProxyErrno(ERRNO_ROFS);
     const size = readAux(control);
     entry.handle.truncate(size);
     this.bumpVersion(entry.id);
@@ -374,6 +431,7 @@ class OpfsProxyServer {
     try {
       const src = this.requireHandle(srcId);
       const dest = this.requireHandle(destId);
+      if (!(src.handle && dest.handle)) throw new ProxyErrno(ERRNO_IO);
       const size = src.handle.getSize();
       dest.handle.truncate(size);
       const buffer = new Uint8Array(Math.min(size, 8 * 1024 * 1024) || 1);
@@ -407,7 +465,7 @@ class OpfsProxyServer {
     const mode = writable ? writableSyncAccessMode(this.syncAccessMode) : "read-only";
     const handle = await openSyncAccessHandle({ fileHandle, mode });
     const id = this.allocId();
-    this.byId.set(id, { handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable });
+    this.byId.set(id, { blob: null, handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable });
     this.byPath.set(guestPath, id);
     return id;
   }
@@ -461,7 +519,7 @@ class OpfsProxyServer {
     entry.refcount -= 1;
     if (entry.refcount > 0) return;
     try {
-      entry.handle.close();
+      entry.handle?.close();
     } catch {
       // best-effort close
     }
@@ -494,7 +552,7 @@ class OpfsProxyServer {
   private closeAllHandles(): void {
     for (const entry of this.byId.values()) {
       try {
-        entry.handle.close();
+        entry.handle?.close();
       } catch {
         // best-effort close
       }

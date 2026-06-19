@@ -131,6 +131,7 @@ export class BrowserOpfsMount {
       this.virtualRestores = addVirtualFilesToMount({
         contents: this.contents,
         mountPath: this.mountPath,
+        proxyClient: this.proxyClient,
         trace,
         virtualFiles,
       });

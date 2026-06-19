@@ -7,6 +7,7 @@ import {
 } from "./browser-opfs-guest-paths.ts";
 import { BrowserVirtualRandomAccessFile, isBlobLike, isVirtualFileProxy } from "./browser-opfs-io-adapters.ts";
 import type { BrowserOpfsMount } from "./browser-opfs-mount.ts";
+import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
   FileReaderSyncLike,
@@ -15,6 +16,7 @@ import type {
   TraceLine,
 } from "./browser-opfs-runtime-types.ts";
 import { basenameForTrace } from "./browser-opfs-stdio-events.ts";
+import type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 import { WasiRandomAccessFileInode } from "./browser-opfs-wasi-file-inode.ts";
 import type { WasiDirectoryContents } from "./browser-opfs-wasi-paths.ts";
 import {
@@ -34,6 +36,9 @@ declare const FileReaderSync: {
 export interface NormalizedVirtualFile {
   path: string;
   source: unknown;
+  /** When set, this Blob input is served by guest path through the OPFS proxy worker (registered by the
+   * runner) instead of a per-thread FileReaderSync. The mount creates a BrowserProxyRandomAccessFile. */
+  useProxyHandle?: boolean;
 }
 
 /** Bookkeeping needed to undo a virtual-file mount after a run finishes. */
@@ -44,11 +49,19 @@ export type VirtualFileRestore =
 interface AddVirtualFilesToMountOptions {
   contents: WasiDirectoryContents;
   mountPath: string;
+  /** Proxy client for serving useProxyHandle Blob inputs (the proxy worker holds the Blob). */
+  proxyClient: OpfsProxyClient;
   trace?: TraceLine;
   virtualFiles?: NormalizedVirtualFile[];
 }
 
-export function addVirtualFilesToMount({ contents, mountPath, trace, virtualFiles }: AddVirtualFilesToMountOptions) {
+export function addVirtualFilesToMount({
+  contents,
+  mountPath,
+  proxyClient,
+  trace,
+  virtualFiles,
+}: AddVirtualFilesToMountOptions) {
   const restores: VirtualFileRestore[] = [];
   for (const entry of virtualFiles ?? []) {
     if (!isGuestPathWithinMount(entry.path, mountPath)) {
@@ -58,9 +71,19 @@ export function addVirtualFilesToMount({ contents, mountPath, trace, virtualFile
       continue;
     }
     const relativePath = entry.path === mountPath ? "" : entry.path.slice(mountPath.length + 1);
-    addVirtualFileEntry(contents, relativePath, entry.source, restores, trace);
+    addVirtualFileEntry(contents, relativePath, entry.source, restores, trace, {
+      guestPath: entry.path,
+      proxyClient,
+      useProxyHandle: Boolean(entry.useProxyHandle),
+    });
   }
   return restores;
+}
+
+interface VirtualFileEntryProxyOptions {
+  guestPath: string;
+  proxyClient: OpfsProxyClient;
+  useProxyHandle: boolean;
 }
 
 function addVirtualFileEntry(
@@ -69,6 +92,7 @@ function addVirtualFileEntry(
   source: unknown,
   restores: VirtualFileRestore[],
   trace: TraceLine | undefined,
+  proxyOptions: VirtualFileEntryProxyOptions,
 ) {
   const parts = normalizeWasiRelativePathParts(relativePath);
   if (parts === null || parts.length === 0) {
@@ -89,16 +113,27 @@ function addVirtualFileEntry(
     }
     entries = existingContents;
   }
-  const file = new BrowserVirtualRandomAccessFile(source, { trace });
   const name = lastPathPart(parts);
-  trace?.(`[browser-opfs] virtual file mounted name=${name} proxy=${Boolean(file.proxy)} size=${file.size()}`);
+  // useProxyHandle inputs read through the OPFS proxy worker (single owner of the Blob) by guest path,
+  // exactly like a staged OPFS file — no per-thread FileReaderSync. Avoid file.size() here: on the proxy
+  // path it would force an open round-trip at mount-build time (per thread).
+  const file: RandomAccessFileLike = proxyOptions.useProxyHandle
+    ? new BrowserProxyRandomAccessFile(proxyOptions.proxyClient, proxyOptions.guestPath, { writable: false })
+    : new BrowserVirtualRandomAccessFile(source, { trace });
+  trace?.(`[browser-opfs] virtual file mounted name=${name} proxyHandle=${proxyOptions.useProxyHandle}`);
   const existingValue = entries.get(name);
   restores.push(
     existingValue === undefined
       ? { entries, hadExisting: false, name, value: null }
       : { entries, hadExisting: true, name, value: existingValue },
   );
-  entries.set(name, new WasiRandomAccessFileInode(file, { closeOnLastFdClose: true, readonly: true }));
+  // The proxy file must survive fd churn within a run: nod opens the disc to probe, drops it, then
+  // re-opens to list/extract. closeOnLastFdClose would permanently close the BrowserProxyRandomAccessFile
+  // (no reopen) on the first drop, so the next path_open throws EBADF. restoreVirtualFiles closes it at
+  // run end instead (matching staged-OPFS inodes). The virtual-Blob path keeps closeOnLastFdClose since
+  // BrowserVirtualRandomAccessFile.reopen() recreates its reader on demand.
+  const inodeOptions = proxyOptions.useProxyHandle ? { readonly: true } : { closeOnLastFdClose: true, readonly: true };
+  entries.set(name, new WasiRandomAccessFileInode(file, inodeOptions));
 }
 
 export function restoreVirtualFiles(restores: VirtualFileRestore[]) {
@@ -282,10 +317,13 @@ function normalizeVirtualFile(entry: unknown, index: number): NormalizedVirtualF
   if (isVirtualFileProxy(proxy)) return { path, source: proxy };
   if (isVirtualFileProxy(source)) return { path, source };
   if (isBlobLike(source)) {
-    if (typeof FileReaderSync !== "function") {
+    // useProxyHandle reads through the proxy worker (blob.arrayBuffer), so it does not need a
+    // per-thread FileReaderSync; only the direct virtual-Blob path does.
+    const useProxyHandle = record.useProxyHandle === true;
+    if (!useProxyHandle && typeof FileReaderSync !== "function") {
       throw new Error("Blob virtual files require FileReaderSync in a dedicated worker");
     }
-    return { path, source };
+    return { path, source, useProxyHandle };
   }
   if (source instanceof Uint8Array || source instanceof ArrayBuffer) return { path, source };
   throw new TypeError(`virtualFiles[${index}].source must be a Blob, File, Uint8Array, or ArrayBuffer`);

@@ -41,6 +41,9 @@ type BrowserVirtualFile = {
   path: string;
   proxy?: BrowserVirtualFileProxy;
   source?: BrowserVirtualFileSource;
+  // When set, the runner hands `source` (a Blob) to the OPFS proxy worker to serve by guest path; no
+  // per-file SAB producer is started here. The mount builds a BrowserProxyRandomAccessFile for it.
+  useProxyHandle?: boolean;
 };
 type AtomicsWaitAsyncResult = {
   async: boolean;
@@ -125,10 +128,12 @@ const registerBrowserVirtualFile = ({
   path,
   source,
   trace,
+  useProxyHandle,
 }: {
   path: string;
   source: BrowserVirtualFileSource;
   trace?: BrowserVirtualFileTraceContext;
+  useProxyHandle?: boolean;
 }): (() => void) => {
   const sourceSize = getVirtualSourceSize(source);
   const sourceKind = getVirtualSourceKind(source);
@@ -139,7 +144,19 @@ const registerBrowserVirtualFile = ({
     path,
     sourceKind,
     sourceSize,
+    useProxyHandle: Boolean(useProxyHandle),
   });
+  if (useProxyHandle) {
+    // The runner forwards this Blob to the OPFS proxy worker (served by guest path); no SAB producer
+    // here. Just carry the source + flag so getActiveBrowserVirtualFiles hands them to the run.
+    const file: BrowserVirtualFile = { path, source, useProxyHandle: true };
+    activeVirtualFiles.set(path, file);
+    emitVirtualFileTrace(trace, "registered proxy-handle virtual file", { path, sourceKind, sourceSize });
+    return () => {
+      emitVirtualFileTrace(trace, "unregistered proxy-handle virtual file", { path, sourceKind, sourceSize });
+      if (activeVirtualFiles.get(path) === file) activeVirtualFiles.delete(path);
+    };
+  }
   if (canUseDirectVirtualFileSource(source)) {
     const file: BrowserVirtualFile = {
       path,

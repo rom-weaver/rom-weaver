@@ -25,7 +25,24 @@ interface ProxyStopMessage {
   type: "stop";
 }
 
-type ProxyWorkerMessage = ProxyBootstrapMessage | ProxyStopMessage;
+// Control-plane messages (not data-plane I/O, which goes over the shared channel): register/unregister
+// a read-only Blob input the server serves by guest path without staging it into OPFS.
+interface ProxyRegisterBlobMessage {
+  type: "register-blob-source";
+  path: string;
+  blob: Blob;
+}
+
+interface ProxyUnregisterBlobMessage {
+  type: "unregister-blob-source";
+  path: string;
+}
+
+type ProxyWorkerMessage =
+  | ProxyBootstrapMessage
+  | ProxyStopMessage
+  | ProxyRegisterBlobMessage
+  | ProxyUnregisterBlobMessage;
 
 const workerScope = self as unknown as Worker;
 let server: OpfsProxyServerHandle | null = null;
@@ -68,6 +85,15 @@ workerScope.onmessage = (event: MessageEvent<ProxyWorkerMessage>) => {
   if (!data || typeof data !== "object") return;
   if (data.type === "bootstrap") {
     void bootstrap(data);
+    return;
+  }
+  if (data.type === "register-blob-source") {
+    // Registered before the run opens the path; the server resolves it to a Blob-backed read handle.
+    server?.registerBlobSource(data.path, data.blob);
+    return;
+  }
+  if (data.type === "unregister-blob-source") {
+    server?.unregisterBlobSource(data.path);
     return;
   }
   if (data.type === "stop") {

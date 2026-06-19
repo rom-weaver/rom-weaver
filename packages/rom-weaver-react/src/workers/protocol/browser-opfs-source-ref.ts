@@ -8,7 +8,6 @@ import {
 import type { LogRecord } from "../../types/logging.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
-import { requestBrowserOpfsStorage } from "./browser-opfs-worker-client.ts";
 import { registerBrowserVirtualFile } from "./browser-virtual-files.ts";
 import { getManagedOpfsFileHandle } from "./opfs-path.ts";
 
@@ -75,72 +74,6 @@ const allocatedVirtualInputPaths = new Set<string>();
 // races a prior instance whose OPFS access handle may still be open, which fails the next
 // createSyncAccessHandle with "Access Handles cannot be created ... another open Access Handle".
 const nextVirtualInputPathSuffix = new Map<string, number>();
-// Inputs at or below this size are copied into OPFS up front; larger inputs stay on the zero-copy
-// virtual-Blob path. See the trade-off note at the use site in createBrowserOpfsSourceRef.
-const STAGE_INPUT_TO_OPFS_MAX_BYTES = 400 * 1024 * 1024;
-
-// WebKit (desktop Safari + every iOS/iPadOS browser, which are all WebKit) is excluded from OPFS
-// input staging. Two reasons:
-//   1. The OPFS staging worker writes the file, but the *separate* spawned runner worker that mounts
-//      /work cannot see it — its OPFS directory handle is resolved before the staging write and does
-//      not observe the new entry — so the run fails with "input path does not exist". Reproduced on
-//      iOS Safari 2026-06-18.
-//   2. Even if it were visible, Safari permits only one SyncAccessHandle per OPFS file (proven
-//      2026-06-17), so the per-thread parallel-read win the staging targets is impossible there.
-// So on WebKit the input stays on the zero-copy virtual-Blob path (read on the wasm main thread),
-// which is the behavior that shipped before OPFS input staging was added. Chromium/Firefox keep the
-// staged copy. Detection mirrors isMobileSafariLike in browser-runtime-diagnostics.ts.
-const isWebKitInputRuntime = () => {
-  const nav = typeof navigator === "object" ? navigator : null;
-  const userAgent = nav?.userAgent || "";
-  if (!userAgent) return false;
-  const maxTouchPoints = typeof nav?.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
-  const isAppleMobile = /iP(hone|ad|od)/.test(userAgent) || (nav?.platform === "MacIntel" && maxTouchPoints > 1);
-  const isDesktopSafari = /Safari/.test(userAgent) && !/(Chrome|Chromium|Edg|OPR|SamsungBrowser)/.test(userAgent);
-  return isAppleMobile || isDesktopSafari;
-};
-
-// Reference-counted registry of inputs already staged into OPFS this session, keyed by a content
-// signature (mount + normalized name + size + a head/tail byte fingerprint). Re-staging an identical
-// source — e.g. re-uploading the same archive to pick a different entry — reuses the existing staged
-// file instead of writing a second copy under a "-N" suffix, so the input keeps its name and we skip
-// the re-stage I/O. The staged file lives until the last reference releases. A same-named file with
-// different bytes produces a different fingerprint, misses here, and still lands on a fresh suffixed
-// path (see allocateVirtualInputPath). The fingerprint samples the head and tail rather than hashing
-// the whole input, so the residual false-reuse case (same name + size + sampled regions, differing
-// only in the middle) is astronomically unlikely for real archives and never seen in practice.
-type StagedInputEntry = {
-  allocatedPath: string;
-  refCount: number;
-  result: Promise<{ size?: number; stagedPath: string }>;
-};
-const stagedInputsByContentKey = new Map<string, StagedInputEntry>();
-
-const STAGED_INPUT_KEY_SEPARATOR = String.fromCharCode(0x00);
-const STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES = 64 * 1024;
-
-// FNV-1a over a byte sample. Cheap (a few KiB read), and only used to tell same-named inputs apart, so
-// reuse never hands one input the bytes of another.
-const hashStageSampleBytes = (bytes: Uint8Array, seed: number) => {
-  let hash = seed >>> 0;
-  for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-  return hash >>> 0;
-};
-
-const fingerprintStageSource = async (source: Blob) => {
-  const size = source.size;
-  const headEnd = Math.min(size, STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES);
-  let hash = hashStageSampleBytes(new Uint8Array(await source.slice(0, headEnd).arrayBuffer()), 0x811c9dc5);
-  if (size > STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES * 2) {
-    const tail = new Uint8Array(await source.slice(size - STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES, size).arrayBuffer());
-    hash = hashStageSampleBytes(tail, hash);
-  }
-  return hash.toString(16);
-};
-
-const createStagedInputContentKey = (mountPoint: string, fileName: string, size: number, fingerprint: string) =>
-  [mountPoint, fileName, size, fingerprint].join(STAGED_INPUT_KEY_SEPARATOR);
-
 const getBrowserSourceTraceKind = (source: unknown) => {
   if (typeof File !== "undefined" && source instanceof File) return "file";
   if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
@@ -172,9 +105,6 @@ const emitBrowserSourceRefTrace = (
     message,
     details || {},
   );
-
-const nowMs = () =>
-  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 
 // Main-thread ledger of how long each input took to stage into OPFS, keyed by its staged OPFS path.
 // Staging runs on the main thread (the runtime adapter calls stageSource before dispatching the
@@ -238,60 +168,6 @@ const allocateVirtualInputPath = (mountPoint: string, fileName: string) => {
 
 const releaseVirtualInputPath = (filePath: string) => {
   allocatedVirtualInputPaths.delete(filePath);
-};
-
-const reuseStagedInput = async (
-  contentKey: string,
-  fileName: string,
-  trace: BrowserOpfsSourceTraceContext | undefined,
-) => {
-  const entry = stagedInputsByContentKey.get(contentKey);
-  if (!entry) return null;
-  // Reserve our reference before awaiting the in-flight stage so an overlapping release can't tear the
-  // entry down to zero and delete the staged file while we wait on it.
-  entry.refCount += 1;
-  const result = await entry.result.then(
-    (value) => value,
-    () => null,
-  );
-  if (result && stagedInputsByContentKey.get(contentKey) === entry) {
-    emitBrowserSourceRefTrace(trace, "reused staged input", {
-      fileName,
-      filePath: result.stagedPath,
-      refCount: entry.refCount,
-      size: result.size,
-    });
-    return result;
-  }
-  // The stage this entry tracked failed, or it was torn down while we awaited — undo the reservation
-  // and let the caller fall through to a fresh stage.
-  entry.refCount -= 1;
-  return null;
-};
-
-const releaseStagedInput = async (contentKey: string, trace: BrowserOpfsSourceTraceContext | undefined) => {
-  const entry = stagedInputsByContentKey.get(contentKey);
-  if (!entry) return;
-  entry.refCount -= 1;
-  if (entry.refCount > 0) return;
-  // Drop the registry entry before the async OPFS removal so a concurrent re-stage misses the registry
-  // and allocates a fresh suffixed path instead of reusing a file mid-teardown. The allocated path
-  // stays reserved until removal completes, so the fresh stage can't reclaim the same path either.
-  stagedInputsByContentKey.delete(contentKey);
-  const resolved = await entry.result.then(
-    (value) => value,
-    () => null,
-  );
-  const stagedPath = resolved?.stagedPath ?? entry.allocatedPath;
-  const cleanedUp = await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [stagedPath] }).then(
-    (value) => value.success,
-    () => false,
-  );
-  releaseVirtualInputPath(entry.allocatedPath);
-  emitBrowserSourceRefTrace(trace, "released staged input", {
-    filePath: stagedPath,
-    success: cleanedUp,
-  });
 };
 
 const createVirtualInputPath = (options: BrowserOpfsSourceRefOptions, fileName: string) => {
@@ -385,115 +261,13 @@ const createBrowserOpfsSourceRef = async (
   }
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
-  const stageBytes = typeof virtualSize === "number" && Number.isFinite(virtualSize) ? virtualSize : virtualSource.size;
-
-  // Before allocating a fresh path, reuse an identical input already staged this session (same mount +
-  // name + size + content fingerprint). Re-uploading the same archive to pick another entry then keeps
-  // its original name and skips the re-stage instead of landing on a "-N" suffix. Only OPFS-staged
-  // inputs are shared; the large-input virtual-Blob path below stays per-instance.
-  const opfsStagingEligible = stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES;
-  const webKitRuntime = isWebKitInputRuntime();
-  if (opfsStagingEligible && webKitRuntime) {
-    emitBrowserSourceRefTrace(options.trace, "input OPFS staging skipped on WebKit, using virtual blob", {
-      fileName: virtualFileName,
-      size: stageBytes,
-    });
-  }
-  const stagedContentKey =
-    opfsStagingEligible && !webKitRuntime
-      ? createStagedInputContentKey(
-          String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, ""),
-          virtualFileName,
-          stageBytes,
-          await fingerprintStageSource(virtualSource),
-        )
-      : null;
-  if (stagedContentKey) {
-    const reused = await reuseStagedInput(stagedContentKey, virtualFileName, options.trace);
-    if (reused) {
-      return {
-        cleanup: async () => releaseStagedInput(stagedContentKey, options.trace),
-        fileName: virtualFileName,
-        filePath: reused.stagedPath,
-        kind: "path",
-        size: reused.size ?? stageBytes,
-        storageKind: "opfs",
-      };
-    }
-  }
-
   const virtualPath = createVirtualInputPath(options, virtualFileName);
 
-  // Trade-off: small inputs are copied into OPFS up front; large inputs stay on the virtual-Blob path.
-  //
-  // The virtual-Blob path is zero-copy, but it hands every wasm decode thread a reference to the same
-  // File-backed Blob, and each thread reads it synchronously with FileReaderSync. On Safari, concurrent
-  // FileReaderSync reads of one file-backed Blob serialize at the file layer, so the decode threads
-  // starve waiting on each other (measured ~10x throughput gap between the fastest and the stalled
-  // threads on a 4-thread RVZ extract). Copying the input into OPFS once lets each thread read it back
-  // through its own SyncAccessHandle, which removes that contention, and keeps the bytes off the
-  // JS/wasm heap (important on memory-constrained Safari/iOS).
-  //
-  // The cost is one up-front read + write. OPFS writes run ~2.7 GiB/s, so the Blob read dominates and
-  // the staging time is small relative to the contention it removes. We only pay it below the
-  // threshold: above it a full staged copy would cost too much I/O and OPFS storage for large discs,
-  // and the per-read contention is a smaller share of a long-running job, so the zero-copy virtual-Blob
-  // path wins there. Staging failures fall back to the virtual-Blob path so input handling stays robust.
-  if (stagedContentKey) {
-    // Register the in-flight stage before awaiting it so a concurrent re-stage of the same input
-    // reuses this one copy instead of writing its own. The promise rejects on a failed stage, which
-    // reuseStagedInput treats as "no reusable copy" so the waiter falls through to its own attempt.
-    const stageStartedAtMs = nowMs();
-    const stagePromise = requestBrowserOpfsStorage({
-      action: "stage",
-      file: virtualSource,
-      fileName: virtualFileName,
-      filePath: virtualPath,
-      mountPoint: options.mountPoint,
-    }).then((staged) => {
-      if (!staged?.success) throw new Error(staged?.error?.message || "Browser OPFS input staging failed");
-      return { size: staged.size ?? stageBytes, stagedPath: staged.filePath ?? virtualPath };
-    });
-    stagedInputsByContentKey.set(stagedContentKey, { allocatedPath: virtualPath, refCount: 1, result: stagePromise });
-    const staged = await stagePromise.then(
-      (value) => value,
-      (error: unknown) => {
-        emitBrowserSourceRefTrace(options.trace, "input OPFS staging failed, using virtual blob", {
-          error: error instanceof Error ? error.message : String(error),
-          filePath: virtualPath,
-          stagingMs: Math.round(nowMs() - stageStartedAtMs),
-        });
-        return null;
-      },
-    );
-    if (staged) {
-      const stagingMs = Math.round(nowMs() - stageStartedAtMs);
-      recordStagedInputMs(staged.stagedPath, stagingMs);
-      emitBrowserSourceRefTrace(options.trace, "[perf] staged input to OPFS", {
-        fileName: virtualFileName,
-        filePath: staged.stagedPath,
-        size: staged.size,
-        stagingMs,
-        throughputMiBs:
-          stagingMs > 0 && typeof staged.size === "number"
-            ? Math.round((staged.size / (1024 * 1024) / (stagingMs / 1000)) * 10) / 10
-            : undefined,
-      });
-      return {
-        cleanup: async () => releaseStagedInput(stagedContentKey, options.trace),
-        fileName: virtualFileName,
-        filePath: staged.stagedPath,
-        kind: "path",
-        size: staged.size,
-        storageKind: "opfs",
-      };
-    }
-    // Staging failed: drop the registry entry and any partial OPFS file so it can't shadow the virtual
-    // registration below. virtualPath stays allocated for the virtual-Blob fallback.
-    stagedInputsByContentKey.delete(stagedContentKey);
-    await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [virtualPath] }).catch(() => undefined);
-  }
-
+  // Every Blob input is served read-only through the OPFS proxy worker by guest path (the runner hands
+  // the Blob to the proxy via registerBlobSource). This replaces BOTH the old up-front OPFS staging copy
+  // and the per-thread FileReaderSync virtual-Blob path: one owner reads the Blob, every wasm decode
+  // thread reads it like a staged OPFS handle — no copy, no FileReaderSync contention, all browsers.
+  // See browser-opfs-proxy-server (Blob-backed handles) and browser-opfs-virtual-files (useProxyHandle).
   emitBrowserSourceRefTrace(options.trace, "registering virtual input", {
     fileName: virtualFileName,
     size: virtualSize,
@@ -506,6 +280,7 @@ const createBrowserOpfsSourceRef = async (
       path: virtualPath,
       source: virtualSource,
       trace: options.trace,
+      useProxyHandle: true,
     });
   } catch (error) {
     releaseVirtualInputPath(virtualPath);

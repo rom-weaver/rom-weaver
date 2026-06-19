@@ -16,6 +16,12 @@ export interface OpfsProxyRuntime {
   client: OpfsProxyClient;
   transfer: OpfsProxyChannelTransfer;
   stop(): Promise<void>;
+  /** Point proxy-worker trace lines at a sink (the active run's trace) so they reach the app log. */
+  setTrace(fn: ((line: string) => void) | null): void;
+  /** Hand the proxy worker a read-only Blob input it serves by guest path (no OPFS staging copy).
+   * Fire-and-forget: the runner registers before building fds, so it lands before any thread opens it. */
+  registerBlobSource(path: string, blob: Blob): void;
+  unregisterBlobSource(path: string): void;
 }
 
 export interface StartOpfsProxyRuntimeOptions {
@@ -40,7 +46,10 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   const worker = new Worker(options.workerUrl ?? new URL("./workers/browser-opfs-proxy-worker.ts", import.meta.url), {
     type: "module",
   });
-  const trace = options.trace;
+  // Mutable so the runner can point proxy-worker traces at the *active run's* trace channel (the one
+  // surfaced in the app log). startOpfsProxyRuntime is called once per runner, before any run, so there
+  // is no run trace at construction; setTrace() updates it per run.
+  let activeTrace = options.trace ?? null;
 
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(
@@ -59,7 +68,7 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
         reject(new Error(data.message ?? "OPFS proxy worker failed to bootstrap"));
         return;
       }
-      if (data?.type === "trace" && data.line) trace?.(data.line);
+      if (data?.type === "trace" && data.line) activeTrace?.(data.line);
     };
     worker.onerror = (event) => {
       clearTimeout(timer);
@@ -73,13 +82,17 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
     });
   });
   const spawnMs = (typeof performance === "undefined" ? 0 : performance.now()) - spawnStartedAtMs;
-  trace?.(
+  activeTrace?.(
     `[browser-opfs] proxy runtime ready slots=${channel.slots.length} mounts=${options.mounts.length} spawnMs=${spawnMs.toFixed(1)}`,
   );
 
-  const client = new OpfsProxyClient(channel, { trace });
+  const client = new OpfsProxyClient(channel, { trace: (line) => activeTrace?.(line) });
   return {
     client,
+    registerBlobSource: (path, blob) => worker.postMessage({ blob, path, type: "register-blob-source" }),
+    setTrace: (fn) => {
+      activeTrace = fn;
+    },
     stop: () =>
       new Promise<void>((resolve) => {
         const settle = () => {
@@ -96,5 +109,6 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
         worker.postMessage({ type: "stop" });
       }),
     transfer: channel.transfer,
+    unregisterBlobSource: (path) => worker.postMessage({ path, type: "unregister-blob-source" }),
   };
 }

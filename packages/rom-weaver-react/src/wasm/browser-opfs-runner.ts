@@ -46,6 +46,7 @@ import {
   traceRandomAccessFileIoStats,
 } from "./browser-opfs-stdio-events.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
+import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
 import {
   browserThreadRequestOptions,
   createBrowserWasiThreadSpawner,
@@ -165,6 +166,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       );
       const command = readRomWeaverRunRequestCommand(request);
       const trace = createLineTrace(runOptions?.onTraceNonJsonLine);
+      // Surface the (once-per-runner) proxy worker's traces through this run's trace channel.
+      opfsProxy.setTrace(trace);
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)} wasmBytes=${wasmByteLength ?? "?"} wasmSha=${wasmSha || "?"}`,
       );
@@ -196,6 +199,18 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         ...(Array.isArray(runOptions.virtualFiles) ? runOptions.virtualFiles : []),
       ]);
       trace(`[browser-opfs] virtual files normalized ${summarizeNormalizedVirtualFiles(virtualFiles)}`);
+
+      // Hand any proxy-handle Blob inputs to the OPFS proxy worker so it serves them by guest path
+      // (single Blob owner, no per-thread FileReaderSync, no staging copy). Registered before the fd
+      // build so it is in place before any thread opens the path; unregistered in the finally below.
+      const proxyBlobInputs = virtualFiles.filter(
+        (file): file is NormalizedVirtualFile & { source: Blob } =>
+          Boolean(file.useProxyHandle) && file.source instanceof Blob,
+      );
+      for (const file of proxyBlobInputs) {
+        opfsProxy.registerBlobSource(file.path, file.source);
+        trace(`[browser-opfs] proxy blob source registered path=${file.path} size=${file.source.size}`);
+      }
 
       const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
@@ -382,6 +397,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         await drainThreadSpawnerOnce();
         closeSyncFiles(closeables);
         await cleanupBrowserOpfsMounts(mounts);
+        for (const file of proxyBlobInputs) opfsProxy.unregisterBlobSource(file.path);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
         trace("[browser-opfs] cleanup done");
         // Per-op latency breakdown. setup = dispatch→wasi.start (mount/fd build + instantiate + any
