@@ -7,12 +7,11 @@ import {
   normalizeKnownInputPaths,
   normalizeMountHandleMap,
   normalizePreopenOutputPaths,
-  normalizeScratchFilePoolSize,
   normalizeVirtualFiles,
   normalizeWritableRoots,
-  seedBrowserOpfsScratchPools,
 } from "./browser-opfs-mounts.ts";
-import { flushBrowserOpfsMounts } from "./browser-opfs-output-materialization.ts";
+import { startOpfsProxyRuntime } from "./browser-opfs-proxy-runtime.ts";
+import type { OpfsProxyMountBootstrap } from "./browser-opfs-proxy-server.ts";
 import {
   assertDedicatedWorkerRuntime,
   assertDirectoryHandle,
@@ -77,7 +76,6 @@ import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./workers
 
 const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
-const DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE = 16;
 
 export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptions = {}) {
   assertDedicatedWorkerRuntime();
@@ -118,17 +116,28 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         })
       : null;
   const mountCache = createBrowserOpfsMountCache();
-  await seedBrowserOpfsScratchPools({
-    mountCache,
-    mountHandles: baseMountHandles,
-    runtimeMounts,
-    scratchFilePoolSize: normalizeScratchFilePoolSize(),
-    syncAccessMode: resolveRunSyncAccessMode({
-      baseMode: options.syncAccessMode,
-      threaded,
-    }),
-    virtualOnlyMounts: Boolean(options.virtualOnlyMounts ?? false),
-    writableRoots: baseWritableRoots,
+  const baseSyncAccessMode = resolveRunSyncAccessMode({ baseMode: options.syncAccessMode, threaded });
+  // The single OPFS-handle-owning proxy worker is spawned once for the runner's lifetime. Every mount —
+  // the runner thread and every spawned WASI compute thread — routes its OPFS I/O through it, which is
+  // the one model that respects WebKit's "one SyncAccessHandle per file" rule while letting spawned
+  // threads (which cannot path_open OPFS files themselves) perform real I/O.
+  // Only mount METADATA is posted; the proxy worker re-resolves its own directory handle (Safari/iOS
+  // cannot structured-clone a FileSystemDirectoryHandle to a nested worker). For each mount we compute
+  // the path from the OPFS root to its handle via `root.resolve(handle)` so the worker can navigate the
+  // same directory — empty for the app (the mount IS the root), or subdir segments for a nested handle.
+  const opfsRootForResolve = await navigator.storage.getDirectory();
+  const proxyMounts: OpfsProxyMountBootstrap[] = [];
+  for (const mountPath of runtimeMounts) {
+    const directoryHandle = baseMountHandles[mountPath];
+    if (!directoryHandle) continue;
+    const rootRelativeParts = (await opfsRootForResolve.resolve(directoryHandle as unknown as FileSystemHandle)) ?? [];
+    proxyMounts.push({ mountPath, rootRelativeParts, writableRoots: baseWritableRoots });
+  }
+  const opfsProxy = await startOpfsProxyRuntime({
+    mounts: proxyMounts,
+    slotCount: resolveBrowserThreadPoolSizeFromCount(baseDefaultThreads ?? resolveBrowserDefaultThreads()) + 4,
+    syncAccessMode: baseSyncAccessMode,
+    workerUrl: options.opfsProxyWorkerUrl,
   });
   // The wasi thread pool pre-warms itself to `initialSize` after a short idle delay (see
   // browser-wasi-thread-pool.ts). Runner init no longer waits on it: the page-load warmup and small
@@ -139,6 +148,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
     async dispose() {
       await mountCache.dispose();
       await threadWorkerPool?.dispose();
+      await opfsProxy.stop();
     },
 
     async run(
@@ -189,6 +199,15 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
 
       const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
+      // Phase timings for the per-op latency breakdown (logged in the finally below). `setup` is the
+      // "before the operation starts" cost — mount/fd build, wasm instantiate, and any thread-pool
+      // pre-warm wait up to wasi.start; `compute` is wasi.start itself; `teardown` is the
+      // drain/flush/cleanup after it returns ("after finish"). performance.now() is available in workers.
+      const nowMs = (): number => (typeof performance === "undefined" ? 0 : performance.now());
+      const runStartedAtMs = nowMs();
+      let setupDoneAtMs: number | null = null;
+      let computeDoneAtMs: number | null = null;
+      let exitCode: number | null = null;
       const resolvedSyncAccessMode = resolveRunSyncAccessMode({
         baseMode: options.syncAccessMode,
         runMode: runOptions.syncAccessMode,
@@ -210,16 +229,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         ...(Array.isArray(options.preopenOutputPaths) ? options.preopenOutputPaths : []),
         ...(Array.isArray(runOptions.preopenOutputPaths) ? runOptions.preopenOutputPaths : []),
       ]);
-      const resolvedMainScratchFilePoolSize = normalizeScratchFilePoolSize(
-        runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
-      );
-      const resolvedThreadScratchFilePoolSize = normalizeScratchFilePoolSize(
-        runOptions.threadScratchFilePoolSize ??
-          options.threadScratchFilePoolSize ??
-          runOptions.scratchFilePoolSize ??
-          options.scratchFilePoolSize ??
-          DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE,
-      );
       const threadSpawner = createBrowserWasiThreadSpawner({
         envList,
         moduleImports,
@@ -229,12 +238,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           knownInputPaths,
           mountHandles,
+          opfsProxyTransfer: opfsProxy.transfer,
           preopenOutputPaths,
           request,
           runtimeMounts,
-          scratchFilePoolSize: resolvedMainScratchFilePoolSize,
           syncAccessMode: resolvedSyncAccessMode,
-          threadScratchFilePoolSize: resolvedThreadScratchFilePoolSize,
           virtualFiles,
           writableRoots,
         },
@@ -268,9 +276,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           // drain best-effort; worker failures already surfaced through the run result
         });
       };
-      trace(
-        `[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode} scratch=${resolvedMainScratchFilePoolSize}`,
-      );
+      trace(`[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode}`);
       const { fds, mounts, stdoutCollector, stderrCollector, stdoutChunks, stderrChunks } =
         await buildBrowserOpfsWasiFds({
           cwdMountPath: workGuestPath,
@@ -278,10 +284,10 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           mountCache,
           mountHandles,
           preopenOutputPaths,
+          proxyClient: opfsProxy.client,
           request,
           runCloseables: closeables,
           runtimeMounts,
-          scratchFilePoolSize: resolvedMainScratchFilePoolSize,
           stderrLineHandler: runOptions.onStderrLine,
           stdin: requestStdin,
           stdoutLineHandler: runOptions.onStdoutLine,
@@ -315,11 +321,14 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         trace("[browser-opfs] thread spawner ready wait start");
         await threadSpawner.ready;
         trace("[browser-opfs] thread spawner ready");
-        let exitCode: number;
         try {
-          trace("[browser-opfs] wasi.start start");
+          setupDoneAtMs = nowMs();
+          trace(`[browser-opfs] wasi.start start setupMs=${(setupDoneAtMs - runStartedAtMs).toFixed(1)}`);
           exitCode = wasi.start(instance);
-          trace(`[browser-opfs] wasi.start returned exitCode=${String(exitCode)}`);
+          computeDoneAtMs = nowMs();
+          trace(
+            `[browser-opfs] wasi.start returned exitCode=${String(exitCode)} computeMs=${(computeDoneAtMs - setupDoneAtMs).toFixed(1)}`,
+          );
         } catch (error) {
           trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
           await throwWithThreadFailure(error, threadSpawner);
@@ -334,9 +343,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         traceFlushOpenWasiFileDescriptors(trace, wasi.fds, "[browser-opfs] flush fd write buffers");
         traceDirectWasiFileIoStats(trace, wasi, "[browser-opfs] direct file io");
         traceRandomAccessFileIoStats(trace, fds, "[browser-opfs] random access file io");
-        trace("[browser-opfs] flush mounts start");
-        await flushBrowserOpfsMounts(mounts, trace);
-        trace("[browser-opfs] flush mounts done");
+        // Output files are real OPFS files written through the proxy during the run, so there is no
+        // end-of-run materialization step: the bytes are already persisted by the time wasi.start returns.
         runSucceeded = true;
         stdoutCollector.flush();
         stderrCollector.flush();
@@ -376,6 +384,23 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         await cleanupBrowserOpfsMounts(mounts);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
         trace("[browser-opfs] cleanup done");
+        // Per-op latency breakdown. setup = dispatch→wasi.start (mount/fd build + instantiate + any
+        // thread-pool pre-warm wait); compute = wasi.start; teardown = drain/flush/cleanup after it.
+        const runEndedAtMs = nowMs();
+        const setupMs = setupDoneAtMs === null ? null : setupDoneAtMs - runStartedAtMs;
+        const computeMs = setupDoneAtMs === null || computeDoneAtMs === null ? null : computeDoneAtMs - setupDoneAtMs;
+        const teardownMs = computeDoneAtMs === null ? null : runEndedAtMs - computeDoneAtMs;
+        const fmt = (value: number | null): string => (value === null ? "n/a" : value.toFixed(1));
+        // `command` says what ran; `threads` is the requested budget (1 = thread-gated, no pool
+        // pre-warm; >1 = the thread pool was engaged, which is what setupMs mostly measures on a cold
+        // runner); `exitCode`/`succeeded` are the outcome. setup = dispatch→wasi.start, compute =
+        // wasi.start, teardown = drain/flush/cleanup after it.
+        trace(
+          `[browser-opfs] command timings command=${formatCommandForTrace(command)}` +
+            ` threads=${parseRequestedThreadCount(request) ?? 1} exitCode=${exitCode === null ? "n/a" : exitCode}` +
+            ` setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
+            ` totalMs=${(runEndedAtMs - runStartedAtMs).toFixed(1)} succeeded=${runSucceeded}`,
+        );
       }
     },
 

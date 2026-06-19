@@ -1,5 +1,6 @@
 import { OUT_OF_MEMORY_MESSAGE_REGEX } from "../../lib/errors.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { markWasmFinished } from "../../lib/perf/op-perf-marks.ts";
 import {
   estimateOpWorkingSetBytes,
   estimateScheduledThreads,
@@ -22,6 +23,7 @@ import {
   withRomWeaverForcedThreads,
 } from "../../wasm/index.ts";
 import browserWasmUrl from "../../wasm/rom-weaver-app.wasm?url";
+import browserOpfsProxyWorkerUrl from "../../wasm/workers/browser-opfs-proxy-worker.ts?worker&url";
 import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?worker&url";
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
@@ -69,6 +71,7 @@ type RomWeaverRunner = {
 };
 
 type BrowserWasmAssetSelection = {
+  opfsProxyWorkerUrl?: string;
   threadWorkerUrl?: string;
   wasmUrl?: string;
 };
@@ -252,6 +255,8 @@ const resolveBrowserWasmUrl = async () => browserWasmUrl;
 
 const resolveBrowserThreadWorkerUrl = async () => browserThreadWorkerUrl;
 
+const resolveBrowserOpfsProxyWorkerUrl = async () => browserOpfsProxyWorkerUrl;
+
 const resolveBrowserRunnerWorkerUrl = async () => browserRunnerWorkerUrl;
 
 const canUseThreadedBrowserWasm = (root: typeof globalThis = globalThis) => {
@@ -262,8 +267,12 @@ const resolveBrowserWasmAsset = async (): Promise<BrowserWasmAssetSelection> => 
   if (!canUseThreadedBrowserWasm()) {
     throw new Error("rom-weaver browser runtime requires SharedArrayBuffer and cross-origin isolation (COOP/COEP).");
   }
-  const [wasmUrl, threadWorkerUrl] = await Promise.all([resolveBrowserWasmUrl(), resolveBrowserThreadWorkerUrl()]);
-  return { threadWorkerUrl, wasmUrl };
+  const [wasmUrl, threadWorkerUrl, opfsProxyWorkerUrl] = await Promise.all([
+    resolveBrowserWasmUrl(),
+    resolveBrowserThreadWorkerUrl(),
+    resolveBrowserOpfsProxyWorkerUrl(),
+  ]);
+  return { opfsProxyWorkerUrl, threadWorkerUrl, wasmUrl };
 };
 
 const normalizeRunnerDefaultThreads = (workerThreads?: RuntimeValue) => {
@@ -289,6 +298,7 @@ const createBrowserRunnerInitOptions = (
     ...(wasmModule ? { module: wasmModule } : {}),
     ...(wasmAsset.wasmUrl ? { wasmUrl: wasmAsset.wasmUrl } : {}),
     ...(wasmAsset.threadWorkerUrl ? { threadWorkerUrl: wasmAsset.threadWorkerUrl } : {}),
+    ...(wasmAsset.opfsProxyWorkerUrl ? { opfsProxyWorkerUrl: wasmAsset.opfsProxyWorkerUrl } : {}),
     ...(defaultThreads ? { defaultThreads } : {}),
     workGuestPath: WORKER_OPFS_MOUNTPOINT,
   };
@@ -598,6 +608,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           (result) => {
             if (settled) return;
             settled = true;
+            // Wasm reported the run finished: open the perceived-latency tail measured to the result
+            // paint (see lib/perf/op-perf-marks.ts → romweaver:after-finish).
+            markWasmFinished();
             resolve(result);
           },
           (error) => {

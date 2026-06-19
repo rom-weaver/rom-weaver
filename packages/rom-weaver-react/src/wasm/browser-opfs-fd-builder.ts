@@ -4,6 +4,8 @@ import { joinGuestPath, normalizeStdin } from "./browser-opfs-guest-paths.ts";
 import type { BrowserOpfsMount } from "./browser-opfs-mount.ts";
 import { cleanupBrowserOpfsMounts } from "./browser-opfs-mount.ts";
 import type { BrowserOpfsMountCache } from "./browser-opfs-mounts.ts";
+import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
+import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
   FileSystemDirectoryHandleLike,
   LineHandler,
@@ -40,10 +42,10 @@ export interface BuildBrowserOpfsWasiFdsOptions {
   mountCache: BrowserOpfsMountCache;
   mountHandles: Record<string, FileSystemDirectoryHandleLike>;
   preopenOutputPaths?: unknown;
+  proxyClient: OpfsProxyClient;
   request: RomWeaverRunInput | undefined;
   runCloseables: unknown[];
   runtimeMounts: string[];
-  scratchFilePoolSize?: unknown;
   stderrLineHandler?: LineHandler;
   stdin?: unknown;
   stdoutLineHandler?: LineHandler;
@@ -65,10 +67,10 @@ export async function buildBrowserOpfsWasiFds({
   stderrLineHandler,
   stdoutLineHandler,
   virtualFiles,
-  scratchFilePoolSize,
   writableRoots,
   syncAccessMode,
   mountCache,
+  proxyClient,
   runCloseables,
   trace,
   virtualOnlyMounts = false,
@@ -105,15 +107,15 @@ export async function buildBrowserOpfsWasiFds({
       const mount = await mountCache.acquire({
         directoryHandle: handle,
         mountPath,
+        proxyClient,
         syncAccessMode,
         virtualOnly: virtualOnlyMounts,
         writableRoots,
       });
       mounts.push(mount);
       trace?.(`[browser-opfs] mount acquire done path=${mountPath}`);
-      await mount.startRun({
+      mount.startRun({
         runCloseables,
-        scratchFilePoolSize,
         trace,
         virtualFiles,
       });
@@ -250,7 +252,16 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     if (!this.mount.isWritablePath(guestPath)) {
       return { inode_obj: null, ret: wasiShim.wasi.ERRNO_ROFS };
     }
-    return unlinkEntryFromDirectory(this.mount.contents, pathStr);
+    const unlinked = unlinkEntryFromDirectory(this.mount.contents, pathStr);
+    if (unlinked.ret === wasiShim.wasi.ERRNO_SUCCESS) {
+      // Also remove the backing OPFS file so the namespace matches the inode tree.
+      try {
+        this.mount.proxyClient.unlink(guestPath);
+      } catch {
+        // best-effort: the inode is already gone; a missing OPFS entry is not fatal to unlink
+      }
+    }
+    return unlinked;
   }
 
   override path_unlink_file(pathStr: string) {
@@ -292,9 +303,14 @@ function createInMemoryEntry(
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
-  const file = mount?.takeScratchFile?.() ?? null;
-  if (!file) return wasiShim.wasi.ERRNO_NOSPC;
-  parent.entries.set(parent.name, new WasiRandomAccessFileInode(file, { scratchBacked: true }));
+  // Create the real OPFS output file on demand through the proxy; the bytes persist as they are written.
+  const guestPath = joinGuestPath(mount.mountPath, pathStr);
+  const proxyFile = new BrowserProxyRandomAccessFile(mount.proxyClient, guestPath, {
+    create: true,
+    writable: true,
+  });
+  mount.trackOwnedFile(proxyFile);
+  parent.entries.set(parent.name, new WasiRandomAccessFileInode(proxyFile));
   return wasiShim.wasi.ERRNO_SUCCESS;
 }
 

@@ -15,8 +15,6 @@ import {
 import { formatErrorForTrace } from "./workers/worker-trace-format.ts";
 
 const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
-const RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT = 4;
-const RANDOM_ACCESS_READ_CACHE_MAX_REQUEST_BYTES = 256 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
 const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
@@ -35,19 +33,6 @@ type FileReaderSyncLike = {
 
 declare const FileReaderSync: {
   new (): FileReaderSyncLike;
-};
-
-type SyncAccessHandleLike = {
-  close(): void;
-  flush(): void;
-  getSize(): number;
-  read(buffer: Uint8Array, options?: { at?: number }): number;
-  truncate(size: number): void;
-  write(buffer: Uint8Array, options?: { at?: number }): number;
-};
-
-type BrowserOpfsRandomAccessFileOptions = {
-  scratchName?: string | null;
 };
 
 type BrowserVirtualRandomAccessFileOptions = {
@@ -84,10 +69,9 @@ type ReadCacheOptions = {
   stats: RandomAccessFileIoStats;
 };
 
-// Fixed-capacity, block-aligned LRU read cache shared by BrowserOpfsRandomAccessFile and
-// BrowserVirtualRandomAccessFile. Behavior (block size/count, LRU eviction, hit/miss accounting, and
-// the fill-on-miss path) is exactly what each adapter open-coded before — only the backing read and
-// the bumped ioStats counters differ, both injected via options. This is a hot path: keep it identical.
+// Fixed-capacity, block-aligned LRU read cache used by BrowserVirtualRandomAccessFile. Behavior (block
+// size/count, LRU eviction, hit/miss accounting, and the fill-on-miss path) is generic — only the
+// backing read and the bumped ioStats counters differ, both injected via options. This is a hot path.
 class LruReadCache {
   private readonly blockBytes: number;
   private readonly blockCount: number;
@@ -208,203 +192,6 @@ type VirtualFileProxySlotView = {
   control: Int32Array<SharedArrayBuffer>;
   data: Uint8Array<SharedArrayBuffer>;
 };
-
-class BrowserOpfsRandomAccessFile {
-  closed: boolean;
-  dirty: boolean;
-  ioStats: RandomAccessFileIoStats;
-  logicalSize: number | null;
-  readCache: LruReadCache;
-  scratchName: string | null;
-  supportsBufferedSequentialWrite: boolean;
-  supportsDirectWasmRead: boolean;
-  syncHandle: SyncAccessHandleLike;
-
-  constructor(syncHandle: SyncAccessHandleLike, options: BrowserOpfsRandomAccessFileOptions = {}) {
-    this.syncHandle = syncHandle;
-    this.scratchName = options.scratchName ?? null;
-    this.dirty = false;
-    this.supportsDirectWasmRead = true;
-    this.supportsBufferedSequentialWrite = true;
-    this.ioStats = createRandomAccessFileIoStats();
-    this.readCache = new LruReadCache({
-      blockBytes: RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES,
-      blockCount: RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT,
-      fill: (blockStart, buf) =>
-        this.readSyncAccessHandleAt(blockStart, buf, Math.min(buf.byteLength, this.size() - blockStart)),
-      reusableBlockErrorMessage: "OPFS read cache has no reusable blocks",
-      statKeys: {
-        fillBytes: "opfsCacheFillBytes",
-        hitBytes: "opfsCacheHitBytes",
-        hits: "opfsCacheHits",
-        misses: "opfsCacheMisses",
-      },
-      stats: this.ioStats,
-    });
-    this.logicalSize = null;
-    this.closed = false;
-  }
-
-  readAt(offset: unknown, dst: Uint8Array): number {
-    if (dst.byteLength <= 0) return 0;
-    const start = Number(offset);
-    if (!Number.isFinite(start) || start < 0) return 0;
-    if (
-      dst.byteLength <= RANDOM_ACCESS_READ_CACHE_MAX_REQUEST_BYTES &&
-      this.readCache.fitsWithinBlock(start, dst.byteLength)
-    ) {
-      const cachedRead = this.readCache.read(start, dst);
-      if (cachedRead !== null) return cachedRead;
-    }
-    return this.readSyncAccessHandleAt(start, dst);
-  }
-
-  writeAt(offset: unknown, src: Uint8Array): number {
-    const start = Number(offset);
-    const callStartMs = monotonicNowMs();
-    const written = this.syncHandle.write(src, { at: start });
-    this.ioStats.opfsWriteCalls += 1;
-    this.ioStats.opfsWriteMs += monotonicNowMs() - callStartMs;
-    this.ioStats.opfsWriteBytes += Math.max(0, Math.min(Number(written) || 0, src.byteLength));
-    if (written > 0) {
-      this.dirty = true;
-      this.logicalSize = Math.max(this.logicalSize ?? 0, start + written);
-      // Only drop cache blocks that overlap the bytes just written, so an interleaved
-      // read/modify/write workload keeps unrelated cached blocks instead of refetching them all.
-      this.readCache.invalidateRange(start, start + written);
-    }
-    return written;
-  }
-
-  size(): number {
-    return Math.max(this.syncHandle.getSize(), this.logicalSize ?? 0);
-  }
-
-  allocateAtLeast(size: unknown): void {
-    const normalizedSize = Math.max(0, Number(size) || 0);
-    if (normalizedSize <= this.size()) return;
-    this.logicalSize = normalizedSize;
-  }
-
-  truncate(size: unknown): void {
-    const normalizedSize = Number(size);
-    if (this.syncHandle.getSize() === normalizedSize && this.logicalSize === normalizedSize) return;
-    // A shrink drops cached bytes at/after the new end; a grow only zero-fills past the old end.
-    // Either way, invalidating [newSize, infinity) is sufficient and leaves earlier cached bytes valid.
-    this.readCache.invalidateRange(normalizedSize, Number.POSITIVE_INFINITY);
-    this.syncHandle.truncate(normalizedSize);
-    this.logicalSize = normalizedSize;
-    this.dirty = true;
-  }
-
-  readSyncAccessHandleAt(offset: number, dst: Uint8Array, requestedLength = dst.byteLength): number {
-    const logicalSize = this.size();
-    const length = Math.max(0, Math.min(requestedLength, dst.byteLength, logicalSize - offset));
-    if (length <= 0) return 0;
-    const physicalSize = this.syncHandle.getSize();
-    const physicalLength = offset < physicalSize ? Math.min(length, physicalSize - offset) : 0;
-    const callStartMs = monotonicNowMs();
-    const bytesRead =
-      physicalLength > 0 ? readSyncAccessHandleFully(this.syncHandle, dst.subarray(0, physicalLength), offset) : 0;
-    const totalRead = bytesRead < length ? length : bytesRead;
-    if (bytesRead < length) dst.fill(0, bytesRead, length);
-    this.ioStats.opfsReadCalls += 1;
-    this.ioStats.opfsReadMs += monotonicNowMs() - callStartMs;
-    this.ioStats.opfsReadBytes += Math.max(0, Math.min(Number(totalRead) || 0, dst.byteLength));
-    return totalRead;
-  }
-
-  flush(): void {
-    if (!this.dirty) return;
-    if (this.scratchName) {
-      this.dirty = false;
-      return;
-    }
-    const callStartMs = monotonicNowMs();
-    this.syncHandle.flush();
-    this.ioStats.opfsFlushCalls += 1;
-    this.ioStats.opfsFlushMs += monotonicNowMs() - callStartMs;
-    this.dirty = false;
-  }
-
-  close(): void {
-    if (this.closed) return;
-    try {
-      this.readCache.clear();
-      this.syncHandle.close();
-    } finally {
-      this.closed = true;
-      this.dirty = false;
-    }
-  }
-
-  snapshotIoStats(): RandomAccessFileIoStats {
-    return { ...this.ioStats };
-  }
-}
-
-class BrowserMemoryRandomAccessFile {
-  bytes: Uint8Array;
-  closed: boolean;
-  length: number;
-  supportsDirectWasmRead: boolean;
-
-  constructor(initialCapacity: unknown = 0) {
-    this.bytes = new Uint8Array(Math.max(0, Number(initialCapacity) || 0));
-    this.length = 0;
-    this.supportsDirectWasmRead = true;
-    this.closed = false;
-  }
-
-  readAt(offset: unknown, dst: Uint8Array): number {
-    if (this.closed) return 0;
-    const start = Number(offset);
-    if (!Number.isFinite(start) || start < 0 || start >= this.length) return 0;
-    const length = Math.min(dst.byteLength, this.length - start);
-    if (length <= 0) return 0;
-    dst.set(this.bytes.subarray(start, start + length));
-    return length;
-  }
-
-  writeAt(offset: unknown, src: Uint8Array): number {
-    if (this.closed) return 0;
-    const start = Number(offset);
-    if (!Number.isFinite(start) || start < 0) return 0;
-    const end = start + src.byteLength;
-    this.ensureCapacity(end);
-    this.bytes.set(src, start);
-    this.length = Math.max(this.length, end);
-    return src.byteLength;
-  }
-
-  size(): number {
-    return this.length;
-  }
-
-  truncate(size: unknown): void {
-    const nextSize = Math.max(0, Number(size) || 0);
-    this.ensureCapacity(nextSize);
-    if (nextSize > this.length) this.bytes.fill(0, this.length, nextSize);
-    this.length = nextSize;
-  }
-
-  flush(): void {
-    // no-op: in-memory adapter has nothing to flush
-  }
-
-  close(): void {
-    this.closed = true;
-  }
-
-  ensureCapacity(size: number): void {
-    if (size <= this.bytes.byteLength) return;
-    let nextCapacity = Math.max(1024, this.bytes.byteLength);
-    while (nextCapacity < size) nextCapacity *= 2;
-    const next = new Uint8Array(nextCapacity);
-    next.set(this.bytes.subarray(0, this.length));
-    this.bytes = next;
-  }
-}
 
 class BrowserVirtualRandomAccessFile {
   closed: boolean;
@@ -741,17 +528,6 @@ function readFitsWithinCacheBlock(
   return offset + byteLength <= blockStart + blockBytes;
 }
 
-function readSyncAccessHandleFully(syncHandle: SyncAccessHandleLike, dst: Uint8Array, offset: number): number {
-  let totalRead = 0;
-  while (totalRead < dst.byteLength) {
-    const chunk = dst.subarray(totalRead);
-    const bytesRead = syncHandle.read(chunk, { at: offset + totalRead });
-    if (!(bytesRead > 0)) break;
-    totalRead += Math.min(bytesRead, chunk.byteLength);
-  }
-  return totalRead;
-}
-
 function monotonicNowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
@@ -785,29 +561,8 @@ function waitForAtomicsStateChange(
   return "changed";
 }
 
-// Test-only: lets benches/tests drive the OPFS random-access read/write path (read cache +
-// sync access handle) directly without standing up a full WASI mount. Unused in production.
-function __createBrowserOpfsRandomAccessFileForTest(
-  syncHandle: SyncAccessHandleLike,
-  options: BrowserOpfsRandomAccessFileOptions = {},
-) {
-  return new BrowserOpfsRandomAccessFile(syncHandle, options);
-}
-
-// Test-only: lets benches/tests drive the virtual Blob/proxy read path directly.
-function __createBrowserVirtualRandomAccessFileForTest(
-  source: unknown,
-  options: BrowserVirtualRandomAccessFileOptions = {},
-) {
-  return new BrowserVirtualRandomAccessFile(source, options);
-}
-
 export {
-  __createBrowserOpfsRandomAccessFileForTest,
-  __createBrowserVirtualRandomAccessFileForTest,
   addRandomAccessFileIoStats,
-  BrowserMemoryRandomAccessFile,
-  BrowserOpfsRandomAccessFile,
   BrowserVirtualRandomAccessFile,
   createRandomAccessFileIoStats,
   isBlobLike,

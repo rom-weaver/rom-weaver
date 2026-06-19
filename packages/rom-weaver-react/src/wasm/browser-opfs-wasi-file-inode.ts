@@ -7,7 +7,7 @@ import { requestsWriteRights } from "./browser-opfs-wasi-paths.ts";
 
 /**
  * Structural surface this module needs from the random-access file adapters
- * (BrowserOpfsRandomAccessFile, BrowserMemoryRandomAccessFile, BrowserVirtualRandomAccessFile).
+ * (BrowserVirtualRandomAccessFile and the proxy-backed BrowserProxyRandomAccessFile).
  * Optional members exist only on some adapters and are feature-detected before use.
  */
 export interface RandomAccessFileLike {
@@ -94,13 +94,6 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode {
   stat() {
     return new wasiShim.wasi.Filestat(this.ino, wasiShim.wasi.FILETYPE_REGULAR_FILE, this.size);
   }
-}
-
-export function __createWasiRandomAccessFileInodeForTest(
-  file: RandomAccessFileLike,
-  options: WasiRandomAccessFileInodeOptions = {},
-) {
-  return new WasiRandomAccessFileInode(file, options);
 }
 
 function normalizeWasiReadResult(value: unknown) {

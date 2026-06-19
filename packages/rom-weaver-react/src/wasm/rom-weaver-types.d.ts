@@ -173,6 +173,9 @@ export interface RomWeaverBrowserOpfsOptions {
   /** URL for the wasm artifact. Defaults to the package artifact URL. */
   wasmUrl?: string;
   threadWorkerUrl?: string | URL;
+  /** URL for the bundled OPFS proxy worker. Defaults to the package artifact URL. Required in a
+   * production build, where the `new URL(...)` dev fallback would resolve to an unbundled source file. */
+  opfsProxyWorkerUrl?: string | URL;
   sharedMemoryInitialPages?: number;
   /** Exact shared-memory maximum. Omit to allow the browser runtime's default fallback ladder. */
   sharedMemoryMaximumPages?: number;
@@ -193,8 +196,6 @@ export interface RomWeaverBrowserOpfsOptions {
   /** Writable guest roots. Defaults to the work mount itself. */
   writableDirectories?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
-  /** @deprecated Ignored. Browser OPFS runtime uses a fixed large scratch pool size. */
-  scratchFilePoolSize?: number;
   /**
    * Default browser thread count applied for typed threaded commands when no
    * command-level thread budget is provided. Use null, false, 0, or "off" to
@@ -219,8 +220,6 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   virtualOnlyMounts?: boolean;
   writableDirectories?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
-  /** @deprecated Ignored. Browser OPFS runtime uses a fixed large scratch pool size. */
-  scratchFilePoolSize?: number;
   invalidateMountCacheBeforeRun?: boolean;
   invalidateMountCacheAfterRun?: boolean;
   threadWorkerUrl?: string | URL;

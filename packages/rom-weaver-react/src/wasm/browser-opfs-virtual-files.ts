@@ -5,13 +5,9 @@ import {
   normalizeKnownInputPaths,
   normalizeRelativePathParts,
 } from "./browser-opfs-guest-paths.ts";
-import {
-  BrowserOpfsRandomAccessFile,
-  BrowserVirtualRandomAccessFile,
-  isBlobLike,
-  isVirtualFileProxy,
-} from "./browser-opfs-io-adapters.ts";
+import { BrowserVirtualRandomAccessFile, isBlobLike, isVirtualFileProxy } from "./browser-opfs-io-adapters.ts";
 import type { BrowserOpfsMount } from "./browser-opfs-mount.ts";
+import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
   FileReaderSyncLike,
   FileSystemDirectoryHandleLike,
@@ -19,7 +15,6 @@ import type {
   TraceLine,
 } from "./browser-opfs-runtime-types.ts";
 import { basenameForTrace } from "./browser-opfs-stdio-events.ts";
-import { openSyncAccessHandle } from "./browser-opfs-sync-access.ts";
 import { WasiRandomAccessFileInode } from "./browser-opfs-wasi-file-inode.ts";
 import type { WasiDirectoryContents } from "./browser-opfs-wasi-paths.ts";
 import {
@@ -222,14 +217,11 @@ async function hydrateMountedInputPathFromOpfs({
   const guestPath = joinGuestPath(mount.mountPath, relativeParts.join("/"));
   const writable = mount.isWritablePath(guestPath);
   try {
-    const fileHandle = await directoryHandle.getFileHandle(name, { create: false });
-    const syncHandle = await openSyncAccessHandle({
-      fileHandle,
-      mode: writable ? mount.syncAccessMode : "read-only",
-    });
-    const file = new BrowserOpfsRandomAccessFile(syncHandle);
-    mount.trackOwnedFile(file);
-    entries.set(name, new WasiRandomAccessFileInode(file, { readonly: !writable }));
+    // Confirm the file exists in OPFS before mounting it (the proxy opens it lazily by path).
+    await directoryHandle.getFileHandle(name, { create: false });
+    const proxyFile = new BrowserProxyRandomAccessFile(mount.proxyClient, guestPath, { writable });
+    mount.trackOwnedFile(proxyFile);
+    entries.set(name, new WasiRandomAccessFileInode(proxyFile, { readonly: !writable }));
     return true;
   } catch {
     // ignored

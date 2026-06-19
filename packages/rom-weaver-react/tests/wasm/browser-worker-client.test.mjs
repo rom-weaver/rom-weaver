@@ -22,7 +22,6 @@ import {
 
 const RUN_1GB_STRESS = typeof __ROM_WEAVER_WASM_STRESS_1GB__ !== "undefined" && __ROM_WEAVER_WASM_STRESS_1GB__ === true;
 const LONG_MATRIX_TIMEOUT_MS = 10 * 60 * 1000;
-const SCRATCH_DIRECTORY_NAME = ".rom-weaver-opfs-scratch";
 // Minimal WASI module: write a running JSON line, spin, then write succeeded.
 const STREAMING_WASI_MODULE_BYTES = new Uint8Array([
   0, 97, 115, 109, 1, 0, 0, 0, 1, 12, 2, 96, 4, 127, 127, 127, 127, 1, 127, 96, 0, 0, 2, 35, 1, 22, 119, 97, 115, 105,
@@ -56,43 +55,6 @@ async function waitForCondition(predicate, { timeoutMs = 10000, pollMs = 20, lab
     await delay(pollMs);
   }
   throw new Error(`timed out waiting for ${label} after ${timeoutMs}ms`);
-}
-
-async function countScratchFiles(rootHandle) {
-  try {
-    const scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
-    let count = 0;
-    for await (const _entry of scratchHandle.entries()) count += 1;
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-async function getScratchStorageBytes(rootHandle) {
-  try {
-    const scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
-    let total = 0;
-    for await (const [, entryHandle] of scratchHandle.entries()) {
-      if (entryHandle.kind !== "file") continue;
-      total += (await entryHandle.getFile()).size;
-    }
-    return total;
-  } catch {
-    return 0;
-  }
-}
-
-async function observeScratchPeak(rootHandle, { isDone, timeoutMs = 20000, pollMs = 10 } = {}) {
-  const done = typeof isDone === "function" ? isDone : () => false;
-  const deadline = Date.now() + timeoutMs;
-  let peak = 0;
-  while (!done() && Date.now() < deadline) {
-    peak = Math.max(peak, await countScratchFiles(rootHandle));
-    await delay(pollMs);
-  }
-  peak = Math.max(peak, await countScratchFiles(rootHandle));
-  return peak;
 }
 
 function createVirtualFileProxy(path, sourceBytes, options = {}) {
@@ -1273,140 +1235,6 @@ describe("rom-weaver-wasm browser runner parity", () => {
       probeChannel.removeEventListener("message", onProbeMessage);
       probeChannel.close();
     }
-  });
-
-  it("browser runner truncates scratch-backed extracted outputs after flushing", async () => {
-    await withTempFixture(async ({ dir, worker, opfsHandle }) => {
-      const sourcePath = joinGuestPath(dir, "scratch-backed-extract-source.bin");
-      const archivePath = joinGuestPath(dir, "scratch-backed-extract.zip");
-      const extractDir = joinGuestPath(dir, "scratch-backed-extract-out");
-
-      await writeGuestPatternFile(opfsHandle, sourcePath, 4 * 1024 * 1024);
-      assertRunJsonSucceeded(
-        await worker.runJson(["compress", sourcePath, "--format", "zip", "--output", archivePath, "--threads", "1"]),
-        { command: "compress" },
-      );
-
-      const extractResult = await worker.runJson(["extract", archivePath, "--out-dir", extractDir, "--threads", "1"]);
-
-      assertRunJsonSucceeded(extractResult, { command: "extract" });
-      expect(await countScratchFiles(opfsHandle)).toBeGreaterThan(0);
-      expect(await getScratchStorageBytes(opfsHandle)).toBe(0);
-    });
-  });
-
-  it("threaded browser runner keeps a stable large nested-thread scratch pool across runs", async () => {
-    await withTempFixture(
-      async ({ dir, init, worker, opfsHandle }) => {
-        expect(init.threaded).toBe(true);
-        const sourcePath = joinGuestPath(dir, "threaded-scratch-default-source.bin");
-        await writeGuestPatternFile(opfsHandle, sourcePath, 32 * 1024 * 1024);
-
-        let runSettled = false;
-        const resultPromise = worker
-          .runJson([
-            "checksum",
-            sourcePath,
-            "--algo",
-            "crc32",
-            "--algo",
-            "sha1",
-            "--algo",
-            "sha256",
-            "--algo",
-            "blake3",
-            "--no-extract",
-            "--threads",
-            "4",
-          ])
-          .finally(() => {
-            runSettled = true;
-          });
-        const peakScratchFiles = await observeScratchPeak(opfsHandle, {
-          isDone: () => runSettled,
-        });
-        const result = await resultPromise;
-        const terminal = assertRunJsonSucceeded(result, { command: "checksum" });
-        const scratchCountAfterFirstRun = await countScratchFiles(opfsHandle);
-
-        expect(terminal.effective_threads).toBeGreaterThan(1);
-        expect(peakScratchFiles).toBeGreaterThanOrEqual(16);
-        expect(scratchCountAfterFirstRun).toBeGreaterThanOrEqual(16);
-
-        const second = await worker.runJson([
-          "checksum",
-          sourcePath,
-          "--algo",
-          "crc32",
-          "--algo",
-          "sha1",
-          "--algo",
-          "sha256",
-          "--algo",
-          "blake3",
-          "--no-extract",
-          "--threads",
-          "4",
-        ]);
-        assertRunJsonSucceeded(second, { command: "checksum" });
-        expect(await countScratchFiles(opfsHandle)).toBe(scratchCountAfterFirstRun);
-      },
-      {
-        initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
-        },
-      },
-    );
-  });
-
-  it("threaded browser runner grows the scratch pool for explicit scratchFilePoolSize overrides", async () => {
-    await withTempFixture(
-      async ({ dir, init, worker, opfsHandle }) => {
-        expect(init.threaded).toBe(true);
-        const sourcePath = joinGuestPath(dir, "threaded-scratch-override-source.bin");
-        await writeGuestPatternFile(opfsHandle, sourcePath, 32 * 1024 * 1024);
-
-        let runSettled = false;
-        const resultPromise = worker
-          .runJson(
-            [
-              "checksum",
-              sourcePath,
-              "--algo",
-              "crc32",
-              "--algo",
-              "sha1",
-              "--algo",
-              "sha256",
-              "--algo",
-              "blake3",
-              "--no-extract",
-              "--threads",
-              "4",
-            ],
-            {
-              scratchFilePoolSize: 32,
-            },
-          )
-          .finally(() => {
-            runSettled = true;
-          });
-        const peakScratchFiles = await observeScratchPeak(opfsHandle, {
-          isDone: () => runSettled,
-        });
-        const result = await resultPromise;
-        const terminal = assertRunJsonSucceeded(result, { command: "checksum" });
-
-        expect(terminal.effective_threads).toBeGreaterThan(1);
-        expect(peakScratchFiles).toBeGreaterThanOrEqual(32);
-        expect(await countScratchFiles(opfsHandle)).toBeGreaterThanOrEqual(32);
-      },
-      {
-        initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
-        },
-      },
-    );
   });
 
   it("runner rejects missing wasm artifacts", async () => {

@@ -68,6 +68,16 @@ import {
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
+// Raw inputs below this size never benefit from worker threads: the Rust core single-threads their
+// checksum (a few-MB hash is fast serial), so injecting the default thread budget only makes the
+// browser thread pool eagerly pre-warm ~20 workers (~900 ms cold) on the operation's critical path for
+// threads the run never uses. Suppressing the default for small inputs lets the op start as soon as the
+// wasm is instantiated. Mirrors the patch-apply `disableDefaultThreadArgInjection` gate. Applied to
+// the checksum path only — for a raw input the byte size IS the data size, so the gate is exact. The
+// extract path is NOT gated: a small archive can decompress to plenty of thread-worthy data, and
+// gating it would single-thread the extract and drop its threaded decode/checksum timing.
+const CHECKSUM_THREAD_POOL_FLOOR_BYTES = 4 * 1024 * 1024;
+
 const appendBrowserStorageContext = async (message: string) => {
   const state = await getBrowserStorageEstimateState();
   return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
@@ -200,7 +210,6 @@ const invokeRomWeaverExtractWorker = async (
     logLevel?: LogLevel | string;
     outDirPath: string;
     preopenOutputPaths?: string[];
-    scratchFilePoolSize?: number | null;
     select?: string[];
     romFilter?: boolean;
     patchFilter?: boolean;
@@ -286,7 +295,6 @@ const invokeRomWeaverExtractWorker = async (
       },
       onLog,
       preopenOutputPaths: input.preopenOutputPaths,
-      scratchFilePoolSize: input.scratchFilePoolSize,
       signal: input.signal,
     }),
   );
@@ -438,15 +446,14 @@ const invokeRomWeaverPatchValidateWorker = async (
   // Some validates fan worker threads across the source: bps block-check CRCs, xdelta's per-window
   // decode, or a caller-requested source-checksum verification. Those MUST keep the runner's worker
   // pool — without it the engine spawns from an empty pool and panics (os error 6). The rest (PPF/
-  // IPS/UPS structural + block checks) read a few hundred bytes single-threaded, so the pool + 64-file
-  // scratch seed is pure setup/teardown (~150 ms for a tiny PPF against a multi-hundred-MB disc) and
-  // is skipped. The apply path keeps its own input-size gate since it always reads+writes the source.
+  // IPS/UPS structural + block checks) read a few hundred bytes single-threaded, so the pool spin-up
+  // is pure setup/teardown and is skipped. The apply path keeps its own input-size gate since it
+  // always reads+writes the source.
   const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || validateWithChecksums.length > 0;
   const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
   const effectiveThreadArg = noWorkerPool ? null : threadArg;
   const disableDefaultThreadArgInjection = noWorkerPool || (hasBpsPatch && !effectiveThreadArg);
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch || noWorkerPool ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-validate", {
     ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
@@ -474,7 +481,6 @@ const invokeRomWeaverPatchValidateWorker = async (
     patchCount: input.patchFiles.length,
     requestedThreadArg,
     romFilePath: input.romFilePath,
-    scratchFilePoolSize,
     singleThreadNoPool: noWorkerPool,
     syncAccessMode: syncAccessMode || "",
     threadArg: effectiveThreadArg,
@@ -495,7 +501,6 @@ const invokeRomWeaverPatchValidateWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
-      scratchFilePoolSize,
       signal: input.signal,
       syncAccessMode,
       virtualOnlyMounts,
@@ -546,7 +551,6 @@ const invokeRomWeaverPatchApplyWorker = async (
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
   const disableDefaultThreadArgInjection = singleThreadNoPool || (hasBpsPatch && !threadArg);
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch || singleThreadNoPool ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-apply", {
     add_header: addHeader,
@@ -577,7 +581,6 @@ const invokeRomWeaverPatchApplyWorker = async (
     patchCount: input.patchFiles.length,
     requestedThreadArg,
     romFilePath: input.romFilePath,
-    scratchFilePoolSize,
     singleThreadNoPool,
     syncAccessMode: syncAccessMode || "",
     threadArg,
@@ -604,7 +607,6 @@ const invokeRomWeaverPatchApplyWorker = async (
         },
         onLog,
         preopenOutputPaths: [outputPath],
-        scratchFilePoolSize,
         signal: input.signal,
         syncAccessMode,
         virtualOnlyMounts,
@@ -852,6 +854,11 @@ const runRomWeaverChecksumWorker = async (
     input.checksumStartOffset > 0
       ? BigInt(Math.floor(input.checksumStartOffset))
       : undefined;
+  // Sub-floor inputs hash fast single-threaded (the Rust core parallelizes only above the MT-floor),
+  // so suppress the default thread budget to keep the browser thread pool from pre-warming for a
+  // checksum that won't use it (see CHECKSUM_THREAD_POOL_FLOOR_BYTES).
+  const suppressDefaultThreadPool =
+    typeof input.fileSize === "number" && input.fileSize >= 0 && input.fileSize < CHECKSUM_THREAD_POOL_FLOOR_BYTES;
   const command = createRomWeaverCommand("checksum", {
     algo: algorithms,
     no_extract: true,
@@ -864,10 +871,12 @@ const runRomWeaverChecksumWorker = async (
     command,
     filePath,
     startOffset: input.checksumStartOffset,
+    suppressDefaultThreadPool,
   });
   const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
+      ...(suppressDefaultThreadPool ? { defaultThreads: 0 } : {}),
       logLevel: input.logLevel,
       onEvent: (event) => {
         const progress = toSimpleProgress(event);

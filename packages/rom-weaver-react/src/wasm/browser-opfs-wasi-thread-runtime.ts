@@ -5,9 +5,9 @@ import {
   createBrowserOpfsMountCache,
   normalizeMountHandleMap,
   normalizeVirtualFiles,
-  seedBrowserOpfsScratchPools,
 } from "./browser-opfs-mounts.ts";
-import { flushBrowserOpfsMounts } from "./browser-opfs-output-materialization.ts";
+import { attachOpfsProxyChannel } from "./browser-opfs-proxy-channel.ts";
+import { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import {
   assertDedicatedWorkerRuntime,
   assertDirectoryHandle,
@@ -119,6 +119,13 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   }
   let runSucceeded = false;
   let mounts: Awaited<ReturnType<typeof buildBrowserOpfsWasiFds>>["mounts"] = [];
+  // Build a client over the forwarded channel so this thread's I/O goes through the runner's single
+  // OPFS proxy — the only way a spawned WASI thread (which cannot path_open OPFS files itself) can
+  // reach real OPFS files. The runner always forwards the channel, so the transfer is always present.
+  if (!runtime?.opfsProxyTransfer) {
+    throw new Error("browser OPFS thread runtime requires an opfsProxyTransfer channel");
+  }
+  const proxyClient = new OpfsProxyClient(attachOpfsProxyChannel(runtime.opfsProxyTransfer), { trace });
 
   try {
     trace(`[browser-opfs-thread] build wasi fds start tid=${tid ?? "unknown"}`);
@@ -128,10 +135,10 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       mountCache: THREAD_WORKER_MOUNT_CACHE,
       mountHandles: normalizedMountHandles,
       preopenOutputPaths: runtime?.preopenOutputPaths,
+      proxyClient,
       request: runtime?.request,
       runCloseables: closeables,
       runtimeMounts: normalizedRuntimeMounts,
-      scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
       stderrLineHandler,
       stdin: undefined,
       stdoutLineHandler,
@@ -196,7 +203,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       built.fds,
       `[browser-opfs-thread] random access file io tid=${tid ?? "unknown"}`,
     );
-    await flushBrowserOpfsMounts(mounts, trace);
+    // Output files are written straight to OPFS through the proxy during the run; no materialization.
     runSucceeded = true;
   } catch (error) {
     trace(`[browser-opfs-thread] failed tid=${tid ?? "unknown"} ${formatErrorForTrace(error)}`);
@@ -224,22 +231,15 @@ export async function __primeRomWeaverBrowserThreadRuntime(
   const trace = createLineTrace(onTraceNonJsonLine);
   const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
   if (!normalizedRuntimeMounts.length) return;
-  trace(`[browser-opfs-thread] prewarm scratch start mounts=${normalizedRuntimeMounts.length}`);
-  const normalizedMountHandles = await resolveThreadRuntimeMountHandles({
+  trace(`[browser-opfs-thread] prewarm mount handles start mounts=${normalizedRuntimeMounts.length}`);
+  // Resolve the OPFS directory handles up front so the first real run skips that latency. The mounts
+  // themselves are built lazily on the first run, since they need that run's forwarded proxy channel.
+  await resolveThreadRuntimeMountHandles({
     runtime,
     runtimeMounts: normalizedRuntimeMounts,
     trace,
   });
-  await seedBrowserOpfsScratchPools({
-    mountCache: THREAD_WORKER_MOUNT_CACHE,
-    mountHandles: normalizedMountHandles,
-    runtimeMounts: normalizedRuntimeMounts,
-    scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
-    syncAccessMode: runtime?.syncAccessMode,
-    virtualOnlyMounts: resolveThreadVirtualOnlyMounts(runtime),
-    writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
-  });
-  trace("[browser-opfs-thread] prewarm scratch done");
+  trace("[browser-opfs-thread] prewarm mount handles done");
 }
 
 async function resolveThreadRuntimeMountHandles({

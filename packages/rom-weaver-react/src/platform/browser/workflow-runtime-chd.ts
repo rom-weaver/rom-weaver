@@ -46,8 +46,6 @@ import {
 } from "./workflow-runtime-vfs-cleanup.ts";
 
 const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
-const CHD_CD_SPLIT_BIN_SCRATCH_FILE_POOL_SIZE = 100;
-const CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE = 2;
 const CHD_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.chd;
 
 const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): string =>
@@ -333,15 +331,6 @@ const createBrowserChdRuntime = (
             logLevel,
             outDirPath,
             preopenOutputPaths,
-            scratchFilePoolSize: directOutputPath
-              ? shouldPreseedSingleBinCdOutputs
-                ? CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE
-                : 1
-              : mode === "cd"
-                ? shouldSplitBin
-                  ? CHD_CD_SPLIT_BIN_SCRATCH_FILE_POOL_SIZE
-                  : CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE
-                : undefined,
             select: [],
             signal,
             sourcePath: workerSource.filePath,

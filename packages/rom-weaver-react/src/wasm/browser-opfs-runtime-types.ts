@@ -1,3 +1,4 @@
+import type { OpfsProxyChannelTransfer } from "./browser-opfs-proxy-channel.ts";
 import type { ThreadStartControl } from "./browser-wasi-thread-protocol.ts";
 import type {
   FileSystemDirectoryHandleLike,
@@ -19,9 +20,7 @@ export type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
 };
 
-export type BrowserOpfsCreateOptions = RomWeaverBrowserOpfsOptions & {
-  threadScratchFilePoolSize?: number;
-};
+export type BrowserOpfsCreateOptions = RomWeaverBrowserOpfsOptions;
 export type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
   RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> & {
     __streamBroadcastChannelName?: string;
@@ -32,7 +31,6 @@ export type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
     // select prompts use the first index; multi-select prompts use all of them.
     hostSelect?: (request: string) => number[];
     preopenOutputPaths?: string[];
-    threadScratchFilePoolSize?: number;
   };
 export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   cwdMountPath?: string;
@@ -42,12 +40,12 @@ export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   invalidateMountCacheBeforeRun?: boolean;
   knownInputPaths?: string[];
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
+  /** Forwarded to spawned WASI threads so they share the runner's OPFS proxy. */
+  opfsProxyTransfer?: OpfsProxyChannelTransfer;
   preopenOutputPaths?: string[];
   request?: RomWeaverRunRequest;
   runtimeMounts?: string[];
-  scratchFilePoolSize?: number;
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
-  threadScratchFilePoolSize?: number;
   virtualFiles?: unknown[];
   virtualOnlyMounts?: boolean;
   writableRoots?: string[];

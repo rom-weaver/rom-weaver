@@ -79,7 +79,6 @@ const toRomWeaverOptions = (input: {
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onLog?: (log: WorkflowRuntimeLog) => void;
   preopenOutputPaths?: string[];
-  scratchFilePoolSize?: number | null;
   signal?: AbortSignal;
   syncAccessMode?: string;
   virtualFiles?: RuntimeValue[];
@@ -107,9 +106,6 @@ const toRomWeaverOptions = (input: {
       RUST_BACKTRACE: "full",
     };
     options.trace = true;
-  }
-  if (typeof input.scratchFilePoolSize === "number" && Number.isFinite(input.scratchFilePoolSize)) {
-    options.scratchFilePoolSize = Math.max(0, Math.floor(input.scratchFilePoolSize));
   }
   if (typeof input.defaultThreads === "number" && Number.isFinite(input.defaultThreads)) {
     options.defaultThreads = Math.floor(input.defaultThreads);
