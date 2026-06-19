@@ -16,49 +16,6 @@ struct CsoDecodedExtractChunk {
     data: Vec<u8>,
 }
 
-/// Random-access [`ciso::read::Read`] over an in-memory copy of the full compressed cso source.
-///
-/// The browser/wasm extract pipeline reads the compressed cso once on the main thread (the only
-/// thread allowed to open OPFS files) and shares the bytes with worker threads, which decode from
-/// this cursor instead of re-opening the file. Compressed cso payloads are far smaller than their
-/// decompressed output, so buffering the compressed file is acceptable and matches the z3ds extract
-/// approach.
-struct InMemoryCsoReader {
-    bytes: Arc<Vec<u8>>,
-}
-
-impl ciso::read::Read<io::Error> for InMemoryCsoReader {
-    fn size(&mut self) -> std::result::Result<u64, io::Error> {
-        u64::try_from(self.bytes.len()).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "cso source size overflowed u64")
-        })
-    }
-
-    fn read(&mut self, pos: u64, buf: &mut [u8]) -> std::result::Result<(), io::Error> {
-        let start = usize::try_from(pos).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cso read offset overflowed usize",
-            )
-        })?;
-        let end = start.checked_add(buf.len()).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cso read range overflowed usize",
-            )
-        })?;
-        let source = self.bytes.as_slice();
-        if end > source.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "cso read range exceeded buffered source",
-            ));
-        }
-        buf.copy_from_slice(&source[start..end]);
-        Ok(())
-    }
-}
-
 struct ExactCsoFileReader {
     file: File,
 }
@@ -86,7 +43,6 @@ impl ciso::read::Read<io::Error> for ExactCsoFileReader {
 enum CsoSourceReader {
     Single(ExactCsoFileReader),
     Split(SplitFileReader<io::Error, ExactCsoFileReader>),
-    InMemory(InMemoryCsoReader),
 }
 
 impl ciso::read::Read<io::Error> for CsoSourceReader {
@@ -94,7 +50,6 @@ impl ciso::read::Read<io::Error> for CsoSourceReader {
         match self {
             Self::Single(reader) => ciso::read::Read::size(reader),
             Self::Split(reader) => ciso::read::Read::size(reader),
-            Self::InMemory(reader) => ciso::read::Read::size(reader),
         }
     }
 
@@ -102,7 +57,6 @@ impl ciso::read::Read<io::Error> for CsoSourceReader {
         match self {
             Self::Single(reader) => ciso::read::Read::read(reader, pos, buf),
             Self::Split(reader) => ciso::read::Read::read(reader, pos, buf),
-            Self::InMemory(reader) => ciso::read::Read::read(reader, pos, buf),
         }
     }
 }
@@ -185,19 +139,6 @@ impl CsoContainerHandler {
         })
     }
 
-    fn open_reader_from_buffer(
-        &self,
-        source: &Path,
-        bytes: Arc<Vec<u8>>,
-    ) -> Result<CsoImageReader> {
-        CsoReader::new(CsoSourceReader::InMemory(InMemoryCsoReader { bytes })).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "cso source `{}` is invalid: {error}",
-                source.display()
-            ))
-        })
-    }
-
     fn output_name(&self, source: &Path) -> String {
         let file_name = source
             .file_name()
@@ -250,16 +191,6 @@ impl CsoContainerHandler {
         task: &CsoExtractTask,
     ) -> Result<CsoDecodedExtractChunk> {
         let mut reader = self.open_reader(source)?;
-        self.decode_extract_task_from_reader(source, &mut reader, task)
-    }
-
-    fn decode_extract_task_from_buffer(
-        &self,
-        source: &Path,
-        bytes: Arc<Vec<u8>>,
-        task: &CsoExtractTask,
-    ) -> Result<CsoDecodedExtractChunk> {
-        let mut reader = self.open_reader_from_buffer(source, bytes)?;
         self.decode_extract_task_from_reader(source, &mut reader, task)
     }
 
@@ -365,7 +296,6 @@ impl ContainerHandlerOperations for CsoContainerHandler {
             tasks = tasks.len(),
             used_parallelism = execution.used_parallelism,
             effective_threads = execution.effective_threads,
-            read_on_main = execution.used_parallelism && container_reads_source_on_main_thread(),
             "cso extract start"
         );
         let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
@@ -386,64 +316,13 @@ impl ContainerHandlerOperations for CsoContainerHandler {
             request.overwrite,
         )?;
         let source = request.source.clone();
-        let decode_result = if execution.used_parallelism && container_reads_source_on_main_thread()
-        {
-            let compressed_len = fs::metadata(&source).map(|meta| meta.len()).unwrap_or(0);
-            if container_exceeds_main_thread_cap(compressed_len) {
-                // Over-cap serial fallback (browser/wasm): the compressed source is too large to
-                // buffer whole on the main thread (e.g. a multi-GiB PS2 disc on iOS). Open a
-                // file-backed reader on the main thread (the only thread allowed to open OPFS) and
-                // decode tasks serially, reusing the one reader so each task reads only the blocks
-                // it needs. Peak memory is one task's decoded output instead of the whole file.
-                // Worker parallelism is given up for these inputs (they cannot be buffered anyway),
-                // but the decode is the same `ciso` path, so output bytes are identical.
-                trace!(
-                    format = self.descriptor.name,
-                    compressed_len,
-                    limit = crate::constants::container_in_memory_limit_bytes(),
-                    "cso read-on-main serial fallback (source exceeds buffer cap)"
-                );
-                let mut serial_reader = self.open_reader(&source)?;
-                tasks.iter().try_for_each(|task| {
-                    let chunk =
-                        self.decode_extract_task_from_reader(&source, &mut serial_reader, task)?;
-                    extract_writer.write(chunk.index, chunk.data, task.len)
-                })
-            } else {
-                // Read-on-main pipeline (browser/wasm): the OPFS source is opened only on the main
-                // runner thread, so the entire compressed cso file is read here once into a shared
-                // buffer. Worker threads then decode from that in-memory buffer (never the file).
-                // Compressed cso is much smaller than the decompressed output, so buffering it is
-                // acceptable; output bytes are identical to the native path.
-                let source_bytes = Arc::new(fs::read(&source).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "cso extract failed while reading source `{}`: {error}",
-                        source.display()
-                    ))
-                })?);
-                trace!(
-                    format = self.descriptor.name,
-                    source_bytes = source_bytes.len(),
-                    "cso read-on-main source buffered"
-                );
-                decode_tasks_ordered(
-                    &tasks,
-                    execution.effective_threads,
-                    Self::extract_pipeline_messages(),
-                    |task: &CsoExtractTask| task.len,
-                    |task| {
-                        self.decode_extract_task_from_buffer(
-                            &source,
-                            Arc::clone(&source_bytes),
-                            &task,
-                        )
-                    },
-                    |chunk: CsoDecodedExtractChunk, task_len| {
-                        extract_writer.write(chunk.index, chunk.data, task_len)
-                    },
-                )
-            }
-        } else if execution.used_parallelism {
+        // Each worker opens its own file-backed `ciso` reader and decodes its assigned task range,
+        // reading only the compressed blocks that range spans (peak memory is one task's decoded
+        // output per worker, not the whole file). In the browser the OPFS proxy worker owns the
+        // source handle, so a spawned wasm thread's `path_open` is marshalled to it and succeeds —
+        // the old read-on-main path (buffer the whole compressed source on the main thread, or
+        // serial-decode it over a cap) is no longer needed.
+        let decode_result = if execution.used_parallelism {
             decode_tasks_ordered(
                 &tasks,
                 execution.effective_threads,

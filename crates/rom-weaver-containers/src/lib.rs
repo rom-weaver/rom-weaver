@@ -219,9 +219,7 @@ pub(crate) use rvz::RvzContainerHandler;
 
 #[path = "handlers/z3ds.rs"]
 mod z3ds;
-pub(crate) use z3ds::{
-    Z3dsContainerHandler, container_exceeds_main_thread_cap, container_reads_source_on_main_thread,
-};
+pub(crate) use z3ds::Z3dsContainerHandler;
 
 #[cfg(test)]
 #[path = "../tests/unit/handlers.rs"]

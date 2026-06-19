@@ -354,29 +354,6 @@ impl<R: Read + Seek> Seek for Z3dsPayloadReader<R> {
     }
 }
 
-/// Whether the threaded container create/extract pipelines (z3ds, cso) must read the source on
-/// the calling (main) thread instead of opening it from spawned worker threads.
-///
-/// Delegates to the shared [`rom_weaver_core::reads_source_on_main_thread`] gate: always true on
-/// wasm32 (only the main runner thread can open OPFS-backed files; worker `path_open` fails with
-/// `os error 44`), and gated by [`crate::constants::MAIN_THREAD_READER_ENV`] on native so tests
-/// can exercise the main-thread reader path.
-pub(crate) fn container_reads_source_on_main_thread() -> bool {
-    rom_weaver_core::reads_source_on_main_thread(crate::constants::MAIN_THREAD_READER_ENV)
-}
-
-/// Whether a read-on-main container extract must fall back to a serial single-pass decode instead
-/// of buffering the whole compressed source on the main thread. Only relevant when main-thread
-/// reads are required (wasm/Safari OPFS) AND the compressed source exceeds
-/// [`crate::constants::container_in_memory_limit_bytes`]; below the cap the parallel
-/// buffer-then-decode path is used. When workers can open the source themselves this is always
-/// `false` (no main-thread buffering happens, so size is irrelevant). z3ds does not use this — it
-/// streams per-task frame ranges unconditionally — so this guards cso and libarchive.
-pub(crate) fn container_exceeds_main_thread_cap(compressed_len: u64) -> bool {
-    container_reads_source_on_main_thread()
-        && compressed_len > crate::constants::container_in_memory_limit_bytes()
-}
-
 thread_local! {
     /// Per-worker reusable zstd compression context, keyed by level. `zstd::bulk::compress` builds
     /// and frees a fresh `CCtx` (and its match-finder workspace) on every call; a z3ds create fans
