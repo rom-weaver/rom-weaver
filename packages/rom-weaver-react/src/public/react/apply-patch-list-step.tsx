@@ -32,7 +32,6 @@ const PATCH_INPUT_VERIFICATION_LABELS: Record<string, string> = {
 const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
   "out crc32": "CRC32",
   "out size": "BYTES",
-  "patch crc32": "PATCH CRC32",
 };
 
 const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: NoticeState }) => {

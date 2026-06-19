@@ -144,7 +144,6 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
     formatPatchValidationValue("in crc32", patch.requirements?.sourceCrc32),
     formatPatchValidationValue("out size", patch.requirements?.targetSize),
     formatPatchValidationValue("out crc32", patch.requirements?.targetCrc32),
-    formatPatchValidationValue("patch crc32", patch.requirements?.patchCrc32),
   ].filter(Boolean);
   const validationValues = requirementValues.length || !patch.patchValidation ? requirementValues : ["dry-run apply"];
   const actualValue = "";
