@@ -51,6 +51,7 @@ const FileCard = ({
   name,
   meta,
   target,
+  stageBar,
   children,
 }: {
   state?: FileState;
@@ -70,13 +71,34 @@ const FileCard = ({
   /** size · format sub-line under the name (`.card-meta` content). */
   meta?: ReactNode;
   target?: ReactNode;
+  /**
+   * Progress bar on the card's top edge while staging: a determinate width
+   * (0–100) when the percent is known, or `"indeterminate"` for an animated
+   * sliding bar. Omit/null to render no bar — the bar is removed once the work
+   * finishes (the meta-line status is what carries completion).
+   */
+  stageBar?: number | "indeterminate" | null;
   children?: ReactNode;
 }) => (
   <div
-    className={join("card file", state, inputMatch && "im", patch && "grabbable patch", className)}
+    className={join(
+      "card file",
+      state,
+      inputMatch && "im",
+      patch && "grabbable patch",
+      stageBar != null && "has-stage-bar",
+      className,
+    )}
     ref={rootRef}
     style={style}
   >
+    {stageBar == null ? null : (
+      <div
+        aria-hidden="true"
+        className={join("stage-bar", stageBar === "indeterminate" && "is-indeterminate")}
+        style={stageBar === "indeterminate" ? undefined : { width: `${Math.max(0, Math.min(100, stageBar))}%` }}
+      />
+    )}
     {hideName ? (
       onRemove ? (
         <RemoveButton label={removeLabel} onClick={onRemove} />

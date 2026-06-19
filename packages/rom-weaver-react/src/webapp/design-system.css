@@ -100,6 +100,54 @@
 /* mono/checksum content rides Archivo's width axis a notch tighter than the
    UI text so long hashes pack more per line without changing the typeface */
 .rw-app .mono { font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; }
+/* a TRUE monospace stack (no new font dependency) for the checks rows: every
+   glyph is one cell, so a hash's width is exactly its character count and the
+   staging shimmer (sized by char count) matches the resolved value at any
+   viewport width. */
+.rw-app { --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+.rw-app .ck { font-family: var(--mono); }
+.rw-app .ck .ck-v { letter-spacing: 0; }
+
+/* --- input staging treatment (CLS: card holds resolved height through staging) --- */
+/* slim progress bar on the card's top edge during staging — a determinate width
+   when the percent is known, an animated sliding segment when it isn't. Removed
+   once the work finishes (the card no longer carries a bar). */
+.rw-app .card.has-stage-bar { position: relative; }
+.rw-app .card .stage-bar {
+  position: absolute; inset: 0 auto auto 0; height: 3px; border-start-start-radius: inherit;
+  background: var(--thread); box-shadow: 0 0 8px color-mix(in oklab, var(--thread) 55%, transparent);
+  transition: width .3s var(--ease);
+}
+.rw-app .card .stage-bar.is-indeterminate {
+  width: 30%; transition: none; animation: stage-bar-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes stage-bar-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .card .stage-bar { transition: none; }
+  .rw-app .card .stage-bar.is-indeterminate { animation: none; }
+}
+/* status in the meta line — sized/condensed to match the size + tag chips so it
+   reads as part of that row, sitting to the right of the platform/format tag. */
+.rw-app .stage-status { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
+.rw-app .stage-status::before { content: "·"; margin-inline-end: 1px; color: var(--ink-4); }
+.rw-app .stage-status .pct { color: var(--thread-text); font-variant-numeric: tabular-nums; font-weight: 650; }
+/* pending checksum value — invisible text the exact char length of the eventual
+   hash (so width + break-all wrapping match it), painted as a shimmering orange
+   bar; box-decoration-break makes each wrapped line carry the fill. */
+.rw-app .ck.pending { cursor: default; }
+.rw-app .ck.pending .copy { opacity: 0; }
+.rw-app .ck.pending .ck-v .pend {
+  color: transparent; user-select: none; border-radius: 3px;
+  background-image: linear-gradient(90deg,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 20%,
+    color-mix(in oklab, var(--thread) 58%, var(--plate-2)) 42%,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 64%);
+  background-size: 220% 100%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  animation: stage-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes stage-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .rw-app .ck.pending .ck-v .pend { animation: none; } }
 .rw-app button { font: inherit; color: inherit; }
 .rw-app svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .rw-app a { color: var(--ink-2); text-decoration: none; }
