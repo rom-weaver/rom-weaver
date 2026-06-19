@@ -473,12 +473,12 @@ function ApplyWorkflowFormView({
   // header.
   const romNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>
-      Add a ROM in <b className="hexref mono">0x01</b> above
+      Waiting for a ROM — click here or the <b className="hexref mono">0x01</b> drop zone above to add one
     </NeedsInput>
   );
   const patchesNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>
-      Add patches in <b className="hexref mono">0x01</b> above
+      Waiting for patches — click here or the <b className="hexref mono">0x01</b> drop zone above to add some
     </NeedsInput>
   );
 
