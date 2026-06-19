@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
-import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
+import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
 import { FileProgress } from "./feedback.tsx";
 
 const formatExtractTimingMs = (ms?: number): string | undefined =>
@@ -91,6 +91,7 @@ const SourceInfoList = ({
   lead,
   onToggle,
   open,
+  pending,
   progress,
   timing,
 }: {
@@ -104,9 +105,15 @@ const SourceInfoList = ({
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
   open?: boolean;
+  /** When set, the file is still staging: render shimmer placeholders for these
+   * planned groups/rows (reserving the resolved height) instead of any value. */
+  pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
   timing?: ReactNode;
 }) => {
+  if (pending?.length) {
+    return <PendingChecks defaultOpen={defaultOpen} groups={pending} label={label} onToggle={onToggle} open={open} />;
+  }
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
   if (!(hasBytes || checksums || lead || progress)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
@@ -197,4 +204,11 @@ const DiscTracksPanel = ({
   );
 };
 
-export { type DiscTrackPanelInfo, DiscTracksPanel, type SourceInfoChecksums, SourceInfoList, type SourceInfoProgress };
+export {
+  type ChecksumPendingGroup,
+  type DiscTrackPanelInfo,
+  DiscTracksPanel,
+  type SourceInfoChecksums,
+  SourceInfoList,
+  type SourceInfoProgress,
+};

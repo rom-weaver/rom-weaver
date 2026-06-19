@@ -3,6 +3,7 @@ import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.
 import { DiscSheetsPanel } from "./cue-panel.tsx";
 import { FixesPanel, type FixesPanelProps } from "./fixes-panel.tsx";
 import {
+  type ChecksumPendingGroup,
   type DiscTrackPanelInfo,
   DiscTracksPanel,
   type SourceInfoChecksums,
@@ -19,6 +20,7 @@ type RomInputInfoPanelProps = {
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
   open?: boolean;
+  pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
   timing?: ReactNode;
 };

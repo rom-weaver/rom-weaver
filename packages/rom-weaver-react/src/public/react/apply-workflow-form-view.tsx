@@ -8,6 +8,7 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
+import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
@@ -196,24 +197,41 @@ const groupRomInputs = (rows: RomInputRowState[]): RomInputGroup[] => {
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
   const { romInputs, alterHeaderChecked, verificationStates, ui } = deps;
   const state = verificationStates.get(romInput.id);
-  const rowProgress = romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
-  if (rowProgress) {
-    return {
-      id: romInput.id,
-      progress: {
-        cancelLabel: romInputs.length > 1 ? "Cancel ROM input staging" : "Cancel ROM staging",
-        id: `rom-weaver-progress-rom-${index}`,
-        onCancel: () => {
-          if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
-          else ui.removeRomInput?.(romInput.id);
-        },
-        ...toWorkflowFileProgressProps(rowProgress)!,
-      },
-    };
+  // ── Input staging treatment (CLS) ──────────────────────────────────────────
+  // The resolved card structure stays mounted through staging: a slim determinate
+  // bar on the card's top edge + a status in the meta line carry progress, and the
+  // Checks drawer reserves its rows as shimmer placeholders sized to the eventual
+  // hash lengths. So nothing below the card moves when the checksums land — the
+  // bare-panel → full-card swap (~116px → ~530px, ~2s after drop, outside the input
+  // grace window) was the dominant layout shift. The bar stays full once finished;
+  // only the status text drops, leaving the platform tag in its slot.
+  const staging = !!romInput.progress;
+  const stagingPhase = romInput.info.validationPhase === "checksum" ? "checksum" : "rom";
+  let stagingProps: ReturnType<typeof toWorkflowFileProgressProps> = null;
+  if (staging) {
+    stagingProps =
+      stagingPhase === "checksum"
+        ? toWorkflowChecksumProgressProps(romInput.progress)
+        : toWorkflowFileProgressProps(romInput.progress);
   }
-  const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
+  const percent = stagePercent(stagingProps);
+  const stageLabel = stageStatusLabel(stagingProps, "Checksumming");
   const romBytes = romInput.size ?? romInput.sourceSize;
   const romTypeTag = formatRomTypeTag(romInput.info.romType);
+  // Phase A reserves the always-present base group; the streamed variant plan will
+  // extend this to the exact group set. No group label → bare rows, matching the
+  // no-variant resolved layout.
+  const pendingGroups = [
+    {
+      id: "raw",
+      rows: [
+        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
+        { label: "CRC32", length: 8 },
+        { label: "MD5", length: 32 },
+        { label: "SHA-1", length: 40 },
+      ],
+    },
+  ];
   return {
     card: {
       extract: {
@@ -224,10 +242,13 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
       },
       meta:
-        typeof romBytes === "number" || romTypeTag ? (
+        typeof romBytes === "number" || romTypeTag || staging ? (
           <>
             {typeof romBytes === "number" ? <span className="fsize mono">{formatByteSize(romBytes)}</span> : null}
             {romTypeTag ? <span className="meta-fmt mono">{romTypeTag}</span> : null}
+            {staging ? (
+              <StageStatus id={`rom-weaver-progress-${stagingPhase}-${index}`} label={stageLabel} percent={percent} />
+            ) : null}
           </>
         ) : undefined,
       onRemove: () => {
@@ -243,19 +264,21 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           trim: romInput.info.romProbe?.trim,
         },
         info: {
-          bytes: romInput.size ?? romInput.sourceSize,
-          checksums: { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
-          checksumVariants: romInput.info.checksumVariants,
-          lead:
-            !checksumProgress && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
+          bytes: romBytes,
+          checksums: staging
+            ? undefined
+            : { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
+          checksumVariants: staging ? undefined : romInput.info.checksumVariants,
+          lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
-          open: romInput.info.checksumsExpanded,
-          progress: toWorkflowChecksumProgressProps(checksumProgress),
-          timing: CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
+          open: staging ? true : romInput.info.checksumsExpanded,
+          pending: staging ? pendingGroups : undefined,
+          timing: staging ? undefined : CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
         },
         ...(romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
       removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",
+      stageBar: stageBarValue(staging, percent),
       state,
     },
     id: romInput.id,

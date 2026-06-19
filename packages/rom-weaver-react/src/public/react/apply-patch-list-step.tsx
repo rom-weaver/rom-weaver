@@ -5,12 +5,13 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./components/ds/checksum-list.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
-import { FileProgress, Notice } from "./components/ds/feedback.tsx";
+import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
+import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -78,8 +79,20 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
 /** One Checks drawer per patch, with INPUT / OUTPUT / DRY-RUN sub-groups — the
  * loom prototype's verification language (a single section, grouped rows; the
  * dry-run reports a verdict block, not a checksum row). */
-const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
+const PatchInfo = ({
+  item,
+  pending,
+}: {
+  item: PatchStackItemState;
+  /** When set, the patch is still staging: render shimmer placeholders for these
+   * planned verification sections (Input / Output) so the card holds its resolved
+   * height through staging — the bar + meta status carry progress. */
+  pending?: ChecksumPendingGroup[];
+}) => {
   const localizer = useUiLocalizer();
+  if (pending?.length) {
+    return <PendingChecks defaultOpen groupClassName="ck-group ckgrp" groups={pending} label="Checks" />;
+  }
   const { dryRun, inputRows, outputRows } = getPatchVerificationRows(item);
   const hasInputDetails = !!(inputRows.length || item.validationMessage);
   const hasOutputDetails = outputRows.length > 0;
@@ -88,18 +101,15 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   // The dry-run verdict line already says pass/fail — only surface the raw
   // validation message alongside it when it carries failure detail.
   const showMessage = !!item.validationMessage && (!dryRun || bad);
+  let match: { label: null; ok: boolean } | undefined;
+  if (item.validationState === "invalid") match = { label: null, ok: false };
+  else if (item.validationState === "valid") match = { label: null, ok: true };
   return (
     <ChecksumList
       defaultOpen={inputRows.length > 0 || hasOutputDetails || dryRun}
       label="Checks"
       lead={showMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined}
-      match={
-        item.validationState === "invalid"
-          ? { label: null, ok: false }
-          : item.validationState === "valid"
-            ? { label: null, ok: true }
-            : undefined
-      }
+      match={match}
       timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
     >
       {inputRows.length ? (
@@ -323,6 +333,7 @@ const ApplyPatchListStep = ({
   ui: PatcherUiController;
   woven?: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   const total = patches.length;
   // Reordering only makes sense for a multi-patch stack. Dragging is additionally
   // suspended while any patch is staging or the stack is otherwise busy.
@@ -373,28 +384,39 @@ const ApplyPatchListStep = ({
         id="rom-weaver-list-patch-stack"
         ref={reorderList.containerRef}
       >
-        {patches.map((item, index) =>
-          item.progress ? (
-            <FileProgress
-              cancelLabel="Cancel patch staging"
-              id={`rom-weaver-progress-patch-${index}`}
-              key={item.key ?? `${index}:${item.fileName}`}
-              onCancel={() => patchStack.removeItem(index)}
-              {...toWorkflowFileProgressProps(item.progress)!}
-            />
-          ) : (
+        {patches.map((item, index) => {
+          // Mirrors the ROM card: the resolved card structure stays mounted through
+          // staging — a determinate bar on the top edge + a "Validating…" status in
+          // the meta line carry progress, and the Checks drawer reserves its
+          // verification sections as shimmer placeholders — so the stack doesn't
+          // jump when validation lands. The bar stays full once finished.
+          const staging = !!item.progress;
+          const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
+          const percent = stagePercent(stagingProps);
+          const rowProps = reorderList.rowProps(index);
+          const disabledClass = disabledFlags?.[index] ? "is-disabled" : undefined;
+          let verdict: "bad" | "ok" | undefined;
+          if (item.validationState === "invalid") verdict = "bad";
+          else if (item.validationState === "valid") verdict = "ok";
+          // Phase A reserves the source (Input) verification group; the streamed
+          // section plan will extend this to the exact sections (Input/Output/dry-run).
+          const pendingSections: ChecksumPendingGroup[] = [
+            {
+              id: "input",
+              label: localizer.message("ui.verify.input"),
+              rows: [
+                { label: "CRC32", length: 8 },
+                { label: "BYTES", length: 8 },
+              ],
+            },
+          ];
+          return (
             <FileCard
               key={item.key ?? `${index}:${item.fileName}`}
-              {...(() => {
-                const rowProps = reorderList.rowProps(index);
-                const disabledClass = disabledFlags?.[index] ? "is-disabled" : undefined;
-                return {
-                  ...rowProps,
-                  className: [rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined,
-                };
-              })()}
+              {...rowProps}
+              className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
               handle={
-                reorderable ? (
+                reorderable && !staging ? (
                   <PatchDragHandle
                     disabled={!canReorder}
                     handleProps={reorderList.handleProps(index)}
@@ -414,15 +436,22 @@ const ApplyPatchListStep = ({
                   ) : null}
                   {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
                   {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
+                  {staging ? (
+                    <StageStatus
+                      id={`rom-weaver-progress-patch-${index}`}
+                      label={stageStatusLabel(stagingProps, "Validating")}
+                      percent={percent}
+                    />
+                  ) : null}
                 </>
               }
               name={
                 <ExtractName
                   fileName={item.fileName}
                   fileSize={item.fileSize}
-                  // The first archive-path entry is the source archive itself
-                  // (shown in the Extract drawer / picker); the rest is the
-                  // folder path within it, surfaced inline on the name.
+                  // The first archive-path entry is the source archive itself (shown
+                  // in the Extract drawer / picker); the rest is the folder path
+                  // within it, surfaced inline on the name.
                   folderPath={
                     (item.archivePathEntries || [])
                       .slice(1)
@@ -437,8 +466,9 @@ const ApplyPatchListStep = ({
               onRemove={() => patchStack.removeItem(index)}
               patch
               removeLabel="Remove patch"
-              state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
-              target={<PatchTarget index={index} item={item} patchStack={patchStack} />}
+              stageBar={stageBarValue(staging, percent)}
+              state={staging ? undefined : verdict}
+              target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
             >
               <div className="patch-body">
                 <div className="patch-body-inner">
@@ -449,12 +479,12 @@ const ApplyPatchListStep = ({
                     timing={TIMING_LABEL(item.decompressionTimeMs)}
                   />
                   <PatchOptions index={index} item={item} patchStack={patchStack} />
-                  <PatchInfo item={item} />
+                  <PatchInfo item={item} pending={staging ? pendingSections : undefined} />
                 </div>
               </div>
             </FileCard>
-          ),
-        )}
+          );
+        })}
       </div>
       {total === 0 &&
       emptyState &&
