@@ -110,9 +110,15 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     this.cacheVersion = version;
     const available = blockStart + filled - start;
     if (available <= 0) return 0;
-    const copyLen = Math.min(available, dst.byteLength);
-    dst.set(this.cacheBuf.subarray(start - blockStart, start - blockStart + copyLen));
-    return copyLen;
+    const fromCache = Math.min(available, dst.byteLength);
+    dst.set(this.cacheBuf.subarray(start - blockStart, start - blockStart + fromCache));
+    if (fromCache >= dst.byteLength) return fromCache;
+    // The request runs past the end of this 1-block cache. Returning the partial count here is a short
+    // read mid-file; positional readers that do not retry (e.g. the CHD scoped reader's read_exact_at)
+    // then fail with "read error". Fill the remainder directly so readAt always satisfies the full
+    // request up to EOF. (`rest` is 0 only at true EOF, which is a correct short read.)
+    const rest = this.client.readInto(handleId, start + fromCache, dst.subarray(fromCache));
+    return fromCache + rest;
   }
 
   writeAt(offset: number | bigint, data: Uint8Array): number {
