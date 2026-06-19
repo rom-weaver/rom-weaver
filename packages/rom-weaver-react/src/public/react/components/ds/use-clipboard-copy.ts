@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { copyToClipboard } from "../../../../lib/clipboard.ts";
 import { createLogger } from "../../../../lib/logging.ts";
 
 /**
@@ -9,26 +10,6 @@ import { createLogger } from "../../../../lib/logging.ts";
 
 const logger = createLogger("clipboard-copy");
 const COPIED_RESET_MS = 1100;
-
-// Fallback for non-secure contexts (e.g. a self-signed LAN cert on iOS) where
-// navigator.clipboard is unavailable — selection + execCommand still copies there.
-const execCommandCopy = (value: string): boolean => {
-  if (typeof document === "undefined") return false;
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.cssText = "position:fixed;top:-1000px;left:0;opacity:0;";
-  document.body.appendChild(textarea);
-  textarea.select();
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch {
-    ok = false;
-  }
-  document.body.removeChild(textarea);
-  return ok;
-};
 
 const useClipboardCopy = (text: string, resetMs = COPIED_RESET_MS) => {
   const [copied, setCopied] = useState(false);
@@ -44,16 +25,9 @@ const useClipboardCopy = (text: string, resetMs = COPIED_RESET_MS) => {
 
   const copy = () => {
     if (!text) return;
-    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-    if (clipboard?.writeText) {
-      clipboard.writeText(text).then(markCopied, () => {
-        if (execCommandCopy(text)) markCopied();
-        else logger.trace("Clipboard copy failed");
-      });
-      return;
-    }
-    if (execCommandCopy(text)) markCopied();
-    else logger.trace("Clipboard unavailable; skipping copy");
+    copyToClipboard(text).then(markCopied, (error) =>
+      logger.trace("Clipboard copy failed", { message: String(error) }),
+    );
   };
 
   return { copied, copy };
