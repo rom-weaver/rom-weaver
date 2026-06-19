@@ -97,7 +97,10 @@ const toRomWeaverOptions = (input: {
     onTraceNonJsonLine: (line) => {
       const message = String(line || "").trim();
       if (!message) return;
-      emitRuntimeLog(input.onLog, "trace", message);
+      // `[perf]` timing lines (command timings, file-io throughput) are always emitted by the runner
+      // regardless of trace mode; surface them at info so they show at the default verbosity instead of
+      // requiring the trace level. Everything else stays trace.
+      emitRuntimeLog(input.onLog, message.startsWith("[perf]") ? "info" : "trace", message);
     },
     signal: input.signal,
   };
