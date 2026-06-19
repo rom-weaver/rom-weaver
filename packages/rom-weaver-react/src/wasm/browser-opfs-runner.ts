@@ -35,7 +35,7 @@ import type {
 } from "./browser-opfs-runtime-types.ts";
 import {
   basenameForTrace,
-  createRunTrace,
+  createLineTrace,
   decodeChunks,
   formatCommandForTrace,
   formatErrorForTrace,
@@ -164,7 +164,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         browserThreadRequestOptions(runDefaultThreads ?? resolveBrowserDefaultThreads()),
       );
       const command = readRomWeaverRunRequestCommand(request);
-      const trace = createRunTrace(runOptions);
+      const trace = createLineTrace(runOptions?.onTraceNonJsonLine);
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)} wasmBytes=${wasmByteLength ?? "?"} wasmSha=${wasmSha || "?"}`,
       );
@@ -408,7 +408,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       commandOrRequest: RomWeaverRunInput,
       runOptions: BrowserOpfsRunOptions & RomWeaverRunJsonOptions<TEvent, TTraceEvent> = {},
     ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
-      const trace = createRunTrace(runOptions);
+      const trace = createLineTrace(runOptions?.onTraceNonJsonLine);
       const request = normalizeRomWeaverRunRequest(commandOrRequest, {
         ...readRunOutputOverrides(runOptions),
         json: true,

@@ -84,10 +84,6 @@ type BufferedWriteWasiFd = {
   pendingWriteBufferLength(): number;
 };
 
-export function createRunTrace(runOptions: { onTraceNonJsonLine?: unknown } | null | undefined): TraceLine {
-  return createLineTrace(runOptions?.onTraceNonJsonLine);
-}
-
 export function createLineTrace(onTraceNonJsonLine: unknown): TraceLine {
   const trace = typeof onTraceNonJsonLine === "function" ? (onTraceNonJsonLine as TraceLine) : null;
   return (line) => {
