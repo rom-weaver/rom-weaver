@@ -2,10 +2,10 @@ use std::{env, fs, path::Path};
 
 use rom_weaver_app::{
     ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand,
-    ListCommand, MatchSidecarsCommand, N64ByteOrder, PatchApplyCommand, PatchCommands,
-    PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, ProbeCommand, RomWeaverRunOutputOptions, RomWeaverRunRequest,
-    TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    ExtractStepDetails, ExtractedFileEntry, ListCommand, MatchSidecarsCommand, N64ByteOrder,
+    PatchApplyCommand, PatchCommands, PatchCreateCandidatesCommand, PatchCreateCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, ProbeCommand, RomWeaverRunOutputOptions,
+    RomWeaverRunRequest, TrimCommand, compression_metadata, patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ContainerDefaultOutputMetadata, ContainerFormatMetadata, ContainerOutputExtensionStrategy,
@@ -58,15 +58,15 @@ fn run() -> Result<(), String> {
     let outputs = [
         GeneratedOutput {
             path: TYPES_OUTPUT_PATH,
-            rendered: render_types(),
+            rendered: strip_trailing_whitespace(render_types()),
         },
         GeneratedOutput {
             path: METADATA_OUTPUT_PATH,
-            rendered: render_metadata(),
+            rendered: strip_trailing_whitespace(render_metadata()),
         },
         GeneratedOutput {
             path: COMMAND_TYPES_OUTPUT_PATH,
-            rendered: render_command_types(),
+            rendered: strip_trailing_whitespace(render_command_types()),
         },
     ];
 
@@ -134,6 +134,25 @@ fn parse_mode(args: Vec<String>) -> Result<Mode, String> {
     }
 }
 
+/// ts-rs renders multi-line struct declarations (structs whose fields carry doc
+/// comments) with a trailing space on each line. Strip per-line trailing
+/// whitespace from every generated file so they satisfy the repo's
+/// `git diff --check` rule. Applied to both `--write` and `--check`, so the
+/// output stays byte-stable between them.
+fn strip_trailing_whitespace(rendered: String) -> String {
+    let mut out = String::with_capacity(rendered.len());
+    for segment in rendered.split_inclusive('\n') {
+        match segment.strip_suffix('\n') {
+            Some(line) => {
+                out.push_str(line.trim_end());
+                out.push('\n');
+            }
+            None => out.push_str(segment.trim_end()),
+        }
+    }
+    out
+}
+
 fn render_types() -> String {
     let config = ts_rs::Config::default();
     let mut declarations = vec![
@@ -145,6 +164,8 @@ fn render_types() -> String {
         export_decl::<ThreadExecution>(&config),
         export_decl::<serde_json::Value>(&config),
         export_decl::<ProgressEvent>(&config),
+        export_decl::<ExtractedFileEntry>(&config),
+        export_decl::<ExtractStepDetails>(&config),
         export_decl::<CompressionLevelProfile>(&config),
         export_decl::<N64ByteOrder>(&config),
         export_decl::<ProbeCommand>(&config),

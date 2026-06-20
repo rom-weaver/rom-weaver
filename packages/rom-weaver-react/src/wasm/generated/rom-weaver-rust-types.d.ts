@@ -17,6 +17,61 @@ export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in
 
 export type ProgressEvent = { command: string, family: OperationFamily, format: string | null, stage: string, label: string, details: JsonValue | null, percent: number | null, requested_threads: number | null, effective_threads: number | null, thread_mode: ThreadMode | null, used_parallelism: boolean | null, thread_fallback: boolean | null, thread_fallback_reason?: string | null, elapsed_ms?: number | null, status: OperationStatus, };
 
+export type ExtractedFileEntry = {
+/**
+ * Entry name as reported by the container handler (path inside the archive,
+ * forward-slash normalized for nested sources).
+ */
+file_name: string,
+/**
+ * Uncompressed size of this entry in bytes. Serialized as `null` (not
+ * omitted) when the container handler does not report a size — the default
+ * `list_entry_records` impl reports `None` for libarchive-backed formats, so
+ * preserving the explicit `null` keeps the emitted JSON byte-identical.
+ */
+size_bytes: bigint | null,
+/**
+ * Coarse classification: `rom`, `patch`, `common` (ignored sidecar), or
+ * `other`. Present on probe-manifest entries; carried through verbatim on
+ * extract-step outputs when the emitted file recorded one.
+ */
+kind?: string | null, };
+
+export type ExtractStepDetails = {
+/**
+ * Nesting depth of this level (0 = the input container).
+ */
+depth: number,
+/**
+ * Full source path this level extracted from (forward-slash normalized).
+ */
+source: string,
+/**
+ * File name component of `source` (no directory).
+ */
+source_name: string,
+/**
+ * Directory this level extracted into (forward-slash normalized). The host
+ * relativizes each level's source against the longest matching `out_dir`.
+ */
+out_dir: string,
+/**
+ * Container format name for this level.
+ */
+format: string,
+/**
+ * Per-level lifecycle: `running` before the work, then `succeeded`/`failed`.
+ */
+status: string,
+/**
+ * Wall-clock ms this level took; only set on the `succeeded` step.
+ */
+extract_time_ms?: number | null,
+/**
+ * Entries this level produced (leaf level only; intermediate levels are empty).
+ */
+outputs: Array<ExtractedFileEntry>, };
+
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
 export type N64ByteOrder = "big-endian" | "little-endian" | "byte-swapped";

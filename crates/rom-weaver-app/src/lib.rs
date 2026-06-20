@@ -921,6 +921,7 @@ mod output_details;
 #[path = "extract_progress.rs"]
 mod extract_progress;
 use extract_progress::*;
+pub use extract_progress::{ExtractStepDetails, ExtractedFileEntry};
 
 #[path = "compress_trim_batch.rs"]
 mod compress_trim_batch;

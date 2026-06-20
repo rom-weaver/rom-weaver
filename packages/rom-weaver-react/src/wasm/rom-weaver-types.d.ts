@@ -21,6 +21,8 @@ export type {
   CompressCommand,
   CompressionLevelProfile,
   ExtractCommand,
+  ExtractedFileEntry,
+  ExtractStepDetails,
   ListCommand,
   PatchApplyCommand,
   PatchCommands,

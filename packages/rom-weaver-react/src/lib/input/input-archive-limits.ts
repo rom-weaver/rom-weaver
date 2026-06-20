@@ -1,3 +1,4 @@
+import type { ExtractedFileEntry } from "../../wasm/index.ts";
 import { RomWeaverError } from "../errors.ts";
 import { getPatchFileCleanup, type PatchFileInstance } from "./binary-service.ts";
 import {
@@ -11,12 +12,10 @@ import {
   type InputPreparationRuntimeLike,
   isCompressionEntryFileName,
   isCompressionFile,
-  isRecord,
   listCompressionEntries,
   normalizeSelectedEntryNames,
   traceArchivePreparation,
 } from "./input-preparation-archive.ts";
-import { getBaseFileName } from "./path-utils.ts";
 
 // Cumulative per-descent counters checked against the configured archive limits. Threaded through the
 // recursive preflight so total entry/candidate/byte counts and visited-archive identities accrue
@@ -205,22 +204,21 @@ const preflightArchiveLimitsForDescent = async (
   }
 };
 
+// `outputs` are the per-level extract-step entries (Rust `ExtractedFileEntry`): `file_name` plus an
+// optional `size_bytes` (ts-rs renders the `u64` as `bigint`, though the JSON value is a number).
 const assertDescentOutputLimits = (
   options: InputPreparationOptions,
   depth: number,
-  outputs: unknown[],
+  outputs: ExtractedFileEntry[],
   totalOutputBytes: number,
 ) => {
   assertArchiveDepth(options, depth);
   for (const output of outputs) {
-    if (!isRecord(output)) continue;
-    const size = typeof output.size_bytes === "number" ? output.size_bytes : 0;
-    const entryName =
-      typeof output.path === "string"
-        ? getBaseFileName(output.path)
-        : typeof output.file_name === "string"
-          ? output.file_name
-          : "";
+    if (!output) continue;
+    const rawSize = output.size_bytes;
+    const numericSize = typeof rawSize === "bigint" ? Number(rawSize) : rawSize;
+    const size = typeof numericSize === "number" && Number.isFinite(numericSize) ? numericSize : 0;
+    const entryName = typeof output.file_name === "string" ? output.file_name : "";
     assertArchiveLimit(
       "ARCHIVE_SINGLE_FILE_LIMIT_EXCEEDED",
       "Archive entry size exceeds configured limit",

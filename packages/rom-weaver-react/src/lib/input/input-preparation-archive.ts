@@ -2,6 +2,7 @@ import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { getPathBaseName } from "../path-utils.ts";
@@ -546,6 +547,25 @@ const resolveArchiveInput = async (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// ts-rs maps Rust `u64` to `bigint`, but these byte counts arrive over JSON as plain numbers; coerce
+// whatever the runtime delivers (number or bigint) to a finite number, defaulting to 0.
+const toFiniteBytes = (value: ExtractedFileEntry["size_bytes"] | undefined): number => {
+  const numeric = typeof value === "bigint" ? Number(value) : value;
+  return typeof numeric === "number" && Number.isFinite(numeric) ? numeric : 0;
+};
+
+// The `extract_step` payload is typed end-to-end (Rust `ExtractStepDetails`); the wire value still
+// arrives as `unknown`, so this guards shape at runtime and hands back the generated type so field
+// access below is compile-checked against the Rust producer. Returns `null` for any non-`succeeded`
+// step (the `running` step fires before the work and carries no outputs/time).
+const readSucceededExtractStep = (progressDetails: unknown): ExtractStepDetails | null => {
+  const step = isRecord(progressDetails) ? (progressDetails as { extract_step?: unknown }).extract_step : undefined;
+  if (!(isRecord(step) && step.status === "succeeded" && typeof step.source_name === "string" && step.source_name)) {
+    return null;
+  }
+  return step as unknown as ExtractStepDetails;
+};
+
 /** Discover a compressed archive's input assets with a SINGLE recursive `extract` (no `list`): the
  * Rust core descends nested containers, resolving one payload per level via the interactive selection
  * callback (auto-pick when unambiguous, prompt when not), and returns the bottom leaf output(s) with
@@ -596,13 +616,10 @@ const resolveArchiveInputAssetsByDescent = async (
   const forwardProgress = runtimeOptions.onProgress;
   runtimeOptions.onProgress = (progress) => {
     const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
-    const step = isRecord(details) ? (details as { extract_step?: unknown }).extract_step : undefined;
-    if (isRecord(step) && step.status === "succeeded" && typeof step.source_name === "string" && step.source_name) {
+    const step = readSucceededExtractStep(details);
+    if (step) {
       const outputs = Array.isArray(step.outputs) ? step.outputs : [];
-      const outputSize = outputs.reduce(
-        (total, output) => total + (isRecord(output) && typeof output.size_bytes === "number" ? output.size_bytes : 0),
-        0,
-      );
+      const outputSize = outputs.reduce((total, output) => total + toFiniteBytes(output?.size_bytes), 0);
       totalDescentOutputBytes += outputSize;
       assertDescentOutputLimits(
         options,
@@ -617,8 +634,10 @@ const resolveArchiveInputAssetsByDescent = async (
         outputSize,
         source: typeof step.source === "string" ? step.source : "",
         sourceName: getBaseFileName(step.source_name),
-        ...(typeof step.extract_time_ms === "number" && Number.isFinite(step.extract_time_ms)
-          ? { extractTimeMs: step.extract_time_ms }
+        ...(step.extract_time_ms !== null &&
+        step.extract_time_ms !== undefined &&
+        Number.isFinite(Number(step.extract_time_ms))
+          ? { extractTimeMs: Number(step.extract_time_ms) }
           : {}),
       });
     }
@@ -825,7 +844,6 @@ export {
   getPatchLeafParentCompressionsForSelection,
   isCompressionEntryFileName,
   isCompressionFile,
-  isRecord,
   listCompressionEntries,
   listCompressionEntryResult,
   normalizeSelectedEntryNames,
