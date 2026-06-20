@@ -43,6 +43,8 @@ export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, };
 
+export type MatchSidecarsCommand = { rom_name: string, patch_names?: Array<string>, };
+
 export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "list", "args": ListCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand } | { "type": "match-sidecars", "args": MatchSidecarsCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
