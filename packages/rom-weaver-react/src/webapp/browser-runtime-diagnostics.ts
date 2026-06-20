@@ -1,3 +1,5 @@
+import { hasMobileToken, isAppleTouchDesktop, isSafariBrowser } from "../platform/shared/webkit-runtime.ts";
+
 type BrowserRuntimeFeatureProbe = {
   available: boolean;
   error?: string;
@@ -55,12 +57,13 @@ const formatError = (error: unknown) => (error instanceof Error ? error.message 
 const getNavigator = () => (typeof navigator === "object" ? navigator : null);
 
 const isMobileSafariLike = (navigatorObject: Navigator | null) => {
-  const userAgent = navigatorObject?.userAgent || "";
-  const platform = navigatorObject?.platform || "";
-  const maxTouchPoints = typeof navigatorObject?.maxTouchPoints === "number" ? navigatorObject.maxTouchPoints : 0;
-  const isSafari = /Safari/.test(userAgent) && !/(Chrome|Chromium|CriOS|FxiOS|EdgiOS)/.test(userAgent);
-  const isMobile = /Mobile(\/\S+)? /.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
-  return isSafari && isMobile;
+  const environment = {
+    maxTouchPoints: navigatorObject?.maxTouchPoints,
+    platform: navigatorObject?.platform,
+    userAgent: navigatorObject?.userAgent,
+  };
+  const isMobile = hasMobileToken(environment) || isAppleTouchDesktop(environment);
+  return isSafariBrowser(environment) && isMobile;
 };
 
 const collectHeaders = async (): Promise<BrowserRuntimeHeaderProbe | null> => {

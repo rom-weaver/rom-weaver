@@ -1,3 +1,9 @@
+import {
+  hasChromeToken,
+  hasMobileToken,
+  hasSafariToken,
+  isAppleTouchDesktop,
+} from "../../platform/shared/webkit-runtime.ts";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 
 /**
@@ -13,10 +19,6 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENS
  * Mobile Safari ignores extension-only `accept` lists, so it falls back to a
  * MIME + archive-extension list that still lets any binary ROM/patch through.
  */
-
-const SAFARI_USER_AGENT_REGEX = /Safari/;
-const CHROME_USER_AGENT_REGEX = /Chrome/;
-const MOBILE_USER_AGENT_REGEX = /Mobile(\/\S+)? /;
 
 type FileInputAcceptEnvironment = {
   userAgent?: string;
@@ -62,12 +64,11 @@ const getNavigatorAcceptEnvironment = (): FileInputAcceptEnvironment => {
 };
 
 const isMobileSafari = (environment: FileInputAcceptEnvironment) => {
-  const userAgent = environment.userAgent || "";
-  const platform = environment.platform || "";
-  const maxTouchPoints = typeof environment.maxTouchPoints === "number" ? environment.maxTouchPoints : 0;
-  const isSafari = SAFARI_USER_AGENT_REGEX.test(userAgent) && !CHROME_USER_AGENT_REGEX.test(userAgent);
-  const isMobile =
-    MOBILE_USER_AGENT_REGEX.test(userAgent) || (isSafari && platform === "MacIntel" && maxTouchPoints > 1);
+  // Site-specific "Safari": only the bare `Chrome` token is excluded (so iOS
+  // Chrome/Firefox/Edge — CriOS/FxiOS/EdgiOS — still count as Safari here),
+  // unlike isSafariBrowser. Kept distinct on purpose; see webkit-runtime.ts.
+  const isSafari = hasSafariToken(environment) && !hasChromeToken(environment);
+  const isMobile = hasMobileToken(environment) || (isSafari && isAppleTouchDesktop(environment));
   return isSafari && isMobile;
 };
 

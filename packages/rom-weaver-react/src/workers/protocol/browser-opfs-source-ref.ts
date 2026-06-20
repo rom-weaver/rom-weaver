@@ -1,4 +1,5 @@
 import { emitTraceLog } from "../../lib/logging.ts";
+import { isAppleMobileWebKit, isWebKitDesktopSafari } from "../../platform/shared/webkit-runtime.ts";
 import { getBrowserSourceBlob, getBrowserSourceHandle } from "../../storage/browser/browser-source-primitives.ts";
 import {
   getNamedSource,
@@ -197,15 +198,16 @@ const PROXY_HANDLE_INPUT_MIN_BYTES = 64 * 1024 * 1024;
 
 // WebKit (desktop Safari + every iOS/iPadOS browser) serializes concurrent FileReaderSync reads of one
 // File at the file layer, so the per-thread fast path stalls there; such inputs read through the OPFS
-// proxy worker instead. Detection mirrors isMobileSafariLike in browser-runtime-diagnostics.ts.
+// proxy worker instead. Primitives are shared with isMobileSafariLike via platform/shared/webkit-runtime.ts;
+// this site's desktop-Safari exclusion set (Edg/OPR/SamsungBrowser) deliberately differs and INCLUDES
+// desktop Safari, so it is composed from isWebKitDesktopSafari, not isSafariBrowser.
 const isWebKitInputRuntime = () => {
   const nav = typeof navigator === "object" ? navigator : null;
-  const userAgent = nav?.userAgent || "";
-  if (!userAgent) return false;
-  const maxTouchPoints = typeof nav?.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
-  const isAppleMobile = /iP(hone|ad|od)/.test(userAgent) || (nav?.platform === "MacIntel" && maxTouchPoints > 1);
-  const isDesktopSafari = /Safari/.test(userAgent) && !/(Chrome|Chromium|Edg|OPR|SamsungBrowser)/.test(userAgent);
-  return isAppleMobile || isDesktopSafari;
+  // An empty UA must classify as non-WebKit even when platform/touch would
+  // otherwise match (preserves the original early return).
+  if (!nav?.userAgent) return false;
+  const environment = { maxTouchPoints: nav.maxTouchPoints, platform: nav.platform, userAgent: nav.userAgent };
+  return isAppleMobileWebKit(environment) || isWebKitDesktopSafari(environment);
 };
 
 const createBrowserOpfsSourceRef = async (
