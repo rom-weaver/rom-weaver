@@ -2,9 +2,10 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
-import { getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
+import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 
 /**
  * The masthead Log dialog: a native <dialog> trace inspector over the
@@ -41,10 +42,26 @@ const formatDetails = (details: LogStoreEntry["details"]) => {
   }
 };
 
-const formatLine = (entry: LogStoreEntry) => {
-  const details = formatDetails(entry.details);
-  return `${entry.timestamp} ${entry.level.toUpperCase()} ${entry.namespace}: ${entry.message}${details ? ` ${details}` : ""}`;
+// The line number (`id`) is a UI-only column (see TraceLine) — copy/download text omits it so the output
+// is clean, paste-ready log lines. A gap in the on-screen numbers still shows where the ring dropped lines.
+// Lines use the short time column shown on screen and a fixed-width level so pasted/downloaded logs stay
+// aligned in a monospace view. `formatLine` (capped details) feeds the filter — capping keeps a giant
+// payload from being re-serialized on every keystroke; `formatCopyLine` (full details) feeds copy/download,
+// where the on-screen cap and its "…(N chars)" marker would just corrupt a saved log.
+const renderLine = (entry: LogStoreEntry, detailsText: string) =>
+  `${formatTimestamp(entry.timestamp)} ${entry.level.toUpperCase().padEnd(5)} ${entry.namespace}: ${entry.message}${detailsText ? ` ${detailsText}` : ""}`;
+
+const serializeDetails = (details: LogStoreEntry["details"]): string => {
+  if (!details || Object.keys(details).length === 0) return "";
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return "";
+  }
 };
+
+const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(entry.details));
+const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
 
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
@@ -60,12 +77,6 @@ const lineClassName = (copied: boolean, failed: boolean) => {
   return "ln";
 };
 
-const copyAllLabel = (localizer: ReturnType<typeof useUiLocalizer>, copied: boolean, failed: boolean) => {
-  if (failed) return localizer.message("ui.common.copyFailed");
-  if (copied) return localizer.message("ui.announce.copied");
-  return localizer.message("ui.common.copy");
-};
-
 const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -74,7 +85,7 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
     <button
       className={lineClassName(copied, failed)}
       onClick={() => {
-        copyToClipboard(formatLine(entry))
+        copyToClipboard(formatCopyLine(entry))
           .then(() => {
             setFailed(false);
             setCopied(true);
@@ -89,6 +100,7 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
       }}
       type="button"
     >
+      <span className="ln-no">{entry.id}</span>
       <span className="ts">{formatTimestamp(entry.timestamp)}</span>
       <span className={`lv ${entry.level}`}>{entry.level}</span>
       <span className="caller">{entry.namespace}</span>
@@ -118,11 +130,20 @@ const LogDialog = ({
   const [filter, setFilter] = useState("");
   const [copiedAll, setCopiedAll] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const entries = useSyncExternalStore(
-    open ? subscribeLogEntries : noopSubscribe,
-    open ? getLogEntries : getEmptyEntries,
+  const [view, setView] = useState<"current" | "previous">("current");
+  // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
+  // OOM-reloaded the tab. Stable for the session, so read once.
+  const previousEntries = useMemo(() => getLastSessionEntries(), []);
+  const hasPrevious = previousEntries.length > 0;
+  const showingPrevious = view === "previous" && hasPrevious;
+  // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
+  // re-render every frame during trace-heavy runs.
+  const liveEntries = useSyncExternalStore(
+    open && !showingPrevious ? subscribeLogEntries : noopSubscribe,
+    open && !showingPrevious ? getLogEntries : getEmptyEntries,
     getEmptyEntries,
   );
+  const entries = showingPrevious ? previousEntries : liveEntries;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -163,32 +184,31 @@ const LogDialog = ({
             {localizer.message("ui.tools.log")}
           </h2>
           <div className="dlg-actions log-actions">
-            <input
-              aria-label={localizer.message("ui.log.filterLabel")}
-              className="input mono log-filter"
-              onChange={(event) => setFilter(event.currentTarget.value)}
-              placeholder={localizer.message("ui.log.filter")}
-              type="search"
-              value={filter}
-            />
-            <label className="loglevel">
-              <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-              <select
-                className="select mono"
-                onChange={(event) => onLevelChange(event.currentTarget.value)}
-                value={currentLevel}
-              >
-                {LOG_LEVELS.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {hasPrevious ? (
+              <fieldset className="logview">
+                <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+                <button
+                  aria-pressed={!showingPrevious}
+                  className={showingPrevious ? "btn slim ghost" : "btn slim"}
+                  onClick={() => setView("current")}
+                  type="button"
+                >
+                  {localizer.message("ui.log.viewCurrent")}
+                </button>
+                <button
+                  aria-pressed={showingPrevious}
+                  className={showingPrevious ? "btn slim" : "btn slim ghost"}
+                  onClick={() => setView("previous")}
+                  type="button"
+                >
+                  {localizer.message("ui.log.viewPrevious")}
+                </button>
+              </fieldset>
+            ) : null}
             <button
-              className={copyFailed ? "btn slim ghost copy-failed" : "btn slim ghost"}
+              className={`btn slim ghost${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
               onClick={() => {
-                copyToClipboard(visible.map(formatLine).join("\n"))
+                copyToClipboard(visible.map(formatCopyLine).join("\n"))
                   .then(() => {
                     setCopyFailed(false);
                     setCopiedAll(true);
@@ -203,13 +223,49 @@ const LogDialog = ({
               }}
               type="button"
             >
-              {copyAllLabel(localizer, copiedAll, copyFailed)}
+              {localizer.message("ui.common.copy")}
             </button>
+            <button
+              className="btn slim ghost"
+              onClick={() =>
+                triggerBrowserDownload(
+                  visible.map(formatCopyLine).join("\n"),
+                  showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt",
+                )
+              }
+              type="button"
+            >
+              {localizer.message("ui.result.download")}
+            </button>
+            <label className="loglevel">
+              <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+              <select
+                className="select mono"
+                onChange={(event) => onLevelChange(event.currentTarget.value)}
+                value={currentLevel}
+              >
+                {LOG_LEVELS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <button aria-label={localizer.message("ui.common.close")} className="dlg-x" onClick={onClose} type="button">
             <X aria-hidden="true" />
           </button>
         </header>
+        <div className="log-filter-bar">
+          <input
+            aria-label={localizer.message("ui.log.filterLabel")}
+            className="input mono log-filter"
+            onChange={(event) => setFilter(event.currentTarget.value)}
+            placeholder={localizer.message("ui.log.filter")}
+            type="search"
+            value={filter}
+          />
+        </div>
         <div className="dlg-body log-body">
           <div aria-atomic="false" aria-live="polite" className="tracelog mono" ref={traceRef}>
             {visible.length === 0 ? (

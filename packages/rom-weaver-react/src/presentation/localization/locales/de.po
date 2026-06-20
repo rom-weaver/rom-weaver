@@ -705,6 +705,21 @@ msgstr "Kein kompatibler Patch gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Vorheriges"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Keine Zeile passt zu „{q}“"
 

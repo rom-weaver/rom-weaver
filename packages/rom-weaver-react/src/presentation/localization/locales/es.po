@@ -705,6 +705,21 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Actual"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Registro mostrado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Ninguna línea coincide con «{q}»"
 

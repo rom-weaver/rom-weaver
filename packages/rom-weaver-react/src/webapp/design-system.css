@@ -1233,6 +1233,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
 .rw-app .tracelog .ln.copied { background: color-mix(in oklab, var(--verified) 16%, transparent); }
 .rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
+.rw-app .tracelog .ln-no { color: var(--ink-4); flex: none; min-width: 5ch; text-align: end; font-variant-numeric: tabular-nums; user-select: none; }
 .rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
 .rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
 :root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
@@ -1320,11 +1321,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the log is tall — fill the available dialog height so more lines are visible */
 .rw-app .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-.rw-app .log-actions { display: inline-flex; gap: 8px; align-items: center; margin-inline-start: auto; }
+/* Actions sit on their own full-width row below the title (wrap on every viewport) and the controls
+   share the width evenly; the level select is last, so it lands at the far right. */
+.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
+.rw-app .log-actions { display: flex; gap: 8px; align-items: center; order: 1; flex-basis: 100%; }
+.rw-app .log-actions > * { flex: 1 1 0; }
+.rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
 .rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
-.rw-app .log-actions .loglevel { display: inline-flex; }
-.rw-app .log-actions .loglevel .select { height: 30px; font-size: .76rem; padding-block: 0; }
-.rw-app .log-actions .log-filter { height: 30px; width: min(180px, 28vw); font-size: .76rem; padding-block: 0; }
+.rw-app .log-actions .loglevel { display: flex; }
+.rw-app .log-actions .loglevel .select { flex: 1 1 0; width: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
+.rw-app .log-actions .logview { display: flex; gap: 2px; margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.rw-app .log-actions .logview .btn { flex: 1 1 0; }
+.rw-app .log-filter-bar { padding: 8px 16px; border-block-end: 1px solid var(--seam-soft); flex: none; }
+.rw-app .log-filter-bar .log-filter { height: 30px; width: 100%; font-size: .76rem; padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
@@ -1532,7 +1541,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
   .rw-app .log-dlg .dlg-title { flex: 1 1 auto; }
   .rw-app .log-actions { order: 1; flex-basis: 100%; margin-inline-start: 0; }
-  .rw-app .log-actions .log-filter { flex: 1 1 100px; width: auto; min-width: 0; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   .rw-app .mode span:not(.mode-thumb) { font-size: .72rem; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
