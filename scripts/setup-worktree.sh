@@ -13,10 +13,11 @@
 #   - runs `npm ci` at the repo root and in packages/rom-weaver-react
 #   - copies the built wasm artifacts from the main checkout (if present) so
 #     browser tests and the dev server work without a local wasm build
+#   - links vendor/* submodules (nod, libarchive) from the main checkout so the
+#     fork-tracked / cmake-built C deps need no re-init or rebuild
 #
-# vendor/* submodule symlinks and the cargo target dir are NOT handled here —
-# link/build those separately (sharing main's target breaks cmake-built wasm
-# C deps like libarchive).
+# The cargo target dir is NOT handled here — keep a worktree-local target;
+# sharing main's target breaks cmake-built wasm C deps like libarchive.
 #
 # Usage (from inside the worktree):  scripts/setup-worktree.sh
 # Re-runnable.
@@ -41,6 +42,29 @@ for artifact in rom-weaver-app.wasm rom-weaver-app.wasm.br; do
   if [ -f "$wasm_src/$artifact" ]; then
     cp "$wasm_src/$artifact" "$wasm_dst/$artifact"
     echo "  copied $artifact from main checkout"
+  fi
+done
+
+# vendor/* submodules are gitlinks: a fresh worktree leaves them empty. Building
+# them here is slow (libarchive is a cmake C build) and nod tracks a fork remote,
+# so mirror the already-populated copies from the main checkout via symlink.
+# Re-runnable: skip when already a symlink, and only link an empty worktree copy
+# against a populated main copy.
+echo "setup-worktree: link vendor submodules from main checkout"
+for submodule in nod libarchive; do
+  worktree_vendor="$worktree_dir/vendor/$submodule"
+  main_vendor="$main_dir/vendor/$submodule"
+  if [ -L "$worktree_vendor" ]; then
+    continue
+  fi
+  if [ -d "$main_vendor" ] && [ -n "$(ls -A "$main_vendor" 2>/dev/null)" ]; then
+    if [ -z "$(ls -A "$worktree_vendor" 2>/dev/null)" ]; then
+      rmdir "$worktree_vendor" 2>/dev/null || true
+      ln -s "$main_vendor" "$worktree_vendor"
+      echo "  linked vendor/$submodule"
+    fi
+  else
+    echo "  skip vendor/$submodule: main checkout copy is missing or empty" >&2
   fi
 done
 
