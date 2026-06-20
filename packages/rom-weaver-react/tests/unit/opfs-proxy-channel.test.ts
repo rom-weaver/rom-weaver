@@ -27,6 +27,7 @@ import {
   OPFS_PROXY_STATE_DONE,
   OPFS_PROXY_STATE_IDLE,
   OPFS_PROXY_STATE_REQUESTED,
+  OPFS_PROXY_STATUS_EIO,
   OPFS_PROXY_STATUS_OK,
 } from "../../src/wasm/browser-opfs-proxy-protocol.ts";
 import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm/browser-opfs-proxy-server.ts";
@@ -35,10 +36,20 @@ import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm
 // mock SyncAccessHandle mirrors FileSystemSyncAccessHandle's synchronous read/write/truncate API.
 class MockFile {
   bytes = new Uint8Array(0);
+  // Live SyncAccessHandle count for this file. WebKit/Safari allow at most one at a time, so the proxy
+  // must never let this exceed 1 (the unlink-then-reopen-before-close case is the one that used to).
+  liveHandles = 0;
+  // Cumulative SyncAccessHandles ever created for this file, to prove a reopen reattached instead of
+  // minting a fresh handle.
+  createdHandles = 0;
 }
 
 class MockSyncAccessHandle {
-  constructor(private readonly file: MockFile) {}
+  private open = true;
+  constructor(private readonly file: MockFile) {
+    this.file.liveHandles += 1;
+    this.file.createdHandles += 1;
+  }
   getSize(): number {
     return this.file.bytes.byteLength;
   }
@@ -69,7 +80,9 @@ class MockSyncAccessHandle {
     // no-op: the mock writes straight into the in-memory buffer
   }
   close(): void {
-    // no-op: nothing to release in the mock
+    if (!this.open) return;
+    this.open = false;
+    this.file.liveHandles -= 1;
   }
 }
 
@@ -77,6 +90,8 @@ class MockFileHandle {
   kind = "file";
   constructor(readonly file: MockFile) {}
   async createSyncAccessHandle(): Promise<MockSyncAccessHandle> {
+    // Mirror WebKit/Safari: only one SyncAccessHandle may be live per file at a time.
+    if (this.file.liveHandles > 0) throw namedError("NoModificationAllowedError");
     return new MockSyncAccessHandle(this.file);
   }
 }
@@ -310,5 +325,71 @@ describe("opfs proxy channel", () => {
     const unlink = await request(channel, { opcode: OPFS_PROXY_OP_UNLINK, path: "/work/temp2.bin" });
     expect(unlink.status).toBe(OPFS_PROXY_STATUS_OK);
     expect(root.files.has("temp2.bin")).toBe(false);
+  });
+
+  it("reattaches to the live handle when a path is reopened before its unlink-deferred close", async () => {
+    const first = await request(channel, {
+      auxLow: CREATE_FLAG | WRITABLE_FLAG,
+      opcode: OPFS_PROXY_OP_OPEN,
+      path: "/work/reopen.bin",
+    });
+    expect(first.status).toBe(OPFS_PROXY_STATUS_OK);
+    const file = root.files.get("reopen.bin")?.file;
+    expect(file?.liveHandles).toBe(1);
+
+    // Unlink while open defers the OPFS removal to the last close; the file (and its single live handle)
+    // stays valid. Reopening the same name BEFORE that close must reattach to the existing handle, not
+    // open a second SyncAccessHandle on the same (not-yet-removed) OPFS file.
+    const unlink = await request(channel, { opcode: OPFS_PROXY_OP_UNLINK, path: "/work/reopen.bin" });
+    expect(unlink.status).toBe(OPFS_PROXY_STATUS_OK);
+
+    const reopened = await request(channel, {
+      auxLow: WRITABLE_FLAG,
+      opcode: OPFS_PROXY_OP_OPEN,
+      path: "/work/reopen.bin",
+    });
+    expect(reopened.status).toBe(OPFS_PROXY_STATUS_OK);
+    // Same id => reattached to the existing entry; never a second live handle on the file.
+    expect(reopened.result).toBe(first.result);
+    expect(file?.liveHandles).toBe(1);
+    expect(file?.createdHandles).toBe(1);
+
+    // The reopen bumped refcount to 2, so the first close keeps the handle usable...
+    await request(channel, { handle: first.result, opcode: OPFS_PROXY_OP_CLOSE });
+    const stillUsable = await request(channel, { handle: first.result, opcode: OPFS_PROXY_OP_SIZE });
+    expect(stillUsable.status).toBe(OPFS_PROXY_STATUS_OK);
+    expect(file?.liveHandles).toBe(1);
+
+    // ...and the last close runs the deferred removal and frees the single handle.
+    await request(channel, { handle: first.result, opcode: OPFS_PROXY_OP_CLOSE });
+    await vi.waitFor(() => expect(root.files.has("reopen.bin")).toBe(false));
+    expect(file?.liveHandles).toBe(0);
+  });
+
+  it("surfaces an error on a double-close (refcount underflow) instead of decrementing silently", async () => {
+    const opened = await request(channel, {
+      auxLow: CREATE_FLAG | WRITABLE_FLAG,
+      opcode: OPFS_PROXY_OP_OPEN,
+      path: "/work/dbl.bin",
+    });
+    expect(opened.status).toBe(OPFS_PROXY_STATUS_OK);
+
+    // First close frees the single reference.
+    const firstClose = await request(channel, { handle: opened.result, opcode: OPFS_PROXY_OP_CLOSE });
+    expect(firstClose.status).toBe(OPFS_PROXY_STATUS_OK);
+
+    // Second close targets an id that no longer exists: a protocol violation that must surface as EIO,
+    // not silently drive a refcount negative (which would leak the entry forever).
+    const secondClose = await request(channel, { handle: opened.result, opcode: OPFS_PROXY_OP_CLOSE });
+    expect(secondClose.status).toBe(OPFS_PROXY_STATUS_EIO);
+  });
+
+  it("surfaces an error for an op targeting an unknown handle id", async () => {
+    // 4242 was never allocated by an open; requireHandle must reject rather than swallow it.
+    const size = await request(channel, { handle: 4242, opcode: OPFS_PROXY_OP_SIZE });
+    expect(size.status).toBe(OPFS_PROXY_STATUS_EIO);
+
+    const close = await request(channel, { handle: 4242, opcode: OPFS_PROXY_OP_CLOSE });
+    expect(close.status).toBe(OPFS_PROXY_STATUS_EIO);
   });
 });

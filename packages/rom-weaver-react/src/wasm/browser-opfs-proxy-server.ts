@@ -144,6 +144,11 @@ class OpfsProxyServer {
   private readonly trace?: (line: string) => void;
   private readonly byId = new Map<number, HandleEntry>();
   private readonly byPath = new Map<string, number>();
+  // Paths unlinked while a handle was still open: the OPFS entry has NOT been removed yet (removeEntry
+  // is deferred to the last close), so the underlying file is still live with exactly one open handle.
+  // A reopen of such a path must reattach to that same handle — opening a second SyncAccessHandle on the
+  // same OPFS file violates WebKit/Safari's one-handle-per-file rule and risks a double removeEntry.
+  private readonly pendingByPath = new Map<string, number>();
   private readonly freeIds: number[] = [];
   // Read-only Blob inputs registered by guest path. opOpen resolves these to Blob-backed handles so a
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
@@ -280,14 +285,8 @@ class OpfsProxyServer {
     const auxLow = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX);
     const create = (auxLow & CREATE_FLAG) !== 0;
     const writableRequested = (auxLow & WRITABLE_FLAG) !== 0;
-    const existing = this.byPath.get(guestPath);
-    if (existing !== undefined) {
-      const entry = this.byId.get(existing);
-      if (entry) {
-        entry.refcount += 1;
-        return entry.id;
-      }
-    }
+    const reattached = this.reattachOpenHandle(guestPath);
+    if (reattached !== undefined) return reattached;
     // A registered Blob input is served as a read-only handle: no OPFS namespace lookup, no
     // SyncAccessHandle. Reads slice the Blob on this (dedicated, free) worker (see opRead).
     const blob = this.blobSources.get(guestPath);
@@ -378,6 +377,9 @@ class OpfsProxyServer {
     if (openEntry) {
       openEntry.pendingRemoval = { dir, name };
       this.byPath.delete(guestPath);
+      // Keep the path discoverable so a reopen-before-last-close reattaches to this still-live handle
+      // instead of opening a second one on the same (not-yet-removed) OPFS file.
+      this.pendingByPath.set(guestPath, openEntry.id);
       return;
     }
     try {
@@ -451,14 +453,8 @@ class OpfsProxyServer {
   }
 
   private async opOpenInternal(guestPath: string, options: { create: boolean; writable: boolean }): Promise<number> {
-    const existing = this.byPath.get(guestPath);
-    if (existing !== undefined) {
-      const entry = this.byId.get(existing);
-      if (entry) {
-        entry.refcount += 1;
-        return entry.id;
-      }
-    }
+    const reattached = this.reattachOpenHandle(guestPath);
+    if (reattached !== undefined) return reattached;
     const location = this.locate(guestPath);
     const writable = options.writable || isGuestPathWithinRoots(guestPath, location.mount.writableRoots);
     const fileHandle = await this.resolveFileHandle(location, { create: options.create });
@@ -507,32 +503,66 @@ class OpfsProxyServer {
     return { dir, name };
   }
 
+  // Reattach an open request to an existing live handle for `guestPath`, bumping its refcount. Covers two
+  // cases: a normally-open path (byPath), and a path unlinked while still open (pendingByPath) whose OPFS
+  // file is not yet removed — reattaching there guarantees we never open a second SyncAccessHandle on the
+  // same file. Returns the handle id on reattach, or undefined when no live handle exists.
+  private reattachOpenHandle(guestPath: string): number | undefined {
+    const liveId = this.byPath.get(guestPath) ?? this.pendingByPath.get(guestPath);
+    if (liveId === undefined) return undefined;
+    const entry = this.byId.get(liveId);
+    if (!entry) {
+      // The path index points at a freed id: a stale mapping that should have been cleared on release.
+      this.byPath.delete(guestPath);
+      this.pendingByPath.delete(guestPath);
+      this.trace?.(`[browser-opfs] proxy stale path index path=${guestPath} id=${liveId}`);
+      return undefined;
+    }
+    entry.refcount += 1;
+    return entry.id;
+  }
+
   private requireHandle(handleId: number): HandleEntry {
     const entry = this.byId.get(handleId);
-    if (!entry) throw new ProxyErrno(ERRNO_IO);
+    if (!entry) {
+      this.trace?.(`[browser-opfs] proxy op on unknown handle id=${handleId}`);
+      throw new ProxyErrno(ERRNO_IO);
+    }
     return entry;
   }
 
   private releaseHandle(handleId: number): void {
     const entry = this.byId.get(handleId);
-    if (!entry) return;
+    if (!entry) {
+      // A close/release targeting a handle that does not exist is a consumer protocol violation
+      // (double-close, or a stale id). Surface it as an errno so it is visible rather than swallowed.
+      this.trace?.(`[browser-opfs] proxy release of unknown handle id=${handleId}`);
+      throw new ProxyErrno(ERRNO_IO);
+    }
+    if (entry.refcount <= 0) {
+      // The entry is already fully released but still in byId (it should have been deleted at 0): a
+      // double-close raced past the delete. Refuse to drive the count negative and leak the entry.
+      this.trace?.(`[browser-opfs] proxy release underflow handle id=${handleId} refcount=${entry.refcount}`);
+      throw new ProxyErrno(ERRNO_IO);
+    }
     entry.refcount -= 1;
     if (entry.refcount > 0) return;
     try {
       entry.handle?.close();
-    } catch {
-      // best-effort close
+    } catch (error) {
+      this.trace?.(`[browser-opfs] proxy handle close failed id=${handleId} ${String(error)}`);
     }
     this.byId.delete(handleId);
     if (this.byPath.get(entry.path) === handleId) this.byPath.delete(entry.path);
+    if (this.pendingByPath.get(entry.path) === handleId) this.pendingByPath.delete(entry.path);
     this.freeIds.push(handleId);
     // A path unlinked while this handle was open deferred its OPFS removal to now (the handle is
-    // closed, so removeEntry no longer hits NoModificationAllowedError). Best-effort, fire-and-forget.
+    // closed, so removeEntry no longer hits NoModificationAllowedError). Fire-and-forget but traced.
     if (entry.pendingRemoval) {
       const { dir, name } = entry.pendingRemoval;
       entry.pendingRemoval = null;
-      void Promise.resolve(dir.removeEntry?.(name)).catch(() => {
-        // ignore best-effort deferred-unlink failures
+      void Promise.resolve(dir.removeEntry?.(name)).catch((error: unknown) => {
+        this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${entry.path} ${String(error)}`);
       });
     }
   }
@@ -559,6 +589,7 @@ class OpfsProxyServer {
     }
     this.byId.clear();
     this.byPath.clear();
+    this.pendingByPath.clear();
   }
 }
 
