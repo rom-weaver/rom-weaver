@@ -1,0 +1,81 @@
+name: Parity
+
+# Re-validate rom-weaver's compression output against the REAL reference tools
+# (chdman, dolphin-tool) so a vendored-codec regression (lzma-rust2, flac, zstd,
+# nod, ciso) is caught. The main `quality` gate in ci.yml only checks parity
+# against frozen in-repo vectors and rom-weaver's own round-trips; nothing there
+# re-checks the live tools. This job is that regression signal.
+#
+# It is intentionally SEPARATE from ci.yml and NOT wired into branch protection:
+# it depends on third-party npm tool releases (chdman/dolphin-tool) that can
+# change independently of this repo, so it runs nightly + on demand rather than
+# blocking every PR.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 07:13 UTC nightly (off the top of the hour to dodge scheduler congestion).
+    - cron: "13 7 * * *"
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      WASI_SDK_VERSION: "33"
+      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install system dependencies
+        # cmake/ninja/pkg-config build the vendored C deps (libarchive-sys) the
+        # native CLI links; node/ripgrep come from mise.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-wasip1-threads
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install mise (node, wasm-opt, ripgrep)
+        uses: jdx/mise-action@v2
+        with:
+          install: true
+
+      - name: Install WASI SDK
+        run: |
+          curl --fail --location --show-error \
+            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
+          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      # The reference tools are cross-platform npm packages (chdman from
+      # emmercm/chdman-js, dolphin-tool). Each exposes a binary of the same name
+      # on PATH after a global install. node comes from mise (.mise.toml).
+      - name: Install reference tools (chdman, dolphin-tool)
+        run: |
+          npm install --global chdman dolphin-tool
+          chdman --version || true
+          dolphin-tool --version || true
+
+      - name: Build rom-weaver CLI
+        run: cargo build --release -p rom-weaver-cli
+
+      - name: Run parity check
+        # FAILS the job on any byte mismatch -- this is the regression signal.
+        env:
+          PARITY_CARGO_PROFILE: release
+        run: scripts/parity-check.sh
