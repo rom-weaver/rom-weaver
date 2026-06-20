@@ -110,7 +110,7 @@ jobs:
           npm --prefix packages/rom-weaver-react run lint
           npm --prefix packages/rom-weaver-react run test:unit
           npm --prefix packages/rom-weaver-react run test:browser:wasm
-          npm --prefix packages/rom-weaver-react test
+          npm --prefix packages/rom-weaver-react run test:browser:parallel
           npm --prefix packages/rom-weaver-react run build
 
   # Report-only coverage. Runs in parallel with `quality`, has no thresholds,
