@@ -20,6 +20,14 @@ JSON back). That splits "duplication" into three buckets:
 Only the first two are actionable. This branch does the highest-confidence,
 self-contained ones; the larger lifts are documented as deferred.
 
+## Status — branch `refactor/ts-rust-unify`
+
+Landed: typegen export-gap fix (`MatchSidecarsCommand`), Task A (patch-create
+checksum name moved into Rust), Task F (z3ds extension mapping), Task G
+(disc-image sector policy). Task E **deferred** (see its note — needs a new
+`PatchHandler` trait method, disproportionate to the win). Tasks B/C/D/H remain
+deferred as below.
+
 ## Tasks — this branch
 
 ### 1. Drop the TS crc32 filename mirror (Task A)
@@ -48,8 +56,13 @@ self-contained ones; the larger lifts are documented as deferred.
   `lib/create/workflow.ts`; delete `lib/create/patch-checksum-name.ts`. Regen
   typegen.
 
-### 2. Patch magic via generated metadata (Task E)
+### 2. Patch magic via generated metadata (Task E) — DEFERRED
 
+- **Why deferred.** The magics exist only as private handler consts
+  (`IPS_MAGIC`/`BPS_MAGIC`/`UPS_MAGIC`), not on `FormatDescriptor`. Exposing them
+  to typegen needs a new `PatchHandler::header_magic()` trait method overridden
+  per handler — disproportionate to removing two small literals. Revisit if a
+  patch-magic consumer in Rust appears.
 - **Problem.** The patch magic table `{ bps: "BPS1", ips: "PATCH", ups: "UPS1" }`
   is hardcoded in two TS files —
   `lib/input/input-archive-patch-validity.ts` and
