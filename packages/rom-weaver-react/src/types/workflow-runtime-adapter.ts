@@ -268,6 +268,7 @@ type RuntimePatchValidateWorkerInput = {
 };
 
 type RuntimePatchCreateWorkerInput = {
+  checksumName?: PatchCreateCommand["checksum_name"];
   format: NonNullable<PatchCreateCommand["format"]>;
   logLevel?: LogLevel;
   metadata: Record<string, JsonValue>;
@@ -277,6 +278,7 @@ type RuntimePatchCreateWorkerInput = {
   originalFilePath: PatchCreateCommand["original"];
   outputName: PatchCreateCommand["output"];
   signal?: AbortSignal;
+  sourceCrc32?: PatchCreateCommand["source_crc32"];
   workerThreads?: RuntimeThreadBudgetInput;
 };
 
@@ -394,6 +396,8 @@ type WorkflowRuntimePatch = {
     format: NonNullable<PatchCreateCommand["format"]>;
     metadata: JsonObject;
     outputName: PatchCreateCommand["output"];
+    checksumName?: PatchCreateCommand["checksum_name"];
+    sourceCrc32?: PatchCreateCommand["source_crc32"];
     workerThreads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;

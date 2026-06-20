@@ -926,6 +926,16 @@ pub struct PatchCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "source-crc32",
+            help = "Precomputed crc32 (8 hex digits) of the original ROM; used with --checksum-name to embed the value without re-reading the original"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub source_crc32: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long = "code",
             action = ArgAction::Append,
             help = "Cheat code (Game Genie or Pro Action Replay/GameShark) to bake into the original ROM to derive the modified ROM; repeat --code for each. Mutually exclusive with --modified."

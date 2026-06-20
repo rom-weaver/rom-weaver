@@ -274,6 +274,8 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     format,
     metadata,
     outputName,
+    checksumName,
+    sourceCrc32,
     workerThreads,
     logLevel,
     onLog,
@@ -304,6 +306,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       if (!(originalSource && modifiedSource)) throw new Error("Create patch worker inputs were not staged");
       const result = await adapter.invokeCreatePatchWorker(
         {
+          checksumName,
           format,
           logLevel,
           metadata: toWorkerMetadata(metadata),
@@ -313,6 +316,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           originalFilePath: originalSource.filePath,
           outputName,
           signal,
+          sourceCrc32,
           workerThreads: workerThreads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,

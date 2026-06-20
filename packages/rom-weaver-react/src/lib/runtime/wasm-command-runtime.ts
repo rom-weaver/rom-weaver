@@ -760,6 +760,8 @@ const invokeRomWeaverCreatePatchWorker = async (
     modified: input.modifiedFilePath,
     original: input.originalFilePath,
     output: outputPath,
+    ...(input.checksumName ? { checksum_name: true } : {}),
+    ...(input.sourceCrc32 ? { source_crc32: input.sourceCrc32 } : {}),
     ...(threadArg ? { threads: threadArg } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create dispatch", {
@@ -794,7 +796,9 @@ const invokeRomWeaverCreatePatchWorker = async (
 
   const emitted = getEmittedFileDetails(result);
   return {
-    fileName: outputFileName,
+    // Rust may rename the output (e.g. `--checksum-name` embeds the source crc32),
+    // so the emitted path is authoritative for the final file name.
+    fileName: emitted?.path ? getPathBaseName(emitted.path, outputFileName) : outputFileName,
     filePath: emitted?.path || outputPath,
     size: emitted?.sizeBytes,
     timing: getRunResultTiming(result),

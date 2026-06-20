@@ -23,10 +23,11 @@ import {
   shouldPrepareWorkflowSource,
 } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
-import { embedSourceCrc32InPatchName } from "./patch-checksum-name.ts";
 
 type JsonObject = { [key: string]: JsonValue };
 type CreateSourceInput = PatchFileInstance | SourceRef;
+
+const CRC32_HEX_REGEX = /^[0-9a-f]{8}$/;
 
 const getCreateFormat = (options: CreatePatchInput["options"]) => options?.format || "bps";
 const getCreateLogLevel = (options: CreatePatchInput["options"]) => options?.logging?.level;
@@ -121,24 +122,22 @@ const runCreateWorkflow = async (
       compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
         ? defaultPatchFileName
         : requestedFileName;
-    // Mirror the Rust `patch-create --checksum-name`: embed the source crc32 into
-    // the patch file name so checksumless formats round trip a "right ROM?" guard
-    // back into apply/validate. For compressed output this names the inner patch
-    // entry, leaving the archive name as requested.
-    const rawPatchFileName = embedSourceCrc32InPatchName(basePatchFileName, input.originalCrc32);
-    if (rawPatchFileName !== basePatchFileName) {
-      traceWorkflowStage(options, "stage.start", "checksum-name", "output", {
-        crc32: input.originalCrc32,
-        outputName: rawPatchFileName,
-        requestedName: basePatchFileName,
-      });
-    }
+    // Embed the source crc32 into the patch file name via Rust `--checksum-name`
+    // (the engine owns the parse/embed; see patch_filename_checksum.rs) so
+    // checksumless formats round trip a "right ROM?" guard back into apply/validate.
+    // Pass the already-known crc32 so Rust need not re-read the original; it renames
+    // the emitted file, which flows back as the output name.
+    const normalizedSourceCrc32 = String(input.originalCrc32 || "")
+      .trim()
+      .toLowerCase();
+    const sourceCrc32 = CRC32_HEX_REGEX.test(normalizedSourceCrc32) ? normalizedSourceCrc32 : undefined;
     const result = await traceWorkflowStageBlock(
       options,
       "create",
       "output",
       () =>
         createPatchCapability({
+          checksumName: !!sourceCrc32,
           format,
           logLevel: getCreateLogLevel(options),
           metadata: getCreateMetadata(options),
@@ -151,14 +150,15 @@ const runCreateWorkflow = async (
               stage: "create",
             }),
           original: original as SourceRef,
-          outputName: rawPatchFileName,
+          outputName: basePatchFileName,
           signal: options.signal,
+          sourceCrc32,
           workerThreads: getCreateWorkerThreads(options),
         }),
       () => ({ patchType: format, worker: true }),
     );
     if (compression === "none") return result;
-    const patchFile = await createPatchFileFromPublicOutput(result.output, rawPatchFileName);
+    const patchFile = await createPatchFileFromPublicOutput(result.output, basePatchFileName);
     const output = await createCompressedPatchOutput(patchFile);
     const compressionTimeMs = roundElapsedMs(output?.timing);
     return {

@@ -520,30 +520,41 @@ impl CliApp {
 
         let mut create_output = args.output;
         if args.checksum_name {
-            match checksum_file_values(&args.original, &["crc32"], &context) {
-                Ok(values) => {
-                    if let Some(crc32) = values.get("crc32") {
-                        let embedded = embed_checksum_in_filename(&create_output, "crc32", crc32);
-                        if embedded != create_output {
-                            trace!(
-                                output = %embedded.display(),
-                                crc32 = %crc32,
-                                "embedded source crc32 into patch file name"
-                            );
-                        }
-                        create_output = embedded;
+            // Prefer a caller-supplied source crc32 (the browser already hashes the
+            // original during input prep) to avoid re-reading the original here; fall
+            // back to computing it when the value is absent or malformed.
+            let provided_crc32 = args
+                .source_crc32
+                .as_deref()
+                .map(str::trim)
+                .filter(|hex| hex.len() == 8 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                .map(str::to_ascii_lowercase);
+            let crc32 = match provided_crc32 {
+                Some(crc32) => Some(crc32),
+                None => match checksum_file_values(&args.original, &["crc32"], &context) {
+                    Ok(values) => values.get("crc32").cloned(),
+                    Err(error) => {
+                        return self.finish(
+                            "patch-create",
+                            fail(
+                                Some(handler.descriptor().name.to_string()),
+                                "validate",
+                                error.to_string(),
+                            ),
+                        );
                     }
-                }
-                Err(error) => {
-                    return self.finish(
-                        "patch-create",
-                        fail(
-                            Some(handler.descriptor().name.to_string()),
-                            "validate",
-                            error.to_string(),
-                        ),
+                },
+            };
+            if let Some(crc32) = crc32 {
+                let embedded = embed_checksum_in_filename(&create_output, "crc32", &crc32);
+                if embedded != create_output {
+                    trace!(
+                        output = %embedded.display(),
+                        crc32 = %crc32,
+                        "embedded source crc32 into patch file name"
                     );
                 }
+                create_output = embedded;
             }
         }
 
