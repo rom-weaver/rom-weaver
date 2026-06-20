@@ -19,6 +19,7 @@ import {
 import {
   type ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+  ROM_WEAVER_DISC_IMAGE_POLICY,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {
@@ -256,15 +257,17 @@ const OutputCompressionManager = (() => {
   const _isUnambiguousZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
     hasUnambiguousRomSpecificCompressionInputExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   // `.bin` doubles as bare console dumps (Genesis etc.), so extension alone
-  // can't justify a CHD default. CD sectors are 2352 bytes raw / 2048 cooked;
-  // a .bin with a known size that isn't sector-aligned is not a disc image.
-  // Unknown sizes keep the extension-based resolution.
+  // can't justify a CHD default. The ambiguous extensions and CD sector sizes
+  // (2352 raw / 2048 cooked) come from the shared Rust disc-image policy; a .bin
+  // with a known size that isn't sector-aligned is not a disc image. Unknown
+  // sizes keep the extension-based resolution.
   const _isLikelyDiscImageSource = (source: CompressionSource | null | undefined) => {
     const extension = String(_getExtension(source) ?? "").toLowerCase();
-    if (extension !== "bin") return true;
+    const ambiguousExtensions: readonly string[] = ROM_WEAVER_DISC_IMAGE_POLICY.ambiguousDiscImageExtensions;
+    if (!ambiguousExtensions.includes(extension)) return true;
     const size = typeof source?.size === "number" && Number.isFinite(source.size) ? source.size : null;
     if (size === null || size <= 0) return true;
-    return size % 2352 === 0 || size % 2048 === 0;
+    return ROM_WEAVER_DISC_IMAGE_POLICY.cdSectorSizes.some((sectorSize) => size % sectorSize === 0);
   };
   const _resolveOutputCompression = (
     source: CompressionSource | null | undefined,
