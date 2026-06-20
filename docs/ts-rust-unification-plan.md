@@ -25,10 +25,10 @@ self-contained ones; the larger lifts are documented as deferred.
 Landed: typegen export-gap fix (`MatchSidecarsCommand`), Task A (patch-create
 checksum name moved into Rust), Task F (z3ds extension mapping), Task G
 (disc-image sector policy), Task C (deleted the redundant TS zstd thread-budget
-planner), Task H (CHD codec presets sourced from compression metadata). Task B
-and Task E **deferred** (B mostly irreducible; E needs a new `PatchHandler` trait
-method). Task D **reviewed and not recommended** (see its note — Rust has no
-archive table to unify onto).
+planner), Task H (CHD codec presets sourced from compression metadata), Task E
+(patch header magic via a new `PatchHandler::header_magic`). Task B **deferred**
+(mostly irreducible). Task D **reviewed and not recommended** (Rust has no archive
+table to unify onto). A/C/E/F/G/H + the typegen fix complete the original sweep.
 
 ## Tasks — this branch
 
@@ -58,13 +58,14 @@ archive table to unify onto).
   `lib/create/workflow.ts`; delete `lib/create/patch-checksum-name.ts`. Regen
   typegen.
 
-### 2. Patch magic via generated metadata (Task E) — DEFERRED
+### 2. Patch magic via generated metadata (Task E) — DONE
 
-- **Why deferred.** The magics exist only as private handler consts
-  (`IPS_MAGIC`/`BPS_MAGIC`/`UPS_MAGIC`), not on `FormatDescriptor`. Exposing them
-  to typegen needs a new `PatchHandler::header_magic()` trait method overridden
-  per handler — disproportionate to removing two small literals. Revisit if a
-  patch-magic consumer in Rust appears.
+- **Done.** Added `PatchHandler::header_magic()` (default `None`, forwarded
+  through `TracingPatchHandler` — the wrapper-forward gotcha), overridden for
+  ips/bps/ups; typegen emits `magic` on `ROM_WEAVER_PATCH_FORMATS`; a shared
+  `lib/patch-header-magic.ts` builds the extension→magic map both consumers use.
+  Scoped to ips/bps/ups (ebp/ips32 left `None`) so the derived map is
+  byte-identical to the old literals.
 - **Problem.** The patch magic table `{ bps: "BPS1", ips: "PATCH", ups: "UPS1" }`
   is hardcoded in two TS files —
   `lib/input/input-archive-patch-validity.ts` and
