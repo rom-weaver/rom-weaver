@@ -237,6 +237,23 @@ const listCompressionEntries = async (
   return result.entries || [];
 };
 
+/**
+ * List a dropped archive's entry file names (a pure read — no byte extraction) so the drop router
+ * can decide its bucket (ROM source vs patch bundle) from the archive's CONTENTS before staging it.
+ * Routing a patch-only archive into the ROM input list would re-stage (re-extract) the already
+ * staged ROM and briefly flash a ROM card before Rust's probe-manifest reclassifies it. Cheap and
+ * cached — the listing is shared with the later staging descent via the `_file` key — so a real ROM
+ * archive only pays one list here, then extracts once. Returns [] on any failure so the caller
+ * falls back to the default (ROM) bucket, where Rust's reclassify still corrects a misroute.
+ */
+const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]> => {
+  const file = await createPatchFile(source as Parameters<typeof createPatchFile>[0], "archive.bin");
+  const entries = await listCompressionEntries(file, undefined);
+  return entries
+    .map((entry) => (typeof entry === "string" ? entry : String((entry as { filename?: string }).filename || "")))
+    .filter((name) => !!name);
+};
+
 // Memoize entry listings per (source bytes, filter + overrides). One input load enumerates the same
 // archive several times — the drop-routing probe classifies it, then chd-split detection, disc-group
 // naming, and the limit preflight each re-list it — and every pass is a full worker round-trip that
@@ -846,6 +863,7 @@ export {
   isCompressionFile,
   listCompressionEntries,
   listCompressionEntryResult,
+  listDroppedArchiveEntryNames,
   normalizeSelectedEntryNames,
   prepareAutoPatchInputs,
   resolveArchiveInput,

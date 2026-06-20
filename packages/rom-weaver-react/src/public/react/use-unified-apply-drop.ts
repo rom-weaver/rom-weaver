@@ -1,24 +1,26 @@
 import { useCallback } from "react";
+import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
-import { classifyDroppedFiles } from "./file-classification.ts";
+import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
  * Drop orchestration for the Apply tab.
  *
- * Bare ROMs/patches route by extension. An archive is NOT pre-classified by a
- * filename probe — that duplicated (and mis-judged) Rust's own ROM/container
- * classification. Instead every archive stages straight into the ROM bucket and
- * lets Rust's nested extract drive: a real ROM (single, or a keep-one pick when
- * several compete) stays in the ROM bucket, while a patch-only bundle is
- * reclassified to the patch bucket when Rust's probe-manifest reports
- * `is_rom === false` (see `reclassifyArchiveToPatch` in the session). Both the
- * in-tab dropzone and the page-wide drop forwarder funnel through one `onDrop`.
+ * Bare ROMs/patches route by extension. An archive is classified by its CONTENTS — a cheap entry
+ * listing (no byte extraction), the same authoritative signal Rust uses (`is_rom = has_rom ||
+ * !has_patch` over the entries; see `emit_probe_manifest`). A real ROM archive joins the ROM
+ * bucket; a patch-only bundle goes straight to the patch bucket. Crucially, a patch-only archive
+ * never enters the ROM input list: routing it there would re-stage (re-extract) any already staged
+ * ROM and flash a ROM card before Rust's later probe-manifest reclassified it. That probe-manifest
+ * reclassify (`reclassifyArchiveToPatch` in the session) remains as a safety net for the rare
+ * misroute (e.g. a listing failure defaults to the ROM bucket). Both the in-tab dropzone and the
+ * page-wide drop forwarder funnel through one `onDrop`.
  */
 
 const logger = createLogger("unified-apply-drop");
 
-/** Retained for API compatibility — the routing no longer needs placeholder cards because an archive's
- * real ROM staging card appears instantly in the ROM bucket. */
+/** Retained for API compatibility — bare files and classified archives stage into their resolved
+ * bucket directly, so no placeholder cards are needed. */
 type PendingDrop = {
   id: string;
   name: string;
@@ -36,22 +38,63 @@ type UnifiedApplyDrop = {
 
 const NO_PENDING_DROPS: PendingDrop[] = [];
 
+/**
+ * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-manifest verdict
+ * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure — the safe
+ * direction, since Rust's reclassify still moves a misrouted patch bundle afterwards.
+ */
+const classifyArchiveBucket = async (archive: File): Promise<"rom" | "patch"> => {
+  try {
+    const names = await listDroppedArchiveEntryNames(archive);
+    const hasRom = names.some(isRomFileName);
+    const hasPatch = names.some(isPatchFileName);
+    const bucket = hasRom || !hasPatch ? "rom" : "patch";
+    logger.trace("archive content classified", {
+      bucket,
+      entryCount: names.length,
+      hasPatch,
+      hasRom,
+      name: archive.name,
+    });
+    return bucket;
+  } catch (error) {
+    logger.trace("archive content classify failed; defaulting to ROM bucket", {
+      error: String(error),
+      name: archive.name,
+    });
+    return "rom";
+  }
+};
+
+const routeUnifiedDrop = async (
+  files: File[],
+  controller: UnifiedDropController,
+  isCancelled?: () => boolean,
+): Promise<void> => {
+  const { archives, inputs, patches } = classifyDroppedFiles(files);
+  const archiveBuckets = await Promise.all(archives.map(classifyArchiveBucket));
+  if (isCancelled?.()) return;
+  const romArchives = archives.filter((_archive, index) => archiveBuckets[index] === "rom");
+  const patchArchives = archives.filter((_archive, index) => archiveBuckets[index] === "patch");
+  const romInputs = [...inputs, ...romArchives];
+  const patchInputs = [...patches, ...patchArchives];
+  logger.trace("unified apply drop routed files", {
+    archiveCount: archives.length,
+    fileCount: files.length,
+    patchArchiveCount: patchArchives.length,
+    patchInputCount: patchInputs.length,
+    romArchiveCount: romArchives.length,
+    romInputCount: romInputs.length,
+  });
+  if (romInputs.length) controller.provideRomInputFiles?.(romInputs);
+  if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
+};
+
 const useUnifiedApplyDrop = (controller: UnifiedDropController): UnifiedApplyDrop => {
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean) => {
       if (isCancelled?.()) return;
-      const { archives, inputs, patches } = classifyDroppedFiles(files);
-      // Archives join the ROM bucket alongside bare ROMs; Rust's nested extract reclassifies any
-      // patch-only bundle to the patch bucket on identify.
-      const romInputs = [...inputs, ...archives];
-      logger.trace("unified apply drop received files", {
-        archiveCount: archives.length,
-        fileCount: files.length,
-        patchCount: patches.length,
-        romInputCount: romInputs.length,
-      });
-      if (romInputs.length) controller.provideRomInputFiles?.(romInputs);
-      if (patches.length) controller.providePatchInputFiles?.(patches);
+      void routeUnifiedDrop(files, controller, isCancelled);
     },
     [controller],
   );
