@@ -991,3 +991,27 @@ fn header_repair_finalize_restores_original_n64_order() {
     let _ = std::fs::remove_file(staged_path);
     let _ = std::fs::remove_file(output_path);
 }
+
+// Golden cases shared with the TypeScript conformance test
+// (`sidecar-patch-resolution.browser.test.js`) so the native matcher and the browser's
+// `match-sidecars` command can never drift on the RetroArch `<rom-stem>.<patch-ext>` convention.
+#[test]
+fn libretro_sidecar_matches_basename_stem_and_order() {
+    let rom = "bundle/game.bin";
+    let cases: [(&str, Option<u32>); 7] = [
+        ("bundle/game.ips", Some(0)),         // stem match, no order suffix
+        ("bundle/game.bin.ips1", Some(1)),    // full-name match + order 1
+        ("bundle/game [Hack].ips2", Some(2)), // bracket label stripped, order 2
+        ("bundle/game.bspatch3", Some(3)),    // different patch ext, order 3
+        ("elsewhere/game.ips", None),         // wrong directory
+        ("bundle/other.ips", None),           // wrong basename
+        ("bundle/game.txt", None),            // not a patch extension
+    ];
+    for (patch, expected) in cases {
+        assert_eq!(
+            CliApp::entry_matches_libretro_sidecar(rom, patch),
+            expected,
+            "sidecar match for `{patch}`"
+        );
+    }
+}

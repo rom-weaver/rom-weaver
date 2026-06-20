@@ -86,6 +86,14 @@ pub enum Commands {
         )
     )]
     PlanExtractBatch(PlanExtractBatchCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            name = "match-sidecars",
+            about = "Match RetroArch-style sidecar patches against a ROM by name (no I/O)"
+        )
+    )]
+    MatchSidecars(MatchSidecarsCommand),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -945,8 +953,8 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 
 mod command_args;
 pub use command_args::{
-    ChecksumCommand, CompressCommand, ExtractCommand, ListCommand, PatchApplyCommand,
-    PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand,
+    ChecksumCommand, CompressCommand, ExtractCommand, ListCommand, MatchSidecarsCommand,
+    PatchApplyCommand, PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand,
     PlanExtractBatchCommand, ProbeCommand, TrimCommand,
 };
 

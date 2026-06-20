@@ -236,6 +236,53 @@ impl CliApp {
         }
     }
 
+    pub(super) fn run_match_sidecars(&self, args: MatchSidecarsCommand) -> AppRunOutcome {
+        let MatchSidecarsCommand {
+            rom_name,
+            patch_names,
+        } = args;
+        trace!(
+            rom = %rom_name,
+            patch_count = patch_names.len(),
+            "starting match-sidecars command"
+        );
+        // Index ties keep input order stable; mirror the host's order → name → index sort so native and
+        // browser agree on the apply sequence for numbered soft-patches.
+        let mut matches: Vec<(String, u32, usize)> = patch_names
+            .iter()
+            .enumerate()
+            .filter_map(|(index, patch)| {
+                Self::entry_matches_libretro_sidecar(&rom_name, patch)
+                    .map(|order| (patch.clone(), order, index))
+            })
+            .collect();
+        matches.sort_by(|left, right| {
+            left.1
+                .cmp(&right.1)
+                .then_with(|| left.0.cmp(&right.0))
+                .then_with(|| left.2.cmp(&right.2))
+        });
+        let sidecar_matches = matches
+            .iter()
+            .map(|(name, order, _)| serde_json::json!({ "name": name, "order": order }))
+            .collect::<Vec<_>>();
+        let context = self.context(ThreadBudget::Fixed(1));
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("match-sidecars".to_string()),
+            "match-sidecars",
+            format!(
+                "matched {} sidecar patch file(s) for `{}`",
+                matches.len(),
+                rom_name
+            ),
+            Some(100.0),
+            context.single_thread_execution(),
+        );
+        report.details = Some(serde_json::json!({ "sidecar_matches": sidecar_matches }));
+        self.finish("match-sidecars", report)
+    }
+
     pub(super) fn selected_libretro_rom_entry(
         archive_path: &Path,
         select: &[String],

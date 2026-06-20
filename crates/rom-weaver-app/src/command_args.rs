@@ -1032,3 +1032,35 @@ pub struct PlanExtractBatchCommand {
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub total_memory_bytes: Option<u64>,
 }
+
+/// Match RetroArch/libretro sidecar patches against a ROM by name — the single source of truth for the
+/// `<rom-stem>.<patch-ext>` soft-patch convention, so the browser (which has no native access to the
+/// matcher) and the native CLI agree exactly. Given a ROM path and candidate patch paths (full paths so
+/// the same-directory rule applies), the report details carry a `sidecar_matches` array of the matched
+/// patches in apply order (`{ name, order }`). Pure name logic — no I/O — so it runs the same on native
+/// and in the browser.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct MatchSidecarsCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "rom-name",
+            value_name = "PATH",
+            help = "ROM path the sidecar patches must match"
+        )
+    )]
+    pub rom_name: String,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-name",
+            value_name = "PATH",
+            help = "Candidate patch path; repeat once per candidate"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_names: Vec<String>,
+}

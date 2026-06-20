@@ -62,6 +62,7 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
     case "compress":
     case "trim":
     case "plan-extract-batch":
+    case "match-sidecars":
       return { args, type } as RomWeaverCommand;
     case "patch-apply":
       return { args: { args, type: "apply" }, type: "patch" } as RomWeaverCommand;
@@ -112,6 +113,7 @@ function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand 
     case "compress":
     case "trim":
     case "plan-extract-batch":
+    case "match-sidecars":
       return { args, type } as RomWeaverCommand;
     default:
       return assertNever(type);
@@ -148,6 +150,7 @@ function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommand
     case "compress":
     case "trim":
     case "plan-extract-batch":
+    case "match-sidecars":
       return {
         args: command.args,
         type: command.type,
@@ -191,6 +194,7 @@ export function collectRomWeaverRunInputPaths(
       collectRomWeaverPatchInputPaths(paths, command.args);
       break;
     case "plan-extract-batch":
+    case "match-sidecars":
       // Pure planning over sizes passed in the args — no file inputs to reference.
       break;
     default:
@@ -282,6 +286,7 @@ export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): bool
           return assertNever(command.args);
       }
     case "plan-extract-batch":
+    case "match-sidecars":
       // Pure planning: the `threads` field is the budget to plan for, not a worker spawn, so it is
       // passed through untouched (no clamp/inject/force).
       return false;
@@ -369,6 +374,7 @@ function replaceRomWeaverCommandArgs(command: RomWeaverCommand, args: Record<str
     case "compress":
     case "trim":
     case "plan-extract-batch":
+    case "match-sidecars":
       return {
         ...command,
         args,
