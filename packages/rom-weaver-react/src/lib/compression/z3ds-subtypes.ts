@@ -45,9 +45,24 @@ const z3dsUnderlyingExtensionForCompressedExtension = (extension: string): strin
   Z3DS_SUBTYPES.find((entry) => entry.underlyingMagic !== null && entry.compressedExtension === extension)
     ?.underlyingExtension ?? null;
 
+/** Compressed (`.z*`) extension for a *raw* payload extension (`cia`/`cci`/`cxi`/
+ * `3dsx`/`3ds`), else null. Narrower than
+ * {@link z3dsCompressedExtensionForSourceExtension}: aliases and already-compressed
+ * extensions are not matched. */
+const z3dsCompressedExtensionForUnderlyingExtension = (extension: string | null | undefined): string | null =>
+  extension
+    ? (Z3DS_SUBTYPES.find((entry) => entry.underlyingExtension === extension)?.compressedExtension ?? null)
+    : null;
+
+/** Whether `extension` is a compressed z3ds-family extension (`zcia`/`zcci`/`zcxi`/`z3dsx`/`z3ds`). */
+const isZ3dsCompressedExtension = (extension: string | null | undefined): boolean =>
+  !!extension && Z3DS_SUBTYPES.some((entry) => entry.compressedExtension === extension);
+
 export {
+  isZ3dsCompressedExtension,
   z3dsCompressedExtensionForMagic,
   z3dsCompressedExtensionForSourceExtension,
+  z3dsCompressedExtensionForUnderlyingExtension,
   z3dsUnderlyingExtensionForCompressedExtension,
   z3dsUnderlyingExtensionForMagic,
 };

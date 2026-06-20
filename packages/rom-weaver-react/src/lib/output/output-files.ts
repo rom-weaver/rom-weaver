@@ -7,14 +7,14 @@ import {
   RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "../compression/rom-specific-format-support.ts";
 import {
+  isZ3dsCompressedExtension,
   z3dsUnderlyingExtensionForCompressedExtension,
   z3dsUnderlyingExtensionForMagic,
 } from "../compression/z3ds-subtypes.ts";
 import { appendFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
-import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
+import { CHD_EXTENSION_REGEX, getFileNameExtension } from "../path-utils.ts";
 
 const RVZ_EXTENSION_REGEX = createRomSpecificExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
-const Z3DS_EXTENSION_REGEX = /\.(zcia|zcci|zcxi|z3dsx|z3ds)$/i;
 const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip)$/i;
 
 const getSourceExtension = (source: SourceFileLike | null | undefined, fallback?: string): string => {
@@ -136,7 +136,7 @@ const getZ3dsIntermediateFileName = (fileName: string, source: SourceFileLike | 
   if (!hasFileNameExtension(fileName)) {
     return replaceFileNameExtension(fileName, sourceExtension);
   }
-  if (Z3DS_EXTENSION_REGEX.test(fileName)) {
+  if (isZ3dsCompressedExtension((getFileNameExtension(fileName) ?? "").toLowerCase())) {
     return replaceFileNameExtension(fileName, sourceExtension);
   }
   return fileName;
