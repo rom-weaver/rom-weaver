@@ -29,23 +29,29 @@ impl CliApp {
 
         let stage = stage.into();
         let label = label.into();
-        trace!(
-            command,
-            family = ?family,
-            format = ?format,
-            stage = %stage,
-            label = %label,
-            percent = ?percent,
-            requested_threads = ?thread_execution.as_ref().map(|value| value.requested_threads),
-            effective_threads = ?thread_execution.as_ref().map(|value| value.effective_threads),
-            thread_mode = ?thread_execution.as_ref().map(|value| value.thread_mode),
-            used_parallelism = ?thread_execution.as_ref().map(|value| value.used_parallelism),
-            thread_fallback = ?thread_execution.as_ref().map(|value| value.thread_fallback),
-            thread_fallback_reason = ?thread_execution
-                .as_ref()
-                .and_then(|value| value.thread_fallback_reason.as_deref()),
-            "emitting running progress event"
-        );
+        // Progress is emitted per 1% (≈100 calls per op); tracing every tick floods the log with
+        // near-identical lines. Trace only at coarse 10% milestones (and non-percent/indeterminate
+        // emits) — enough to spot a stall without burying the rest of the trace. The progress event
+        // below is still emitted on every call, so the UI is unaffected.
+        if percent.is_none_or(|value| (value as u32).is_multiple_of(10)) {
+            trace!(
+                command,
+                family = ?family,
+                format = ?format,
+                stage = %stage,
+                label = %label,
+                percent = ?percent,
+                requested_threads = ?thread_execution.as_ref().map(|value| value.requested_threads),
+                effective_threads = ?thread_execution.as_ref().map(|value| value.effective_threads),
+                thread_mode = ?thread_execution.as_ref().map(|value| value.thread_mode),
+                used_parallelism = ?thread_execution.as_ref().map(|value| value.used_parallelism),
+                thread_fallback = ?thread_execution.as_ref().map(|value| value.thread_fallback),
+                thread_fallback_reason = ?thread_execution
+                    .as_ref()
+                    .and_then(|value| value.thread_fallback_reason.as_deref()),
+                "emitting running progress event"
+            );
+        }
         let thread_execution = thread_execution.as_ref();
         self.reporter.emit(ProgressEvent {
             command: command.to_string(),

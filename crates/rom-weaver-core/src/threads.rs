@@ -302,6 +302,9 @@ impl ThreadCapability {
                 }
             }
         };
+        // One line carries the full negotiated plan; `used_parallelism` already says whether threads
+        // are on, so the separate enabled/disabled trace (and the duplicate `threads_enabled` field)
+        // was pure repetition on a path that runs on every plan_threads call.
         trace!(
             capability = ?self,
             budget = %budget,
@@ -309,26 +312,8 @@ impl ThreadCapability {
             effective_threads = execution.effective_threads,
             thread_mode = ?execution.thread_mode,
             used_parallelism = execution.used_parallelism,
-            threads_enabled = execution.used_parallelism,
             "thread execution negotiated"
         );
-        if execution.used_parallelism {
-            trace!(
-                capability = ?self,
-                budget = %budget,
-                requested_threads = execution.requested_threads,
-                effective_threads = execution.effective_threads,
-                "parallel threads enabled"
-            );
-        } else {
-            trace!(
-                capability = ?self,
-                budget = %budget,
-                requested_threads = execution.requested_threads,
-                effective_threads = execution.effective_threads,
-                "parallel threads disabled"
-            );
-        }
         execution
     }
 
