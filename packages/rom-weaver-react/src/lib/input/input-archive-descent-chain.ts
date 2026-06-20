@@ -15,6 +15,9 @@ type DescentExtractStep = {
   outDir: string;
   outputSize: number;
   format: string;
+  /** Wall-clock ms this level took to extract (Rust `extract_step.extract_time_ms`); rendered as the
+   * level's per-row time in the extraction tree. */
+  extractTimeMs?: number;
 };
 
 /**
@@ -58,6 +61,9 @@ const buildDescentParentCompressions = ({
       kind: step.format,
       ...(typeof sourceSize === "number" && sourceSize > 0 ? { sourceSize } : {}),
       ...(step.outputSize > 0 ? { outputSize: step.outputSize } : {}),
+      ...(typeof step.extractTimeMs === "number" && Number.isFinite(step.extractTimeMs)
+        ? { decompressionTimeMs: step.extractTimeMs }
+        : {}),
     };
   });
   // Append the extracted payload itself as the final chain level, showing its path inside its

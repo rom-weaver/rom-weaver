@@ -617,6 +617,9 @@ const resolveArchiveInputAssetsByDescent = async (
         outputSize,
         source: typeof step.source === "string" ? step.source : "",
         sourceName: getBaseFileName(step.source_name),
+        ...(typeof step.extract_time_ms === "number" && Number.isFinite(step.extract_time_ms)
+          ? { extractTimeMs: step.extract_time_ms }
+          : {}),
       });
     }
     forwardProgress?.(progress as never);
