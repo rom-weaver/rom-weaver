@@ -28,6 +28,24 @@ describe("worker-error kind contract", () => {
     expect(resolveWorkerErrorKind(error, error.name, message)).toBe(kind);
   });
 
+  it("prefers an explicit typed error kind over message-prefix inference", () => {
+    // The Rust core attaches the generated RomWeaverErrorKind to a failed event
+    // (propagated onto the thrown error as `kind`). resolveWorkerErrorKind must
+    // trust that typed kind even when the message text would regex-classify
+    // differently — this is what makes the typed kind the contract and the
+    // inferCoreWorkerErrorKind regex a mere fallback.
+    const unmatchable = Object.assign(new Error("totally unrelated text"), {
+      kind: "validation",
+    });
+    expect(resolveWorkerErrorKind(unmatchable, unmatchable.name, unmatchable.message)).toBe("validation");
+
+    // It also wins over a *contradicting* core message prefix.
+    const contradicting = Object.assign(new Error("i/o error: disk gone"), {
+      kind: "cancelled",
+    });
+    expect(resolveWorkerErrorKind(contradicting, contradicting.name, contradicting.message)).toBe("cancelled");
+  });
+
   it("does not misclassify a non-core message as a core kind", () => {
     const message = "totally unrelated text";
     const error = new Error(message);

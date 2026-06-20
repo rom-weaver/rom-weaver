@@ -25,7 +25,11 @@ import {
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, runRomWeaverJson } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import {
+  getRomWeaverFailureMessage,
+  runRomWeaverJson,
+  withRomWeaverFailureKind,
+} from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import {
   parseChecksumDetails,
@@ -89,10 +93,11 @@ const throwRomWeaverFailureWithBrowserOutputContext = async (
   operationLabel: string,
 ): Promise<never> => {
   const message = getRomWeaverFailureMessage(result, fallbackMessage);
-  const error = await withBrowserOutputStorageFailureContext(new Error(message), {
+  const contextualized = await withBrowserOutputStorageFailureContext(new Error(message), {
     operationLabel,
   });
-  throw error instanceof Error ? error : new Error(String(error || message));
+  const error = contextualized instanceof Error ? contextualized : new Error(String(contextualized || message));
+  throw withRomWeaverFailureKind(error, result);
 };
 
 const invokeRomWeaverCompressionCreateWorker = async (
@@ -175,7 +180,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
-    throw new Error(failureMessage);
+    throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
 
   const emitted = getEmittedFiles(result)[0];
@@ -342,7 +347,7 @@ const runRomWeaverListWorker = async (
   const result = await runList();
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression listing failed");
-    throw new Error(failureMessage);
+    throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
   const entries = getContainerEntriesFromList(result);
   return { chdMediaKind: getChdMediaKindFromList(result), entries };
@@ -383,7 +388,7 @@ const runRomWeaverProbePatchWorker = async (
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Patch probe failed");
-    throw new Error(failureMessage);
+    throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
   return getPatchDetailsFromProbe(result);
 };
@@ -428,7 +433,7 @@ const runRomWeaverMatchSidecarsWorker = async (
     toRomWeaverOptions({ logLevel: input.logLevel, onLog, signal: input.signal }),
   );
   if (!(result.ok && result.exitCode === 0)) {
-    throw new Error(getRomWeaverFailureMessage(result, "Sidecar match failed"));
+    throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, "Sidecar match failed")), result);
   }
   return getSidecarMatchesFromResult(result);
 };
@@ -539,7 +544,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     const failureMessage = await appendBrowserStorageContext(
       getRomWeaverFailureMessage(result, "Patch validation failed"),
     );
-    throw new Error(failureMessage);
+    throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
 
   const terminal = getTerminalEvent(result);
@@ -662,9 +667,10 @@ const invokeRomWeaverPatchApplyWorker = async (
             .slice(-8)
             .join(" | ")
         : "";
-      if (traceTail) throw new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`);
+      if (traceTail)
+        throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`), result);
     }
-    throw new Error(`${failureMessage}${traceContext}`);
+    throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext}`), result);
   }
 
   const emitted = getEmittedFileDetails(result);

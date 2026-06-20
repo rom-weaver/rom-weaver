@@ -7,6 +7,7 @@ type RomWeaverRuntimeProgressDetails = RomWeaverProgressEvent["details"];
 type RomWeaverRuntimeProgressFormat = RomWeaverProgressEvent["format"];
 type RomWeaverRuntimeProgressElapsedMs = RomWeaverProgressEvent["elapsed_ms"];
 type RomWeaverRuntimeProgressEffectiveThreads = RomWeaverProgressEvent["effective_threads"];
+type RomWeaverRuntimeProgressErrorKind = RomWeaverProgressEvent["error_kind"];
 
 const RUNNING_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "running";
 const FAILED_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "failed";
@@ -30,6 +31,12 @@ const getRomWeaverRunEventElapsedMs = (event: RomWeaverRunJsonEvent): RomWeaverR
 const getRomWeaverRunEventEffectiveThreads = (event: RomWeaverRunJsonEvent): RomWeaverRuntimeProgressEffectiveThreads =>
   event.effective_threads;
 
+// Typed error classification the Rust core attaches to a failed terminal event
+// (`RomWeaverErrorKind`). Present only on failures whose message is a bare
+// `RomWeaverError` rendering; absent otherwise.
+const getRomWeaverRunEventErrorKind = (event: RomWeaverRunJsonEvent): RomWeaverRuntimeProgressErrorKind =>
+  event.error_kind;
+
 const isRomWeaverFailedRunEvent = (event: RomWeaverRunJsonEvent): boolean =>
   getRomWeaverRunEventStatus(event) === FAILED_PROGRESS_STATUS;
 
@@ -43,6 +50,7 @@ export {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventEffectiveThreads,
   getRomWeaverRunEventElapsedMs,
+  getRomWeaverRunEventErrorKind,
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
   getRomWeaverRunEventPercent,

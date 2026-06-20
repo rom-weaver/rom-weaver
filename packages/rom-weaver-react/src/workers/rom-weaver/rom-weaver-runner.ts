@@ -34,6 +34,7 @@ import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 import {
   getRomWeaverRunEventElapsedMs,
+  getRomWeaverRunEventErrorKind,
   getRomWeaverRunEventLabel,
   isRomWeaverFailedRunEvent,
   isRomWeaverTerminalRunEvent,
@@ -787,6 +788,40 @@ const getRomWeaverFailureMessage = (
   return fallback;
 };
 
+type RomWeaverFailureKind = NonNullable<ReturnType<typeof getRomWeaverRunEventErrorKind>>;
+
+// The typed `RomWeaverErrorKind` the Rust core attached to the failing terminal
+// event, if any. This is the canonical, generated-enum classification — the JS
+// `inferCoreWorkerErrorKind` regex is only a fallback for failures that arrive
+// without it (worker/panic strings, or messages wrapped in extra context).
+const getRomWeaverFailureKind = (
+  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
+): RomWeaverFailureKind | undefined => {
+  const events = Array.isArray(result?.events) ? result.events : [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!(event && isRomWeaverFailedRunEvent(event))) continue;
+    const kind = getRomWeaverRunEventErrorKind(event);
+    if (kind) return kind;
+  }
+  return undefined;
+};
+
+// Attach the run's typed failure kind to a thrown error so the worker-error
+// classifier (`resolveWorkerErrorKind`) prefers it over message-prefix
+// inference. No-op when the run carried no typed kind, leaving the existing
+// fallback path untouched.
+const withRomWeaverFailureKind = <E extends Error>(
+  error: E,
+  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
+): E => {
+  const kind = getRomWeaverFailureKind(result);
+  if (kind) {
+    (error as E & { kind?: RomWeaverFailureKind }).kind = kind;
+  }
+  return error;
+};
+
 const TRACE_STDERR_LINE_REGEX = /^\d{4}-\d{2}-\d{2}T\S+\s+(?:TRACE|DEBUG|INFO|WARN|ERROR)\s+[\w:]+:/;
 
 const getNonTraceStderr = (result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined) => {
@@ -808,4 +843,5 @@ export {
   runRomWeaverJson,
   setInputSelectionHandler,
   warmupRomWeaverRunner,
+  withRomWeaverFailureKind,
 };

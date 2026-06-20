@@ -5,12 +5,15 @@ import type {
 } from "../rom-weaver-types.d.ts";
 
 /**
- * Compile-time exhaustiveness guard for the core (Rust) error kinds. Keyed by
- * the generated {@link RomWeaverErrorKind}, so adding a new Rust kind (which
- * regenerates that union) makes tsc fail here until the new kind is handled —
- * the loud signal that keeps the JS classifier from silently missing a kind.
- * Its keys also seed WORKER_ERROR_KINDS below, so it is load-bearing, not dead
- * code.
+ * Compile-time exhaustiveness guard for the *set* of core (Rust) error kinds.
+ * Keyed by the generated {@link RomWeaverErrorKind}, so adding a new Rust kind
+ * (which regenerates that union) makes tsc fail here until the new kind is
+ * handled. This locks the recognized kind set — NOT the message-prefix
+ * classification below. Runtime classification of a Rust failure now comes from
+ * the typed `error_kind` the core attaches to failed events (preferred by
+ * {@link resolveWorkerErrorKind}); the {@link inferCoreWorkerErrorKind} regex is
+ * only a fallback. Its keys also seed WORKER_ERROR_KINDS below, so it is
+ * load-bearing, not dead code.
  */
 const CORE_ERROR_KINDS = {
   cancelled: true,
@@ -35,6 +38,11 @@ export function resolveWorkerErrorKind(
   message: string,
   fallbackKind?: unknown,
 ): RomWeaverWorkerErrorKind {
+  // Prefer the typed kind the Rust core attached to the error (the generated
+  // RomWeaverErrorKind, propagated from a failed event's `error_kind`). This is
+  // the canonical classification; the message-prefix regex below is only a
+  // fallback for errors that arrive without it (worker/panic strings, or
+  // messages wrapped in extra context).
   const explicit = normalizeWorkerErrorKind(readOptionalRecord(error)?.kind);
   if (explicit) {
     return explicit;
@@ -103,6 +111,12 @@ export function readWorkerErrorContext(input: unknown): RomWeaverWorkerErrorCont
   return context;
 }
 
+// Fallback classifier: maps a bare RomWeaverError `Display` message to its kind
+// by prefix. These prefixes mirror Rust's `RomWeaverErrorKind::classify_message`
+// (crates/rom-weaver-core/src/error.rs), which is the source of truth and feeds
+// the typed `error_kind` preferred by resolveWorkerErrorKind. This regex only
+// runs for errors that reach JS without that typed kind; keep it in sync with
+// the Rust prefixes as a best-effort fallback.
 function inferCoreWorkerErrorKind(message: string): RomWeaverWorkerErrorKind | null {
   if (/^validation failed:/i.test(message)) {
     return "validation";
