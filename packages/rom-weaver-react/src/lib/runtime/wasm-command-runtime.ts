@@ -39,7 +39,7 @@ import {
   normalizeCodecEntries,
   normalizeCompressionLevelProfile,
 } from "./compression-codec-args.ts";
-import { resolveCompressionCreateThreadArg, toThreadBudget } from "./compression-thread-budget.ts";
+import { toThreadBudget } from "./compression-thread-budget.ts";
 import type { RomWeaverProbePatchDetails } from "./patch-run-resolution.ts";
 import {
   getPatchApplyOutputFileName,
@@ -136,27 +136,11 @@ const invokeRomWeaverCompressionCreateWorker = async (
   }
   const codecs = normalizedChdCodecs.codecs;
   const levelProfile = normalizeCompressionLevelProfile(input.levelProfile);
-  const threadResolution = resolveCompressionCreateThreadArg({
-    codecs,
-    format,
-    levelProfile,
-    totalBytes: input.totalBytes,
-    workerThreads: input.workerThreads,
-  });
-  const threadArg = threadResolution.threadArg;
-  if (
-    threadResolution.threadCap !== null &&
-    !Object.is(threadResolution.threadArg, threadResolution.requestedThreadArg)
-  ) {
-    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress normalized browser thread cap", {
-      format,
-      requestedThreadArg: threadResolution.requestedThreadArg,
-      threadArg,
-      threadCap: threadResolution.threadCap,
-      totalBytes: input.totalBytes ?? null,
-      zipZstdLevel: threadResolution.zipZstdLevel,
-    });
-  }
+  // The zip+zstd browser memory thread cap is enforced authoritatively in Rust
+  // (zip.rs create_thread_capability -> plan_threads negotiates the requested
+  // count down to achievable.min(memory_cap)); forward the requested budget and
+  // let the engine cap it. See docs/ts-rust-unification-plan.md (Task C).
+  const threadArg = toThreadBudget(input.workerThreads);
   const command = createRomWeaverCommand("compress", {
     codec: codecs,
     format: format || undefined,
@@ -968,7 +952,6 @@ export {
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
-  resolveCompressionCreateThreadArg,
   resolvePatchApplyThreadArg,
   runRomWeaverChecksumWorker,
   runRomWeaverListWorker,
