@@ -10,10 +10,11 @@ mod tests {
     };
 
     use crate::{
-        ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, NodHandlerCore,
-        RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher, SevenZContainerHandler, SevenZMethod,
-        Z3dsContainerHandler, ZipContainerHandler, copy_progress_buffer_size,
-        lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits, zstd_threads_for_budget,
+        ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
+        NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
+        SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
+        copy_progress_buffer_size, lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits,
+        zstd_threads_for_budget,
     };
     use chd::{
         header::Header,
@@ -33,7 +34,7 @@ mod tests {
     use rom_weaver_codecs::encode_xz_preset;
     use rom_weaver_core::{
         CancellationToken, ContainerHandlerOperations, NoopProgressSink, OperationContext,
-        ThreadBudget, ThreadCapability, ThreadExecution,
+        RomWeaverError, ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp,
     };
 
     const TEST_CSO_BLOCK_BYTES: usize = 2 * 1024;
@@ -4337,5 +4338,595 @@ mod tests {
                 .to_string()
                 .contains("requested selections were not found: *.cue")
         );
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Handler error-path coverage. These exercise malformed/truncated/wrong-magic inputs that
+    // are otherwise only reached through the end-to-end cli_smoke suite, where a wrong or
+    // missing guard surfaces as an opaque failure. Each asserts the matched `RomWeaverError`
+    // variant and the specific guard message so the intended branch (not just *some* error) is
+    // what fired.
+    // ----------------------------------------------------------------------------------------
+
+    /// A minimal but otherwise-valid 0x20-byte z3ds header. Individual fields are overridden by
+    /// the malformed-header tests to land on a single guard at a time.
+    fn build_z3ds_header(magic: [u8; 4], version: u16, header_size: u16) -> [u8; 0x20] {
+        let mut raw = [0_u8; 0x20];
+        raw[..4].copy_from_slice(&magic);
+        // underlying_magic (offset 4..8) left zero
+        raw[8..10].copy_from_slice(&version.to_le_bytes());
+        raw[10..12].copy_from_slice(&header_size.to_le_bytes());
+        // metadata_size (12..16), compressed_size (16..24), uncompressed_size (24..32) left zero
+        raw
+    }
+
+    fn z3ds_probe_request(source: &Path) -> rom_weaver_core::ContainerProbeRequest {
+        rom_weaver_core::ContainerProbeRequest {
+            source: source.to_path_buf(),
+            split_bin: false,
+        }
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_truncated_header() {
+        let temp_dir = temp_dir_path("z3ds-truncated-header");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("short.z3ds");
+        // Fewer than the 0x20 header bytes -> read_exact hits UnexpectedEof.
+        fs::write(&source, b"Z3DSshort").expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("truncated header should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("too small to be a z3ds container")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_wrong_magic() {
+        let temp_dir = temp_dir_path("z3ds-wrong-magic");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("bad-magic.z3ds");
+        fs::write(&source, build_z3ds_header(*b"ZZZZ", 1, 0x20)).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("wrong magic should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("missing Z3DS magic")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_unsupported_version() {
+        let temp_dir = temp_dir_path("z3ds-bad-version");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("bad-version.z3ds");
+        fs::write(&source, build_z3ds_header(*b"Z3DS", 2, 0x20)).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("unsupported version should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("unsupported z3ds version 2")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_unsupported_header_size() {
+        let temp_dir = temp_dir_path("z3ds-bad-header-size");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("bad-header-size.z3ds");
+        fs::write(&source, build_z3ds_header(*b"Z3DS", 1, 0x40)).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("unsupported header size should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("unsupported z3ds header size 64")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_metadata_size_past_eof() {
+        let temp_dir = temp_dir_path("z3ds-metadata-overrun");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("metadata-overrun.z3ds");
+        // Valid header, but metadata_size pushes the payload offset beyond the file size.
+        let mut raw = build_z3ds_header(*b"Z3DS", 1, 0x20);
+        raw[12..16].copy_from_slice(&4096_u32.to_le_bytes());
+        fs::write(&source, raw).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("metadata size past EOF should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid z3ds metadata size")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_probe_rejects_compressed_size_past_eof() {
+        let temp_dir = temp_dir_path("z3ds-compressed-overrun");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("compressed-overrun.z3ds");
+        // Valid header with no metadata, but compressed_size exceeds the bytes after the header.
+        let mut raw = build_z3ds_header(*b"Z3DS", 1, 0x20);
+        raw[16..24].copy_from_slice(&4096_u64.to_le_bytes());
+        fs::write(&source, raw).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("compressed size past EOF should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid z3ds compressed size")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_create_rejects_out_of_range_level() {
+        let temp_dir = temp_dir_path("z3ds-bad-level");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("disc.3ds");
+        fs::write(&input_path, vec![0xAB; 4096]).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join("disc.z3ds"),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: Some(1000),
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("out-of-range level should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("z3ds level `1000` is out of range")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_create_rejects_unsupported_codec() {
+        let temp_dir = temp_dir_path("z3ds-bad-codec");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("disc.3ds");
+        fs::write(&input_path, vec![0xAB; 4096]).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join("disc.z3ds"),
+                    format: "z3ds".to_string(),
+                    codec: Some("lzma2".to_string()),
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("unsupported codec should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("unsupported z3ds codec `lzma2`")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_create_rejects_multiple_inputs() {
+        let temp_dir = temp_dir_path("z3ds-multi-input");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let first = temp_dir.join("a.3ds");
+        let second = temp_dir.join("b.3ds");
+        fs::write(&first, vec![0x11; 16]).expect("fixture");
+        fs::write(&second, vec![0x22; 16]).expect("fixture");
+
+        let handler = Z3dsContainerHandler;
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![first, second],
+                    output: temp_dir.join("disc.z3ds"),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("multiple inputs should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires exactly one input file")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_probe_rejects_wrong_magic() {
+        let temp_dir = temp_dir_path("cso-wrong-magic");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("not-really.cso");
+        // Right size to be opened, wrong CISO header -> ciso reader construction fails.
+        fs::write(&source, vec![0x00; 1024]).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("non-cso source should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("is invalid")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_create_is_rejected_with_extract_only_variant() {
+        let temp_dir = temp_dir_path("cso-create-variant");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, b"payload").expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join("payload.cso"),
+                    format: "cso".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("cso create should be rejected");
+        assert!(
+            matches!(
+                error,
+                RomWeaverError::Unsupported(UnsupportedOp::ExtractOnlyCreate { ref format, .. })
+                    if format == "cso"
+            ),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_list_entries_normalizes_output_name() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let cases = [
+            ("game.cso", "game.iso"),
+            ("GAME.CISO", "GAME.iso"),
+            ("disc.1.cso", "disc.iso"),
+        ];
+        for (input_name, expected) in cases {
+            let entries = handler
+                .list_entries(&z3ds_probe_request(Path::new(input_name)), &{
+                    OperationContext::new(
+                        ThreadBudget::Fixed(1),
+                        test_temp_root(),
+                        Arc::new(NoopProgressSink),
+                        CancellationToken::new(),
+                    )
+                })
+                .expect("cso list");
+            assert_eq!(
+                entries,
+                vec![expected.to_string()],
+                "for input {input_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn pbp_probe_rejects_truncated_source() {
+        let temp_dir = temp_dir_path("pbp-truncated");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("short.pbp");
+        // Below the 0x28-byte PBP header -> "too small" guard before any signature read.
+        fs::write(&source, b"\0PBPshort").expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("truncated pbp should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("too small to be a pbp container")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_probe_rejects_invalid_first_section_offset() {
+        let temp_dir = temp_dir_path("pbp-bad-section-offset");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("bad-section.pbp");
+        // Valid magic + full header, but the first section offset (0x08) is below the header
+        // size, tripping the section-table guard.
+        let mut header = vec![0u8; 0x28];
+        header[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
+        write_u32_le(&mut header, 8, 0x10); // first section offset < 0x28
+        fs::write(&source, header).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("invalid section offset should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid PBP section table")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_probe_rejects_out_of_range_psar_offset() {
+        let temp_dir = temp_dir_path("pbp-bad-psar-offset");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("bad-psar.pbp");
+        // The PSAR offset field (0x24) is the last section-table slot, so to reach the dedicated
+        // PSAR guard (which rejects `>= file_size`) without first tripping the section-table guard
+        // (which rejects `> file_size`) the value must equal the file size exactly. A 0x30-byte
+        // file with the PSAR slot set to 0x30 passes the section checks but fails the PSAR check.
+        let file_size = 0x30u32;
+        let mut header = vec![0u8; file_size as usize];
+        header[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
+        for section in 0..7 {
+            write_u32_le(&mut header, 8 + (section * 4), 0x28);
+        }
+        write_u32_le(&mut header, 0x24, file_size); // PSAR offset == file size
+        fs::write(&source, header).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let error = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("out-of-range psar offset should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid DATA.PSAR offset")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn nod_open_disc_rejects_non_disc_input() {
+        let temp_dir = temp_dir_path("nod-open-bad");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("not-a-disc.iso");
+        // Random bytes are not a recognizable disc image -> nod open fails and is mapped to
+        // a Validation error with the "failed to open" prefix.
+        fs::write(&source, vec![0x5A; 4096]).expect("fixture");
+
+        let core = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
+        // NodDiscReader is not Debug, so unwrap the error arm by hand rather than `expect_err`.
+        let error = match core.open_disc(&source, 0) {
+            Ok(_) => panic!("non-disc input should fail to open"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("failed to open gcz source")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn nod_ensure_single_create_input_rejects_multiple_inputs() {
+        let core = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
+        let request = ContainerCreateRequest {
+            inputs: vec![PathBuf::from("a.iso"), PathBuf::from("b.iso")],
+            output: PathBuf::from("out.rvz"),
+            format: "gcz".to_string(),
+            codec: None,
+            level: None,
+            parent: None,
+        };
+        let error = core
+            .ensure_single_create_input(&request)
+            .expect_err("multiple inputs should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("gcz create currently requires exactly one input file")),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn nod_validate_i8_level_rejects_overflowing_level() {
+        let core = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
+        // Within i8 range round-trips unchanged.
+        assert_eq!(core.validate_i8_level("zstd", 19).expect("in range"), 19);
+        // Above i8::MAX (127) overflows the conversion guard.
+        let error = core
+            .validate_i8_level("zstd", 200)
+            .expect_err("level 200 should overflow i8");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("level `200` is out of range")),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    fn garbage_archive_bytes() -> Vec<u8> {
+        // Deliberately not the magic of any container libarchive recognizes: a short run of
+        // pseudo-random bytes. libarchive's format auto-detection rejects this, which the
+        // containers-crate wrappers surface as a `Validation` error.
+        (0..64u32)
+            .map(|index| (index.wrapping_mul(37) ^ 0xA5) as u8)
+            .collect()
+    }
+
+    #[test]
+    fn libarchive_list_entries_wrapper_rejects_garbage_archive() {
+        // libarchive's reader uses deep stack frames; mirror the other libarchive-backed tests
+        // and run on an 8 MiB stack so the default 2 MiB test-thread stack does not overflow.
+        run_with_large_stack("libarchive-list-garbage", || {
+            let temp_dir = temp_dir_path("libarchive-list-garbage");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let source = temp_dir.join("garbage.7z");
+            fs::write(&source, garbage_archive_bytes()).expect("fixture");
+
+            let error = crate::list_regular_archive_entries_with_libarchive(&source, "7z")
+                .expect_err("garbage archive should not list");
+            assert!(
+                matches!(error, RomWeaverError::Validation(_)),
+                "unexpected error: {error:?}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn libarchive_probe_details_wrapper_rejects_garbage_archive() {
+        run_with_large_stack("libarchive-probe-garbage", || {
+            let temp_dir = temp_dir_path("libarchive-probe-garbage");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let source = temp_dir.join("garbage.7z");
+            fs::write(&source, garbage_archive_bytes()).expect("fixture");
+
+            let error = crate::probe_regular_archive_details_with_libarchive(&source, "7z")
+                .expect_err("garbage archive should not probe");
+            assert!(
+                matches!(error, RomWeaverError::Validation(_)),
+                "unexpected error: {error:?}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn libarchive_extract_wrapper_rejects_garbage_archive() {
+        run_with_large_stack("libarchive-extract-garbage", || {
+            let temp_dir = temp_dir_path("libarchive-extract-garbage");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let source = temp_dir.join("garbage.7z");
+            fs::write(&source, garbage_archive_bytes()).expect("fixture");
+
+            let request = rom_weaver_core::ContainerExtractRequest {
+                source,
+                out_dir: temp_dir.join("out"),
+                selections: Vec::new(),
+                kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                containing_archive: None,
+                split_bin: false,
+                ignore_common_files: false,
+                overwrite: true,
+                parent: None,
+            };
+            let error = crate::extract_regular_archive_with_libarchive(
+                &request,
+                &test_context(&temp_dir, 1),
+                "7z",
+            )
+            .expect_err("garbage archive should not extract");
+            assert!(
+                matches!(error, RomWeaverError::Validation(_)),
+                "unexpected error: {error:?}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn libarchive_stream_probe_wrapper_rejects_empty_payload() {
+        run_with_large_stack("libarchive-stream-empty", || {
+            let temp_dir = temp_dir_path("libarchive-stream-empty");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let source = temp_dir.join("empty.gz");
+            // An empty file cannot be opened as a raw archive stream, so the wrapper surfaces a
+            // `Validation` error carrying the format-name context it injected. (libarchive's raw
+            // reader passes non-gzip *bytes* through the gzip filter rather than erroring, so a
+            // truly empty input is the sound way to drive the open-stream failure path.)
+            fs::write(&source, b"").expect("fixture");
+
+            let error = crate::probe_stream_with_libarchive(
+                &source,
+                "gz",
+                crate::LibarchiveReadFilter::Gzip,
+            )
+            .expect_err("empty payload should not stream-probe");
+            assert!(
+                matches!(error, RomWeaverError::Validation(ref message) if message.contains("gz probe failed")),
+                "unexpected error: {error:?}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn seven_z_parse_level_accepts_range_edges_and_rejects_below_range() {
+        let temp_dir = temp_dir_path("seven-z-level-edges");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let execution = test_context(&temp_dir, 1).plan_threads(ThreadCapability::parallel(None));
+        let handler = SevenZContainerHandler::new(&SEVEN_Z);
+
+        // Both ends of the documented 0..=9 range are accepted.
+        for level in [0, 9] {
+            handler
+                .parse_codec(Some("lzma2"), Some(level), &execution)
+                .unwrap_or_else(|error| panic!("level {level} should parse: {error}"));
+        }
+        // Below the range is rejected by the same guard as the already-tested upper edge.
+        let error = handler
+            .parse_codec(Some("lzma2"), Some(-1), &execution)
+            .expect_err("level -1 should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("out of range")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 }

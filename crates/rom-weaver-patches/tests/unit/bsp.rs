@@ -4,7 +4,7 @@ use std::{
     process::Command,
 };
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler, RomWeaverError};
 use serde_json::Value;
 
 use super::{BSP_THREAD_WORK_CHUNK_BYTES, BSP_VM_SOURCE, BspPatchHandler, apply_bsp_patch_bytes};
@@ -443,4 +443,91 @@ fn create_is_reported_as_unsupported() {
             .to_string()
             .contains("BSP patch creation is not implemented")
     );
+}
+
+// --------------------------------------------------------------------------------------------
+// BSP VM opcode error paths. The existing tests cover the happy-path opcodes (differentially
+// against the JS reference runtime) but not the interpreter's guard branches, which only surface
+// through the end-to-end suite. Each test hands the VM a hand-built byte program that lands on a
+// single guard and asserts the wrapped `RomWeaverError::Validation` carries that guard's message.
+// `apply_bsp_patch_bytes` wraps every VM failure as `Validation("BSP patch execution failed: …")`.
+// --------------------------------------------------------------------------------------------
+
+/// Push a 32-bit little-endian value onto a BSP program being assembled byte-by-byte.
+fn push_word(buffer: &mut Vec<u8>, value: u32) {
+    buffer.extend_from_slice(&value.to_le_bytes());
+}
+
+fn assert_bsp_program_error(patch: &[u8], input: Vec<u8>, fragment: &str) {
+    let error =
+        apply_bsp_patch_bytes(patch, input, None).expect_err("malformed BSP program should fail");
+    assert!(
+        matches!(error, RomWeaverError::Validation(ref message) if message.contains(fragment)),
+        "expected `{fragment}`, got: {error:?}"
+    );
+}
+
+#[test]
+fn apply_rejects_undefined_opcode() {
+    // 0xC0 is outside the opcode_parameters match -> "undefined opcode".
+    assert_bsp_program_error(&[0xC0], vec![0x00], "undefined opcode");
+}
+
+#[test]
+fn apply_rejects_division_by_zero() {
+    // 0x2C: var[arg0] = arg1 / arg2, with the divisor word set to 0.
+    let mut patch = vec![0x2C, 0x00];
+    push_word(&mut patch, 10); // dividend
+    push_word(&mut patch, 0); // divisor -> division by zero
+    assert_bsp_program_error(&patch, vec![0x00], "division by zero");
+}
+
+#[test]
+fn apply_rejects_modulo_by_zero() {
+    // 0x30: var[arg0] = arg1 % arg2, divisor 0 -> same guard.
+    let mut patch = vec![0x30, 0x00];
+    push_word(&mut patch, 10);
+    push_word(&mut patch, 0);
+    assert_bsp_program_error(&patch, vec![0x00], "division by zero");
+}
+
+#[test]
+fn apply_rejects_read_past_end_of_patch_space() {
+    // 0x10: var[arg0] = patch_byte[arg1]; address points well past the patch length.
+    let mut patch = vec![0x10, 0x00];
+    push_word(&mut patch, 0xFFFF_FFF0);
+    assert_bsp_program_error(&patch, vec![0x00], "past the end of the patch space");
+}
+
+#[test]
+fn apply_rejects_invalid_ips_header() {
+    // 0x86: ipspatch var[arg0] from address arg1. The bytes at that address are not the IPS
+    // "PATCH" magic, so ipspatch_opcode returns "invalid IPS header".
+    let mut patch = vec![0x86, 0x00];
+    push_word(&mut patch, 7); // address of the (non-PATCH) embedded IPS stream
+    patch.extend_from_slice(b"NOTIPS!"); // 7 bytes at offset 7
+    assert_bsp_program_error(&patch, vec![0x00], "invalid IPS header");
+}
+
+#[test]
+fn apply_rejects_invalid_unicode_codepoint() {
+    // 0xA2: append Unicode char arg0 to the message buffer; above U+10FFFF is invalid.
+    let mut patch = vec![0xA2];
+    push_word(&mut patch, 0x11_0000); // > U+10FFFF
+    assert_bsp_program_error(&patch, vec![0x00], "invalid Unicode character");
+}
+
+#[test]
+fn apply_rejects_pop_from_empty_stack() {
+    // 0x0A pops the stack into a variable; with an empty stack this hits the pop guard.
+    assert_bsp_program_error(&[0x0A, 0x00], vec![0x00], "popped empty stack");
+}
+
+#[test]
+fn apply_rejects_zero_length_nested_bsppatch() {
+    // 0x94: bsppatch var[arg0] over patch[arg1..arg1+arg2]; a zero length is rejected.
+    let mut patch = vec![0x94, 0x00];
+    push_word(&mut patch, 0); // start
+    push_word(&mut patch, 0); // len = 0 -> "invalid zero length"
+    assert_bsp_program_error(&patch, vec![0x00], "invalid zero length");
 }

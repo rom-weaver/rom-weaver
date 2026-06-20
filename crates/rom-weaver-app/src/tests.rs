@@ -7,8 +7,8 @@ use rom_weaver_core::{
     ArchiveEntryKindFilter, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest,
     FormatDescriptor, NoopProgressSink, OperationContext, OperationFamily, OperationReport,
-    PromptCandidate, Result, Selection, SelectionList, SelectionPrompter, ThreadBudget,
-    ThreadCapability,
+    PromptCandidate, Result, RomWeaverError, Selection, SelectionList, SelectionPrompter,
+    ThreadBudget, ThreadCapability,
 };
 use serde_json::json;
 
@@ -1014,4 +1014,163 @@ fn libretro_sidecar_matches_basename_stem_and_order() {
             "sidecar match for `{patch}`"
         );
     }
+}
+
+// --------------------------------------------------------------------------------------------
+// patch-validate helper coverage. `parse_patch_apply_checksum_values`,
+// `validate_patch_input_size`, `validate_patch_apply_expected_checksums`, and `checksum_hex_len`
+// drive the `patch-validate`/`patch-apply` `--validate-with-*`/`--checksum-cache` branches and
+// have no in-source tests; they were only exercised end-to-end. Each error case asserts the
+// matched `RomWeaverError` variant plus the guard message so the intended branch is the one hit.
+// --------------------------------------------------------------------------------------------
+
+#[test]
+fn parse_patch_apply_checksum_values_accepts_and_normalizes_valid_pairs() {
+    let values = CliApp::parse_patch_apply_checksum_values(
+        &[
+            "CRC32=0xDEADBEEF".to_string(),
+            "  md5 = D41D8CD98F00B204E9800998ECF8427E ".to_string(),
+        ],
+        "--validate-with-checksum",
+    )
+    .expect("valid checksum pairs should parse");
+
+    // Algorithm is lowercased, a `0x` prefix is stripped, the hex value is lowercased, and
+    // surrounding whitespace is trimmed.
+    assert_eq!(values.get("crc32").map(String::as_str), Some("deadbeef"));
+    assert_eq!(
+        values.get("md5").map(String::as_str),
+        Some("d41d8cd98f00b204e9800998ecf8427e")
+    );
+}
+
+#[test]
+fn parse_patch_apply_checksum_values_deduplicates_matching_repeats() {
+    let values = CliApp::parse_patch_apply_checksum_values(
+        &["crc32=deadbeef".to_string(), "CRC32=DEADBEEF".to_string()],
+        "--checksum-cache",
+    )
+    .expect("identical repeats should dedupe");
+    assert_eq!(values.len(), 1);
+    assert_eq!(values.get("crc32").map(String::as_str), Some("deadbeef"));
+}
+
+#[test]
+fn parse_patch_apply_checksum_values_rejects_malformed_inputs() {
+    // (input, message fragment) pairs, each landing on a distinct guard.
+    let cases = [
+        (vec!["   ".to_string()], "cannot be empty"),
+        (vec!["crc32deadbeef".to_string()], "expected ALGO=HEX"),
+        (vec!["=deadbeef".to_string()], "algorithm is missing before"),
+        (
+            vec!["sha9=deadbeef".to_string()],
+            "unsupported checksum algorithm",
+        ),
+        (vec!["crc32=".to_string()], "value is missing after"),
+        (vec!["crc32=xyz12345".to_string()], "must be hexadecimal"),
+        (vec!["crc32=dead".to_string()], "expects 8 hex characters"),
+        (
+            vec!["crc32=deadbeef".to_string(), "crc32=feedface".to_string()],
+            "conflicting values",
+        ),
+    ];
+    for (input, fragment) in cases {
+        let error = CliApp::parse_patch_apply_checksum_values(&input, "--validate-with-checksum")
+            .expect_err("malformed checksum value should fail");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains(fragment)),
+            "input {input:?} expected `{fragment}`, got: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn checksum_hex_len_maps_supported_algorithms() {
+    assert_eq!(CliApp::checksum_hex_len("crc16"), Some(4));
+    assert_eq!(CliApp::checksum_hex_len("crc32"), Some(8));
+    assert_eq!(CliApp::checksum_hex_len("crc32c"), Some(8));
+    assert_eq!(CliApp::checksum_hex_len("adler32"), Some(8));
+    assert_eq!(CliApp::checksum_hex_len("md5"), Some(32));
+    assert_eq!(CliApp::checksum_hex_len("sha1"), Some(40));
+    assert_eq!(CliApp::checksum_hex_len("sha256"), Some(64));
+    assert_eq!(CliApp::checksum_hex_len("blake3"), Some(64));
+    assert_eq!(CliApp::checksum_hex_len("nope"), None);
+}
+
+#[test]
+fn validate_patch_input_size_enforces_exact_and_minimum() {
+    let path = write_repair_test_file("patch-validate-size.bin", &[0u8; 64]);
+
+    // Exact-size match returns a descriptive label.
+    let label = CliApp::validate_patch_input_size(&path, Some(64), None)
+        .expect("matching size should pass");
+    assert!(label.contains("size=64"), "label: {label}");
+
+    // Exact-size mismatch is rejected.
+    let error = CliApp::validate_patch_input_size(&path, Some(128), None)
+        .expect_err("size mismatch should fail");
+    assert!(
+        matches!(error, RomWeaverError::Validation(ref message) if message.contains("input size mismatch")),
+        "unexpected error: {error:?}"
+    );
+
+    // Below the minimum is rejected; at-or-above passes.
+    let error = CliApp::validate_patch_input_size(&path, None, Some(65))
+        .expect_err("below minimum should fail");
+    assert!(
+        matches!(error, RomWeaverError::Validation(ref message) if message.contains("below required minimum")),
+        "unexpected error: {error:?}"
+    );
+    let label =
+        CliApp::validate_patch_input_size(&path, None, Some(64)).expect("at minimum should pass");
+    assert!(label.contains("min_size=64"), "label: {label}");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn validate_patch_apply_expected_checksums_uses_hints_for_match_and_mismatch() {
+    use std::collections::BTreeMap;
+
+    let app = test_app_with_prompt(Vec::new());
+    let context = app.context(ThreadBudget::Fixed(1));
+    // The hash hints stand in for cached input checksums, so the source bytes are never read by
+    // the checksum engine for these algorithms. The file still must exist for the metadata path.
+    let path = write_repair_test_file("patch-validate-checksum.bin", &[0xAB, 0xCD]);
+
+    let mut expected = BTreeMap::new();
+    expected.insert("crc32".to_string(), "deadbeef".to_string());
+    let mut hints = BTreeMap::new();
+    hints.insert("crc32".to_string(), "deadbeef".to_string());
+
+    let label = CliApp::validate_patch_apply_expected_checksums(
+        &path, &expected, &hints, "input", &context,
+    )
+    .expect("matching hint should pass");
+    assert!(label.contains("crc32=deadbeef"), "label: {label}");
+
+    // A hint that disagrees with the expected value trips the mismatch guard.
+    let mut wrong_hints = BTreeMap::new();
+    wrong_hints.insert("crc32".to_string(), "feedface".to_string());
+    let error = CliApp::validate_patch_apply_expected_checksums(
+        &path,
+        &expected,
+        &wrong_hints,
+        "input",
+        &context,
+    )
+    .expect_err("mismatching hint should fail");
+    assert!(
+        matches!(error, RomWeaverError::Validation(ref message) if message.contains("checksum mismatch for crc32")),
+        "unexpected error: {error:?}"
+    );
+
+    // No expected checksums short-circuits to an empty label without touching the engine.
+    let empty = BTreeMap::new();
+    let label =
+        CliApp::validate_patch_apply_expected_checksums(&path, &empty, &hints, "input", &context)
+            .expect("no expected checksums should pass");
+    assert!(label.is_empty(), "label should be empty, got: {label}");
+
+    let _ = std::fs::remove_file(path);
 }

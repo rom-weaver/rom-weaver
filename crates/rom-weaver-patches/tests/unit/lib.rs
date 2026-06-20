@@ -542,3 +542,59 @@ fn find_by_name_routes_ips32_name_to_ips32_handler() {
     let handler = registry.find_by_name("ips32").expect("ips32");
     assert_eq!(handler.descriptor().name, "IPS32");
 }
+
+#[test]
+fn ninja1_handler_reports_unsupported_for_every_operation() {
+    use rom_weaver_core::{OperationStatus, PatchApplyRequest, PatchCreateRequest};
+
+    use crate::test_support::{TestDir, test_context_with_threads};
+
+    // NINJA1 is recognized (its magic routes here) but unsupported: every operation must return a
+    // well-formed `Unsupported` report rather than erroring or pretending to succeed. This path is
+    // otherwise only exercised end-to-end, where a regression would surface as an opaque failure.
+    let temp = TestDir::new();
+    let patch_path = temp.child("update.bin");
+    fs::write(&patch_path, b"NINJA1\0\0\0\0").expect("fixture");
+    let input_path = temp.child("input.bin");
+    fs::write(&input_path, [0x00, 0x01, 0x02]).expect("fixture");
+    let output_path = temp.child("output.bin");
+
+    let registry = PatchRegistry::new();
+    let handler = registry.find_by_name("ninja1").expect("ninja1 handler");
+    let context = test_context_with_threads(&temp, 1);
+
+    let capabilities = handler.capabilities();
+    assert!(!capabilities.parse);
+    assert!(!capabilities.apply);
+    assert!(!capabilities.create);
+
+    let parse_report = handler.parse(&patch_path, &context).expect("parse report");
+    assert_eq!(parse_report.status, OperationStatus::Unsupported);
+    assert_eq!(parse_report.format.as_deref(), Some("NINJA1"));
+    assert!(parse_report.label.contains("NINJA1"));
+
+    let apply_report = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path.clone(),
+                patches: vec![patch_path.clone()],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect("apply report");
+    assert_eq!(apply_report.status, OperationStatus::Unsupported);
+
+    let create_report = handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path,
+                modified: patch_path,
+                output: output_path,
+                format: "NINJA1".into(),
+            },
+            &context,
+        )
+        .expect("create report");
+    assert_eq!(create_report.status, OperationStatus::Unsupported);
+}
