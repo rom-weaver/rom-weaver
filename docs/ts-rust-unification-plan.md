@@ -24,9 +24,10 @@ self-contained ones; the larger lifts are documented as deferred.
 
 Landed: typegen export-gap fix (`MatchSidecarsCommand`), Task A (patch-create
 checksum name moved into Rust), Task F (z3ds extension mapping), Task G
-(disc-image sector policy). Task E **deferred** (see its note — needs a new
-`PatchHandler` trait method, disproportionate to the win). Tasks B/C/D/H remain
-deferred as below.
+(disc-image sector policy), Task C (deleted the redundant TS zstd thread-budget
+planner — Rust already enforces the identical cap). Task E and Task B **deferred**
+(see their notes — E needs a new `PatchHandler` trait method; B is mostly
+irreducible). Tasks D/H remain deferred as below.
 
 ## Tasks — this branch
 
@@ -106,14 +107,24 @@ checks share one canonical policy.
 
 ## Deferred — documented, not in this branch
 
-- **B. Output filename prediction.** TS re-derives extracted/output names
-  (`container-format-registry.ts` getChd/Rvz/Z3dsExtractedFileName,
-  `lib/output/*`) that Rust already returns in extract results. Surface the
-  canonical name from Rust. Medium lift, touches many naming paths.
-- **C. zstd thread/memory planner.** `lib/runtime/compression-thread-budget.ts`
-  + `lib/runtime/op-memory-estimate.ts` port zstd's internal strategy table and
-  workspace math to JS. Highest parity hazard (must track the linked zstd).
-  Unify behind a Rust planning command, mirroring `plan-extract-batch`.
+- **B. Output filename prediction — REVIEWED, SKIPPED.** Investigated; mostly not
+  unifiable. compress/create/trim/apply names are *authored in TS* then echoed
+  back by Rust (`emitted_files` = the supplied `--output` path), so "use the
+  result name" is circular. Extract/chd/rvz/z3ds names *are* Rust-authored, but TS
+  must re-derive them to pre-open the OPFS output path before the op runs and to
+  fill the format dropdown / filename field synchronously (a round-trip regresses
+  UX). The one real win — post-extract display/selection names preferring the
+  emitted name — is already largely done (`selectChdOutputs`/
+  `selectPreferredExtractedFile`).
+- **C. zstd thread/memory planner — DONE (deletion, not a port).** Investigation
+  found `compression-thread-budget.ts` was a hand-port of logic Rust already owns
+  (`zip.rs` `create_thread_capability`/`zstd_threads_for_budget`), and Rust applies
+  the identical cap as final authority (`plan_threads`/`negotiate`). So the TS
+  pre-cap was a provable no-op on the effective thread count — deleted it (~230
+  lines + 5 obsolete browser tests), keeping only `toThreadBudget`.
+  `op-memory-estimate.ts` stays: it is the JS scheduler's synchronous memory model
+  (mirrored in Rust `concurrency.rs` for the batch planner), not removable without
+  round-tripping a hot path.
 - **D. Archive magic + extension detector.** `workers/protocol/archive-shared-utils.ts`
   hand-maintains ~30 magic signatures + ~150 extensions. Generate the table from
   the Rust container registry, or probe via Rust on the worker path.
