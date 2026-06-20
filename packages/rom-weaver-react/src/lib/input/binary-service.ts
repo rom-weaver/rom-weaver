@@ -327,6 +327,40 @@ const createLazyExternalPatchFile = (fileName: string, options: LazyExternalPatc
   return file;
 };
 
+// Morph an EXISTING input file in place from Blob/byte-backed to OPFS-path-backed: drop the in-memory
+// bytes (freeing a large Blob's native backing on memory-constrained WebKit) and route every read to
+// `filePath` through a worker. Mirrors createLazyExternalPatchFile but mutates the live instance so the
+// session's existing references (input assets, the apply flow) follow it onto the staged OPFS copy.
+const convertPatchFileToLazyExternal = (
+  file: PatchFileInstance,
+  options: { cleanup?: () => Promise<void> | void; filePath: string; size?: number },
+): PatchFileInstance => {
+  const resolvedFilePath = String(options.filePath || "").trim();
+  if (!resolvedFilePath) throw new Error("OPFS-backed input requires a file path");
+  const lazyFile = file as CleanablePatchFile & { _byteSource?: unknown; _u8array?: Uint8Array };
+  if (typeof options.size === "number" && Number.isFinite(options.size)) {
+    file.fileSize = Math.max(0, Math.floor(options.size));
+  }
+  file.filePath = resolvedFilePath;
+  delete lazyFile._file;
+  delete lazyFile._byteSource;
+  delete lazyFile._u8array;
+  lazyFile._browserFileBacked = true;
+  lazyFile._lazyExternalSource = true;
+  file.readIntoAt = throwLazyExternalRead as PatchFileInstance["readIntoAt"];
+  file.readBytesAt = throwLazyExternalRead as NonNullable<PatchFileInstance["readBytesAt"]>;
+  file.readU8At = throwLazyExternalRead as NonNullable<PatchFileInstance["readU8At"]>;
+  file.materialize = throwLazyExternalRead as PatchFileInstance["materialize"];
+  file.slice = throwLazyExternalRead as PatchFileInstance["slice"];
+  attachPatchFileSourceRef(file, {
+    fileName: file.fileName || "input.bin",
+    size: file.fileSize,
+    source: resolvedFilePath,
+  });
+  attachPatchFileCleanup(file, options.cleanup);
+  return file;
+};
+
 const createLazyBlobBackedPatchFile = (
   blob: Blob,
   fileName: string,
@@ -396,6 +430,7 @@ export {
   attachPatchFileCleanup,
   attachPatchFileSourceRef,
   clonePatchFile,
+  convertPatchFileToLazyExternal,
   createBlobBackedPatchFile,
   createLazyExternalPatchFile,
   createOutputFile,

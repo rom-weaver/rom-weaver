@@ -131,6 +131,7 @@ type ChecksumWorkerRunner = (
     filePath?: string;
     fileSize?: number;
     logLevel?: string;
+    writeTo?: string;
   },
   onProgress?: (progress: WorkflowRuntimeProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -434,7 +435,7 @@ const createWorkerChecksumRuntime = (
   workerIo: RuntimeWorkerIo,
   runChecksumWorker: ChecksumWorkerRunner,
 ): WorkflowRuntime["checksum"] => ({
-  calculate: async ({ source, algorithms, startOffset, logLevel, onLog, onProgress }) => {
+  calculate: async ({ source, algorithms, startOffset, logLevel, onLog, onProgress, writeTo }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: "file.bin",
       pathPrefix: "checksum-input",
@@ -451,6 +452,7 @@ const createWorkerChecksumRuntime = (
           filePath: workerSource.filePath,
           fileSize: workerSource.size,
           logLevel,
+          ...(writeTo ? { writeTo } : {}),
         },
         onProgress,
         onLog,
