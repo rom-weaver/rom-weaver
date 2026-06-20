@@ -1,5 +1,6 @@
 import type { RomWeaverRunInput, RomWeaverRunRequest } from "./browser-opfs-runtime-types.ts";
 import { readRomWeaverRequestedThreadCount } from "./rom-weaver-command.ts";
+import { resolveBrowserDefaultThreads } from "./workers/browser-thread-budget.ts";
 
 export const DEFAULT_BROWSER_THREAD_COUNT = 4;
 export const MAX_BROWSER_THREAD_POOL_SIZE = 64;
@@ -28,12 +29,15 @@ export function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount: numb
 }
 
 export function parseRequestedThreadCount(request: RomWeaverRunInput): number | null {
-  return readRomWeaverRequestedThreadCount(request, browserThreadRequestOptions(DEFAULT_BROWSER_THREAD_COUNT));
+  return readRomWeaverRequestedThreadCount(request, browserThreadRequestOptions());
 }
 
-export function browserThreadRequestOptions(defaultThreads: number = DEFAULT_BROWSER_THREAD_COUNT) {
+// `autoThreads` and the implicit `defaultThreads` resolve "auto" (and the unset default) to the host
+// core count via resolveBrowserDefaultThreads, so the engine honours the UI's advertised
+// "auto = browser-reported core count" contract instead of collapsing every host to a flat 4 threads.
+export function browserThreadRequestOptions(defaultThreads: number = resolveBrowserDefaultThreads()) {
   return {
-    autoThreads: DEFAULT_BROWSER_THREAD_COUNT,
+    autoThreads: resolveBrowserDefaultThreads(),
     defaultThreads,
     maxThreads: MAX_BROWSER_THREAD_POOL_SIZE,
   };

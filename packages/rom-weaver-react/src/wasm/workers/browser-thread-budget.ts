@@ -1,22 +1,25 @@
 import type { RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 
-// Default worker thread count when none is configured. Browsers cap concurrency aggressively, so we
-// stay conservative and only scale up to this from `navigator.hardwareConcurrency`.
+// Floor for the implicit default browser worker-thread count. The UI advertises that "auto" resolves
+// to the browser-reported core count (settings.threadsHint / getDefaultThreadCount in
+// compression-options.ts), so the engine scales `navigator.hardwareConcurrency` up from this floor —
+// it is NOT a cap.
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 
-// Upper bound for an explicitly configured browser thread count. Keeps a runaway `defaultThreads`
-// option from oversubscribing the pool.
+// Upper bound for the resolved/configured browser thread count. Keeps a high core count or a runaway
+// `defaultThreads` option from oversubscribing the pool.
 const MAX_BROWSER_THREAD_COUNT = 64;
 
 /**
- * Resolve the implicit default thread count from the host environment, clamped to
- * `[1, DEFAULT_BROWSER_THREAD_COUNT]`. Falls back to `DEFAULT_BROWSER_THREAD_COUNT` when
- * `navigator.hardwareConcurrency` is unavailable or invalid.
+ * Resolve the implicit default thread count from the host environment: `navigator.hardwareConcurrency`
+ * clamped to `[DEFAULT_BROWSER_THREAD_COUNT, MAX_BROWSER_THREAD_COUNT]`. Mirrors the UI-facing
+ * `getDefaultThreadCount` so the engine honours the advertised "auto = core count" contract. Falls
+ * back to `DEFAULT_BROWSER_THREAD_COUNT` when `navigator.hardwareConcurrency` is unavailable or invalid.
  */
 export function resolveBrowserDefaultThreads(root: typeof globalThis = globalThis): number {
   const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
   if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
-    return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
+    return Math.min(MAX_BROWSER_THREAD_COUNT, Math.max(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
   }
   return DEFAULT_BROWSER_THREAD_COUNT;
 }
