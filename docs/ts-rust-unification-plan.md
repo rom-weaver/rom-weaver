@@ -25,9 +25,10 @@ self-contained ones; the larger lifts are documented as deferred.
 Landed: typegen export-gap fix (`MatchSidecarsCommand`), Task A (patch-create
 checksum name moved into Rust), Task F (z3ds extension mapping), Task G
 (disc-image sector policy), Task C (deleted the redundant TS zstd thread-budget
-planner — Rust already enforces the identical cap). Task E and Task B **deferred**
-(see their notes — E needs a new `PatchHandler` trait method; B is mostly
-irreducible). Tasks D/H remain deferred as below.
+planner), Task H (CHD codec presets sourced from compression metadata). Task B
+and Task E **deferred** (B mostly irreducible; E needs a new `PatchHandler` trait
+method). Task D **reviewed and not recommended** (see its note — Rust has no
+archive table to unify onto).
 
 ## Tasks — this branch
 
@@ -125,11 +126,19 @@ checks share one canonical policy.
   `op-memory-estimate.ts` stays: it is the JS scheduler's synchronous memory model
   (mirrored in Rust `concurrency.rs` for the batch planner), not removable without
   round-tripping a hot path.
-- **D. Archive magic + extension detector.** `workers/protocol/archive-shared-utils.ts`
-  hand-maintains ~30 magic signatures + ~150 extensions. Generate the table from
-  the Rust container registry, or probe via Rust on the worker path.
-- **H. CHD codec presets.** `lib/compression/codec-fields.ts` hardcodes the
-  CD-vs-DVD codec matrix as JS strings; source it from compression metadata.
+- **D. Archive magic + extension detector — REVIEWED, NOT RECOMMENDED.**
+  `workers/protocol/archive-shared-utils.ts` hand-maintains ~30 magic signatures
+  + ~136 extensions. Investigation found this is NOT TS-duplicating-Rust: Rust has
+  no archive magic/extension table — it delegates detection to libarchive C at
+  runtime (only zip/7z/rar/tar) and archive `magic` is empty in the registry. The
+  superset of recognized-but-unhandled formats is browser-classification-only data
+  the native side never uses. Moving it to Rust wouldn't dedup anything (single
+  copy today); it would relocate browser-only data into the core crate and stay a
+  hand-port. Left in TS by design.
+- **H. CHD codec presets — DONE.** The CD/DVD preset combos now live in the Rust
+  compression metadata (`compression.rs` `CompressionCodecPresetMetadata`), are
+  emitted via typegen, and `codec-fields.ts` builds the dropdown options from the
+  generated data. Label/value/searchText reproduced byte-identically.
 
 ## Verification (whole branch)
 
