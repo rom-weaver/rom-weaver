@@ -16,9 +16,9 @@ use rom_weaver_checksum::{
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
-    SharedThreadPool, ThreadExecution, bounded_items_for_threads,
-    create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
-    is_rom_filter_candidate_name, maybe_emit_container_byte_progress, ordered_streaming_compress,
+    SharedThreadPool, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
+    detect_disc_sheet, emit_container_running_progress, is_rom_filter_candidate_name,
+    maybe_emit_container_byte_progress, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 
