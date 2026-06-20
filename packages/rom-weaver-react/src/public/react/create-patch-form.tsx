@@ -2,20 +2,15 @@ import Download from "lucide-react/dist/esm/icons/download.js";
 import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
-import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import {
   type BrowserCreateResult,
-  type BrowserSaveDestination,
   type CreateSettings,
   CreateWorkflow,
   getCreatePatchFormatCandidates,
-  type RuntimePatchCreateFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
@@ -24,7 +19,19 @@ import { InfoPopover } from "./components/ds/layout.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
-import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
+import {
+  type CompletedCreateOutput,
+  CREATE_HERO_FORMATS,
+  CREATE_SUPPORTED_FILES,
+  type CreateDisplaySourceState,
+  type CreateMessagePlacement,
+  type CreatePatchFormatCandidateState,
+  getCompletedDownloadMeta,
+  getDisplaySourceInfo,
+  isChecksumProgress,
+  resolveCreateExecutionOutputName,
+} from "./create-patch-output-model.ts";
+import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./create-source-step-view-model.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { ARCHIVE_INPUT_HINT, ROM_INPUT_HINT } from "./input-helper-text.ts";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
@@ -41,7 +48,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { routeByOrder } from "./unified-drop-routing.ts";
-import { getDefaultCreateOutputName, getReactBinarySourceFileName, toStagedInputInfo } from "./workflow-adapters.ts";
+import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
   usePageDropForwarder,
@@ -52,10 +59,7 @@ import {
 import {
   createReactWorkflowId,
   createSettingsDependencyKey,
-  formatChecksumTiming,
   formatElapsedMs,
-  getSourceNoticeLevel,
-  getSourceNoticeMessage,
   hasSourceQueueWarning,
   isDismissibleWorkflowError,
   mergeSettingsWithOutput,
@@ -63,107 +67,12 @@ import {
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
-  toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,
   useActiveAbortController,
   useDisposableWorkflowOutput,
   useWorkflowProgressState,
-  type WorkflowFormProgressState,
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
-
-const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
-  const normalizedOutputName = outputName.trim();
-  if (!normalizedOutputName) return normalizedOutputName;
-  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  return appendFileNameExtension(normalizedOutputName, patchType || "bps");
-};
-
-const getFileExtensionLabel = (fileName: string) => {
-  const extension = fileName.trim().match(/(\.[^./\\]+)$/)?.[1];
-  return extension || fileName;
-};
-
-// Below this raw size a percentage is noise (tiny patches read as 44522%),
-// so the ratio is suppressed and the byte size stands on its own.
-const MIN_COMPRESSION_RATIO_RAW_BYTES = 100 * 1024;
-
-const getCompressionRatioLabel = (
-  compression: "7z" | "none" | "zip",
-  outputSize?: number | null,
-  rawSize?: number | null,
-) => {
-  if (compression === "none") return undefined;
-  if (
-    typeof outputSize !== "number" ||
-    !Number.isFinite(outputSize) ||
-    typeof rawSize !== "number" ||
-    !Number.isFinite(rawSize) ||
-    rawSize < MIN_COMPRESSION_RATIO_RAW_BYTES
-  ) {
-    return undefined;
-  }
-  return `${Math.round((outputSize / rawSize) * 100)}%`;
-};
-
-const getCompletedDownloadMeta = ({
-  compression,
-  fileName,
-  patchType,
-  rawSize,
-  size,
-}: {
-  compression: "7z" | "none" | "zip";
-  fileName: string;
-  patchType: string;
-  rawSize?: number | null;
-  size?: number | null;
-}) => ({
-  // format-only face — the filename already fills the output field above
-  format: `Patch .${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
-  ratio: getCompressionRatioLabel(compression, size, rawSize),
-  size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
-});
-
-type CreateDisplaySourceState = CreateWorkflowSourceState;
-type CreatePatchFormatCandidateState = RuntimePatchCreateFormatCandidates & {
-  key: string;
-};
-type CompletedCreateOutput = {
-  compression: "7z" | "none" | "zip";
-  compressionTimeMs?: number;
-  createTimeMs?: number;
-  fileName: string;
-  patchType: string;
-  rawSize?: number;
-  saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
-  size?: number;
-};
-type CreateMessagePlacement = "modified" | "original" | "output";
-
-const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefined, fallback: string) =>
-  toStagedInputInfo(source, fallback);
-
-const getDisplaySourceChecksums = (source: CreateDisplaySourceState | null | undefined) =>
-  (source as (CreateDisplaySourceState & { checksums?: Record<string, string> }) | null | undefined)?.checksums;
-
-const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null | undefined) =>
-  formatChecksumTiming(
-    (source as (CreateDisplaySourceState & { checksumTimeMs?: number }) | null | undefined)?.checksumTimeMs,
-  );
-
-/** Format pills under the 0x01 hero — mirrors the loom prototype's create list. */
-const CREATE_HERO_FORMATS = ["sfc", "gba", "iso", "bin", "zip", "7z", "chd", "rvz"] as const;
-
-/** Full registry support, listed in the 0x01 info popover. */
-const CREATE_SUPPORTED_FILES = [
-  { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
-  { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
-] as const;
-
-const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
-const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
-  !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
 
 type InternalCreatePatchFormProps = CreatePatchFormProps & {
   createWorkflow?: typeof CreateWorkflow;
@@ -824,90 +733,19 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createTimingText = completedOutput ? formatElapsedMs(completedOutput.createTimeMs) : "";
   const compressTimingText = completedOutput ? formatElapsedMs(completedOutput.compressionTimeMs) : "";
 
-  const renderSourceStep = ({
-    num,
-    role,
-    title,
-    file,
-    fileName,
-    sourceState,
-    removeLabel,
-    onClear,
-    sourceProgress = null,
-    checksumProgress = null,
-  }: {
-    num: string;
-    role: "modified" | "original";
-    title: string;
-    file: BinarySource | null;
-    fileName: string;
-    sourceState: CreateDisplaySourceState | null;
-    removeLabel: string;
-    onClear: () => void;
-    sourceProgress?: typeof progressProps;
-    checksumProgress?: WorkflowFormProgressState | null;
-  }): CreatePatchFormViewModel["originalStep"] => {
-    const displayInfo = getDisplaySourceInfo(sourceState, fileName);
-    const sourceChecksumProgress = isChecksumProgress(checksumProgress) ? checksumProgress : null;
-    const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
-    const runtimeNoticeVisible = !!message && messagePlacement === role;
-    const notice = runtimeNoticeVisible ? (
-      <Notice
-        id={`patch-builder-${role}-error-message`}
-        level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-        onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-      >
-        {message}
-      </Notice>
-    ) : sourceNoticeMessage ? (
-      <Notice id={`patch-builder-${role}-error-message`} level={getSourceNoticeLevel(sourceState)}>
-        {sourceNoticeMessage}
-      </Notice>
-    ) : null;
-    return {
-      id: `patch-builder-row-${role}`,
-      items: file
-        ? [
-            sourceProgress
-              ? {
-                  id: `${num}:progress`,
-                  progress: sourceProgress,
-                }
-              : {
-                  card: {
-                    extract: {
-                      fileName,
-                      fileSize: displayInfo?.size,
-                      parentCompressions: displayInfo?.parentCompressions,
-                      timing: formatElapsedMs(displayInfo?.decompressionTimeMs),
-                    },
-                    onRemove: onClear,
-                    panels: {
-                      fixes: {},
-                      info: {
-                        bytes: displayInfo?.size ?? displayInfo?.sourceSize,
-                        checksums: getDisplaySourceChecksums(sourceState),
-                        defaultOpen: false,
-                        progress: toWorkflowChecksumProgressProps(sourceChecksumProgress),
-                        timing: getChecksumTimingLabel(getDisplaySourceChecksumTiming(sourceState)) || undefined,
-                      },
-                    },
-                    removeLabel,
-                    state: hasSourceQueueWarning(sourceState)
-                      ? "bad"
-                      : sourceState?.status === "ready"
-                        ? "ok"
-                        : undefined,
-                  },
-                  id: `${num}:card`,
-                },
-          ]
-        : [],
-      notice,
-      num,
-      title,
-    };
+  // Runtime-notice slice the source-step builder previously closed over (the failure message and its
+  // placement/severity/dismissibility). Passed explicitly so the builder stays a pure projection.
+  const sourceStepRuntimeNotice: CreateSourceStepRuntimeNotice = {
+    clearWorkflowMessage,
+    errorCode,
+    message,
+    messageDismissible,
+    messagePlacement,
   };
+  const renderSourceStep = (
+    options: Omit<Parameters<typeof buildCreateSourceStep>[0], "runtimeNotice">,
+  ): CreatePatchFormViewModel["originalStep"] =>
+    buildCreateSourceStep({ ...options, runtimeNotice: sourceStepRuntimeNotice });
 
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesEmpty = useFlatTransitionFlag(!(original || modified));
