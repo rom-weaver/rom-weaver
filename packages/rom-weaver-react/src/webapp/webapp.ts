@@ -3,6 +3,7 @@
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { beginOpfsCleanupGate, markOpfsCleanupSettled } from "../storage/browser/opfs-cleanup-gate.ts";
@@ -188,6 +189,7 @@ const webappController = createWebappRootController({
   storage: typeof localStorage === "undefined" ? undefined : localStorage,
 });
 applySettingsToRuntime(webappController.getState().settings);
+logger.info("Browser environment", collectBrowserInfo());
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
