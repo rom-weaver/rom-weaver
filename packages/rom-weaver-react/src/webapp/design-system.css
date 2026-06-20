@@ -1508,6 +1508,10 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   /* drop surfaces (empty hero AND the compact add-row) + "needs input" directives
      match the cards' 6px inset so 0x01 is the same width as every other section */
   .rw-app .step.is-input .drop, .rw-app .needs-input { margin-inline: 6px; width: calc(100% - 12px); }
+  /* the "Waiting for a ROM/patches …" directive must stay ONE line on a phone:
+     tighten the inline padding/gap and step the font down (Archivo's width axis
+     is already condensed here) so the longest message fits without wrapping */
+  .rw-app .needs-input { font-size: .66rem; padding-inline: 14px; gap: 7px; }
   /* the notice shares the same 6px inset as the cards/headers */
   .rw-app .notice { margin-inline: 6px; }
   .rw-app .sv-inner { padding-inline: 8px; }
