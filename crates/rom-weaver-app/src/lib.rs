@@ -21,7 +21,8 @@ use rom_weaver_checksum::rom_headers::{
 };
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
-    VariantOutput, VariantRow, checksum_file_values, overlay_checksums, supported_algorithms,
+    VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
+    supported_algorithms,
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,

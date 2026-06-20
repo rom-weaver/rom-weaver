@@ -23,16 +23,28 @@ impl CliApp {
             .collect::<Vec<_>>();
         let file_len = fs::metadata(&request.source)?.len();
         let name_hint = request.source.file_name().and_then(|name| name.to_str());
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        // The standalone checksum-variants command keeps its single-threaded streaming pass; pass its
-        // resolved thread count (1) so the raw variant stays synchronous here. Parallelizing this path
-        // is a separate follow-up; the inline extract path is what spends spare threads on hashing.
-        let mut engine = StreamingVariantChecksums::new(
-            &algorithms,
+        // Hash with the same parallelism as the inline extract path (shared budget policy) instead of
+        // forcing single-threaded — previously this path was pinned to one thread, which made
+        // `checksum` slower than extract's inline checksum. `engine_budget` is the full op budget so
+        // the engine can split it across the active variants (each capping internally at its
+        // algorithm count); capping the engine budget itself at the algorithm count would zero out
+        // parallelism on multi-variant ROMs. The *reported* thread count is the algorithm-count cap,
+        // which matches the command's failure-path reporting and the worker count actually spawned
+        // for a single-variant file (the common case).
+        let engine_budget = context.variant_hash_execution().effective_threads;
+        let execution =
+            context.plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1))));
+        trace!(
+            source = %request.source.display(),
             file_len,
-            name_hint,
-            execution.effective_threads,
-        )?;
+            algorithm_count = algorithms.len(),
+            engine_budget,
+            reported_threads = execution.effective_threads,
+            used_parallelism = execution.used_parallelism,
+            "planned checksum variant hashing budget"
+        );
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, file_len, name_hint, engine_budget)?;
 
         // Identity detection is a separate stream consumer fed the same bytes as the
         // variant engine — neither embeds the other. No extra read.
@@ -67,39 +79,21 @@ impl CliApp {
             deferred_fix_header,
             ..
         } = engine.finalize()?;
+        // The repair dependency may have exceeded the in-memory prefix cap; the file is on disk, so
+        // finish any deferred fix-header in one extra read (shared with the extract write path).
+        finish_deferred_fix_header(&mut rows, deferred_fix_header, &algorithms, &request.source)?;
         let extension = request
             .source
             .extension()
             .map(|ext| format!(".{}", ext.to_string_lossy()));
         let rom_identity = identity.detect(extension.as_deref());
-        if let Some(deferred) = deferred_fix_header {
-            // The repair dependency exceeded the in-memory prefix cap; the file
-            // is on disk, so apply the overlay in one extra read to finish it.
-            let mut overlay_file = File::open(&request.source)?;
-            let checksums = overlay_checksums(&mut overlay_file, &algorithms, &deferred.patches)?;
-            rows.push(VariantRow {
-                id: deferred.id,
-                label: deferred.label,
-                checksums,
-                apply_compatibility: deferred.apply_compatibility,
-                transforms: deferred.transforms,
-            });
-        }
 
-        let mut primary_checksums = BTreeMap::new();
-        let mut rows_json = Vec::with_capacity(rows.len());
-        for row in &rows {
-            if row.id == "raw" {
-                primary_checksums = row.checksums.clone();
-            }
-            rows_json.push(json!({
-                "id": row.id,
-                "label": row.label,
-                "checksums": row.checksums,
-                "applyCompatibility": row.apply_compatibility,
-                "transforms": row.transforms,
-            }));
-        }
+        let primary_checksums = rows
+            .iter()
+            .find(|row| row.id == "raw")
+            .map(|row| row.checksums.clone())
+            .unwrap_or_default();
+        let rows_json = rows.iter().map(VariantRow::to_json).collect::<Vec<_>>();
 
         let mut report = OperationReport::succeeded(
             OperationFamily::Checksum,

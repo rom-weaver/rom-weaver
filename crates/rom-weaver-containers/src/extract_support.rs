@@ -11,12 +11,12 @@ use std::{
 use rayon::prelude::*;
 use rom_weaver_checksum::{
     IdentityPrefix, RomIdentity, StreamingChecksum, StreamingVariantChecksums, VariantOutput,
-    VariantRow, overlay_checksums,
+    VariantRow, finish_deferred_fix_header,
 };
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
+    SharedThreadPool, ThreadExecution, bounded_items_for_threads,
     create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
     is_rom_filter_candidate_name, maybe_emit_container_byte_progress, ordered_streaming_compress,
 };
@@ -328,9 +328,8 @@ impl ExtractHasher {
         // parallel and overlap the producer instead of serializing on the decode thread. A lone ROM
         // with only the `raw` variant gets the whole budget (capped at the algorithm count); a ROM
         // with several variants (e.g. raw + fix-header) gives each a share so they run concurrently.
-        let hash_thread_budget = context
-            .plan_threads(ThreadCapability::parallel(None))
-            .effective_threads;
+        // Shared with the standalone `checksum` command so both hash with identical parallelism.
+        let hash_thread_budget = context.variant_hash_execution().effective_threads;
         let engine =
             StreamingVariantChecksums::new(algorithms, total_len, name_hint, hash_thread_budget)?;
         Ok(Self::Variants {
@@ -435,17 +434,12 @@ impl ExtractHasher {
                     deferred_fix_header,
                     raw_timing,
                 } = engine.finalize()?;
-                if let Some(deferred) = deferred_fix_header {
-                    let mut file = File::open(output_path)?;
-                    let checksums = overlay_checksums(&mut file, &algorithms, &deferred.patches)?;
-                    rows.push(VariantRow {
-                        id: deferred.id,
-                        label: deferred.label,
-                        checksums,
-                        apply_compatibility: deferred.apply_compatibility,
-                        transforms: deferred.transforms,
-                    });
-                }
+                finish_deferred_fix_header(
+                    &mut rows,
+                    deferred_fix_header,
+                    &algorithms,
+                    output_path,
+                )?;
                 let values = rows
                     .iter()
                     .find(|row| row.id == "raw")
@@ -543,18 +537,7 @@ fn build_extract_checksum_emitted_file_detail(
         );
     }
     if !variants.is_empty() {
-        let variant_rows = variants
-            .into_iter()
-            .map(|row| {
-                json!({
-                    "id": row.id,
-                    "label": row.label,
-                    "checksums": row.checksums,
-                    "applyCompatibility": row.apply_compatibility,
-                    "transforms": row.transforms,
-                })
-            })
-            .collect::<Vec<_>>();
+        let variant_rows = variants.iter().map(VariantRow::to_json).collect::<Vec<_>>();
         entry.insert("checksum_variants".to_string(), Value::Array(variant_rows));
     }
     Some(Value::Object(entry))

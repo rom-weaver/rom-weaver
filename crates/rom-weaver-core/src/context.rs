@@ -269,6 +269,21 @@ impl OperationContext {
         Some(self.plan_threads(ThreadCapability::single_threaded()))
     }
 
+    /// Thread plan for the streaming checksum-variant engine: the full op thread budget with no
+    /// per-call cap. `StreamingVariantChecksums` then splits `effective_threads` across the active
+    /// variants (each capping internally at its algorithm count) so their crc32/md5/sha1 hash in
+    /// parallel and overlap the byte producer instead of serializing on it.
+    ///
+    /// Both variant-hashing callers — the `checksum` command and the extract write path — negotiate
+    /// the budget through here so they hash with identical parallelism and cannot drift (the command
+    /// previously forced single-threaded while extract did not, making the command slower). The cap
+    /// must stay `None`: capping at the algorithm count here would collapse the per-variant split to
+    /// one thread each. `parallel(None)` is pure (it does not consume the budget) and resolves to a
+    /// single thread on the non-threaded wasm build.
+    pub fn variant_hash_execution(&self) -> ThreadExecution {
+        self.plan_threads(ThreadCapability::parallel(None))
+    }
+
     pub fn build_pool(
         &self,
         capability: ThreadCapability,

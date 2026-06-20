@@ -52,6 +52,21 @@ pub struct VariantRow {
     pub transforms: Value,
 }
 
+impl VariantRow {
+    /// JSON shape shared by the `checksum` command's `checksum_variants` details and the extract
+    /// `emitted_files[].checksum_variants` entries, so both surfaces emit byte-identical rows
+    /// (asserted by the `extract_checksum_variants_match_checksum_command` parity test).
+    pub fn to_json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "label": self.label,
+            "checksums": self.checksums,
+            "applyCompatibility": self.apply_compatibility,
+            "transforms": self.transforms,
+        })
+    }
+}
+
 /// A `fix-header` variant that exceeded [`FIX_HEADER_PREFIX_CAP`]: its repair
 /// patches are known, but the caller must apply them in a separate read to
 /// produce the digest (e.g. via [`overlay_checksums`]).
@@ -1005,6 +1020,32 @@ fn extension_with_dot(name: &str) -> Option<String> {
         return None;
     }
     Some(name[dot..].to_string())
+}
+
+/// Complete a deferred `fix-header` variant (if any) by applying its repair patches in one extra
+/// read of `path`, appending the finished row to `rows`. The engine defers only the digest — the
+/// patches are already known — when the repair dependency exceeds [`FIX_HEADER_PREFIX_CAP`]. Both
+/// variant callers (the `checksum` command and the extract write path) finish it this same way; a
+/// `None` deferral is a no-op so callers can pipe `VariantOutput::deferred_fix_header` straight in.
+pub fn finish_deferred_fix_header(
+    rows: &mut Vec<VariantRow>,
+    deferred: Option<DeferredFixHeader>,
+    algorithms: &[String],
+    path: &std::path::Path,
+) -> Result<()> {
+    let Some(deferred) = deferred else {
+        return Ok(());
+    };
+    let mut file = std::fs::File::open(path)?;
+    let checksums = overlay_checksums(&mut file, algorithms, &deferred.patches)?;
+    rows.push(VariantRow {
+        id: deferred.id,
+        label: deferred.label,
+        checksums,
+        apply_compatibility: deferred.apply_compatibility,
+        transforms: deferred.transforms,
+    });
+    Ok(())
 }
 
 /// Compute checksums for a stream after applying a sparse byte overlay. Used to
