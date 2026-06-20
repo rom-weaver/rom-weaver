@@ -11,11 +11,13 @@ impl CliApp {
         request: &ChecksumRequest,
         context: &OperationContext,
         stage: &'static str,
+        write_to: Option<&std::path::Path>,
         on_progress: &mut F,
     ) -> Result<OperationReport>
     where
         F: FnMut(ChecksumProgress),
     {
+        use std::io::Write as _;
         let algorithms = request
             .algorithms
             .iter()
@@ -50,6 +52,15 @@ impl CliApp {
         // variant engine — neither embeds the other. No extra read.
         let mut identity = IdentityPrefix::new();
         let mut file = File::open(&request.source)?;
+        // Optionally copy each chunk to `write_to` in the SAME read pass. The browser passes this for a
+        // large WebKit/iOS Blob input: the interleaved reads+writes keep the source read from OOM-
+        // reloading the tab (a read-only pass over a ~GiB Blob pins its whole backing; writing forces
+        // eviction — this mirrors the extract write path, which never reloads), and the copy lands the
+        // input on OPFS so a later apply reuses it instead of re-reading the Blob.
+        let mut writer = write_to.map(std::fs::File::create).transpose()?;
+        if let Some(path) = write_to {
+            trace!(write_to = %path.display(), "checksum copying source to write-to path during hash");
+        }
         let mut buffer = vec![0_u8; CHECKSUM_VARIANT_CHUNK_SIZE];
         let mut processed = 0_u64;
         let mut next_percent = 1_u64;
@@ -61,6 +72,9 @@ impl CliApp {
             }
             engine.update(&buffer[..read])?;
             identity.push(&buffer[..read]);
+            if let Some(writer) = writer.as_mut() {
+                writer.write_all(&buffer[..read])?;
+            }
             processed = processed.saturating_add(read as u64);
             Self::emit_checksum_variant_progress(
                 processed,
@@ -68,6 +82,9 @@ impl CliApp {
                 &mut next_percent,
                 on_progress,
             );
+        }
+        if let Some(writer) = writer.as_mut() {
+            writer.flush()?;
         }
         on_progress(ChecksumProgress {
             processed_bytes: file_len,
