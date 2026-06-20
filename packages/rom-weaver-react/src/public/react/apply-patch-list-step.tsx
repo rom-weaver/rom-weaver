@@ -392,6 +392,10 @@ const ApplyPatchListStep = ({
           const staging = !!item.progress;
           const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
           const percent = stagePercent(stagingProps);
+          // A patch pulled from a container archive extracts before it validates; the
+          // runtime labels that stage "extracting …". (Patch rows have no validationPhase,
+          // so the label is the available signal here — unlike ROM inputs.)
+          const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
           const rowProps = reorderList.rowProps(index);
           const disabledClass = disabledFlags?.[index] ? "is-disabled" : undefined;
           let verdict: "bad" | "ok" | undefined;
@@ -438,7 +442,7 @@ const ApplyPatchListStep = ({
                   {staging ? (
                     <StageStatus
                       id={`rom-weaver-progress-patch-${index}`}
-                      label={stageStatusLabel(stagingProps, "Validating")}
+                      label={stageStatusLabel("Validating", patchExtracting)}
                       percent={percent}
                     />
                   ) : null}

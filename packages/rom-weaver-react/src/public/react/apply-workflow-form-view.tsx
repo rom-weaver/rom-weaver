@@ -215,7 +215,11 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         : toWorkflowFileProgressProps(romInput.progress);
   }
   const percent = stagePercent(stagingProps);
-  const stageLabel = stageStatusLabel(stagingProps, "Checksumming");
+  // A container ROM extracts and checksums in one pass (Rust hashes inline), so it sits
+  // in the "extract" phase throughout — show both verbs. A bare ROM has no extract phase
+  // and reads plain "Checksumming…". The phase comes from the runtime stage, not the
+  // label text, so the combined verb no longer drops out on stageless progress ticks.
+  const stageLabel = stageStatusLabel("Checksumming", romInput.info.validationPhase === "extract");
   const romBytes = romInput.size ?? romInput.sourceSize;
   const romTypeTag = formatRomTypeTag(romInput.info.romType);
   // Phase A reserves the always-present base group; the streamed variant plan will

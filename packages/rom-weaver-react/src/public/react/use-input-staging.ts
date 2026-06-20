@@ -5,6 +5,7 @@ import {
   getPendingInputDisplayFileName,
   getProgressDetails,
   getProgressStagedInputInfo,
+  isCompressedInputFileName,
   sortRomInputs,
 } from "./apply-session-inputs.ts";
 import { getTraceSourceSummaries, logUiError } from "./apply-session-logging.ts";
@@ -233,6 +234,17 @@ const useInputStaging = (context: InputStagingContext) => {
                 ...existing?.info,
                 archiveName: existing?.info.archiveName || "",
                 fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
+                // A dropped container extracts before/while it hashes, so seed the extract
+                // phase up front — the card reads "Extracting & Checksumming…" from the first
+                // frame instead of flashing a bare "Checksumming…" until the first extract
+                // event lands. A real phase already observed (extract/checksum) wins; the seed
+                // only overrides the "idle" default, and a bare ROM stays "idle" → "Checksumming…".
+                validationPhase:
+                  existing?.info.validationPhase === "extract" || existing?.info.validationPhase === "checksum"
+                    ? existing.info.validationPhase
+                    : isCompressedInputFileName(getBinarySourceFileName(input, ""))
+                      ? "extract"
+                      : existing?.info.validationPhase,
               },
               loading: retained && existing ? existing.loading : true,
               order: index,

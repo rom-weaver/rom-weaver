@@ -12,13 +12,20 @@ import type { ReactNode } from "react";
 type StageProgress = { label?: ReactNode; percent?: number | null } | null | undefined;
 
 /**
- * Phase-aware staging label: "<verb>…" normally, "Extracting & <verb>…" while the
- * runtime's extract stage is in flight (it hashes/validates during extraction, so
- * both verbs apply). `verb` is "Checksumming" for ROM inputs, "Validating" for
- * patches — the runtime labels the extract stage "Extracting <name>".
+ * Phase-aware staging label: "<verb>…" while the input is only being checksummed/
+ * validated, "Extracting & <verb>…" while it is also being extracted from a
+ * container (extraction hashes/validates inline, so both verbs apply). `verb` is
+ * "Checksumming" for ROM inputs, "Validating" for patches.
+ *
+ * `extracting` is driven by the runtime's authoritative stage (a ROM input's
+ * `validationPhase`, sourced from Rust's `stage` field) rather than sniffing the
+ * label text for "extract": the old regex fell back to a bare "<verb>…" whenever a
+ * byte-progress event carrying an "extracting …" label wasn't the most recent one
+ * seen (startup, the finalize tail, formats whose progress label omits the word),
+ * so a combined extract+checksum input read as plain "Checksumming…".
  */
-const stageStatusLabel = (progress: StageProgress, verb: string): string =>
-  /extract/i.test(String(progress?.label ?? "")) ? `Extracting & ${verb}…` : `${verb}…`;
+const stageStatusLabel = (verb: string, extracting: boolean): string =>
+  extracting ? `Extracting & ${verb}…` : `${verb}…`;
 
 /** Numeric percent from converted progress props, or null when indeterminate. */
 const stagePercent = (progress: StageProgress): number | null =>
