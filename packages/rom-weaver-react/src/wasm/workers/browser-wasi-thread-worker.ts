@@ -176,7 +176,6 @@ async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
   }
   const poolStream = createStreamPublisher(payload, null);
   await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
-  poolStream?.traceLine(`[wasi-thread-worker] pool worker ready command=${payload.commandId ?? "standalone"}`);
   self.postMessage({
     commandId: payload.commandId,
     type: "ready",
@@ -189,7 +188,6 @@ async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
       }
       const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
       if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-        poolStream?.traceLine(`[wasi-thread-worker] pool worker shutdown command=${payload.commandId ?? "unknown"}`);
         return;
       }
       if (state === THREAD_SLOT_STATE_FAILED) {
