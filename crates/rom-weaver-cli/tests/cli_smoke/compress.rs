@@ -1385,6 +1385,17 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
         leaf_step.is_some(),
         "expected a succeeded step event reporting the leaf output"
     );
+    // Every completed level reports its own extract time so the host can render a per-level time in
+    // the extraction tree (the `running` step, which precedes the work, carries none).
+    for event in &step_events {
+        let step = &event["details"]["extract_step"];
+        if step["status"] == "succeeded" {
+            assert!(
+                step["extract_time_ms"].is_u64(),
+                "succeeded step events must carry a per-level extract_time_ms"
+            );
+        }
+    }
     for event in &step_events {
         assert_eq!(
             event["status"], "running",

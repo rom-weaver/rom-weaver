@@ -146,6 +146,7 @@ impl CliApp {
             None,
             extract_threads.clone(),
         );
+        let primary_extract_started = std::time::Instant::now();
         let mut report = self
             .extract_with_selection_fallback(
                 handler.as_ref(),
@@ -198,6 +199,10 @@ impl CliApp {
                 &primary_emitted_files,
                 None,
             );
+            let primary_extract_elapsed_ms = primary_extract_started
+                .elapsed()
+                .as_millis()
+                .min(u32::MAX as u128) as u32;
             self.emit_extract_step(ExtractStepEvent {
                 format: format_name,
                 depth: 0,
@@ -205,6 +210,7 @@ impl CliApp {
                 out_dir: &out_dir,
                 step_status: "succeeded",
                 outputs: &primary_details,
+                elapsed_ms: Some(primary_extract_elapsed_ms),
                 thread_execution: report.thread_execution.clone(),
             });
             let mut all_emitted_details = primary_details;

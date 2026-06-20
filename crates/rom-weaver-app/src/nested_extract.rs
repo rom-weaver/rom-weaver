@@ -184,6 +184,7 @@ impl CliApp {
                 out_dir: &nested_out_dir,
                 step_status: "running",
                 outputs: &[],
+                elapsed_ms: None,
                 thread_execution: step_threads.clone(),
             });
             let step_started = std::time::Instant::now();
@@ -221,6 +222,7 @@ impl CliApp {
                 out_dir: &nested_out_dir,
                 step_status: "succeeded",
                 outputs: &nested_details,
+                elapsed_ms: Some(step_elapsed_ms),
                 thread_execution: step_threads,
             });
             emitted_details.extend(nested_details);

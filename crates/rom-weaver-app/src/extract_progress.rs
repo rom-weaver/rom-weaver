@@ -7,6 +7,10 @@ pub(super) struct ExtractStepEvent<'a> {
     pub(super) out_dir: &'a Path,
     pub(super) step_status: &'a str,
     pub(super) outputs: &'a [Value],
+    /// Wall-clock time this level took to extract, in ms. Set on the `succeeded` step so the host can
+    /// render a per-level extract time in the extraction tree; `None` on the `running` step (which
+    /// fires before the work) and whenever timing was not measured.
+    pub(super) elapsed_ms: Option<u32>,
     pub(super) thread_execution: Option<ThreadExecution>,
 }
 
@@ -130,6 +134,7 @@ impl CliApp {
             out_dir,
             step_status,
             outputs,
+            elapsed_ms,
             thread_execution,
         } = event;
         let source_name = source
@@ -166,6 +171,10 @@ impl CliApp {
         );
         step.insert("format".to_string(), json!(format));
         step.insert("status".to_string(), json!(step_status));
+        // Per-level extract time; the host attaches it to this level's row in the extraction tree.
+        if let Some(elapsed_ms) = elapsed_ms {
+            step.insert("extract_time_ms".to_string(), json!(elapsed_ms));
+        }
         step.insert("outputs".to_string(), Value::Array(output_summaries));
         let mut details = Map::new();
         details.insert("extract_step".to_string(), Value::Object(step));
