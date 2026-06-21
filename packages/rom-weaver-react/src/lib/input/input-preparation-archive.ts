@@ -827,9 +827,33 @@ const archiveHasSelectablePatches = async (
   options: ApplyWorkflowOptions | undefined,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
 ): Promise<boolean> => {
+  if (options?.input?.containerInputsEnabled === false) return false;
+  // Classify by file name/extension BEFORE touching the bytes. createPatchFile() on a Blob-backed source with
+  // no path reads the ENTIRE file into a main-thread ArrayBuffer (binary-source-utils materializeSourceArrayBuffer)
+  // — for a bare ~1 GiB ROM dropped as a File that is the iOS/WebKit jetsam OOM-reload, and it was wasted work
+  // because a raw ROM has no selectable patches. classifyPatcherInput needs only the name (plus a synchronous
+  // magic probe when bytes are already resident), never the whole Blob. Only an actual, non-path-backed container
+  // is materialized below, and only to enumerate its entries.
+  const classification = classifyPatcherInput(source as Parameters<typeof classifyPatcherInput>[0]);
+  if (classification.kind !== "compression") {
+    traceArchivePreparation(options, "implicit-patch scan: raw input — no archive enumeration", {
+      fileName: classification.fileName,
+      kind: classification.kind,
+    });
+    return false;
+  }
+  if (PATH_BACKED_COMPRESSION_FORMATS.has(classification.compressionFormat)) {
+    traceArchivePreparation(options, "implicit-patch scan: path-backed ROM container — no selectable patches", {
+      compressionFormat: classification.compressionFormat,
+      fileName: classification.fileName,
+    });
+    return false;
+  }
+  traceArchivePreparation(options, "implicit-patch scan: enumerating container entries (materializes archive)", {
+    compressionFormat: classification.compressionFormat,
+    fileName: classification.fileName,
+  });
   const archiveFile = await createPatchFile(source, "input.bin");
-  if (options?.input?.containerInputsEnabled === false || !isCompressionFile(archiveFile)) return false;
-  if (PATH_BACKED_COMPRESSION_FORMATS.has(getCompressionFormat(archiveFile))) return false;
   const patchEntries = await filterValidPatchArchiveEntriesForSource(archiveFile, options, runtime).catch(() => []);
   return patchEntries.length > 0;
 };
