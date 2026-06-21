@@ -321,15 +321,6 @@ pub struct ChecksumCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "write-to",
-            help = "Copy the checksummed source bytes to this path during the same read pass. The browser uses this to land a large input on OPFS in one pass (the interleaved writes keep a huge WebKit/iOS Blob read from OOM-reloading the tab) and to reuse the copy for a later apply."
-        )
-    )]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub write_to: Option<PathBuf>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
             long,
             help = "Fold platform probe metadata into the result and fail when the checksummed bytes resolve to no known platform"
         )

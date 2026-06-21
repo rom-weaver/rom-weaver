@@ -4,7 +4,6 @@ import type { WorkflowKind, WorkflowProgress, WorkflowProgressRole } from "../..
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import type { InputAsset, InputParentCompression } from "../input/input-assets.ts";
-import { adoptStagedInput, resolveInputWriteToPath } from "../input/input-opfs-staging.ts";
 import { createChecksumSource, DEFAULT_CHECKSUMS, isRecord } from "./controller-utils.ts";
 
 type StandardWorkflowChecksums = Record<(typeof DEFAULT_CHECKSUMS)[number], string>;
@@ -146,10 +145,6 @@ const calculateStandardInputChecksumsForFile = async ({
   if (!runtime.checksum.calculate) return { checksums: {} as StandardWorkflowChecksums };
   const details = createChecksumProgressDetails(state);
   const id = `${progressId || state.id}:checksum`;
-  // Every Blob-backed input is copied to OPFS DURING the checksum (one pass via the command's write_to):
-  // the interleaved writes keep a large WebKit/iOS Blob read from OOM-reloading the tab, and the copy is
-  // reused by the later apply. null only when there is no Blob to copy or the input is already staged.
-  const writeToPath = resolveInputWriteToPath(file, { logLevel, onLog });
   emitProgress({
     details,
     id,
@@ -174,10 +169,7 @@ const calculateStandardInputChecksumsForFile = async ({
         workflow,
       }),
     source: createChecksumSource(file, state.fileName) as never,
-    ...(writeToPath ? { writeTo: writeToPath } : {}),
   });
-  // The checksum succeeded and wrote the input to OPFS; point the input at that copy so apply reuses it.
-  if (writeToPath) adoptStagedInput(file, writeToPath, file.fileSize, { logLevel, onLog });
   return {
     checksums: {
       crc32: Number(result.crc32 || 0)

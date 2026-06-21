@@ -870,10 +870,6 @@ const runRomWeaverChecksumWorker = async (
     /** Fail the checksum unless the source resolves to a known platform. Off by default —
      * plain checksum happily hashes unidentified bytes. */
     probe?: boolean;
-    /** OPFS guest path to copy the source into during the hash read (one pass). Large WebKit inputs
-     * use this to land on OPFS without a second read; the interleaved writes also keep the Blob read
-     * from OOM-reloading the tab. */
-    writeTo?: string;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -910,14 +906,12 @@ const runRomWeaverChecksumWorker = async (
   // rebuilds it (the "page reloaded / lost my work" symptom). Extract escapes this because it runs
   // through the memory/thread-aware scheduler, which throttles its pool to a fraction of the cores.
   const checksumThreadBudget = suppressDefaultThreadPool ? 0 : Math.max(1, algorithms.length);
-  const writeTo = String(input.writeTo || "").trim();
   const command = createRomWeaverCommand("checksum", {
     algo: algorithms,
     no_extract: true,
     source: filePath,
     ...(checksumStart === undefined ? {} : { start: checksumStart }),
     ...(input.probe ? { probe: true } : {}),
-    ...(writeTo ? { write_to: writeTo } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson checksum dispatch", {
     algorithms,
@@ -925,7 +919,6 @@ const runRomWeaverChecksumWorker = async (
     filePath,
     startOffset: input.checksumStartOffset,
     suppressDefaultThreadPool,
-    writeTo,
   });
   const result = await runRomWeaverJson(
     command,

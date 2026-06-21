@@ -40,7 +40,6 @@ impl CliApp {
             no_trim_fix,
             start,
             length,
-            write_to,
             // Consumed by the `run_checksum` wrapper before the inner body runs.
             probe: _,
             threads,
@@ -220,7 +219,6 @@ impl CliApp {
                 &request,
                 &context,
                 checksum_stage,
-                write_to.as_deref(),
                 &mut |progress| {
                     self.emit_running(
                         OperationLabel {

@@ -332,9 +332,6 @@ type WorkflowRuntimeChecksum = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
-    // OPFS guest path to copy the checksummed source into during the same read pass (large WebKit
-    // inputs). Lands the input on OPFS without a second read and keeps the Blob read from OOM-reloading.
-    writeTo?: string;
   }) => Promise<ChecksumResult>;
 };
 
