@@ -404,13 +404,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   async clearPatches(): Promise<void> {
     return this.mutate("clearPatches", async () => {
-      this.trace("patches.clear.start", {
-        patchCount: this.patches.length,
-      });
+      const patchCount = this.patches.length;
       await this.releasePatchSources();
       this.patches = [];
       this.recomputeOutputState();
-      this.trace("patches.clear.finish");
+      this.trace("patches.clear", { patchCount });
     });
   }
 
@@ -651,10 +649,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       workflowId: this.id,
     });
     try {
-      this.trace("source.stage.prepare-patch.start", {
-        fileName: stage.state.fileName,
-        order: stage.state.order,
-      });
       const prepared = await prepareInputFile(
         stage.source as never,
         "patch",
@@ -687,15 +681,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     if (selectable.length === 1) {
       stage.state.selectedCandidateId = selectable[0]?.id;
       stage.selectedArchiveEntry = stage.internalCandidates.get(selectable[0]?.id || "")?.archiveEntry;
-      this.trace("source.stage.prepare-selected.start", {
-        fileName: stage.state.fileName,
-        order: stage.state.order,
-        selectedCandidateId: stage.state.selectedCandidateId,
-      });
       await this.prepareSelectedSource(stage);
       this.trace("source.stage.prepare-selected.finish", {
         fileName: stage.state.fileName,
         order: stage.state.order,
+        selectedCandidateId: stage.state.selectedCandidateId,
         status: stage.state.status,
       });
       await this.parsePatch(stage);
