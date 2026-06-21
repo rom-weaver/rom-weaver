@@ -558,12 +558,8 @@ impl ContainerHandlerOperations for TracingContainerHandler {
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
         let descriptor = self.registration.descriptor;
-        trace!(
-            family = ?descriptor.family,
-            format = descriptor.name,
-            source = %source.display(),
-            "container probe start"
-        );
+        // No "start" line: probe is fast and called once per registered handler during format
+        // detection, so the start/complete pair doubles trace volume without breadcrumb value.
         let confidence = self.inner.probe(source);
         trace!(
             family = ?descriptor.family,
@@ -789,12 +785,7 @@ impl PatchHandler for TracingPatchHandler {
 
     fn probe(&self, patch_path: &Path) -> ProbeConfidence {
         let descriptor = self.inner.descriptor();
-        trace!(
-            family = ?descriptor.family,
-            format = descriptor.name,
-            patch = %patch_path.display(),
-            "patch probe start"
-        );
+        // No "start" line: see TracingContainerHandler::probe — fast, per-handler, high-frequency.
         let confidence = self.inner.probe(patch_path);
         trace!(
             family = ?descriptor.family,

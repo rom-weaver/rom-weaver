@@ -77,10 +77,6 @@ impl CliApp {
         for candidate in root_candidates {
             self.enqueue_nested_candidate(candidate, 1, kind_filter, &processed, &mut queue);
         }
-        trace!(
-            initial_queue_len = queue.len(),
-            "nested archive extraction initial queue prepared"
-        );
 
         while let Some((source, depth)) = queue.pop_front() {
             trace!(

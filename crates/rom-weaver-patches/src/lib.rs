@@ -405,12 +405,7 @@ impl PatchRegistry {
     pub fn probe(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
         let ebp_extension = is_ebp_extension(path);
         let xdelta_extension = is_xdelta_extension(path);
-        trace!(
-            patch = %path.display(),
-            ebp_extension,
-            xdelta_extension,
-            "patch registry probe start"
-        );
+        // No "start" line: each branch below logs exactly one outcome, so a probe is a single line.
         let signature_match = self.probe_by_signature(path, ebp_extension, xdelta_extension);
         if let Some(signature_match) = signature_match {
             trace!(
