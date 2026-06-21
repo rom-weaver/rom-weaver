@@ -581,7 +581,7 @@ impl PatchHandler for VcdiffPatchHandler {
             let mut reader = BufReader::new(File::open(&request.output)?);
             let parsed = parse_patch(&mut reader)?;
             let finalize_ms = elapsed_ms(finalize_start);
-            info!(
+            debug!(
                 format = self.descriptor.name,
                 windows = parsed.windows.len(),
                 uncompressed_patch_bytes = baseline_raw_bytes,

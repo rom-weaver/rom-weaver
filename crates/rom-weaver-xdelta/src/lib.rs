@@ -31,7 +31,7 @@ use rom_weaver_core::{
     ThreadExecution, XdeltaSecondaryMode,
 };
 use serde_json::json;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 #[cfg(test)]
 const VCDIFF: rom_weaver_core::FormatDescriptor = rom_weaver_core::FormatDescriptor {
