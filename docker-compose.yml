@@ -1,0 +1,20 @@
+# Serve the RomWeaver webapp (static SPA) behind your HTTPS reverse proxy.
+#
+# Prereq (once, from the repo root): mise run build-wasm
+# Then:                              docker compose up --build
+# Open:                             http://localhost:8080
+# Custom port:                      PORT=3000 docker compose up   (-> http://localhost:3000)
+#
+# The container speaks plain HTTP on 8080; your reverse proxy terminates TLS
+# and forwards to webapp:8080. COOP/COEP/CORP headers and brotli (*.br) pass
+# straight through. For a standalone HTTPS listener instead of a proxy, mount a
+# cert + key and set SERVER_HTTP2_TLS=true / SERVER_HTTP2_TLS_CERT / _KEY.
+services:
+  webapp:
+    build:
+      context: ./packages/rom-weaver-react
+      dockerfile: Dockerfile
+    image: rom-weaver-webapp
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
