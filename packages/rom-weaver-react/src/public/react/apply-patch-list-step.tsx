@@ -161,7 +161,9 @@ const PatchOptions = ({
   patchStack: PatcherStackController;
 }) => {
   const setOption = patchStack.setPatchOption;
-  if (!setOption) return null;
+  // Only PPF patches expose options (the undo toggle). Other formats have no
+  // per-patch options worth a drawer, so the card stays clean.
+  if (!(setOption && item.showPpfUndo)) return null;
   const ppfUndoChecked = item.ppfUndo !== false;
   return (
     <Drawer
