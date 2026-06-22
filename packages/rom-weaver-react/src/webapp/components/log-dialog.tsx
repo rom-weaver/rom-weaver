@@ -32,6 +32,12 @@ const formatTimestamp = (iso: string) => {
 // serialized length well past anything useful to read inline.
 const MAX_DETAILS_CHARS = 4096;
 
+// Cap how many lines render at once. A trace-level session fills the ring with thousands of entries,
+// and rendering them all as buttons spikes DOM/memory enough to OOM-reload a memory-constrained tab
+// (iOS Safari especially, mid-run). Render only the newest N; the filter narrows to find older lines
+// and Copy/Download still cover the full filtered set.
+const MAX_RENDERED_LINES = 500;
+
 const formatDetails = (details: LogStoreEntry["details"]) => {
   if (!details || Object.keys(details).length === 0) return "";
   try {
@@ -158,6 +164,11 @@ const LogDialog = ({
     return entries.filter((entry) => formatLine(entry).toLowerCase().includes(query));
   }, [entries, filter]);
 
+  // Only the newest MAX_RENDERED_LINES are mounted; copy/download below still use the full `visible`
+  // set, so capping the DOM never drops data from a saved log.
+  const rendered = visible.length > MAX_RENDERED_LINES ? visible.slice(-MAX_RENDERED_LINES) : visible;
+  const hiddenLineCount = visible.length - rendered.length;
+
   // Keep the newest lines in view while the dialog is open.
   useEffect(() => {
     const trace = traceRef.current;
@@ -273,7 +284,16 @@ const LogDialog = ({
                 {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "—"}
               </div>
             ) : (
-              visible.map((entry) => <TraceLine entry={entry} key={entry.id} />)
+              <>
+                {hiddenLineCount > 0 ? (
+                  <div className="tracelog-truncated">
+                    {`${hiddenLineCount} earlier line(s) hidden — filter to narrow, or Download for the full log`}
+                  </div>
+                ) : null}
+                {rendered.map((entry) => (
+                  <TraceLine entry={entry} key={entry.id} />
+                ))}
+              </>
             )}
           </div>
         </div>
