@@ -1,20 +1,17 @@
 import { DEFAULT_VFS_ROOT } from "../../storage/vfs/path.ts";
 import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../types/selection.ts";
-import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { attachIngestPatchRequirements, patchProbeRequirementsFromDescriptor } from "../apply/patch-apply-service.ts";
 import { RomWeaverError } from "../errors.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { getPatchFileCleanup, type PatchFileInstance } from "./binary-service.ts";
-import { preflightArchiveLimitsForDescent } from "./input-archive-limits.ts";
 import {
   ensureValidatedPatchArchiveEntryCleanup,
   getValidatedPatchArchiveEntryCache,
-  isValidPatchPatchFile,
 } from "./input-archive-patch-validity.ts";
 import { type InputParentCompression, makeInputId } from "./input-assets.ts";
 import {
   describeArchiveFileForTrace,
   getCompressionFormat,
-  getCompressionRuntimeOptions,
   getCompressionRuntimeSource,
   type InputPreparationOptions,
   type InputPreparationRuntimeLike,
@@ -23,6 +20,9 @@ import {
 } from "./input-preparation-archive.ts";
 import { resolveInputPreparationRuntime } from "./input-preparation-compression.ts";
 import { getBaseFileName, normalizeArchiveEntryName } from "./path-utils.ts";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 type PatchArchiveLeaf = {
   candidate: SelectionFileCandidate;
@@ -57,11 +57,13 @@ const derivePatchLeafBreadcrumbs = (path: string): string[] => {
   return dirSegments.slice(start);
 };
 
-/** Extract EVERY patch across all (nested) branches of a patch archive in one recursive descent with
- * interactive selection OFF, so an ambiguous multi-branch container fully unpacks instead of
- * prompting for a single branch. Each valid leaf patch is cached by its unique extracted path so the
- * re-entrant selection (and the multi-select fan-out) can reuse it without re-extracting — essential
- * because two sibling patches in one branch cannot be addressed by a primary-container `--select`. */
+/** Discover EVERY patch across all (nested) branches of a patch archive in one recursive `ingest`
+ * call: ingest classifies + extracts all patch-filtered leaves (the facade adopts them as
+ * `patchOutputs`) and describes each (`result.patches`), so the leaf's embedded source/target
+ * requirements ride along the extraction and are stashed for the apply parse (no second probe). Each
+ * valid leaf is cached by its unique extracted path so the re-entrant selection (and the multi-select
+ * fan-out) reuses it without re-extracting. Every patch ingest identifies is surfaced (only an archive
+ * leaf is excluded); the apply-time validate guards a genuinely bad one. */
 const enumeratePatchLeaves = async (
   archiveFile: PatchFileInstance,
   options: InputPreparationOptions,
@@ -69,54 +71,70 @@ const enumeratePatchLeaves = async (
   sourceIndex: number,
 ): Promise<PatchArchiveLeaf[]> => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
-  if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
+  if (!resolvedRuntime.ingest?.run) throw new Error("Ingest runtime is unavailable");
   const compressionFormat = getCompressionFormat(archiveFile);
-  await preflightArchiveLimitsForDescent(archiveFile, options, runtime, { patchFilter: true }, []);
   traceArchivePreparation(options, "input.archive.patch.enumerate.start", {
     compressionFormat,
     file: describeArchiveFileForTrace(archiveFile),
   });
-  const result = await resolvedRuntime.compression.extract({
-    descendSinglePayload: true,
-    entries: [],
-    format: compressionFormat,
-    options: getCompressionRuntimeOptions(options, { interactiveSelectionEnabled: false }, { patchFilter: true }),
+  // Ingest reports one extract elapsed per descended level (not per leaf); sum them for the breadcrumb
+  // root, matching the single-elapsed value the old extract path attached there.
+  let extractElapsedMs: number | undefined;
+  const { result, patchOutputs } = await resolvedRuntime.ingest.run({
+    fileName: archiveFile.fileName,
+    // Unpack EVERY patch leaf without Rust prompting for a subset: the flat multi-select below is the
+    // single place the user chooses patches. Without this, an ambiguous patch archive prompts twice —
+    // once in ingest's extract selection, then again here.
+    interactiveSelectionEnabled: false,
+    logLevel: options?.logging?.level,
+    onLog: options?.onLog,
+    onProgress: (progress) => {
+      const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
+      const step = isRecord(details) ? (details as { extract_step?: unknown }).extract_step : undefined;
+      if (isRecord(step) && step.status === "succeeded") {
+        const elapsed = Number((step as { extract_time_ms?: unknown }).extract_time_ms);
+        if (Number.isFinite(elapsed)) extractElapsedMs = (extractElapsedMs ?? 0) + elapsed;
+      }
+      options?.onProgress?.(progress as never);
+    },
     source: getCompressionRuntimeSource(archiveFile),
+    ...(options?.signal ? { signal: options.signal } : {}),
   });
-  const outputs: PublicOutput[] = Array.isArray(result.outputs) ? result.outputs : result.output ? [result.output] : [];
   const cache = getValidatedPatchArchiveEntryCache(archiveFile);
   const leaves: PatchArchiveLeaf[] = [];
-  for (let index = 0; index < outputs.length; index += 1) {
-    const output = outputs[index];
+  for (let index = 0; index < result.patches.length; index += 1) {
+    const descriptor = result.patches[index];
+    if (!descriptor) continue;
+    const displayPath = descriptor.leafPath;
+    // Archive leaves are adopted 1:1 into patchOutputs (a bare patch — never an archive — yields none).
+    const output = patchOutputs.find((candidate) => candidate.path === displayPath);
     if (!output) continue;
-    const displayPath = String(output.path || "");
-    const fileName = getBaseFileName(output.fileName || `patch-${index + 1}.bin`);
-    let file = displayPath ? cache.get(displayPath) : undefined;
+    const fileName = getBaseFileName(descriptor.fileName || `patch-${index + 1}.bin`);
+    let file = cache.get(displayPath);
     if (!file) {
       file = await createPatchFileFromPublicOutput(output, fileName, { materializeBlob: true });
       file.fileName = fileName;
     }
-    if (isCompressionFile(file) || !(await isValidPatchPatchFile(file))) {
-      if (!(displayPath && cache.has(displayPath)))
-        await Promise.resolve(getPatchFileCleanup(file)?.()).catch(() => undefined);
+    // Trust ingest's name-based patch identification (the Rust set) and surface ALL of its leaves —
+    // only an archive leaf is excluded. The TS magic-byte re-check used to drop name-valid patches the
+    // header probe mis-read, hiding real choices; ingest already classified these as patches and the
+    // apply-time validate still guards a genuinely bad one.
+    if (isCompressionFile(file)) {
+      if (!cache.has(displayPath)) await Promise.resolve(getPatchFileCleanup(file)?.()).catch(() => undefined);
       continue;
     }
-    if (displayPath) {
-      ensureValidatedPatchArchiveEntryCleanup(archiveFile);
-      cache.set(displayPath, file);
-    }
+    // Stash the descriptor's embedded source/target requirements so the apply parse reuses them
+    // instead of re-ingesting the leaf.
+    attachIngestPatchRequirements(file, patchProbeRequirementsFromDescriptor(descriptor));
+    ensureValidatedPatchArchiveEntryCleanup(archiveFile);
+    cache.set(displayPath, file);
     // Full archive-nesting path: the source archive, then each nested archive/folder it descends
     // through (the leaf file name is shown separately as the candidate's primary label).
     const breadcrumbs = [archiveFile.fileName || "archive", ...derivePatchLeafBreadcrumbs(displayPath)];
     // Surface the same chain as parentCompressions so a fanned-out patch keeps its "extract section"
-    // (the archive › nested-archive path) in the patch stack row. The runtime only reports a single
-    // extract elapsed time and the leaf size (not per-intermediate-archive sizes), so attach the
-    // elapsed time to the root entry but leave parent sizes unset — synthesizing the whole-archive
-    // size as a single leaf's parent would compute a nonsensical compression ratio (archive ÷ leaf).
-    const extractElapsedMs =
-      typeof output.timing?.elapsedMs === "number" && Number.isFinite(output.timing.elapsedMs)
-        ? output.timing.elapsedMs
-        : undefined;
+    // (the archive › nested-archive path) in the patch stack row. Attach the elapsed time to the root
+    // entry but leave parent sizes unset — synthesizing the whole-archive size as a single leaf's
+    // parent would compute a nonsensical compression ratio (archive ÷ leaf).
     const parentCompressions: InputParentCompression[] = breadcrumbs.map((entryName, depth) => ({
       depth,
       fileName: entryName,
@@ -131,7 +149,7 @@ const enumeratePatchLeaves = async (
         kind: "patch",
         path: displayPath || fileName,
         selectable: true,
-        size: output.size,
+        size: descriptor.sizeBytes,
         type: "file",
       },
       file,
@@ -144,7 +162,7 @@ const enumeratePatchLeaves = async (
     leafCandidateIds: leaves.map((leaf) => leaf.candidate.id),
     leafCount: leaves.length,
     leafPaths: leaves.map((leaf) => leaf.candidate.path),
-    outputCount: outputs.length,
+    outputCount: patchOutputs.length,
   });
   return leaves;
 };

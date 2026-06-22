@@ -56,6 +56,32 @@ describe("resolveMemoryCeilingBytes", () => {
     expect(resolveMemoryCeilingBytes({})).toBe(Math.floor(1.5 * GIB));
     expect(resolveMemoryCeilingBytes(null)).toBe(Math.floor(1.5 * GIB));
   });
+
+  it("caps mobile runtimes at 1 GiB regardless of reported/absent device memory", () => {
+    // iOS Safari: no deviceMemory exposed, so the 1.5 GiB fallback is capped down to the mobile ceiling.
+    const iosSafari =
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1";
+    expect(resolveMemoryCeilingBytes({ navigator: { userAgent: iosSafari } })).toBe(1 * GIB);
+    // iPadOS desktop mode masquerades as MacIntel with touch — still mobile, still capped.
+    expect(
+      resolveMemoryCeilingBytes({ navigator: { maxTouchPoints: 5, platform: "MacIntel", userAgent: "Macintosh" } }),
+    ).toBe(1 * GIB);
+    // Android Chrome reports a generous deviceMemory; the mobile cap lowers the 2 GiB clamp to 1 GiB.
+    const androidChrome =
+      "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36";
+    expect(resolveMemoryCeilingBytes({ navigator: { deviceMemory: 8, userAgent: androidChrome } })).toBe(1 * GIB);
+  });
+
+  it("never raises a smaller mobile ceiling up to the cap", () => {
+    const lowAndroid =
+      "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36";
+    expect(resolveMemoryCeilingBytes({ navigator: { deviceMemory: 0.5, userAgent: lowAndroid } })).toBe(512 * MIB);
+  });
+
+  it("leaves desktop runtimes uncapped by the mobile ceiling", () => {
+    const desktopSafari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15";
+    expect(resolveMemoryCeilingBytes({ navigator: { deviceMemory: 8, userAgent: desktopSafari } })).toBe(2 * GIB);
+  });
 });
 
 describe("estimateScheduledThreads", () => {
@@ -75,13 +101,6 @@ describe("estimateScheduledThreads", () => {
     expect(estimateScheduledThreads(topLevel("compress"), 2 * MIB, 8)).toBe(1);
     expect(estimateScheduledThreads(topLevel("compress"), 1024 * MIB, 8)).toBe(8);
     expect(estimateScheduledThreads(topLevel("compress"), 48 * MIB, 8)).toBe(3);
-  });
-
-  it("keeps other operations light: one thread unless the input is large", () => {
-    expect(estimateScheduledThreads(topLevel("extract"), 0, 8)).toBe(1);
-    expect(estimateScheduledThreads(topLevel("extract"), 10 * MIB, 8)).toBe(1);
-    expect(estimateScheduledThreads(topLevel("extract"), 200 * MIB, 8)).toBe(4);
-    expect(estimateScheduledThreads(topLevel("checksum"), 0, 8)).toBe(1);
   });
 
   it("never exceeds the requested thread count", () => {

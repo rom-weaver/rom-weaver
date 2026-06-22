@@ -108,5 +108,4 @@ export {
   ensureValidatedPatchArchiveEntryCleanup,
   filterValidPatchArchiveEntriesForSource,
   getValidatedPatchArchiveEntryCache,
-  isValidPatchPatchFile,
 };

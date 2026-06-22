@@ -1,4 +1,5 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
+import type { ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type { ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, PublicOutput } from "../../types/workflow-runtime-types.ts";
@@ -78,44 +79,6 @@ const toOptionalCrc32Hex = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const normalizePatchProbeRequirements = (
-  details: Awaited<ReturnType<NonNullable<WorkflowRuntime["patch"]["probePatch"]>>> | null | undefined,
-): PatchProbeRequirements | undefined => {
-  if (!details || typeof details !== "object") return undefined;
-  const detailRecord = details as Record<string, unknown>;
-  const format =
-    typeof details.format === "string" && details.format.trim() ? details.format.trim().toUpperCase() : undefined;
-  const minimumSourceSize = toOptionalFiniteInt(detailRecord.minimum_source_size ?? detailRecord.minimumSourceSize);
-  const sourceSize = toOptionalFiniteInt(details.source_size);
-  const targetSize = toOptionalFiniteInt(details.target_size);
-  const recordCount = toOptionalFiniteInt(details.record_count);
-  const sourceCrc32 = toOptionalCrc32Hex(details.source_crc32);
-  const targetCrc32 = toOptionalCrc32Hex(details.target_crc32);
-  const patchCrc32 = toOptionalCrc32Hex(details.patch_crc32);
-  if (
-    !(
-      format ||
-      minimumSourceSize !== undefined ||
-      sourceSize !== undefined ||
-      targetSize !== undefined ||
-      sourceCrc32 ||
-      targetCrc32 ||
-      patchCrc32
-    )
-  )
-    return undefined;
-  return {
-    ...(format ? { format } : {}),
-    ...(minimumSourceSize === undefined ? {} : { minimumSourceSize }),
-    ...(patchCrc32 ? { patchCrc32 } : {}),
-    ...(recordCount === undefined ? {} : { recordCount }),
-    ...(sourceCrc32 ? { sourceCrc32 } : {}),
-    ...(sourceSize === undefined ? {} : { sourceSize }),
-    ...(targetCrc32 ? { targetCrc32 } : {}),
-    ...(targetSize === undefined ? {} : { targetSize }),
-  };
-};
-
 const readPatchHeader = async (patchFile: PatchFileInstance, length: number): Promise<string | null> => {
   try {
     patchFile.littleEndian = false;
@@ -191,20 +154,80 @@ const getPatchProbeRequirements = (patch: ParsedPatchLike | null | undefined): P
   return requirements ? { ...requirements } : undefined;
 };
 
-const probePatchRequirementsForApply = async (
+const INGEST_PATCH_REQUIREMENTS_KEY = "__romWeaverIngestPatchRequirements";
+
+// A staging step that already ran `ingest` over a patch leaf (the archive patch enumeration) stashes
+// the mapped requirements on the leaf file so the later parse reuses them instead of re-ingesting.
+const attachIngestPatchRequirements = (
+  patchFile: PatchFileInstance,
+  requirements: PatchProbeRequirements | undefined,
+): void => {
+  if (requirements) (patchFile as Record<string, unknown>)[INGEST_PATCH_REQUIREMENTS_KEY] = requirements;
+};
+
+const getAttachedIngestPatchRequirements = (patchFile: PatchFileInstance): PatchProbeRequirements | undefined => {
+  const requirements = (patchFile as Record<string, unknown>)[INGEST_PATCH_REQUIREMENTS_KEY];
+  return requirements && typeof requirements === "object" ? { ...(requirements as PatchProbeRequirements) } : undefined;
+};
+
+// Map an ingest `PatchDescriptor`'s embedded fields onto the apply-preflight requirements shape. The
+// descriptor parser already coerced crc32/size to numbers, so the shared hex/int helpers render them.
+const patchProbeRequirementsFromDescriptor = (
+  descriptor: ParsedPatchDescriptor | undefined,
+): PatchProbeRequirements | undefined => {
+  if (!descriptor) return undefined;
+  const format = descriptor.format && descriptor.format !== "unknown" ? descriptor.format.toUpperCase() : undefined;
+  const minimumSourceSize = toOptionalFiniteInt(descriptor.minimumSourceSize);
+  const sourceSize = toOptionalFiniteInt(descriptor.sourceSize);
+  const targetSize = toOptionalFiniteInt(descriptor.targetSize);
+  const recordCount = toOptionalFiniteInt(descriptor.recordCount);
+  const sourceCrc32 = toOptionalCrc32Hex(descriptor.sourceCrc32);
+  const targetCrc32 = toOptionalCrc32Hex(descriptor.targetCrc32);
+  const patchCrc32 = toOptionalCrc32Hex(descriptor.patchCrc32);
+  if (
+    !(
+      format ||
+      minimumSourceSize !== undefined ||
+      sourceSize !== undefined ||
+      targetSize !== undefined ||
+      sourceCrc32 ||
+      targetCrc32 ||
+      patchCrc32
+    )
+  )
+    return undefined;
+  return {
+    ...(format ? { format } : {}),
+    ...(minimumSourceSize === undefined ? {} : { minimumSourceSize }),
+    ...(patchCrc32 ? { patchCrc32 } : {}),
+    ...(recordCount === undefined ? {} : { recordCount }),
+    ...(sourceCrc32 ? { sourceCrc32 } : {}),
+    ...(sourceSize === undefined ? {} : { sourceSize }),
+    ...(targetCrc32 ? { targetCrc32 } : {}),
+    ...(targetSize === undefined ? {} : { targetSize }),
+  };
+};
+
+// Resolve a staged patch's apply-preflight requirements from the consolidated `ingest` command
+// (classify + parse in one call), which describes the embedded source/target metadata. Archive leaves
+// already carry the descriptor's requirements (stashed by the patch enumeration); a bare patch runs
+// ingest here once over its own bytes.
+const resolvePatchRequirementsForApply = async (
   patchFile: PatchFileInstance,
   runtime?: WorkflowRuntime,
 ): Promise<PatchProbeRequirements | undefined> => {
-  const probePatch = runtime?.patch.probePatch;
-  if (!probePatch) return undefined;
+  const attached = getAttachedIngestPatchRequirements(patchFile);
+  if (attached) return attached;
+  const ingestRun = runtime?.ingest?.run;
+  if (!ingestRun) return undefined;
   const externalSource = getPatchFileExternalSource(patchFile, patchFile.fileName || "patch.bin");
   if (!externalSource) return undefined;
   try {
-    const details = await probePatch({
-      patch: externalSource.source,
-      patchFileName: patchFile.fileName || "patch.bin",
+    const { result } = await ingestRun({
+      fileName: patchFile.fileName || "patch.bin",
+      source: externalSource.source,
     });
-    return normalizePatchProbeRequirements(details);
+    return patchProbeRequirementsFromDescriptor(result.patches[0]);
   } catch (_error) {
     return undefined;
   }
@@ -214,8 +237,8 @@ const parsePatchForApply = async (
   patchFile: PatchFileInstance,
   runtime?: WorkflowRuntime,
 ): Promise<ParsedPatchLike | null> => {
-  const probeRequirements = await probePatchRequirementsForApply(patchFile, runtime);
-  return createParsedPatchProxy(patchFile, probeRequirements);
+  const requirements = await resolvePatchRequirementsForApply(patchFile, runtime);
+  return createParsedPatchProxy(patchFile, requirements);
 };
 
 const verifyPatchedOutputIfRequired = async (
@@ -303,9 +326,11 @@ const resolvePatchTargets = async (
 };
 
 export {
+  attachIngestPatchRequirements,
   getPatchProbeRequirements,
   normalizePatchOptions,
   parsePatchForApply,
+  patchProbeRequirementsFromDescriptor,
   resolvePatchTargets,
   toPublicOutput,
   verifyPatchedOutputIfRequired,

@@ -7,6 +7,7 @@ import type {
   ThreadBudget,
 } from "../wasm/index.ts";
 import type { ChecksumResult, ChecksumVariant, RomTypeTag } from "./checksum.ts";
+import type { ParsedIngestResult } from "./ingest.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
 import type { OutputStorageKind } from "./output.ts";
 import type { JsonObject, JsonValue } from "./runtime.ts";
@@ -370,26 +371,6 @@ type WorkflowRuntimePatch = {
     message?: string;
     status: "passed";
   }>;
-  probePatch?: (input: {
-    patch: SourceRef;
-    patchFileName?: string;
-    logLevel?: LogLevel;
-    onLog?: (log: WorkflowRuntimeLog) => void;
-    onProgress?: (progress: WorkflowRuntimeProgress) => void;
-    signal?: AbortSignal;
-  }) => Promise<{
-    format?: string | null;
-    minimum_source_size?: number | null;
-    patch_crc32?: number | null;
-    record_count?: number | null;
-    source_crc32?: number | null;
-    source_size?: number | null;
-    source_window_count?: number | null;
-    target_crc32?: number | null;
-    target_size?: number | null;
-    target_window_count?: number | null;
-    window_checksum_count?: number | null;
-  }>;
   createPatch?: (input: {
     original: SourceRef;
     modified: SourceRef;
@@ -413,6 +394,35 @@ type WorkflowRuntimePatch = {
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
     signal?: AbortSignal;
   }) => Promise<RuntimePatchCreateFormatCandidates>;
+};
+
+type WorkflowRuntimeIngest = {
+  // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
+  // ROMs), and describe patches — one consolidated call the drop/staging flow routes on. Archive ROM
+  // leaves are adopted into `outputs` (path-backed PublicOutputs carrying the ingest checksums + disc
+  // structure), aligned with `result.assets` for non-`copiedInPlace` assets, so the staging pipeline
+  // reuses its existing PublicOutput→PatchFileInstance bridge. A bare ROM (`copiedInPlace`) yields no
+  // output — the caller keeps its own source ref and uses the result's checksums.
+  run?: (input: {
+    source: unknown;
+    fileName?: string;
+    checksumAlgorithms?: string[];
+    // Pin which archive payload(s) to extract (the resolved "keep one ROM" entry). Empty/omitted lets
+    // ingest auto-pick a single logical payload or prompt the host when ambiguous.
+    select?: string[];
+    interactiveSelectionEnabled?: boolean;
+    // For a multi-track CHD CD: force per-track split BIN (true) or single merged BIN (false). Omit
+    // to let ingest ask the host interactively when the disc offers the choice.
+    splitBin?: boolean;
+    logLevel?: LogLevel;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+    onProgress?: (progress: WorkflowRuntimeProgress) => void;
+    signal?: AbortSignal;
+    // Archive PATCH leaves are adopted into `patchOutputs` (aligned with `result.patches`), same as ROM
+    // leaves into `outputs`, so the patch-staging path reuses the PublicOutput→PatchFileInstance
+    // bridge. A bare patch yields no `patchOutput` (its leaf is the staged source, cleaned up here —
+    // the caller keeps its own file and uses the descriptor's metadata).
+  }) => Promise<{ result: ParsedIngestResult; outputs: PublicOutput[]; patchOutputs: PublicOutput[] }>;
 };
 
 type WorkflowRuntimeTrim = {
@@ -480,6 +490,11 @@ type WorkflowRuntime = {
   compression: WorkflowRuntimeCompression;
   binary: WorkflowRuntimeBinary;
   checksum: WorkflowRuntimeChecksum;
+  ingest?: WorkflowRuntimeIngest;
+  /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
+   * one unit even though each file is staged independently. Optional — runtimes without a batch planner
+   * omit it and ops are admitted as they arrive. */
+  noteIoBatch?: (jobSizes: number[]) => void;
   output: WorkflowRuntimeOutput;
   publicOutput: RuntimePublicOutputAdapter;
   patch: WorkflowRuntimePatch;

@@ -251,3 +251,181 @@ describe("createOperationScheduler", () => {
     await pb;
   });
 });
+
+describe("createOperationScheduler — I/O lane (Rust plan)", () => {
+  const io = (jobSizeBytes: number, paths: string[] = []) => ({
+    io: true,
+    jobSizeBytes,
+    paths: new Set(paths),
+    threads: 0,
+  });
+
+  // Stub planner that puts every job in one concurrent wave (full overlap), splitting the budget evenly.
+  const planAllTogether = (budget: number) => async (sizes: number[]) => ({
+    waves: [{ jobs: sizes.map((_, index) => index), threadsPerJob: Math.max(1, Math.floor(budget / sizes.length)) }],
+  });
+
+  it("admits an I/O wave the planner groups together, even when the jobs arrive staggered", async () => {
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 4,
+      planBatch: planAllTogether(4),
+      totalThreadBudget: 4,
+    });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    const pa = scheduler.schedule(io(100), () => a.promise);
+    await tick();
+    const pb = scheduler.schedule(io(100), () => b.promise);
+    await tick();
+    expect(scheduler.inFlightCount).toBe(2);
+    a.resolve("a");
+    b.resolve("b");
+    expect(await pa).toBe("a");
+    expect(await pb).toBe("b");
+  });
+
+  it("plans a noted simultaneous drop as one batch so the first job's threads reflect the whole drop", async () => {
+    const planSeen: number[][] = [];
+    const planBatch = async (sizes: number[]) => {
+      planSeen.push([...sizes]);
+      return {
+        waves: [{ jobs: sizes.map((_, index) => index), threadsPerJob: Math.max(1, Math.floor(6 / sizes.length)) }],
+      };
+    };
+    const scheduler = createOperationScheduler({ maxConcurrency: 6, planBatch, totalThreadBudget: 6 });
+    // The drop point declares all three sizes up front; only the first file reaches the scheduler now.
+    scheduler.noteIoBatch([100, 100, 100]);
+    const a = deferred<string>();
+    let aThreads = 0;
+    const pa = scheduler.schedule(io(100), (threads) => {
+      aThreads = threads;
+      return a.promise;
+    });
+    await tick();
+    expect(planSeen[0]).toHaveLength(3); // first plan saw the whole drop, not just the one arrived job
+    expect(aThreads).toBe(2); // floor(6/3) — the first job starts at the batch's per-job share, not full 6
+    a.resolve("a");
+    await pa;
+  });
+
+  it("gives a lone (un-noted) I/O job the whole budget", async () => {
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 6,
+      planBatch: planAllTogether(6),
+      totalThreadBudget: 6,
+    });
+    const a = deferred<string>();
+    let aThreads = 0;
+    const pa = scheduler.schedule(io(100), (threads) => {
+      aThreads = threads;
+      return a.promise;
+    });
+    await tick();
+    expect(aThreads).toBe(6); // no noted batch + nothing else in flight → full budget
+    a.resolve("a");
+    await pa;
+  });
+
+  it("defers an I/O job the planner places in a later wave until the first finishes", async () => {
+    // Only the first job of any round is concurrently runnable; the rest land in a later wave.
+    const planFirstOnly = async (sizes: number[]) => ({
+      waves: [
+        { jobs: [0], threadsPerJob: 4 },
+        { jobs: sizes.slice(1).map((_, index) => index + 1), threadsPerJob: 4 },
+      ],
+    });
+    const scheduler = createOperationScheduler({ maxConcurrency: 4, planBatch: planFirstOnly, totalThreadBudget: 4 });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    let bStarted = false;
+    const pa = scheduler.schedule(io(100), () => a.promise);
+    await tick();
+    const pb = scheduler.schedule(io(100), async () => {
+      bStarted = true;
+      return b.promise;
+    });
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    expect(bStarted).toBe(false);
+    a.resolve("a");
+    await pa;
+    await tick();
+    expect(bStarted).toBe(true);
+    b.resolve("b");
+    await pb;
+  });
+
+  it("never overlaps I/O jobs that share an OPFS path even when the planner groups them", async () => {
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 4,
+      planBatch: planAllTogether(4),
+      totalThreadBudget: 4,
+    });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    let bStarted = false;
+    const pa = scheduler.schedule(io(100, ["/work/a.iso"]), () => a.promise);
+    await tick();
+    const pb = scheduler.schedule(io(100, ["/work/a.iso"]), async () => {
+      bStarted = true;
+      return b.promise;
+    });
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    expect(bStarted).toBe(false);
+    a.resolve("a");
+    await pa;
+    await tick();
+    expect(bStarted).toBe(true);
+    b.resolve("b");
+    await pb;
+  });
+
+  it("falls back to serial admission when a planning round-trip fails", async () => {
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 4,
+      planBatch: async () => {
+        throw new Error("plan boom");
+      },
+      totalThreadBudget: 4,
+    });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    let bStarted = false;
+    const pa = scheduler.schedule(io(100), () => a.promise);
+    const pb = scheduler.schedule(io(100), async () => {
+      bStarted = true;
+      return b.promise;
+    });
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    expect(bStarted).toBe(false);
+    a.resolve("a");
+    await pa;
+    await tick();
+    expect(bStarted).toBe(true);
+    b.resolve("b");
+    await pb;
+  });
+
+  it("admits I/O ops serially when no planner is configured", async () => {
+    const scheduler = createOperationScheduler({ maxConcurrency: 4, totalThreadBudget: 4 });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    let bStarted = false;
+    const pa = scheduler.schedule(io(100), () => a.promise);
+    const pb = scheduler.schedule(io(100), async () => {
+      bStarted = true;
+      return b.promise;
+    });
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    expect(bStarted).toBe(false);
+    a.resolve("a");
+    await pa;
+    await tick();
+    expect(bStarted).toBe(true);
+    b.resolve("b");
+    await pb;
+  });
+});

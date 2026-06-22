@@ -1,6 +1,6 @@
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 
-type InputPreparationRuntime = Pick<WorkflowRuntime, "compression" | "name" | "workerIo">;
+type InputPreparationRuntime = Pick<WorkflowRuntime, "compression" | "ingest" | "name" | "workerIo">;
 const DEFAULT_INPUT_PREPARATION_RUNTIME: Pick<WorkflowRuntime, "name"> = {
   name: "browser",
 };

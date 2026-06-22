@@ -1076,7 +1076,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return {
       compatibility: cloneValue(this.settings.compatibility || {}),
       input: cloneValue(this.settings.input || {}),
-      limits: cloneValue(this.settings.limits || {}),
       logging: cloneValue(this.settings.logging || {}),
       onLog: this.settings.logging?.sink,
       onProgress,

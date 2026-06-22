@@ -113,20 +113,6 @@ const resolvePatchApplyThreadArg = (
   };
 };
 
-type RomWeaverProbePatchDetails = {
-  format: string | null;
-  minimum_source_size: number | null;
-  patch_crc32: number | null;
-  record_count: number | null;
-  source_crc32: number | null;
-  source_size: number | null;
-  source_window_count: number | null;
-  target_crc32: number | null;
-  target_size: number | null;
-  target_window_count: number | null;
-  window_checksum_count: number | null;
-};
-
 const toNullableInt = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   if (typeof value !== "string") return null;
@@ -161,26 +147,6 @@ const toOptionalChecksumHex = (value: unknown): string | undefined => {
 const toOptionalInt = (value: unknown): number | undefined => {
   const normalized = toNullableInt(value);
   return normalized === null ? undefined : normalized;
-};
-
-const getPatchDetailsFromProbe = (result: RomWeaverRunJsonResult): RomWeaverProbePatchDetails => {
-  const terminal = getTerminalEvent(result);
-  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
-  const patch = asRecord(details?.patch);
-  const formatValue = patch?.format ?? patch?.patch_format ?? details?.format;
-  return {
-    format: typeof formatValue === "string" && formatValue.trim() ? formatValue.trim() : null,
-    minimum_source_size: toNullableInt(patch?.minimum_source_size ?? patch?.minimumSourceSize),
-    patch_crc32: toNullableUint32(patch?.patch_crc32 ?? patch?.patchCrc32),
-    record_count: toNullableInt(patch?.record_count ?? patch?.recordCount),
-    source_crc32: toNullableUint32(patch?.source_crc32 ?? patch?.sourceCrc32),
-    source_size: toNullableInt(patch?.source_size ?? patch?.sourceSize),
-    source_window_count: toNullableInt(patch?.source_window_count ?? patch?.sourceWindowCount),
-    target_crc32: toNullableUint32(patch?.target_crc32 ?? patch?.targetCrc32),
-    target_size: toNullableInt(patch?.target_size ?? patch?.targetSize),
-    target_window_count: toNullableInt(patch?.target_window_count ?? patch?.targetWindowCount),
-    window_checksum_count: toNullableInt(patch?.window_checksum_count ?? patch?.windowChecksumCount),
-  };
 };
 
 const normalizePatchValidationChecksumEntries = (value: unknown): string[] => {
@@ -268,10 +234,8 @@ const readPatchCreateFormatCandidates = (result: RomWeaverRunJsonResult): Runtim
   };
 };
 
-export type { RomWeaverProbePatchDetails };
 export {
   getPatchApplyOutputFileName,
-  getPatchDetailsFromProbe,
   getPatchValidationRequirements,
   normalizePatchValidationChecksumEntries,
   readPatchCreateFormatCandidates,

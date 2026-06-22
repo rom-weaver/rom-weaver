@@ -27,7 +27,6 @@ import {
   resolveChdSplitBinSelection,
   resolveCompressionRomAutoPickEntryName,
 } from "./input-archive-disc-groups.ts";
-import { assertDescentOutputLimits, preflightArchiveLimitsForDescent } from "./input-archive-limits.ts";
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
@@ -212,7 +211,6 @@ const getCompressionRuntimeOptions = (
   ...(typeof overrides.interactiveSelectionEnabled === "boolean"
     ? { interactiveSelectionEnabled: overrides.interactiveSelectionEnabled }
     : {}),
-  ...(options?.limits ? { limits: options.limits } : {}),
   ...(kindFilter.romFilter ? { romFilter: true } : {}),
   ...(kindFilter.patchFilter ? { patchFilter: true } : {}),
   logLevel: options?.logging?.level,
@@ -465,9 +463,6 @@ const normalizeSelectedEntryNames = (entryNames: readonly string[] | undefined):
     .map((entryName) => String(entryName || "").trim())
     .filter((entryName) => !!entryName);
 
-const findArchiveEntryByName = (entries: ArchiveEntryLike[], entryName: string) =>
-  entries.find((entry) => entry.filename === entryName || getBaseFileName(entry.filename) === entryName);
-
 /** Resolve a single compressed input/patch FILE with one recursive `extract` (no `list`): the Rust
  * core descends nested containers and resolves a single payload per level via the interactive
  * callback, returning the bottom leaf file. Used by the patch (and rom file-staging) path. */
@@ -501,7 +496,6 @@ const resolveArchiveInputFileByDescent = async (
   const selectedEntries = normalizeSelectedEntryNames(
     chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
   );
-  await preflightArchiveLimitsForDescent(file, options, runtime, kindFilter, selectedEntries);
   traceArchivePreparation(options, "input.archive.file.descent.start", {
     compressionFormat,
     file: describeArchiveFileForTrace(file),
@@ -583,10 +577,19 @@ const readSucceededExtractStep = (progressDetails: unknown): ExtractStepDetails 
   return step as unknown as ExtractStepDetails;
 };
 
-/** Discover a compressed archive's input assets with a SINGLE recursive `extract` (no `list`): the
- * Rust core descends nested containers, resolving one payload per level via the interactive selection
- * callback (auto-pick when unambiguous, prompt when not), and returns the bottom leaf output(s) with
- * checksums. Builds rom assets, or a cue group when the leaf is a CD image (cue + tracks). */
+// Map ingest's detected optical medium to the CHD recompress mode the output path keys off.
+const discFormatToChdMode = (discFormat: string | undefined): ChdCodecMode | undefined => {
+  const lower = String(discFormat || "").toLowerCase();
+  if (lower === "dvd") return "dvd";
+  if (lower === "cd" || lower.includes("gd")) return "cd";
+  return undefined;
+};
+
+/** Discover a compressed archive's input assets with a SINGLE recursive ingest (classify + descend +
+ * checksum): the Rust core descends nested containers, resolving one payload per level (auto-pick when
+ * unambiguous, host prompt when not, plus the multi-track CHD CD split-bin prompt), and returns the
+ * bottom leaf output(s) with checksums. Builds rom assets, or a cue group when the leaf is a CD image
+ * (cue + tracks). */
 const resolveArchiveInputAssetsByDescent = async (
   archiveFile: PatchFileInstance,
   options: ApplyWorkflowOptions | undefined,
@@ -595,79 +598,52 @@ const resolveArchiveInputAssetsByDescent = async (
   selectedInputEntryName?: string,
 ): Promise<InputAsset[]> => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
-  if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
+  if (!resolvedRuntime.ingest?.run) throw new Error("Ingest runtime is unavailable");
   const compressionFormat = getCompressionFormat(archiveFile);
-  const chdSelection = await resolveChdSplitBinSelection({
-    archiveFile,
-    compressionFormat,
-    kindFilter: { romFilter: true },
-    options,
-    runtime,
-    selectedEntryName: selectedInputEntryName,
-  });
-  // With no pinned entry the Rust descend keeps a loose bin+cue/gdi disc whole on its own (a disc
-  // is one logical payload, so the sheet + every track extract together — see the
-  // `extract_emits_disc_group_structure` cli_smoke proof), so the host no longer pre-expands the
-  // disc group itself.
-  const selectedEntries = normalizeSelectedEntryNames(
-    chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
-  );
-  await preflightArchiveLimitsForDescent(archiveFile, options, runtime, { romFilter: true }, selectedEntries);
+  // A resolved keep-one selection pins the payload; otherwise ingest auto-picks a single logical
+  // payload (a loose bin+cue/gdi disc stays whole) or prompts the host. Multi-track CHD CD split-bin
+  // is decided by ingest's own host prompt — no pre-resolution here.
+  const select = normalizeSelectedEntryNames(selectedInputEntryName ? [selectedInputEntryName] : []);
   traceArchivePreparation(options, "input.archive.descent.start", {
     compressionFormat,
     file: describeArchiveFileForTrace(archiveFile),
-    selectedEntries,
+    selectedEntries: select,
     sourceIndex,
   });
-  // Capture each `extract-step` the Rust descent emits (one per descended level), so the existing
-  // extraction-tree UI can show the nested archive chain. Each step carries its full `source` path
-  // and the `out_dir` it extracted into; the UI relativizes each level's source (and the final leaf)
-  // against the longest matching `out_dir` to show the path *inside* its immediate parent archive.
+  // Capture each `extract-step` ingest emits (one per descended level) for the extraction-tree UI.
+  // Each step carries its full `source` path and the `out_dir` it extracted into; the UI relativizes
+  // each level's source against the longest matching `out_dir` to show the path inside its parent.
   const steps: DescentExtractStep[] = [];
-  let totalDescentOutputBytes = 0;
-  const runtimeOptions = getCompressionRuntimeOptions(
-    options,
-    { chdSplitBin: chdSelection.chdSplitBin },
-    { romFilter: true },
-  );
-  const forwardProgress = runtimeOptions.onProgress;
-  runtimeOptions.onProgress = (progress) => {
-    const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
-    const step = readSucceededExtractStep(details);
-    if (step) {
-      const outputs = Array.isArray(step.outputs) ? step.outputs : [];
-      const outputSize = outputs.reduce((total, output) => total + toFiniteBytes(output?.size_bytes), 0);
-      totalDescentOutputBytes += outputSize;
-      assertDescentOutputLimits(
-        options,
-        typeof step.depth === "number" ? step.depth : steps.length,
-        outputs,
-        totalDescentOutputBytes,
-      );
-      steps.push({
-        depth: typeof step.depth === "number" ? step.depth : steps.length,
-        format: typeof step.format === "string" && step.format ? step.format : compressionFormat,
-        outDir: typeof step.out_dir === "string" ? step.out_dir : "",
-        outputSize,
-        source: typeof step.source === "string" ? step.source : "",
-        sourceName: getBaseFileName(step.source_name),
-        ...(step.extract_time_ms !== null &&
-        step.extract_time_ms !== undefined &&
-        Number.isFinite(Number(step.extract_time_ms))
-          ? { extractTimeMs: Number(step.extract_time_ms) }
-          : {}),
-      });
-    }
-    forwardProgress?.(progress as never);
-  };
-  const result = await resolvedRuntime.compression.extract({
-    descendSinglePayload: true,
-    entries: selectedEntries,
-    format: compressionFormat,
-    options: runtimeOptions,
+  const { result: ingestResult, outputs } = await resolvedRuntime.ingest.run({
+    fileName: archiveFile.fileName,
     source: getCompressionRuntimeSource(archiveFile),
+    ...(select.length ? { select } : {}),
+    logLevel: options?.logging?.level,
+    onLog: options?.onLog,
+    onProgress: (progress) => {
+      const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
+      const step = readSucceededExtractStep(details);
+      if (step) {
+        const stepOutputs = Array.isArray(step.outputs) ? step.outputs : [];
+        const outputSize = stepOutputs.reduce((total, output) => total + toFiniteBytes(output?.size_bytes), 0);
+        steps.push({
+          depth: typeof step.depth === "number" ? step.depth : steps.length,
+          format: typeof step.format === "string" && step.format ? step.format : compressionFormat,
+          outDir: typeof step.out_dir === "string" ? step.out_dir : "",
+          outputSize,
+          source: typeof step.source === "string" ? step.source : "",
+          sourceName: getBaseFileName(step.source_name),
+          ...(step.extract_time_ms !== null &&
+          step.extract_time_ms !== undefined &&
+          Number.isFinite(Number(step.extract_time_ms))
+            ? { extractTimeMs: Number(step.extract_time_ms) }
+            : {}),
+        });
+      }
+      options?.onProgress?.(progress as never);
+    },
+    ...(options?.signal ? { signal: options.signal } : {}),
   });
-  const outputs = Array.isArray(result.outputs) ? result.outputs : [];
   if (!outputs.length) throw new Error(`${archiveFile.fileName || "Archive"} produced no extractable payload`);
   const files = await Promise.all(
     outputs.map(async (output, index) => {
@@ -680,7 +656,9 @@ const resolveArchiveInputAssetsByDescent = async (
         preferExternalFilePath: !shouldMaterializeForSyncRead,
       });
       file.fileName = fileName;
-      if (chdSelection.chdMode) file._chdMode = chdSelection.chdMode;
+      // The CHD recompress path keys off `_chdMode`; ingest reports each leaf's optical medium.
+      const chdMode = discFormatToChdMode(ingestResult.assets[index]?.discFormat);
+      if (chdMode) file._chdMode = chdMode;
       return file;
     }),
   );
@@ -859,8 +837,8 @@ const archiveHasSelectablePatches = async (
 };
 
 // Shared low-level archive primitives consumed by the sibling modules split out of this orchestrator
-// (input-archive-limits, input-archive-disc-groups, input-archive-patch-leaves). Not part of the
-// public input-preparation surface — internal to the input-archive cluster.
+// (input-archive-disc-groups, input-archive-patch-leaves). Not part of the public input-preparation
+// surface — internal to the input-archive cluster.
 export type {
   ArchiveEntryLike,
   ChdCodecMode,
@@ -877,18 +855,14 @@ export {
   extractArchiveEntry,
   extractArchiveEntryBytes,
   filterNestedContainerEntries,
-  findArchiveEntryByName,
   getCompressionFormat,
-  getCompressionRuntimeOptions,
   getCompressionRuntimeSource,
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
-  isCompressionEntryFileName,
   isCompressionFile,
   listCompressionEntries,
   listCompressionEntryResult,
   listDroppedArchiveEntryNames,
-  normalizeSelectedEntryNames,
   prepareAutoPatchInputs,
   resolveArchiveInput,
   resolveArchiveInputAssets,

@@ -240,10 +240,19 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       return { role, sources, stages: [view], synthetic: false, view };
     }
 
-    const stages: Array<SharedRomStagedSource<TSource, TState>> = [];
-    for (let index = 0; index < sources.length; index += 1) {
-      stages.push(await this.stageSource(this.createInitialSource(role, sources[index] as TSource, index)));
-    }
+    // Declare the whole drop's source sizes up front (known synchronously here) so the Rust batch plan
+    // sees every file at once. Each source stages independently and reaches the scheduler staggered, so
+    // without this the first file would be planned alone and start at the full thread budget; with it,
+    // the first job's thread share already reflects the full simultaneous drop.
+    this.runtime.noteIoBatch?.(sources.map((source) => Math.max(0, getBinarySourceSize(source as never) || 0)));
+    // Independent sources stage concurrently: each `stageSource` runs its own ingest through
+    // `runRomWeaverJson`, whose OperationScheduler admits the I/O ops via that Rust plan (memory fit +
+    // which jobs overlap) and gates OPFS path exclusivity. Firing them in one tick lets two ROMs
+    // extract+checksum at once; the plan serializes back down whenever the combined working set would
+    // exhaust the memory ceiling. Promise.all preserves input order, so `stages[i]` matches `sources[i]`.
+    const stages = await Promise.all(
+      sources.map((source, index) => this.stageSource(this.createInitialSource(role, source as TSource, index))),
+    );
     return this.buildSyntheticSession(role, sources, stages);
   }
 

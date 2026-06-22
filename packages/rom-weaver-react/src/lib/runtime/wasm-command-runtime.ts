@@ -4,6 +4,7 @@ import {
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
+import type { ParsedIngestResult } from "../../types/ingest.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type {
   RuntimePatchApplyWorkerInput,
@@ -44,10 +45,9 @@ import {
   normalizeCompressionLevelProfile,
 } from "./compression-codec-args.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
-import type { RomWeaverProbePatchDetails } from "./patch-run-resolution.ts";
+import { parseIngestResult } from "./ingest-result.ts";
 import {
   getPatchApplyOutputFileName,
-  getPatchDetailsFromProbe,
   getPatchValidationRequirements,
   normalizePatchValidationChecksumEntries,
   readPatchCreateFormatCandidates,
@@ -351,46 +351,6 @@ const runRomWeaverListWorker = async (
   }
   const entries = getContainerEntriesFromList(result);
   return { chdMediaKind: getChdMediaKindFromList(result), entries };
-};
-
-const runRomWeaverProbePatchWorker = async (
-  input: {
-    logLevel?: LogLevel | string;
-    patchFilter?: boolean;
-    sourcePath: string;
-    signal?: AbortSignal;
-  },
-  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
-  onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<RomWeaverProbePatchDetails> => {
-  const sourcePath = String(input.sourcePath || "").trim();
-  if (!sourcePath) throw new Error("Patch probe source path is required");
-  const command = createRomWeaverCommand("probe", {
-    ...(input.patchFilter ? { patch_filter: true } : {}),
-    source: sourcePath,
-  });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe-patch dispatch", {
-    command,
-    patchFilter: !!input.patchFilter,
-    sourcePath,
-  });
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({
-      logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
-      onLog,
-      signal: input.signal,
-    }),
-  );
-  if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Patch probe failed");
-    throw withRomWeaverFailureKind(new Error(failureMessage), result);
-  }
-  return getPatchDetailsFromProbe(result);
 };
 
 type LibretroSidecarMatch = { name: string; order: number };
@@ -956,13 +916,177 @@ const runRomWeaverChecksumWorker = async (
   };
 };
 
+// Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
+// ROMs), and describe patches — the consolidated `ingest` command. One round-trip replaces the
+// webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
+const invokeRomWeaverIngestWorker = async (
+  input: {
+    checksumAlgorithms?: string[];
+    interactiveSelectionEnabled?: boolean;
+    invalidateMountCacheBeforeRun?: boolean;
+    knownInputPaths?: string[];
+    logLevel?: LogLevel | string;
+    noIgnore?: boolean;
+    noNestedExtract?: boolean;
+    outDirPath: string;
+    preopenOutputPaths?: string[];
+    select?: string[];
+    signal?: AbortSignal;
+    sourcePath: string;
+    // For a multi-track CHD CD: force per-track split BIN (true) or a single merged BIN (false).
+    // Omit to let the ingest command ask the host interactively when the disc offers the choice.
+    splitBin?: boolean;
+    workerThreads?: RuntimeThreadBudgetInput;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<ParsedIngestResult> => {
+  const sourcePath = String(input.sourcePath || "").trim();
+  if (!sourcePath) throw new Error("Ingest source path is required");
+  const outDirPath = String(input.outDirPath || "").trim();
+  if (!outDirPath) throw new Error("Ingest output directory is required");
+  const select: string[] = [];
+  for (const selected of Array.isArray(input.select) ? input.select : []) {
+    const value = String(selected || "").trim();
+    if (value) select.push(value);
+  }
+  const checksum: string[] = [];
+  for (const algorithm of Array.isArray(input.checksumAlgorithms) ? input.checksumAlgorithms : []) {
+    const value = String(algorithm || "")
+      .trim()
+      .toLowerCase();
+    if (value) checksum.push(value);
+  }
+  const threadArg = toThreadBudget(input.workerThreads);
+  const command = createRomWeaverCommand("ingest", {
+    out_dir: outDirPath,
+    source: sourcePath,
+    ...(select.length ? { select } : {}),
+    ...(input.noIgnore ? { no_ignore: true } : {}),
+    ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
+    ...(typeof input.splitBin === "boolean" ? { split_bin: input.splitBin } : {}),
+    ...(checksum.length ? { checksum } : {}),
+    ...(threadArg ? { threads: threadArg } : {}),
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson ingest dispatch", {
+    checksum,
+    command,
+    outDirPath,
+    selectCount: select.length,
+    sourcePath,
+    threadArg,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      ...(typeof input.interactiveSelectionEnabled === "boolean"
+        ? { interactiveSelectionEnabled: input.interactiveSelectionEnabled }
+        : {}),
+      invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      preopenOutputPaths: input.preopenOutputPaths,
+      signal: input.signal,
+    }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    await throwRomWeaverFailureWithBrowserOutputContext(
+      result,
+      "Ingest failed",
+      `ingest \`${getPathBaseName(sourcePath)}\``,
+    );
+  }
+  const terminal = getLastEvent(result);
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  const parsed = parseIngestResult(details);
+  if (!parsed) {
+    throw withRomWeaverFailureKind(new Error("Ingest result was missing or malformed"), result);
+  }
+  return parsed;
+};
+
+/** One concurrently-runnable group of a {@link RomWeaverBatchPlan}: the original job indices that may
+ * run together and the worker-thread count each should use (the Rust planner's even split of the
+ * budget for the group). */
+type RomWeaverBatchPlanWave = { jobs: number[]; threadsPerJob: number };
+/** A concurrent extraction schedule from the Rust planner: ordered waves run one after another, the
+ * jobs within a wave run together. Mirrors Rust `BatchPlan`; parsed loosely (no typegen dependency). */
+type RomWeaverBatchPlan = { waves: RomWeaverBatchPlanWave[] };
+
+const parseRomWeaverBatchPlan = (details: unknown): RomWeaverBatchPlan | undefined => {
+  const plan = asRecord(asRecord(details)?.extract_batch_plan);
+  if (!plan) return undefined;
+  const waves: RomWeaverBatchPlanWave[] = [];
+  for (const waveValue of Array.isArray(plan.waves) ? plan.waves : []) {
+    const wave = asRecord(waveValue);
+    if (!wave) continue;
+    const jobs: number[] = [];
+    for (const jobValue of Array.isArray(wave.jobs) ? wave.jobs : []) {
+      const job = Number(jobValue);
+      if (Number.isInteger(job) && job >= 0) jobs.push(job);
+    }
+    const threadsPerJob = Math.max(1, Math.floor(Number(wave.threads_per_job)) || 1);
+    waves.push({ jobs, threadsPerJob });
+  }
+  return { waves };
+};
+
+// Plan a concurrent extraction schedule via the shared Rust planner (`plan-extract-batch`): the single
+// source of truth the native batch executor also uses, so both group jobs identically. The browser
+// passes only what it alone knows — its resolved (mobile-capped) memory ceiling and thread budget —
+// plus each job's source size; Rust owns the working-set multiplier, wave packing, and thread split.
+// This command is thread-less and pure; the runner runs it OUTSIDE the OperationScheduler (see
+// rom-weaver-runner) because the scheduler itself calls this to decide admission.
+const invokeRomWeaverPlanExtractBatchWorker = async (input: {
+  jobSizes: number[];
+  logLevel?: LogLevel | string;
+  maxConcurrency?: number;
+  memoryCeilingBytes?: number;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+  signal?: AbortSignal;
+  threads?: RuntimeThreadBudgetInput;
+}): Promise<RomWeaverBatchPlan> => {
+  const jobSizes = (Array.isArray(input.jobSizes) ? input.jobSizes : []).map((size) =>
+    BigInt(Math.max(0, Math.floor(Number(size) || 0))),
+  );
+  const threadArg = toThreadBudget(input.threads);
+  const command = createRomWeaverCommand("plan-extract-batch", {
+    job_sizes: jobSizes,
+    ...(threadArg ? { threads: threadArg } : {}),
+    ...(typeof input.maxConcurrency === "number" && input.maxConcurrency > 0
+      ? { max_concurrency: Math.floor(input.maxConcurrency) }
+      : {}),
+    ...(typeof input.memoryCeilingBytes === "number" && input.memoryCeilingBytes > 0
+      ? { memory_ceiling_bytes: BigInt(Math.floor(input.memoryCeilingBytes)) }
+      : {}),
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({ logLevel: input.logLevel, onLog: input.onLog, signal: input.signal }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Extract batch planning failed", "plan-extract-batch");
+  }
+  const terminal = getLastEvent(result);
+  const plan = parseRomWeaverBatchPlan(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
+  if (!plan) throw withRomWeaverFailureKind(new Error("Extract batch plan was missing or malformed"), result);
+  return plan;
+};
+
 export {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
+  invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
+  invokeRomWeaverPlanExtractBatchWorker,
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
@@ -970,6 +1094,5 @@ export {
   runRomWeaverChecksumWorker,
   runRomWeaverListWorker,
   runRomWeaverMatchSidecarsWorker,
-  runRomWeaverProbePatchWorker,
   selectRomWeaverOutputPath,
 };

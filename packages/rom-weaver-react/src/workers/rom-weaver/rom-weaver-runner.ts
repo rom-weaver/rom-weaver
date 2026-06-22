@@ -413,10 +413,30 @@ const getOperationScheduler = (): OperationScheduler => {
     operationScheduler = createOperationScheduler({
       maxConcurrency: threadBudget,
       memoryCeiling: resolveMemoryCeilingBytes(),
+      // I/O ops (extract/ingest/checksum) are admitted by the shared Rust planner: the browser passes
+      // only its own (mobile-capped) memory ceiling and thread budget plus each job's source size; Rust
+      // owns the multiplier, the memory fit, and which jobs overlap. The lazy import breaks the
+      // runner <-> wasm-command-runtime module cycle; `plan-extract-batch` bypasses the scheduler (see
+      // the dispatch below), so this call cannot re-enter it.
+      planBatch: async (jobSizes, planOptions) => {
+        const { invokeRomWeaverPlanExtractBatchWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
+        return invokeRomWeaverPlanExtractBatchWorker({
+          jobSizes,
+          memoryCeilingBytes: planOptions.memoryCeilingBytes,
+          threads: planOptions.threadBudget,
+        });
+      },
       totalThreadBudget: threadBudget,
     });
   }
   return operationScheduler;
+};
+
+// Declare a simultaneous I/O drop (its source sizes) so the scheduler's first plan call sees the whole
+// batch even though each file reaches the scheduler staggered (staged independently). Called by the
+// drop/staging layer, which alone knows every file's size up front.
+const noteRomWeaverIoBatch = (jobSizes: number[]) => {
+  getOperationScheduler().noteIoBatch(Array.isArray(jobSizes) ? jobSizes : []);
 };
 
 const resetRomWeaverRunner = async (options: { terminate?: boolean } = {}) => {
@@ -558,7 +578,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   // operations whose combined memory would exhaust the device.
   const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
 
-  const dispatchRun = async (): Promise<RomWeaverRunnerRunJsonResult> => {
+  const dispatchRun = async (assignedThreads: number): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
     const lease = await getRunnerPool().acquire({ workerThreads: runnerCreateWorkerThreads });
     if (signal?.aborted) {
@@ -586,25 +606,21 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           signal.addEventListener("abort", abortRun, { once: true });
           removeAbortListener = () => signal.removeEventListener("abort", abortRun);
         }
-        // Hand this operation its fair slice of the shared thread budget. By the time dispatch runs,
-        // every sibling fired in the same tick has already been admitted (acquire is async), so the
-        // count reflects the true concurrency: a lone op keeps the whole budget, but K concurrent ops
-        // each cap to budget/K so their WASI thread pools sum to the budget instead of each grabbing it
-        // whole (which oversubscribed the pool → `os error 6` → single-thread fallback). Divide only
-        // across *thread-requesting* ops: a concurrent 0-thread op (a probe, or a single-threaded patch
-        // validate/apply staged alongside a heavy extract) competes for a runner but not for the thread
-        // pool, so counting it would needlessly halve the heavy op's threads. This is the browser
-        // counterpart of the Rust planner's fair_thread_allotment; the scheduler's memory/concurrency
-        // gates above already decided *which* ops may overlap.
-        const concurrency = Math.max(1, getOperationScheduler().inFlightThreadedCount);
+        // Force this op to the worker-thread count the scheduler assigned it. For an I/O op that's the
+        // Rust plan's wave `threadsPerJob` (`fair_thread_allotment` over the whole admitted wave — incl.
+        // a noted simultaneous drop); for a non-I/O op it's the op's own reservation. A full-budget
+        // assignment is left as "auto" (no force). This keeps K concurrent jobs' WASI thread pools
+        // summing to the budget instead of each grabbing it whole (which oversubscribed the pool →
+        // `os error 6` → single-thread fallback). The scheduler already decided *which* ops overlap.
+        const forcedThreads = Math.max(1, Math.floor(assignedThreads));
         const dispatchInput =
-          romWeaverCommandSupportsThreads(command) && concurrency > 1
-            ? withRomWeaverForcedThreads(commandOrRequest, Math.max(1, Math.floor(threadBudget / concurrency)))
+          romWeaverCommandSupportsThreads(command) && forcedThreads < threadBudget
+            ? withRomWeaverForcedThreads(commandOrRequest, forcedThreads)
             : commandOrRequest;
         if (dispatchInput !== commandOrRequest) {
           emitRunnerTraceLine(
             options,
-            `runJson thread allotment concurrency=${concurrency} threadBudget=${threadBudget} threadsPerOp=${Math.max(1, Math.floor(threadBudget / concurrency))}`,
+            `runJson thread allotment threadsPerOp=${forcedThreads} threadBudget=${threadBudget}`,
           );
         }
         lease.runner.runJson(dispatchInput, runOptions).then(
@@ -655,10 +671,27 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   // a preceding probe `list`) closes the drop -> done arc.
   const submittedAtMs = perfNow();
   const threadCapable = romWeaverCommandSupportsThreads(command);
-  const result = await getOperationScheduler().schedule(
-    { bytes: operationBytes, label: command.type, paths: operationPaths, threads: operationThreads },
-    dispatchRun,
-  );
+  // `plan-extract-batch` is the scheduler's OWN decision oracle (the browser asks Rust how to group the
+  // pending I/O ops). It is thread-less and pure, so it bypasses the scheduler entirely — routing it
+  // through schedule() would re-enter the scheduler from inside its admission step and deadlock.
+  // Extract/ingest/checksum are I/O-bound: admit them via the Rust batch plan (it owns memory fit and
+  // which jobs overlap) rather than the local thread/memory gates. The runner's per-dispatch
+  // `budget / inFlightThreadedCount` split then gives each concurrent job its fair thread slice.
+  const ioCommand = command.type === "extract" || command.type === "ingest" || command.type === "checksum";
+  const result =
+    command.type === "plan-extract-batch"
+      ? await dispatchRun(operationThreads)
+      : await getOperationScheduler().schedule(
+          {
+            bytes: operationBytes,
+            io: ioCommand,
+            jobSizeBytes: inputBytes,
+            label: command.type,
+            paths: operationPaths,
+            threads: operationThreads,
+          },
+          dispatchRun,
+        );
   recordCommandLatency({
     commandType: command.type,
     submittedAtMs,
@@ -838,6 +871,7 @@ export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,
   markRomWeaverRunnerStale,
+  noteRomWeaverIoBatch,
   recycleWarmRomWeaverRunner,
   resetRomWeaverRunner,
   runRomWeaverJson,
