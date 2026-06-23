@@ -33,6 +33,7 @@ import {
   getGeneratedCompressionProfileLevel,
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
+import { applyCompressionOutputFileName } from "./container-format-registry.ts";
 import { isLikelyDiscImageSource } from "./disc-image-policy.ts";
 import {
   CHD_COMPRESSION_INPUT_EXTENSIONS,
@@ -399,11 +400,6 @@ const OutputCompressionManager = (() => {
     const selected = _normalizeOutputCompression(compression);
     return selected;
   };
-  const _appendFileExtension = (fileName: string, extension: string | number | boolean | null | undefined): string => {
-    const normalizedExtension = String(extension || "").replace(/^\./, "");
-    if (!normalizedExtension) return fileName;
-    return `${fileName}.${normalizedExtension}`;
-  };
   const _getZ3dsOutputExtension = (source: CompressionSource | null | undefined) => {
     const extension = _getExtension(source);
     return (
@@ -551,11 +547,15 @@ const OutputCompressionManager = (() => {
       const selected = _normalizeOutputCompression(compression);
       const fileName = _getFileName(source) || "patched.bin";
       if (selected === OUTPUT_COMPRESSION.NONE || selected === OUTPUT_COMPRESSION.AUTO) return fileName;
-      if (selected === OUTPUT_COMPRESSION.Z3DS)
-        return _replaceExtension(fileName, _getZ3dsOutputExtension(source as CompressionSource | null | undefined));
-      if (selected === OUTPUT_COMPRESSION.SEVEN_ZIP || selected === OUTPUT_COMPRESSION.ZIP)
-        return _appendFileExtension(fileName, _getArchiveOutputExtension(selected, options));
-      return _replaceExtension(fileName, _getArchiveOutputExtension(selected, options));
+      // Z3DS picks its output extension from the source's payload subtype; every other container
+      // uses the format name. The replace-vs-append decision (archives append a `.zip`/`.7z`
+      // wrapper; disc images and z3ds replace the extension) is the Rust-owned per-format strategy,
+      // applied by `applyCompressionOutputFileName` instead of being re-hardcoded here.
+      const extension =
+        selected === OUTPUT_COMPRESSION.Z3DS
+          ? _getZ3dsOutputExtension(source as CompressionSource | null | undefined)
+          : _getArchiveOutputExtension(selected, options);
+      return applyCompressionOutputFileName(fileName, selected, extension);
     },
     getCompressionProfileLevel: _getCompressionProfileLevel,
     getDefaultThreadCount: _getDefaultThreadCount,

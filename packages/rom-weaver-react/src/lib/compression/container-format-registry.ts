@@ -322,6 +322,32 @@ const getCompressionOutputExtension = (
   context: CompressionOutputExtensionContext = {},
 ): string => COMPRESSION_FORMAT_REGISTRY[format].outputExtension(context);
 
+type ContainerOutputExtensionStrategy = GeneratedContainerDefaultOutput["outputExtensionStrategy"];
+
+// The Rust-owned per-format replace-vs-append rule (`append` for archive containers like 7z/zip,
+// `replace` for the disc images chd/rvz, `z3ds-subtype` which also replaces). Surfaced via typegen on
+// each format's `defaultOutput`; this is the single read of it so the output filename builder doesn't
+// re-hardcode the decision.
+const getCompressionOutputExtensionStrategy = (
+  format: CompressionFormat,
+): ContainerOutputExtensionStrategy | undefined =>
+  format === "none" ? undefined : getGeneratedDefaultOutputMetadata(format).outputExtensionStrategy;
+
+// Build the compressed output file name for `fileName` by applying the format's Rust-owned
+// extension strategy to the already-resolved `extension`: `append` keeps the original name and adds
+// the extension (a `.zip`/`.7z` wraps the file), every other strategy replaces the extension (a disc
+// image becomes `name.chd`/`name.rvz`, a z3ds-subtype becomes `name.<subtype>`).
+const applyCompressionOutputFileName = (
+  fileName: string,
+  format: CompressionFormat,
+  extension: string | number | boolean | null | undefined,
+): string => {
+  const normalizedExtension = stripLeadingExtensionDot(extension);
+  if (!normalizedExtension) return fileName;
+  if (getCompressionOutputExtensionStrategy(format) === "append") return `${fileName}.${normalizedExtension}`;
+  return replaceFileNameExtension(fileName, normalizedExtension);
+};
+
 const getRomSpecificExtractedFileName = (format: RomSpecificCompressionFormat, source: ByteProbeableSource): string =>
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY[format].extractedFileName(source);
 
@@ -384,6 +410,7 @@ const resolveAutomaticCompressionFormat = ({
 
 export type { ArchiveCompressionFormat, RomSpecificCompressionFormat, RomSpecificCompressionFormatRegistration };
 export {
+  applyCompressionOutputFileName,
   CREATE_ARCHIVE_COMPRESSION_FORMATS,
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
   getCompressionFormatRegistration,
