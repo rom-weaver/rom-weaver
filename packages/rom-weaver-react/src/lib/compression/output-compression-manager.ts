@@ -19,7 +19,6 @@ import {
 import {
   type ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-  ROM_WEAVER_DISC_IMAGE_POLICY,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {
@@ -34,6 +33,7 @@ import {
   getGeneratedCompressionProfileLevel,
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
+import { isLikelyDiscImageSource } from "./disc-image-policy.ts";
 import {
   CHD_COMPRESSION_INPUT_EXTENSIONS,
   CHD_DECOMPRESSION_INPUT_EXTENSIONS,
@@ -256,18 +256,12 @@ const OutputCompressionManager = (() => {
     hasUnambiguousRomSpecificCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isUnambiguousZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
     hasUnambiguousRomSpecificCompressionInputExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
-  // `.bin` doubles as bare console dumps (Genesis etc.), so extension alone
-  // can't justify a CHD default. The ambiguous extensions and CD sector sizes
-  // (2352 raw / 2048 cooked) come from the shared Rust disc-image policy; a .bin
-  // with a known size that isn't sector-aligned is not a disc image. Unknown
-  // sizes keep the extension-based resolution.
+  // `.bin` doubles as bare console dumps (Genesis etc.), so extension alone can't justify a CHD
+  // default. The ambiguous extensions and CD sector sizes come from the shared Rust-owned
+  // disc-image policy via the single `isLikelyDiscImageSource` consumption point.
   const _isLikelyDiscImageSource = (source: CompressionSource | null | undefined) => {
-    const extension = String(_getExtension(source) ?? "").toLowerCase();
-    const ambiguousExtensions: readonly string[] = ROM_WEAVER_DISC_IMAGE_POLICY.ambiguousDiscImageExtensions;
-    if (!ambiguousExtensions.includes(extension)) return true;
     const size = typeof source?.size === "number" && Number.isFinite(source.size) ? source.size : null;
-    if (size === null || size <= 0) return true;
-    return ROM_WEAVER_DISC_IMAGE_POLICY.cdSectorSizes.some((sectorSize) => size % sectorSize === 0);
+    return isLikelyDiscImageSource(_getExtension(source), size);
   };
   const _resolveOutputCompression = (
     source: CompressionSource | null | undefined,

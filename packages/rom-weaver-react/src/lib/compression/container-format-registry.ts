@@ -3,7 +3,6 @@ import type { RuntimeWorkerSourceScope } from "../../types/workflow-runtime-adap
 import {
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-  ROM_WEAVER_DISC_IMAGE_POLICY,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import {
   getFileNameExtension,
@@ -11,6 +10,7 @@ import {
   replaceFileNameExtension,
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
+import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "./disc-image-policy.ts";
 import { createRomSpecificExtensionRegex } from "./rom-specific-format-support.ts";
 import {
   z3dsCompressedExtensionForSourceExtension,
@@ -354,19 +354,6 @@ const getCompressionFormatForFileExtension = (
   )?.format;
 };
 
-// `.bin` is ambiguous: CD images (bin/cue) should auto-resolve to chd, but bare
-// console ROM dumps use the same extension. A `.bin` whose size is not a whole
-// number of CD/DVD sectors is not a disc image; an unknown size keeps the
-// extension-based resolution. The sector sizes and ambiguous-extension list are
-// the canonical Rust disc-image policy (surfaced via typegen).
-const AMBIGUOUS_DISC_IMAGE_EXTENSIONS: readonly string[] = ROM_WEAVER_DISC_IMAGE_POLICY.ambiguousDiscImageExtensions;
-const CD_SECTOR_SIZES: readonly number[] = ROM_WEAVER_DISC_IMAGE_POLICY.cdSectorSizes;
-
-const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
-  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return true;
-  return CD_SECTOR_SIZES.some((sectorSize) => size % sectorSize === 0);
-};
-
 const resolveAutomaticCompressionFormat = ({
   fallback = "7z",
   parentCompressions,
@@ -386,7 +373,10 @@ const resolveAutomaticCompressionFormat = ({
   const extension = normalizeExtension(getSourceFileExtension(sourceFileName));
   const extensionFormat = getCompressionFormatForFileExtension(extension);
   if (!extensionFormat) return fallback;
-  if (extension && AMBIGUOUS_DISC_IMAGE_EXTENSIONS.includes(extension) && !isLikelyDiscImageSize(sourceSize)) {
+  // `.bin` doubles as a bare console ROM dump; an ambiguous-extension source whose size is not
+  // sector-aligned is not a disc image, so it does not auto-resolve to a disc container. The
+  // sector sizes + ambiguous-extension list come from the shared Rust-owned disc-image policy.
+  if (isAmbiguousDiscImageExtension(extension) && !isLikelyDiscImageSize(sourceSize)) {
     return fallback;
   }
   return extensionFormat;

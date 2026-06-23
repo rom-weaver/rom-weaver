@@ -775,3 +775,35 @@ impl ContainerRegistry {
         }
     }
 }
+
+/// Whether an extension is one of the disc-image/ROM ambiguous extensions (currently `.bin`). The
+/// extension is matched bare (no leading dot), case-insensitively.
+pub fn is_ambiguous_disc_image_extension(extension: &str) -> bool {
+    let normalized = extension.trim_start_matches('.').to_ascii_lowercase();
+    AMBIGUOUS_DISC_IMAGE_EXTENSIONS
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(&normalized))
+}
+
+/// Whether `size` is a whole number of CD/DVD logical sectors. An unknown size (`None`) keeps the
+/// extension-based resolution by returning `true`.
+pub fn is_likely_disc_image_size(size: Option<u64>) -> bool {
+    let Some(size) = size.filter(|value| *value > 0) else {
+        return true;
+    };
+    rom_weaver_chd::CD_SECTOR_SIZES
+        .iter()
+        .any(|sector_size| size % u64::from(*sector_size) == 0)
+}
+
+/// Whether a source with the given `extension` and optional `size` is a disc image rather than a
+/// bare console ROM dump. Non-ambiguous extensions are always disc images; an ambiguous extension is
+/// a disc image only when its size is sector-aligned (or unknown). This is the size-aware half of
+/// the disc-image policy the webapp's output-format auto-resolution applies (the policy data is the
+/// same one surfaced to TS via [`disc_image_policy_metadata`]).
+pub fn is_likely_disc_image_source(extension: &str, size: Option<u64>) -> bool {
+    if !is_ambiguous_disc_image_extension(extension) {
+        return true;
+    }
+    is_likely_disc_image_size(size)
+}

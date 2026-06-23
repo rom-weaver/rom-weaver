@@ -2807,6 +2807,49 @@ mod tests {
     }
 
     #[test]
+    fn ambiguous_disc_image_extension_matches_bin_case_insensitively() {
+        assert!(crate::is_ambiguous_disc_image_extension("bin"));
+        assert!(crate::is_ambiguous_disc_image_extension(".BIN"));
+        assert!(!crate::is_ambiguous_disc_image_extension("iso"));
+        assert!(!crate::is_ambiguous_disc_image_extension("cue"));
+        assert!(!crate::is_ambiguous_disc_image_extension(""));
+    }
+
+    #[test]
+    fn likely_disc_image_size_requires_cd_or_dvd_sector_alignment() {
+        // 2352 (raw CD) and 2048 (cooked) are the policy sector sizes.
+        assert!(crate::is_likely_disc_image_size(Some(2352)));
+        assert!(crate::is_likely_disc_image_size(Some(2352 * 1000)));
+        assert!(crate::is_likely_disc_image_size(Some(2048)));
+        assert!(crate::is_likely_disc_image_size(Some(2048 * 64)));
+        // A bare Genesis dump (power-of-two MB) is not sector-aligned to 2352, but IS divisible by
+        // 2048; pick a size that is divisible by neither.
+        assert!(!crate::is_likely_disc_image_size(Some(3 * 1024 * 1024 + 1)));
+        // Unknown / zero size keeps the extension-based resolution.
+        assert!(crate::is_likely_disc_image_size(None));
+        assert!(crate::is_likely_disc_image_size(Some(0)));
+    }
+
+    #[test]
+    fn likely_disc_image_source_only_gates_ambiguous_extensions() {
+        // Non-ambiguous extension is always a disc image regardless of size.
+        assert!(crate::is_likely_disc_image_source(
+            "iso",
+            Some(3 * 1024 * 1024 + 1)
+        ));
+        assert!(crate::is_likely_disc_image_source("img", None));
+        // Ambiguous `.bin` with a sector-aligned size is a disc image.
+        assert!(crate::is_likely_disc_image_source("bin", Some(2352 * 500)));
+        // Ambiguous `.bin` with a non-sector-aligned size is a bare ROM dump.
+        assert!(!crate::is_likely_disc_image_source(
+            "bin",
+            Some(3 * 1024 * 1024 + 1)
+        ));
+        // Unknown size keeps the disc-image resolution for `.bin`.
+        assert!(crate::is_likely_disc_image_source("bin", None));
+    }
+
+    #[test]
     fn chd_mode_aliases_route_to_chd_handler() {
         let registry = ContainerRegistry::new();
         for alias in ["chd", "chd-cd", "chd-dvd", "chd-raw", "chd-hd"] {
