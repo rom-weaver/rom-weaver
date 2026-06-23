@@ -8,13 +8,15 @@ import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventFormat,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
+import {
+  isBpsPatchFormatName,
+  isBpsPatchPath,
+  isXdeltaPatchFormatName,
+  isXdeltaPatchPath,
+} from "../patch-format-classification.ts";
 import { getFileNameParts, getPathBaseName } from "../path-utils.ts";
 import type { RomWeaverRunJsonResult } from "./run-result-parsing.ts";
 import { asRecord, getTerminalEvent } from "./run-result-parsing.ts";
-
-const XDELTA_PATCH_FILE_EXTENSION_REGEX = /\.(?:xdelta|delta|dat|vcdiff)$/i;
-const BPS_PATCH_FILE_EXTENSION_REGEX = /\.bps$/i;
-const PATCH_FORMAT_NORMALIZE_REGEX = /[^a-z0-9]+/g;
 
 // Below this source size a patch apply/validate is forced onto the runner's
 // no-pool, single-threaded path. In the browser the wasm engine reads the
@@ -26,32 +28,6 @@ const PATCH_FORMAT_NORMALIZE_REGEX = /[^a-z0-9]+/g;
 // every format while covering all cartridge-sized ROMs and their patches.
 const SMALL_PATCH_APPLY_FAST_PATH_LIMIT_BYTES = 64 * 1024 * 1024;
 
-const normalizePatchFormat = (value: unknown): string => {
-  if (typeof value !== "string") return "";
-  return value.trim().toLowerCase().replace(PATCH_FORMAT_NORMALIZE_REGEX, "");
-};
-
-const isXdeltaPatchFormat = (value: unknown) => {
-  const normalized = normalizePatchFormat(value);
-  return normalized === "xdelta" || normalized === "vcdiff";
-};
-
-const isBpsPatchFormat = (value: unknown) => normalizePatchFormat(value) === "bps";
-
-const isXdeltaPatchPath = (value: unknown) => {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return XDELTA_PATCH_FILE_EXTENSION_REGEX.test(trimmed);
-};
-
-const isBpsPatchPath = (value: unknown) => {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return BPS_PATCH_FILE_EXTENSION_REGEX.test(trimmed);
-};
-
 const resolvePatchApplyThreadArg = (
   requestedThreadArg: ThreadBudget | null,
   patchFiles: Array<{ patchFileName?: string; patchFilePath?: string; patchFormat?: string }>,
@@ -59,14 +35,16 @@ const resolvePatchApplyThreadArg = (
 ) => {
   const hasXdeltaPatch = patchFiles.some((patch) => {
     return (
-      isXdeltaPatchFormat(patch.patchFormat) ||
+      isXdeltaPatchFormatName(patch.patchFormat) ||
       isXdeltaPatchPath(patch.patchFilePath) ||
       isXdeltaPatchPath(patch.patchFileName)
     );
   });
   const hasBpsPatch = patchFiles.some((patch) => {
     return (
-      isBpsPatchFormat(patch.patchFormat) || isBpsPatchPath(patch.patchFilePath) || isBpsPatchPath(patch.patchFileName)
+      isBpsPatchFormatName(patch.patchFormat) ||
+      isBpsPatchPath(patch.patchFilePath) ||
+      isBpsPatchPath(patch.patchFileName)
     );
   });
   if (hasXdeltaPatch) {

@@ -12,6 +12,7 @@ import {
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { verifyPatchedOutputChecksum } from "../output/output-checksum-verification.ts";
+import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
 import { normalizeApplyProgressInput, reportProgress } from "../progress/progress-reporting.ts";
@@ -40,21 +41,14 @@ const HEX_PREFIX_REGEX = /^0x/i;
 const HEX_DIGITS_REGEX = /^[0-9a-f]+$/i;
 const DECIMAL_DIGITS_REGEX = /^\d+$/;
 
-const isXdeltaCompatiblePatchExtension = (extension: string | undefined) => {
-  return extension === "xdelta" || extension === "delta" || extension === "dat" || extension === "vcdiff";
-};
-
 const getPatchSummaryFormatName = (fileName: string | undefined) => {
   const extension = getFileNameExtension(fileName);
   if (extension === "ebp") return "IPS";
-  if (isXdeltaCompatiblePatchExtension(extension)) return "VCDIFF";
+  if (isXdeltaPatchExtension(extension)) return "VCDIFF";
   return extension ? extension.toUpperCase() : "Patch";
 };
 
-const isXdeltaPatchFileName = (fileName: string | undefined) => {
-  const extension = getFileNameExtension(fileName);
-  return isXdeltaCompatiblePatchExtension(extension);
-};
+const isXdeltaPatchFileName = (fileName: string | undefined) => isXdeltaPatchExtension(getFileNameExtension(fileName));
 
 const getPatchFileExtension = (fileName: string | undefined) => getFileNameExtension(fileName);
 
