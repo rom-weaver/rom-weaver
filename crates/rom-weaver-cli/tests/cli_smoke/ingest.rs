@@ -349,9 +349,37 @@ fn ingest_bare_ips_patch_describes_without_checksumming() {
         !descriptor["format"].as_str().expect("format").is_empty(),
         "the patch format is reported"
     );
+    assert_eq!(
+        descriptor["is_valid_patch"], true,
+        "a real IPS patch parses, so it is marked valid"
+    );
     // IPS carries no embedded source/target checksums.
     assert!(descriptor["source_crc32"].is_null());
     assert!(descriptor["target_crc32"].is_null());
+}
+
+#[test]
+fn ingest_invalid_patch_extension_is_marked_not_valid() {
+    let temp = setup_temp_dir();
+    // A `.ips` whose bytes are NOT a valid IPS patch (missing the PATCH/EOF framing): recognized by
+    // extension but fails to parse, so `is_valid_patch` is false (no re-extraction needed by the host).
+    let patch = temp.child("broken.ips");
+    fs::write(patch.path(), b"this is not an ips patch at all").expect("fixture");
+    let out_dir = temp.child("ingest-invalid-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        patch.path().to_str().expect("path"),
+        "--out-dir",
+        out_dir.path().to_str().expect("path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(descriptor["file_name"], "broken.ips");
+    assert_eq!(
+        descriptor["is_valid_patch"], false,
+        "a malformed IPS is recognized by extension but does not parse: {descriptor}"
+    );
 }
 
 #[test]
@@ -383,6 +411,10 @@ fn ingest_bps_patch_surfaces_embedded_metadata() {
     assert!(descriptor["patch_crc32"].as_u64().is_some());
     assert!(descriptor["source_size"].as_u64().is_some());
     assert!(descriptor["target_size"].as_u64().is_some());
+    assert_eq!(
+        descriptor["is_valid_patch"], true,
+        "a real BPS patch parses, so it is marked valid"
+    );
 }
 
 #[test]

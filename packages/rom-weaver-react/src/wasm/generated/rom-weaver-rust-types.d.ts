@@ -194,7 +194,13 @@ filename_size?: bigint | null,
 /**
  * Libretro sidecar apply order, set only when matched against a known ROM in the same source.
  */
-sidecar_order?: number | null, };
+sidecar_order?: number | null,
+/**
+ * `true` when a registered patch handler recognized the leaf's format and parsed it (valid patch
+ * magic). The host trusts this instead of re-extracting + re-reading the magic. `false` for an
+ * unsupported extension or a recognized-but-unparseable file (bad/truncated magic).
+ */
+is_valid_patch: boolean, };
 
 export type IngestResult = {
 /**

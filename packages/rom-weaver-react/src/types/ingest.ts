@@ -37,6 +37,8 @@ export interface ParsedPatchDescriptor {
   filenameChecksums: ChecksumMap;
   filenameSize?: number;
   sidecarOrder?: number;
+  /** Whether Rust recognized + parsed the patch magic (the validity the host no longer re-derives). */
+  isValidPatch: boolean;
 }
 
 export interface ParsedIngestResult {

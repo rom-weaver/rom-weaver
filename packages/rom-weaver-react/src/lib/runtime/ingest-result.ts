@@ -72,6 +72,7 @@ const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | undefined
     fileName: toStringValue(record.file_name) || leafPath,
     filenameChecksums: toChecksumMap(record.filename_checksums),
     format: toStringValue(record.format) || "unknown",
+    isValidPatch: record.is_valid_patch === true,
     leafPath,
     sizeBytes: toNumberValue(record.size_bytes) ?? 0,
   };

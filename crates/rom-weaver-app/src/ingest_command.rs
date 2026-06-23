@@ -136,6 +136,10 @@ pub struct PatchDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub sidecar_order: Option<u32>,
+    /// `true` when a registered patch handler recognized the leaf's format and parsed it (valid patch
+    /// magic). The host trusts this instead of re-extracting + re-reading the magic. `false` for an
+    /// unsupported extension or a recognized-but-unparseable file (bad/truncated magic).
+    pub is_valid_patch: bool,
 }
 
 /// Internal carrier of the classified branch result before it is wrapped into a report.
@@ -805,14 +809,32 @@ impl CliApp {
             filename_checksums: requirements.checksums,
             filename_size: requirements.size,
             sidecar_order,
+            is_valid_patch: false,
         };
 
         let Some(handler) = self.patches.probe(leaf_path) else {
             // Unsupported/unknown patch: keep the file-name-derived requirements and the extension
-            // format so the host can still surface it; no embedded metadata to read.
+            // format so the host can still surface it; no embedded metadata to read, not a valid patch.
             return Ok(descriptor);
         };
-        let report = Self::attach_patch_probe_details(handler.parse(leaf_path, context)?);
+        // A recognized handler that PARSES the leaf confirms the patch magic — the same fact the host
+        // re-derived by re-extracting + re-reading the header. A parse error means a
+        // recognized-by-extension but structurally-invalid/truncated file: surface it (with file-name
+        // requirements + format) but mark it not a valid patch rather than failing the whole ingest.
+        let report = match handler.parse(leaf_path, context) {
+            Ok(report) => {
+                descriptor.is_valid_patch = true;
+                Self::attach_patch_probe_details(report)
+            }
+            Err(error) => {
+                trace!(
+                    leaf = %leaf_path.display(),
+                    %error,
+                    "patch leaf recognized by handler but failed to parse; marking invalid"
+                );
+                return Ok(descriptor);
+            }
+        };
         if let Some(patch) = report
             .details
             .as_ref()
