@@ -13,7 +13,19 @@ import {
 
 describe("rom-weaver command boundary helpers", () => {
   it("exports Rust-generated known command discriminants", () => {
-    expect(KNOWN_COMMAND_TYPES).toEqual(["probe", "list", "extract", "checksum", "compress", "trim", "patch"]);
+    expect(KNOWN_COMMAND_TYPES).toEqual([
+      "probe",
+      "list",
+      "extract",
+      "checksum",
+      "ingest",
+      "compress",
+      "trim",
+      "patch",
+      "plan-extract-batch",
+      "match-sidecars",
+      "group-disc-entries",
+    ]);
     expect(KNOWN_PATCH_COMMAND_TYPES).toEqual(["apply", "validate", "create-candidates", "create"]);
   });
 
