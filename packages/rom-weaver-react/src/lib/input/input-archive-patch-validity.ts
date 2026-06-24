@@ -1,20 +1,28 @@
-import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
-import { attachPatchFileCleanup, getPatchFileCleanup, type PatchFileInstance } from "./binary-service.ts";
+import {
+  attachPatchFileCleanup,
+  getPatchFileCleanup,
+  getPatchFileExternalSource,
+  type PatchFileInstance,
+} from "./binary-service.ts";
 import {
   type ArchiveEntryLike,
+  describeArchiveFileForTrace,
   extractArchiveEntry,
   filterNestedContainerEntries,
   type InputPreparationOptions,
   type InputPreparationRuntimeLike,
   isCompressionFile,
   listCompressionEntries,
+  traceArchivePreparation,
 } from "./input-preparation-archive.ts";
-import { DEFAULT_INPUT_PREPARATION_RUNTIME } from "./input-preparation-compression.ts";
+import { DEFAULT_INPUT_PREPARATION_RUNTIME, resolveInputPreparationRuntime } from "./input-preparation-compression.ts";
 
 // Patch-validity detection + the per-archive cache of validated patch leaves, split out of the
 // input-archive orchestrator. A dropped archive is scanned for sidecar patches; each candidate entry
-// is extracted once and checked for a real patch magic, and the surviving leaf files are cached
-// (keyed by entry name) on a WeakMap so re-entrant selection can reuse them without re-extracting.
+// is extracted once and the surviving leaf files are cached (keyed by entry name) on a WeakMap so
+// re-entrant selection can reuse them without re-extracting. Validity is Rust's verdict
+// (`PatchDescriptor.is_valid_patch`), obtained by ingesting the already-extracted leaf's own bytes —
+// the same classify-and-parse the apply path runs on a bare patch — not a TS re-read of the magic.
 
 type ValidatedPatchArchiveEntryCache = Map<string, PatchFileInstance>;
 
@@ -50,18 +58,31 @@ const ensureValidatedPatchArchiveEntryCleanup = (archiveFile: PatchFileInstance)
   });
 };
 
-const isValidPatchPatchFile = async (patchFile: PatchFileInstance): Promise<boolean> => {
+/** Rust's verdict on an already-extracted patch leaf: ingest the leaf's own bytes (the consolidated
+ * classify + parse the apply path already runs over a bare patch — no archive re-extraction) and read
+ * `PatchDescriptor.is_valid_patch`. `true` means a registered patch handler recognized + parsed the
+ * magic; `false` covers an unsupported extension or a recognized-but-unparseable file. Replaces the
+ * former TS magic re-read so the host trusts Rust's single source of truth. */
+const isValidPatchLeaf = async (
+  patchFile: PatchFileInstance,
+  options: InputPreparationOptions,
+  runtime: InputPreparationRuntimeLike,
+): Promise<boolean> => {
+  const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
+  const ingestRun = resolvedRuntime.ingest?.run;
+  if (!ingestRun) throw new Error("Ingest runtime is unavailable");
+  const fileName = patchFile.fileName || "patch.bin";
+  const externalSource = getPatchFileExternalSource(patchFile, fileName);
+  if (!externalSource) return false;
   try {
-    patchFile.littleEndian = false;
-    patchFile.seek(0);
-    const header = patchFile.readString(8);
-    patchFile.seek(0);
-    const extension = String(patchFile.fileName || "")
-      .match(/\.([^.]+?)(?:\d+)?$/)?.[1]
-      ?.toLowerCase();
-    if (!extension) return false;
-    const expectedMagic = getExpectedPatchHeaderMagic(extension);
-    return expectedMagic ? header.startsWith(expectedMagic) : true;
+    const { result } = await ingestRun({
+      fileName,
+      ...(options?.logging?.level ? { logLevel: options.logging.level } : {}),
+      ...(options?.onLog ? { onLog: options.onLog } : {}),
+      source: externalSource.source,
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+    return result.patches[0]?.isValidPatch === true;
   } catch (_error) {
     return false;
   }
@@ -93,7 +114,7 @@ const filterValidPatchArchiveEntriesForSource = async (
     if (!patchFile) continue;
     try {
       if (isCompressionFile(patchFile)) continue;
-      if (!(await isValidPatchPatchFile(patchFile))) continue;
+      if (!(await isValidPatchLeaf(patchFile, options, runtime))) continue;
       ensureValidatedPatchArchiveEntryCleanup(archiveFile);
       cache.set(entry.filename, patchFile);
       validEntries.push(entry);
@@ -101,6 +122,11 @@ const filterValidPatchArchiveEntriesForSource = async (
       if (!cache.has(entry.filename)) await Promise.resolve(getPatchFileCleanup(patchFile)?.()).catch(() => undefined);
     }
   }
+  traceArchivePreparation(options, "input.archive.patch.validity.finish", {
+    candidateCount: patchEntries.length,
+    file: describeArchiveFileForTrace(archiveFile),
+    validEntryNames: validEntries.map((entry) => entry.filename),
+  });
   return validEntries;
 };
 
