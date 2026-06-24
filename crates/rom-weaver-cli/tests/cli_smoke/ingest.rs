@@ -561,3 +561,37 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
     assert_eq!(terminal["command"], "ingest");
     assert_eq!(terminal["status"], "failed");
 }
+
+#[test]
+fn ingest_disc_asset_carries_engine_disc_format() {
+    // The webapp's CHD output-panel disc label is now driven by this `disc_format`
+    // verdict (engine identity), not a TS filename/cue regex — lock the contract.
+    let temp = setup_temp_dir();
+    let iso = temp.child("game.iso");
+    fs::write(iso.path(), build_test_gamecube_iso(0x8000)).expect("iso fixture");
+    let out_dir = temp.child("ingest-disc-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        iso.path().to_str().expect("path"),
+        "--out-dir",
+        out_dir.path().to_str().expect("path"),
+        "--json",
+    ]);
+    assert_eq!(terminal["command"], "ingest");
+    assert_eq!(terminal["status"], "succeeded");
+
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let assets = ingest["assets"].as_array().expect("assets array");
+    assert_eq!(assets.len(), 1, "a bare disc image is a single asset");
+    let asset = &assets[0];
+    assert_eq!(
+        asset["platform"], "Nintendo GameCube",
+        "the GameCube disc magic resolves the platform identity"
+    );
+    assert_eq!(
+        asset["disc_format"], "DVD",
+        "a GameCube disc image reports its optical medium as DVD"
+    );
+}
