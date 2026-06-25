@@ -72,16 +72,6 @@ import {
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
-// Raw inputs below this size never benefit from worker threads: the Rust core single-threads their
-// checksum (a few-MB hash is fast serial), so injecting the default thread budget only makes the
-// browser thread pool eagerly pre-warm ~20 workers (~900 ms cold) on the operation's critical path for
-// threads the run never uses. Suppressing the default for small inputs lets the op start as soon as the
-// wasm is instantiated. Mirrors the patch-apply `disableDefaultThreadArgInjection` gate. Applied to
-// the checksum path only — for a raw input the byte size IS the data size, so the gate is exact. The
-// extract path is NOT gated: a small archive can decompress to plenty of thread-worthy data, and
-// gating it would single-thread the extract and drop its threaded decode/checksum timing.
-const CHECKSUM_THREAD_POOL_FLOOR_BYTES = 4 * 1024 * 1024;
-
 const appendBrowserStorageContext = async (message: string) => {
   const state = await getBrowserStorageEstimateState();
   return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
@@ -936,19 +926,15 @@ const runRomWeaverChecksumWorker = async (
     input.checksumStartOffset > 0
       ? BigInt(Math.floor(input.checksumStartOffset))
       : undefined;
-  // Sub-floor inputs hash fast single-threaded (the Rust core parallelizes only above the MT-floor),
-  // so suppress the default thread budget to keep the browser thread pool from pre-warming for a
-  // checksum that won't use it (see CHECKSUM_THREAD_POOL_FLOOR_BYTES).
-  const suppressDefaultThreadPool =
-    typeof input.fileSize === "number" && input.fileSize >= 0 && input.fileSize < CHECKSUM_THREAD_POOL_FLOOR_BYTES;
-  // Cap the worker pool at the algorithm count. A checksum fans its algorithms across threads (and the
-  // variant engine caps each variant at the algorithm count), so it can never use more than one worker
-  // per algorithm — warming the full core count ("auto") just stands up wasm worker instances the hash
-  // can't use, and each reserves a thread stack in shared linear memory. On memory-constrained
-  // WebKit/iOS tabs that extra pile of instances OOMs the worker, which tears the runner down and
-  // rebuilds it (the "page reloaded / lost my work" symptom). Extract escapes this because it runs
-  // through the memory/thread-aware scheduler, which throttles its pool to a fraction of the cores.
-  const checksumThreadBudget = suppressDefaultThreadPool ? 0 : Math.max(1, algorithms.length);
+  // Inject NO per-command thread cap — match the `ingest` dispatch exactly, which passes no
+  // `defaultThreads` and lets the Rust batch planner (`plan-extract-batch`) own the thread split.
+  // A previous cap pinned `threads` at the algorithm count, but the variant engine first splits the
+  // budget ACROSS the active variants (`per_variant = budget / active_variants`) and only then caps
+  // each variant at its algorithm count; a multi-variant ROM (e.g. GBA: raw + fix-header) therefore
+  // collapsed to `per_variant = 1` under the cap and hashed single-threaded — making a bare checksum
+  // slower than the inline checksum on the extract path, which feeds the engine the full budget. The
+  // checksum op is now scheduler-admitted (the I/O batch planner, with a mobile memory ceiling), so the
+  // pool-warming/OOM concern that motivated the cap is handled there, just like extract/ingest.
   const command = createRomWeaverCommand("checksum", {
     algo: algorithms,
     no_extract: true,
@@ -961,12 +947,10 @@ const runRomWeaverChecksumWorker = async (
     command,
     filePath,
     startOffset: input.checksumStartOffset,
-    suppressDefaultThreadPool,
   });
   const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
-      defaultThreads: checksumThreadBudget,
       logLevel: input.logLevel,
       onEvent: (event) => {
         const progress = toSimpleProgress(event);
