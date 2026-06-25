@@ -82,6 +82,13 @@ pub struct IngestRomAsset {
     pub gdi_text: Option<String>,
     /// `true` when this was a bare ROM checksummed in place (no extraction, no OPFS copy).
     pub copied_in_place: bool,
+    /// Wall-clock milliseconds spent hashing a bare ROM in place (the checksum compute itself,
+    /// excluding wasm/host setup). Set only for `copied_in_place` assets; an extracted leaf folds its
+    /// hashing into the extract timing instead. Lets the host show a real checksum duration rather than
+    /// the "from extract" sentinel an extracted leaf uses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub checksum_ms: Option<u32>,
 }
 
 /// A consolidated patch descriptor: format + embedded source/target metadata (where the format
@@ -413,6 +420,7 @@ impl CliApp {
             cue_text: None,
             gdi_text: None,
             copied_in_place: true,
+            checksum_ms: None,
         };
         let asset = self.fill_asset_checksums(asset, source, algorithms, context)?;
         Ok(IngestOutcome {
@@ -493,6 +501,7 @@ impl CliApp {
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 copied_in_place: false,
+                checksum_ms: None,
             };
             // Reuse the checksums the extract already streamed for this leaf instead of re-reading it.
             // libarchive emits the full variant set (`checksum_variants`); the disc-image codecs
@@ -730,6 +739,7 @@ impl CliApp {
         let thread_execution =
             Some(context.plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1)))));
         let file_name = asset.file_name.clone();
+        let hash_started = std::time::SystemTime::now();
         let report = self.run_checksum_variants_with_progress(
             &request,
             context,
@@ -748,6 +758,12 @@ impl CliApp {
                 );
             },
         )?;
+        // Record the hashing wall time from Rust so the host shows a real checksum duration (a bare ROM
+        // is checksummed in place; an extracted leaf folds this into its extract timing instead).
+        asset.checksum_ms = hash_started
+            .elapsed()
+            .ok()
+            .map(|elapsed| elapsed.as_millis().min(u128::from(u32::MAX)) as u32);
         if let Some(details) = report.details.as_ref().and_then(Value::as_object) {
             if let Some(checksums) = details.get("checksums").and_then(|value| {
                 serde_json::from_value::<BTreeMap<String, String>>(value.clone()).ok()

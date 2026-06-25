@@ -136,7 +136,14 @@ gdi_text?: string | null,
 /**
  * `true` when this was a bare ROM checksummed in place (no extraction, no OPFS copy).
  */
-copied_in_place: boolean, };
+copied_in_place: boolean,
+/**
+ * Wall-clock milliseconds spent hashing a bare ROM in place (the checksum compute itself,
+ * excluding wasm/host setup). Set only for `copied_in_place` assets; an extracted leaf folds its
+ * hashing into the extract timing instead. Lets the host show a real checksum duration rather than
+ * the "from extract" sentinel an extracted leaf uses.
+ */
+checksum_ms?: number | null, };
 
 export type PatchDescriptor = {
 /**
