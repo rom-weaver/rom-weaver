@@ -1691,8 +1691,9 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
 .rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
 .rw-app .selfoot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }
-.rw-app .matches { color: var(--verified); }
-.rw-app .nomatch { color: var(--fault); }
+/* the "matches patch" tag also carries .fmt (orange) — match .tag.fmt's
+   specificity so the verified-green actually wins the cascade */
+.rw-app .tag.matches { color: var(--verified); }
 @media (forced-colors: active) {
   .rw-app .selcheck:has(input:checked) { outline: 3px solid Highlight; outline-offset: -1px; }
 }
