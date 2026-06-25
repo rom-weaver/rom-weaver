@@ -23,11 +23,6 @@
   --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>");
 }
 
-/* registered so the count-up keyframe can interpolate it numerically.
-   inherits MUST be true — the ::after that typesets the counter reads the
-   animated value through inheritance */
-@property --t { syntax: "<integer>"; inherits: true; initial-value: 0; }
-
 :root[data-theme="dark"] {
   color-scheme: dark;
   --chassis: #0c0f13;           /* console shell */
@@ -40,7 +35,6 @@
   --weft: #e7d3a8;              /* cream label-stock — hash readouts */
   --thread-text: #ef8534;       /* accent as text, lifted for contrast */
   --verified: #69aa84;          /* sage quadrant */
-  --verified-deep: #2c5c42;
   --fault: #e0606a;
   --care: #d8a64f;
   --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / .7), 0 4px 16px rgb(0 0 0 / .35);
@@ -59,7 +53,6 @@
      (was #c2410c — 4.42:1 on the --well chips, just under) */
   --thread-text: #b03a0a;
   --verified: #047857;
-  --verified-deep: #d9eadf;
   /* deep enough that fault-card titles/codes clear 4.5:1 on the pink-tinted
      light surfaces (was #dc2626 — 4.41:1 on the fault card) */
   --fault: #b91c1c;
@@ -878,7 +871,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   letter-spacing: 0; text-transform: none; white-space: normal; text-align: start;
   animation: drop-in .2s var(--ease);
 }
-.rw-app .step-meta .info-pop, .rw-app .optshead .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
+.rw-app .step-meta .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
 /* bulleted help points, like the real app's info popovers */
 .rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .rw-app .info-list li { position: relative; padding-inline-start: 14px; }
@@ -924,8 +917,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .rw-dragging, .rw-app .rw-dragging .handle { cursor: grabbing; }
 .rw-app .rw-dragging .handle { color: var(--thread-text); border-color: var(--thread); }
 .rw-app .rw-shifting { transition: transform .18s var(--ease); }
-.rw-app .rw-settling { position: relative; z-index: 6; transition: transform .18s var(--ease); }
-@media (prefers-reduced-motion: reduce) { .rw-app .rw-shifting, .rw-app .rw-settling { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .rw-app .rw-shifting { transition: none; } }
 
 /* inline requirement checks at the verification point */
 
@@ -1142,7 +1134,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the label reserve DERIVES from the button size so touch-sized (36px) or
    phone-sized (24px) controls never render over the label text */
 .rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }
-.rw-app .prog-panel.has-handle .lab { padding-inline-end: calc(2 * var(--ctrl-h) + 22px); }
 .rw-app .prog-panel .cancel { width: var(--ctrl-h); height: var(--ctrl-h); background: var(--well); }
 .rw-app .runprog .prog { flex: 1 1 auto; }
 /* the live-run panel replaces the full-width run button INSIDE the apply card, so a
@@ -1186,15 +1177,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .download-btn .dl-delta::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
 .rw-app .download-btn .dl-total { margin-inline-start: auto; font-weight: 600; font-size: .88rem; opacity: .92; text-transform: none; letter-spacing: .01em; white-space: nowrap; }
 .rw-app .download-btn .dl-total b { font-weight: 750; }
-/* the total counts up in pure CSS: the registered --t animates 0 → the inline
-   centisecond target, and counters typeset "9.44s" (decimal separator comes
-   from the locale via --dec). reduced-motion's global 0-duration = instant. */
-.rw-app .total-time { animation: count-up .9s cubic-bezier(.33, 1, .68, 1) both; }
-.rw-app .total-time::after {
-  counter-reset: tt-int calc((var(--t) - mod(var(--t), 100)) / 100) tt-frac mod(var(--t), 100);
-  content: counter(tt-int) var(--dec, ".") counter(tt-frac, decimal-leading-zero) "s";
-}
-@keyframes count-up { from { --t: 0; } }
 /* step-header complete-state badges: the green verified mark + per-stage chips
    stagger in as the result lands (delays are set inline per chip) */
 .rw-app .step-meta .rb { gap: 5px; }
@@ -1309,14 +1291,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .dlg-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: 14px 16px; overflow: auto; overscroll-behavior: contain; }
-/* with enough width, the groups pack into two masonry columns — content height
-   roughly halves, so a tall-enough viewport needs no scrollbar at all */
-@media (min-width: 720px) {
-  .rw-app #settings-body { columns: 2; column-gap: 11px; }
-  .rw-app #settings-body .setcols { display: contents; }
-  .rw-app #settings-body .setcols .setgroup { margin-block-end: 11px; }
-  .rw-app #settings-body .validation { column-span: all; }
-}
 /* log dialog: a tall, readable trace with a level filter + copy in the header */
 /* the log is tall — fill the available dialog height so more lines are visible */
 .rw-app .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
@@ -1414,7 +1388,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .setgroup > * { grid-column: 1 / -1; min-width: 0; }
 .rw-app .setgroup .gtitle { font-size: .84rem; font-weight: 650; letter-spacing: 0; color: var(--thread-text); margin-block-end: 9px; }
 .rw-app .setrow { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; gap: 10px; padding-block: 4px; }
-.rw-app .optrow { display: flex; align-items: center; gap: 7px; }
 /* every settings label (plain rows AND the range head) keeps the same air
    between its text and the info "i" */
 .rw-app .slabel { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--ink-2); }
@@ -1431,7 +1404,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .srange-head .v { font-size: .76rem; font-weight: 650; color: var(--thread-text); }
 .rw-app .srange-scale { display: flex; justify-content: space-between; font-size: .62rem; color: var(--ink-4); margin-block-start: 2px; }
 .rw-app .validation { margin-block-start: 4px; padding: 8px 11px; border-radius: var(--r-s); font-size: .82rem; color: var(--fault); background: color-mix(in oklab, var(--fault) 9%, transparent); border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam)); }
-.rw-app .sethint { font-size: .7rem; color: var(--ink-4); margin: 2px 0 0; }
 
 /* cross-document navigations (reload, hash entry) crossfade instead of
    flashing white — same-origin only, no-op in browsers without support */
@@ -1468,8 +1440,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 /* while a scenario view transition runs, the morph IS the animation — suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card, .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
-/* drop acknowledgment / "files go here" ring */
-.rw-app .pulse-target { animation: target-pulse .9s var(--ease); }
 
 /* ═══ keyframes ═══ */
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
@@ -1482,13 +1452,8 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
    animation) once its bucket resolves and the real staging card takes over. The swap never blocks
    staging. The list gets breathing room so the chip doesn't crowd the drop zone above it. */
 .rw-app #rom-weaver-pending-drops { margin-block: 14px 6px; }
-@keyframes target-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 60%, transparent); }
-  100% { box-shadow: 0 0 0 16px transparent; }
-}
 @keyframes fault-in { 0% { opacity: 0; translate: 0 -4px; } 55% { translate: 2px 0; } 70% { translate: -2px 0; } 85% { translate: 1px 0; } 100% { translate: 0 0; } }
 @keyframes trace-in { from { opacity: 0; translate: -4px 0; } }
-@keyframes dlg-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 @keyframes weave-run { from { background-position: 0 0; } to { background-position: 18px 0; } }
 @keyframes indet { 0% { margin-inline-start: -32%; } 100% { margin-inline-start: 100%; } }
 
@@ -1588,9 +1553,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
      step up from the desktop .66rem so the status stays readable on a phone */
   .rw-app .selvage { font-size: .76rem; }
   .rw-app .sv-inner { flex-wrap: nowrap; gap: 10px; }
-  /* version/cache/threads stay visible on a phone (stage text yields first);
-     only the live heap readout is desktop-only — it's the widest and least useful */
-  .rw-app .selvage .sv-mem { display: none; }
   .rw-app .sv-stage { flex: 0 1 auto; }
   .rw-app .sv-link { flex: none; }
 }
@@ -1653,7 +1615,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app .mh-sp { flex: 1 1 auto; }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; }
-.rw-modal .sellead { padding: 0 0 11px; font-size: .9rem; color: var(--ink-2); }
 /* settings is the longest dialog — let it use most of the viewport height */
 .rw-modal.settings-modal .rw-modal-card { width: min(820px, 100%); max-height: min(94dvh, 1020px); }
 /* the archive/candidate picker can list long nested paths — let it use the
@@ -1672,10 +1633,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app .settings-placeholder-value { color: var(--ink-3); font-style: italic; font-weight: 450; }
 .rw-app .setrow .sctl .input::placeholder { color: var(--ink-3); font-style: italic; opacity: .78; }
 .rw-app .setrow .sctl .select option[value=""] { color: var(--ink-3); font-style: italic; }
-.rw-app .setfoot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-.rw-app .setfoot .sp { flex: 1 1 auto; }
-.rw-app .dflt { color: var(--ink-4); font-weight: 400; font-size: .82em; }
-.rw-app .rom-type { color: var(--ink-2); font-weight: 700; }
 
 /* ── selection tree (archive / disc candidate picker) ──
    keeps the .seltree/.selnode structure the browser tests drive, drawn in

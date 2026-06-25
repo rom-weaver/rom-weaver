@@ -4,31 +4,14 @@
 
 body{
 	--rom-weaver-color-background:oklch(0.23 0.022 292);
-	--rom-weaver-color-surface:oklch(0.958 0.018 304);
 	--rom-weaver-color-surface-muted:oklch(0.936 0.022 302);
-	--rom-weaver-color-surface-strong:oklch(0.9 0.032 301);
-	--rom-weaver-color-border:oklch(0.8 0.03 303);
 	--rom-weaver-color-border-strong:oklch(0.66 0.055 302);
 	--rom-weaver-color-text:oklch(0.33 0.026 299);
 	--rom-weaver-color-text-soft:oklch(0.46 0.028 300);
 	--rom-weaver-color-primary:oklch(0.66 0.16 303);
 	--rom-weaver-color-primary-hover:oklch(0.71 0.16 304);
-	--rom-weaver-color-primary-active:oklch(0.59 0.15 301);
 	--rom-weaver-color-primary-focus:oklch(0.87 0.09 303 / .5);
-	--rom-weaver-color-success:oklch(0.66 0.13 154);
-	--rom-weaver-color-danger:oklch(0.62 0.2 24);
-	--rom-weaver-color-warning:oklch(0.74 0.16 67);
-	--rom-weaver-color-spinner:oklch(0.71 0.15 303);
 	--rom-weaver-color-muted:var(--rom-weaver-color-text-soft);
-	--rom-weaver-color-outer-btn:oklch(0.972 0.008 292);
-	--rom-weaver-color-footer:oklch(0.72 0.022 292);
-	--rom-weaver-color-footer-link:oklch(0.8 0.022 292);
-	--rom-weaver-color-footer-link-border:oklch(0.5 0.024 292);
-	--rom-weaver-color-footer-hover:oklch(0.96 0.011 292);
-	--rom-weaver-color-footer-hover-border:oklch(0.71 0.16 304);
-	--rom-weaver-control-height:46px;
-	--rom-weaver-control-font-size:13px;
-	--rom-weaver-control-line-height:1.24;
 }
 
 html,
@@ -87,25 +70,6 @@ textarea::placeholder{
 	opacity:.95;
 }
 
-input[type=file].no-file-selector-button::file-selector-button{
-	display:none;
-}
-
-.compression-control{
-	--rom-weaver-compression-thumb-size:16px;
-	--rom-weaver-compression-track-inset:calc(var(--rom-weaver-compression-thumb-size) / 2);
-}
-
-.compression-scale{
-	margin-inline:var(--rom-weaver-compression-track-inset);
-}
-
-.compression-scale-label{
-	left:var(--compression-scale-position);
-	text-align:center;
-	transform:translateX(-50%);
-}
-
 input[type=checkbox].styled{
 	appearance:none;
 	position:relative;
@@ -156,82 +120,6 @@ input[type=checkbox].styled:checked{
 input[type=checkbox].styled:checked::after{
 	opacity:1;
 	transform:translate(-50%, -56%) rotate(45deg) scale(1);
-}
-
-@keyframes rom-weaver-progress-indeterminate{
-	0%{
-		left:-52%;
-		width:28%;
-	}
-	45%{
-		width:52%;
-	}
-	100%{
-		left:100%;
-		width:34%;
-	}
-}
-
-@keyframes rom-weaver-progress-sheen{
-	0%{
-		background-position:210% 0;
-	}
-	100%{
-		background-position:-110% 0;
-	}
-}
-
-@keyframes rom-weaver-progress-weave-a{
-	0%{
-		background-position:0 0;
-	}
-	100%{
-		background-position:210% 0;
-	}
-}
-
-@keyframes rom-weaver-progress-weave-b{
-	0%{
-		background-position:200% 0;
-	}
-	100%{
-		background-position:-20% 0;
-	}
-}
-
-@keyframes rom-weaver-progress-thread{
-	0%{
-		transform:translateX(-36%);
-	}
-	100%{
-		transform:translateX(248%);
-	}
-}
-
-@keyframes spin{
-	100%{transform:rotate(360deg)}
-}
-
-.rom-weaver-spinner{
-	position:relative;
-	display:inline-block;
-	width:20px;
-	height:20px;
-	vertical-align:middle;
-	animation:spin 1s ease-in-out infinite;
-}
-
-.rom-weaver-spinner:before{
-	position:absolute;
-	top:0;
-	left:50%;
-	display:inline-block;
-	width:6px;
-	height:6px;
-	margin-left:-3px;
-	border-radius:3px;
-	background-color:var(--rom-weaver-color-spinner);
-	content:"";
 }
 
 #rom-weaver-dialog-zip::backdrop{
