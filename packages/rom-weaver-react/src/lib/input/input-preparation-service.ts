@@ -46,9 +46,6 @@ import {
 import { getBaseFileName, normalizeArchiveEntryName } from "./path-utils.ts";
 
 type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
-type InputPreparationBehaviorOptions = {
-  allowLazyBrowserRomSource?: boolean;
-};
 type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
   compression?: WorkflowRuntime["compression"];
   sidecars: {
@@ -138,10 +135,8 @@ const getLazyBrowserSource = async (
   source: SourceRef,
   fallbackFileName: string,
   options: InputPreparationOptions,
-  behavior: InputPreparationBehaviorOptions = {},
 ): Promise<LazyBrowserSource | null> => {
   emitInputPreparationTrace(options, "lazy browser source check start", {
-    behavior,
     source: summarizePreparationSource(source, fallbackFileName),
   });
   if (typeof Blob === "undefined") return null;
@@ -189,13 +184,6 @@ const getLazyBrowserSource = async (
     });
     return { blob, fileHandle, fileName: magicFileName };
   }
-  if (!behavior.allowLazyBrowserRomSource) {
-    emitInputPreparationTrace(options, "lazy browser source rejected", {
-      fileName,
-      reason: "lazy-rom-source-disabled",
-    });
-    return null;
-  }
   if (isCueEntryFileName(fileName)) {
     emitInputPreparationTrace(options, "lazy browser source rejected", {
       fileName,
@@ -231,49 +219,28 @@ const getLazyBrowserSource = async (
   return { blob, fileHandle, fileName };
 };
 
+// Every dropped input — ROM or patch — becomes a lazy (Blob/handle/path-backed) file that streams
+// its bytes in a worker. There is no main-thread materialization path: that is what produced the iOS
+// jetsam tab-reload on large ROMs. Small synchronous reads (cue/gdi sheet text, header probes) are
+// handled by their own bounded readers, not by materializing the whole input here.
 const createInputPreparationPatchFile = async (
   source: SourceRef,
   fallbackFileName: string,
   role: "patch" | "rom",
   options: InputPreparationOptions,
-  behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PatchFileInstance> => {
   emitInputPreparationTrace(options, "create patch file start", {
-    behavior,
     fallbackFileName,
     role,
     source: summarizePreparationSource(source, fallbackFileName),
   });
-  if (role === "patch") {
-    const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options, behavior);
-    if (lazyBrowserSource) {
-      emitInputPreparationTrace(options, "create patch file lazy patch source", {
-        fileName: lazyBrowserSource.fileName,
-        size: lazyBrowserSource.blob.size,
-      });
-      return createBlobBackedPatchFile(
-        lazyBrowserSource.blob,
-        lazyBrowserSource.fileName,
-        undefined,
-        lazyBrowserSource.fileHandle,
-        { materialize: false },
-      );
-    }
-    emitInputPreparationTrace(options, "create patch file materialized patch source", {
-      fallbackFileName,
-    });
-    return createPatchFile(source, fallbackFileName);
-  }
-
   const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
   const sourceFileName = sourceAccess.fileName || fallbackFileName;
-  const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options, {
-    ...behavior,
-    allowLazyBrowserRomSource: true,
-  });
+  const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options);
   if (lazyBrowserSource) {
-    emitInputPreparationTrace(options, "create patch file lazy rom source", {
+    emitInputPreparationTrace(options, "create patch file lazy source", {
       fileName: lazyBrowserSource.fileName,
+      role,
       size: lazyBrowserSource.blob.size,
     });
     return createBlobBackedPatchFile(
@@ -288,8 +255,9 @@ const createInputPreparationPatchFile = async (
   const sourcePath =
     getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
   if (sourcePath) {
-    emitInputPreparationTrace(options, "create patch file lazy external rom source", {
+    emitInputPreparationTrace(options, "create patch file lazy external source", {
       fileName: sourceFileName,
+      role,
       size: sourceAccess.size ?? undefined,
       sourcePath,
     });
@@ -302,6 +270,7 @@ const createInputPreparationPatchFile = async (
   emitInputPreparationTrace(options, "create patch file failed", {
     fileName: sourceFileName,
     reason: "no-path-backed-source",
+    role,
   });
   throw new Error(`${sourceFileName} must be OPFS/VFS path-backed in browser workflows`);
 };
@@ -442,14 +411,12 @@ const prepareInputAssets = async (
   sourceIndex: number,
   runtime: InputPreparationRuntime,
   selectedEntryName?: string,
-  behavior: InputPreparationBehaviorOptions = {},
 ): Promise<InputAsset[]> => {
   emitInputPreparationTrace(options, "input.assets.prepare.start", {
-    behavior,
     source: summarizePreparationSource(source, "input.bin"),
     sourceIndex,
   });
-  const file = await createInputPreparationPatchFile(source, "input.bin", "rom", options, behavior);
+  const file = await createInputPreparationPatchFile(source, "input.bin", "rom", options);
   emitInputPreparationTrace(options, "input.assets.patch-file.created", {
     fileName: file.fileName,
     filePath: file.filePath || "",
@@ -577,9 +544,8 @@ const prepareInput = async (
   runtime?: InputPreparationRuntime,
   selectedArchiveEntry?: string,
   sourceIndex = 0,
-  behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PatchFileInstance> => {
-  return (await prepareInputFile(source, role, options, runtime, selectedArchiveEntry, sourceIndex, behavior)).file;
+  return (await prepareInputFile(source, role, options, runtime, selectedArchiveEntry, sourceIndex)).file;
 };
 
 const prepareInputFile = async (
@@ -589,21 +555,13 @@ const prepareInputFile = async (
   runtime?: InputPreparationRuntime,
   selectedArchiveEntry?: string,
   sourceIndex = 0,
-  behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PreparedInputFileResult> => {
   emitInputPreparationTrace(options, "input.file.prepare.start", {
-    behavior,
     role,
     source: summarizePreparationSource(source, role === "rom" ? "rom.bin" : "patch.bin"),
     sourceIndex,
   });
-  const file = await createInputPreparationPatchFile(
-    source,
-    role === "rom" ? "rom.bin" : "patch.bin",
-    role,
-    options,
-    role === "rom" ? behavior : {},
-  );
+  const file = await createInputPreparationPatchFile(source, role === "rom" ? "rom.bin" : "patch.bin", role, options);
   emitInputPreparationTrace(options, "input.file.patch-file.created", {
     fileName: file.fileName,
     filePath: file.filePath || "",

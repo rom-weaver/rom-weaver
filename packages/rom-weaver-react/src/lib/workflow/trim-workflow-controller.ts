@@ -137,9 +137,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
           workerThreads: this.settings.workers?.threads,
         });
         const stage = (await this.inputStages.stageSource(
-          this.inputStages.createInitialSource(TRIM_INPUT_ROLE, first, 0, {
-            allowLazyBrowserRomSource: true,
-          }),
+          this.inputStages.createInitialSource(TRIM_INPUT_ROLE, first, 0),
         )) as StagedSource<TSource>;
         this.inputStage = stage;
         await this.inputStages.maybeResolveBlockingStageSelection(stage);

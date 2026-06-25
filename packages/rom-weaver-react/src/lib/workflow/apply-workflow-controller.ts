@@ -592,16 +592,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.runQueuedMutation(operation, callback, { rearmAbort: true, wrapErrors: true });
   }
 
-  private createInitialSource(
-    role: SourceRole,
-    source: TSource,
-    index: number,
-    options: { allowLazyBrowserRomSource?: boolean } = {},
-  ): StagedSource<TSource> {
+  private createInitialSource(role: SourceRole, source: TSource, index: number): StagedSource<TSource> {
     const fileName = getSourceFileName(source, `${role}-${index + 1}`);
     const sourceSize = getSourceSize(source);
     return {
-      allowLazyBrowserRomSource: options.allowLazyBrowserRomSource,
       index,
       internalCandidates: new Map(),
       outputLabel: role === "patch" ? createPatchOutputLabel(fileName) : undefined,
@@ -626,9 +620,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private async stageInputSession(sources: TSource[]): Promise<InputSession<TSource>> {
-    const session = (await this.inputStages.stageSession("input", sources, {
-      allowLazyBrowserRomSource: true,
-    })) as InputSession<TSource>;
+    const session = (await this.inputStages.stageSession("input", sources)) as InputSession<TSource>;
     this.inputSession = session;
     this.refreshPreparedInputMetadata(session);
     return session;
@@ -641,7 +633,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       return staged;
     }
     this.trace("source.stage.start", {
-      allowLazyBrowserRomSource: !!stage.allowLazyBrowserRomSource,
       fileName: stage.state.fileName,
       order: stage.state.order,
       role: stage.state.role,

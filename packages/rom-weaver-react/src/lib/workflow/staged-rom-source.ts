@@ -80,12 +80,11 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     role: TState["role"],
     source: TSource,
     index: number,
-    options: { allowLazyBrowserRomSource?: boolean; id?: string } = {},
+    options: { id?: string } = {},
   ): SharedRomStagedSource<TSource, TState> {
     const fileName = getSourceFileName(source, `${role}-${index + 1}`);
     const sourceSize = getSourceSize(source);
     return {
-      allowLazyBrowserRomSource: options.allowLazyBrowserRomSource,
       index,
       internalCandidates: new Map(),
       parentCompressions: [],
@@ -116,7 +115,6 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
 
   async stageSource(stage: SharedRomStagedSource<TSource, TState>): Promise<SharedRomStagedSource<TSource, TState>> {
     this.trace?.("source.stage.start", {
-      allowLazyBrowserRomSource: !!stage.allowLazyBrowserRomSource,
       fileName: stage.state.fileName,
       order: stage.state.order,
       role: stage.state.role,
@@ -174,22 +172,14 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     return stage;
   }
 
-  async stageSession(
-    role: TState["role"],
-    sources: TSource[],
-    options: { allowLazyBrowserRomSource?: boolean } = {},
-  ): Promise<SharedRomSourceSession<TSource, TState>> {
+  async stageSession(role: TState["role"], sources: TSource[]): Promise<SharedRomSourceSession<TSource, TState>> {
     if (!sources.length) throw new RomWeaverError("INVALID_INPUT", `No ${role} source was provided`);
     this.trace?.("source.session.stage.start", {
       role,
       sourceCount: sources.length,
     });
     if (sources.length === 1) {
-      const view = await this.stageSource(
-        this.createInitialSource(role, sources[0] as TSource, 0, {
-          allowLazyBrowserRomSource: options.allowLazyBrowserRomSource,
-        }),
-      );
+      const view = await this.stageSource(this.createInitialSource(role, sources[0] as TSource, 0));
       return { role, sources, stages: [view], synthetic: false, view };
     }
 
@@ -523,7 +513,6 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       stage.index,
       this.runtime,
       selectedArchiveEntry,
-      { allowLazyBrowserRomSource: !!stage.allowLazyBrowserRomSource },
     );
   }
 

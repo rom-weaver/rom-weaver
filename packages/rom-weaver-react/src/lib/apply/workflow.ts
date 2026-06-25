@@ -210,9 +210,7 @@ const runApplyWorkflow = async (
             const inputSource = inputSources[index];
             if (!inputSource) throw new Error(`Input ${index + 1} was not provided`);
             inputAssets.push(
-              ...(await deps.prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName, {
-                allowLazyBrowserRomSource: inputSources.length === 1,
-              })),
+              ...(await deps.prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName)),
             );
           }
         }

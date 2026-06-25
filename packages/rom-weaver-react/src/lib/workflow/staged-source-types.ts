@@ -52,7 +52,6 @@ type SharedInternalCandidate<TSource, TState extends SharedRomSourceState> = {
 
 type SharedRomStagedSource<TSource, TState extends SharedRomSourceState> = {
   source: TSource;
-  allowLazyBrowserRomSource?: boolean;
   index: number;
   state: TState;
   internalCandidates: Map<string, SharedInternalCandidate<TSource, TState>>;
