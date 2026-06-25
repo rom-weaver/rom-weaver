@@ -25,7 +25,7 @@ import {
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
-import { getChdAutoCreateMode, getDiscKind, getDiscKindLabel } from "../../lib/input/rom-specific-file-utils.ts";
+import { getChdAutoCreateMode, getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 
 type SettingsLike = Record<string, unknown>;
@@ -33,6 +33,9 @@ type SourceLike = {
   _chdCuePath?: string;
   _chdCueText?: string;
   _chdMode?: string;
+  // Engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the ingest/checksum
+  // identity pass; drives the CHD output-panel disc label (no TS regex).
+  _discFormat?: string;
   fileName?: string;
   getExtension?: () => string;
 };
@@ -319,16 +322,11 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
   }
   if (normalized === "chd") {
     const mode = resolveChdPanelMode(settings, source);
-    // GD-ROM media reuses the CD codec set; surface the detected disc type so the
-    // output reflects the GD-vs-CD media the create will actually produce.
-    const discLabel = source
-      ? getDiscKindLabel(
-          getDiscKind({
-            cueText: (source as SourceLike)._chdCueText,
-            fileName: (source as SourceLike).fileName,
-          }),
-        )
-      : null;
+    // GD-ROM media reuses the CD codec set; surface the engine-detected disc type
+    // so the output reflects the GD-vs-CD media the create will actually produce.
+    // The verdict comes from the Rust ingest/checksum identity pass (`_discFormat`),
+    // not a TS regex over the cue text / file name.
+    const discLabel = source ? getDiscFormatLabel((source as SourceLike)._discFormat) : null;
     const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
     const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";

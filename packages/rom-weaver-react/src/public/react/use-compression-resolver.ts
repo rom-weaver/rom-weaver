@@ -114,6 +114,10 @@ const useCompressionResolver = ({
   const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
     const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
     const chdMode = romInputs[0]?.chdMode;
+    // Engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the ingest/checksum
+    // identity pass; the CHD output panel reads it for the disc label instead of
+    // re-deriving GD-vs-CD from the cue text / file name in TS.
+    const discFormat = romInputs[0]?.info?.romType?.discFormat;
     const baseSource = effectiveInputs[0];
     if (!selectedInputFileName) return baseSource;
     if (baseSource && typeof baseSource === "object") {
@@ -123,6 +127,7 @@ const useCompressionResolver = ({
       return {
         ...(baseSource as unknown as Record<string, unknown>),
         ...(chdMode ? { _chdMode: chdMode } : {}),
+        ...(discFormat ? { _discFormat: discFormat } : {}),
         ...(typeof baseSize === "number" && Number.isFinite(baseSize) ? { size: baseSize } : {}),
         fileName: selectedInputFileName,
         name: selectedInputFileName,
