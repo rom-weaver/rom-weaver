@@ -95,6 +95,13 @@ const parseArguments = (argv) => {
       options.noCoopCoep = true;
       continue;
     }
+    // Explicit positive form (default already on): force server-set COOP/COEP/CORP headers so cross-origin
+    // isolation does not depend on the service worker. Useful for verifying the production bundle in
+    // `preview` — the SW can fail to register behind the self-signed cert, but server headers still isolate.
+    if (arg === "--coop-coep") {
+      options.noCoopCoep = false;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       options.help = true;
       continue;
@@ -115,7 +122,7 @@ const parseArguments = (argv) => {
 
 const printUsage = () => {
   console.log(
-    "Usage: node scripts/dev-server.mjs [dev|preview] [--port 5173] [--open] [--no-coop-coep]\nThe server always listens on all available network interfaces.",
+    "Usage: node scripts/dev-server.mjs [dev|preview] [--port 5173] [--open] [--coop-coep] [--no-coop-coep]\nCOOP/COEP/CORP headers are on by default (--coop-coep forces them; --no-coop-coep disables them so the\nservice worker must provide isolation). The server always listens on all available network interfaces.",
   );
 };
 
