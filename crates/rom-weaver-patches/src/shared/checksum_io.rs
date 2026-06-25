@@ -26,17 +26,25 @@ pub(crate) fn crc32_slice(bytes: &[u8]) -> u32 {
 }
 
 pub(crate) fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
+    let parse_hex = |value: &str| {
+        u32::from_str_radix(value, 16).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "native checksum engine returned invalid crc32: {error}"
+            ))
+        })
+    };
+    // Reuse a CRC32 the host already computed for this exact input (seeded from `--checksum-cache`)
+    // instead of re-reading the whole file just to re-derive the source checksum.
+    if let Some(cached) = context.seeded_checksum(path, "crc32") {
+        return parse_hex(&cached);
+    }
     let results = checksum_file_values(path, &["crc32"], context)?;
     let Some(value) = results.get("crc32") else {
         return Err(RomWeaverError::Validation(
             "native checksum engine did not return crc32 result".into(),
         ));
     };
-    u32::from_str_radix(value, 16).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "native checksum engine returned invalid crc32: {error}"
-        ))
-    })
+    parse_hex(value)
 }
 
 /// CRC32 of the first `len` bytes of `path`, read through a `buffer_len`-sized

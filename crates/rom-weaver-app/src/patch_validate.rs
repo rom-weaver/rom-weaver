@@ -140,6 +140,10 @@ impl CliApp {
             extracted_archives,
             cleanup_paths,
         } = resolved_input;
+        // Reuse the host-provided input checksums (the CRC32 the webapp already computed during
+        // staging) for the handler's source-checksum verification — the dry-run apply otherwise
+        // re-reads the whole input just to re-derive a CRC32 we already have.
+        context.seed_checksums(&resolved_input, &cached_input_checksums);
         let mut temp_paths = cleanup_paths;
         let (resolved_patches, extracted_patch_notes) = match self.resolve_patches(
             &patches,

@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, HashMap},
     fmt,
     path::Path,
     path::PathBuf,
@@ -111,6 +112,11 @@ pub struct OperationContext {
     /// wasi worker pool, stalling with 30s spawn timeouts; reusing one pool keeps the live thread
     /// count bounded while still giving each (serially processed) extract the whole pool.
     operation_pool: Arc<Mutex<Option<(SharedThreadPool, ThreadExecution)>>>,
+    /// Already-known checksums for input paths, keyed `path -> { algorithm -> hex }`. Seeded by the
+    /// patch apply/validate commands from the host's `--checksum-cache` (the input CRC32 the webapp
+    /// already computed during staging) so the format handlers' source-checksum verification reuses it
+    /// instead of re-reading the whole input. Shared across context clones via the `Arc`.
+    seeded_checksums: Arc<Mutex<HashMap<PathBuf, BTreeMap<String, String>>>>,
 }
 
 impl OperationContext {
@@ -132,7 +138,39 @@ impl OperationContext {
             cancel,
             patch_policy: PatchPolicy::default(),
             operation_pool: Arc::new(Mutex::new(None)),
+            seeded_checksums: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Record already-known checksums for `path` (merging into any existing entry) so later
+    /// per-path checksum lookups (e.g. patch source-checksum verification) reuse them. A no-op when
+    /// `checksums` is empty.
+    pub fn seed_checksums(&self, path: &Path, checksums: &BTreeMap<String, String>) {
+        if checksums.is_empty() {
+            return;
+        }
+        let mut cache = self
+            .seeded_checksums
+            .lock()
+            .expect("seeded checksum cache poisoned");
+        let entry = cache.entry(path.to_path_buf()).or_default();
+        for (algorithm, value) in checksums {
+            entry
+                .entry(algorithm.to_ascii_lowercase())
+                .or_insert_with(|| value.to_ascii_lowercase());
+        }
+    }
+
+    /// The seeded checksum for `path`/`algorithm`, if one was recorded via [`seed_checksums`].
+    pub fn seeded_checksum(&self, path: &Path, algorithm: &str) -> Option<String> {
+        let cache = self
+            .seeded_checksums
+            .lock()
+            .expect("seeded checksum cache poisoned");
+        cache
+            .get(path)?
+            .get(&algorithm.to_ascii_lowercase())
+            .cloned()
     }
 
     /// The grouped patch-only policy knobs. Individual fields are also reachable

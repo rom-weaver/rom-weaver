@@ -257,6 +257,14 @@ impl CliApp {
                 } = resolved;
                 (source, extracted_archives, cleanup_paths)
             };
+        // Reuse the host-provided input checksums (the CRC32 the webapp already computed during
+        // staging) for the handler's source-checksum verification instead of re-reading the input.
+        // Keyed by the original resolved path; any header/N64 transform writes a distinct temp path
+        // whose lookup misses and falls back to a fresh compute. Skipped for disc apply, where the
+        // resolved input is a single track but the cached checksums describe the whole disc.
+        if disc_context.is_none() {
+            context.seed_checksums(&resolved_input, &cached_input_checksums);
+        }
         let mut temp_paths = input_cleanup_paths;
         temp_paths.extend(discovered_sidecars.cleanup_paths);
         let (mut resolved_patches, extracted_patch_notes) = match self.resolve_patches(
