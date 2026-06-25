@@ -16,7 +16,6 @@ import {
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
-import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
@@ -37,14 +36,11 @@ type SettingsState = {
   requireInputChecksumMatch: boolean;
   requireOutputChecksumMatch: boolean;
   compressionProfile: string;
-  compressionFormat: string;
-  chdOutputMode: string;
   chdCreateCdCodecs: string;
   chdCreateDvdCodecs: string;
   rvzCodec: string;
   rvzCompressionLevel: number | "";
   rvzBlockSize: number;
-  rvzScrub: boolean;
   z3dsCompressionLevel: number | "";
   sevenZipCodec: string;
   sevenZipLevel: number | "";
@@ -159,14 +155,11 @@ const SETTINGS_FIELD_ORDER = [
   "requireInputChecksumMatch",
   "requireOutputChecksumMatch",
   "compressionProfile",
-  "compressionFormat",
-  "chdOutputMode",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
   "rvzCodec",
   "rvzCompressionLevel",
   "rvzBlockSize",
-  "rvzScrub",
   "z3dsCompressionLevel",
   "sevenZipCodec",
   "sevenZipLevel",
@@ -254,20 +247,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
     suggestionDataLocalize: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
     validationLabel: "DVD Codecs",
-  },
-  chdOutputMode: {
-    defaultValue: "auto",
-    id: "settings-chd-output-mode",
-    key: "chdOutputMode",
-    kind: "hidden",
-    validValues: ["auto", "cd", "dvd"],
-  },
-  compressionFormat: {
-    defaultValue: "auto",
-    id: "settings-output-compression",
-    key: "compressionFormat",
-    kind: "hidden",
-    validValues: ["auto", ...ROM_WEAVER_CREATE_CONTAINER_FORMATS, "none"],
   },
   compressionProfile: {
     defaultValue: "max",
@@ -442,13 +421,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       ZSTD_CODEC_MAX_LEVEL,
     )}.`,
     validationLabel: "RVZ compression level override",
-  },
-  rvzScrub: {
-    defaultValue: false,
-    disabled: ({ uiState }) => !uiState.rvzEnabled,
-    id: "settings-rvz-scrub",
-    key: "rvzScrub",
-    kind: "hidden",
   },
   sevenZipCodec: {
     codecOptions: getCompressionCodecOptions("sevenZipCodec"),
@@ -674,10 +646,10 @@ const getSettingsUiState = (source: SettingsDraftState): SettingsUiState => {
     defaultCompression === "zip/special" ||
     defaultCompression === "special only";
   return {
-    chdEnabled: specialEnabled || source.compressionFormat === "chd",
+    chdEnabled: specialEnabled,
     compressionProfileIndex: getCompressionProfileIndex(SETTINGS_VALID_COMPRESSION_PROFILES, source.compressionProfile),
     compressionProfileLabel: getCompressionProfileLabel(source.compressionProfile),
-    rvzEnabled: specialEnabled || source.compressionFormat === "rvz",
+    rvzEnabled: specialEnabled,
     sevenZipEnabled: defaultCompression === "7z/special" || defaultCompression === "7z only",
     workerThreadsEnabled: canUseThreadedWasm(),
     zipEnabled: defaultCompression === "zip/special" || defaultCompression === "zip only",

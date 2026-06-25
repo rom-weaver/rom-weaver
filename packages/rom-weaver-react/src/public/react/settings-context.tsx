@@ -191,10 +191,8 @@ const getNormalizedWorkflowSettings = (
     hasFlatProfile || hasFlatRvzCodec ? undefined : outputContainer.rvzCompressionLevel,
   );
   const rvzBlockSize = readFirstDefined(source.rvzBlockSize, outputContainer.rvzBlockSize);
-  const rvzScrub = readFirstDefined(source.rvzScrub, outputContainer.rvzScrub);
   const chdCreateCdCodecs = readFirstDefined(source.chdCreateCdCodecs, outputContainer.chdCreateCdCodecs);
   const chdCreateDvdCodecs = readFirstDefined(source.chdCreateDvdCodecs, outputContainer.chdCreateDvdCodecs);
-  const chdOutputMode = readFirstDefined(source.chdOutputMode, outputContainer.chdOutputMode);
   const z3dsCompressionLevel = readFirstDefined(
     source.z3dsCompressionLevel,
     hasFlatProfile ? undefined : outputContainer.z3dsCompressionLevel,
@@ -229,16 +227,16 @@ const getNormalizedWorkflowSettings = (
     },
     output: {
       ...output,
-      compression: readFirstDefined(output.compression, source.compressionFormat),
+      compression: readFirstDefined(output.compression, "auto"),
       container: {
         chdCreateCdCodecs: chdCreateCdCodecs as OutputContainerSettings["chdCreateCdCodecs"],
         chdCreateDvdCodecs: chdCreateDvdCodecs as OutputContainerSettings["chdCreateDvdCodecs"],
-        chdOutputMode: chdOutputMode as OutputContainerSettings["chdOutputMode"],
+        chdOutputMode: "auto" as OutputContainerSettings["chdOutputMode"],
         profile: compressionLevels.compressionProfile as OutputContainerSettings["profile"],
         rvzBlockSize: rvzBlockSize as OutputContainerSettings["rvzBlockSize"],
         rvzCodec: compressionLevels.rvzCodec as OutputContainerSettings["rvzCodec"],
         rvzCompressionLevel: compressionLevels.rvzCompressionLevel as OutputContainerSettings["rvzCompressionLevel"],
-        rvzScrub: rvzScrub as OutputContainerSettings["rvzScrub"],
+        rvzScrub: false as OutputContainerSettings["rvzScrub"],
         sevenZipCodec: compressionLevels.sevenZipCodec as OutputContainerSettings["sevenZipCodec"],
         sevenZipLevel: compressionLevels.sevenZipLevel as OutputContainerSettings["sevenZipLevel"],
         z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel as OutputContainerSettings["z3dsCompressionLevel"],

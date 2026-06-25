@@ -60,11 +60,7 @@ type CodecListOptions = NonNullable<Parameters<typeof normalizeCodecList>[1]>;
 const storedStringSchema = v.string();
 const storedBooleanSchema = v.boolean();
 const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
-const BOOLEAN_SETTINGS_FIELDS = ["fixChecksum", "rvzScrub"] as const satisfies readonly SettingsFieldKey[];
-const HIDDEN_DEFAULT_SETTINGS_FIELDS = [
-  "compressionFormat",
-  "chdOutputMode",
-] as const satisfies readonly SettingsFieldKey[];
+const BOOLEAN_SETTINGS_FIELDS = ["fixChecksum"] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "language",
@@ -397,7 +393,6 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     rvzBlockSize: compression.rvzBlockSize,
     rvzCodec: compression.rvzCodec,
     rvzCompressionLevel: compression.rvzCompressionLevel,
-    rvzScrub: compression.rvzScrub,
     sevenZipCodec: compression.sevenZipCodec,
     sevenZipLevel: compression.sevenZipLevel,
     workerThreads: compression.workerThreads,
@@ -498,9 +493,6 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
         settings,
       );
 
-    const rvzScrub = readStoredField(storedBooleanSchema, loadedSettings.rvzScrub);
-    if (rvzScrub !== undefined) settings.rvzScrub = rvzScrub;
-
     const sevenZipCodec = readStoredField(storedStringSchema, loadedSettings.sevenZipCodec);
     if (sevenZipCodec !== undefined)
       settings.sevenZipCodec = normalizeStoredCodecSetting(
@@ -524,9 +516,6 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const message = err instanceof Error ? err.message : String(err);
     resetStoredSettings(storageObject, message);
   }
-
-  settings.compressionFormat = getSettingsFieldDefaultValue("compressionFormat");
-  settings.chdOutputMode = getSettingsFieldDefaultValue("chdOutputMode");
 
   return settings;
 };
@@ -611,7 +600,6 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
     settings: copyObject(settings) as SettingsState,
   };
 
-  applyDefaultFields(validation.settings, HIDDEN_DEFAULT_SETTINGS_FIELDS);
   for (const fieldKey of ALWAYS_VALIDATE_CHOICE_FIELDS)
     assignSetting(validation.settings, fieldKey, validateMetadataChoiceField(fieldKey, rawDraft, validation));
   applyBooleanFields(rawDraft, validation.settings, BOOLEAN_SETTINGS_FIELDS);
@@ -645,8 +633,6 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
     {
       chdCreateCdCodecs: settings.chdCreateCdCodecs,
       chdCreateDvdCodecs: settings.chdCreateDvdCodecs,
-      chdOutputMode: getSettingsFieldDefaultValue("chdOutputMode"),
-      compressionFormat: getSettingsFieldDefaultValue("compressionFormat"),
       compressionProfile: settings.compressionProfile,
       defaultCompression: settings.defaultCompression,
       fixChecksum: settings.fixChecksum,
@@ -657,7 +643,6 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       rvzBlockSize: settings.rvzBlockSize,
       rvzCodec: compressionLevels.rvzCodec,
       rvzCompressionLevel: compressionLevels.rvzCompressionLevel,
-      rvzScrub: settings.rvzScrub,
       sevenZipCodec: compressionLevels.sevenZipCodec,
       sevenZipLevel: compressionLevels.sevenZipLevel,
       workerThreads: settings.workerThreads,
