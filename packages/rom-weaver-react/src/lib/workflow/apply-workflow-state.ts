@@ -53,6 +53,10 @@ type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>
   preparedInputAssets?: InputAsset[];
   preparedPatchFile?: PatchFileInstance;
   parsedPatch?: ParsedPatchLike;
+  /** In-flight `parsePatch` for this stage. The eager `stageSource` parse and the `setInput`
+   * readiness re-evaluation can both reach `parsePatch` before either finishes; sharing one promise
+   * keeps the patch from being ingested twice. Cleared once the parse settles. */
+  parsePatchInFlight?: Promise<void>;
   selectedArchiveEntry?: string;
   outputLabel?: string;
 };

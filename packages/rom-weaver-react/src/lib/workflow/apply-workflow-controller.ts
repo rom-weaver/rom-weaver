@@ -139,7 +139,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.patches.map((patch) => patch.source);
   }
 
-  async setInput(input: TSource | TSource[]): Promise<void> {
+  async setInput(
+    input: TSource | TSource[],
+    options?: { onFinalized?: (input: ApplyWorkflowInputState | null) => void },
+  ): Promise<void> {
     return this.mutate("setInput", async () => {
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
@@ -185,6 +188,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           hasChecksums: !!this.inputSession.view.state.checksums,
           status: this.inputSession.view.state.status,
         });
+        // The input is fully checksummed here — surface its terminal state now so the ROM row stops
+        // showing "checksumming" while the patch (re)validation below runs. That validation is a patch
+        // concern and reports only on the patch row, so it must not keep the ROM row busy.
+        options?.onFinalized?.(this.getInput());
         const endImplicit = startStageSpan("setInput:discoverImplicitPatches");
         await this.discoverImplicitPatches();
         endImplicit();
@@ -877,6 +884,21 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private async parsePatch(stage: StagedSource<TSource>): Promise<void> {
+    // Already described — nothing to re-ingest.
+    if (stage.parsedPatch) return;
+    // The eager stageSource parse and setInput's readiness pass both reach here while the input is
+    // still staging; share the one in-flight ingest instead of describing the same patch twice.
+    if (stage.parsePatchInFlight) return stage.parsePatchInFlight;
+    const run = this.runParsePatch(stage);
+    stage.parsePatchInFlight = run;
+    try {
+      await run;
+    } finally {
+      stage.parsePatchInFlight = undefined;
+    }
+  }
+
+  private async runParsePatch(stage: StagedSource<TSource>): Promise<void> {
     const patchFile = stage.preparedPatchFile;
     if (!patchFile) {
       stage.state.status = "needsSelection";

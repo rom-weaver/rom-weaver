@@ -308,7 +308,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             inputCount: snapshot.inputs.length,
           });
           inputPromise = workflow
-            .setInput(snapshot.inputs)
+            // Surface the ROM row's done state (clear "checksumming" + populate checksums) the moment
+            // the input is checksummed, before the patch (re)validation inside setInput runs — that
+            // validation is a patch concern and reports only on the patch row.
+            .setInput(snapshot.inputs, {
+              onFinalized: (state) => {
+                handlers.onInputState?.(state);
+                if (state?.checksums) handlers.onChecksumReady?.(state);
+                emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input finalized", { input: state });
+              },
+            })
             .then(() => {
               emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
                 input: workflow.getInput(),
