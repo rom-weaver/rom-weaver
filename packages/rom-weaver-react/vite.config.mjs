@@ -127,6 +127,18 @@ const packagedBrotliPathForDistAsset = (filePath) => {
   if (path.extname(filePath) !== ".wasm") return null;
   if (!(fs.existsSync(packagedWasmPath) && fs.existsSync(packagedWasmBrotliPath))) return null;
   if (sha256File(filePath) !== sha256File(packagedWasmPath)) return null;
+  // The prebuilt `.br` sibling exists only to skip the slow quality-11 compress of the ~6 MB wasm. But
+  // it is a gitignored build artifact that can lag the wasm (e.g. the wasm is rebuilt — gaining a new
+  // command — without regenerating its `.br`). Shipping a stale `.br` serves an OUTDATED wasm to every
+  // brotli-capable browser (i.e. all of them) while the raw `.wasm` is current — silently breaking the
+  // app in prod even though dev (raw wasm) works. Verify the sibling decodes back to the wasm; if it is
+  // stale or corrupt, fall through to compress the real asset.
+  try {
+    const decoded = zlib.brotliDecompressSync(fs.readFileSync(packagedWasmBrotliPath));
+    if (!decoded.equals(fs.readFileSync(packagedWasmPath))) return null;
+  } catch {
+    return null;
+  }
   return packagedWasmBrotliPath;
 };
 
