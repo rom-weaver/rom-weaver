@@ -23,7 +23,7 @@ import {
   normalizeArchiveEntryBytes,
 } from "./binary-service.ts";
 import { buildDescentParentCompressions, type DescentExtractStep } from "./input-archive-descent-chain.ts";
-import { resolveChdSplitBinSelection, resolveCompressionRomAutoPickEntryName } from "./input-archive-disc-groups.ts";
+import { resolveCompressionRomAutoPickEntryName } from "./input-archive-disc-groups.ts";
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
@@ -61,7 +61,6 @@ type InputPreparationRuntimeLike = InputPreparationRuntime | Pick<WorkflowRuntim
 type ChdCodecMode = "cd" | "dvd";
 type CompressionExtractOverrides = {
   checksumAlgorithms?: string[];
-  chdSplitBin?: boolean;
   interactiveSelectionEnabled?: boolean;
 };
 type CompressionEntryKindFilter = {
@@ -184,7 +183,6 @@ const getCompressionRuntimeOptions = (
   ...(Array.isArray(overrides.checksumAlgorithms)
     ? { extractChecksumAlgorithms: [...overrides.checksumAlgorithms] }
     : {}),
-  ...(typeof overrides.chdSplitBin === "boolean" ? { chdSplitBin: overrides.chdSplitBin } : {}),
   ...(typeof overrides.interactiveSelectionEnabled === "boolean"
     ? { interactiveSelectionEnabled: overrides.interactiveSelectionEnabled }
     : {}),
@@ -462,17 +460,7 @@ const resolveArchiveInputFileByDescent = async (
     const patchLeaf = await resolvePatchArchiveLeaf(file, options, runtime, selectedArchiveEntry, sourceIndex);
     if (patchLeaf) return patchLeaf;
   }
-  const chdSelection = await resolveChdSplitBinSelection({
-    archiveFile: file,
-    compressionFormat,
-    kindFilter,
-    options,
-    runtime,
-    selectedEntryName: selectedArchiveEntry,
-  });
-  const selectedEntries = normalizeSelectedEntryNames(
-    chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
-  );
+  const selectedEntries = normalizeSelectedEntryNames(selectedArchiveEntry ? [selectedArchiveEntry] : []);
   traceArchivePreparation(options, "input.archive.file.descent.start", {
     compressionFormat,
     file: describeArchiveFileForTrace(file),
@@ -483,7 +471,7 @@ const resolveArchiveInputFileByDescent = async (
     descendSinglePayload: true,
     entries: selectedEntries,
     format: compressionFormat,
-    options: getCompressionRuntimeOptions(options, { chdSplitBin: chdSelection.chdSplitBin }, kindFilter),
+    options: getCompressionRuntimeOptions(options, {}, kindFilter),
     source: getCompressionRuntimeSource(file),
   });
   const output = result.output || (Array.isArray(result.outputs) ? result.outputs[0] : undefined);
@@ -494,7 +482,6 @@ const resolveArchiveInputFileByDescent = async (
     preferExternalFilePath: true,
   });
   extracted.fileName = fileName;
-  if (chdSelection.chdMode) extracted._chdMode = chdSelection.chdMode;
   traceArchivePreparation(options, "input.archive.file.descent.finish", {
     compressionFormat,
     fileName,
@@ -887,13 +874,7 @@ const archiveHasSelectablePatches = async (
 // Shared low-level archive primitives consumed by the sibling modules split out of this orchestrator
 // (input-archive-disc-groups, input-archive-patch-leaves). Not part of the public input-preparation
 // surface — internal to the input-archive cluster.
-export type {
-  ArchiveEntryLike,
-  ChdCodecMode,
-  CompressionEntryKindFilter,
-  InputPreparationOptions,
-  InputPreparationRuntimeLike,
-};
+export type { ArchiveEntryLike, InputPreparationOptions, InputPreparationRuntimeLike };
 export {
   archiveHasSelectablePatches,
   attachBareRomIngestMetadata,
@@ -907,7 +888,6 @@ export {
   getPatchLeafParentCompressionsForSelection,
   isCompressionFile,
   listCompressionEntries,
-  listCompressionEntryResult,
   listDroppedArchiveEntryNames,
   prepareAutoPatchInputs,
   resolveArchiveInput,
