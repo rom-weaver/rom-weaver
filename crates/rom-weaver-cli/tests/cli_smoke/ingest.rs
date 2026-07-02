@@ -540,6 +540,62 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
 }
 
 #[test]
+fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
+    // A keep-one ROM `--select` pins which ROM is extracted, but it must NOT suppress the bundle's
+    // sidecar patches: they are enumerated independently so the host can still offer to apply them.
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), with_nes_header(b"selected rom payload")).expect("rom fixture");
+    let other = temp.child("other.nes");
+    fs::write(other.path(), with_nes_header(b"other rom payload")).expect("other rom fixture");
+    let patch = create_bps_patch(&temp, b"abcdefgh", b"abZZefgh", "game.bps");
+    let archive = temp.child("mixed-multi.zip");
+    command_stdout(
+        &[
+            "compress",
+            rom.path().to_str().expect("path"),
+            other.path().to_str().expect("path"),
+            patch.to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let out_dir = temp.child("ingest-mixed-multi-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        archive.path().to_str().expect("path"),
+        "--out-dir",
+        out_dir.path().to_str().expect("path"),
+        "--select",
+        "game.nes",
+        "--json",
+    ]);
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let assets = ingest["assets"].as_array().expect("assets array");
+    assert!(
+        assets.iter().any(|asset| asset["file_name"] == "game.nes"),
+        "the selected ROM is extracted + checksummed"
+    );
+    assert!(
+        !assets.iter().any(|asset| asset["file_name"] == "other.nes"),
+        "the unselected ROM is not extracted"
+    );
+    let patches = ingest["patches"].as_array().expect("patches array");
+    assert!(
+        patches
+            .iter()
+            .any(|descriptor| descriptor["file_name"] == "game.bps"),
+        "the sidecar patch is surfaced despite the ROM `--select`"
+    );
+}
+
+#[test]
 fn ingest_rejects_unsupported_checksum_algorithm() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");

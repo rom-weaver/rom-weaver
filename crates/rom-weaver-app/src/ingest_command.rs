@@ -325,7 +325,8 @@ impl CliApp {
         );
 
         if !is_rom {
-            // Patch-only bundle: describe every patch leaf, no ROM checksumming.
+            // Patch-only bundle: describe every patch leaf, no ROM checksumming. An explicit `--select`
+            // still pins specific leaves; interactive resolution stays driven by the global flag.
             let patches = self.ingest_patch_leaves(
                 handler,
                 source,
@@ -333,6 +334,7 @@ impl CliApp {
                 &raw_selections,
                 no_ignore,
                 no_nested_extract,
+                true,
                 None,
                 context,
             )?;
@@ -361,16 +363,19 @@ impl CliApp {
             context,
         )?;
         // A mixed archive (ROM + sidecar patches) surfaces both so the host can offer applying the
-        // bundled patches without losing the ROM checksum.
+        // bundled patches without losing the ROM checksum. The sidecar patches are enumerated
+        // independently of the ROM keep-one `select` (a chosen ROM must not hide the bundle's patches)
+        // and never prompt — every patch leaf is returned so the host drives the patch choice.
         let patches = if has_patch {
             let rom_hint = assets.first().map(|asset| asset.file_name.clone());
             self.ingest_patch_leaves(
                 handler,
                 source,
                 out_dir,
-                &raw_selections,
+                &[],
                 no_ignore,
                 no_nested_extract,
+                false,
                 rom_hint.as_deref(),
                 context,
             )?
@@ -454,6 +459,7 @@ impl CliApp {
             no_ignore,
             no_nested_extract,
             split_bin,
+            true,
             "ingest input",
             context,
         )?;
@@ -553,6 +559,7 @@ impl CliApp {
         raw_selections: &[String],
         no_ignore: bool,
         no_nested_extract: bool,
+        interactive: bool,
         rom_hint: Option<&str>,
         context: &OperationContext,
     ) -> Result<Vec<PatchDescriptor>> {
@@ -566,6 +573,7 @@ impl CliApp {
             no_ignore,
             no_nested_extract,
             false,
+            interactive,
             "ingest patch input",
             context,
         )?;
@@ -601,21 +609,29 @@ impl CliApp {
         no_ignore: bool,
         no_nested_extract: bool,
         split_bin: bool,
+        interactive: bool,
         source_label: &'static str,
         context: &OperationContext,
     ) -> Result<Vec<Value>> {
-        let selections = self.resolved_extract_selections(
-            handler,
-            source,
-            raw_selections.to_vec(),
-            SelectionResolutionOptions {
-                kind_filter,
-                split_bin,
-                ignore_common_files: !no_ignore,
-                source_label,
-            },
-            context,
-        )?;
+        // The sidecar-patch sub-pass runs non-interactively: empty `raw_selections` then extract every
+        // patch leaf rather than resolving/prompting a payload choice. The ROM pass keeps interactive
+        // resolution (keep-one disambiguation).
+        let selections = if interactive {
+            self.resolved_extract_selections(
+                handler,
+                source,
+                raw_selections.to_vec(),
+                SelectionResolutionOptions {
+                    kind_filter,
+                    split_bin,
+                    ignore_common_files: !no_ignore,
+                    source_label,
+                },
+                context,
+            )?
+        } else {
+            raw_selections.to_vec()
+        };
         self.emit_running(
             OperationLabel {
                 command: "ingest",
