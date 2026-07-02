@@ -43,51 +43,97 @@ const emitBrowserRuntimeVfsTrace = (
     details,
   );
 
+// Staging dedup state is process-global, not per-runtime-instance. The app builds several
+// WorkflowRuntime instances (the module singleton in workflow-runtime.ts plus the lazily-created
+// input-preparation and output-verification runtimes), and one dropped input is staged by passes that
+// land on *different* instances. The virtual-file path allocator (browser-opfs-source-ref) is already a
+// module global, so two instances staging the same input concurrently collide there and the loser is
+// handed a phantom `name-2.ext` — which the codec/disc extractors then bake into `-2` outputs. Keeping
+// the dedup cache global (keyed by content identity, namespaced by mount) makes every pass on any
+// instance reuse one staged copy and one bare visible name. String-keyed (not a WeakMap), so entries are
+// pruned explicitly in cleanupCachedStagedSource — which already runs for every staged source.
+const stagedSourceCache = new Map<string, CachedStagedSource>();
+// In-flight stages keyed by the same content identity, so a second pass that starts before the first
+// finishes staging coalesces onto it instead of running a duplicate stage (the resolved-entry cache only
+// dedupes *after* the first pass caches). Cleared in stageSource's finally once the entry caches.
+const pendingStages = new Map<string, Promise<void>>();
+// Sources released while a staging pass was still in flight: releaseSources misses the cache for those
+// (the entry is only cached after staging completes), and the cancelled consumer never calls its wrapped
+// cleanup, stranding the staged OPFS copy. Track the release so the in-flight pass cleans up after itself
+// when it lands; a later re-stage of the same source clears the mark.
+const releasedStagingSources = new Set<string>();
+// Per-object identity key for sources that carry no derivable content identity (file handles, nameless
+// Blobs). Those are reused by reference across passes, so object identity is the right key.
+let nextObjectIdentityKey = 0;
+const objectIdentityKeys = new WeakMap<object, string>();
+const getObjectIdentityKey = (candidate: object): string => {
+  const existing = objectIdentityKeys.get(candidate);
+  if (existing) return existing;
+  nextObjectIdentityKey += 1;
+  const created = `obj:${nextObjectIdentityKey}`;
+  objectIdentityKeys.set(candidate, created);
+  return created;
+};
+const cleanupCachedStagedSource = async (key: string, cached: CachedStagedSource) => {
+  // Releasing twice must not double-release the underlying staged copy: the source-ref cleanup
+  // decrements a content-keyed registry, and a second call could hit a NEW same-key entry.
+  if (cached.cleanedUp) return;
+  cached.cleanedUp = true;
+  if (cached.cleanupTimer) {
+    clearTimeout(cached.cleanupTimer);
+    cached.cleanupTimer = undefined;
+  }
+  // Only evict our own slot: a re-stage may have replaced this key with a different live entry, and
+  // deleting that would strand the new staged copy (identity guard, mirrors browser-virtual-files.ts).
+  if (stagedSourceCache.get(key) === cached) stagedSourceCache.delete(key);
+  await cached.staged.cleanup().catch(() => undefined);
+};
+const releaseCachedStagedSource = (key: string, cached: CachedStagedSource) => {
+  cached.refCount = Math.max(0, cached.refCount - 1);
+  if (cached.refCount > 0 || cached.cleanupTimer) return;
+  if (cached.cleanupWhenIdle) {
+    void cleanupCachedStagedSource(key, cached);
+    return;
+  }
+  // Defer cleanup so the next pass of the same input reuses this staged copy instead of re-staging the
+  // whole compressed file. A re-stage within the window clears this timer and re-references it.
+  cached.cleanupTimer = setTimeout(() => {
+    cached.cleanupTimer = undefined;
+    void cleanupCachedStagedSource(key, cached);
+  }, STAGED_SOURCE_RETENTION_MS);
+};
+const wrapCachedStagedSource = (key: string, cached: CachedStagedSource): StagedBrowserSource => {
+  let released = false;
+  return {
+    ...cached.staged,
+    cleanup: async () => {
+      if (released) return;
+      released = true;
+      releaseCachedStagedSource(key, cached);
+    },
+  };
+};
+
 const createBrowserRuntimeVfsIo = ({
   mountPoint = WORKER_OPFS_MOUNTPOINT,
   vfs,
 }: CreateBrowserRuntimeVfsIoOptions): RuntimeWorkerIo => {
-  const stagedSourceCache = new WeakMap<object, CachedStagedSource>();
-  // Sources released while a staging pass was still in flight: releaseSources misses the cache for
-  // those (the entry is only cached after staging completes), and the cancelled consumer never
-  // calls its wrapped cleanup, stranding the staged OPFS copy. Track the release so the in-flight
-  // pass cleans up after itself when it lands; a later re-stage of the same source clears the mark.
-  const releasedStagingSources = new WeakSet<object>();
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const getStagedSourceCacheKey = (source: unknown) => {
+  const getStagedSourceCacheKey = (source: unknown): string | null => {
     const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
     const candidate = directSource || source;
     if (!(candidate && typeof candidate === "object")) return null;
     if (isVfsFileRef(candidate)) return null;
-    return candidate;
-  };
-  const cleanupCachedStagedSource = async (key: object, cached: CachedStagedSource) => {
-    // Releasing twice must not double-release the underlying staged copy: the source-ref cleanup
-    // decrements a content-keyed registry, and a second call could hit a NEW same-key entry.
-    if (cached.cleanedUp) return;
-    cached.cleanedUp = true;
-    if (cached.cleanupTimer) {
-      clearTimeout(cached.cleanupTimer);
-      cached.cleanupTimer = undefined;
+    // Namespace the (process-global) cache key by mount so it never serves a path staged under a
+    // different mount point. All current runtimes share WORKER_OPFS_MOUNTPOINT; this stays correct if
+    // that ever changes.
+    const mountPrefix = `${mountPoint}|`;
+    // A File carries a stable content identity (name + size + lastModified) that survives the per-pass
+    // re-wrapping of one dropped input into fresh File objects, so every pass resolves to one key.
+    if (typeof File !== "undefined" && candidate instanceof File) {
+      return `${mountPrefix}file:${candidate.name}:${candidate.size}:${candidate.lastModified}`;
     }
-    // Only evict our own slot: a re-stage may have replaced this key with a different live entry, and
-    // deleting that would strand the new staged copy (identity guard, mirrors browser-virtual-files.ts).
-    if (stagedSourceCache.get(key) === cached) stagedSourceCache.delete(key);
-    await cached.staged.cleanup().catch(() => undefined);
-  };
-  const releaseCachedStagedSource = (key: object, cached: CachedStagedSource) => {
-    cached.refCount = Math.max(0, cached.refCount - 1);
-    if (cached.refCount > 0 || cached.cleanupTimer) return;
-    if (cached.cleanupWhenIdle) {
-      void cleanupCachedStagedSource(key, cached);
-      return;
-    }
-    // Defer cleanup so the next pass of the same input reuses this staged copy instead of re-staging
-    // the whole compressed file. A re-stage within the window clears this timer and re-references it.
-    cached.cleanupTimer = setTimeout(() => {
-      cached.cleanupTimer = undefined;
-      void cleanupCachedStagedSource(key, cached);
-    }, STAGED_SOURCE_RETENTION_MS);
+    return `${mountPrefix}${getObjectIdentityKey(candidate)}`;
   };
   const releaseSources: RuntimeWorkerIo["releaseSources"] = async (sources) => {
     const cleanups: Array<Promise<void>> = [];
@@ -104,17 +150,6 @@ const createBrowserRuntimeVfsIo = ({
       cleanups.push(cleanupCachedStagedSource(key, cached));
     }
     await Promise.all(cleanups);
-  };
-  const wrapCachedStagedSource = (key: object, cached: CachedStagedSource): StagedBrowserSource => {
-    let released = false;
-    return {
-      ...cached.staged,
-      cleanup: async () => {
-        if (released) return;
-        released = true;
-        releaseCachedStagedSource(key, cached);
-      },
-    };
   };
   const statWithRetries = async (filePath: string) => {
     let stat = await vfs.stat(filePath);
@@ -178,21 +213,40 @@ const createBrowserRuntimeVfsIo = ({
     // A fresh stage of this source supersedes any earlier release marker (e.g. the same File
     // re-added after a cancelled candidate selection).
     if (cacheKey) releasedStagingSources.delete(cacheKey);
-    const cached = cacheKey ? stagedSourceCache.get(cacheKey) : undefined;
-    if (cached) {
-      if (cached.cleanupTimer) {
-        clearTimeout(cached.cleanupTimer);
-        cached.cleanupTimer = undefined;
+    // Reuse an already-staged copy: cancel any pending cleanup and hand back another ref-counted wrapper.
+    const reuseCachedEntry = (key: string, entry: CachedStagedSource): StagedBrowserSource => {
+      if (entry.cleanupTimer) {
+        clearTimeout(entry.cleanupTimer);
+        entry.cleanupTimer = undefined;
       }
-      cached.refCount += 1;
+      entry.refCount += 1;
       emitBrowserRuntimeVfsTrace(trace, "stageSource reusing cached staged source ref", {
-        fileName: cached.staged.fileName,
-        filePath: cached.staged.filePath,
+        fileName: entry.staged.fileName,
+        filePath: entry.staged.filePath,
         scope,
-        size: cached.staged.size,
-        virtual: !!cached.staged.virtual,
+        size: entry.staged.size,
+        virtual: !!entry.staged.virtual,
       });
-      return wrapCachedStagedSource(cacheKey, cached);
+      return wrapCachedStagedSource(key, entry);
+    };
+    const cached = cacheKey ? stagedSourceCache.get(cacheKey) : undefined;
+    if (cacheKey && cached) return reuseCachedEntry(cacheKey, cached);
+    // Coalesce concurrent stages of the SAME source onto one in-flight stage. The resolved-entry cache
+    // above only dedupes once the first pass has finished staging *and* cached its entry; a second pass
+    // that starts inside that window would otherwise run its own stageFromSource, copy the input into
+    // OPFS a second time, and — because the first copy still holds the bare visible name — be handed a
+    // phantom `name-2.ext`. Codec/disc extractors derive output names from the staged stem, so the stray
+    // copy surfaced as a `-2` extraction with no base file (e.g. during ingest). Awaiting the in-flight
+    // stage lets this pass reuse the single bare-named copy instead.
+    if (cacheKey) {
+      const inFlight = pendingStages.get(cacheKey);
+      if (inFlight) {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource awaiting in-flight stage of same source", { scope });
+        await inFlight.catch(() => undefined);
+        const settled = stagedSourceCache.get(cacheKey);
+        if (settled) return reuseCachedEntry(cacheKey, settled);
+        // The in-flight stage failed or was released before we woke; fall through to a fresh stage.
+      }
     }
     // Cache every staged source (in-memory virtual *and* real OPFS-staged path copies) keyed on the
     // underlying File/handle, so the list/probe/extract passes of a single input reuse one staged copy
@@ -232,36 +286,20 @@ const createBrowserRuntimeVfsIo = ({
       });
       return wrapCachedStagedSource(cacheKey, entry);
     };
-    let staged = await stageFromSource();
-    emitBrowserRuntimeVfsTrace(trace, "stageSource source ref created", {
-      fileName: staged.fileName,
-      filePath: staged.filePath,
-      size: staged.size,
-      virtual: !!staged.virtual,
-    });
-    if (staged.virtual) {
-      return cacheStagedSource(staged);
-    }
-    try {
-      const stat = await assertStagedPath(staged.filePath);
-      emitBrowserRuntimeVfsTrace(trace, "stageSource path verified", {
+    const runStaging = async (): Promise<StagedBrowserSource> => {
+      let staged = await stageFromSource();
+      emitBrowserRuntimeVfsTrace(trace, "stageSource source ref created", {
+        fileName: staged.fileName,
         filePath: staged.filePath,
-        size: staged.size ?? stat.size,
+        size: staged.size,
+        virtual: !!staged.virtual,
       });
-      return cacheStagedSource({
-        ...staged,
-        size: staged.size ?? stat.size,
-      });
-    } catch (error) {
-      emitBrowserRuntimeVfsTrace(trace, "stageSource path verify failed, retrying", {
-        filePath: staged.filePath,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      await staged.cleanup().catch(() => undefined);
-      staged = await stageFromSource();
+      if (staged.virtual) {
+        return cacheStagedSource(staged);
+      }
       try {
         const stat = await assertStagedPath(staged.filePath);
-        emitBrowserRuntimeVfsTrace(trace, "stageSource retry path verified", {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource path verified", {
           filePath: staged.filePath,
           size: staged.size ?? stat.size,
         });
@@ -269,14 +307,50 @@ const createBrowserRuntimeVfsIo = ({
           ...staged,
           size: staged.size ?? stat.size,
         });
-      } catch (retryError) {
-        emitBrowserRuntimeVfsTrace(trace, "stageSource retry failed", {
+      } catch (error) {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource path verify failed, retrying", {
           filePath: staged.filePath,
-          message: retryError instanceof Error ? retryError.message : String(retryError),
+          message: error instanceof Error ? error.message : String(error),
         });
         await staged.cleanup().catch(() => undefined);
-        throw retryError instanceof Error ? retryError : error;
+        staged = await stageFromSource();
+        try {
+          const stat = await assertStagedPath(staged.filePath);
+          emitBrowserRuntimeVfsTrace(trace, "stageSource retry path verified", {
+            filePath: staged.filePath,
+            size: staged.size ?? stat.size,
+          });
+          return cacheStagedSource({
+            ...staged,
+            size: staged.size ?? stat.size,
+          });
+        } catch (retryError) {
+          emitBrowserRuntimeVfsTrace(trace, "stageSource retry failed", {
+            filePath: staged.filePath,
+            message: retryError instanceof Error ? retryError.message : String(retryError),
+          });
+          await staged.cleanup().catch(() => undefined);
+          throw retryError instanceof Error ? retryError : error;
+        }
       }
+    };
+    // No stable cache key (e.g. a non-object source): nothing to coalesce against, stage directly.
+    if (!cacheKey) return runStaging();
+    // Publish this stage as in-flight so a concurrent same-source pass coalesces onto it (above) rather
+    // than starting a duplicate stage. Resolved in `finally` after the entry is cached, so the waiter
+    // then finds it in the resolved-entry cache.
+    let settleInFlight: () => void = () => undefined;
+    pendingStages.set(
+      cacheKey,
+      new Promise<void>((resolve) => {
+        settleInFlight = resolve;
+      }),
+    );
+    try {
+      return await runStaging();
+    } finally {
+      pendingStages.delete(cacheKey);
+      settleInFlight();
     }
   };
 
