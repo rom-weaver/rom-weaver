@@ -133,7 +133,6 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       knownInputPaths: runtime?.knownInputPaths,
       mountCache: THREAD_WORKER_MOUNT_CACHE,
       mountHandles: normalizedMountHandles,
-      preopenOutputPaths: runtime?.preopenOutputPaths,
       proxyClient,
       request: runtime?.request,
       runCloseables: closeables,

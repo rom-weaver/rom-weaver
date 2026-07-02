@@ -78,7 +78,6 @@ const toRomWeaverOptions = (input: {
   logLevel?: LogLevel | string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onLog?: (log: WorkflowRuntimeLog) => void;
-  preopenOutputPaths?: string[];
   signal?: AbortSignal;
   syncAccessMode?: string;
   virtualFiles?: RuntimeValue[];
@@ -121,12 +120,6 @@ const toRomWeaverOptions = (input: {
       .map((pathValue) => String(pathValue || "").trim())
       .filter((pathValue) => !!pathValue);
     if (knownInputPaths.length) options.knownInputPaths = knownInputPaths;
-  }
-  if (Array.isArray(input.preopenOutputPaths)) {
-    const preopenOutputPaths = input.preopenOutputPaths
-      .map((pathValue) => String(pathValue || "").trim())
-      .filter((pathValue) => !!pathValue);
-    if (preopenOutputPaths.length) options.preopenOutputPaths = preopenOutputPaths;
   }
   if (Array.isArray(input.virtualFiles)) options.virtualFiles = input.virtualFiles;
   if (typeof input.virtualOnlyMounts === "boolean") options.virtualOnlyMounts = input.virtualOnlyMounts;

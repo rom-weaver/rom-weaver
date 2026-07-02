@@ -30,7 +30,6 @@ export type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
     // Resolve a mid-run selection request to the chosen 0-based indices (empty == cancel). Single-
     // select prompts use the first index; multi-select prompts use all of them.
     hostSelect?: (request: string) => number[];
-    preopenOutputPaths?: string[];
   };
 export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   cwdMountPath?: string;
@@ -42,7 +41,6 @@ export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
   /** Forwarded to spawned WASI threads so they share the runner's OPFS proxy. */
   opfsProxyTransfer?: OpfsProxyChannelTransfer;
-  preopenOutputPaths?: string[];
   request?: RomWeaverRunRequest;
   runtimeMounts?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;

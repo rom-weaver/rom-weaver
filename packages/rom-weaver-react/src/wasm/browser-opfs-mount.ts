@@ -1,10 +1,5 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
-import {
-  isGuestPathWithinMount,
-  isGuestPathWithinRoots,
-  joinGuestPath,
-  normalizePreopenOutputPaths,
-} from "./browser-opfs-guest-paths.ts";
+import { isGuestPathWithinRoots, joinGuestPath } from "./browser-opfs-guest-paths.ts";
 import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
@@ -19,7 +14,6 @@ import { addVirtualFilesToMount, restoreVirtualFiles } from "./browser-opfs-virt
 import type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 import { WasiRandomAccessFileInode } from "./browser-opfs-wasi-file-inode.ts";
 import type { WasiDirectoryContents } from "./browser-opfs-wasi-paths.ts";
-import { lastPathPart, normalizeWasiRelativePathParts } from "./browser-opfs-wasi-paths.ts";
 
 export interface BrowserOpfsMountAcquireOptions {
   directoryHandle: FileSystemDirectoryHandleLike;
@@ -170,68 +164,6 @@ export class BrowserOpfsMount {
     this.trace?.(
       `[browser-opfs] mount finishRun pruned run adapters path=${this.mountPath} closed=${perRunFiles.length}`,
     );
-  }
-
-  async preopenOutputPaths({ paths, trace }: { paths?: unknown; trace?: TraceLine } = {}) {
-    if (this.virtualOnly) return;
-    const normalizedPaths = normalizePreopenOutputPaths(paths);
-    if (normalizedPaths.length === 0) return;
-    let preopened = 0;
-    for (const guestPath of normalizedPaths) {
-      if (!isGuestPathWithinMount(guestPath, this.mountPath)) continue;
-      await this.preopenOutputPath(guestPath);
-      preopened += 1;
-    }
-    if (preopened > 0) {
-      trace?.(`[browser-opfs] mount preopen outputs path=${this.mountPath} files=${preopened}`);
-    }
-  }
-
-  async preopenOutputPath(guestPath: string) {
-    if (!this.isWritablePath(guestPath)) {
-      throw new Error(`Browser OPFS output path is not writable: ${guestPath}`);
-    }
-    const relativePath = guestPath === this.mountPath ? "" : guestPath.slice(this.mountPath.length + 1);
-    const parts = normalizeWasiRelativePathParts(relativePath);
-    if (parts === null || parts.length === 0) {
-      throw new Error(`Browser OPFS output path must be a file inside ${this.mountPath}: ${guestPath}`);
-    }
-
-    let entries = this.contents;
-    for (const part of parts.slice(0, -1)) {
-      let entry: wasiShim.Inode | null = entries.get(part) ?? null;
-      if (!entry) {
-        entry = new wasiShim.Directory(new Map());
-        entries.set(part, entry);
-      }
-      if (!(entry instanceof wasiShim.Directory)) {
-        throw new Error(`Browser OPFS output parent is not a directory: ${guestPath}`);
-      }
-      // The proxy worker creates the OPFS directories on open; only build the wasm-side inode tree
-      // here so path resolution works.
-      entries = entry.contents;
-    }
-
-    const name = lastPathPart(parts);
-    const existing = entries.get(name) ?? null;
-    if (existing instanceof wasiShim.Directory) {
-      throw new Error(`Browser OPFS output path is a directory: ${guestPath}`);
-    }
-    if (existing instanceof WasiRandomAccessFileInode && typeof existing.file?.close === "function") {
-      try {
-        existing.file.close();
-      } catch {
-        // ignore stale output handle cleanup failures; the new handle below owns the path.
-      }
-    }
-
-    const proxyFile = new BrowserProxyRandomAccessFile(this.proxyClient, guestPath, {
-      create: true,
-      writable: true,
-    });
-    proxyFile.truncate(0);
-    this.trackOwnedFile(proxyFile);
-    entries.set(name, new WasiRandomAccessFileInode(proxyFile));
   }
 
   trackOwnedFile(file: RandomAccessFileLike) {

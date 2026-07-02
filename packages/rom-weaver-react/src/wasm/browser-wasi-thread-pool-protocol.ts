@@ -114,7 +114,7 @@ export function createThreadWorkerRuntimePayload(
   runtime: ThreadSpawnerRuntime | undefined,
 ): ThreadSpawnerRuntime | undefined {
   if (!runtime || typeof runtime !== "object") return runtime;
-  const { mountHandles: _mountHandles, preopenOutputPaths: _preopenOutputPaths, ...rest } = runtime;
+  const { mountHandles: _mountHandles, ...rest } = runtime;
   const payload: ThreadWorkerRuntimePayload = {
     ...rest,
     resolveMountHandlesInWorker: true,

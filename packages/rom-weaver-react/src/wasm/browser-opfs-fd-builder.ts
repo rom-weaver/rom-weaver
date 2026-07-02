@@ -41,7 +41,6 @@ export interface BuildBrowserOpfsWasiFdsOptions {
   knownInputPaths?: unknown;
   mountCache: BrowserOpfsMountCache;
   mountHandles: Record<string, FileSystemDirectoryHandleLike>;
-  preopenOutputPaths?: unknown;
   proxyClient: OpfsProxyClient;
   request: RomWeaverRunInput | undefined;
   runCloseables: unknown[];
@@ -63,7 +62,6 @@ export async function buildBrowserOpfsWasiFds({
   runtimeMounts,
   mountHandles,
   knownInputPaths,
-  preopenOutputPaths,
   stderrLineHandler,
   stdoutLineHandler,
   virtualFiles,
@@ -120,7 +118,6 @@ export async function buildBrowserOpfsWasiFds({
         virtualFiles,
       });
       trace?.(`[browser-opfs] mount startRun done path=${mountPath}`);
-      await mount.preopenOutputPaths({ paths: preopenOutputPaths, trace });
       fds.push(new PreparedWasiPreopenDirectory(mount));
       if (mountPath === cwdMountPath) cwdMount = mount;
     }

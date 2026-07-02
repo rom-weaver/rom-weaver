@@ -6,7 +6,6 @@ import {
   createBrowserOpfsMountCache,
   normalizeKnownInputPaths,
   normalizeMountHandleMap,
-  normalizePreopenOutputPaths,
   normalizeVirtualFiles,
   normalizeWritableRoots,
 } from "./browser-opfs-mounts.ts";
@@ -240,10 +239,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         ...(Array.isArray(options.knownInputPaths) ? options.knownInputPaths : []),
         ...(Array.isArray(runOptions.knownInputPaths) ? runOptions.knownInputPaths : []),
       ]);
-      const preopenOutputPaths = normalizePreopenOutputPaths([
-        ...(Array.isArray(options.preopenOutputPaths) ? options.preopenOutputPaths : []),
-        ...(Array.isArray(runOptions.preopenOutputPaths) ? runOptions.preopenOutputPaths : []),
-      ]);
       const threadSpawner = createBrowserWasiThreadSpawner({
         envList,
         moduleImports,
@@ -254,7 +249,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           knownInputPaths,
           mountHandles,
           opfsProxyTransfer: opfsProxy.transfer,
-          preopenOutputPaths,
           request,
           runtimeMounts,
           syncAccessMode: resolvedSyncAccessMode,
@@ -298,7 +292,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           knownInputPaths,
           mountCache,
           mountHandles,
-          preopenOutputPaths,
           proxyClient: opfsProxy.client,
           request,
           runCloseables: closeables,

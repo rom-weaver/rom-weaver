@@ -192,8 +192,6 @@ export interface RomWeaverBrowserOpfsOptions {
   virtualFiles?: RomWeaverBrowserVirtualFile[];
   /** Extra guest input paths that threaded virtual-only mounts must hydrate before a run. */
   knownInputPaths?: string[];
-  /** Writable guest output paths to create/truncate inside the cached OPFS mount before a run. */
-  preopenOutputPaths?: string[];
   /** When true, mount tables start empty and only hydrated paths/virtual files are present. */
   virtualOnlyMounts?: boolean;
   /** Writable guest roots. Defaults to the work mount itself. */
@@ -224,8 +222,6 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   stagingMs?: number;
   /** Extra guest input paths that threaded virtual-only mounts must hydrate before a run. */
   knownInputPaths?: string[];
-  /** Writable guest output paths to create/truncate inside the cached OPFS mount before a run. */
-  preopenOutputPaths?: string[];
   /** When true, mount tables start empty and only hydrated paths/virtual files are present. */
   virtualOnlyMounts?: boolean;
   writableDirectories?: string[];

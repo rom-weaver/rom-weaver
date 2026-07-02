@@ -43,10 +43,6 @@ export function normalizeKnownInputPaths(value: unknown) {
   return normalizeGuestPathList(value, "knownInputPaths");
 }
 
-export function normalizePreopenOutputPaths(value: unknown) {
-  return normalizeGuestPathList(value, "preopenOutputPaths");
-}
-
 export function isGuestPathWithinRoots(path: unknown, roots: readonly string[]) {
   const normalizedPath = normalizeGuestPath(path, { label: "guest path" });
   for (const root of roots) {

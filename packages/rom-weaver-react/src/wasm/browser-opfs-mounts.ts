@@ -6,7 +6,6 @@ export { buildBrowserOpfsWasiFds } from "./browser-opfs-fd-builder.ts";
 export {
   normalizeKnownInputPaths,
   normalizeMountHandleMap,
-  normalizePreopenOutputPaths,
   normalizeWritableRoots,
 } from "./browser-opfs-guest-paths.ts";
 export type { BrowserOpfsMountAcquireOptions } from "./browser-opfs-mount.ts";
