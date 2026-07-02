@@ -68,13 +68,9 @@ const NON_ASCII_CHARS_REGEX = /[^\x20-\x7e]+/g;
 const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
+// Visible names currently handed out to live (not-yet-cleaned-up) staged sources. A name is added on
+// allocate and removed in the source ref's `cleanup`, so membership means "still in use right now".
 const allocatedVirtualInputPaths = new Set<string>();
-// Smallest collision suffix still available per normalized file name. This only ever advances, so a
-// freed path is never handed back out: re-staging a same-named source (e.g. uploading the same
-// archive again to pick a different entry) always lands on a brand-new path. Reusing a freed path
-// races a prior instance whose OPFS access handle may still be open, which fails the next
-// createSyncAccessHandle with "Access Handles cannot be created ... another open Access Handle".
-const nextVirtualInputPathSuffix = new Map<string, number>();
 const getBrowserSourceTraceKind = (source: unknown) => {
   if (typeof File !== "undefined" && source instanceof File) return "file";
   if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
@@ -153,15 +149,20 @@ const createVisibleCollisionFileName = (fileName: string, suffixIndex: number) =
   return `${stem}-${suffixIndex}${extension}`;
 };
 
+// Hand out the smallest visible name not currently in use: the bare name when it is free, otherwise
+// the first `name-N` whose path is unallocated. The suffix is collision-driven, not monotonic — once a
+// source is cleaned up its name is reclaimed, so a same-named re-stage reuses the bare name instead of
+// forever climbing `-2`/`-3`. Safe because a name is only released in `cleanup`, which runs after the
+// staged source's command has finished and dropped its (read-only, Blob-backed) proxy handle, so reuse
+// never races a still-open handle. Concurrently-live same-named stages still get distinct names: the
+// live one is still in `allocatedVirtualInputPaths`, so the next one lands on `-2`.
 const allocateVirtualInputPath = (mountPoint: string, fileName: string) => {
   const normalizedMountPoint = String(mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
-  const startSuffix = nextVirtualInputPathSuffix.get(fileName) ?? 1;
-  for (let suffixIndex = startSuffix; suffixIndex < Number.MAX_SAFE_INTEGER; suffixIndex += 1) {
+  for (let suffixIndex = 1; suffixIndex < Number.MAX_SAFE_INTEGER; suffixIndex += 1) {
     const candidateName = createVisibleCollisionFileName(fileName, suffixIndex);
     const candidatePath = getWorkerStorageBucketPath(normalizedMountPoint, "input", candidateName, candidateName);
     if (allocatedVirtualInputPaths.has(candidatePath)) continue;
     allocatedVirtualInputPaths.add(candidatePath);
-    nextVirtualInputPathSuffix.set(fileName, suffixIndex + 1);
     return candidatePath;
   }
   throw new Error(`Unable to allocate browser input path for ${fileName}`);

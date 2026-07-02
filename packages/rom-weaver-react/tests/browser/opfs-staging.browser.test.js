@@ -152,3 +152,26 @@ test("browser OPFS source refs use visible suffixes for concurrently-live duplic
 
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
+
+test("browser OPFS source refs reuse the bare name after the prior stage is cleaned up", async () => {
+  const stageGame = (byte) =>
+    createBrowserOpfsSourceRef(new File([new Uint8Array([byte])], "game.bin"), "game.bin", {
+      bucket: "input",
+      mountPoint: "/work",
+      pathPrefix: "direct-input",
+    });
+
+  // The suffix is collision-driven, not monotonic: once a same-named source is cleaned up its name is
+  // free again, so a sequential re-stage reclaims the bare name rather than climbing to `game-2.bin`.
+  const first = await stageGame(1);
+  expect(first.filePath).toBe("/work/game.bin");
+  await first.cleanup();
+
+  const second = await stageGame(2);
+  try {
+    expect(second.filePath).toBe("/work/game.bin");
+  } finally {
+    await second.cleanup();
+  }
+  expect(getActiveBrowserVirtualFiles()).toEqual([]);
+});
