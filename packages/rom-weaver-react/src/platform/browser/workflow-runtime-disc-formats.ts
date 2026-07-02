@@ -16,23 +16,16 @@ import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
-  emitBrowserWorkflowTrace,
   getPathDerivedFileName,
   getPathDirectory,
   joinPath,
+  normalizeRomSpecificEntryNameForSource,
   normalizeRomSpecificListEntries,
   normalizeZ3dsListEntriesForSource,
   replaceProgressSourceLabel,
-  uniqueNonEmptyStrings,
   withCodecLevel,
 } from "./workflow-runtime-helpers.ts";
-import {
-  filterOutputCandidatesAwayFromSource,
-  getBrowserExtractOutputPathCandidates,
-  removeBrowserVfsOutputPaths,
-  selectPreferredExtractedFile,
-  waitForBrowserVfsPath,
-} from "./workflow-runtime-vfs-cleanup.ts";
+import { selectPreferredExtractedFile, waitForBrowserVfsPath } from "./workflow-runtime-vfs-cleanup.ts";
 
 const RVZ_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.rvz;
 const Z3DS_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.z3ds;
@@ -63,7 +56,6 @@ const createBrowserDiscFormatsRuntime = (
       run: async (workerSource) => {
         const outputFileName = outputName || "output.rvz";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
-        await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
         const codecs = withCodecLevel(codec || COMPRESSION_DEFAULTS.rvzCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -75,7 +67,6 @@ const createBrowserDiscFormatsRuntime = (
             logLevel,
             outputFileName,
             outputPath,
-            preopenOutputPaths: [outputPath],
             signal,
             workerThreads: threads,
           },
@@ -107,7 +98,6 @@ const createBrowserDiscFormatsRuntime = (
       run: async (workerSource) => {
         const outputFileName = outputName || "output.z3ds";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
-        await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
         const codecs = withCodecLevel(COMPRESSION_DEFAULTS.z3dsCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -119,7 +109,6 @@ const createBrowserDiscFormatsRuntime = (
             logLevel,
             outputFileName,
             outputPath,
-            preopenOutputPaths: [outputPath],
             signal,
             workerThreads: threads,
           },
@@ -160,56 +149,12 @@ const createBrowserDiscFormatsRuntime = (
         fileName: stagedSourceFileName,
       });
       await ensureRvzSourceExists();
-      const listed = await runRomWeaverListWorker(
-        {
-          logLevel,
-          signal,
-          sourcePath: workerSource.filePath,
-        },
-        undefined,
-        onLog,
-      ).catch(() => null);
-      const listedEntries = normalizeRomSpecificListEntries(
-        listed?.entries || [],
-        stagedSourceFileName,
-        sourceFileName,
-      );
-      const listedOutputFileName = getPathBaseName(
-        String(listedEntries[0]?.fileName || listedEntries[0]?.filename || listedEntries[0]?.name || ""),
-      );
-      const outputFileName = outputName || listedOutputFileName || actualOutputFileName;
-      const outputPath = joinPath(outDirPath, listedOutputFileName || stagedOutputFileName || actualOutputFileName);
-      const preopenOutputPaths = filterOutputCandidatesAwayFromSource(
-        uniqueNonEmptyStrings([
-          ...listedEntries.flatMap((entry) =>
-            getBrowserExtractOutputPathCandidates(
-              outDirPath,
-              String(entry?.fileName || entry?.filename || entry?.name || ""),
-            ),
-          ),
-          ...(outputName ? getBrowserExtractOutputPathCandidates(outDirPath, outputName) : []),
-          ...(stagedOutputFileName ? getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName) : []),
-          ...(actualOutputFileName ? getBrowserExtractOutputPathCandidates(outDirPath, actualOutputFileName) : []),
-          outputPath,
-        ]),
-        workerSource.filePath,
-      );
-      await removeBrowserVfsOutputPaths(preopenOutputPaths, [workerSource.filePath]);
-      if (outputPath === workerSource.filePath) {
-        throw new Error(`RVZ output path conflicts with the active input: ${outputPath}`);
-      }
-      emitBrowserWorkflowTrace({ logLevel, onLog }, "rvz output precreated", {
-        candidates: preopenOutputPaths,
-        outputPath,
-        sourcePath: workerSource.filePath,
-      });
       const extracted = await invokeRomWeaverExtractWorker(
         {
           checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
           knownInputPaths: [workerSource.filePath],
           logLevel,
           outDirPath,
-          preopenOutputPaths,
           select: [],
           signal,
           sourcePath: workerSource.filePath,
@@ -230,20 +175,25 @@ const createBrowserDiscFormatsRuntime = (
         emittedFiles: extracted.emittedFiles,
         logLevel,
         onLog,
-        preferredEntryNames: [
-          outputFileName,
-          actualOutputFileName,
-          stagedOutputFileName,
-          listedOutputFileName,
-          outputName,
-        ],
+        preferredEntryNames: [outputName, actualOutputFileName, stagedOutputFileName],
         traceLabel: "rvz",
       });
+      // Name the output from the file the container handler actually emitted (rebased onto the logical
+      // source name), so the saved name matches the bytes written. The Rust extract truncates its own
+      // output, so no pre-clear/preopen is needed.
+      const emittedOutputFileName = primaryFile
+        ? normalizeRomSpecificEntryNameForSource(
+            getPathBaseName(String(primaryFile.fileName || primaryFile.path || "")),
+            stagedSourceFileName,
+            sourceFileName,
+          )
+        : "";
+      const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
       return await workerIo.createWorkerOutput(
         {
           checksums: primaryFile?.checksums,
           fileName: outputFileName,
-          filePath: primaryFile?.path || outputPath,
+          filePath: primaryFile?.path || joinPath(outDirPath, outputFileName),
           romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },
@@ -271,53 +221,12 @@ const createBrowserDiscFormatsRuntime = (
       const stagedOutputFileName = getRomSpecificExtractedFileName("z3ds", {
         fileName: stagedSourceFileName,
       });
-      const listed = await runRomWeaverListWorker(
-        {
-          logLevel,
-          signal,
-          sourcePath: workerSource.filePath,
-        },
-        undefined,
-        onLog,
-      ).catch(() => null);
-      const listedEntries = normalizeZ3dsListEntriesForSource(
-        normalizeRomSpecificListEntries(listed?.entries || [], stagedSourceFileName, sourceFileName),
-        sourceFileName,
-      );
-      const preseedPaths =
-        listedEntries
-          .flatMap((entry) =>
-            getBrowserExtractOutputPathCandidates(
-              outDirPath,
-              String(entry?.fileName || entry?.filename || entry?.name || ""),
-            ),
-          )
-          .filter((entry) => !!entry) || [];
-      const listedOutputFileName = getPathBaseName(
-        String(listedEntries[0]?.fileName || listedEntries[0]?.filename || listedEntries[0]?.name || ""),
-      );
-      // Prefer the container handler's authoritative extracted entry name (it maps the source
-      // extension, e.g. `.zcci` -> `.cci`) so the saved/displayed name matches the file actually
-      // written, instead of the request-filename guess that falls back to `.3ds`.
-      const outputFileName = outputName || listedOutputFileName || actualOutputFileName;
-      const outputPath = joinPath(outDirPath, listedOutputFileName || stagedOutputFileName || actualOutputFileName);
-      if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
-      if (stagedOutputFileName)
-        preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
-      preseedPaths.push(outputPath);
-      preseedPaths.push(joinPath(outDirPath, actualOutputFileName));
-      const preopenOutputPaths = filterOutputCandidatesAwayFromSource(
-        uniqueNonEmptyStrings(preseedPaths),
-        workerSource.filePath,
-      );
-      await removeBrowserVfsOutputPaths(preopenOutputPaths, [workerSource.filePath]);
       const extracted = await invokeRomWeaverExtractWorker(
         {
           checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
           knownInputPaths: [workerSource.filePath],
           logLevel,
           outDirPath,
-          preopenOutputPaths,
           select: [],
           signal,
           sourcePath: workerSource.filePath,
@@ -332,20 +241,25 @@ const createBrowserDiscFormatsRuntime = (
         emittedFiles: extracted.emittedFiles,
         logLevel,
         onLog,
-        preferredEntryNames: [
-          outputFileName,
-          actualOutputFileName,
-          stagedOutputFileName,
-          listedOutputFileName,
-          outputName,
-        ],
+        preferredEntryNames: [outputName, actualOutputFileName, stagedOutputFileName],
         traceLabel: "z3ds",
       });
+      // Name the output from the file the handler actually emitted (rebased onto the logical source
+      // name). The emitted name already carries the authoritative extension (e.g. `.zcci` -> `.cci`),
+      // and the Rust extract truncates its own output, so no pre-clear/preopen is needed.
+      const emittedOutputFileName = primaryFile
+        ? normalizeRomSpecificEntryNameForSource(
+            getPathBaseName(String(primaryFile.fileName || primaryFile.path || "")),
+            stagedSourceFileName,
+            sourceFileName,
+          )
+        : "";
+      const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
       return await workerIo.createWorkerOutput(
         {
           checksums: primaryFile?.checksums,
           fileName: outputFileName,
-          filePath: primaryFile?.path || outputPath,
+          filePath: primaryFile?.path || joinPath(outDirPath, outputFileName),
           romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },

@@ -36,7 +36,7 @@ import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
 import { createBrowserArchiveRuntime } from "./workflow-runtime-archive.ts";
 import { createBrowserChdRuntime } from "./workflow-runtime-chd.ts";
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
-import { browserVfs, removeBrowserVfsOutputPaths } from "./workflow-runtime-vfs-cleanup.ts";
+import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
 const getBrowserDestinationHandle = (destination: unknown) => {
   if (!destination || typeof destination === "string") return undefined;
@@ -184,19 +184,10 @@ const createBrowserCompressionRuntime = (workerIo: RuntimeWorkerIo): WorkflowRun
 
 const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["patch"] => {
   const sharedPatchRuntime = createSharedPatchRuntime({
-    invokeApplyPatchWorker: (input, onProgress, onLog) =>
-      invokeRomWeaverPatchApplyWorker(input, onProgress, onLog, (outputPath) =>
-        removeBrowserVfsOutputPaths(
-          [outputPath],
-          [input.romFilePath, ...input.patchFiles.map((patch) => patch.patchFilePath)],
-        ),
-      ),
+    invokeApplyPatchWorker: (input, onProgress, onLog) => invokeRomWeaverPatchApplyWorker(input, onProgress, onLog),
     invokeCreatePatchCandidatesWorker: (input, onProgress, onLog) =>
       invokeRomWeaverCreatePatchCandidatesWorker(input, onProgress, onLog),
-    invokeCreatePatchWorker: (input, onProgress, onLog) =>
-      invokeRomWeaverCreatePatchWorker(input, onProgress, onLog, (outputPath) =>
-        removeBrowserVfsOutputPaths([outputPath], [input.originalFilePath, input.modifiedFilePath]),
-      ),
+    invokeCreatePatchWorker: (input, onProgress, onLog) => invokeRomWeaverCreatePatchWorker(input, onProgress, onLog),
     invokeValidatePatchWorker: (input, onProgress, onLog) =>
       invokeRomWeaverPatchValidateWorker(input, onProgress, onLog),
     workerIo,
@@ -207,10 +198,7 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
 
 const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["trim"] =>
   createSharedTrimRuntime({
-    invokeTrimWorker: (input, onProgress, onLog) =>
-      invokeRomWeaverTrimWorker(input, onProgress, onLog, (outputPath) =>
-        removeBrowserVfsOutputPaths([outputPath], [input.sourceFilePath]),
-      ),
+    invokeTrimWorker: (input, onProgress, onLog) => invokeRomWeaverTrimWorker(input, onProgress, onLog),
     workerIo,
     workerOutputFailureMessage: "Trim worker did not return browser output",
   });

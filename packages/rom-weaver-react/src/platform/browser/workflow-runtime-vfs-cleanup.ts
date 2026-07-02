@@ -103,27 +103,6 @@ const selectPreferredExtractedFile = async (input: {
   return selected;
 };
 
-const removeBrowserVfsOutputPaths = async (
-  filePaths: string[],
-  // `modifiedFilePath` is optional now that patch-create accepts cheat codes
-  // instead of a modified ROM; the body coerces undefined away below.
-  blockedPaths: Array<string | undefined> = [],
-) => {
-  const seen = new Set<string>();
-  const blocked = new Set(
-    blockedPaths.map((filePath) => String(filePath || "").trim()).filter((filePath) => !!filePath),
-  );
-  for (const filePath of filePaths) {
-    const normalizedPath = String(filePath || "").trim();
-    if (!normalizedPath || seen.has(normalizedPath)) continue;
-    if (blocked.has(normalizedPath)) {
-      throw new Error(`Browser output path conflicts with an active input or patch: ${normalizedPath}`);
-    }
-    seen.add(normalizedPath);
-    await browserVfs.remove(normalizedPath).catch(() => undefined);
-  }
-};
-
 const filterOutputCandidatesAwayFromSource = (filePaths: string[], sourcePath: string) => {
   const normalizedSourcePath = String(sourcePath || "").trim();
   if (!normalizedSourcePath) return filePaths;
@@ -180,7 +159,6 @@ export {
   filterOutputCandidatesAwayFromSource,
   getBrowserExtractOutputPathCandidates,
   readTextFromBrowserVfs,
-  removeBrowserVfsOutputPaths,
   selectPreferredExtractedFile,
   sumBrowserVfsPathBytes,
   waitForBrowserVfsPath,

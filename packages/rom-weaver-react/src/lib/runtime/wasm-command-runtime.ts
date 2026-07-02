@@ -102,7 +102,6 @@ const invokeRomWeaverCompressionCreateWorker = async (
     logLevel?: LogLevel | string;
     outputFileName: string;
     outputPath: string;
-    preopenOutputPaths?: string[];
     signal?: AbortSignal;
     totalBytes?: number | null;
     virtualFiles?: RuntimeValue[];
@@ -164,7 +163,6 @@ const invokeRomWeaverCompressionCreateWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
-      preopenOutputPaths: input.preopenOutputPaths,
       signal: input.signal,
       virtualFiles: input.virtualFiles,
     }),
@@ -189,7 +187,6 @@ const invokeRomWeaverExtractWorker = async (
     knownInputPaths?: string[];
     logLevel?: LogLevel | string;
     outDirPath: string;
-    preopenOutputPaths?: string[];
     select?: string[];
     romFilter?: boolean;
     patchFilter?: boolean;
@@ -274,7 +271,6 @@ const invokeRomWeaverExtractWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
-      preopenOutputPaths: input.preopenOutputPaths,
       signal: input.signal,
     }),
   );
@@ -509,7 +505,6 @@ const invokeRomWeaverPatchApplyWorker = async (
   input: RuntimePatchApplyWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-  onBeforeRun?: (outputPath: string) => Promise<void> | void,
 ): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
   const outputFileName = getPatchApplyOutputFileName(input);
   const outputPath = selectRomWeaverOutputPath(
@@ -576,31 +571,22 @@ const invokeRomWeaverPatchApplyWorker = async (
       storage: await getBrowserStorageEstimateState(),
     });
   }
-  await onBeforeRun?.(outputPath);
-
-  let result: RomWeaverRunJsonResult;
-  try {
-    result = await runRomWeaverJson(
-      command,
-      toRomWeaverOptions({
-        defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
-        invalidateMountCacheBeforeRun: true,
-        logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
-        onLog,
-        preopenOutputPaths: [outputPath],
-        signal: input.signal,
-        syncAccessMode,
-        virtualOnlyMounts,
-      }),
-    );
-  } catch (error) {
-    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
-    throw error;
-  }
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
+      invalidateMountCacheBeforeRun: true,
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      signal: input.signal,
+      syncAccessMode,
+      virtualOnlyMounts,
+    }),
+  );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = await appendBrowserStorageContext(getRomWeaverFailureMessage(result, "Patch apply failed"));
     const traceContext = isTraceEnabled(input.logLevel)
@@ -685,7 +671,6 @@ const invokeRomWeaverCreatePatchWorker = async (
   input: RuntimePatchCreateWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-  onBeforeRun?: (outputPath: string) => Promise<void> | void,
 ): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
   const outputFileName = getPathBaseName(
     input.outputName || `patch.${String(input.format || "bin").toLowerCase()}`,
@@ -712,27 +697,18 @@ const invokeRomWeaverCreatePatchWorker = async (
     outputPath,
     threadArg,
   });
-  await onBeforeRun?.(outputPath);
-
-  let result: RomWeaverRunJsonResult;
-  try {
-    result = await runRomWeaverJson(
-      command,
-      toRomWeaverOptions({
-        logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
-        onLog,
-        preopenOutputPaths: [outputPath],
-        signal: input.signal,
-      }),
-    );
-  } catch (error) {
-    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
-    throw error;
-  }
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      signal: input.signal,
+    }),
+  );
   ensureRomWeaverSuccess(result, "Patch create failed");
 
   const emitted = getEmittedFileDetails(result);
@@ -750,7 +726,6 @@ const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-  onBeforeRun?: (outputPath: string) => Promise<void> | void,
 ): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
   const sourceFilePath = String(input.sourceFilePath || "").trim();
   if (!sourceFilePath) throw new Error("Trim source path is required");
@@ -778,27 +753,18 @@ const invokeRomWeaverTrimWorker = async (
     sourceFilePath,
     threadArg,
   });
-  await onBeforeRun?.(outputPath);
-
-  let result: RomWeaverRunJsonResult;
-  try {
-    result = await runRomWeaverJson(
-      command,
-      toRomWeaverOptions({
-        logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
-        onLog,
-        preopenOutputPaths: [outputPath],
-        signal: input.signal,
-      }),
-    );
-  } catch (error) {
-    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
-    throw error;
-  }
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      signal: input.signal,
+    }),
+  );
   ensureRomWeaverSuccess(result, "Trim failed");
 
   const emitted = getEmittedFileDetails(result);
@@ -914,7 +880,6 @@ const invokeRomWeaverIngestWorker = async (
     noIgnore?: boolean;
     noNestedExtract?: boolean;
     outDirPath: string;
-    preopenOutputPaths?: string[];
     select?: string[];
     signal?: AbortSignal;
     sourcePath: string;
@@ -975,7 +940,6 @@ const invokeRomWeaverIngestWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
-      preopenOutputPaths: input.preopenOutputPaths,
       signal: input.signal,
     }),
   );

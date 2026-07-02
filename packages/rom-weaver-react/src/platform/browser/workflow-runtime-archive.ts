@@ -28,20 +28,16 @@ import {
   EXTRACT_CHECKSUM_ALGORITHMS,
   emitBrowserWorkflowTrace,
   findExtractedFile,
-  getListedOutputEntryName,
   getPathDerivedFileName,
   isCueEntryName,
   normalizeRomSpecificEntryNameForSource,
-  normalizeRomSpecificListEntries,
   toLevelProfile,
-  uniqueNonEmptyStrings,
   withCodecLevel,
 } from "./workflow-runtime-helpers.ts";
 import {
   browserVfs,
   filterOutputCandidatesAwayFromSource,
   getBrowserExtractOutputPathCandidates,
-  removeBrowserVfsOutputPaths,
   sumBrowserVfsPathBytes,
 } from "./workflow-runtime-vfs-cleanup.ts";
 
@@ -142,28 +138,29 @@ const createArchiveEntrySource = (
   return null;
 };
 
-const getDescendOutputPlan = async ({
+// A nested CHD that is a CD image must be extracted with `splitBin` so its tracks come out as
+// separate files. That decision needs the container's media kind, which only the list reports — the
+// one piece of the descend pass that still requires a list. (The Rust extract truncates its own
+// outputs, so there is no longer any output pre-clear to plan here.)
+const getDescendChdSplitBinEligible = async ({
   archivePath,
-  fileName,
   format,
   logLevel,
   onLog,
-  outDirPath,
   signal,
 }: {
   archivePath: string;
-  fileName: string;
   format?: string;
   logLevel?: unknown;
   onLog?: (log: WorkflowRuntimeLog) => void;
-  outDirPath: string;
   signal?: AbortSignal;
-}): Promise<{ chdSplitBinEligible: boolean; preopenOutputPaths: string[] }> => {
-  const normalizedFormat = String(format || "")
-    .trim()
-    .toLowerCase();
-  if (!isRomSpecificCompressionFormat(normalizedFormat)) {
-    return { chdSplitBinEligible: false, preopenOutputPaths: [] };
+}): Promise<boolean> => {
+  if (
+    String(format || "")
+      .trim()
+      .toLowerCase() !== "chd"
+  ) {
+    return false;
   }
   const listed = await runRomWeaverListWorker(
     {
@@ -174,25 +171,13 @@ const getDescendOutputPlan = async ({
     undefined,
     onLog,
   ).catch(() => null);
-  const sourceFileName = fileName || getPathBaseName(archivePath, "archive.bin");
-  const stagedSourceFileName = getPathDerivedFileName(archivePath, sourceFileName);
-  const listedEntries = normalizeRomSpecificListEntries(listed?.entries || [], stagedSourceFileName, sourceFileName);
-  const chdSplitBinEligible = normalizedFormat === "chd" && listed?.chdMediaKind === "cd";
-  const preopenOutputPaths = filterOutputCandidatesAwayFromSource(
-    uniqueNonEmptyStrings(
-      listedEntries.flatMap((entry) =>
-        getBrowserExtractOutputPathCandidates(outDirPath, getListedOutputEntryName(entry)),
-      ),
-    ),
+  const chdSplitBinEligible = listed?.chdMediaKind === "cd";
+  emitBrowserWorkflowTrace({ logLevel, onLog }, "archive descend chd media kind", {
     archivePath,
-  );
-  emitBrowserWorkflowTrace({ logLevel, onLog }, "archive descend output preopen candidates", {
-    archivePath,
+    chdMediaKind: listed?.chdMediaKind ?? "",
     chdSplitBinEligible,
-    format: normalizedFormat,
-    preopenOutputPaths,
   });
-  return { chdSplitBinEligible, preopenOutputPaths };
+  return chdSplitBinEligible;
 };
 
 const stageBrowserCompressionEntries = async (
@@ -254,7 +239,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         outputFileName,
         outputPath,
       });
-      await removeBrowserVfsOutputPaths([outputPath], staged.inputPaths);
       return {
         output: await workerIo.createWorkerOutput(
           await invokeRomWeaverCompressionCreateWorker(
@@ -268,7 +252,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               logLevel: workflowInput.options?.logLevel,
               outputFileName,
               outputPath,
-              preopenOutputPaths: [outputPath],
               signal: workflowInput.options?.signal,
               totalBytes: inputTotalBytes,
               workerThreads: workflowInput.options?.workerThreads,
@@ -301,16 +284,13 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         const cleanupExtractedFiles = async (filePaths: string[]) => {
           await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
         };
-        const outputPlan = await getDescendOutputPlan({
+        const chdSplitBinEligible = await getDescendChdSplitBinEligible({
           archivePath: archive.filePath,
-          fileName: archive.fileName,
           format: workflowInput.format,
           logLevel: workflowInput.options?.logLevel,
           onLog: workflowInput.options?.onLog,
-          outDirPath,
           signal: workflowInput.options?.signal,
         });
-        await removeBrowserVfsOutputPaths(outputPlan.preopenOutputPaths, [archive.filePath]);
         const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
           ? workflowInput.options.extractChecksumAlgorithms
               .map((algorithm) =>
@@ -337,12 +317,11 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             noNestedExtract: false,
             outDirPath,
             patchFilter: workflowInput.options?.patchFilter,
-            preopenOutputPaths: outputPlan.preopenOutputPaths,
             romFilter: workflowInput.options?.romFilter,
             select: selectedEntries,
             signal: workflowInput.options?.signal,
             sourcePath: archive.filePath,
-            splitBin: outputPlan.chdSplitBinEligible && workflowInput.options?.chdSplitBin === true,
+            splitBin: chdSplitBinEligible && workflowInput.options?.chdSplitBin === true,
             workerThreads: workflowInput.options?.workerThreads,
           },
           forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
@@ -365,7 +344,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               ? normalizeRomSpecificEntryNameForSource(extractedFileName, stagedSourceFileName, sourceFileName)
               : extractedFileName;
             const fileName =
-              outputPlan.chdSplitBinEligible && entry === primaryDataEntry
+              chdSplitBinEligible && entry === primaryDataEntry
                 ? stripPrimaryChdTrackSuffix(normalizedFileName)
                 : normalizedFileName;
             return workerIo.createWorkerOutput(
@@ -408,7 +387,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           throw new Error(`Browser extract output path conflicts with the active input: ${entryName}`);
         }
         try {
-          await removeBrowserVfsOutputPaths(outputPathCandidates, [archive.filePath]);
           const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
             ? workflowInput.options.extractChecksumAlgorithms
                 .map((algorithm) =>

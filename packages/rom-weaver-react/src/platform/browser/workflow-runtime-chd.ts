@@ -36,14 +36,7 @@ import {
   normalizeRomSpecificListEntries,
   uniqueNonEmptyStrings,
 } from "./workflow-runtime-helpers.ts";
-import {
-  browserVfs,
-  filterOutputCandidatesAwayFromSource,
-  getBrowserExtractOutputPathCandidates,
-  readTextFromBrowserVfs,
-  removeBrowserVfsOutputPaths,
-  writeTextToBrowserVfs,
-} from "./workflow-runtime-vfs-cleanup.ts";
+import { browserVfs, readTextFromBrowserVfs, writeTextToBrowserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
 const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
 const CHD_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.chd;
@@ -202,10 +195,6 @@ const createBrowserChdRuntime = (
         ...stagedInputPaths,
         ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath]),
       ]);
-      await removeBrowserVfsOutputPaths(
-        [outputPath],
-        [...stagedInputPaths, ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath])],
-      );
       const codecs = normalizeCodecEntries(compressionCodecs);
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
@@ -217,7 +206,6 @@ const createBrowserChdRuntime = (
           logLevel,
           outputFileName,
           outputPath,
-          preopenOutputPaths: [outputPath],
           signal,
           workerThreads: threads,
         },
@@ -272,56 +260,9 @@ const createBrowserChdRuntime = (
                 _chdMode: mode || undefined,
                 fileName: stagedSourceFileName,
               });
-      const stagedCueOutputFileName = shouldPreseedSingleBinCdOutputs
-        ? getChdCdOutputFileName(stagedSourceFileName, "cue")
-        : "";
       const shouldSplitBin = mode === "cd" && splitBin !== false;
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
-      const staleOutputPaths: string[] = [];
-      if (mode === "cd") {
-        const listed = await runRomWeaverListWorker(
-          {
-            logLevel,
-            signal,
-            sourcePath: workerSource.filePath,
-          },
-          undefined,
-          onLog,
-        ).catch(() => null);
-        const stagedSingleBinOutputFileName = getChdCdOutputFileName(stagedSourceFileName, "bin");
-        const cdOutputEntryNames = uniqueNonEmptyStrings([
-          ...(listed?.entries || [])
-            .map((entry) => String(entry?.fileName || entry?.filename || entry?.name || ""))
-            .filter(
-              (entryName) =>
-                !(shouldSplitBin && getPathBaseName(entryName, entryName) === stagedSingleBinOutputFileName),
-            ),
-          getChdCdOutputFileName(stagedSourceFileName, "cue"),
-          ...(shouldSplitBin ? [] : [stagedSingleBinOutputFileName, outputName || ""]),
-        ]);
-        staleOutputPaths.push(
-          ...filterOutputCandidatesAwayFromSource(
-            cdOutputEntryNames.flatMap((entryName) => getBrowserExtractOutputPathCandidates(outDirPath, entryName)),
-            workerSource.filePath,
-          ),
-        );
-      }
-      if (directOutputPath) {
-        const outputPathCandidates = shouldPreseedSingleBinCdOutputs
-          ? [directOutputPath, stagedCueOutputFileName ? joinPath(outDirPath, stagedCueOutputFileName) : ""]
-          : [
-              directOutputPath,
-              actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
-              outputName ? joinPath(outDirPath, outputName) : "",
-            ];
-        staleOutputPaths.push(...outputPathCandidates);
-      }
-      const preopenOutputPaths = filterOutputCandidatesAwayFromSource(
-        uniqueNonEmptyStrings(staleOutputPaths),
-        workerSource.filePath,
-      );
-      await removeBrowserVfsOutputPaths(preopenOutputPaths, [workerSource.filePath]);
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
@@ -330,7 +271,6 @@ const createBrowserChdRuntime = (
             knownInputPaths: uniqueNonEmptyStrings([workerSource.filePath]),
             logLevel,
             outDirPath,
-            preopenOutputPaths,
             select: [],
             signal,
             sourcePath: workerSource.filePath,
