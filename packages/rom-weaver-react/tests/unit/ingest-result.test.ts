@@ -50,6 +50,40 @@ describe("parseIngestResult", () => {
     expect(asset?.checksumVariants[0]?.id).toBe("raw");
   });
 
+  it("maps extract_time_ms and disc structure for an extracted nested leaf", () => {
+    const parsed = parseIngestResult({
+      ingest: {
+        assets: [
+          {
+            checksum_variants: [],
+            checksums: { CRC32: "feedface" },
+            copied_in_place: false,
+            disc_format: "CD-ROM",
+            disc_group_id: "disc-1",
+            extract_time_ms: 1234,
+            file_name: "game (Track 1).bin",
+            kind: "bin",
+            path: "/work/game (Track 1).bin",
+            size_bytes: 734003200,
+            track_number: 1,
+          },
+        ],
+        is_rom: true,
+        kind: "rom",
+        patches: [],
+        source_file_name: "game.chd",
+      },
+    });
+    const asset = parsed?.assets[0];
+    expect(asset?.copiedInPlace).toBe(false);
+    expect(asset?.extractTimeMs).toBe(1234);
+    expect(asset?.discFormat).toBe("CD-ROM");
+    expect(asset?.discGroupId).toBe("disc-1");
+    expect(asset?.trackNumber).toBe(1);
+    // No bare-ROM in-place hashing happened, so the checksum sentinel stays absent.
+    expect(asset?.checksumMs).toBeUndefined();
+  });
+
   it("coerces a patch source descriptor with embedded metadata", () => {
     const parsed = parseIngestResult({
       ingest: {

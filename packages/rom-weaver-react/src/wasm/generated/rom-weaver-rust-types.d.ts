@@ -138,6 +138,13 @@ cue_text?: string | null,
  */
 gdi_text?: string | null,
 /**
+ * Wall-clock milliseconds the extract step that produced this leaf took. Carried only for
+ * nested leaves (the archive level that emitted them); a depth-0 / single-level leaf leaves
+ * this `None` and the host falls back to the run-level timing — matching the `extract`
+ * command's per-file timing semantics.
+ */
+extract_time_ms?: number | null,
+/**
  * `true` when this was a bare ROM checksummed in place (no extraction, no OPFS copy).
  */
 copied_in_place: boolean,

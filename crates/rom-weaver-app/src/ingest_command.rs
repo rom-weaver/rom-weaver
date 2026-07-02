@@ -82,6 +82,13 @@ pub struct IngestRomAsset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub gdi_text: Option<String>,
+    /// Wall-clock milliseconds the extract step that produced this leaf took. Carried only for
+    /// nested leaves (the archive level that emitted them); a depth-0 / single-level leaf leaves
+    /// this `None` and the host falls back to the run-level timing — matching the `extract`
+    /// command's per-file timing semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub extract_time_ms: Option<u32>,
     /// `true` when this was a bare ROM checksummed in place (no extraction, no OPFS copy).
     pub copied_in_place: bool,
     /// Wall-clock milliseconds spent hashing a bare ROM in place (the checksum compute itself,
@@ -470,6 +477,7 @@ impl CliApp {
             track_number: None,
             cue_text: None,
             gdi_text: None,
+            extract_time_ms: None,
             copied_in_place: true,
             checksum_ms: None,
         };
@@ -552,6 +560,10 @@ impl CliApp {
                     .get("gdi_text")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                extract_time_ms: map
+                    .get("extract_time_ms")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as u32),
                 copied_in_place: false,
                 checksum_ms: None,
             };

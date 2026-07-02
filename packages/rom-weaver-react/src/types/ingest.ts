@@ -19,6 +19,10 @@ export interface ParsedIngestRomAsset {
   trackNumber?: number;
   cueText?: string;
   gdiText?: string;
+  /** Wall time (ms) of the extract step that produced this leaf; present only for nested leaves
+   * (the archive level that emitted them). Absent for a depth-0/single-level leaf — callers fall
+   * back to the run-level timing. */
+  extractTimeMs?: number;
   copiedInPlace: boolean;
   /** Rust-reported hashing wall time (ms) for a bare ROM checksummed in place; absent for an
    * extracted leaf (whose hashing is folded into its extract timing). */
