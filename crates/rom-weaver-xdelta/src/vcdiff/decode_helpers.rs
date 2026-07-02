@@ -66,6 +66,16 @@ pub(super) fn read_section<R: Read + Seek>(
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
+    // Validate the declared extent against the real patch length *before*
+    // allocating: a malformed window can claim a multi-gigabyte section that
+    // would otherwise abort the process on the `vec![0; size]` below.
+    let patch_len = reader.seek(SeekFrom::End(0))?;
+    let end = checked_add(start, len, "section end")?;
+    if end > patch_len {
+        return Err(RomWeaverError::Validation(format!(
+            "section [{start}, {end}) extends past the {patch_len}-byte patch"
+        )));
+    }
     let mut buffer = vec![0; size];
     reader.seek(SeekFrom::Start(start))?;
     reader.read_exact(&mut buffer)?;
@@ -73,11 +83,16 @@ pub(super) fn read_section<R: Read + Seek>(
 }
 
 pub(super) fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
-    let size = usize::try_from(len).map_err(|_| {
-        RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
-    })?;
-    let mut buffer = vec![0; size];
-    reader.read_exact(&mut buffer)?;
+    // Discard `len` bytes by streaming them into a sink instead of allocating a
+    // `len`-sized buffer, so an attacker-controlled section length cannot trigger
+    // an out-of-memory abort. `io::copy` stops short at EOF, so verify the full
+    // span was actually present (matching the old `read_exact` semantics).
+    let copied = std::io::copy(&mut (&mut *reader).take(len), &mut std::io::sink())?;
+    if copied != len {
+        return Err(RomWeaverError::Validation(format!(
+            "section declares {len} byte(s) but only {copied} are available"
+        )));
+    }
     Ok(())
 }
 

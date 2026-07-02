@@ -115,6 +115,7 @@ const METHOD_DEFLATE: u16 = 8;
 /// bytes, and inflates them when DEFLATE-compressed. Only the STORED (0) and
 /// DEFLATE (8) methods — the only ones a `.dcp` uses — are supported.
 pub fn extract_entry<R: Read + Seek>(reader: &mut R, entry: &ZipEntry) -> Result<Vec<u8>> {
+    let file_len = reader.seek(SeekFrom::End(0))?;
     reader.seek(SeekFrom::Start(u64::from(entry.local_header_offset)))?;
     let mut header = [0u8; 30];
     reader.read_exact(&mut header)?;
@@ -126,8 +127,18 @@ pub fn extract_entry<R: Read + Seek>(reader: &mut R, entry: &ZipEntry) -> Result
     }
     let name_len = read_u16(&header, 26) as i64;
     let extra_len = read_u16(&header, 28) as i64;
-    reader.seek(SeekFrom::Current(name_len + extra_len))?;
+    let data_start = reader.seek(SeekFrom::Current(name_len + extra_len))?;
 
+    // `compressed_size` is an attacker-controlled 32-bit field; reject any value
+    // that overruns the remaining file before sizing the read buffer so a tiny
+    // malicious archive cannot trigger a multi-gigabyte allocation.
+    let remaining = file_len.saturating_sub(data_start);
+    if u64::from(entry.compressed_size) > remaining {
+        return Err(RomWeaverError::Validation(format!(
+            "ZIP: entry `{}` compressed size {} exceeds remaining file length {remaining}",
+            entry.name, entry.compressed_size
+        )));
+    }
     let mut compressed = vec![0u8; entry.compressed_size as usize];
     reader.read_exact(&mut compressed)?;
 
@@ -183,5 +194,117 @@ fn locate_central_directory<R: Read + Seek>(
             "ZIP: ZIP64 archives are not yet supported".to_string(),
         ));
     }
-    Ok((u64::from(cd_offset), cd_size as usize, entry_count))
+    // The 32-bit size fields are attacker-controlled: a value just below the
+    // ZIP64 sentinel (e.g. 0xFFFF_FFFE, ~4 GiB) clears the guard above yet would
+    // size a multi-gigabyte allocation. Reject any central directory that cannot
+    // fit in the file before it is read into memory.
+    let cd_offset = u64::from(cd_offset);
+    let fits = cd_offset
+        .checked_add(u64::from(cd_size))
+        .is_some_and(|end| end <= file_len);
+    if !fits {
+        return Err(RomWeaverError::Validation(format!(
+            "ZIP: central directory (offset {cd_offset}, size {cd_size}) exceeds file length {file_len}"
+        )));
+    }
+    Ok((cd_offset, cd_size as usize, entry_count))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    fn le16(v: u16) -> [u8; 2] {
+        v.to_le_bytes()
+    }
+    fn le32(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
+
+    /// An EOCD-only buffer whose central-directory size field is just below the
+    /// ZIP64 sentinel (~4 GiB) while the file is 22 bytes must be rejected
+    /// before the central directory is allocated.
+    #[test]
+    fn rejects_central_directory_larger_than_file() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&le32(EOCD_SIGNATURE));
+        buf.extend_from_slice(&le16(0)); // disk
+        buf.extend_from_slice(&le16(0)); // cd disk
+        buf.extend_from_slice(&le16(0)); // entries this disk
+        buf.extend_from_slice(&le16(0)); // total entries
+        buf.extend_from_slice(&le32(0xFFFF_FFFE)); // cd_size, just under the sentinel
+        buf.extend_from_slice(&le32(0)); // cd_offset
+        buf.extend_from_slice(&le16(0)); // comment len
+
+        let err = read_central_directory(&mut Cursor::new(buf)).unwrap_err();
+        assert!(matches!(err, RomWeaverError::Validation(_)));
+    }
+
+    /// A valid one-entry archive whose central `compressed_size` lies (~4 GiB,
+    /// not the ZIP64 sentinel): extraction must reject it instead of allocating
+    /// a multi-gigabyte buffer.
+    #[test]
+    fn rejects_entry_compressed_size_larger_than_file() {
+        let data: &[u8] = b"hi";
+        let name: &[u8] = b"x.bin";
+
+        let mut buf = Vec::new();
+        // Local file header + stored payload.
+        buf.extend_from_slice(&le32(LOCAL_FILE_HEADER_SIGNATURE));
+        buf.extend_from_slice(&le16(20)); // version needed
+        buf.extend_from_slice(&le16(0)); // flags
+        buf.extend_from_slice(&le16(METHOD_STORED));
+        buf.extend_from_slice(&le16(0)); // mod time
+        buf.extend_from_slice(&le16(0)); // mod date
+        buf.extend_from_slice(&le32(0)); // crc32
+        buf.extend_from_slice(&le32(data.len() as u32)); // compressed
+        buf.extend_from_slice(&le32(data.len() as u32)); // uncompressed
+        buf.extend_from_slice(&le16(name.len() as u16));
+        buf.extend_from_slice(&le16(0)); // extra len
+        buf.extend_from_slice(name);
+        buf.extend_from_slice(data);
+
+        // Central-directory header with a malicious compressed size.
+        let cd_offset = buf.len() as u32;
+        let mut central = Vec::new();
+        central.extend_from_slice(&le32(CENTRAL_FILE_HEADER_SIGNATURE));
+        central.extend_from_slice(&le16(20)); // version made by
+        central.extend_from_slice(&le16(20)); // version needed
+        central.extend_from_slice(&le16(0)); // flags
+        central.extend_from_slice(&le16(METHOD_STORED));
+        central.extend_from_slice(&le16(0)); // mod time
+        central.extend_from_slice(&le16(0)); // mod date
+        central.extend_from_slice(&le32(0)); // crc32
+        central.extend_from_slice(&le32(0xFFFF_FFFE)); // compressed, just under the sentinel
+        central.extend_from_slice(&le32(data.len() as u32)); // uncompressed
+        central.extend_from_slice(&le16(name.len() as u16));
+        central.extend_from_slice(&le16(0)); // extra len
+        central.extend_from_slice(&le16(0)); // comment len
+        central.extend_from_slice(&le16(0)); // disk start
+        central.extend_from_slice(&le16(0)); // internal attr
+        central.extend_from_slice(&le32(0)); // external attr
+        central.extend_from_slice(&le32(0)); // local header offset
+        central.extend_from_slice(name);
+
+        let cd_size = central.len() as u32;
+        buf.extend_from_slice(&central);
+
+        // End Of Central Directory.
+        buf.extend_from_slice(&le32(EOCD_SIGNATURE));
+        buf.extend_from_slice(&le16(0)); // disk
+        buf.extend_from_slice(&le16(0)); // cd disk
+        buf.extend_from_slice(&le16(1)); // entries this disk
+        buf.extend_from_slice(&le16(1)); // total entries
+        buf.extend_from_slice(&le32(cd_size));
+        buf.extend_from_slice(&le32(cd_offset));
+        buf.extend_from_slice(&le16(0)); // comment len
+
+        let mut reader = Cursor::new(buf);
+        let entries = read_central_directory(&mut reader).unwrap();
+        assert_eq!(entries.len(), 1);
+        let err = extract_entry(&mut reader, &entries[0]).unwrap_err();
+        assert!(matches!(err, RomWeaverError::Validation(_)));
+    }
 }

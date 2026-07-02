@@ -602,23 +602,10 @@ impl NodHandlerCore {
 
 /// Generate an extract-only NOD container handler that forwards every operation to a shared
 /// [`NodHandlerCore`]. The five GameCube/Wii compressed formats (GCZ/WBFS/TGC/NFS/WIA) decode
-/// identically; only the descriptor, [`NodFormat`] variant, and the `create` rejection message
-/// differ.
-///
-/// The four-argument form rejects `create` with the standard "extract-only" message. The
-/// five-argument form takes a `RomWeaverError` expression for formats whose CLI guidance differs
-/// (GCZ points at `--format rvz`; NFS explains it is decompress-only).
+/// identically; only the descriptor and [`NodFormat`] variant differ. `create` is rejected with
+/// the standard "extract-only" message.
 macro_rules! nod_extract_only_handler {
     ($core:ident, $handler:ident, $descriptor:expr, $format:expr $(,)?) => {
-        nod_extract_only_handler!(
-            $core,
-            $handler,
-            $descriptor,
-            $format,
-            extract_only_create_error($descriptor.name)
-        );
-    };
-    ($core:ident, $handler:ident, $descriptor:expr, $format:expr, $create_error:expr $(,)?) => {
         const $core: NodHandlerCore = NodHandlerCore::new($descriptor, $format);
 
         pub(crate) struct $handler;
@@ -662,7 +649,7 @@ macro_rules! nod_extract_only_handler {
                 context: &OperationContext,
             ) -> Result<OperationReport> {
                 let _ = (request, context);
-                Err($create_error)
+                Err(extract_only_create_error($descriptor.name))
             }
         }
     };

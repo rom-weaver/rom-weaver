@@ -6,22 +6,21 @@ type WorkerAssetRoot = typeof globalThis & {
 };
 
 // Input staging is retired (browser inputs read directly — see browser-opfs-source-ref), so this client
-// only drives output-side OPFS writes/truncates and path cleanup. "stage-error" remains the generic
-// failure reply for every action.
-type BrowserOpfsStorageAction = "cleanup" | "truncate" | "write";
+// only drives output-side OPFS writes and truncates. "stage-error" remains the generic failure reply for
+// every action.
+type BrowserOpfsStorageAction = "truncate" | "write";
 
 type BrowserOpfsStorageRequest = {
   action: BrowserOpfsStorageAction;
   bytes?: Uint8Array;
   filePath?: string;
-  filePaths?: string[];
   position?: number;
   requestId?: string;
   size?: number;
 };
 
 type BrowserOpfsStorageResponse = {
-  action: "cleanup-complete" | "stage-error" | "truncate-complete" | "write-complete";
+  action: "stage-error" | "truncate-complete" | "write-complete";
   error?: { message?: string };
   filePath?: string;
   requestId?: string;
@@ -82,7 +81,12 @@ const requestBrowserOpfsStorage = async (request: BrowserOpfsStorageRequest): Pr
     };
     worker.addEventListener("message", handleMessage);
     worker.addEventListener("error", handleError);
-    worker.postMessage(message);
+    // Transfer the write payload's buffer instead of structure-cloning it: each OPFS write ships an
+    // ~8 MiB chunk and a clone would copy it on send (then the worker would copy again). The caller hands
+    // us a standalone ArrayBuffer-backed copy it never touches after this call, so detaching it is safe.
+    const transferableBuffer =
+      message.bytes instanceof Uint8Array && message.bytes.buffer instanceof ArrayBuffer ? message.bytes.buffer : null;
+    worker.postMessage(message, transferableBuffer ? [transferableBuffer] : []);
   });
 };
 

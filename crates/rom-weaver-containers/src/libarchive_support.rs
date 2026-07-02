@@ -1184,6 +1184,38 @@ fn extract_libarchive_task_chunk_to_sender(
     Ok(())
 }
 
+/// Removes the output files an in-flight extract created when dropped without being committed, so a
+/// failed multi-file extract does not leave partial outputs that block a retry with "refusing to
+/// overwrite". Mirrors the cleanup-on-error the single-file container handlers already perform, and
+/// (being Drop-based) also cleans up on a panic.
+struct PartialExtractCleanup<'a> {
+    output_paths: &'a BTreeSet<PathBuf>,
+    format_name: &'a str,
+    committed: bool,
+}
+
+impl PartialExtractCleanup<'_> {
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for PartialExtractCleanup<'_> {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
+        }
+        trace!(
+            format = self.format_name,
+            outputs = self.output_paths.len(),
+            "removing partial extract outputs after error"
+        );
+        for path in self.output_paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
 pub(crate) fn extract_regular_archive_with_libarchive(
     request: &ContainerExtractRequest,
     context: &OperationContext,
@@ -1219,6 +1251,15 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         ensure_extract_output_available(&task.output_path, request.overwrite)?;
         duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
     }
+
+    // Any failure past this point can leave partially written output files on disk; this guard
+    // removes them on an early return (or panic) so a retry isn't blocked by "refusing to
+    // overwrite". It is committed once the extract completes successfully.
+    let mut cleanup = PartialExtractCleanup {
+        output_paths: &output_paths,
+        format_name,
+        committed: false,
+    };
 
     let (execution, written_bytes, output_checksums) = if tasks.is_empty() || duplicate_output_paths
     {
@@ -1566,6 +1607,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         (execution, written_bytes, output_checksums)
     };
 
+    // The extract succeeded; keep its outputs rather than removing them on drop.
+    cleanup.commit();
+
     let file_count = tasks.iter().filter(|task| !task.is_dir).count();
     debug!(
         format = format_name,
@@ -1598,4 +1642,78 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         .map(|task| task.output_path.clone())
         .collect::<Vec<_>>();
     Ok(attach_emitted_file_paths(report, &produced_outputs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::UNIX_EPOCH;
+
+    fn unique_temp_dir(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is after the unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "rom-weaver-libarchive-cleanup-{tag}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn write_file(path: &Path, bytes: &[u8]) {
+        let mut file = File::create(path).expect("create test output file");
+        file.write_all(bytes).expect("write test output file");
+    }
+
+    #[test]
+    fn partial_extract_cleanup_removes_outputs_when_not_committed() {
+        let dir = unique_temp_dir("uncommitted");
+        let first = dir.join("a.bin");
+        let second = dir.join("b.bin");
+        write_file(&first, b"partial");
+        write_file(&second, b"partial");
+        let mut output_paths = BTreeSet::new();
+        output_paths.insert(first.clone());
+        output_paths.insert(second.clone());
+
+        {
+            let _cleanup = PartialExtractCleanup {
+                output_paths: &output_paths,
+                format_name: "zip",
+                committed: false,
+            };
+        }
+
+        assert!(
+            !first.exists() && !second.exists(),
+            "an uncommitted cleanup guard must remove every partial output on drop"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn partial_extract_cleanup_keeps_outputs_when_committed() {
+        let dir = unique_temp_dir("committed");
+        let kept = dir.join("a.bin");
+        write_file(&kept, b"complete");
+        let mut output_paths = BTreeSet::new();
+        output_paths.insert(kept.clone());
+
+        {
+            let mut cleanup = PartialExtractCleanup {
+                output_paths: &output_paths,
+                format_name: "zip",
+                committed: false,
+            };
+            cleanup.commit();
+        }
+
+        assert!(
+            kept.exists(),
+            "a committed cleanup guard must keep the finished outputs"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
 }

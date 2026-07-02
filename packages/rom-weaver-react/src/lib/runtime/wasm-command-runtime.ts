@@ -70,6 +70,7 @@ import {
   getTerminalEvent,
   parseChecksumVariants,
   toSimpleProgress,
+  type WireRecord,
 } from "./run-result-parsing.ts";
 
 const appendBrowserStorageContext = async (message: string) => {

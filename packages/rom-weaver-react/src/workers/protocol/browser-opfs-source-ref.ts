@@ -120,6 +120,9 @@ const getStagedInputMs = (paths: Iterable<string>): number | undefined => {
     if (typeof ms === "number") {
       total += ms;
       found = true;
+      // Consume the entry: stagingMs is read back exactly once per command (to surface it on the [perf]
+      // line), so the ledger must drop the record here or it grows unbounded across a long session.
+      stagedInputMsByPath.delete(path);
     }
   }
   return found ? total : undefined;

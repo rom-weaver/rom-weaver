@@ -24,6 +24,8 @@ use crate::shared::threading::{
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
+/// Minimum on-disk bytes for a single record: a u32 offset plus a u32 length.
+const PMSR_MIN_RECORD_BYTES: u64 = 8;
 const PMSR_IO_BUFFER_SIZE: usize = 64 * 1024;
 const CREATE_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5CD7E;
@@ -308,7 +310,12 @@ fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
     let record_capacity = usize::try_from(record_count).map_err(|_| {
         RomWeaverError::Validation("MOD record count exceeded platform addressable range".into())
     })?;
-    let mut records = Vec::with_capacity(record_capacity);
+    // `record_count` is an attacker-controlled u32; each record needs at least a
+    // u32 offset + u32 length on disk, so cap the up-front reservation by the bytes
+    // actually remaining to avoid an oversized speculative allocation.
+    let max_records_by_bytes =
+        usize::try_from(parser.remaining() / PMSR_MIN_RECORD_BYTES).unwrap_or(record_capacity);
+    let mut records = Vec::with_capacity(record_capacity.min(max_records_by_bytes));
     let mut min_target_size = 0u64;
 
     for _ in 0..record_count {

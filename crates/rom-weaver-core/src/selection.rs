@@ -112,78 +112,72 @@ impl WildcardPattern {
 fn matches_wildcard_segment(pattern: &str, candidate: &str) -> bool {
     let pattern_chars = pattern.chars().collect::<Vec<_>>();
     let candidate_chars = candidate.chars().collect::<Vec<_>>();
-    matches_wildcard_segment_inner(&pattern_chars, &candidate_chars, 0, 0)
+    matches_wildcard_segment_inner(&pattern_chars, &candidate_chars)
 }
 
-fn matches_wildcard_segment_inner(
-    pattern: &[char],
-    candidate: &[char],
-    pattern_index: usize,
-    candidate_index: usize,
-) -> bool {
-    let mut pattern_index = pattern_index;
-    let mut candidate_index = candidate_index;
+/// Greedy two-pointer wildcard match with a single backtrack anchor on the most
+/// recent `*` group. Runs in O(pattern * candidate) time and O(1) extra space, so an
+/// adversarial multi-star archive entry name cannot drive it into the exponential
+/// recursion the previous implementation allowed. `?`, literals, and `[...]` classes
+/// each consume exactly one candidate char, so the standard wildcard greedy algorithm
+/// keeps the original matching semantics intact.
+fn matches_wildcard_segment_inner(pattern: &[char], candidate: &[char]) -> bool {
+    let mut pattern_index = 0usize;
+    let mut candidate_index = 0usize;
+    // Backtrack anchor: pattern index just past the most recent `*` group, plus the
+    // candidate index that star is currently credited with having consumed.
+    let mut star_pattern_index: Option<usize> = None;
+    let mut star_candidate_index = 0usize;
 
-    while pattern_index < pattern.len() {
-        match pattern[pattern_index] {
-            '*' => {
-                while pattern_index < pattern.len() && pattern[pattern_index] == '*' {
-                    pattern_index += 1;
-                }
-                if pattern_index == pattern.len() {
-                    return true;
-                }
-                for next_candidate_index in candidate_index..=candidate.len() {
-                    if matches_wildcard_segment_inner(
-                        pattern,
-                        candidate,
-                        pattern_index,
-                        next_candidate_index,
-                    ) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-            '?' => {
-                if candidate_index == candidate.len() {
-                    return false;
-                }
-                pattern_index += 1;
+    while candidate_index < candidate.len() {
+        if pattern_index < pattern.len() && pattern[pattern_index] != '*' {
+            let (matched, next_pattern_index) =
+                match_single_token(pattern, pattern_index, candidate[candidate_index]);
+            if matched {
+                pattern_index = next_pattern_index;
                 candidate_index += 1;
-            }
-            '[' => {
-                let Some(class_end) = find_character_class_end(pattern, pattern_index + 1) else {
-                    if candidate_index == candidate.len() || candidate[candidate_index] != '[' {
-                        return false;
-                    }
-                    pattern_index += 1;
-                    candidate_index += 1;
-                    continue;
-                };
-                if candidate_index == candidate.len() {
-                    return false;
-                }
-                if !character_class_matches(
-                    &pattern[pattern_index + 1..class_end],
-                    candidate[candidate_index],
-                ) {
-                    return false;
-                }
-                pattern_index = class_end + 1;
-                candidate_index += 1;
-            }
-            expected => {
-                if candidate_index == candidate.len() || candidate[candidate_index] != expected {
-                    return false;
-                }
-                pattern_index += 1;
-                candidate_index += 1;
+                continue;
             }
         }
+        if pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+            while pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+                pattern_index += 1;
+            }
+            star_pattern_index = Some(pattern_index);
+            star_candidate_index = candidate_index;
+            continue;
+        }
+        let Some(anchor) = star_pattern_index else {
+            return false;
+        };
+        // Let the most recent `*` swallow one more candidate char and retry from there.
+        star_candidate_index += 1;
+        candidate_index = star_candidate_index;
+        pattern_index = anchor;
     }
 
-    candidate_index == candidate.len()
+    while pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+        pattern_index += 1;
+    }
+    pattern_index == pattern.len()
+}
+
+/// Matches the single non-`*` pattern token starting at `pattern_index` against one
+/// candidate char, returning whether it matched and the pattern index just past the
+/// token. `?` matches any char, `[...]` matches a character class (an unterminated `[`
+/// is treated as a literal `[`), and anything else matches an exact char.
+fn match_single_token(pattern: &[char], pattern_index: usize, value: char) -> (bool, usize) {
+    match pattern[pattern_index] {
+        '?' => (true, pattern_index + 1),
+        '[' => match find_character_class_end(pattern, pattern_index + 1) {
+            Some(class_end) => (
+                character_class_matches(&pattern[pattern_index + 1..class_end], value),
+                class_end + 1,
+            ),
+            None => (value == '[', pattern_index + 1),
+        },
+        expected => (value == expected, pattern_index + 1),
+    }
 }
 
 fn find_character_class_end(pattern: &[char], class_start: usize) -> Option<usize> {
@@ -260,13 +254,17 @@ impl SelectionMatcher {
         if entry_name.is_empty() {
             return false;
         }
+        // Credit *every* pattern this entry satisfies, not just the first: overlapping
+        // selections (e.g. `*.bin` and `track01.bin`) must each be marked matched, or
+        // `ensure_all_matched` would abort the extract claiming a selection was unused.
+        let mut any_matched = false;
         for requested in &self.requested {
             if requested.matches(&entry_name) {
                 self.matched.insert(requested.requested.clone());
-                return true;
+                any_matched = true;
             }
         }
-        false
+        any_matched
     }
 
     pub fn ensure_all_matched(&self) -> Result<()> {
@@ -347,5 +345,60 @@ mod tests {
                 .to_string()
                 .contains("requested selections were not found: *.cue")
         );
+    }
+
+    #[test]
+    fn selection_matcher_credits_all_overlapping_patterns() {
+        // A single entry that satisfies both an exact name and a wildcard must credit
+        // *both* selections, or ensure_all_matched would wrongly abort the extract.
+        let mut selections =
+            SelectionMatcher::new(&["*.bin".to_string(), "track01.bin".to_string()]);
+        assert!(selections.matches("track01.bin"));
+        assert!(
+            selections.ensure_all_matched().is_ok(),
+            "both overlapping selections should be marked matched"
+        );
+    }
+
+    #[test]
+    fn selection_matcher_credits_overlapping_glob_and_prefix() {
+        let mut selections =
+            SelectionMatcher::new(&["content/**/*.bin".to_string(), "content".to_string()]);
+        assert!(selections.matches("content/tracks/track01.bin"));
+        assert!(selections.ensure_all_matched().is_ok());
+    }
+
+    #[test]
+    fn glob_matcher_handles_multi_star_and_classes() {
+        let mut selections = SelectionMatcher::new(&[
+            "a*b*c".to_string(),
+            "cover.[0-9][0-9][0-9]".to_string(),
+            "weird[name".to_string(),
+        ]);
+        // Multi-star with interleaved literals.
+        assert!(selections.matches("axxbyyc"));
+        // Adjacent character classes.
+        assert!(selections.matches("cover.123"));
+        // Unterminated `[` falls back to a literal bracket.
+        assert!(selections.matches("weird[name"));
+        assert!(selections.ensure_all_matched().is_ok());
+    }
+
+    #[test]
+    fn glob_matcher_rejects_non_matches() {
+        let mut selections = SelectionMatcher::new(&["a*b*c".to_string()]);
+        assert!(!selections.matches("axxbyyd"));
+        assert!(!selections.matches("ab"));
+        assert!(selections.ensure_all_matched().is_err());
+    }
+
+    #[test]
+    fn glob_matcher_does_not_blow_up_on_adversarial_stars() {
+        // The previous recursive matcher was exponential on long multi-star patterns
+        // against a non-matching candidate; the greedy matcher returns promptly.
+        let pattern = "*".repeat(40);
+        let mut selections = SelectionMatcher::new(&[format!("{pattern}z")]);
+        let candidate = "a".repeat(64);
+        assert!(!selections.matches(&candidate));
     }
 }

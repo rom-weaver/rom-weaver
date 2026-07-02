@@ -277,6 +277,41 @@ fn walks_nested_subdirectory() {
 }
 
 #[test]
+fn read_logical_range_rejects_overrun_without_huge_alloc() {
+    use super::sector::TrackSectors;
+
+    // A small 4-sector cooked track.
+    let track = vec![0xEEu8; 4 * SECTOR];
+    let mut sectors = TrackSectors::open(Cursor::new(track)).expect("open track");
+    assert_eq!(sectors.logical_sector_count(), 4);
+
+    // An in-bounds read still works.
+    let ok = sectors
+        .read_logical_range(1, SECTOR as u64)
+        .expect("in-bounds read");
+    assert_eq!(ok.len(), SECTOR);
+
+    // A bogus ~4 GiB length (as an untrusted extent size could carry) overruns
+    // the track and must be rejected before reserving any capacity.
+    let err = sectors
+        .read_logical_range(0, u64::from(u32::MAX))
+        .expect_err("overrun must be rejected");
+    assert!(matches!(
+        err,
+        rom_weaver_core::RomWeaverError::Validation(_)
+    ));
+
+    // A start sector past the end of the track is rejected too.
+    let err = sectors
+        .read_logical_range(99, SECTOR as u64)
+        .expect_err("past-end start must be rejected");
+    assert!(matches!(
+        err,
+        rom_weaver_core::RomWeaverError::Validation(_)
+    ));
+}
+
+#[test]
 fn rejects_image_without_primary_descriptor() {
     let mut junk = vec![0u8; 32 * SECTOR];
     junk[16 * SECTOR] = 99; // wrong descriptor type at sector 16

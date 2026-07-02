@@ -217,7 +217,11 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
       invalidateReadCache(normalizedPath);
       const data = toUint8Array(bytes);
-      const payload = new Uint8Array(data.byteLength);
+      // `bytes` may alias memory we must not detach (a view into shared wasm linear memory), so copy into
+      // a standalone, regular-ArrayBuffer payload we own. requestBrowserOpfsStorage transfers
+      // `payload.buffer` to the OPFS worker (no structure-clone copy); payload must not be reused after.
+      const byteLength = data.byteLength;
+      const payload = new Uint8Array(byteLength);
       payload.set(data);
       const fileOffset =
         typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
@@ -228,7 +232,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         position: fileOffset,
       });
       if (!response.success) throw new Error(response.error?.message || `Browser VFS write failed: ${normalizedPath}`);
-      return data.byteLength;
+      return byteLength;
     },
   };
 

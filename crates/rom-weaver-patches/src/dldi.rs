@@ -349,6 +349,26 @@ fn apply_dldi_patch_to_file(
         ));
     }
 
+    // `driver_size_bytes` derives from a single attacker-controlled log2 byte (up
+    // to 1<<63). The parse path intentionally tolerates a truncated driver payload
+    // (see `apply_accepts_truncated_patch_payload`), so the size cannot be bounded
+    // by the patch slice length; instead `try_reserve` bounds it against allocatable
+    // memory and turns an oversized declaration into a validation error before any
+    // output file is created.
+    let mut slot = Vec::new();
+    slot.try_reserve_exact(patch_header.driver_size_bytes)
+        .map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "DLDI driver size {} byte(s) exceeds allocatable memory",
+                patch_header.driver_size_bytes
+            ))
+        })?;
+    slot.resize(patch_header.driver_size_bytes, 0);
+    let existing_slot_len = available_len_usize.min(patch_header.driver_size_bytes);
+    if existing_slot_len > 0 {
+        input_reader.read_exact_at(patch_offset_u64, &mut slot[..existing_slot_len])?;
+    }
+
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -358,12 +378,6 @@ fn apply_dldi_patch_to_file(
         .write(true)
         .open(output_path)?;
     output.set_len(patch_end.max(input_len))?;
-
-    let mut slot = vec![0u8; patch_header.driver_size_bytes];
-    let existing_slot_len = available_len_usize.min(patch_header.driver_size_bytes);
-    if existing_slot_len > 0 {
-        input_reader.read_exact_at(patch_offset_u64, &mut slot[..existing_slot_len])?;
-    }
 
     let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
     slot[..patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);

@@ -209,11 +209,26 @@ class OpfsProxyServer {
       }
     } catch (error) {
       // The loop itself failing is fatal: poison so every waiting consumer fails fast with EIO.
-      Atomics.store(global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+      this.poisonAndWakeConsumers();
       this.trace?.(`[browser-opfs] proxy server loop died ${String(error)}`);
     } finally {
       this.closeAllHandles();
+      // The loop has exited, so nothing will ever service another request: poison + wake every parked
+      // consumer (a clean stop, not just a crash) so they fail fast instead of waiting out their full
+      // op/acquire timeouts. Idempotent with the catch path above.
+      this.poisonAndWakeConsumers();
       this.trace?.("[browser-opfs] proxy server stopped");
+    }
+  }
+
+  // Mark the proxy dead and wake every consumer parked on a slot's STATE word. The poison flag alone
+  // is invisible to a consumer already blocked in Atomics.wait, and the failure path never signalled
+  // any slot, so parked consumers used to wait out their full timeouts. Notifying each STATE word
+  // unblocks them to re-check isPoisoned() and fail fast.
+  private poisonAndWakeConsumers(): void {
+    Atomics.store(this.channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+    for (const slot of this.channel.slots) {
+      Atomics.notify(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX);
     }
   }
 
@@ -235,7 +250,12 @@ class OpfsProxyServer {
         `[browser-opfs] proxy op failed opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
       );
     }
-    Atomics.store(control, OPFS_PROXY_CONTROL_RESULT_INDEX, result | 0);
+    // Encode the result across two words like read/write offsets so 64-bit values survive: RESULT
+    // holds the low 32 bits, AUX_HIGH the high 32 bits. SIZE for a >= 2 GiB file would otherwise wrap
+    // to a (often negative) 32-bit value; the consumer reconstructs high * 2**32 + (low >>> 0). Every
+    // other op's result fits in 32 bits, so AUX_HIGH resolves to 0 for them.
+    Atomics.store(control, OPFS_PROXY_CONTROL_RESULT_INDEX, result >>> 0);
+    Atomics.store(control, OPFS_PROXY_CONTROL_AUX_HIGH_INDEX, Math.floor(result / 2 ** 32) >>> 0);
     Atomics.store(control, OPFS_PROXY_CONTROL_STATUS_INDEX, status);
     Atomics.store(control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_DONE);
     Atomics.notify(control, OPFS_PROXY_CONTROL_STATE_INDEX, 1);
@@ -285,7 +305,7 @@ class OpfsProxyServer {
     const auxLow = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX);
     const create = (auxLow & CREATE_FLAG) !== 0;
     const writableRequested = (auxLow & WRITABLE_FLAG) !== 0;
-    const reattached = this.reattachOpenHandle(guestPath);
+    const reattached = this.reattachOpenHandle(guestPath, { create, writableRequested });
     if (reattached !== undefined) return reattached;
     // A registered Blob input is served as a read-only handle: no OPFS namespace lookup, no
     // SyncAccessHandle. Reads slice the Blob on this (dedicated, free) worker (see opRead).
@@ -453,7 +473,10 @@ class OpfsProxyServer {
   }
 
   private async opOpenInternal(guestPath: string, options: { create: boolean; writable: boolean }): Promise<number> {
-    const reattached = this.reattachOpenHandle(guestPath);
+    const reattached = this.reattachOpenHandle(guestPath, {
+      create: options.create,
+      writableRequested: options.writable,
+    });
     if (reattached !== undefined) return reattached;
     const location = this.locate(guestPath);
     const writable = options.writable || isGuestPathWithinRoots(guestPath, location.mount.writableRoots);
@@ -507,7 +530,11 @@ class OpfsProxyServer {
   // cases: a normally-open path (byPath), and a path unlinked while still open (pendingByPath) whose OPFS
   // file is not yet removed — reattaching there guarantees we never open a second SyncAccessHandle on the
   // same file. Returns the handle id on reattach, or undefined when no live handle exists.
-  private reattachOpenHandle(guestPath: string): number | undefined {
+  private reattachOpenHandle(
+    guestPath: string,
+    options: { create?: boolean; writableRequested?: boolean } = {},
+  ): number | undefined {
+    const fromByPath = this.byPath.has(guestPath);
     const liveId = this.byPath.get(guestPath) ?? this.pendingByPath.get(guestPath);
     if (liveId === undefined) return undefined;
     const entry = this.byId.get(liveId);
@@ -517,6 +544,26 @@ class OpfsProxyServer {
       this.pendingByPath.delete(guestPath);
       this.trace?.(`[browser-opfs] proxy stale path index path=${guestPath} id=${liveId}`);
       return undefined;
+    }
+    // A writable open cannot be satisfied by a read-only handle: the existing SyncAccessHandle was
+    // opened read-only and cannot be upgraded in place (a second handle on the same file violates the
+    // WebKit one-handle rule), so reject rather than hand back a handle whose writes would hit EROFS.
+    if (options.writableRequested && !entry.writable) {
+      this.trace?.(
+        `[browser-opfs] proxy reattach mode conflict path=${guestPath} requested=writable existing=read-only`,
+      );
+      throw new ProxyErrno(ERRNO_ACCES);
+    }
+    // POSIX create-after-unlink: a CREATE-intent open of a path whose handle is pending OPFS removal
+    // (unlinked while still open) must not let the deferred removeEntry delete the freshly written
+    // output at the old handle's last close. We cannot open a second SyncAccessHandle on the
+    // not-yet-removed file, so revive this still-live handle as a normal entry and cancel its deferred
+    // removal — the reopened path becomes the live file again instead of a doomed one.
+    if (options.create && !fromByPath && entry.pendingRemoval) {
+      entry.pendingRemoval = null;
+      this.pendingByPath.delete(guestPath);
+      this.byPath.set(guestPath, entry.id);
+      this.trace?.(`[browser-opfs] proxy create-after-unlink revived path=${guestPath} id=${entry.id}`);
     }
     entry.refcount += 1;
     return entry.id;

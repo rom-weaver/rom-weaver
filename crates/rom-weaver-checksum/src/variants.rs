@@ -346,6 +346,15 @@ struct N64Repair {
 struct FixHeader {
     checksum: Option<StreamingChecksum>,
     flush_offset: u64,
+    /// Produce a [`DeferredFixHeader`] instead of an in-pass digest: the streamed
+    /// accumulators still resolve the repair, but the digest is computed in one
+    /// extra read via [`overlay_checksums`]. Set when the prefix would exceed the
+    /// in-memory cap *or* when a Genesis repair spans the whole file (its checksum
+    /// sits near the start yet sums to EOF, so an in-pass hasher would buffer all
+    /// of it).
+    deferred: bool,
+    /// True only when `deferred` was forced by [`FIX_HEADER_PREFIX_CAP`] (an
+    /// anomaly worth a warning); a routine Genesis deferral leaves this false.
     cap_exceeded: bool,
     flushed: bool,
     prefix: Vec<u8>,
@@ -363,7 +372,7 @@ impl FixHeader {
             n64.accumulator.feed(offset, chunk);
         }
 
-        if self.cap_exceeded {
+        if self.deferred {
             return Ok(());
         }
 
@@ -484,12 +493,19 @@ impl FixHeader {
                 "repairedProfiles": repaired,
             }
         });
-        if self.cap_exceeded {
-            warn!(
-                flush_offset = self.flush_offset,
-                cap = FIX_HEADER_PREFIX_CAP,
-                "fix-header variant deferred: repair dependency exceeds in-memory prefix cap"
-            );
+        if self.deferred {
+            if self.cap_exceeded {
+                warn!(
+                    flush_offset = self.flush_offset,
+                    cap = FIX_HEADER_PREFIX_CAP,
+                    "fix-header variant deferred: repair dependency exceeds in-memory prefix cap"
+                );
+            } else {
+                trace!(
+                    flush_offset = self.flush_offset,
+                    "fix-header variant deferred: checksum spans the full file; applying sparse overlay in a second read"
+                );
+            }
             return Ok(FixHeaderOutcome::Deferred(DeferredFixHeader {
                 id: "fix-header".to_string(),
                 label: "Fix header".to_string(),
@@ -585,12 +601,11 @@ impl StreamingVariantChecksums {
                 Ok(())
             }
             State::Buffering => {
-                let offset = self.consumed;
                 self.header_buf.extend_from_slice(bytes);
                 self.consumed = self.consumed.saturating_add(bytes.len() as u64);
                 let scan_target = PLAN_SCAN_BYTES.min(self.total_len);
                 if self.header_buf.len() as u64 >= scan_target || self.consumed >= self.total_len {
-                    self.plan(offset)?;
+                    self.plan()?;
                 }
                 Ok(())
             }
@@ -607,7 +622,7 @@ impl StreamingVariantChecksums {
     pub fn finalize(mut self) -> Result<VariantOutput> {
         if matches!(self.state, State::Buffering) {
             // Stream shorter than the scan window: plan now from what we have.
-            self.plan(0)?;
+            self.plan()?;
         }
         let State::Planned(planned) = self.state else {
             return Ok(VariantOutput {
@@ -666,7 +681,7 @@ impl StreamingVariantChecksums {
 
     /// Build the active variant set from the buffered header + total length,
     /// then replay the buffered bytes through it.
-    fn plan(&mut self, _offset: u64) -> Result<()> {
+    fn plan(&mut self) -> Result<()> {
         let header = std::mem::take(&mut self.header_buf);
         // Build every applicable variant with a synchronous hasher first so the active count is
         // known, then split the worker budget across them and upgrade each to a parallel hasher.
@@ -725,11 +740,9 @@ impl StreamingVariantChecksums {
             n64_orders,
         }));
 
-        // Replay the buffered header bytes (offset 0..header.len()).
-        let header_len = header.len() as u64;
+        // Replay the buffered header bytes (offset 0..header.len()). `consumed`
+        // already counted the header bytes during buffering.
         self.feed_planned(0, &header)?;
-        // `consumed` already counted the header bytes during buffering.
-        let _ = header_len;
         Ok(())
     }
 
@@ -838,7 +851,13 @@ impl StreamingVariantChecksums {
             flush_offset = flush_offset.max(n64.accumulator.end);
         }
         let cap_exceeded = flush_offset > FIX_HEADER_PREFIX_CAP;
-        let checksum = if cap_exceeded {
+        // The Genesis checksum is stored near the start (0x18E) yet sums to EOF,
+        // so an in-pass single hasher would have to buffer the whole file. Defer
+        // it: the streamed accumulator still computes the sum, then the 2-byte
+        // repair is applied as a sparse overlay in one extra read (see
+        // `overlay_checksums`), the same mechanism the cap-exceeded path uses.
+        let deferred = cap_exceeded || sega.is_some();
+        let checksum = if deferred {
             None
         } else {
             StreamingChecksum::new(&self.algorithms)?
@@ -846,6 +865,7 @@ impl StreamingVariantChecksums {
         trace!(
             flush_offset,
             cap_exceeded,
+            deferred,
             gba = gba.is_some(),
             sega = sega.is_some(),
             n64 = n64.is_some(),
@@ -854,6 +874,7 @@ impl StreamingVariantChecksums {
         Ok(Some(FixHeader {
             checksum,
             flush_offset,
+            deferred,
             cap_exceeded,
             flushed: false,
             prefix: Vec::new(),
@@ -912,6 +933,19 @@ fn plan_n64_repair(header: &[u8], total_len: u64) -> Option<N64Repair> {
         return None;
     }
     let order = N64Order::detect(header)?;
+    // The streamed CRC pair below implements only the CIC-6101/6102 seed and
+    // round function. The 6103/6105/6106 boot chips use a different seed (6105
+    // also a different round and final combine), so applying this algorithm to
+    // them would emit a wrong fix-header digest and a corrupting "repair". When
+    // the IPL3 bootcode positively identifies one of those, skip the variant
+    // rather than emit garbage. An unidentified bootcode (homebrew, synthetic
+    // fixtures) falls back to the 6101/6102 algorithm as before.
+    if let Some(cic) = detect_n64_cic(header, order)
+        && !cic.uses_6102_algorithm()
+    {
+        trace!(?cic, "n64 fix-header skipped: unsupported CIC seed/round");
+        return None;
+    }
     let old_crc1 = order.word_normalized([header[0x10], header[0x11], header[0x12], header[0x13]]);
     let old_crc2 = order.word_normalized([header[0x14], header[0x15], header[0x16], header[0x17]]);
     Some(N64Repair {
@@ -921,6 +955,56 @@ fn plan_n64_repair(header: &[u8], total_len: u64) -> Option<N64Repair> {
         old_crc2,
         accumulator: N64Accumulator::new(order, 0x1000, 0x101000),
     })
+}
+
+/// N64 boot chip (CIC) variant, identified from the IPL3 bootcode CRC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum N64Cic {
+    Cic6101,
+    Cic6102,
+    Cic6103,
+    Cic6105,
+    Cic6106,
+}
+
+impl N64Cic {
+    /// Map a CRC32 of the (big-endian-normalized) IPL3 bootcode `[0x40, 0x1000)`
+    /// to its boot chip. Values are the well-known constants used by `n64crc`.
+    fn from_bootcode_crc(crc: u32) -> Option<Self> {
+        match crc {
+            0x6170_A4A1 => Some(Self::Cic6101),
+            0x90BB_6CB5 => Some(Self::Cic6102),
+            0x0B05_0EE0 => Some(Self::Cic6103),
+            0x98BC_2C86 => Some(Self::Cic6105),
+            0xACC8_580A => Some(Self::Cic6106),
+            _ => None,
+        }
+    }
+
+    /// Whether [`N64Accumulator`]'s hard-coded seed and round function (CIC-6102)
+    /// is correct for this chip. 6101 shares the 6102 algorithm; the rest differ.
+    fn uses_6102_algorithm(self) -> bool {
+        matches!(self, Self::Cic6101 | Self::Cic6102)
+    }
+}
+
+/// Identify the N64 boot chip from the IPL3 bootcode `[0x40, 0x1000)`. Returns
+/// `None` when the bootcode is unavailable or matches no known chip (treated as
+/// the 6101/6102 default by the caller).
+fn detect_n64_cic(header: &[u8], order: N64Order) -> Option<N64Cic> {
+    const BOOTCODE_START: usize = 0x40;
+    const BOOTCODE_END: usize = 0x1000;
+    if header.len() < BOOTCODE_END {
+        return None;
+    }
+    // The reference CRCs are over big-endian bootcode bytes, so normalize each
+    // word out of the source byte order before hashing.
+    let mut bootcode = Vec::with_capacity(BOOTCODE_END - BOOTCODE_START);
+    for word in header[BOOTCODE_START..BOOTCODE_END].chunks_exact(4) {
+        let value = order.word_normalized([word[0], word[1], word[2], word[3]]);
+        bootcode.extend_from_slice(&value.to_be_bytes());
+    }
+    N64Cic::from_bootcode_crc(crate::crc32_bytes(&bootcode))
 }
 
 /// Mirror of the file-based strippable-header detection, but driven by an
@@ -1087,4 +1171,107 @@ pub fn overlay_checksums<R: Read>(
         offset = chunk_end;
     }
     checksum.finalize()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    fn algorithms() -> Vec<String> {
+        vec!["crc32".to_string(), "sha1".to_string()]
+    }
+
+    #[test]
+    fn n64_cic_maps_known_bootcode_crcs() {
+        assert_eq!(
+            N64Cic::from_bootcode_crc(0x6170_A4A1),
+            Some(N64Cic::Cic6101)
+        );
+        assert_eq!(
+            N64Cic::from_bootcode_crc(0x90BB_6CB5),
+            Some(N64Cic::Cic6102)
+        );
+        assert_eq!(
+            N64Cic::from_bootcode_crc(0x0B05_0EE0),
+            Some(N64Cic::Cic6103)
+        );
+        assert_eq!(
+            N64Cic::from_bootcode_crc(0x98BC_2C86),
+            Some(N64Cic::Cic6105)
+        );
+        assert_eq!(
+            N64Cic::from_bootcode_crc(0xACC8_580A),
+            Some(N64Cic::Cic6106)
+        );
+        assert_eq!(N64Cic::from_bootcode_crc(0xDEAD_BEEF), None);
+    }
+
+    #[test]
+    fn only_6101_6102_use_the_streamed_algorithm() {
+        assert!(N64Cic::Cic6101.uses_6102_algorithm());
+        assert!(N64Cic::Cic6102.uses_6102_algorithm());
+        assert!(!N64Cic::Cic6103.uses_6102_algorithm());
+        assert!(!N64Cic::Cic6105.uses_6102_algorithm());
+        assert!(!N64Cic::Cic6106.uses_6102_algorithm());
+    }
+
+    fn build_n64_rom() -> Vec<u8> {
+        let mut rom = vec![0u8; 0x101000];
+        rom[..4].copy_from_slice(&N64_BIG_ENDIAN_MAGIC);
+        for (index, value) in rom[0x1000..].iter_mut().enumerate() {
+            *value = (index as u8).wrapping_mul(9).wrapping_add(0x11);
+        }
+        rom
+    }
+
+    #[test]
+    fn n64_repair_kept_for_unidentified_bootcode() {
+        // An all-zero IPL3 bootcode matches no known CIC, so the engine keeps the
+        // 6101/6102 default rather than dropping the variant (this mirrors the
+        // synthetic fixtures used elsewhere).
+        let rom = build_n64_rom();
+        assert!(detect_n64_cic(&rom, N64Order::BigEndian).is_none());
+        assert!(plan_n64_repair(&rom, rom.len() as u64).is_some());
+    }
+
+    #[test]
+    fn genesis_fix_header_defers_with_matching_overlay_digest() {
+        let mut rom = vec![0u8; 0x400];
+        rom[0x100..0x104].copy_from_slice(b"SEGA");
+        rom[0x200..0x210].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        // Deliberately wrong stored checksum so a repair patch is produced.
+        rom[0x18E] = 0xFF;
+        rom[0x18F] = 0xFF;
+
+        let algorithms = algorithms();
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, rom.len() as u64, Some("game.md"), 1)
+                .expect("engine");
+        engine.update(&rom).expect("update");
+        let output = engine.finalize().expect("finalize");
+
+        // Genesis must not buffer the whole file in-pass: it defers instead.
+        assert!(
+            output.rows.iter().all(|row| row.id != "fix-header"),
+            "genesis fix-header should not be an in-pass row"
+        );
+        let deferred = output
+            .deferred_fix_header
+            .expect("genesis fix-header should defer");
+        assert_eq!(deferred.id, "fix-header");
+
+        // The deferred overlay digest must equal hashing the repaired bytes.
+        let overlay = overlay_checksums(&mut Cursor::new(&rom), &algorithms, &deferred.patches)
+            .expect("overlay");
+        let mut repaired = rom.clone();
+        for (offset, bytes) in &deferred.patches {
+            let start = *offset as usize;
+            repaired[start..start + bytes.len()].copy_from_slice(bytes);
+        }
+        let direct = overlay_checksums(&mut Cursor::new(&repaired), &algorithms, &BTreeMap::new())
+            .expect("direct");
+        assert_eq!(overlay, direct);
+    }
 }

@@ -430,6 +430,47 @@ fn msf_parsing_round_trips() {
 }
 
 #[test]
+fn msf_parsing_rejects_minute_overflow() {
+    let handler = ChdContainerHandler;
+    // The frame total is `minutes * 4500 + ...`; it overflows u32 at 954438
+    // minutes. An attacker-controllable cue must error rather than wrap.
+    assert!(handler.parse_msf("954437:00:00").is_ok());
+    let err = handler.parse_msf("954438:00:00").unwrap_err();
+    assert!(
+        err.to_string().contains("out of range"),
+        "unexpected error: {err}"
+    );
+    // u32::MAX minutes (far past the limit) must not panic on overflow.
+    assert!(handler.parse_msf("4294967295:00:00").is_err());
+}
+
+#[test]
+fn parse_wave_file_rejects_oversized_fmt_chunk() {
+    let handler = ChdContainerHandler;
+    let path = std::env::temp_dir().join(format!(
+        "rw-chd-unit-{}-oversized-fmt.wav",
+        std::process::id()
+    ));
+
+    // A valid RIFF/WAVE header followed by a fmt chunk that declares a ~4 GiB
+    // length. The parser must reject it before allocating a read buffer.
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&0_u32.to_le_bytes());
+    bytes.extend_from_slice(b"WAVE");
+    bytes.extend_from_slice(b"fmt ");
+    bytes.extend_from_slice(&0xFFFF_FFF0_u32.to_le_bytes());
+    std::fs::write(&path, &bytes).unwrap();
+
+    let err = handler.parse_wave_file(&path).unwrap_err();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        err.to_string().contains("fmt chunk"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn parse_disc_mode_maps_known_track_types() {
     let handler = ChdContainerHandler;
     assert_eq!(

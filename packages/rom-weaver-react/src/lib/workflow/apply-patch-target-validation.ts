@@ -8,6 +8,12 @@ import { createApplyPatchValidationKey } from "./apply-patch-readiness-state-mac
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
+// An aborted or transient worker failure is not a verdict on the patch. Caching one as a terminal
+// "invalid" (keyed on the stable inputs) would pin the poisoned result forever, because the
+// short-circuit in validateApplyPatchTarget only skips re-validation for terminal statuses. Treat
+// these as a retryable "unknown" so the next readiness pass re-validates.
+const TRANSIENT_VALIDATION_ERROR_CODES = new Set(["CANCELLED", "WORKER_FAILED", "WORKER_UNAVAILABLE"]);
+
 type PatchTargetValidationAdapters = {
   emitProgress: (event: {
     details?: Record<string, unknown>;
@@ -138,9 +144,14 @@ const validateApplyPatchTarget = async <TSource>(
     };
     stage.state.checksumTimeMs = Date.now() - validationStartedAt;
   } catch (error) {
+    const normalized = toRomWeaverError(error);
+    // A cancelled run or a transient worker failure is not a "patch does not apply" verdict. Storing
+    // it as terminal "invalid" against the stable validationKey would make the short-circuit reuse it
+    // forever; store a non-terminal "unknown" instead so the verdict is retried.
+    const transient = adapters.signal.aborted || TRANSIENT_VALIDATION_ERROR_CODES.has(normalized.code);
     stage.state.patchValidation = {
-      message: toRomWeaverError(error).message,
-      status: "invalid",
+      message: normalized.message,
+      status: transient ? "unknown" : "invalid",
       targetInputId: target.id,
       validationKey,
     };

@@ -47,6 +47,9 @@ export class BrowserOpfsMount {
   directoryHandle: FileSystemDirectoryHandleLike;
   mountPath: string;
   ownedFiles: RandomAccessFileLike[];
+  /** Count of ownedFiles built at mount creation (the persistent input set). Everything appended past
+   * this index is per-run (preopened/created outputs, lazily hydrated inputs) and pruned in finishRun. */
+  persistentOwnedFileCount: number;
   proxyClient: OpfsProxyClient;
   syncAccessMode: RomWeaverBrowserSyncAccessMode | undefined;
   trace: TraceLine | null;
@@ -99,6 +102,7 @@ export class BrowserOpfsMount {
     this.directoryHandle = directoryHandle;
     this.mountPath = mountPath;
     this.ownedFiles = ownedFiles;
+    this.persistentOwnedFileCount = ownedFiles.length;
     this.proxyClient = proxyClient;
     this.syncAccessMode = syncAccessMode;
     this.virtualOnly = Boolean(virtualOnly);
@@ -146,7 +150,26 @@ export class BrowserOpfsMount {
       restoreVirtualFiles(this.virtualRestores);
     }
     this.virtualRestores = null;
+    this.pruneRunOwnedFiles();
     this.trace = null;
+  }
+
+  /**
+   * Close and forget every proxy adapter created during the run — preopened/created output files and
+   * lazily hydrated inputs — reverting ownedFiles to the persistent set built at mount creation. A
+   * cached mount reused across many ops would otherwise hold one open proxy handle per distinct
+   * output/hydrated-input file until dispose, exhausting the proxy handle table (EIO) after ~1020 files.
+   * The matching inodes are dropped from the in-memory tree so a later run recreates/rehydrates them
+   * instead of dereferencing a now-closed handle.
+   */
+  pruneRunOwnedFiles() {
+    if (this.ownedFiles.length <= this.persistentOwnedFileCount) return;
+    const perRunFiles = this.ownedFiles.splice(this.persistentOwnedFileCount);
+    evictInodesBackedByFiles(this.contents, new Set(perRunFiles));
+    closeSyncFiles(perRunFiles);
+    this.trace?.(
+      `[browser-opfs] mount finishRun pruned run adapters path=${this.mountPath} closed=${perRunFiles.length}`,
+    );
   }
 
   async preopenOutputPaths({ paths, trace }: { paths?: unknown; trace?: TraceLine } = {}) {
@@ -219,6 +242,21 @@ export class BrowserOpfsMount {
     this.finishRun();
     closeSyncFiles(this.ownedFiles);
     this.ownedFiles = [];
+  }
+}
+
+/** Recursively removes every directory entry whose inode is backed by one of the given files, so a
+ * pruned per-run adapter leaves no dangling closed-handle inode in the mount tree. */
+function evictInodesBackedByFiles(contents: WasiDirectoryContents, files: Set<RandomAccessFileLike>): void {
+  if (files.size === 0) return;
+  for (const [name, inode] of contents) {
+    if (inode instanceof wasiShim.Directory) {
+      evictInodesBackedByFiles(inode.contents, files);
+      continue;
+    }
+    if (inode instanceof WasiRandomAccessFileInode && files.has(inode.file)) {
+      contents.delete(name);
+    }
   }
 }
 

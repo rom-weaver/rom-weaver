@@ -13,6 +13,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
     parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
@@ -607,7 +608,29 @@ fn create_ppf3_patch_streaming(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct PpfDiffRun {
     offset: u64,
-    len: u8,
+    len: u64,
+}
+
+impl PpfDiffRun {
+    fn end(&self) -> Result<u64> {
+        self.offset
+            .checked_add(self.len)
+            .ok_or_else(|| RomWeaverError::Validation("PPF diff run offset overflowed".into()))
+    }
+}
+
+impl AdjacentRun for PpfDiffRun {
+    fn start(&self) -> u64 {
+        self.offset
+    }
+
+    fn end(&self) -> Result<u64> {
+        PpfDiffRun::end(self)
+    }
+
+    fn append(&mut self, next: Self) {
+        self.len = self.len.saturating_add(next.len);
+    }
 }
 
 fn create_ppf3_patch_parallel(
@@ -634,17 +657,30 @@ fn create_ppf3_patch_parallel(
         pool,
     )?;
     let mut modified = BufReader::new(File::open(modified_path)?);
+    let mut data = vec![0u8; usize::from(u8::MAX)];
+    let mut record_count = 0usize;
 
+    // Each run is a fully-merged contiguous diff region; split it into maximal
+    // 255-byte records aligned from the run start so the bytes are identical to
+    // the serial path regardless of how the chunk boundaries fell.
     for run in &runs {
-        let data_len = usize::from(run.len);
-        let mut data = vec![0u8; data_len];
         modified.seek(SeekFrom::Start(run.offset))?;
-        modified.read_exact(&mut data)?;
-        write_ppf3_record(output, run.offset, &data)?;
+        let mut record_offset = run.offset;
+        let mut remaining = run.len;
+        while remaining > 0 {
+            let take = remaining.min(u64::from(u8::MAX)) as usize;
+            modified.read_exact(&mut data[..take])?;
+            write_ppf3_record(output, record_offset, &data[..take])?;
+            record_offset = record_offset
+                .checked_add(take as u64)
+                .ok_or_else(|| RomWeaverError::Validation("PPF create offset overflowed".into()))?;
+            remaining -= take as u64;
+            record_count = record_count.saturating_add(1);
+        }
     }
 
     Ok(CreatedPpfPatch {
-        record_count: runs.len(),
+        record_count,
         blockcheck_enabled,
     })
 }
@@ -675,27 +711,15 @@ fn collect_ppf_diff_runs_parallel(
         ))
     })?;
 
-    let mut merged: Vec<PpfDiffRun> = Vec::new();
+    // Fully fuse contiguous runs across chunk boundaries (no 255 cap) so the
+    // merged runs are independent of how many chunks the scan used; the writer
+    // then re-splits them into maximal 255-byte records (matching serial).
+    let mut chunk_runs = Vec::with_capacity(per_chunk_runs.len());
     for runs in per_chunk_runs {
-        let runs = runs?;
-        for run in runs {
-            if let Some(last) = merged.last_mut() {
-                let contiguous = last
-                    .offset
-                    .checked_add(u64::from(last.len))
-                    .is_some_and(|end| end == run.offset);
-                if contiguous {
-                    let combined_len = usize::from(last.len) + usize::from(run.len);
-                    if combined_len <= usize::from(u8::MAX) {
-                        last.len = combined_len as u8;
-                        continue;
-                    }
-                }
-            }
-            merged.push(run);
-        }
+        // Surface scan errors in chunk order, exactly as the previous loop did.
+        chunk_runs.push(runs?);
     }
-    Ok(merged)
+    merge_adjacent_runs(chunk_runs)
 }
 
 fn collect_ppf_chunk_diff_runs(
@@ -716,7 +740,7 @@ fn collect_ppf_chunk_diff_runs(
     let mut modified_buffer = vec![0u8; CREATE_COMPARE_BUFFER_SIZE];
     let mut runs = Vec::new();
     let mut pending_start: Option<u64> = None;
-    let mut pending_len = 0usize;
+    let mut pending_len = 0u64;
     let mut absolute = start;
 
     while absolute < end {
@@ -750,19 +774,6 @@ fn collect_ppf_chunk_diff_runs(
                 pending_len = pending_len.checked_add(1).ok_or_else(|| {
                     RomWeaverError::Validation("PPF diff run length overflowed".into())
                 })?;
-                if pending_len == usize::from(u8::MAX) {
-                    let run_start = pending_start.ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "internal PPF state error: pending run missing start offset".into(),
-                        )
-                    })?;
-                    runs.push(PpfDiffRun {
-                        offset: run_start,
-                        len: u8::MAX,
-                    });
-                    pending_start = None;
-                    pending_len = 0;
-                }
             } else if pending_len > 0 {
                 let run_start = pending_start.ok_or_else(|| {
                     RomWeaverError::Validation(
@@ -771,7 +782,7 @@ fn collect_ppf_chunk_diff_runs(
                 })?;
                 runs.push(PpfDiffRun {
                     offset: run_start,
-                    len: pending_len as u8,
+                    len: pending_len,
                 });
                 pending_start = None;
                 pending_len = 0;
@@ -790,7 +801,7 @@ fn collect_ppf_chunk_diff_runs(
         })?;
         runs.push(PpfDiffRun {
             offset: run_start,
-            len: pending_len as u8,
+            len: pending_len,
         });
     }
     Ok(runs)
@@ -805,7 +816,7 @@ fn collect_ppf_chunk_diff_runs_from_bytes(
 ) -> Result<Vec<PpfDiffRun>> {
     let mut runs = Vec::new();
     let mut pending_start: Option<u64> = None;
-    let mut pending_len = 0usize;
+    let mut pending_len = 0u64;
     let mut absolute = start;
 
     for (index, &target) in modified_bytes.iter().enumerate() {
@@ -822,19 +833,6 @@ fn collect_ppf_chunk_diff_runs_from_bytes(
             pending_len = pending_len.checked_add(1).ok_or_else(|| {
                 RomWeaverError::Validation("PPF diff run length overflowed".into())
             })?;
-            if pending_len == usize::from(u8::MAX) {
-                let run_start = pending_start.ok_or_else(|| {
-                    RomWeaverError::Validation(
-                        "internal PPF state error: pending run missing start offset".into(),
-                    )
-                })?;
-                runs.push(PpfDiffRun {
-                    offset: run_start,
-                    len: u8::MAX,
-                });
-                pending_start = None;
-                pending_len = 0;
-            }
         } else if pending_len > 0 {
             let run_start = pending_start.ok_or_else(|| {
                 RomWeaverError::Validation(
@@ -843,7 +841,7 @@ fn collect_ppf_chunk_diff_runs_from_bytes(
             })?;
             runs.push(PpfDiffRun {
                 offset: run_start,
-                len: pending_len as u8,
+                len: pending_len,
             });
             pending_start = None;
             pending_len = 0;
@@ -861,7 +859,7 @@ fn collect_ppf_chunk_diff_runs_from_bytes(
         })?;
         runs.push(PpfDiffRun {
             offset: run_start,
-            len: pending_len as u8,
+            len: pending_len,
         });
     }
     Ok(runs)

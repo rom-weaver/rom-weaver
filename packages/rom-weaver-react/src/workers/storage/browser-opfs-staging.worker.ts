@@ -1,23 +1,22 @@
-import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
+import { getManagedOpfsFileHandle } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
-// OPFS write/truncate/cleanup worker. Input staging (copying a Blob into OPFS) was retired — browser
-// inputs now read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
-// browser-opfs-source-ref). This worker only services output-side writes and path cleanup. The
+// OPFS write/truncate worker. Input staging (copying a Blob into OPFS) was retired — browser inputs now
+// read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
+// browser-opfs-source-ref). This worker only services output-side writes and truncates. The
 // "stage-error" response action is kept as the generic failure reply for every action.
 
 type StorageRequest = {
-  action: "cleanup" | "truncate" | "write";
+  action: "truncate" | "write";
   bytes?: Uint8Array;
   filePath?: string;
-  filePaths?: string[];
   position?: number;
   requestId?: string;
   size?: number;
 };
 
 type StorageResponse = {
-  action: "cleanup-complete" | "stage-error" | "truncate-complete" | "write-complete";
+  action: "stage-error" | "truncate-complete" | "write-complete";
   error?: { message: string };
   filePath?: string;
   requestId?: string;
@@ -73,11 +72,18 @@ const closeWritable = async (writable: FileSystemWritableFileStream, writeError:
   else await writable.close();
 };
 
+// FileSystemWritableFileStream.write requires an ArrayBuffer-backed view (BufferSource excludes
+// SharedArrayBuffer-backed views). The client transfers the payload's ArrayBuffer, so `bytes` is already
+// ArrayBuffer-backed in practice and toWritableBufferSource passes it through with no copy; this stays
+// only as a defensive fallback for a hypothetical SharedArrayBuffer-backed payload.
 const toArrayBufferBackedBytes = (bytes: Uint8Array): Uint8Array<ArrayBuffer> => {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return copy;
 };
+
+const toWritableBufferSource = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
+  bytes.buffer instanceof ArrayBuffer ? (bytes as Uint8Array<ArrayBuffer>) : toArrayBufferBackedBytes(bytes);
 
 const truncateOpfsPath = async (request: StorageRequest): Promise<StorageResponse> => {
   const filePath = String(request.filePath || "").trim();
@@ -140,7 +146,7 @@ const writeBytesToOpfsPath = async (request: StorageRequest): Promise<StorageRes
     const writable = await fileHandle.createWritable({ keepExistingData: true });
     let writeError: unknown = null;
     try {
-      await writable.write({ data: toArrayBufferBackedBytes(bytes), position, type: "write" });
+      await writable.write({ data: toWritableBufferSource(bytes), position, type: "write" });
     } catch (error) {
       writeError = error;
       throw error;
@@ -157,20 +163,10 @@ const writeBytesToOpfsPath = async (request: StorageRequest): Promise<StorageRes
   };
 };
 
-const cleanupPaths = async (request: StorageRequest): Promise<StorageResponse> => {
-  await Promise.all((request.filePaths || []).map((filePath) => removeManagedOpfsPath(filePath, navigator)));
-  return {
-    action: "cleanup-complete",
-    requestId: request.requestId,
-    success: true,
-  };
-};
-
 workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
   const request = event.data || ({} as StorageRequest);
   let run: Promise<StorageResponse>;
-  if (request.action === "cleanup") run = cleanupPaths(request);
-  else if (request.action === "truncate") run = truncateOpfsPath(request);
+  if (request.action === "truncate") run = truncateOpfsPath(request);
   else if (request.action === "write") run = writeBytesToOpfsPath(request);
   else run = Promise.reject(new Error(`unsupported OPFS storage action: ${String(request.action)}`));
   run

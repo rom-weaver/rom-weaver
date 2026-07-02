@@ -214,8 +214,6 @@ impl ContainerHandlerOperations for XisoContainerHandler {
         _request: &ContainerCreateRequest,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        Err(RomWeaverError::Validation(
-            "xiso container create is not supported; xiso is trim-only (use `trim`)".into(),
-        ))
+        Err(extract_only_create_error(XISO.name))
     }
 }

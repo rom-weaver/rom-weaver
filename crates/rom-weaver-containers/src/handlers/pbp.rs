@@ -588,6 +588,13 @@ impl PbpContainerHandler {
         })
     }
 
+    fn extract_pipeline_messages() -> OrderedStreamingMessages {
+        OrderedStreamingMessages {
+            worker_closed: "pbp extract workers ended before all chunks were consumed",
+            result_closed: "pbp extract pipeline ended before all chunks were produced",
+        }
+    }
+
     fn build_disc_extract_tasks(
         &self,
         disc_index: usize,
@@ -935,8 +942,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             if write_bin {
                 let tasks = self.build_disc_extract_tasks(disc_index, disc)?;
                 let extract_capability = ThreadCapability::parallel(Some(tasks.len().max(1)));
-                let (disc_execution, pool) = context.build_pool(extract_capability)?;
-                execution = disc_execution;
+                execution = context.plan_threads(extract_capability);
                 trace!(
                     format = PBP.name,
                     disc = disc.disc_number,
@@ -958,41 +964,41 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 let decode_result = if execution.used_parallelism {
                     let progress_context = context.clone();
                     let progress_execution = execution.clone();
-                    write_decoded_chunks_from_workers(
-                        &pool,
+                    // Decode through the ordered, back-pressured pipeline (the same one cso/z3ds use):
+                    // it bounds in-flight tasks and reorders internally, handing chunks to the writer
+                    // in strict ascending order. A real-size disc fans out into dozens-to-hundreds of
+                    // tasks, so the older par_iter fan-out delivered chunks out of order and overflowed
+                    // the writer's small reorder window; feeding them in order keeps the window at one.
+                    decode_tasks_ordered(
                         &tasks,
-                        bounded_items_for_threads(execution.effective_threads),
-                        "pbp extract output receiver closed",
-                        |task| {
-                            let chunk = self.decode_disc_extract_task(&source, disc, task)?;
+                        execution.effective_threads,
+                        Self::extract_pipeline_messages(),
+                        |task: &PbpDiscExtractTask| task.expected_len,
+                        |task| self.decode_disc_extract_task(&source, disc, &task),
+                        |chunk: PbpDiscDecodedChunk, task_len| {
                             let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
                                 RomWeaverError::Validation(
                                     "pbp extract chunk length overflowed".into(),
                                 )
                             })?;
-                            if chunk_len != task.expected_len {
+                            if chunk_len != task_len {
                                 return Err(RomWeaverError::Validation(format!(
                                     "pbp extract chunk {} for disc {} wrote {} bytes but expected {}",
-                                    task.task_index, disc.disc_number, chunk_len, task.expected_len
+                                    chunk.task_index, disc.disc_number, chunk_len, task_len
                                 )));
                             }
-                            if chunk.disc_index != task.disc_index
-                                || chunk.task_index != task.task_index
-                            {
+                            if chunk.disc_index != disc_index {
                                 return Err(RomWeaverError::Validation(format!(
                                     "pbp extract chunk order mismatch for disc {} task {}",
-                                    disc.disc_number, task.task_index
+                                    disc.disc_number, chunk.task_index
                                 )));
                             }
-                            let chunk_index = u64::try_from(task.task_index).map_err(|_| {
+                            let chunk_index = u64::try_from(chunk.task_index).map_err(|_| {
                                 RomWeaverError::Validation(
                                     "pbp extract chunk index overflowed".into(),
                                 )
                             })?;
-                            Ok((chunk_index, chunk.data, chunk_len))
-                        },
-                        |(chunk_index, data, chunk_len)| {
-                            ordered_writer.write_chunk(chunk_index, data)?;
+                            ordered_writer.write_chunk(chunk_index, chunk.data)?;
                             if total_extract_bytes > 0 {
                                 let completed = extract_progress_bytes
                                     .fetch_add(chunk_len, Ordering::Relaxed)
@@ -1138,8 +1144,6 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         _request: &ContainerCreateRequest,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        Err(RomWeaverError::Validation(
-            "pbp create is not supported".into(),
-        ))
+        Err(extract_only_create_error(PBP.name))
     }
 }

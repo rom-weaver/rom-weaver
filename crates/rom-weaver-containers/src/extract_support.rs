@@ -4,11 +4,8 @@ use std::{
     io::{BufWriter, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU8, AtomicU64, Ordering},
-    sync::mpsc,
-    thread,
 };
 
-use rayon::prelude::*;
 use rom_weaver_checksum::{
     IdentityPrefix, RomIdentity, StreamingChecksum, StreamingVariantChecksums, VariantOutput,
     VariantRow, finish_deferred_fix_header,
@@ -16,13 +13,13 @@ use rom_weaver_checksum::{
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
-    SharedThreadPool, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
-    detect_disc_sheet, emit_container_running_progress, is_rom_filter_candidate_name,
+    ThreadExecution, bounded_items_for_threads, create_extract_output_file, detect_disc_sheet,
+    emit_container_running_progress, is_rom_filter_candidate_name,
     maybe_emit_container_byte_progress, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 
-use crate::constants::{PARALLEL_COORDINATOR_STACK_SIZE_BYTES, copy_progress_buffer_size};
+use crate::constants::copy_progress_buffer_size;
 
 pub(crate) fn ensure_extract_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
     if overwrite || !output_path.exists() {
@@ -718,65 +715,54 @@ impl<'a> ExtractChunkWriter<'a> {
     }
 }
 
-pub(crate) fn write_decoded_chunks_from_workers<TTask, TChunk, Decode, WriteChunk>(
-    pool: &SharedThreadPool,
-    tasks: &[TTask],
-    max_in_flight_items: usize,
-    receiver_closed_message: &'static str,
-    decode: Decode,
-    mut write_chunk: WriteChunk,
-) -> Result<()>
-where
-    TTask: Sync,
-    TChunk: Send,
-    Decode: Fn(&TTask) -> Result<TChunk> + Send + Sync,
-    WriteChunk: FnMut(TChunk) -> Result<()>,
-{
-    let (sender, receiver) = mpsc::sync_channel::<TChunk>(max_in_flight_items.max(1));
-    let mut write_result = Ok(());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // `par_iter` fans the decode across the full pool (the configured compute-worker budget). The
-    // two coordination threads — the rayon driver below (it calls `pool.install` and parks, holding
-    // no pool slot) and the consuming thread that drains the channel and writes/reorders chunks —
-    // run on top of those workers, not subtracted from them.
-    thread::scope(|scope| -> Result<()> {
-        let producer = thread::Builder::new()
-            .name("rom-weaver-decode".to_string())
-            .stack_size(PARALLEL_COORDINATOR_STACK_SIZE_BYTES)
-            .spawn_scoped(scope, || {
-                pool.install(|| {
-                    tasks.par_iter().try_for_each_with(sender, |sender, task| {
-                        let chunk = decode(task)?;
-                        sender.send(chunk).map_err(|_| {
-                            RomWeaverError::Validation(receiver_closed_message.to_string())
-                        })
-                    })
-                })
-            })
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to start parallel decode coordinator: {error}"
-                ))
-            })?;
+    /// Regression for the PBP parallel disc extract overflow: a real-size disc fans out into far
+    /// more decode tasks than the writer's reorder window holds (the window is only ~2x the thread
+    /// count, a PS1 disc yields dozens-to-hundreds of tasks). `decode_tasks_ordered` must hand chunks
+    /// to the writer in strict ascending order so a small-window [`OrderedChunkWriter`] never trips
+    /// "exceeded max reorder window", regardless of the order workers finish in. The earlier
+    /// `par_iter` fan-out delivered chunks out of order and overflowed the window.
+    #[test]
+    fn decode_tasks_ordered_keeps_writer_window_bounded() {
+        let task_count = 64usize;
+        let effective_threads = 4usize;
+        let window = bounded_items_for_threads(effective_threads);
+        assert!(
+            window < task_count,
+            "test must fan out beyond the reorder window ({window} >= {task_count})"
+        );
+        const CHUNK_LEN: usize = 8;
 
-        let mut receiver = Some(receiver);
-        while let Some(active_receiver) = receiver.as_ref() {
-            match active_receiver.recv() {
-                Ok(chunk) => {
-                    if let Err(error) = write_chunk(chunk) {
-                        write_result = Err(error);
-                        drop(receiver.take());
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
+        let tasks: Vec<usize> = (0..task_count).collect();
+        let mut writer = OrderedChunkWriter::new(Vec::new(), window).expect("writer");
+        let messages = OrderedStreamingMessages {
+            worker_closed: "test decode workers closed early",
+            result_closed: "test decode pipeline closed early",
+        };
+
+        decode_tasks_ordered(
+            &tasks,
+            effective_threads,
+            messages,
+            |_task: &usize| CHUNK_LEN as u64,
+            |task| Ok::<(usize, Vec<u8>), RomWeaverError>((task, vec![task as u8; CHUNK_LEN])),
+            |(index, data): (usize, Vec<u8>), _task_len| {
+                let chunk_index = u64::try_from(index).expect("chunk index fits u64");
+                writer.write_chunk(chunk_index, data)
+            },
+        )
+        .expect("ordered decode must keep the writer window bounded");
+
+        let output = writer.finish().expect("writer finishes without gaps");
+        assert_eq!(output.len(), task_count * CHUNK_LEN);
+        for (task, chunk) in output.chunks_exact(CHUNK_LEN).enumerate() {
+            assert!(
+                chunk.iter().all(|byte| *byte == task as u8),
+                "chunk {task} written out of order"
+            );
         }
-
-        let producer_result = producer.join().map_err(|_| {
-            RomWeaverError::Validation("parallel decode coordinator panicked".into())
-        })?;
-        write_result?;
-        producer_result
-    })
+    }
 }

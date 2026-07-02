@@ -70,7 +70,9 @@ const createBrowserRuntimeVfsIo = ({
       clearTimeout(cached.cleanupTimer);
       cached.cleanupTimer = undefined;
     }
-    stagedSourceCache.delete(key);
+    // Only evict our own slot: a re-stage may have replaced this key with a different live entry, and
+    // deleting that would strand the new staged copy (identity guard, mirrors browser-virtual-files.ts).
+    if (stagedSourceCache.get(key) === cached) stagedSourceCache.delete(key);
     await cached.staged.cleanup().catch(() => undefined);
   };
   const releaseCachedStagedSource = (key: object, cached: CachedStagedSource) => {
@@ -206,6 +208,18 @@ const createBrowserRuntimeVfsIo = ({
         // cancelled flow and will never call cleanup, so drop the staged copy now.
         releasedStagingSources.delete(cacheKey);
         void cleanupCachedStagedSource(cacheKey, entry);
+        return wrapCachedStagedSource(cacheKey, entry);
+      }
+      // A concurrent same-key stage may have cached a live entry while this one was in flight; don't
+      // clobber it (identity guard, like the delete above) — overwriting would strand its staged copy and
+      // let our later cleanup evict the wrong entry. Keep ours untracked; its wrapper cleanup still
+      // releases the duplicate staged copy.
+      if (stagedSourceCache.get(cacheKey)) {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource skipped caching (key already live)", {
+          fileName: resolved.fileName,
+          filePath: resolved.filePath,
+          scope,
+        });
         return wrapCachedStagedSource(cacheKey, entry);
       }
       stagedSourceCache.set(cacheKey, entry);

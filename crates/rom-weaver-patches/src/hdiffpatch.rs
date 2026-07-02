@@ -1065,7 +1065,16 @@ fn apply_hdiff13_with_chunks(
     let new_data_size = usize::try_from(header.new_data_size).map_err(|_| {
         RomWeaverError::Validation("HDiffPatch new_data_size overflowed usize".into())
     })?;
-    let mut output = Vec::with_capacity(new_data_size);
+    // `new_data_size` is an attacker-controlled varint; `try_reserve` turns an
+    // oversized declared size into a validation error instead of an allocation
+    // abort. The buffer still grows incrementally, so a valid (memory-fitting)
+    // patch produces byte-identical output.
+    let mut output = Vec::new();
+    output.try_reserve(new_data_size).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "HDiffPatch declared new_data_size {new_data_size} exceeds allocatable memory"
+        ))
+    })?;
 
     let mut cover_index = 0usize;
     let mut rle_ctrl_index = 0usize;
@@ -1323,7 +1332,16 @@ fn apply_hdiffsf20_with_diff(
         .map_err(|_| RomWeaverError::Validation("HDIFFSF20 new size overflowed usize".into()))?;
     let parsed = parse_hdiffsf20_steps(diff, old_data.len(), new_data_size, header.cover_count)?;
 
-    let mut output = vec![0u8; new_data_size];
+    // `new_data_size` is an attacker-controlled varint; `try_reserve_exact` turns
+    // an oversized declared size into a validation error rather than aborting the
+    // process on a multi-gigabyte `vec![0u8; n]`.
+    let mut output = Vec::new();
+    output.try_reserve_exact(new_data_size).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "HDIFFSF20 declared new_data_size {new_data_size} exceeds allocatable memory"
+        ))
+    })?;
+    output.resize(new_data_size, 0);
     let used_parallelism = if enable_parallel_steps && parsed.steps.len() > 1 {
         let rendered = parsed
             .steps

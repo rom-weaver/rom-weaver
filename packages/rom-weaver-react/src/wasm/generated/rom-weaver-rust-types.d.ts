@@ -36,8 +36,11 @@ file_name: string,
  * omitted) when the container handler does not report a size — the default
  * `list_entry_records` impl reports `None` for libarchive-backed formats, so
  * preserving the explicit `null` keeps the emitted JSON byte-identical.
+ *
+ * Emitted as a JSON `number` on the wasm wire, so override the default
+ * ts-rs `bigint` mapping to `number | null` to match the runtime payload.
  */
-size_bytes: bigint | null,
+size_bytes: number | null,
 /**
  * Coarse classification: `rom`, `patch`, `common` (ignored sidecar), or
  * `other`. Present on probe-manifest entries; carried through verbatim on
@@ -93,9 +96,10 @@ path: string,
  */
 file_name: string,
 /**
- * Size of the asset in bytes.
+ * Size of the asset in bytes. Emitted as a JSON `number` on the wasm wire,
+ * so override the default ts-rs `bigint` mapping to `number`.
  */
-size_bytes: bigint,
+size_bytes: number,
 /**
  * Coarse kind (`rom`/`bin`/`cue`/…) when known.
  */
@@ -156,8 +160,10 @@ leaf_path: string,
 file_name: string,
 /**
  * Size of the patch file in bytes (the bare source or extracted leaf).
+ * Emitted as a JSON `number` on the wasm wire, so override the default
+ * ts-rs `bigint` mapping to `number`.
  */
-size_bytes: bigint,
+size_bytes: number,
 /**
  * Patch format name (handler descriptor, else the file extension when unsupported).
  */
@@ -167,13 +173,15 @@ format: string,
  */
 patch_crc32?: number | null,
 /**
- * Embedded expected source size in bytes (byuu formats).
+ * Embedded expected source size in bytes (byuu formats). Emitted as a JSON
+ * `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
  */
-source_size?: bigint | null,
+source_size?: number | null,
 /**
- * Embedded produced target size in bytes (byuu + xdelta).
+ * Embedded produced target size in bytes (byuu + xdelta). Emitted as a JSON
+ * `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
  */
-target_size?: bigint | null,
+target_size?: number | null,
 /**
  * Embedded expected source CRC32 (byuu formats).
  */
@@ -183,21 +191,24 @@ source_crc32?: number | null,
  */
 target_crc32?: number | null,
 /**
- * Embedded minimum required source size (xdelta).
+ * Embedded minimum required source size (xdelta). Emitted as a JSON
+ * `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
  */
-minimum_source_size?: bigint | null,
+minimum_source_size?: number | null,
 /**
- * Record/window/command count when the format reports one.
+ * Record/window/command count when the format reports one. Emitted as a JSON
+ * `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
  */
-record_count?: bigint | null,
+record_count?: number | null,
 /**
  * Expected input checksums parsed from the file name, keyed by algorithm.
  */
 filename_checksums: { [key in string]: string },
 /**
- * Expected exact input size parsed from the file name.
+ * Expected exact input size parsed from the file name. Emitted as a JSON
+ * `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
  */
-filename_size?: bigint | null,
+filename_size?: number | null,
 /**
  * Libretro sidecar apply order, set only when matched against a known ROM in the same source.
  */

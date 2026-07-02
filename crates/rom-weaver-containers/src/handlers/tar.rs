@@ -1,22 +1,11 @@
 use super::*;
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum TarCompression {
-    None,
-    Gzip,
-    Bzip2,
-    Xz,
-}
-
 pub(crate) struct TarContainerHandler {
     descriptor: &'static FormatDescriptor,
 }
 
 impl TarContainerHandler {
-    pub(crate) const fn new(
-        descriptor: &'static FormatDescriptor,
-        _compression: TarCompression,
-    ) -> Self {
+    pub(crate) const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
 }

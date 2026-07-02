@@ -49,6 +49,28 @@ impl CliApp {
                 ),
             );
         }
+        // A `.dcp` rebuilds the GD-ROM filesystem rather than patching ROM bytes,
+        // and it auto-selects the high-density data track. Cheats (which patch
+        // byte offsets) and an explicit `--target` track have no effect here, so
+        // reject them instead of silently dropping them.
+        if !args.codes.is_empty() {
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "validate",
+                    "a .dcp patch cannot be combined with --code; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
+                ),
+            );
+        }
+        if args.target.is_some() {
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "validate",
+                    "a .dcp patch ignores --target; the GD-ROM high-density data track is selected automatically".to_string(),
+                ),
+            );
+        }
 
         let dcp_path = args.patches[0].clone();
         if let Some(report) = self.require_existing_path(

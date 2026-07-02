@@ -190,14 +190,24 @@ impl CliApp {
                 .map(|file| file.to_string_lossy().to_ascii_lowercase())
                 .unwrap_or_else(|| name.to_ascii_lowercase())
         };
-        // Map every leaf's basename → its index, so a sheet's referenced files resolve to the
-        // emitted track entries to annotate.
-        let index_by_name: std::collections::HashMap<String, usize> = leaves
+        // Directory portion of an emitted file's path, normalized to forward slashes.
+        let dir_key = |path: &str| -> String {
+            Path::new(path)
+                .parent()
+                .map(|parent| parent.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default()
+        };
+        // Map (directory, basename) → leaf index. Keying on the emitting directory as well as the
+        // basename keeps a multi-disc archive's repeated `track01.bin` entries distinct, so a sheet
+        // annotates only the tracks in its own directory instead of whichever leaf was seen last.
+        let index_by_dir_name: std::collections::HashMap<(String, String), usize> = leaves
             .iter()
             .enumerate()
             .filter_map(|(index, leaf)| {
-                let name = leaf.as_object()?.get("file_name")?.as_str()?;
-                Some((base_name(name), index))
+                let map = leaf.as_object()?;
+                let path = map.get("path").and_then(Value::as_str)?;
+                let name = map.get("file_name").and_then(Value::as_str)?;
+                Some(((dir_key(path), base_name(name)), index))
             })
             .collect();
 
@@ -232,13 +242,24 @@ impl CliApp {
                 .and_then(Value::as_str)
                 .unwrap_or(path)
                 .to_string();
+            let sheet_dir = dir_key(path);
             let tracks = refs
                 .referenced_files
                 .iter()
                 .enumerate()
                 .filter_map(|(order, reference)| {
-                    index_by_name
-                        .get(&base_name(reference))
+                    // References are relative to the sheet's directory and may include a
+                    // subdirectory; resolve that against the sheet's directory so the
+                    // (dir, basename) key matches the track leaf sitting beside the sheet.
+                    let reference_dir = match Path::new(reference).parent() {
+                        Some(parent) if !parent.as_os_str().is_empty() => Path::new(&sheet_dir)
+                            .join(parent)
+                            .to_string_lossy()
+                            .replace('\\', "/"),
+                        _ => sheet_dir.clone(),
+                    };
+                    index_by_dir_name
+                        .get(&(reference_dir, base_name(reference)))
                         .map(|&track_index| (track_index, order + 1))
                 })
                 .collect::<Vec<_>>();
@@ -325,5 +346,57 @@ mod emitted_files_tests {
     fn missing_emitted_files_detail_reports_nothing() {
         assert!(CliApp::emitted_file_detail_paths(None).is_empty());
         assert!(CliApp::emitted_file_detail_paths(Some(&json!({}))).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod disc_group_tests {
+    use serde_json::{Value, json};
+
+    use super::CliApp;
+
+    #[test]
+    fn multi_disc_tracks_with_same_basename_are_scoped_by_directory() {
+        // Two discs whose data tracks share the basename `track01.bin`. The
+        // annotation map keys on directory + basename, so each sheet annotates
+        // only the track sitting beside it — never the other disc's track.
+        let base = std::env::temp_dir().join(format!(
+            "rw-disc-group-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_nanos())
+                .unwrap_or(0)
+        ));
+        let disc1 = base.join("disc1");
+        let disc2 = base.join("disc2");
+        std::fs::create_dir_all(&disc1).expect("disc1 dir");
+        std::fs::create_dir_all(&disc2).expect("disc2 dir");
+        let cue_text =
+            "FILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n";
+        std::fs::write(disc1.join("game1.cue"), cue_text).expect("disc1 cue");
+        std::fs::write(disc2.join("game2.cue"), cue_text).expect("disc2 cue");
+
+        let leaf = |path: std::path::PathBuf, file_name: &str| -> Value {
+            json!({
+                "path": path.to_string_lossy().replace('\\', "/"),
+                "file_name": file_name,
+            })
+        };
+        let leaves = vec![
+            leaf(disc1.join("game1.cue"), "game1.cue"),
+            leaf(disc1.join("track01.bin"), "track01.bin"),
+            leaf(disc2.join("game2.cue"), "game2.cue"),
+            leaf(disc2.join("track01.bin"), "track01.bin"),
+        ];
+
+        let annotated = CliApp::attach_disc_group_details(leaves);
+
+        assert_eq!(annotated[1]["disc_group_id"].as_str(), Some("game1.cue"));
+        assert_eq!(annotated[1]["track_number"], 1);
+        assert_eq!(annotated[3]["disc_group_id"].as_str(), Some("game2.cue"));
+        assert_eq!(annotated[3]["track_number"], 1);
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -17,6 +17,10 @@ pub struct ExtractedFileEntry {
     /// omitted) when the container handler does not report a size — the default
     /// `list_entry_records` impl reports `None` for libarchive-backed formats, so
     /// preserving the explicit `null` keeps the emitted JSON byte-identical.
+    ///
+    /// Emitted as a JSON `number` on the wasm wire, so override the default
+    /// ts-rs `bigint` mapping to `number | null` to match the runtime payload.
+    #[cfg_attr(feature = "typescript-types", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
     /// Coarse classification: `rom`, `patch`, `common` (ignored sidecar), or
     /// `other`. Present on probe-manifest entries; carried through verbatim on

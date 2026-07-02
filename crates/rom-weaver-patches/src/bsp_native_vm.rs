@@ -16,6 +16,18 @@ use sha1::{Digest, Sha1};
 type VmResult<T> = std::result::Result<T, String>;
 const FILE_IO_CHUNK_BYTES: usize = 1024 * 1024;
 
+/// Fixed component of the per-run instruction budget. BSP scripts are a
+/// Turing-complete bytecode (jump/call opcodes can loop forever on malformed
+/// input), so `execute` aborts once it has run more than the budget to turn an
+/// attacker-supplied infinite loop into a validation error instead of a hang.
+const BSP_STEP_BUDGET_FLOOR: u64 = 1 << 32;
+/// Additional budget granted per input byte (patch + file) so legitimate scripts
+/// that iterate over large ROMs still have ample headroom.
+const BSP_STEP_BUDGET_PER_BYTE: u64 = 4096;
+/// Upper bound on stack length for `resize_stack`; a single `resizeStack` opcode
+/// carries an attacker-controlled u32, so reject absurd sizes before allocating.
+const BSP_MAX_STACK_LEN: usize = 1 << 24;
+
 #[derive(Clone, Copy)]
 enum StepControl {
     Continue,
@@ -324,7 +336,15 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     }
 
     fn execute(&mut self) -> VmResult<VmOutcome> {
+        let budget = self.step_budget();
+        let mut steps = 0u64;
         loop {
+            steps += 1;
+            if steps > budget {
+                return Err(format!(
+                    "BSP script exceeded its instruction budget of {budget} steps (possible infinite loop)"
+                ));
+            }
             let opcode = self.next_patch_byte()?;
             let args = self.opcode_parameters(opcode)?;
             let control = self.execute_opcode(opcode, &args)?;
@@ -348,6 +368,16 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             parent.variables[waiting_var as usize] = exit_code;
             self.current_frame = parent;
         }
+    }
+
+    fn step_budget(&self) -> u64 {
+        let patch_len = self.patch_len() as u64;
+        let file_len = self.file_buffer.len() as u64;
+        BSP_STEP_BUDGET_FLOOR.saturating_add(
+            patch_len
+                .saturating_add(file_len)
+                .saturating_mul(BSP_STEP_BUDGET_PER_BYTE),
+        )
     }
 
     fn top_frame(&self) -> &Frame<'a> {
@@ -439,6 +469,11 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
 
     fn resize_stack(&mut self, size: u32) -> VmResult<()> {
         let target = usize::try_from(size).map_err(|_| "stack size overflow".to_string())?;
+        if target > BSP_MAX_STACK_LEN {
+            return Err(format!(
+                "BSP resizeStack requested {target} entries, exceeding the maximum of {BSP_MAX_STACK_LEN}"
+            ));
+        }
         let frame = self.top_frame_mut();
         if target < frame.stack.len() {
             while frame.stack.len() > target {
@@ -446,6 +481,10 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             }
             return Ok(());
         }
+        let additional = target - frame.stack.len();
+        frame.stack.try_reserve(additional).map_err(|error| {
+            format!("BSP resizeStack could not allocate {additional} stack entries: {error}")
+        })?;
         while frame.stack.len() < target {
             frame.stack.push_front(0);
         }

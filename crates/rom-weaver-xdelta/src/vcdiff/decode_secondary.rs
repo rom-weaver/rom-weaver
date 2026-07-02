@@ -11,6 +11,17 @@ pub(super) fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<V
             "xdelta djw secondary decoder invalid output size".into(),
         ));
     }
+    // Each decoded symbol is one output byte and consumes at least one input
+    // bit, so the packed input bounds the output. Reject an inflated declared
+    // size before reserving (`output` and the `sectors` vector below) so a tiny
+    // payload cannot request a multi-gigabyte allocation.
+    let max_output = input.len().saturating_mul(8);
+    if output_size > max_output {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw secondary declares {output_size}-byte output but {} packed byte(s) yield at most {max_output}",
+            input.len()
+        )));
+    }
 
     let mut state = DjwBitState::decode_init();
     let mut input_pos = 0usize;
@@ -1410,6 +1421,16 @@ pub(super) fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<V
         output_size,
         "xdelta secondary decode"
     );
+    // One output byte per decoded symbol, each costing at least one input bit:
+    // reject an inflated declared size before reserving so a tiny payload cannot
+    // request a multi-gigabyte allocation.
+    let max_output = input.len().saturating_mul(8);
+    if output_size > max_output {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta fgk secondary declares {output_size}-byte output but {} packed byte(s) yield at most {max_output}",
+            input.len()
+        )));
+    }
     let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
     let mut output = Vec::with_capacity(output_size);
     let mut input_pos = 0usize;
@@ -1511,4 +1532,31 @@ pub(super) fn decode_xdelta_fgk_section_if_flag(
         })?,
     )?;
     Ok(decoded)
+}
+
+#[cfg(test)]
+mod audit_alloc_guard_tests {
+    use super::{decode_djw_secondary, decode_fgk_secondary};
+
+    #[test]
+    fn djw_rejects_output_larger_than_input_can_yield() {
+        // Four packed bytes can yield at most 32 output bytes (one per bit), so
+        // a declared gigabyte output must error rather than pre-reserve it.
+        let error = decode_djw_secondary(&[0u8; 4], 1 << 30)
+            .expect_err("oversized djw output must be rejected");
+        assert!(
+            error.to_string().contains("yield at most"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn fgk_rejects_output_larger_than_input_can_yield() {
+        let error = decode_fgk_secondary(&[0u8; 4], 1 << 30)
+            .expect_err("oversized fgk output must be rejected");
+        assert!(
+            error.to_string().contains("yield at most"),
+            "unexpected error: {error}"
+        );
+    }
 }

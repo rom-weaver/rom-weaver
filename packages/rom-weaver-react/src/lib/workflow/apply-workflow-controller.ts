@@ -230,7 +230,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const stage = this.createInitialSource("patch", patch, patchIndex);
     stage.outputLabel = createPatchOutputLabel(stage.state.fileName);
     this.patches.push(stage);
-    const stagedPromise = this.stageSource(stage)
+    // Eager staging runs OUTSIDE the mutation queue so the patch's I/O overlaps the ROM's setInput.
+    // It must NOT open the blocking selection dialog here: setInput's ROM prompt may still be resolving
+    // and the two single-modal dialogs would race. Defer the patch's interactive selection to the
+    // queued addPatch mutation below, which resolves it serially after setInput completes.
+    const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
       .then((staged) => {
         // The patch is extracted, but its addPatch mutation is queued behind the ROM's setInput
         // (mutations run serially). Until that mutation runs and validation begins, the row would keep
@@ -611,7 +615,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return session;
   }
 
-  private async stageSource(stage: StagedSource<TSource>): Promise<StagedSource<TSource>> {
+  private async stageSource(
+    stage: StagedSource<TSource>,
+    stageOptions: { deferBlockingSelection?: boolean } = {},
+  ): Promise<StagedSource<TSource>> {
     if (stage.state.role === "input") {
       const staged = (await this.inputStages.stageSource(stage)) as StagedSource<TSource>;
       this.refreshPreparedInputMetadataForStage(staged);
@@ -664,7 +671,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     if (selectable.length === 1) {
       stage.state.selectedCandidateId = selectable[0]?.id;
       stage.selectedArchiveEntry = stage.internalCandidates.get(selectable[0]?.id || "")?.archiveEntry;
-      await this.prepareSelectedSource(stage);
+      await this.prepareSelectedSource(stage, stageOptions);
       this.trace("source.stage.prepare-selected.finish", {
         fileName: stage.state.fileName,
         order: stage.state.order,
@@ -674,7 +681,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       await this.parsePatch(stage);
     } else {
       stage.state.status = "needsSelection";
-      await this.maybeResolveBlockingPatchSelection(stage);
+      // When staging eagerly (outside the mutation queue) the blocking selection is deferred to the
+      // queued mutation so it cannot race setInput's ROM dialog; the stage is left in "needsSelection"
+      // for the mutation's maybeResolveBlockingPatchSelection to resolve.
+      if (!stageOptions.deferBlockingSelection) await this.maybeResolveBlockingPatchSelection(stage);
     }
     this.trace("source.stage.finish", {
       candidateCount: stage.state.candidates.length,
@@ -687,7 +697,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return stage;
   }
 
-  private async prepareSelectedSource(stage: StagedSource<TSource>): Promise<void> {
+  private async prepareSelectedSource(
+    stage: StagedSource<TSource>,
+    stageOptions: { deferBlockingSelection?: boolean } = {},
+  ): Promise<void> {
     if (stage.state.role === "input") {
       await this.inputStages.prepareSelectedSource(stage);
       this.refreshPreparedInputMetadataForStage(stage);
@@ -738,7 +751,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
       if (requests.length) {
         this.handleSourceSelectionRequests(stage, requests);
-        await this.maybeResolveBlockingPatchSelection(stage);
+        // Eager staging defers interactive selection: leave the stage in "needsSelection" so the
+        // queued mutation resolves it serially, avoiding a second dialog racing setInput's ROM prompt.
+        if (!stageOptions.deferBlockingSelection) await this.maybeResolveBlockingPatchSelection(stage);
         return;
       }
       throw error;

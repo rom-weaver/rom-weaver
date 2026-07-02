@@ -531,14 +531,31 @@ fn apply_aps_records_in_memory(
     for record in records {
         match record {
             ApsRecord::Simple { offset, data } => {
-                let start = *offset as usize;
-                let end = start + data.len();
-                if end > output_size as usize {
+                // `offset` is u64: compute `end` in u64 with a checked add so a
+                // wrapping `usize` add on wasm32 cannot produce `end < start` and
+                // bypass the bounds check before slicing `output`.
+                let data_len = u64::try_from(data.len()).map_err(|_| {
+                    RomWeaverError::Validation("APS record length exceeded u64".into())
+                })?;
+                let end = offset.checked_add(data_len).ok_or_else(|| {
+                    RomWeaverError::Validation("APS record end overflowed".into())
+                })?;
+                if end > output_size {
                     return Err(RomWeaverError::Validation(
                         "APS record exceeded output size".into(),
                     ));
                 }
                 if !data.is_empty() {
+                    let start = usize::try_from(*offset).map_err(|_| {
+                        RomWeaverError::Validation(
+                            "APS record offset exceeded addressable memory".into(),
+                        )
+                    })?;
+                    let end = usize::try_from(end).map_err(|_| {
+                        RomWeaverError::Validation(
+                            "APS record end exceeded addressable memory".into(),
+                        )
+                    })?;
                     output[start..end].copy_from_slice(data);
                 }
             }
@@ -547,14 +564,25 @@ fn apply_aps_records_in_memory(
                 byte,
                 length,
             } => {
-                let start = *offset as usize;
-                let end = start + usize::from(*length);
-                if end > output_size as usize {
+                let end = offset.checked_add(u64::from(*length)).ok_or_else(|| {
+                    RomWeaverError::Validation("APS RLE record end overflowed".into())
+                })?;
+                if end > output_size {
                     return Err(RomWeaverError::Validation(
                         "APS RLE record exceeded output size".into(),
                     ));
                 }
                 if *length > 0 {
+                    let start = usize::try_from(*offset).map_err(|_| {
+                        RomWeaverError::Validation(
+                            "APS RLE record offset exceeded addressable memory".into(),
+                        )
+                    })?;
+                    let end = usize::try_from(end).map_err(|_| {
+                        RomWeaverError::Validation(
+                            "APS RLE record end exceeded addressable memory".into(),
+                        )
+                    })?;
                     output[start..end].fill(*byte);
                 }
             }

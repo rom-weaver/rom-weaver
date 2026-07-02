@@ -243,10 +243,14 @@ impl CliApp {
         };
         let context = self.context(threads);
         let thread_execution = context.single_thread_execution();
+        // Pre-collection validation failures (bad extension, nothing collected,
+        // too many sources for --output) have no determined trim kind yet, so
+        // they carry no format. Kind-specific reports below use the format
+        // derived from the collected sources.
         let fail = |stage: &str, message: String| {
             OperationReport::failed(
                 OperationFamily::Command,
-                Some("nds".to_string()),
+                None,
                 stage,
                 message,
                 thread_execution.clone(),
@@ -283,13 +287,17 @@ impl CliApp {
             }
         };
 
+        // Report format reflects the kind(s) actually collected, so xiso /
+        // rvz-scrub trims are no longer mislabeled `nds`.
+        let report_format = Self::trim_report_format(&trim_sources);
+
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
             return self.finish(
                 "trim",
                 OperationReport::succeeded(
                     OperationFamily::Command,
-                    Some("nds".to_string()),
+                    Some(report_format.clone()),
                     "trim",
                     format!(
                         "no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"
@@ -489,7 +497,9 @@ impl CliApp {
             Self::cleanup_temp_paths(&cleanup_paths);
             return self.finish(
                 "trim",
-                fail(
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some(report_format.clone()),
                     "trim",
                     format!(
                         "{} completed with failures; processed={} trimmed={} already_trimmed={} failed={} skipped_unsupported={}; first_error={}",
@@ -511,6 +521,7 @@ impl CliApp {
                         skipped_unsupported,
                         first_error.unwrap_or_else(|| "(none)".to_string()),
                     ),
+                    thread_execution.clone(),
                 ),
             );
         }
@@ -532,7 +543,7 @@ impl CliApp {
             "trim",
             OperationReport::succeeded(
                 OperationFamily::Command,
-                Some("nds".to_string()),
+                Some(report_format.clone()),
                 "trim",
                 match single_detail {
                     Some(single_detail) => format!(
@@ -564,6 +575,18 @@ impl CliApp {
                 thread_execution,
             ),
         )
+    }
+
+    /// Report `format` for a trim run: the shared trim kind's label when every
+    /// collected source is the same kind (so an xiso / rvz-scrub batch is not
+    /// mislabeled `nds`), or a generic `trim` when the kinds differ or none were
+    /// collected.
+    fn trim_report_format(sources: &[TrimSource]) -> String {
+        let mut kinds = sources.iter().map(|source| source.kind);
+        match kinds.next() {
+            Some(first) if kinds.all(|kind| kind == first) => first.mode_label().to_string(),
+            _ => "trim".to_string(),
+        }
     }
 
     /// Files staged for repack besides the ROM being trimmed, used to decide whether `--in-place`
@@ -744,5 +767,47 @@ impl CliApp {
             )));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod trim_report_format_tests {
+    use std::path::PathBuf;
+
+    use crate::{CliApp, TrimInputKind, TrimSource};
+
+    fn source(kind: TrimInputKind) -> TrimSource {
+        TrimSource {
+            path: PathBuf::from("rom.bin"),
+            kind,
+            archive_origin: None,
+            repack_root: None,
+        }
+    }
+
+    #[test]
+    fn unanimous_kind_uses_that_kinds_label() {
+        let sources = vec![source(TrimInputKind::Xiso), source(TrimInputKind::Xiso)];
+        assert_eq!(CliApp::trim_report_format(&sources), "xiso");
+    }
+
+    #[test]
+    fn single_rvz_scrub_is_not_mislabeled_nds() {
+        let sources = vec![source(TrimInputKind::RvzScrub)];
+        assert_eq!(CliApp::trim_report_format(&sources), "rvz-scrub");
+    }
+
+    #[test]
+    fn mixed_kinds_fall_back_to_generic_trim() {
+        let sources = vec![
+            source(TrimInputKind::NdsFamily),
+            source(TrimInputKind::RvzScrub),
+        ];
+        assert_eq!(CliApp::trim_report_format(&sources), "trim");
+    }
+
+    #[test]
+    fn empty_sources_fall_back_to_generic_trim() {
+        assert_eq!(CliApp::trim_report_format(&[]), "trim");
     }
 }

@@ -152,7 +152,7 @@ impl OperationContext {
         let mut cache = self
             .seeded_checksums
             .lock()
-            .expect("seeded checksum cache poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = cache.entry(path.to_path_buf()).or_default();
         for (algorithm, value) in checksums {
             entry
@@ -166,7 +166,7 @@ impl OperationContext {
         let cache = self
             .seeded_checksums
             .lock()
-            .expect("seeded checksum cache poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         cache
             .get(path)?
             .get(&algorithm.to_ascii_lowercase())

@@ -939,6 +939,15 @@ pub(super) fn read_window_index<R: Read + Seek>(
         )));
     }
 
+    // The section start offsets above are only seek targets; validate the full
+    // window extent against the real patch length here so a malformed window
+    // cannot drive `read_section`/`skip_bytes` into an oversized allocation.
+    let patch_len = reader.seek(SeekFrom::End(0))?;
+    if window_end > patch_len {
+        return Err(RomWeaverError::Validation(format!(
+            "window sections end at offset {window_end} but the patch is only {patch_len} byte(s)"
+        )));
+    }
     reader.seek(SeekFrom::Start(window_end))?;
 
     Ok(Some(WindowIndex {
@@ -2210,4 +2219,59 @@ pub(super) fn xdelta_secondary_candidate_is_efficient(
     candidate_size: usize,
 ) -> bool {
     candidate_size < original_size.saturating_sub(XDELTA_SECONDARY_MIN_SAVINGS)
+}
+
+#[cfg(test)]
+mod audit_alloc_guard_tests {
+    use super::vcdiff_output_size;
+
+    fn push_varint(out: &mut Vec<u8>, mut value: u64) {
+        if value == 0 {
+            out.push(0);
+            return;
+        }
+        let mut groups = Vec::new();
+        while value > 0 {
+            groups.push((value % 128) as u8);
+            value /= 128;
+        }
+        for index in (0..groups.len()).rev() {
+            let last = index == 0;
+            out.push(if last {
+                groups[index]
+            } else {
+                groups[index] | 0x80
+            });
+        }
+    }
+
+    /// A window whose declared sections run past the end of the (tiny) patch
+    /// must be rejected at parse time instead of being trusted into an oversized
+    /// `read_section` allocation downstream.
+    #[test]
+    fn oversized_window_extent_is_rejected() {
+        let huge_data_len: u64 = 1_000_000_000;
+
+        // Header bytes after `delta_encoding_len`: target_window_size(1) +
+        // delta_indicator(1) + data_len(5) + inst_len(1) + addr_len(1) = 9.
+        let mut section_header = Vec::new();
+        push_varint(&mut section_header, 16); // target_window_size
+        section_header.push(0); // delta_indicator
+        push_varint(&mut section_header, huge_data_len); // data_len
+        push_varint(&mut section_header, 1); // inst_len
+        push_varint(&mut section_header, 1); // addr_len
+
+        let delta_encoding_len = section_header.len() as u64 + huge_data_len + 1 + 1;
+
+        let mut patch = vec![0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x00];
+        push_varint(&mut patch, delta_encoding_len);
+        patch.extend_from_slice(&section_header);
+
+        let error = vcdiff_output_size(&patch).expect_err("oversized window must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains("window sections end at offset"),
+            "unexpected error: {message}"
+        );
+    }
 }

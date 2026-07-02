@@ -45,7 +45,9 @@ pub struct IngestRomAsset {
     pub path: String,
     /// File name component of `path`.
     pub file_name: String,
-    /// Size of the asset in bytes.
+    /// Size of the asset in bytes. Emitted as a JSON `number` on the wasm wire,
+    /// so override the default ts-rs `bigint` mapping to `number`.
+    #[cfg_attr(feature = "typescript-types", ts(type = "number"))]
     pub size_bytes: u64,
     /// Coarse kind (`rom`/`bin`/`cue`/…) when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -102,6 +104,9 @@ pub struct PatchDescriptor {
     /// File name component of `leaf_path`.
     pub file_name: String,
     /// Size of the patch file in bytes (the bare source or extracted leaf).
+    /// Emitted as a JSON `number` on the wasm wire, so override the default
+    /// ts-rs `bigint` mapping to `number`.
+    #[cfg_attr(feature = "typescript-types", ts(type = "number"))]
     pub size_bytes: u64,
     /// Patch format name (handler descriptor, else the file extension when unsupported).
     pub format: String,
@@ -109,13 +114,15 @@ pub struct PatchDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_crc32: Option<u32>,
-    /// Embedded expected source size in bytes (byuu formats).
+    /// Embedded expected source size in bytes (byuu formats). Emitted as a JSON
+    /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, type = "number | null"))]
     pub source_size: Option<u64>,
-    /// Embedded produced target size in bytes (byuu + xdelta).
+    /// Embedded produced target size in bytes (byuu + xdelta). Emitted as a JSON
+    /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, type = "number | null"))]
     pub target_size: Option<u64>,
     /// Embedded expected source CRC32 (byuu formats).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -125,19 +132,22 @@ pub struct PatchDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub target_crc32: Option<u32>,
-    /// Embedded minimum required source size (xdelta).
+    /// Embedded minimum required source size (xdelta). Emitted as a JSON
+    /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, type = "number | null"))]
     pub minimum_source_size: Option<u64>,
-    /// Record/window/command count when the format reports one.
+    /// Record/window/command count when the format reports one. Emitted as a JSON
+    /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, type = "number | null"))]
     pub record_count: Option<u64>,
     /// Expected input checksums parsed from the file name, keyed by algorithm.
     pub filename_checksums: BTreeMap<String, String>,
-    /// Expected exact input size parsed from the file name.
+    /// Expected exact input size parsed from the file name. Emitted as a JSON
+    /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, type = "number | null"))]
     pub filename_size: Option<u64>,
     /// Libretro sidecar apply order, set only when matched against a known ROM in the same source.
     #[serde(default, skip_serializing_if = "Option::is_none")]

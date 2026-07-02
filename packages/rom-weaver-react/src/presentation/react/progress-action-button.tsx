@@ -1,5 +1,5 @@
 import X from "lucide-react/dist/esm/icons/x.js";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { createProgressViewModel } from "../workflow-presentation.ts";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../workflow-presentation.ts";
 
@@ -74,6 +74,27 @@ function ProgressActionButton({
         ? clampProgressPercent(progress.percent) || 0
         : 0;
   const isDownload = !progress && DOWNLOAD_LABEL_REGEX.test(label);
+  const ariaValueNow = isIndeterminate ? null : Math.round(determinatePercent);
+
+  const runButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const wasRunningRef = useRef(false);
+  const isRunning = Boolean(progress);
+
+  // Swapping the run <button> for the progress <div> unmounts the focused element and
+  // drops focus to <body>. On that transition move focus to the cancel control while
+  // running, and restore it to the run button when finished — but only if focus was lost,
+  // so we never steal it from somewhere the user has since moved.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const wasRunning = wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (wasRunning === isRunning) return;
+    const focusLost = document.activeElement === null || document.activeElement === document.body;
+    if (!focusLost) return;
+    const target = isRunning ? cancelButtonRef.current : runButtonRef.current;
+    target?.focus();
+  }, [isRunning]);
 
   // While running, the button is replaced by the loom live-run panel — the
   // borderless instrument row that spans the output card's content width.
@@ -84,7 +105,16 @@ function ProgressActionButton({
           <div className="lab">
             <span className="what run-stage-label">{progressLabelParts?.taskText || progress.message}</span>
           </div>
-          <div aria-hidden="true" className={join("meter track live", isIndeterminate && "indet")}>
+          <div
+            aria-label={progressLabelParts?.taskText || progress.message}
+            aria-live="polite"
+            aria-valuemax={isIndeterminate ? undefined : 100}
+            aria-valuemin={isIndeterminate ? undefined : 0}
+            aria-valuenow={ariaValueNow ?? undefined}
+            aria-valuetext={isIndeterminate ? undefined : progressLabelParts?.percentText || undefined}
+            className={join("meter track live", isIndeterminate && "indet")}
+            role="progressbar"
+          >
             <div
               className="fill bar run-fill"
               style={isIndeterminate ? undefined : { transform: `scaleX(${determinatePercent / 100})` }}
@@ -102,6 +132,7 @@ function ProgressActionButton({
               aria-label={cancelLabel}
               className="cancel run-cancel progress-cancel"
               onClick={onCancel}
+              ref={cancelButtonRef}
               title={cancelLabel}
               type="button"
             >
@@ -119,6 +150,7 @@ function ProgressActionButton({
       disabled={disabled}
       id={id}
       onClick={onClick}
+      ref={runButtonRef}
       title={title}
       type="button"
     >

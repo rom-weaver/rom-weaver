@@ -24,6 +24,10 @@ const SOLID_MD5_LEN: usize = 16;
 const SOLID_DATE_LEN: usize = 3;
 const SOLID_MAX_DESCRIPTION_LEN: usize = 512;
 const SOLID_MAX_DESCRIPTION_COUNT: usize = 7;
+/// Minimum on-disk bytes for a single primitive: an addrByte plus a sizeByte.
+/// Used to cap the up-front primitive reservation against an attacker-supplied
+/// `primitiveCount`.
+const SOLID_MIN_PRIMITIVE_BYTES: u64 = 2;
 
 const BASE_ADDR_SIZE_MASK: u8 = 0b0000_0111;
 const BIG_FILE_FLAG: u8 = 0b0000_1000;
@@ -468,7 +472,12 @@ fn parse_solid_patch_file(path: &Path) -> Result<ParsedSolidPatch> {
         _ => unreachable!(),
     };
 
-    let mut primitives = Vec::with_capacity(primitive_count);
+    // `primitive_count` is an attacker-controlled u64; each primitive needs at
+    // least an addrByte + sizeByte on disk, so cap the up-front reservation by the
+    // bytes actually remaining to avoid an oversized speculative allocation.
+    let max_primitives_by_bytes =
+        usize::try_from(parser.remaining() / SOLID_MIN_PRIMITIVE_BYTES).unwrap_or(primitive_count);
+    let mut primitives = Vec::with_capacity(primitive_count.min(max_primitives_by_bytes));
     for _ in 0..primitive_count {
         let addr_byte = parser.read_u8("SOLID primitive addrByteArr")?;
         let size_byte = parser.read_u8("SOLID primitive sizeByteArr")?;
@@ -604,7 +613,14 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
         _ => unreachable!(),
     };
 
-    let mut primitives = Vec::with_capacity(primitive_count);
+    // See the streaming parser: cap the reservation by the bytes remaining so a
+    // bogus `primitiveCount` cannot drive an oversized allocation.
+    let max_primitives_by_bytes = usize::try_from(
+        u64::try_from(bytes.len().saturating_sub(cursor)).unwrap_or(u64::MAX)
+            / SOLID_MIN_PRIMITIVE_BYTES,
+    )
+    .unwrap_or(primitive_count);
+    let mut primitives = Vec::with_capacity(primitive_count.min(max_primitives_by_bytes));
     for _ in 0..primitive_count {
         let addr_byte = read_u8(bytes, &mut cursor, "SOLID primitive addrByteArr")?;
         let size_byte = read_u8(bytes, &mut cursor, "SOLID primitive sizeByteArr")?;
@@ -1446,6 +1462,10 @@ impl<R: Read> SolidFileParser<R> {
 
     fn is_at_end(&self) -> bool {
         self.cursor == self.file_len
+    }
+
+    fn remaining(&self) -> u64 {
+        self.file_len.saturating_sub(self.cursor)
     }
 
     fn read_exact(&mut self, len: usize, label: &'static str) -> Result<Vec<u8>> {

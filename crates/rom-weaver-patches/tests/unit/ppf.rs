@@ -767,6 +767,71 @@ fn create_splits_runs_larger_than_u8_max() {
     assert_eq!(parsed.records[4].data.len(), 4);
 }
 
+/// Parity regression: a changed run that straddles a parallel-scan chunk boundary must
+/// produce byte-identical patch output whether the scan ran serially (one chunk) or in
+/// parallel (multiple chunks). The merge must fully fuse the run across the boundary and
+/// re-split into maximal 255-byte records, so record boundaries never depend on thread count.
+#[test]
+fn create_parallel_matches_serial_across_chunk_boundary() {
+    let temp = TestDir::new();
+    let original_path = temp.child("original.bin");
+    let modified_path = temp.child("modified.bin");
+    let serial_patch = temp.child("serial.ppf");
+    let parallel_patch = temp.child("parallel.ppf");
+
+    // Size the inputs just past one scan chunk so the parallel path uses two chunks.
+    let boundary = CREATE_THREAD_SCAN_CHUNK_BYTES;
+    let total = boundary + 1024;
+    let original = vec![0u8; total];
+    let mut modified = original.clone();
+    // A 600-byte changed run straddling the chunk boundary: longer than a single 255-byte
+    // record so misaligned re-chunking would diverge from the serial output.
+    for byte in modified[boundary - 300..boundary + 300].iter_mut() {
+        *byte = 0xCD;
+    }
+    fs::write(&original_path, &original).expect("write original");
+    fs::write(&modified_path, &modified).expect("write modified");
+
+    let handler = PpfPatchHandler::new(&PPF);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: original_path.clone(),
+                modified: modified_path.clone(),
+                output: serial_patch.clone(),
+                format: "PPF".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("serial create");
+
+    let parallel_report = handler
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: parallel_patch.clone(),
+                format: "PPF".into(),
+            },
+            &test_context_with_threads(&temp, 8),
+        )
+        .expect("parallel create");
+    let parallel_execution = parallel_report
+        .thread_execution
+        .expect("parallel create reports thread execution");
+    assert!(
+        parallel_execution.used_parallelism,
+        "test must exercise the parallel scan path"
+    );
+
+    let serial_bytes = fs::read(&serial_patch).expect("serial patch");
+    let parallel_bytes = fs::read(&parallel_patch).expect("parallel patch");
+    assert_eq!(
+        serial_bytes, parallel_bytes,
+        "parallel PPF create must be byte-identical to serial across a chunk boundary"
+    );
+}
+
 #[test]
 fn create_rejects_shrinking_outputs() {
     let temp = TestDir::new();

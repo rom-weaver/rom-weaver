@@ -63,7 +63,7 @@ use extract_support::{
     ContainerProgressContext, ExtractChunkWriter, ExtractedFileChecksum,
     attach_extract_checksum_details, copy_reader_with_progress, create_extract_checksum,
     decode_tasks_ordered, emit_container_indeterminate_progress, emit_container_step_progress,
-    stream_extract_identity, write_decoded_chunks_from_workers,
+    stream_extract_identity,
 };
 #[cfg(test)]
 use formats::SEVEN_Z;
@@ -160,7 +160,7 @@ pub(crate) use zip::{ZipContainerFlavor, ZipContainerHandler};
 
 #[path = "handlers/tar.rs"]
 mod tar_handler;
-pub(crate) use tar_handler::{TarCompression, TarContainerHandler};
+pub(crate) use tar_handler::TarContainerHandler;
 
 #[path = "handlers/stream.rs"]
 mod stream;

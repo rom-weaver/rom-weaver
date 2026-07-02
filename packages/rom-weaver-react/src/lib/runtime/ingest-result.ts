@@ -6,7 +6,8 @@
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
 import type { ChecksumMap } from "../../types/checksum.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
-import { parseChecksumVariants } from "./run-result-parsing.ts";
+import type { IngestResult, IngestRomAsset, PatchDescriptor } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+import { parseChecksumVariants, type WireRecord } from "./run-result-parsing.ts";
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -34,7 +35,7 @@ const toChecksumMap = (value: unknown): ChecksumMap => {
 };
 
 const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
-  const record = asRecord(value);
+  const record = asRecord(value) as WireRecord<IngestRomAsset> | undefined;
   if (!record) return undefined;
   const path = toStringValue(record.path);
   if (!path) return undefined;
@@ -66,7 +67,7 @@ const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
 };
 
 const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | undefined => {
-  const record = asRecord(value);
+  const record = asRecord(value) as WireRecord<PatchDescriptor> | undefined;
   if (!record) return undefined;
   const leafPath = toStringValue(record.leaf_path);
   if (!leafPath) return undefined;
@@ -104,7 +105,7 @@ const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | undefined
  * is missing or malformed (so callers can fail loudly rather than route on a half-formed result).
  */
 export const parseIngestResult = (details: unknown): ParsedIngestResult | undefined => {
-  const ingest = asRecord(asRecord(details)?.ingest);
+  const ingest = asRecord(asRecord(details)?.ingest) as WireRecord<IngestResult> | undefined;
   if (!ingest) return undefined;
   const kind = ingest.kind === "patch" ? "patch" : ingest.kind === "rom" ? "rom" : undefined;
   if (!kind) return undefined;

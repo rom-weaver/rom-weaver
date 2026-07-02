@@ -10,9 +10,9 @@ use rom_weaver_core::{
 use crate::{
     CsoContainerHandler, GczContainerHandler, NfsContainerHandler, PbpContainerHandler,
     RarContainerHandler, RvzContainerHandler, SevenZContainerHandler, StreamCompression,
-    StreamContainerHandler, TarCompression, TarContainerHandler, TgcContainerHandler,
-    WbfsContainerHandler, WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler,
-    ZipContainerFlavor, ZipContainerHandler,
+    StreamContainerHandler, TarContainerHandler, TgcContainerHandler, WbfsContainerHandler,
+    WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler, ZipContainerFlavor,
+    ZipContainerHandler,
 };
 
 pub(crate) const ZIP: FormatDescriptor = FormatDescriptor {
@@ -316,7 +316,7 @@ enum ContainerHandlerKind {
     Zip(ZipContainerFlavor),
     SevenZ,
     Rar,
-    Tar(TarCompression),
+    Tar,
     Stream(StreamCompression),
     Cso,
     Pbp,
@@ -369,7 +369,7 @@ impl ContainerHandlerKind {
             Self::Zip(flavor) => Arc::new(ZipContainerHandler::new(descriptor, flavor)),
             Self::SevenZ => Arc::new(SevenZContainerHandler::new(descriptor)),
             Self::Rar => Arc::new(RarContainerHandler::new(descriptor)),
-            Self::Tar(compression) => Arc::new(TarContainerHandler::new(descriptor, compression)),
+            Self::Tar => Arc::new(TarContainerHandler::new(descriptor)),
             Self::Stream(compression) => {
                 Arc::new(StreamContainerHandler::new(descriptor, compression))
             }
@@ -479,25 +479,25 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
         descriptor: &TAR,
         capabilities: EXTRACT_ONLY_PARALLEL,
         default_output: None,
-        handler: ContainerHandlerKind::Tar(TarCompression::None),
+        handler: ContainerHandlerKind::Tar,
     },
     ContainerFormatRegistration {
         descriptor: &TAR_GZ,
         capabilities: EXTRACT_ONLY_PARALLEL,
         default_output: None,
-        handler: ContainerHandlerKind::Tar(TarCompression::Gzip),
+        handler: ContainerHandlerKind::Tar,
     },
     ContainerFormatRegistration {
         descriptor: &TAR_BZ2,
         capabilities: EXTRACT_ONLY_PARALLEL,
         default_output: None,
-        handler: ContainerHandlerKind::Tar(TarCompression::Bzip2),
+        handler: ContainerHandlerKind::Tar,
     },
     ContainerFormatRegistration {
         descriptor: &TAR_XZ,
         capabilities: EXTRACT_ONLY_PARALLEL,
         default_output: None,
-        handler: ContainerHandlerKind::Tar(TarCompression::Xz),
+        handler: ContainerHandlerKind::Tar,
     },
     ContainerFormatRegistration {
         descriptor: &GZ,

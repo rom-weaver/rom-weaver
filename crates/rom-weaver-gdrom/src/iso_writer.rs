@@ -498,7 +498,10 @@ fn flatten_tree(
             .into_iter()
             .map(|(n, idx)| (n, idx as usize))
             .collect();
-        slot.data_len = len as u32;
+        // ECMA-119 requires a directory's recorded Data Length to be a whole
+        // number of logical blocks; the on-disc extent already occupies whole
+        // sectors, so only round the recorded field up to match.
+        slot.data_len = (len.div_ceil(SECTOR) * SECTOR) as u32;
     }
 }
 

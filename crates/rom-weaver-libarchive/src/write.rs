@@ -1,4 +1,5 @@
 use super::*;
+use tracing::trace;
 
 #[derive(Clone, Copy, Debug)]
 pub enum WriteFormat {
@@ -62,7 +63,6 @@ pub struct EntrySpec<'a> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ZeroWriteBehavior {
-    Complete,
     Error,
 }
 pub struct WriteArchive {
@@ -311,7 +311,8 @@ impl WriteArchive {
         &mut self,
         payload: &[u8],
         context: &str,
-        zero_write_behavior: ZeroWriteBehavior,
+        // Retained for API/test compatibility; a zero-length write is always an error now.
+        _zero_write_behavior: ZeroWriteBehavior,
     ) -> Result<()> {
         let mut offset = 0usize;
         while offset < payload.len() {
@@ -326,14 +327,12 @@ impl WriteArchive {
                 return Err(error_from_archive(self.as_ptr(), context));
             }
             if written == 0 {
-                match zero_write_behavior {
-                    ZeroWriteBehavior::Complete => return Ok(()),
-                    ZeroWriteBehavior::Error => {
-                        return Err(RomWeaverError::Validation(format!(
-                            "{context}: libarchive reported a zero-length write"
-                        )));
-                    }
-                }
+                // A zero-length write means libarchive accepted none of the payload; treating
+                // it as success would silently truncate the entry (a parity violation), so it is
+                // always surfaced as an error.
+                return Err(RomWeaverError::Validation(format!(
+                    "{context}: libarchive reported a zero-length write"
+                )));
             }
             let written = usize::try_from(written).map_err(|_| {
                 RomWeaverError::Validation(format!(
@@ -392,11 +391,21 @@ unsafe extern "C" fn codec_progress_callback(client_data: *mut c_void, processed
         return;
     }
     let callback_data = unsafe { &mut *client_data.cast::<CodecProgressCallbackData>() };
-    (callback_data.on_bytes_processed)(processed_bytes);
+    let on_bytes_processed = &mut callback_data.on_bytes_processed;
+    // This callback has no return channel (libarchive ignores its result), so a user-supplied
+    // progress closure that panics can only be contained here. Catching it keeps the panic from
+    // unwinding across the extern "C" boundary and aborting the process; progress is best-effort,
+    // so the dropped update is logged rather than failing the compression.
+    let notified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        on_bytes_processed(processed_bytes);
+    }));
+    if notified.is_err() {
+        trace!("libarchive 7z progress callback panicked; dropping progress update");
+    }
 }
 
 unsafe extern "C" fn write_file_callback(
-    _archive: *mut archive,
+    archive_ptr: *mut archive,
     client_data: *mut c_void,
     buffer: *const c_void,
     length: usize,
@@ -410,12 +419,50 @@ unsafe extern "C" fn write_file_callback(
     } else {
         unsafe { std::slice::from_raw_parts(buffer.cast::<u8>(), length) }
     };
-    match callback_data.file.write_all(payload) {
-        Ok(()) => {
-            (callback_data.on_bytes_written)(length as u64);
-            length as sys::la_ssize_t
-        }
-        Err(_) => -1,
+    if let Err(error) = callback_data.file.write_all(payload) {
+        // Record the concrete OS error (disk-full / EACCES / OPFS quota) on the handle so the
+        // writer's next status check surfaces it instead of an opaque "unknown libarchive failure".
+        set_archive_io_error(archive_ptr, &error);
+        return -1;
+    }
+    let on_bytes_written = &mut callback_data.on_bytes_written;
+    // A panic in the user-supplied write closure must not unwind across this extern "C" boundary
+    // (that aborts the process via the cannot-unwind guard); record it on the handle and fail the
+    // write so it surfaces as a RomWeaverError.
+    let notified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        on_bytes_written(length as u64);
+    }));
+    if notified.is_err() {
+        trace!("libarchive write progress callback panicked; failing write");
+        set_archive_error(
+            archive_ptr,
+            0,
+            "libarchive write progress callback panicked",
+        );
+        return -1;
+    }
+    length as sys::la_ssize_t
+}
+
+/// Record an I/O failure on the libarchive handle so the next status check produces a specific
+/// `RomWeaverError` (errno + message) instead of an opaque "unknown libarchive failure". Used by
+/// the write callback, which can only signal failure by returning a negative length.
+fn set_archive_io_error(archive_ptr: *mut archive, error: &io::Error) {
+    set_archive_error(
+        archive_ptr,
+        error.raw_os_error().unwrap_or(0),
+        &error.to_string(),
+    );
+}
+
+fn set_archive_error(archive_ptr: *mut archive, errno: i32, message: &str) {
+    let Ok(message) = CString::new(message) else {
+        return;
+    };
+    // Pass the message as a `%s` argument rather than as the format string itself so a `%` in an
+    // OS error string is never interpreted as a printf directive.
+    unsafe {
+        sys::archive_set_error(archive_ptr, errno, c"%s".as_ptr(), message.as_ptr());
     }
 }
 

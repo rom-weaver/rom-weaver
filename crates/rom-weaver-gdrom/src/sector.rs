@@ -184,7 +184,26 @@ impl<R: Read + Seek> TrackSectors<R> {
     /// Read `len` bytes of logical (cooked) data beginning at logical sector
     /// `start_sector`. Reads whole sectors and truncates to `len`.
     pub fn read_logical_range(&mut self, start_sector: u64, len: u64) -> Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0));
+        // Validate the request against the track length up front. `len` and
+        // `start_sector` derive from untrusted on-disc fields (extent LBAs and
+        // sizes), so reject an overrun before reserving anything — otherwise a
+        // bogus ~4 GiB length would trigger a huge speculative allocation
+        // before the per-sector loop ever discovers the track is short.
+        if start_sector > self.logical_sectors {
+            return Err(RomWeaverError::Validation(format!(
+                "logical sector {start_sector} is past end of track ({} sectors)",
+                self.logical_sectors
+            )));
+        }
+        let available_bytes =
+            (self.logical_sectors - start_sector).saturating_mul(LOGICAL_SECTOR_SIZE as u64);
+        if len > available_bytes {
+            return Err(RomWeaverError::Validation(format!(
+                "logical range of {len} bytes from sector {start_sector} overruns track ({available_bytes} bytes available)"
+            )));
+        }
+        let capacity = usize::try_from(len).unwrap_or(0);
+        let mut out = Vec::with_capacity(capacity);
         let mut sector = start_sector;
         let mut buf = [0u8; LOGICAL_SECTOR_SIZE];
         while (out.len() as u64) < len {

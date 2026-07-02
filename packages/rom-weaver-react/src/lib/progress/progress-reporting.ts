@@ -17,7 +17,24 @@ const isRecord = (value: JsonValue | object | null | undefined): value is JsonOb
   !!value && typeof value === "object" && !ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer);
 
 const logger = createLogger("workflow:progress");
+// Bounded LRU of the last-logged value per `stage:label`. Labels embed per-file/per-op names, so a
+// long-lived page produces an unbounded stream of distinct keys; without a cap this Map would grow
+// for the page lifetime. Capping it keeps recent dedupe behavior while bounding memory — an evicted
+// key simply re-logs once the next time it appears.
+const PROGRESS_LOG_DEDUPE_CAP = 256;
 const progressLogState = new Map<string, number | string>();
+
+const rememberProgressDedupe = (key: string, value: number | string) => {
+  // Delete-then-set marks the key most-recently-used (Map preserves insertion order).
+  progressLogState.delete(key);
+  progressLogState.set(key, value);
+  while (progressLogState.size > PROGRESS_LOG_DEDUPE_CAP) {
+    const oldest = progressLogState.keys().next().value;
+    if (oldest === undefined) break;
+    progressLogState.delete(oldest);
+  }
+};
+
 const getProgressLogLevel = (options: ProgressOptions) => {
   if (!options) return undefined;
   if ("logLevel" in options) return options.logLevel;
@@ -31,7 +48,7 @@ const logProgressEvent = (options: ProgressOptions, event: ProgressEvent) => {
   const key = `${event.stage}:${event.label}`;
   const dedupeValue = percent === null ? "indeterminate" : percent;
   if (progressLogState.get(key) === dedupeValue) return;
-  progressLogState.set(key, dedupeValue);
+  rememberProgressDedupe(key, dedupeValue);
   logger.debug(
     "Progress",
     {

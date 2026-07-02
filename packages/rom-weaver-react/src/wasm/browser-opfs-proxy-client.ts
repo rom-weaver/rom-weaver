@@ -299,11 +299,20 @@ export class OpfsProxyClient {
     this.ringDoorbell();
 
     const deadline = createWaitDeadline(OP_TIMEOUT_MS);
+    const shouldAbort = () => this.isPoisoned();
     while (true) {
       const state = Atomics.load(control, OPFS_PROXY_CONTROL_STATE_INDEX);
       if (state === OPFS_PROXY_STATE_DONE) break;
       if (this.isPoisoned()) throw new OpfsProxyError("OPFS proxy died mid-request", OPFS_PROXY_STATUS_EIO);
-      const result = waitForAtomicsStateChange(control, OPFS_PROXY_CONTROL_STATE_INDEX, state, { deadline });
+      // shouldAbort re-checks the poison flag every slice so a proxy that dies (and wakes us via its
+      // per-slot notify, or even with a lost wakeup) fails fast instead of waiting out OP_TIMEOUT_MS.
+      const result = waitForAtomicsStateChange(control, OPFS_PROXY_CONTROL_STATE_INDEX, state, {
+        deadline,
+        shouldAbort,
+      });
+      if (result === "aborted") {
+        throw new OpfsProxyError("OPFS proxy died mid-request", OPFS_PROXY_STATUS_EIO);
+      }
       if (result === "timed-out") {
         Atomics.store(this.channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
         this.trace?.(`[browser-opfs] proxy op timed out opcode=${request.opcode} slot=${index}`);
@@ -311,7 +320,11 @@ export class OpfsProxyClient {
       }
     }
     const status = Atomics.load(control, OPFS_PROXY_CONTROL_STATUS_INDEX);
-    const result = Atomics.load(control, OPFS_PROXY_CONTROL_RESULT_INDEX);
+    // The result is encoded across two words (RESULT low, AUX_HIGH high), mirroring the read/write
+    // offset encoding, so 64-bit values such as SIZE for >= 2 GiB files do not truncate to 32 bits.
+    const resultLow = Atomics.load(control, OPFS_PROXY_CONTROL_RESULT_INDEX) >>> 0;
+    const resultHigh = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_HIGH_INDEX) >>> 0;
+    const result = resultHigh * 2 ** 32 + resultLow;
     if (status !== OPFS_PROXY_STATUS_OK) {
       // On failure the proxy stashes a human-readable detail in the data buffer (RESULT = its length).
       const detailLength = Math.max(0, Math.min(result, slot.data.byteLength));
@@ -330,8 +343,12 @@ export class OpfsProxyClient {
   private acquireSlot(): { slot: OpfsProxyChannelSlot; index: number } {
     if (this.isPoisoned()) throw new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO);
     const deadline = createWaitDeadline(SLOT_ACQUIRE_TIMEOUT_MS);
+    const shouldAbort = () => this.isPoisoned();
     const slots = this.channel.slots;
     while (true) {
+      // Re-check on every scan so a proxy that dies while we are parked here fails fast rather than
+      // looping until SLOT_ACQUIRE_TIMEOUT_MS.
+      if (this.isPoisoned()) throw new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO);
       for (let i = 0; i < slots.length; i += 1) {
         const slot = slots[i];
         if (!slot) continue;
@@ -349,7 +366,13 @@ export class OpfsProxyClient {
       const first = slots[0];
       if (!first) throw new OpfsProxyError("OPFS proxy channel has no slots", OPFS_PROXY_STATUS_EIO);
       const state = Atomics.load(first.control, OPFS_PROXY_CONTROL_STATE_INDEX);
-      const waitResult = waitForAtomicsStateChange(first.control, OPFS_PROXY_CONTROL_STATE_INDEX, state, { deadline });
+      const waitResult = waitForAtomicsStateChange(first.control, OPFS_PROXY_CONTROL_STATE_INDEX, state, {
+        deadline,
+        shouldAbort,
+      });
+      if (waitResult === "aborted") {
+        throw new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO);
+      }
       if (waitResult === "timed-out") {
         throw new OpfsProxyError("OPFS proxy slot acquisition timed out", OPFS_PROXY_STATUS_EIO);
       }

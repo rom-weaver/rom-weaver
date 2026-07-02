@@ -11,6 +11,10 @@ impl ChdContainerHandler {
     pub(super) const FLAC_SAMPLE_RATE_HZ: usize = 44_100;
     pub(super) const CD_SECTOR_DATA_BYTES: usize = crate::CD_SECTOR_SIZES[0] as usize;
     pub(super) const CD_SUBCODE_BYTES: usize = 96;
+    // A WAVE `fmt ` chunk is at most 40 bytes (WAVE_FORMAT_EXTENSIBLE). Track
+    // files are untrusted, so reject a larger declared length before allocating
+    // a read buffer rather than honoring a multi-gigabyte chunk size.
+    pub(super) const MAX_WAVE_FMT_CHUNK_BYTES: u64 = 40;
     // MAME's CHD CD format pads every track's hunk-stream frame count up to a
     // multiple of this many frames; the per-track metadata keeps the unpadded
     // data frame count and the extra frames are re-derived on read.
@@ -660,7 +664,15 @@ impl ChdContainerHandler {
                 "invalid cue time `{value}`"
             )));
         }
-        Ok(minutes * 60 * 75 + seconds * 75 + frames)
+        // `minutes` is attacker-controllable on the create path; the frame total
+        // overflows u32 around 954438 minutes, so accumulate with checked math.
+        minutes
+            .checked_mul(60 * 75)
+            .and_then(|total| total.checked_add(seconds * 75))
+            .and_then(|total| total.checked_add(frames))
+            .ok_or_else(|| {
+                RomWeaverError::Validation(format!("cue time `{value}` is out of range"))
+            })
     }
 
     pub(super) fn format_msf(&self, frames: u32) -> String {
@@ -707,6 +719,13 @@ impl ChdContainerHandler {
 
             match &chunk_header[..4] {
                 b"fmt " => {
+                    if chunk_size > Self::MAX_WAVE_FMT_CHUNK_BYTES {
+                        return Err(RomWeaverError::Validation(format!(
+                            "wave track `{}` declares an implausibly large {chunk_size}-byte fmt chunk (max {} bytes)",
+                            path.display(),
+                            Self::MAX_WAVE_FMT_CHUNK_BYTES
+                        )));
+                    }
                     let chunk_len = usize::try_from(chunk_size).map_err(|_| {
                         RomWeaverError::Validation(format!(
                             "wave track `{}` has an oversized fmt chunk",

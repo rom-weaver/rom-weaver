@@ -128,11 +128,10 @@ pub fn encode_xz_preset(payload: &[u8], level: u32) -> Result<Vec<u8>> {
         .map_err(|error| RomWeaverError::Validation(format!("xz encode finalize failed: {error}")))
 }
 
-pub fn decode_xz_exact(payload: &[u8], expected_len: usize) -> Result<Vec<u8>> {
-    let mut decoder = XzReader::new(Cursor::new(payload), false);
-    let mut output = vec![0u8; expected_len];
-    decoder
-        .read_exact(&mut output)
-        .map_err(|error| RomWeaverError::Validation(format!("xz decode failed: {error}")))?;
-    Ok(output)
+pub fn decode_xz_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {
+    decode_exact(
+        XzReader::new(Cursor::new(payload), false),
+        expected_len,
+        "xz",
+    )
 }

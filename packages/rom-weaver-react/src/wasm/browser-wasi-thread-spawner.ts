@@ -7,6 +7,7 @@ import type { ThreadSpawnerRuntime } from "./browser-wasi-thread-pool-protocol.t
 import {
   allocateThreadId,
   createWaitDeadline,
+  signalThreadStartState,
   THREAD_SLOT_ERROR_INDEX,
   THREAD_SLOT_START_ARG_INDEX,
   THREAD_SLOT_STATE_FAILED,
@@ -231,12 +232,37 @@ function createBrowserWasiThreadSpawnerForCommand({
   wasmMemory: WebAssembly.Memory;
 }): BrowserWasiThreadSpawner {
   const activeWorkers = new Map<number, ThreadPoolCommandSlot>();
+  // Slots whose start was never acknowledged: kept tracked (so no later spawn reuses them) and signalled
+  // SHUTDOWN, but drained without blocking in waitForWorkers — the bounded command.shutdown owns their
+  // final teardown so a worker wedged inside wasi_thread_start cannot hang the run.
+  const poisonedSlots = new Set<ThreadPoolCommandSlot>();
   let firstThreadFailure: Error | null = null;
 
   const recordFailure = (tid: number, error: unknown): Error => {
     const wrapped = wrapThreadFailure(tid, error);
     if (!firstThreadFailure) firstThreadFailure = wrapped;
     return wrapped;
+  };
+
+  // command.shutdown awaits each slot's done with no internal deadline, so a worker that never acks (and
+  // may be wedged running wasi_thread_start) would hang teardown forever. Bound the wait: on timeout the
+  // recorded failure still surfaces, turning a permanent hang into a clean failure.
+  const shutdownCommandWithDeadline = async (): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const bound = new Promise<"timed-out">((resolve) => {
+      timer = setTimeout(() => resolve("timed-out"), THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS);
+    });
+    try {
+      const outcome = await Promise.race([command.shutdown().then(() => "done" as const), bound]);
+      if (outcome === "timed-out") {
+        trace?.(
+          `[browser-opfs] thread pool command shutdown wait timed out command=${command.commandId}` +
+            ` after ${THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS}ms`,
+        );
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
 
   const reapCompletedWorkers = () => {
@@ -350,9 +376,12 @@ function createBrowserWasiThreadSpawnerForCommand({
 
     const startAckError = waitForThreadStartAck(slot.control, tid);
     if (startAckError) {
-      activeWorkers.delete(tid);
-      slot.busy = false;
-      slot.tid = null;
+      // The worker may not have picked up this REQUESTED slot yet; if simply abandoned it would still run
+      // wasi_thread_start against a now-stale startArg and orphan a thread. Signal SHUTDOWN so an
+      // unstarted worker aborts cleanly, keep the slot tracked+busy (poisoned) so no later spawn reuses
+      // it, and let the bounded command.shutdown finish its teardown.
+      signalThreadStartState(slot.control, THREAD_SLOT_STATE_SHUTDOWN);
+      poisonedSlots.add(slot);
       recordFailure(tid, startAckError);
       trace?.(`[browser-opfs] thread spawn ack failed tid=${tid} ${formatErrorForTrace(startAckError)}`);
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
@@ -366,6 +395,14 @@ function createBrowserWasiThreadSpawnerForCommand({
     trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size} command=${command.commandId}`);
     while (activeWorkers.size > 0) {
       for (const [tid, slot] of activeWorkers.entries()) {
+        // A poisoned slot (start never acknowledged) is already failing and SHUTDOWN-signalled; do not
+        // block on its state — the bounded command.shutdown tears it down.
+        if (poisonedSlots.has(slot)) {
+          poisonedSlots.delete(slot);
+          activeWorkers.delete(tid);
+          trace?.(`[browser-opfs] thread abandoned tid=${tid} worker=${slot.index} command=${command.commandId}`);
+          continue;
+        }
         while (true) {
           const state = loadThreadSlotState(slot.control);
           if (state === THREAD_SLOT_STATE_IDLE) {
@@ -386,7 +423,7 @@ function createBrowserWasiThreadSpawnerForCommand({
         }
       }
     }
-    await command.shutdown();
+    await shutdownCommandWithDeadline();
     if (firstThreadFailure) throw firstThreadFailure;
     trace?.(`[browser-opfs] thread wait done command=${command.commandId}`);
   };

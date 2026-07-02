@@ -56,6 +56,17 @@ fn disc_track_in_memory_limit_bytes() -> u64 {
     )
 }
 
+/// Directory holding the disc sheet's tracks. `Path::parent` returns `Some("")`
+/// (not `None`) for a bare filename, so a plain `unwrap_or(".")` never fires and
+/// `read_dir("")` fails ENOENT — breaking "cd into the disc folder, pass
+/// game.cue". Normalize an empty parent to `.`.
+fn sheet_directory(input: &Path) -> &Path {
+    match input.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
 impl CliApp {
     /// Resolve `input` as a disc sheet for patching. Returns `Ok(None)` when
     /// `input` is not a `.cue`/`.gdi` (the caller falls back to the plain
@@ -90,7 +101,7 @@ impl CliApp {
             sheet_paths.push(gdi);
         }
 
-        let sheet_dir = input.parent().unwrap_or_else(|| Path::new("."));
+        let sheet_dir = sheet_directory(input);
         let mut files = Vec::with_capacity(referenced_names.len());
         for name in &referenced_names {
             let path = sheet_dir.join(name);
@@ -147,7 +158,7 @@ impl CliApp {
             sheet_paths.push(gdi);
         }
 
-        let sheet_dir = input.parent().unwrap_or_else(|| Path::new("."));
+        let sheet_dir = sheet_directory(input);
         let mut files = Vec::with_capacity(referenced_names.len());
         for name in &referenced_names {
             let path = sheet_dir.join(name);

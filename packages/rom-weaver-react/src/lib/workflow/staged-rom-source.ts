@@ -239,10 +239,32 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     // `runRomWeaverJson`, whose OperationScheduler admits the I/O ops via that Rust plan (memory fit +
     // which jobs overlap) and gates OPFS path exclusivity. Firing them in one tick lets two ROMs
     // extract+checksum at once; the plan serializes back down whenever the combined working set would
-    // exhaust the memory ceiling. Promise.all preserves input order, so `stages[i]` matches `sources[i]`.
-    const stages = await Promise.all(
+    // exhaust the memory ceiling. allSettled preserves input order, so `stages[i]` matches `sources[i]`.
+    // A bare Promise.all would surface the first rejection while silently dropping the already-resolved
+    // siblings, orphaning their OPFS scratch copies — the caller releases the pre-stage session, which
+    // never received them. So on any rejection, release every fulfilled stage's prepared assets here
+    // before rethrowing.
+    const settled = await Promise.allSettled(
       sources.map((source, index) => this.stageSource(this.createInitialSource(role, source as TSource, index))),
     );
+    const fulfilled = settled.filter(
+      (result): result is PromiseFulfilledResult<SharedRomStagedSource<TSource, TState>> =>
+        result.status === "fulfilled",
+    );
+    const rejected = settled.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+    if (rejected) {
+      this.trace?.("source.session.stage.multi.partial-failure", {
+        error: rejected.reason,
+        fulfilledCount: fulfilled.length,
+        role,
+        sourceCount: sources.length,
+      });
+      const orphanedRuntimeSources = fulfilled.flatMap((result) => this.getRuntimeSourcesForStage(result.value));
+      await Promise.all(fulfilled.map((result) => releasePreparedRomSourceAndWait(result.value as never)));
+      await this.releaseRuntimeSources(orphanedRuntimeSources);
+      throw rejected.reason;
+    }
+    const stages = fulfilled.map((result) => result.value);
     return this.buildSyntheticSession(role, sources, stages);
   }
 

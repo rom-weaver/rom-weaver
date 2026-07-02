@@ -46,11 +46,17 @@ export const THREAD_SLOT_STATE_FAILED = 5;
 export const THREAD_SLOT_STATE_SHUTDOWN = 6;
 
 export type ThreadStartControl = Int32Array<SharedArrayBuffer>;
-export type AtomicsWaitResult = "ok" | "not-equal" | "timed-out";
+export type AtomicsWaitResult = "ok" | "not-equal" | "timed-out" | "aborted";
 
 export type WaitForAtomicsStateChangeOptions = {
   deadline?: number;
   sliceMs?: number;
+  /**
+   * Checked once before waiting and again after every slice. When it returns true the wait bails out
+   * with "aborted" instead of running out the full deadline. Lets a caller fast-fail on an external
+   * condition (e.g. the OPFS proxy poison flag) that no STATE notification will ever surface.
+   */
+  shouldAbort?: () => boolean;
 };
 
 /** Creates the shared monotonic thread-id counter (one Int32 in a SharedArrayBuffer). */
@@ -109,14 +115,16 @@ export function waitForAtomicsStateChange(
   expectedState: number,
   options: WaitForAtomicsStateChangeOptions = {},
 ): AtomicsWaitResult {
-  const { deadline, sliceMs = ATOMICS_WAIT_SLICE_MS } = options;
+  const { deadline, sliceMs = ATOMICS_WAIT_SLICE_MS, shouldAbort } = options;
   const slice = Math.max(1, Number(sliceMs) || ATOMICS_WAIT_SLICE_MS);
   if (typeof deadline === "number") {
     while (true) {
+      if (shouldAbort?.()) return "aborted";
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) return "timed-out";
       const result = Atomics.wait(control, index, expectedState, Math.min(remainingMs, slice));
       if (result !== "timed-out") return result;
+      if (shouldAbort?.()) return "aborted";
       if (remainingMs <= slice) return "timed-out";
     }
   }

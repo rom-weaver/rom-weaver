@@ -114,6 +114,49 @@ fn build_iso_then_mode1_encode_round_trips_as_raw_track() {
 }
 
 #[test]
+fn authored_directory_data_len_is_block_aligned() {
+    // ECMA-119 requires a directory's recorded Data Length to be a whole number
+    // of logical blocks; a strict reader does `data_len / 2048` to count
+    // sectors, so a sub-2048 length would read zero entries.
+    let files = vec![
+        file("ROOT.BIN", vec![1; 50]),
+        file("DATA/R01.MLT", vec![2; SECTOR + 9]),
+        file("DATA/SUB/DEEP.DAT", vec![4; 4096]),
+    ];
+    let bias = GD_HIGH_DENSITY_START_LBA;
+    let image = build_iso(&files, bias, IsoTimestamp::default()).expect("build");
+    let fs = GdRomFs::open(Cursor::new(image.clone()), bias).expect("open");
+
+    let root = fs.primary_volume_descriptor().root.clone();
+    assert_eq!(
+        root.data_len % SECTOR as u32,
+        0,
+        "root directory data_len {} is not a 2048 multiple",
+        root.data_len
+    );
+
+    // Walk every directory record reachable from the root and confirm each
+    // subdirectory's recorded Data Length is a whole-block multiple too.
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        let sector = (dir.extent_lba - bias) as usize;
+        let extent = &image[sector * SECTOR..sector * SECTOR + dir.data_len as usize];
+        for child in super::iso9660::parse_directory(extent).expect("parse dir") {
+            if child.is_dir {
+                assert_eq!(
+                    child.data_len % SECTOR as u32,
+                    0,
+                    "directory `{}` data_len {} is not a 2048 multiple",
+                    child.name,
+                    child.data_len
+                );
+                stack.push(child);
+            }
+        }
+    }
+}
+
+#[test]
 fn empty_file_is_authored_and_read_back() {
     let files = vec![file("EMPTY.DAT", Vec::new()), file("REAL.BIN", vec![9; 10])];
     let image = build_iso(&files, 0, IsoTimestamp::default()).expect("build");

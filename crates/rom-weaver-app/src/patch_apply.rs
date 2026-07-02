@@ -163,6 +163,19 @@ impl CliApp {
                 ),
             );
         }
+        // A disc reassembles into multiple track files (or a CHD), not a single
+        // checksummable artifact; the would-be output path here is the sheet
+        // text, so checksumming it never reflects the patched disc. Reject the
+        // combination rather than report a misleading validate failure.
+        if disc_context.is_some() && !expected_output_checksums.is_empty() {
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "validate",
+                    "disc patch apply (.cue/.gdi input) cannot be combined with --validate-output-checksum; the reassembled disc is emitted as multiple track files (or a CHD), not a single checksummable output".to_string(),
+                ),
+            );
+        }
         let is_disc = disc_context.is_some();
         trace!(
             is_disc,

@@ -1,5 +1,6 @@
 import type { ChecksumMap, ChecksumVariant, ExtractTiming, RomTypeTag } from "../../types/checksum.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime-types.ts";
+import type { ExtractedFileEntry } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
   getRomWeaverRunEventDetails,
@@ -15,6 +16,16 @@ import { getPathBaseName } from "../path-utils.ts";
 import { markWasmFirstProgress } from "../perf/op-perf-marks.ts";
 
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
+
+/**
+ * A `JSON.parse`d wire object for a generated Rust type `T`: every field of `T` present as an optional
+ * `unknown` (the raw parsed value, before the coercion helpers below normalize it). Casting a parsed
+ * record to `WireRecord<T>` ties each field read to `keyof T`, so renaming a Rust field — regenerated
+ * into the `*.d.ts` — turns a now-stale reader into a tsc error instead of a silent `undefined`.
+ * Values stay `unknown` (typegen carries `u64` as `bigint`/`number` and `JSON.parse` yields plain
+ * `number`), so the per-field coercions remain the single source of runtime truth.
+ */
+type WireRecord<T> = { [K in keyof T]?: unknown };
 
 type SimpleRuntimeProgress = {
   details?: RuntimeValue;
@@ -246,9 +257,13 @@ const getContainerEntriesFromList = (result: RomWeaverRunJsonResult): Compressio
     }
     const record = asRecord(entry);
     if (!record) continue;
-    const fileName = String(record.file_name || record.fileName || record.filename || record.name || "").trim();
+    // Canonical container-entry fields (`file_name`/`size_bytes`) are read through the generated
+    // `ExtractedFileEntry` so a Rust rename breaks the build; the camelCase fallbacks below cover
+    // legacy/alternate emitters that this command may still receive and have no generated contract.
+    const typed = record as WireRecord<ExtractedFileEntry>;
+    const fileName = String(typed.file_name || record.fileName || record.filename || record.name || "").trim();
     if (!fileName) continue;
-    const sizeValue = record.size_bytes ?? record.size;
+    const sizeValue = typed.size_bytes ?? record.size;
     const size = typeof sizeValue === "number" && Number.isFinite(sizeValue) ? sizeValue : undefined;
     output.push({
       fileName,
@@ -303,7 +318,7 @@ const ensureRomWeaverSuccess = (result: RomWeaverRunJsonResult, fallbackMessage:
   throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, fallbackMessage)), result);
 };
 
-export type { RomWeaverEmittedFile, RomWeaverRunJsonResult };
+export type { RomWeaverEmittedFile, RomWeaverRunJsonResult, WireRecord };
 export {
   asRecord,
   ensureRomWeaverSuccess,

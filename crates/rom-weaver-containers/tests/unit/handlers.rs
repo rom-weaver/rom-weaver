@@ -1315,6 +1315,50 @@ mod tests {
     }
 
     #[test]
+    fn gz_stream_extract_produces_byte_identical_output() {
+        let temp_dir = temp_dir_path("gz-stream-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let payload_path = temp_dir.join("payload.bin");
+        write_xorshift_fixture(&payload_path, 256 * 1024, 0x9E37_79B9);
+        let expected = fs::read(&payload_path).expect("read payload fixture");
+
+        let archive_path = temp_dir.join("payload.bin.gz");
+        {
+            let archive_file = File::create(&archive_path).expect("create gz fixture");
+            let mut encoder =
+                flate2::write::GzEncoder::new(archive_file, DeflateCompression::new(6));
+            encoder.write_all(&expected).expect("gz encode payload");
+            encoder.finish().expect("gz finish");
+        }
+
+        let output_dir = temp_dir.join("out");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("gz").expect("gz handler");
+        // Exercises the probe-skipping indeterminate-progress extract path (no size pre-pass).
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 4),
+            )
+            .expect("extract gz stream");
+
+        let extracted = fs::read(output_dir.join("payload.bin")).expect("read extracted payload");
+        assert_eq!(extracted, expected);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn bz2_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("bz2").expect("bz2 handler");

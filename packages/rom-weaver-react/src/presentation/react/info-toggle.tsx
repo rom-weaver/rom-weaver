@@ -1,5 +1,14 @@
 import Info from "lucide-react/dist/esm/icons/info.js";
-import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
@@ -30,8 +39,8 @@ function InfoToggle({
   const [panelStyle, setPanelStyle] = useState<CSSProperties | undefined>(undefined);
   const panelId = useId();
 
-  useLayoutEffect(() => {
-    if (!(portalPanel && open) || typeof window === "undefined") return;
+  const computePanelPosition = useCallback(() => {
+    if (typeof window === "undefined") return;
     const panel = panelRef.current;
     const button = buttonRef.current;
     if (!(panel && button)) return;
@@ -49,7 +58,26 @@ function InfoToggle({
         ? belowTop
         : Math.max(viewportMargin, aboveTop);
     setPanelStyle({ left, top });
-  }, [open, portalPanel]);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!(portalPanel && open)) return;
+    computePanelPosition();
+  }, [open, portalPanel, computePanelPosition]);
+
+  useEffect(() => {
+    if (!(portalPanel && open) || typeof window === "undefined") return;
+    const handleReposition = () => computePanelPosition();
+    // Both consumers live inside scrollable panels; scroll events don't bubble, so listen
+    // in the capture phase to catch any ancestor scroll container and keep the fixed
+    // popover pinned to its trigger (and re-clamped to the viewport) instead of floating.
+    window.addEventListener("scroll", handleReposition, true);
+    window.addEventListener("resize", handleReposition);
+    return () => {
+      window.removeEventListener("scroll", handleReposition, true);
+      window.removeEventListener("resize", handleReposition);
+    };
+  }, [open, portalPanel, computePanelPosition]);
 
   useEffect(() => {
     if (!(open && typeof document !== "undefined")) return;

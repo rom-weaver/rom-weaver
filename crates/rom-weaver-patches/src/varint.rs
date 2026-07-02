@@ -45,9 +45,16 @@ pub(crate) fn push_varint(bytes: &mut Vec<u8>, data: u64) {
 pub(crate) fn read_varint(mut read_byte: impl FnMut() -> Result<u8>, label: &str) -> Result<u64> {
     let mut data = 0u64;
     let mut shift = 1u64;
-    loop {
+    // A canonical `u64` encoding never exceeds `VARINT_MAX_LEN` bytes; bounding the
+    // iteration count keeps a malformed all-continuation stream from looping forever.
+    for _ in 0..VARINT_MAX_LEN {
         let byte = u64::from(read_byte()?);
-        data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
+        // `checked_mul` folds the data-byte contribution into the overflow check; the
+        // old unchecked `(byte & 0x7f) * shift` could wrap before any guard ran.
+        let addend = (byte & 0x7f).checked_mul(shift).ok_or_else(|| {
+            RomWeaverError::Validation(format!("{label} varint overflowed available range"))
+        })?;
+        data = data.checked_add(addend).ok_or_else(|| {
             RomWeaverError::Validation(format!("{label} varint overflowed available range"))
         })?;
         if byte & 0x80 != 0 {
@@ -59,5 +66,38 @@ pub(crate) fn read_varint(mut read_byte: impl FnMut() -> Result<u8>, label: &str
         data = data.checked_add(shift).ok_or_else(|| {
             RomWeaverError::Validation(format!("{label} varint overflowed available range"))
         })?;
+    }
+    Err(RomWeaverError::Validation(format!(
+        "{label} varint exceeded maximum length"
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reader(bytes: Vec<u8>) -> impl FnMut() -> Result<u8> {
+        let mut iter = bytes.into_iter();
+        move || {
+            iter.next()
+                .ok_or_else(|| RomWeaverError::Validation("TEST varint ran out of input".into()))
+        }
+    }
+
+    #[test]
+    fn round_trips_u64_max() {
+        let mut buffer = [0u8; VARINT_MAX_LEN];
+        let len = encode_varint(&mut buffer, u64::MAX);
+        let decoded = read_varint(reader(buffer[..len].to_vec()), "TEST").expect("decode");
+        assert_eq!(decoded, u64::MAX);
+    }
+
+    #[test]
+    fn rejects_unterminated_stream_without_overflow_panic() {
+        // 0x00 bytes never set the terminator bit; a malformed over-long run must
+        // return a validation error rather than wrapping or looping forever.
+        let bytes = vec![0u8; VARINT_MAX_LEN + 8];
+        let error = read_varint(reader(bytes), "TEST").expect_err("must reject");
+        assert!(matches!(error, RomWeaverError::Validation(_)));
     }
 }

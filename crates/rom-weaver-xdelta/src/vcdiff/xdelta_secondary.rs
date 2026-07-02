@@ -452,7 +452,20 @@ impl XdeltaLzmaSectionDecoder {
         Self { feed, decoder }
     }
 
-    pub(super) fn decode(&mut self, payload: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    pub(super) fn decode(
+        &mut self,
+        payload: &[u8],
+        expected_size: usize,
+        max_output: usize,
+    ) -> Result<Vec<u8>> {
+        // LZMA can expand by an arbitrary ratio, so the declared size cannot be
+        // trusted: cap it against the window-derived ceiling before allocating
+        // so a tiny compressed payload cannot demand a gigabyte buffer.
+        if expected_size > max_output {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta lzma secondary declares {expected_size}-byte section but the window bounds it to {max_output}"
+            )));
+        }
         self.feed.push(payload);
         let mut output = vec![0u8; expected_size];
         self.decoder.read_exact(&mut output).map_err(|error| {
@@ -483,21 +496,25 @@ impl XdeltaLzmaSectionDecoders {
         inst: &[u8],
         addr: &[u8],
         delta_indicator: u8,
+        max_output: usize,
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
         let data = decode_xdelta_lzma_section_with_state(
             data,
             delta_indicator & DELTA_DATA_COMP != 0,
             &mut self.data,
+            max_output,
         )?;
         let inst = decode_xdelta_lzma_section_with_state(
             inst,
             delta_indicator & DELTA_INST_COMP != 0,
             &mut self.inst,
+            max_output,
         )?;
         let addr = decode_xdelta_lzma_section_with_state(
             addr,
             delta_indicator & DELTA_ADDR_COMP != 0,
             &mut self.addr,
+            max_output,
         )?;
         Ok((data, inst, addr))
     }
@@ -559,6 +576,10 @@ impl XdeltaLzmaSectionEncoder {
     }
 
     pub(super) fn encode<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+        // Stream continuity lives in `self.stream`; the scratch `output` buffer
+        // only holds the current window's emitted bytes, so clearing it each call
+        // is byte-safe and stops it from accumulating every prior window.
+        self.output.clear();
         if section.len() < XDELTA_SECONDARY_MIN_INPUT {
             return Ok((Cow::Borrowed(section), false));
         }
@@ -727,7 +748,8 @@ pub(super) fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
     let (data, inst, addr) = if window.delta_indicator == 0 {
         (data, inst, addr)
     } else {
-        decoders.decode_sections(&data, &inst, &addr, window.delta_indicator)?
+        let max_output = lzma_section_output_ceiling(window);
+        decoders.decode_sections(&data, &inst, &addr, window.delta_indicator, max_output)?
     };
     decode_native_window_sections(
         window,
@@ -836,10 +858,29 @@ pub(super) fn read_window_sections<R: Read + Seek>(
     })
 }
 
+/// Upper bound on a single secondary-decompressed window section. A window
+/// decodes to `target_window_size` bytes; the data section holds at most one
+/// byte per output byte, and the instruction/address sections are bounded by the
+/// instruction count (at worst a few bytes per output byte). `16 * target +
+/// source + 64 KiB` covers every spec-valid section with wide margin while
+/// turning a malicious "expands to gigabytes" LZMA stream into a validation
+/// error instead of an out-of-memory abort.
+fn lzma_section_output_ceiling(window: &WindowIndex) -> usize {
+    const SLACK: u64 = 64 * 1024;
+    window
+        .target_window_size
+        .saturating_mul(16)
+        .saturating_add(window.source_segment_size)
+        .saturating_add(SLACK)
+        .try_into()
+        .unwrap_or(usize::MAX)
+}
+
 pub(super) fn decode_xdelta_lzma_section_with_state(
     section: &[u8],
     compressed: bool,
     decoder: &mut XdeltaLzmaSectionDecoder,
+    max_output: usize,
 ) -> Result<Vec<u8>> {
     if !compressed {
         return Ok(section.to_vec());
@@ -852,7 +893,7 @@ pub(super) fn decode_xdelta_lzma_section_with_state(
     let expected = usize::try_from(decoded_size).map_err(|_| {
         RomWeaverError::Validation("xdelta lzma section decoded size is too large".into())
     })?;
-    let decoded = decoder.decode(payload, expected)?;
+    let decoded = decoder.decode(payload, expected, max_output)?;
     if decoded.len() != expected {
         return Err(RomWeaverError::Validation(format!(
             "xdelta lzma section decoded to {} byte(s) but expected {}",
