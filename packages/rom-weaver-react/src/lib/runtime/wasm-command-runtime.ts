@@ -388,89 +388,6 @@ const runRomWeaverMatchSidecarsWorker = async (
   return getSidecarMatchesFromResult(result);
 };
 
-type DiscGroupingEntryInput = { filename: string; archiveEntryType?: string; sheetText?: string };
-type DiscGroupResult = {
-  cueFileName: string;
-  trackFileNames: string[];
-  missingReferences: string[];
-  complete: boolean;
-  cueText?: string;
-};
-type DiscGroupingResult = {
-  discGroups: DiscGroupResult[];
-  referencedTrackNames: string[];
-  standaloneEntries: string[];
-  autoPick: { entryName: string | null; ambiguous: boolean };
-};
-
-const toStringArray = (value: unknown): string[] =>
-  Array.isArray(value) ? value.map((entry) => String(entry || "")).filter((entry) => !!entry) : [];
-
-const parseDiscGroupingResult = (result: RomWeaverRunJsonResult): DiscGroupingResult => {
-  const terminal = getTerminalEvent(result);
-  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
-  const grouping = asRecord(details?.disc_grouping);
-  const discGroups = (Array.isArray(grouping?.disc_groups) ? grouping.disc_groups : [])
-    .map((entry) => asRecord(entry))
-    .filter((record): record is Record<string, unknown> => !!record)
-    .map((record) => ({
-      complete: Boolean(record.complete),
-      cueFileName: String(record.cue_file_name || ""),
-      cueText: typeof record.cue_text === "string" ? record.cue_text : undefined,
-      missingReferences: toStringArray(record.missing_references),
-      trackFileNames: toStringArray(record.track_file_names),
-    }));
-  const autoPick = asRecord(grouping?.auto_pick);
-  return {
-    autoPick: {
-      ambiguous: Boolean(autoPick?.ambiguous),
-      entryName: typeof autoPick?.entry_name === "string" ? autoPick.entry_name : null,
-    },
-    discGroups,
-    referencedTrackNames: toStringArray(grouping?.referenced_track_names),
-    standaloneEntries: toStringArray(grouping?.standalone_entries),
-  };
-};
-
-// Group a source's container entries into discs + standalones and compute the auto-pick via Rust's
-// `group-disc-entries` command, so the browser shares the native disc-grouping decision (CUE/GDI
-// reference resolution, identical-track-set dedup, single-candidate auto-pick) instead of
-// re-implementing it. Pure name + supplied-sheet-text logic — no I/O; the host extracts any cue/gdi
-// text and passes it in `sheetText`.
-const runRomWeaverGroupDiscEntriesWorker = async (
-  input: {
-    sourceName?: string;
-    entries: DiscGroupingEntryInput[];
-    logLevel?: LogLevel | string;
-    signal?: AbortSignal;
-  },
-  onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<DiscGroupingResult> => {
-  const entries = (Array.isArray(input.entries) ? input.entries : [])
-    .map((entry) => ({
-      ...(entry.archiveEntryType ? { archive_entry_type: entry.archiveEntryType } : {}),
-      filename: String(entry.filename || ""),
-      ...(typeof entry.sheetText === "string" ? { sheet_text: entry.sheetText } : {}),
-    }))
-    .filter((entry) => !!entry.filename);
-  const command = createRomWeaverCommand("group-disc-entries", {
-    entries,
-    source_name: String(input.sourceName || ""),
-  });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson group-disc-entries dispatch", {
-    entryCount: entries.length,
-    sourceName: input.sourceName || "",
-  });
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({ logLevel: input.logLevel, onLog, signal: input.signal }),
-  );
-  if (!(result.ok && result.exitCode === 0)) {
-    throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, "Disc grouping failed")), result);
-  }
-  return parseDiscGroupingResult(result);
-};
-
 const normalizeN64ByteOrder = (value: unknown): "big-endian" | "little-endian" | "byte-swapped" | undefined => {
   const normalized = String(value || "")
     .trim()
@@ -1145,7 +1062,6 @@ const invokeRomWeaverPlanExtractBatchWorker = async (input: {
   return plan;
 };
 
-export type { DiscGroupingEntryInput };
 export {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
@@ -1160,7 +1076,6 @@ export {
   normalizeCodecEntries,
   resolvePatchApplyThreadArg,
   runRomWeaverChecksumWorker,
-  runRomWeaverGroupDiscEntriesWorker,
   runRomWeaverListWorker,
   runRomWeaverMatchSidecarsWorker,
   selectRomWeaverOutputPath,

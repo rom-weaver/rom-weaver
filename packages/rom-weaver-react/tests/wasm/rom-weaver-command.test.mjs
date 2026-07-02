@@ -24,7 +24,6 @@ describe("rom-weaver command boundary helpers", () => {
       "patch",
       "plan-extract-batch",
       "match-sidecars",
-      "group-disc-entries",
     ]);
     expect(KNOWN_PATCH_COMMAND_TYPES).toEqual(["apply", "validate", "create-candidates", "create"]);
   });

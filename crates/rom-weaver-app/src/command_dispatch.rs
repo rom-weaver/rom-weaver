@@ -37,7 +37,6 @@ impl CliApp {
             },
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
             Commands::MatchSidecars(args) => self.run_match_sidecars(args),
-            Commands::GroupDiscEntries(args) => self.run_group_disc_entries(args),
         }
     }
 
@@ -56,7 +55,6 @@ impl CliApp {
             Commands::Patch(PatchCommands::Create(_)) => "patch-create",
             Commands::PlanExtractBatch(_) => "plan-extract-batch",
             Commands::MatchSidecars(_) => "match-sidecars",
-            Commands::GroupDiscEntries(_) => "group-disc-entries",
         }
     }
 

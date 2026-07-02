@@ -1,13 +1,12 @@
 use std::{env, fs, path::Path};
 
 use rom_weaver_app::{
-    ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, DiscAutoPick, DiscGroup,
-    DiscGroupingEntry, DiscGroupingResult, ExtractCommand, ExtractStepDetails, ExtractedFileEntry,
-    GroupDiscEntriesCommand, IngestCommand, IngestKind, IngestResult, IngestRomAsset, ListCommand,
-    MatchSidecarsCommand, N64ByteOrder, PatchApplyCommand, PatchCommands,
-    PatchCreateCandidatesCommand, PatchCreateCommand, PatchDescriptor, PatchValidateCommand,
-    PlanExtractBatchCommand, ProbeCommand, RomWeaverRunOutputOptions, RomWeaverRunRequest,
-    TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand,
+    ExtractStepDetails, ExtractedFileEntry, IngestCommand, IngestKind, IngestResult,
+    IngestRomAsset, ListCommand, MatchSidecarsCommand, N64ByteOrder, PatchApplyCommand,
+    PatchCommands, PatchCreateCandidatesCommand, PatchCreateCommand, PatchDescriptor,
+    PatchValidateCommand, PlanExtractBatchCommand, ProbeCommand, RomWeaverRunOutputOptions,
+    RomWeaverRunRequest, TrimCommand, compression_metadata, patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ContainerDefaultOutputMetadata, ContainerFormatMetadata, ContainerOutputExtensionStrategy,
@@ -188,11 +187,6 @@ fn render_types() -> String {
         export_decl::<PatchCommands>(&config),
         export_decl::<PlanExtractBatchCommand>(&config),
         export_decl::<MatchSidecarsCommand>(&config),
-        export_decl::<DiscGroupingEntry>(&config),
-        export_decl::<DiscGroup>(&config),
-        export_decl::<DiscAutoPick>(&config),
-        export_decl::<DiscGroupingResult>(&config),
-        export_decl::<GroupDiscEntriesCommand>(&config),
         export_decl::<Commands>(&config),
         export_decl::<RomWeaverRunOutputOptions>(&config),
         export_decl::<RomWeaverRunRequest>(&config),

@@ -1150,31 +1150,3 @@ pub struct MatchSidecarsCommand {
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_names: Vec<String>,
 }
-
-/// Group a source's container entries into discs (a `.cue`/`.gdi` sheet plus its tracks),
-/// deduplicate sheets covering an identical track set, and compute the single-candidate auto-pick —
-/// the disc-grouping decision the webapp previously re-implemented in TypeScript. Pure name + cue/gdi
-/// text logic with no I/O (the host supplies any extracted sheet text), so native and browser agree.
-/// The report details carry a `disc_grouping` object (groups, referenced tracks, standalones,
-/// auto-pick). Browser-only; the native CLI builds the JSON request.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct GroupDiscEntriesCommand {
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long = "source-name",
-            value_name = "NAME",
-            default_value = "",
-            help = "Display name of the source whose entries are being grouped (trace/label only)"
-        )
-    )]
-    #[serde(default)]
-    pub source_name: String,
-    /// The container entries to group. Built from the JSON request on the browser side; the native
-    /// CLI does not parse these positionally (they ride the typed request only).
-    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
-    #[serde(default)]
-    pub entries: Vec<DiscGroupingEntry>,
-}
