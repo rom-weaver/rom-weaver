@@ -10,6 +10,7 @@ use std::{
 };
 
 mod archive_entries;
+mod archive_formats;
 mod constants;
 mod extract_support;
 mod formats;
@@ -53,6 +54,9 @@ use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTab
 use zstd::bulk::Compressor as ZstdCompressor;
 
 use archive_entries::{ArchiveInputEntry, collect_archive_inputs, sum_input_file_bytes};
+pub use archive_formats::{
+    ArchiveExtensionAlias, ArchiveFormatMetadata, ArchiveMagicSignature, archive_format_metadata,
+};
 use constants::{
     LIBARCHIVE_CREATE_IO_BUFFER_BYTES, LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES,
     LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, Z3DS_DECODE_BUFFER_BYTES, Z3DS_DEFAULT_COMPRESSION_LEVEL,

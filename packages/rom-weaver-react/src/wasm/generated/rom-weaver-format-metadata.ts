@@ -1573,6 +1573,624 @@ export const ROM_WEAVER_DISC_IMAGE_POLICY = {
   ]
 } as const;
 
+export const ROM_WEAVER_ARCHIVE_FORMATS = {
+  "extensionAliases": [
+    {
+      "archiveType": "ar",
+      "extension": "a"
+    },
+    {
+      "archiveType": "br",
+      "extension": "brotli"
+    },
+    {
+      "archiveType": "bz2",
+      "extension": "bzip2"
+    },
+    {
+      "archiveType": "chm",
+      "extension": "chi"
+    },
+    {
+      "archiveType": "chm",
+      "extension": "chq"
+    },
+    {
+      "archiveType": "gz",
+      "extension": "gzip"
+    },
+    {
+      "archiveType": "ar",
+      "extension": "lib"
+    },
+    {
+      "archiveType": "lizard",
+      "extension": "liz"
+    },
+    {
+      "archiveType": "lz",
+      "extension": "lzip"
+    },
+    {
+      "archiveType": "tar",
+      "extension": "ova"
+    },
+    {
+      "archiveType": "xar",
+      "extension": "pkg"
+    },
+    {
+      "archiveType": "rar",
+      "extension": "r00"
+    },
+    {
+      "archiveType": "tar.gz",
+      "extension": "taz"
+    },
+    {
+      "archiveType": "tar.br",
+      "extension": "tbr"
+    },
+    {
+      "archiveType": "tar.bz2",
+      "extension": "tbz"
+    },
+    {
+      "archiveType": "tar.bz2",
+      "extension": "tbz2"
+    },
+    {
+      "archiveType": "tar.gz",
+      "extension": "tgz"
+    },
+    {
+      "archiveType": "tar.lizard",
+      "extension": "tliz"
+    },
+    {
+      "archiveType": "tar.lzma",
+      "extension": "tlz"
+    },
+    {
+      "archiveType": "tar.lz4",
+      "extension": "tlz4"
+    },
+    {
+      "archiveType": "tar.lz5",
+      "extension": "tlz5"
+    },
+    {
+      "archiveType": "tar.gz",
+      "extension": "tpz"
+    },
+    {
+      "archiveType": "tar.xz",
+      "extension": "txz"
+    },
+    {
+      "archiveType": "tar.zst",
+      "extension": "tzst"
+    },
+    {
+      "archiveType": "tar.zst",
+      "extension": "tzstd"
+    },
+    {
+      "archiveType": "xar",
+      "extension": "xip"
+    },
+    {
+      "archiveType": "zip",
+      "extension": "z01"
+    },
+    {
+      "archiveType": "zst",
+      "extension": "zstd"
+    }
+  ],
+  "magicSignatures": [
+    {
+      "archiveType": "zip",
+      "bytes": [
+        80,
+        75,
+        3,
+        4
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "7z",
+      "bytes": [
+        55,
+        122,
+        188,
+        175,
+        39,
+        28
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "rar",
+      "bytes": [
+        82,
+        97,
+        114,
+        33,
+        26,
+        7,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "rar",
+      "bytes": [
+        82,
+        97,
+        114,
+        33,
+        26,
+        7,
+        1,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "tar",
+      "bytes": [
+        117,
+        115,
+        116,
+        97,
+        114
+      ],
+      "offset": 257
+    },
+    {
+      "archiveType": "arj",
+      "bytes": [
+        96,
+        234
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "gz",
+      "bytes": [
+        31,
+        139
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "bz2",
+      "bytes": [
+        66,
+        90,
+        104
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "xz",
+      "bytes": [
+        253,
+        55,
+        122,
+        88,
+        90,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "zst",
+      "bytes": [
+        40,
+        181,
+        47,
+        253
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "lzma",
+      "bytes": [
+        93,
+        0,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "lz4",
+      "bytes": [
+        4,
+        34,
+        77,
+        24
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "lz5",
+      "bytes": [
+        5,
+        34,
+        77,
+        24
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "lizard",
+      "bytes": [
+        6,
+        34,
+        77,
+        24
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "lz",
+      "bytes": [
+        76,
+        90,
+        73,
+        80
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "z",
+      "bytes": [
+        31,
+        157
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "z",
+      "bytes": [
+        31,
+        160
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "cab",
+      "bytes": [
+        77,
+        83,
+        67,
+        70
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "ar",
+      "bytes": [
+        33,
+        60,
+        97,
+        114,
+        99,
+        104,
+        62,
+        10
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "cpio",
+      "bytes": [
+        48,
+        55,
+        48,
+        55,
+        48
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "cpio",
+      "bytes": [
+        199,
+        113
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "cpio",
+      "bytes": [
+        113,
+        199
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "compound",
+      "bytes": [
+        208,
+        207,
+        17,
+        224,
+        161,
+        177,
+        26,
+        225
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "chm",
+      "bytes": [
+        73,
+        84,
+        83,
+        70,
+        3,
+        0,
+        0,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "qcow",
+      "bytes": [
+        81,
+        70,
+        73,
+        251
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "rpm",
+      "bytes": [
+        237,
+        171,
+        238,
+        219
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "squashfs",
+      "bytes": [
+        104,
+        115,
+        113,
+        115
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "squashfs",
+      "bytes": [
+        115,
+        113,
+        115,
+        104
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "squashfs",
+      "bytes": [
+        115,
+        104,
+        115,
+        113
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "squashfs",
+      "bytes": [
+        113,
+        115,
+        104,
+        115
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "wim",
+      "bytes": [
+        77,
+        83,
+        87,
+        73,
+        77,
+        0,
+        0,
+        0
+      ],
+      "offset": 0
+    },
+    {
+      "archiveType": "xar",
+      "bytes": [
+        120,
+        97,
+        114,
+        33,
+        0
+      ],
+      "offset": 0
+    }
+  ],
+  "multipartExtensionAliases": [
+    {
+      "archiveType": "tar.br",
+      "extension": "tar.brotli"
+    },
+    {
+      "archiveType": "tar.lz",
+      "extension": "tar.lzip"
+    },
+    {
+      "archiveType": "tar.zst",
+      "extension": "tar.zstd"
+    }
+  ],
+  "multipartExtensions": [
+    "tar.gz",
+    "tar.bz2",
+    "tar.xz",
+    "tar.lzma",
+    "tar.zst",
+    "tar.br",
+    "tar.lz",
+    "tar.lz4",
+    "tar.lz5",
+    "tar.lizard"
+  ],
+  "supportedExtensions": [
+    "001",
+    "7z",
+    "a",
+    "aaf",
+    "apfs",
+    "apk",
+    "apm",
+    "appx",
+    "ar",
+    "arj",
+    "avhdx",
+    "b64",
+    "br",
+    "brotli",
+    "bz2",
+    "bzip2",
+    "cab",
+    "chi",
+    "chm",
+    "chq",
+    "chw",
+    "cpio",
+    "cramfs",
+    "deb",
+    "dmg",
+    "doc",
+    "docx",
+    "epub",
+    "esd",
+    "ext",
+    "ext2",
+    "ext3",
+    "ext4",
+    "fat",
+    "gpt",
+    "gz",
+    "gzip",
+    "hfs",
+    "hfsx",
+    "hxi",
+    "hxq",
+    "hxr",
+    "hxs",
+    "hxw",
+    "ihex",
+    "ipa",
+    "jar",
+    "lha",
+    "lib",
+    "lit",
+    "liz",
+    "lzh",
+    "lizard",
+    "lpimg",
+    "lz",
+    "lz4",
+    "lz5",
+    "lzip",
+    "lzma",
+    "lzma86",
+    "mbr",
+    "msi",
+    "mslz",
+    "msp",
+    "msm",
+    "mub",
+    "nsis",
+    "ntfs",
+    "ods",
+    "odt",
+    "ova",
+    "pmd",
+    "ppkg",
+    "ppt",
+    "pkg",
+    "qcow",
+    "qcow2",
+    "qcow2c",
+    "r00",
+    "rar",
+    "rpm",
+    "scap",
+    "sfs",
+    "simg",
+    "squashfs",
+    "swm",
+    "tar",
+    "tar.br",
+    "tar.brotli",
+    "tar.bz2",
+    "tar.gz",
+    "tar.lizard",
+    "tar.lz",
+    "tar.lz4",
+    "tar.lz5",
+    "tar.lzip",
+    "tar.lzma",
+    "tar.xz",
+    "tar.zst",
+    "tar.zstd",
+    "taz",
+    "tbz",
+    "tbz2",
+    "tbr",
+    "te",
+    "tgz",
+    "tliz",
+    "tlz",
+    "tlz4",
+    "tlz5",
+    "tpz",
+    "txz",
+    "tzst",
+    "tzstd",
+    "udf",
+    "udeb",
+    "uefi",
+    "uefif",
+    "vdi",
+    "vhd",
+    "vhdx",
+    "vmdk",
+    "wim",
+    "xar",
+    "xip",
+    "xls",
+    "xlsx",
+    "xpi",
+    "xz",
+    "z",
+    "z01",
+    "zip",
+    "zipx",
+    "zst",
+    "zstd"
+  ]
+} as const;
+
 export const ROM_WEAVER_Z3DS_SUBTYPES = [
   {
     "compressedExtension": "zcia",
@@ -1629,6 +2247,7 @@ export const ROM_WEAVER_Z3DS_SUBTYPES = [
 ] as const;
 
 export const ROM_WEAVER_FORMAT_METADATA = {
+  archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,
   compression: ROM_WEAVER_COMPRESSION_METADATA,
   containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,
   containerFormats: ROM_WEAVER_CONTAINER_FORMATS,
