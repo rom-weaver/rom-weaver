@@ -6,10 +6,9 @@ import { browserRuntime } from "./workflow-runtime.ts";
 
 const WARMUP_ARTIFACT_MARKER = "rom-weaver-warmup";
 
-// Checksums the real first ROM-load op computes inline during extract (see `extractChecksumAlgorithms`
-// in workflow-runtime-archive.ts). The warmup requests them too so the inline StreamingChecksum decode
-// path is warm; measured on a prod build, that path is ~25ms of the first op and is NOT warmed by a
-// plain extract (`options: {}`).
+// Checksums the real first ROM-load op computes inline during ingest. The warmup requests them too so
+// the inline StreamingChecksum decode path is warm; measured on a prod build, that path is ~25ms of the
+// first op and is NOT warmed by an extract without checksums.
 const WARMUP_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"];
 
 type OpfsDirectoryEntriesHandle = FileSystemDirectoryHandle & {
@@ -17,14 +16,14 @@ type OpfsDirectoryEntriesHandle = FileSystemDirectoryHandle & {
 };
 
 // A tiny deflate-compressed zip (one entry, 426 bytes) embedded as base64. It is used to run one silent
-// end-to-end extract+checksum on page load so every per-op code path is warm before the user's first
-// real op. The fixture is a zip-with-checksums rather than a CHD because the common first op is a
-// dropped ROM archive, and a prod-build measurement showed the first archive extract+checksum pays
-// ~50ms of one-time cost split roughly evenly between the shared thread-pool/OPFS spawn (which
-// any extraction warms) and the libarchive/DEFLATE + inline-checksum JIT (which only an archive extract
-// with checksums warms). A CHD warmup covered only the former half; this covers both, and being the
-// lighter extract it also finishes sooner, narrowing the window where a quick first drop beats it. A
-// disc-image (CHD) first op is rarer and still gets the shared-spawn half from this archive warmup.
+// end-to-end ingest (classify + extract + inline checksum) on page load so every per-op code path is
+// warm before the user's first real op. The fixture is a zip rather than a CHD because the common first
+// op is a dropped ROM archive, and a prod-build measurement showed the first archive extract+checksum
+// pays ~50ms of one-time cost split roughly evenly between the shared thread-pool/OPFS spawn (which any
+// extraction warms) and the libarchive/DEFLATE + inline-checksum JIT (which only an archive extract with
+// checksums warms). A CHD warmup covered only the former half; this covers both, and being the lighter
+// extract it also finishes sooner, narrowing the window where a quick first drop beats it. A disc-image
+// (CHD) first op is rarer and still gets the shared-spawn half from this archive warmup.
 const WARMUP_ZIP_BASE64 =
   "UEsDBBQAAAAIAHV70FxlzFsPNAEAAAAQAAAKAAAAd2FybXVwLmJpbuM2CK2af+Qln3FE7aLjbwTNohuWnnovYhnXvOLsJ3GbxLbVF75K2ad0rrv8Q9YpvWf" +
   "jtd8Krln9W27+U/bInbT9DqOad8HUXfdZNP2KZ+x9xK4TWDb7wFMu/ZDKeYdf8BqF1yw89lrANKp+ycl3whaxTcvPfBSzTmhddf6LpF1yx9pL32Uc07o3XP" +
@@ -82,32 +81,30 @@ const sweepWarmupArtifacts = async (): Promise<void> => {
   await sweep(root).catch(() => undefined);
 };
 
-// Runs one tiny zip list + extract end-to-end, computing the standard checksums inline, so every
-// per-extraction code path (decode JIT, inline checksum, OPFS input/output handles through the proxy,
-// and the shared worker pool) is warm before the user's first real op.
+// Runs one tiny zip end-to-end through `ingest` (the real first-op path: classify + extract + inline
+// checksum in one pass), so every per-op code path (decode JIT, inline checksum, OPFS input/output
+// handles through the proxy, and the shared worker pool) is warm before the user's first real op.
 // Best-effort only: it is single-flight, swallows all errors, and sweeps prior-load warmup artifacts so
 // warmup can never surface to the user or grow OPFS storage without bound.
 const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
   if (warmupExtractionStarted) return;
   warmupExtractionStarted = true;
-  const compression = browserRuntime.compression;
-  if (!compression?.extract) return;
+  const ingest = browserRuntime.ingest;
+  if (!ingest?.run) return;
   const file = createWarmupZipFile();
   if (!file) return;
   await sweepWarmupArtifacts();
-  const source = { fileName: file.name, source: file };
-  const options = { extractChecksumAlgorithms: [...WARMUP_CHECKSUM_ALGORITHMS] };
   logger.trace("warmup extraction start");
   markWarmupStart();
   try {
-    const probed = await compression.probe?.({ format: "zip", options, source });
-    const entries = (probed?.entries || [])
-      .map((entry) => entry.filename)
-      .filter((entry): entry is string => typeof entry === "string" && !!entry);
-    const result = await compression.extract({ entries, format: "zip", options, source });
-    await cleanupWarmupOutputs(result?.outputs || []);
+    const { outputs, patchOutputs } = await ingest.run({
+      checksumAlgorithms: [...WARMUP_CHECKSUM_ALGORITHMS],
+      fileName: file.name,
+      source: { fileName: file.name, source: file },
+    });
+    await cleanupWarmupOutputs([...outputs, ...patchOutputs]);
     markWarmupDone();
-    logger.trace("warmup extraction done", { entryCount: entries.length });
+    logger.trace("warmup extraction done", { outputCount: outputs.length });
   } catch (error) {
     logger.trace("warmup extraction skipped", {
       message: error instanceof Error ? error.message : String(error),
