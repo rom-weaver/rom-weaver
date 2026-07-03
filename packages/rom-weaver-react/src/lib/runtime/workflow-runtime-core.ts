@@ -23,9 +23,9 @@ import type {
   WorkflowRuntimeLog,
   WorkflowRuntimePreload,
   WorkflowRuntimePreloadEvent,
-  WorkflowRuntimeProgress,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { warmupRomWeaverRunner } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import {
   getRomSpecificCompressionFormatRegistration,
   type RomSpecificCompressionFormat,
@@ -704,7 +704,6 @@ const createRuntimePreload = (): WorkflowRuntimePreload => ({
       emit({ data: { capability, status: "loading", workerKind }, kind: "worker" });
       emit({ data: { capability, status: "loading", tool }, kind: "wasm" });
       emit({ data: { capability, status: "busy", workerKind }, kind: "worker" });
-      const { warmupRomWeaverRunner } = await import("../../workers/rom-weaver/rom-weaver-runner.ts");
       await warmupRomWeaverRunner(options?.workerThreads);
       emit({ data: { capability, status: "loaded", tool }, kind: "wasm" });
       emit({ data: { capability, status: "instantiated", tool }, kind: "wasm" });

@@ -67,7 +67,6 @@ import {
   getLastEvent,
   getRunResultTiming,
   getTerminalEvent,
-  parseChecksumVariants,
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
@@ -755,74 +754,6 @@ const invokeRomWeaverIngestWorker = async (
   return { ...parsed, timing: getRunResultTiming(result) };
 };
 
-/** One concurrently-runnable group of a {@link RomWeaverBatchPlan}: the original job indices that may
- * run together and the worker-thread count each should use (the Rust planner's even split of the
- * budget for the group). */
-type RomWeaverBatchPlanWave = { jobs: number[]; threadsPerJob: number };
-/** A concurrent extraction schedule from the Rust planner: ordered waves run one after another, the
- * jobs within a wave run together. Mirrors Rust `BatchPlan`; parsed loosely (no typegen dependency). */
-type RomWeaverBatchPlan = { waves: RomWeaverBatchPlanWave[] };
-
-const parseRomWeaverBatchPlan = (details: unknown): RomWeaverBatchPlan | undefined => {
-  const plan = asRecord(asRecord(details)?.extract_batch_plan);
-  if (!plan) return undefined;
-  const waves: RomWeaverBatchPlanWave[] = [];
-  for (const waveValue of Array.isArray(plan.waves) ? plan.waves : []) {
-    const wave = asRecord(waveValue);
-    if (!wave) continue;
-    const jobs: number[] = [];
-    for (const jobValue of Array.isArray(wave.jobs) ? wave.jobs : []) {
-      const job = Number(jobValue);
-      if (Number.isInteger(job) && job >= 0) jobs.push(job);
-    }
-    const threadsPerJob = Math.max(1, Math.floor(Number(wave.threads_per_job)) || 1);
-    waves.push({ jobs, threadsPerJob });
-  }
-  return { waves };
-};
-
-// Plan a concurrent extraction schedule via the shared Rust planner (`plan-extract-batch`): the single
-// source of truth the native batch executor also uses, so both group jobs identically. The browser
-// passes only what it alone knows — its resolved (mobile-capped) memory ceiling and thread budget —
-// plus each job's source size; Rust owns the working-set multiplier, wave packing, and thread split.
-// This command is thread-less and pure; the runner runs it OUTSIDE the OperationScheduler (see
-// rom-weaver-runner) because the scheduler itself calls this to decide admission.
-const invokeRomWeaverPlanExtractBatchWorker = async (input: {
-  jobSizes: number[];
-  logLevel?: LogLevel | string;
-  maxConcurrency?: number;
-  memoryCeilingBytes?: number;
-  onLog?: (log: WorkflowRuntimeLog) => void;
-  signal?: AbortSignal;
-  threads?: RuntimeThreadBudgetInput;
-}): Promise<RomWeaverBatchPlan> => {
-  const jobSizes = (Array.isArray(input.jobSizes) ? input.jobSizes : []).map((size) =>
-    BigInt(Math.max(0, Math.floor(Number(size) || 0))),
-  );
-  const threadArg = toThreadBudget(input.threads);
-  const command = createRomWeaverCommand("plan-extract-batch", {
-    job_sizes: jobSizes,
-    ...(threadArg ? { threads: threadArg } : {}),
-    ...(typeof input.maxConcurrency === "number" && input.maxConcurrency > 0
-      ? { max_concurrency: Math.floor(input.maxConcurrency) }
-      : {}),
-    ...(typeof input.memoryCeilingBytes === "number" && input.memoryCeilingBytes > 0
-      ? { memory_ceiling_bytes: BigInt(Math.floor(input.memoryCeilingBytes)) }
-      : {}),
-  });
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({ logLevel: input.logLevel, onLog: input.onLog, signal: input.signal }),
-  );
-  if (!(result.ok && result.exitCode === 0)) {
-    await throwRomWeaverFailureWithBrowserOutputContext(result, "Extract batch planning failed", "plan-extract-batch");
-  }
-  const terminal = getLastEvent(result);
-  const plan = parseRomWeaverBatchPlan(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
-  if (!plan) throw withRomWeaverFailureKind(new Error("Extract batch plan was missing or malformed"), result);
-  return plan;
-};
-
 export {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
@@ -830,7 +761,6 @@ export {
   invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
-  invokeRomWeaverPlanExtractBatchWorker,
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,

@@ -517,5 +517,4 @@ export type {
   WorkflowRuntimeLog,
   WorkflowRuntimePreload,
   WorkflowRuntimePreloadEvent,
-  WorkflowRuntimeProgress,
 };

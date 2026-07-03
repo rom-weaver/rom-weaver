@@ -1,13 +1,17 @@
 import { OUT_OF_MEMORY_MESSAGE_REGEX } from "../../lib/errors.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { markWasmFinished } from "../../lib/perf/op-perf-marks.ts";
+import { toThreadBudget } from "../../lib/runtime/compression-thread-budget.ts";
 import {
   estimateOpWorkingSetBytes,
   estimateScheduledThreads,
   resolveMemoryCeilingBytes,
 } from "../../lib/runtime/op-memory-estimate.ts";
 import { perfNow, recordCommandLatency } from "../../lib/runtime/perf-latency.ts";
+import { toRomWeaverOptions } from "../../lib/runtime/run-options.ts";
 import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
+import type { LogLevel } from "../../types/logging.ts";
+import type { RuntimeThreadBudgetInput, WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
 import type {
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverRunInput,
@@ -17,6 +21,7 @@ import type {
 } from "../../wasm/index.ts";
 import {
   collectRomWeaverRunInputPaths,
+  createRomWeaverCommand,
   readRomWeaverRequestedThreadCount,
   readRomWeaverRunInputCommand,
   romWeaverCommandSupportsThreads,
@@ -33,6 +38,7 @@ import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protoc
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 import {
+  getRomWeaverRunEventDetails,
   getRomWeaverRunEventElapsedMs,
   getRomWeaverRunEventErrorKind,
   getRomWeaverRunEventLabel,
@@ -415,17 +421,14 @@ const getOperationScheduler = (): OperationScheduler => {
       memoryCeiling: resolveMemoryCeilingBytes(),
       // I/O ops (extract/ingest/checksum) are admitted by the shared Rust planner: the browser passes
       // only its own (mobile-capped) memory ceiling and thread budget plus each job's source size; Rust
-      // owns the multiplier, the memory fit, and which jobs overlap. The lazy import breaks the
-      // runner <-> wasm-command-runtime module cycle; `plan-extract-batch` bypasses the scheduler (see
-      // the dispatch below), so this call cannot re-enter it.
-      planBatch: async (jobSizes, planOptions) => {
-        const { invokeRomWeaverPlanExtractBatchWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
-        return invokeRomWeaverPlanExtractBatchWorker({
+      // owns the multiplier, the memory fit, and which jobs overlap. `plan-extract-batch` is dispatched
+      // outside the scheduler (see the dispatch below), so this call cannot re-enter it.
+      planBatch: (jobSizes, planOptions) =>
+        invokeRomWeaverPlanExtractBatchWorker({
           jobSizes,
           memoryCeilingBytes: planOptions.memoryCeilingBytes,
           threads: planOptions.threadBudget,
-        });
-      },
+        }),
       totalThreadBudget: threadBudget,
     });
   }
@@ -699,6 +702,83 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     wasmElapsedMs: readWasmReportedElapsedMs(result),
   });
   return result;
+};
+
+/** One concurrently-runnable group of a {@link RomWeaverBatchPlan}: the original job indices that may
+ * run together and the worker-thread count each should use (the Rust planner's even split of the
+ * budget for the group). */
+type RomWeaverBatchPlanWave = { jobs: number[]; threadsPerJob: number };
+/** A concurrent extraction schedule from the Rust planner: ordered waves run one after another, the
+ * jobs within a wave run together. Mirrors Rust `BatchPlan`; parsed loosely (no typegen dependency). */
+type RomWeaverBatchPlan = { waves: RomWeaverBatchPlanWave[] };
+
+const asPlanRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+
+const parseRomWeaverBatchPlan = (details: unknown): RomWeaverBatchPlan | undefined => {
+  const plan = asPlanRecord(asPlanRecord(details)?.extract_batch_plan);
+  if (!plan) return undefined;
+  const waves: RomWeaverBatchPlanWave[] = [];
+  for (const waveValue of Array.isArray(plan.waves) ? plan.waves : []) {
+    const wave = asPlanRecord(waveValue);
+    if (!wave) continue;
+    const jobs: number[] = [];
+    for (const jobValue of Array.isArray(wave.jobs) ? wave.jobs : []) {
+      const job = Number(jobValue);
+      if (Number.isInteger(job) && job >= 0) jobs.push(job);
+    }
+    const threadsPerJob = Math.max(1, Math.floor(Number(wave.threads_per_job)) || 1);
+    waves.push({ jobs, threadsPerJob });
+  }
+  return { waves };
+};
+
+// Plan a concurrent extraction schedule via the shared Rust planner (`plan-extract-batch`): the single
+// source of truth the native batch executor also uses, so both group jobs identically. The browser
+// passes only what it alone knows — its resolved (mobile-capped) memory ceiling and thread budget —
+// plus each job's source size; Rust owns the working-set multiplier, wave packing, and thread split.
+// Lives in the runner (not the wasm-command layer) so the OperationScheduler's planBatch can call it
+// WITHOUT the runner importing wasm-command-runtime — which would re-form the runner⇄command module
+// cycle. It runs OUTSIDE the scheduler (runRomWeaverJson dispatches plan-extract-batch directly) because
+// the scheduler itself calls this to decide admission.
+const invokeRomWeaverPlanExtractBatchWorker = async (input: {
+  jobSizes: number[];
+  logLevel?: LogLevel | string;
+  maxConcurrency?: number;
+  memoryCeilingBytes?: number;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+  signal?: AbortSignal;
+  threads?: RuntimeThreadBudgetInput;
+}): Promise<RomWeaverBatchPlan> => {
+  const jobSizes = (Array.isArray(input.jobSizes) ? input.jobSizes : []).map((size) =>
+    BigInt(Math.max(0, Math.floor(Number(size) || 0))),
+  );
+  const threadArg = toThreadBudget(input.threads);
+  const command = createRomWeaverCommand("plan-extract-batch", {
+    job_sizes: jobSizes,
+    ...(threadArg ? { threads: threadArg } : {}),
+    ...(typeof input.maxConcurrency === "number" && input.maxConcurrency > 0
+      ? { max_concurrency: Math.floor(input.maxConcurrency) }
+      : {}),
+    ...(typeof input.memoryCeilingBytes === "number" && input.memoryCeilingBytes > 0
+      ? { memory_ceiling_bytes: BigInt(Math.floor(input.memoryCeilingBytes)) }
+      : {}),
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({ logLevel: input.logLevel, onLog: input.onLog, signal: input.signal }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    throw withRomWeaverFailureKind(
+      new Error(getRomWeaverFailureMessage(result, "Extract batch planning failed")),
+      result,
+    );
+  }
+  const events = Array.isArray(result.events) ? result.events : [];
+  const terminal = events.length ? events[events.length - 1] : null;
+  const plan = parseRomWeaverBatchPlan(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
+  if (!plan) throw withRomWeaverFailureKind(new Error("Extract batch plan was missing or malformed"), result);
+  return plan;
 };
 
 // Normalize a worker-threads seed so "auto"/numbers/undefined compare by surface value; used only to

@@ -235,5 +235,4 @@ const createBrowserRuntime = (): WorkflowRuntime => {
 
 const browserRuntime = createBrowserRuntime();
 
-export type { WorkflowRuntime };
 export { browserRuntime, createBrowserRuntime };
