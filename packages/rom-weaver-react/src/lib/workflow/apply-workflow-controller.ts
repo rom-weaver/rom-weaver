@@ -62,7 +62,11 @@ import type {
   SourceValidator,
   StagedSource,
 } from "./apply-workflow-state.ts";
-import { BaseWorkflowController, type BaseWorkflowSnapshot } from "./base-workflow-controller.ts";
+import {
+  BaseWorkflowController,
+  type BaseWorkflowSnapshot,
+  type WorkflowProgressEvent,
+} from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
 import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
@@ -96,6 +100,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
   private inputs: TSource[] = [];
+  /** Picks captured by an early sidecar patch dialog opened from the streamed `patch-manifest`
+   * event (before the ROM finished hashing), keyed by the input stage id. `discoverImplicitPatches`
+   * applies these instead of re-opening the dialog. A non-empty entry lists the chosen patch file
+   * names in apply order; an empty array means the early dialog ran but the user picked nothing. */
+  private earlySidecarSelections = new Map<string, string[]>();
+  /** In-flight early sidecar dialogs keyed by input stage id, so a repeated `patch-manifest` event
+   * never opens a second dialog and `discoverImplicitPatches` can await the pick before reconciling. */
+  private earlySidecarSelectionInFlight = new Map<string, Promise<void>>();
 
   constructor(
     runtime: WorkflowRuntime,
@@ -231,15 +243,24 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     stage.outputLabel = createPatchOutputLabel(stage.state.fileName);
     this.patches.push(stage);
     // Eager staging runs OUTSIDE the mutation queue so the patch's I/O overlaps the ROM's setInput.
-    // It must NOT open the blocking selection dialog here: setInput's ROM prompt may still be resolving
-    // and the two single-modal dialogs would race. Defer the patch's interactive selection to the
-    // queued addPatch mutation below, which resolves it serially after setInput completes.
+    // The interactive pick is surfaced here too (not deferred to the queued mutation), gated only by
+    // the single-modal mutex so it can't race setInput's ROM prompt — but it does NOT wait for the
+    // ROM's extract/checksum. The user picks while the ROM is still hashing; the state-mutating apply
+    // + validation still run in the queued addPatch mutation below, serialized after setInput.
     const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
       .then((staged) => {
         // The patch is extracted, but its addPatch mutation is queued behind the ROM's setInput
         // (mutations run serially). Until that mutation runs and validation begins, the row would keep
         // showing the patch's last staging label ("checking nested archives in extracted outputs"),
         // so replace it with an accurate "waiting on the ROM" status while the input is still loading.
+        this.emitPatchAwaitingInputProgress(staged);
+        return staged;
+      })
+      .then(async (staged) => {
+        // Open the multi-select dialog as soon as the patch archive is staged (mutex-gated behind any
+        // ROM prompt). The pick is stashed for the queued mutation; re-emit the "waiting on the ROM"
+        // status so the row reflects that the apply is now blocked on the input, not on a pending pick.
+        await this.resolvePatchSelectionChoice(staged);
         this.emitPatchAwaitingInputProgress(staged);
         return staged;
       })
@@ -318,6 +339,108 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return (stage.preparedInputAssets ?? []).flatMap((asset) => asset.sidecarPatches ?? []);
   }
 
+  /** Intercept staging progress for the streamed `patch-manifest` event — the ingest enumerates a
+   * mixed archive's sidecar patches BEFORE it hashes the ROM and streams them here — and open the
+   * multi-select dialog right away. The user picks while the ROM checksum is still running; the pick
+   * is reconciled in {@link discoverImplicitPatches} once the input session finishes staging. */
+  protected override emitProgress(event: WorkflowProgressEvent): void {
+    this.maybeSurfaceEarlySidecarPatches(event);
+    super.emitProgress(event);
+  }
+
+  private maybeSurfaceEarlySidecarPatches(event: WorkflowProgressEvent): void {
+    // Headless soft-patching applies name-matched sidecars without a dialog — nothing to open early.
+    if (!this.selectFile) return;
+    const details = event.details;
+    if (!isRecord(details)) return;
+    const manifest = details.patch_manifest;
+    if (!isRecord(manifest)) return;
+    const stageId = typeof details.sourceId === "string" ? details.sourceId : undefined;
+    if (!stageId) return;
+    // Surface once per input stage: ignore a repeated/re-emitted manifest for a stage already handled.
+    if (this.earlySidecarSelectionInFlight.has(stageId) || this.earlySidecarSelections.has(stageId)) return;
+    const patchFileNames = (Array.isArray(manifest.patches) ? manifest.patches : [])
+      .map((patch) => (isRecord(patch) && typeof patch.file_name === "string" ? patch.file_name : undefined))
+      .filter((name): name is string => !!name);
+    // A lone sidecar auto-adds later (no prompt); only two or more open the multi-select dialog.
+    if (patchFileNames.length < 2) return;
+    this.trace("patch.implicit.early-surface.start", { count: patchFileNames.length, stageId });
+    this.earlySidecarSelectionInFlight.set(stageId, this.surfaceEarlySidecarSelection(stageId, patchFileNames));
+  }
+
+  private async surfaceEarlySidecarSelection(stageId: string, patchFileNames: string[]): Promise<void> {
+    try {
+      const selection = await this.resolveSelectionRequest(
+        this.buildSidecarManifestRequest(patchFileNames),
+        this.selectFile,
+      );
+      // The candidate ids ARE the patch file names (see buildSidecarManifestRequest); keep them in
+      // pick order. A null selection (no handler) records an empty pick so the reconcile step does not
+      // re-open a fallback dialog.
+      const selectedIds = selection
+        ? Array.isArray(selection.ids) && selection.ids.length
+          ? selection.ids
+          : [selection.id]
+        : [];
+      const picked = selectedIds.filter((id): id is string => typeof id === "string" && patchFileNames.includes(id));
+      this.earlySidecarSelections.set(stageId, picked);
+      this.trace("patch.implicit.early-surface.resolved", { picked, stageId });
+    } catch (error) {
+      // A failed/cancelled early dialog leaves no recorded pick, so discoverImplicitPatches falls back
+      // to surfacing the dialog the normal way.
+      this.trace("patch.implicit.early-surface.failed", { error, stageId });
+    } finally {
+      this.earlySidecarSelectionInFlight.delete(stageId);
+    }
+  }
+
+  /** A synthetic multi-select request over the streamed sidecar patch file names. The chosen leaf
+   * files are applied later from the staged `sidecarPatches`, so this request only needs ids/labels
+   * for the dialog; each candidate id is its patch file name. */
+  private buildSidecarManifestRequest(patchFileNames: string[]): CandidateSelectionRequest {
+    return {
+      candidates: patchFileNames.map((fileName) => ({
+        fileName,
+        id: fileName,
+        kind: "patch",
+        patchable: true,
+        selectable: true,
+        type: "file",
+      })),
+      multiSelect: true,
+      role: "patch",
+      sourceName: patchFileNames[0] || "patch",
+      warnings: [],
+    };
+  }
+
+  /** Apply a pick captured by an early `patch-manifest` dialog: wait for an in-flight dialog, then
+   * fan the chosen sidecars out from the already-materialized leaves (no second dialog, no re-ingest).
+   * Returns whether an early pick was handled (including an empty pick — the user chose nothing). */
+  private async applyEarlySidecarSelection(
+    stage: StagedSource<TSource>,
+    sidecarPatches: PreparedSidecarPatch[],
+  ): Promise<boolean> {
+    const inFlight = this.earlySidecarSelectionInFlight.get(stage.state.id);
+    if (inFlight) await inFlight;
+    const picked = this.earlySidecarSelections.get(stage.state.id);
+    if (!picked) return false;
+    // Consume each match once so duplicate file names map to distinct leaves, preserving pick order.
+    const remaining = [...sidecarPatches];
+    const chosen: PreparedSidecarPatch[] = [];
+    for (const fileName of picked) {
+      const index = remaining.findIndex((sidecar) => sidecar.file.fileName === fileName);
+      if (index !== -1) chosen.push(...remaining.splice(index, 1));
+    }
+    this.trace("patch.implicit.early-apply", {
+      applied: chosen.length,
+      picked: picked.length,
+      stageId: stage.state.id,
+    });
+    for (const leaf of chosen) await this.addFannedOutPatch(leaf.file, leaf.parentCompressions);
+    return true;
+  }
+
   private async discoverImplicitPatches(): Promise<void> {
     if (this.patches.length || !this.inputSession) return;
     const stages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
@@ -331,9 +454,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     for (const stage of stages) {
       const sidecarPatches = this.stageSidecarPatches(stage);
       if (!sidecarPatches.length) continue;
+      // Preferred path: the dialog was already opened from the streamed `patch-manifest` while the ROM
+      // was hashing; apply that pick directly off the materialized leaves — no second dialog, no
+      // re-ingest of the archive.
+      if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) continue;
       // A lone sidecar patch auto-adds (no prompt), reusing the leaf the ROM-staging ingest already
-      // extracted. Two or more open the multi-select dialog — the user picks, nothing is attributed by
-      // name or dropped. (The apply execution skips its own discovery once rows exist.)
+      // extracted. (The apply execution skips its own discovery once rows exist.)
       if (sidecarPatches.length === 1) {
         const only = sidecarPatches[0];
         if (only) {
@@ -342,6 +468,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         }
         continue;
       }
+      // Fallback (the early streamed dialog never ran — e.g. the manifest event was missed): surface
+      // the multi-select now by re-staging the archive as a patch source.
       this.trace("patch.implicit.sidecar-surface", { count: sidecarPatches.length, fileName: stage.state.fileName });
       await this.surfaceArchivePatchSelection(this.cloneArchiveAsPatchSource(stage.source));
     }
@@ -798,7 +926,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return resolved;
   }
 
-  private async maybeResolveBlockingPatchSelection(stage: StagedSource<TSource>): Promise<boolean> {
+  /** Open the multi-select dialog for a patch (under the single-modal mutex) and stash the user's
+   * picks on the stage. Splitting the user-facing ask from {@link applyPatchSelectionChoice} lets the
+   * dialog surface ASAP (before the ROM finishes) while the state-mutating apply stays serialized in
+   * the mutation queue. Returns whether a choice now awaits application. */
+  private async resolvePatchSelectionChoice(stage: StagedSource<TSource>): Promise<boolean> {
+    if (stage.pendingSelectedIds?.length) return true;
     if (!(stage.state.status === "needsSelection" && !stage.state.selectedCandidateId && stage.state.candidates.length))
       return false;
     const selection = await this.resolveSelectionRequest(this.createSelectionRequest(stage.state), this.selectFile);
@@ -813,6 +946,23 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (!stage.internalCandidates.has(id))
         throw new RomWeaverError("SELECTION_NOT_FOUND", `Selection candidate was not found: ${id}`);
     }
+    stage.pendingSelectedIds = selectedIds;
+    return true;
+  }
+
+  private async maybeResolveBlockingPatchSelection(stage: StagedSource<TSource>): Promise<boolean> {
+    if (!(await this.resolvePatchSelectionChoice(stage))) return false;
+    await this.applyPatchSelectionChoice(stage);
+    return true;
+  }
+
+  /** Apply the picks captured by {@link resolvePatchSelectionChoice}: prepare the first pick and fan
+   * each additional pick out into its own patch row. Mutates shared `this.patches`, so it must run
+   * inside the mutation queue, never eagerly. */
+  private async applyPatchSelectionChoice(stage: StagedSource<TSource>): Promise<void> {
+    const selectedIds = stage.pendingSelectedIds;
+    stage.pendingSelectedIds = undefined;
+    if (!selectedIds?.length) return;
     const [firstId, ...restIds] = selectedIds as [string, ...string[]];
     releasePreparedSource(stage);
     stage.state.multiSelect = false;
@@ -859,7 +1009,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (!leaf) continue;
       await this.addFannedOutPatch(leaf, parentCompressions);
     }
-    return true;
   }
 
   private refreshPreparedInputMetadataForStage(stage: StagedSource<TSource> | undefined) {
@@ -1153,6 +1302,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private async releaseInputSession() {
     const session = this.inputSession;
     this.inputSession = undefined;
+    // Drop any early sidecar picks tied to the released session so a fresh input never reuses them.
+    this.earlySidecarSelections.clear();
+    this.earlySidecarSelectionInFlight.clear();
     await this.inputStages.releaseSession(session);
   }
 }

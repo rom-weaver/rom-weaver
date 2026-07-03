@@ -89,6 +89,12 @@ abstract class BaseWorkflowController<
   protected settings: Partial<TSettings>;
   private cachedSnapshot?: TSnapshot;
   private snapshotDirty = true;
+  /** Single-modal mutex for interactive selection dialogs. The candidate-selection UI holds exactly
+   * one open dialog at a time, so two `selectFile` calls must never overlap. {@link selectFile} is
+   * wrapped to run through this lock, so every actual dialog serializes while auto-resolved
+   * (no-dialog) selections never block. This lets an eagerly-surfaced patch dialog open as soon as it
+   * is ready — gated only behind another open dialog — rather than behind a whole mutation. */
+  private selectionLock: Promise<void> = Promise.resolve();
 
   constructor(
     workflow: WorkflowKind,
@@ -103,13 +109,35 @@ abstract class BaseWorkflowController<
     this.id = options.id || createWorkflowId();
     this.settings = cloneValue(options.settings || {});
     this.constructorSignal = options.signal;
-    this.selectFile = options.selectFile;
+    // Serialize every actual selection dialog through the single-modal lock at the one place
+    // `selectFile` enters the controller, so all callers (this controller and its staged
+    // sub-controllers) share one modal without each having to remember to lock.
+    const rawSelectFile = options.selectFile;
+    this.selectFile = rawSelectFile
+      ? (request) => this.withSelectionLock(() => Promise.resolve(rawSelectFile(request)))
+      : undefined;
     if (options.signal?.aborted) this.abortController.abort(options.signal.reason);
     else options.signal?.addEventListener("abort", () => this.abort(options.signal?.reason), { once: true });
   }
 
   abort(reason?: unknown): void {
     if (!this.abortController.signal.aborted) this.abortController.abort(reason);
+  }
+
+  /** Run a selection dialog under the single-modal lock (see {@link selectionLock}). Only the dialog
+   * is serialized — the caller's surrounding work runs unlocked. */
+  private async withSelectionLock<T>(run: () => Promise<T>): Promise<T> {
+    const previous = this.selectionLock;
+    let release!: () => void;
+    this.selectionLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous.catch(() => undefined);
+    try {
+      return await run();
+    } finally {
+      release();
+    }
   }
 
   /**
@@ -277,5 +305,5 @@ abstract class BaseWorkflowController<
   }
 }
 
-export type { BaseWorkflowSnapshot, SourceValidator };
+export type { BaseWorkflowSnapshot, SourceValidator, WorkflowProgressEvent };
 export { BaseWorkflowController };

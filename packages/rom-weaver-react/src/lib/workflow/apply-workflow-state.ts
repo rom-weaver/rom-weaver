@@ -59,6 +59,10 @@ type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>
   parsePatchInFlight?: Promise<void>;
   selectedArchiveEntry?: string;
   outputLabel?: string;
+  /** Patch candidate ids the user picked in an eagerly-opened multi-select dialog (a dropped patch
+   * archive whose pick was surfaced ASAP, before the ROM finished checksumming). The queued addPatch
+   * mutation applies them (fan-out + validation) once it runs, instead of re-opening the dialog. */
+  pendingSelectedIds?: string[];
 };
 type InputSession<TSource> = SharedRomSourceSession<TSource, InternalSourceState>;
 
