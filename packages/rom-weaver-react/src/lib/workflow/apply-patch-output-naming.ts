@@ -1,14 +1,8 @@
 import type { SelectionFileCandidate } from "../../types/selection.ts";
+import { extractPatchFileLabel } from "../output/patch-output-label.ts";
 import type { StagedSource } from "./apply-workflow-state.ts";
 
-const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
-
-const createPatchOutputLabel = (fileName: string | undefined) => {
-  const label = String(fileName || "")
-    .match(PATCH_OUTPUT_LABEL_PATTERN)?.[1]
-    ?.trim();
-  return label || undefined;
-};
+const createPatchOutputLabel = (fileName: string | undefined) => extractPatchFileLabel(fileName);
 
 const resolvePatchOutputName = <TSource>(patch: StagedSource<TSource>, index: number): string => {
   if (patch.state.selectedCandidateId) {

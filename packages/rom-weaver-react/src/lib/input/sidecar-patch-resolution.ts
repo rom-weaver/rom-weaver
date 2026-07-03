@@ -1,3 +1,4 @@
+import { extractPatchFileLabel } from "../output/patch-output-label.ts";
 import { runRomWeaverMatchSidecarsWorker } from "../runtime/wasm-command-runtime.ts";
 
 const PATH_DIRECTORY_PREFIX_REGEX = /^.*[/\\]/;
@@ -15,22 +16,14 @@ type ResolvedSidecarPatch<TEntry extends SidecarPatchEntry> = {
   outputLabel?: string;
 };
 
-const BRACKET_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
-
 const getSidecarEntryFileName = (entry: SidecarPatchEntry | string | null | undefined): string => {
   if (typeof entry === "string") return entry;
   if (!entry) return "";
   return String(entry.filename || entry.fileName || entry.name || "");
 };
 
-// Display-only: a `[Label]` tag in the patch name becomes the generated output name. Not part of the
-// match rule (Rust owns that), so it stays on the host side.
-const getSidecarPatchOutputLabel = (fileName: string): string | undefined => {
-  const baseName = String(fileName || "").replace(PATH_DIRECTORY_PREFIX_REGEX, "");
-  const match = baseName.match(BRACKET_LABEL_PATTERN);
-  const label = match?.[1]?.trim();
-  return label || undefined;
-};
+const getSidecarPatchOutputLabel = (fileName: string): string | undefined =>
+  extractPatchFileLabel(String(fileName || "").replace(PATH_DIRECTORY_PREFIX_REGEX, ""));
 
 /**
  * Resolve the RetroArch/libretro sidecar patches for a ROM by delegating the `<rom-stem>.<patch-ext>`
