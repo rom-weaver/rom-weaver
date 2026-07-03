@@ -25,11 +25,7 @@ import type {
   WorkflowRuntimePreloadEvent,
   WorkflowRuntimeProgress,
 } from "../../types/workflow-runtime-adapter.ts";
-import type {
-  CompressionExtractResult,
-  CompressionListResult,
-  PublicOutput,
-} from "../../types/workflow-runtime-types.ts";
+import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime-types.ts";
 import {
   getRomSpecificCompressionFormatRegistration,
   type RomSpecificCompressionFormat,
@@ -85,9 +81,6 @@ type RomSpecificRuntimeAdapter = {
   createZ3ds?: (
     input: RuntimeRomSpecificCreateZ3dsInput,
   ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
-  listChd?: (input: RuntimeRomSpecificExtractChdInput) => Promise<CompressionListResult>;
-  listRvz?: (input: RuntimeRomSpecificExtractRvzInput) => Promise<CompressionListResult>;
-  listZ3ds?: (input: RuntimeRomSpecificExtractZ3dsInput) => Promise<CompressionListResult>;
   extractChd?: (input: RuntimeRomSpecificExtractChdInput) => Promise<CompressionExtractResult>;
   extractRvz?: (
     input: RuntimeRomSpecificExtractRvzInput,
@@ -486,16 +479,11 @@ const createSharedCompressionRuntime = (
     { source: unknown }
   >;
   type RomSpecificExtractRequest = Parameters<NonNullable<WorkflowRuntime["compression"]["extract"]>>[0];
-  type RomSpecificListRequest = Parameters<NonNullable<WorkflowRuntime["compression"]["list"]>>[0];
   type RomSpecificCreateInput =
     | RuntimeRomSpecificCreateChdInput
     | RuntimeRomSpecificCreateRvzInput
     | RuntimeRomSpecificCreateZ3dsInput;
   type RomSpecificExtractInput =
-    | RuntimeRomSpecificExtractChdInput
-    | RuntimeRomSpecificExtractRvzInput
-    | RuntimeRomSpecificExtractZ3dsInput;
-  type RomSpecificListInput =
     | RuntimeRomSpecificExtractChdInput
     | RuntimeRomSpecificExtractRvzInput
     | RuntimeRomSpecificExtractZ3dsInput;
@@ -576,31 +564,6 @@ const createSharedCompressionRuntime = (
       | ((input: RomSpecificExtractInput) => Promise<CompressionExtractResult | RomSpecificCreateOutput>)
       | undefined;
     return extract?.(input);
-  };
-  const listRomSpecificResult = async (
-    registration: RomSpecificCompressionFormatRegistration,
-    input: RomSpecificListInput,
-  ) => {
-    const list = romSpecificRuntime[registration.list] as
-      | ((input: RomSpecificListInput) => Promise<CompressionListResult>)
-      | undefined;
-    return list?.(input);
-  };
-  const getRomSpecificListInput = (
-    registration: RomSpecificCompressionFormatRegistration,
-    request: RomSpecificListRequest,
-  ): RomSpecificListInput => {
-    const fileName = getSourceFileName(request.source, registration.fallbackFileName);
-    return {
-      fileName,
-      logLevel: request.options?.logLevel,
-      mode: undefined,
-      onLog: request.options?.onLog,
-      onProgress: forwardRomSpecificProgress("input", request.options?.onProgress, `Reading ${fileName}...`),
-      source: request.source,
-      splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
-      threads: request.options?.workerThreads,
-    };
   };
   const extractChd = async (request: RomSpecificExtractRequest) => {
     const registration = getRomSpecificCompressionFormatRegistration("chd");
@@ -724,17 +687,10 @@ const createSharedCompressionRuntime = (
     return archiveRuntime.extract(request);
   };
   if (!input.archiveRuntimeOptional || archiveRuntime.extract) runtime.extract = extract;
-  runtime.list = async (request) => {
-    const registration = getRomSpecificCompressionFormatRegistration(request.format);
-    if (registration)
-      return requireOutput(
-        await listRomSpecificResult(registration, getRomSpecificListInput(registration, request)),
-        `${registration.label} compression listing is unavailable`,
-      );
-    const listRuntime = archiveRuntime.list;
-    if (!listRuntime) throw new Error("Archive compression listing is unavailable");
-    return listRuntime(request);
-  };
+  // Entry enumeration is handler-agnostic: the Rust `probe` command auto-detects chd/z3ds/zip/etc and
+  // reports the container's entries (no per-format dispatch, no decompression).
+  const archiveProbe = archiveRuntime.probe;
+  if (archiveProbe) runtime.probe = (request) => archiveProbe(request);
   return runtime;
 };
 

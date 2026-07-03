@@ -49,7 +49,10 @@ fn probe_reports_known_container_as_supported() {
         "7z"
     );
     assert_eq!(json["details"]["container"]["reason"], "fallback-7z-lzma2");
-    assert!(json["details"]["container"]["entry_count"].is_null());
+    // probe is a strict superset of the former `list`: it enumerates the container's selectable
+    // entries with no decompression.
+    assert_eq!(json["details"]["container"]["entry_count"], 1);
+    assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
     assert!(
         !json["label"]
             .as_str()
@@ -59,7 +62,7 @@ fn probe_reports_known_container_as_supported() {
 }
 
 #[test]
-fn list_reports_selectable_zip_entries() {
+fn probe_lists_selectable_zip_entries() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"payload").expect("fixture");
     let archive = temp.child("sample.zip");
@@ -78,10 +81,15 @@ fn list_reports_selectable_zip_entries() {
     );
 
     let json = run_single_json_event(
-        &["list", archive.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            archive.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
         0,
     );
-    assert_eq!(json["command"], "list");
+    assert_eq!(json["command"], "probe");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
     assert_eq!(json["status"], "succeeded");
@@ -92,12 +100,6 @@ fn list_reports_selectable_zip_entries() {
         "7z"
     );
     assert_eq!(json["details"]["container"]["reason"], "fallback-7z-lzma2");
-    assert!(
-        !json["label"]
-            .as_str()
-            .expect("label")
-            .contains("selectable entries")
-    );
 }
 
 #[test]
@@ -217,65 +219,6 @@ fn probe_no_extract_reports_container_bytes() {
             .as_str()
             .expect("label")
             .contains("probe source resolved via")
-    );
-}
-
-#[test]
-fn list_with_select_reports_selected_nested_container_entries() {
-    let temp = setup_temp_dir();
-    fs::write(temp.child("sample.bin").path(), b"payload").expect("payload fixture");
-    fs::write(temp.child("notes.txt").path(), b"ignore me").expect("note fixture");
-
-    let inner = temp.child("inner.zip");
-    command_stdout(
-        &[
-            "compress",
-            temp.child("sample.bin").path().to_str().expect("path"),
-            "--format",
-            "zip",
-            "--output",
-            inner.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
-
-    let outer = temp.child("outer.zip");
-    command_stdout(
-        &[
-            "compress",
-            inner.path().to_str().expect("path"),
-            temp.child("notes.txt").path().to_str().expect("path"),
-            "--format",
-            "zip",
-            "--output",
-            outer.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
-
-    let json = run_single_json_event(
-        &[
-            "list",
-            outer.path().to_str().expect("path"),
-            "--select",
-            "inner.zip",
-            "--json",
-        ],
-        0,
-    );
-    assert_eq!(json["command"], "list");
-    assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "zip");
-    assert_eq!(json["status"], "succeeded");
-    assert_eq!(json["details"]["container"]["entry_count"], 1);
-    assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("list source resolved via 1 container extract step(s)")
     );
 }
 
@@ -496,7 +439,7 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
 }
 
 #[test]
-fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
+fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
     let temp = setup_temp_dir();
     fs::create_dir_all(temp.child("__MACOSX").path()).expect("__MACOSX dir");
     fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
@@ -542,24 +485,26 @@ fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
 
     let json = run_single_json_event(
         &[
-            "list",
+            "probe",
             outer.path().to_str().expect("path"),
             "--rom-filter",
+            "--no-extract",
             "--json",
         ],
         0,
     );
-    assert_eq!(json["command"], "list");
+    assert_eq!(json["command"], "probe");
     assert_eq!(json["status"], "succeeded");
     assert_eq!(json["details"]["container"]["entries"][0], "game.nes");
     assert_eq!(json["details"]["container"]["entry_count"], 1);
 
     let no_ignore_json = run_single_json_event(
         &[
-            "list",
+            "probe",
             outer.path().to_str().expect("path"),
             "--rom-filter",
             "--no-ignore",
+            "--no-extract",
             "--json",
         ],
         0,
@@ -579,7 +524,7 @@ fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
 }
 
 #[test]
-fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
+fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
     let temp = setup_temp_dir();
     fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
 
@@ -613,14 +558,15 @@ fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
 
     let json = run_single_json_event(
         &[
-            "list",
+            "probe",
             outer.path().to_str().expect("path"),
             "--rom-filter",
+            "--no-extract",
             "--json",
         ],
         0,
     );
-    assert_eq!(json["command"], "list");
+    assert_eq!(json["command"], "probe");
     assert_eq!(json["status"], "succeeded");
     assert_eq!(json["details"]["container"]["entries"][0], "inner.zip");
     assert_eq!(json["details"]["container"]["entry_count"], 1);
@@ -809,41 +755,7 @@ fn probe_reports_gba_header_profile() {
 }
 
 #[test]
-fn list_rejects_patch_inputs() {
-    let temp = setup_temp_dir();
-    fs::write(
-        temp.child("update.ips").path(),
-        build_ips_patch(
-            vec![TestIpsRecord::Literal {
-                offset: 0,
-                data: vec![0xAA],
-            }],
-            None,
-        ),
-    )
-    .expect("fixture");
-
-    let json = run_single_json_event(
-        &[
-            "list",
-            temp.child("update.ips").path().to_str().expect("path"),
-            "--json",
-        ],
-        1,
-    );
-    assert_eq!(json["command"], "list");
-    assert_eq!(json["family"], "patch");
-    assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("only supported for container formats")
-    );
-}
-
-#[test]
-fn list_reports_pbp_multi_disc_selectable_outputs() {
+fn probe_reports_pbp_multi_disc_selectable_outputs() {
     let temp = setup_temp_dir();
     let disc1 = build_test_pbp_iso(72, 13);
     let disc2 = build_test_pbp_iso(80, 29);
@@ -852,10 +764,15 @@ fn list_reports_pbp_multi_disc_selectable_outputs() {
     fs::write(source.path(), pbp).expect("pbp fixture");
 
     let json = run_single_json_event(
-        &["list", source.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            source.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
         0,
     );
-    assert_eq!(json["command"], "list");
+    assert_eq!(json["command"], "probe");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "pbp");
     assert_eq!(json["status"], "succeeded");

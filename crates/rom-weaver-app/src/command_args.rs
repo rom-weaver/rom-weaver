@@ -82,63 +82,6 @@ pub struct ProbeCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ListCommand {
-    pub source: PathBuf,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long = "select",
-            help = "Select a nested container by exact name, prefix, or glob before listing entries (repeatable)"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub select: Vec<String>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long = "rom-filter",
-            help = "Keep ROM-like payload candidates during nested list source resolution"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub rom_filter: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long = "patch-filter",
-            help = "Keep patch-like payload candidates during nested list source resolution"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_filter: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default ignore filtering during nested list container selection"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_ignore: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "For CHD CD listing, report split CUE + per-track BIN entries (`*.trackNN.bin`) instead of a single BIN; ignored for containers that do not support it"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub split_bin: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct ExtractCommand {
     pub source: PathBuf,
     #[cfg_attr(

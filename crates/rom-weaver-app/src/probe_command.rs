@@ -118,8 +118,32 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
-            report =
-                Self::attach_container_probe_details(report, None, probe_recommendation.as_ref());
+            // Enumerate the container's selectable entries (a cheap, decompression-free
+            // central-directory/header scan) so probe is a strict superset of the former `list`
+            // command. Honors the same `rom_filter`/`patch_filter`/`no_ignore` semantics: payload
+            // matches win, falling back to container entries when no payload matches.
+            let listed_entries =
+                handler
+                    .list_entry_records(&request, &context)
+                    .ok()
+                    .map(|entries| {
+                        let (payload_entries, fallback_entries) =
+                            Self::kind_filtered_container_list_entries(
+                                &entries,
+                                kind_filter,
+                                !no_ignore,
+                            );
+                        if payload_entries.is_empty() {
+                            fallback_entries
+                        } else {
+                            payload_entries
+                        }
+                    });
+            report = Self::attach_container_probe_details(
+                report,
+                listed_entries,
+                probe_recommendation.as_ref(),
+            );
             // Console + optical medium of the resolved (decoded) source, from a bounded
             // prefix read — the same identity detection checksum/extract surface, now in
             // the probe path so platform identify lives with probe (no-op for archives

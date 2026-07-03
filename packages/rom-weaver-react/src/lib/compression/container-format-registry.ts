@@ -40,7 +40,6 @@ type RomSpecificCompressionFormat = Extract<ContainerCompressionFormat, "chd" | 
 type ArchiveCompressionFormat = Exclude<ContainerCompressionFormat, RomSpecificCompressionFormat>;
 type RomSpecificRuntimeCreateMethod = "createChd" | "createRvz" | "createZ3ds";
 type RomSpecificRuntimeExtractMethod = "extractChd" | "extractRvz" | "extractZ3ds";
-type RomSpecificRuntimeListMethod = "listChd" | "listRvz" | "listZ3ds";
 type RomSpecificRuntimeScope = Extract<RuntimeWorkerSourceScope, "chd" | "rvz" | "z3ds">;
 type GeneratedContainerDefaultOutput = NonNullable<(typeof ROM_WEAVER_CONTAINER_FORMATS)[number]["defaultOutput"]>;
 
@@ -63,7 +62,6 @@ type RomSpecificCompressionFormatRegistration = CompressionFormatRegistrationBas
   extractedFileName: (source: ByteProbeableSource) => string;
   extensionRegex: RegExp;
   fallbackFileName: string;
-  list: RomSpecificRuntimeListMethod;
   magicBytes: readonly number[];
   pathPrefix: {
     create: string;
@@ -78,7 +76,6 @@ type RomSpecificRuntimeRegistration = {
   extract: RomSpecificRuntimeExtractMethod;
   extractedFileName: (source: ByteProbeableSource) => string;
   fallbackFileName: string;
-  list: RomSpecificRuntimeListMethod;
   pathPrefix: {
     create: string;
     extract: string;
@@ -191,7 +188,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extract: "extractChd",
     extractedFileName: getChdExtractedFileName,
     fallbackFileName: "input.chd",
-    list: "listChd",
     pathPrefix: {
       create: "chd-image",
       extract: "chd-input",
@@ -204,7 +200,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extract: "extractRvz",
     extractedFileName: getRvzExtractedFileName,
     fallbackFileName: "input.rvz",
-    list: "listRvz",
     pathPrefix: {
       create: "rvz-image",
       extract: "rvz-input",
@@ -216,7 +211,6 @@ const ROM_SPECIFIC_RUNTIME_REGISTRY = {
     extract: "extractZ3ds",
     extractedFileName: getZ3dsExtractedFileName,
     fallbackFileName: "input.z3ds",
-    list: "listZ3ds",
     pathPrefix: {
       create: "z3ds-image",
       extract: "z3ds-input",
@@ -245,7 +239,6 @@ const createRomSpecificCompressionFormatRegistration = (
     extract: runtime.extract,
     extractedFileName: runtime.extractedFileName,
     fallbackFileName: runtime.fallbackFileName,
-    list: runtime.list,
     magicBytes: getGeneratedContainerMagic(format),
     pathPrefix: runtime.pathPrefix,
     scope: runtime.scope,

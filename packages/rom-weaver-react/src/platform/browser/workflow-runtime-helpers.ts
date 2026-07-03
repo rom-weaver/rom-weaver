@@ -70,8 +70,6 @@ const getListedOutputEntryName = (entry: ListedOutputEntry | null | undefined): 
 
 const isCueEntryName = (entryName: string): boolean => /\.cue$/i.test(getPathBaseName(entryName, entryName));
 
-const isGdiEntryName = (entryName: string): boolean => /\.gdi$/i.test(getPathBaseName(entryName, entryName));
-
 const normalizeRomSpecificListEntries = <TEntry extends ListedOutputEntry>(
   entries: TEntry[],
   stagedFileName: string,
@@ -129,23 +127,6 @@ const normalizeRomSpecificEntryNameForSource = (
   )[0];
   return String(normalized?.fileName || entryName || "");
 };
-
-const normalizeZ3dsListEntriesForSource = <TEntry extends { fileName?: string; filename?: string; name?: string }>(
-  entries: TEntry[],
-  sourceFileName: string,
-): TEntry[] =>
-  entries.map((entry) => {
-    const entryName = getListedOutputEntryName(entry);
-    if (!entryName) return entry;
-    const normalizedName = normalizeRomSpecificExtractedFileName("z3ds", entryName, { fileName: sourceFileName });
-    if (normalizedName === entryName) return entry;
-    return {
-      ...entry,
-      fileName: normalizedName,
-      filename: normalizedName,
-      name: getPathBaseName(normalizedName, normalizedName),
-    };
-  });
 
 const replaceProgressSourceLabel = <TProgress extends { label?: string; message?: string }>(
   progress: TProgress,
@@ -221,16 +202,12 @@ export {
   emitBrowserWorkflowTrace,
   findExtractedFile,
   getFileStem,
-  getListedOutputEntryName,
   getPathDerivedFileName,
   getPathDirectory,
   isCueEntryName,
-  isGdiEntryName,
   joinPath,
   normalizeEntryPath,
   normalizeRomSpecificEntryNameForSource,
-  normalizeRomSpecificListEntries,
-  normalizeZ3dsListEntriesForSource,
   replaceProgressSourceLabel,
   toLevelProfile,
   uniqueNonEmptyStrings,

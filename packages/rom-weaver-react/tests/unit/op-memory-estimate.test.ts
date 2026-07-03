@@ -30,9 +30,8 @@ describe("estimateOpWorkingSetBytes", () => {
     expect(estimateOpWorkingSetBytes(patch("apply"), 100 * MIB)).toBe(BASE + 200 * MIB);
   });
 
-  it("keeps metadata scans (probe/list) light", () => {
+  it("keeps metadata scans (probe) light", () => {
     expect(estimateOpWorkingSetBytes(topLevel("probe"), 100 * MIB)).toBe(BASE + 25 * MIB);
-    expect(estimateOpWorkingSetBytes(topLevel("list"), 100 * MIB)).toBe(BASE + 25 * MIB);
   });
 
   it("treats checksum/trim as a single streamed copy", () => {

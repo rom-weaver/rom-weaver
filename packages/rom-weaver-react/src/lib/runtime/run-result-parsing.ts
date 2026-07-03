@@ -1,5 +1,5 @@
 import type { ChecksumMap, ChecksumVariant, ExtractTiming, RomTypeTag } from "../../types/checksum.ts";
-import type { CompressionListResult } from "../../types/workflow-runtime-types.ts";
+import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
 import type { ExtractedFileEntry } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
@@ -237,13 +237,13 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
   return output;
 };
 
-const getContainerEntriesFromList = (result: RomWeaverRunJsonResult): CompressionListResult["entries"] => {
+const getContainerEntriesFromProbe = (result: RomWeaverRunJsonResult): CompressionProbeResult["entries"] => {
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const container = asRecord(details?.container);
   const entryRecords = Array.isArray(container?.entry_records) ? container.entry_records : [];
   const entries = entryRecords.length ? entryRecords : Array.isArray(container?.entries) ? container.entries : [];
-  const output: CompressionListResult["entries"] = [];
+  const output: CompressionProbeResult["entries"] = [];
   for (const entry of entries) {
     if (typeof entry === "string") {
       const normalized = entry.trim();
@@ -273,16 +273,6 @@ const getContainerEntriesFromList = (result: RomWeaverRunJsonResult): Compressio
     });
   }
   return output;
-};
-
-const getChdMediaKindFromList = (result: RomWeaverRunJsonResult): string | undefined => {
-  const terminal = getTerminalEvent(result);
-  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
-  const chd = asRecord(details?.chd);
-  const mediaKind = String(chd?.media_kind || "")
-    .trim()
-    .toLowerCase();
-  return mediaKind || undefined;
 };
 
 // The Rust ProgressEvent carries effective_threads as a sibling of `details`.
@@ -322,8 +312,7 @@ export type { RomWeaverRunJsonResult, WireRecord };
 export {
   asRecord,
   ensureRomWeaverSuccess,
-  getChdMediaKindFromList,
-  getContainerEntriesFromList,
+  getContainerEntriesFromProbe,
   getEmittedFileDetails,
   getEmittedFiles,
   getLastEvent,

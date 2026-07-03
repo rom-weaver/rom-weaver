@@ -32,7 +32,6 @@ const patchMultiplier = (command: Extract<RomWeaverCommand, { type: "patch" }>):
 const operationMultiplier = (command: RomWeaverCommand): number => {
   switch (command.type) {
     case "probe":
-    case "list":
       return MULTIPLIER_METADATA;
     case "checksum":
     case "trim":

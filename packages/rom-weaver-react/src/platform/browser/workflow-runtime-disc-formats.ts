@@ -8,7 +8,6 @@ import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts"
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
-  runRomWeaverListWorker,
   selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { RomSpecificRuntimeAdapter } from "../../lib/runtime/workflow-runtime-core.ts";
@@ -20,8 +19,6 @@ import {
   getPathDirectory,
   joinPath,
   normalizeRomSpecificEntryNameForSource,
-  normalizeRomSpecificListEntries,
-  normalizeZ3dsListEntriesForSource,
   replaceProgressSourceLabel,
   withCodecLevel,
 } from "./workflow-runtime-helpers.ts";
@@ -32,10 +29,7 @@ const Z3DS_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.z3ds;
 
 const createBrowserDiscFormatsRuntime = (
   workerIo: RuntimeWorkerIo,
-): Pick<
-  RomSpecificRuntimeAdapter,
-  "createRvz" | "createZ3ds" | "extractRvz" | "extractZ3ds" | "listRvz" | "listZ3ds"
-> => ({
+): Pick<RomSpecificRuntimeAdapter, "createRvz" | "createZ3ds" | "extractRvz" | "extractZ3ds"> => ({
   createRvz: async ({
     source,
     fileName,
@@ -266,48 +260,6 @@ const createBrowserDiscFormatsRuntime = (
         outputFileName,
         "Z3DS extraction worker did not return browser output",
       );
-    } finally {
-      await workerSource.cleanup().catch(() => undefined);
-    }
-  },
-  listRvz: async ({ fileName }) => ({
-    entries: [
-      {
-        fileName: getRomSpecificExtractedFileName("rvz", { fileName }),
-        filename: getRomSpecificExtractedFileName("rvz", { fileName }),
-        name: getPathBaseName(
-          getRomSpecificExtractedFileName("rvz", { fileName }),
-          getRomSpecificExtractedFileName("rvz", { fileName }),
-        ),
-      },
-    ],
-  }),
-  listZ3ds: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
-    const workerSource = await workerIo.stageSource({
-      fallbackFileName: fileName,
-      pathPrefix: Z3DS_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
-      scope: Z3DS_ROM_SPECIFIC_FORMAT.scope,
-      source,
-      trace: { logLevel, onLog },
-    });
-    try {
-      const result = await runRomWeaverListWorker(
-        {
-          logLevel,
-          signal,
-          sourcePath: workerSource.filePath,
-        },
-        onProgress,
-        onLog,
-      );
-      const sourceFileName = fileName || workerSource.fileName || Z3DS_ROM_SPECIFIC_FORMAT.fallbackFileName;
-      const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
-      return {
-        entries: normalizeZ3dsListEntriesForSource(
-          normalizeRomSpecificListEntries(result.entries, stagedSourceFileName, sourceFileName),
-          sourceFileName,
-        ),
-      };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

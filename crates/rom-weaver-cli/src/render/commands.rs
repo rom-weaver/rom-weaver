@@ -9,7 +9,7 @@ use super::{Surface, humanize_bytes};
 /// Render the summary for a succeeded command, dispatching on the command name.
 pub fn render_success(surface: &Surface, event: &ProgressEvent) {
     match event.command.as_str() {
-        "probe" | "list" => render_container_or_patch(surface, event),
+        "probe" => render_container_or_patch(surface, event),
         "extract" | "compress" | "patch-apply" | "patch-create" => {
             render_emitted_files(surface, event)
         }

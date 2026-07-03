@@ -15,7 +15,6 @@ describe("rom-weaver command boundary helpers", () => {
   it("exports Rust-generated known command discriminants", () => {
     expect(KNOWN_COMMAND_TYPES).toEqual([
       "probe",
-      "list",
       "extract",
       "checksum",
       "ingest",
@@ -87,8 +86,8 @@ describe("rom-weaver command boundary helpers", () => {
     expect(clamped.command.args.threads).toBe(8);
     expect(readRomWeaverRequestedThreadCount(clamped, { maxThreads: 8 })).toBe(8);
 
-    const listRequest = normalizeRomWeaverRunRequest(createRomWeaverCommand("list", { source: "/work/archive.zip" }));
-    expect(withRomWeaverDefaultThreads(listRequest, 4)).toBe(listRequest);
+    const probeRequest = normalizeRomWeaverRunRequest(createRomWeaverCommand("probe", { source: "/work/archive.zip" }));
+    expect(withRomWeaverDefaultThreads(probeRequest, 4)).toBe(probeRequest);
   });
 
   it("rejects malformed command discriminants with known command details", () => {

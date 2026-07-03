@@ -23,7 +23,6 @@ impl CliApp {
         trace!(command = command_name, "dispatching CLI command");
         match command {
             Commands::Probe(args) => self.run_probe(args),
-            Commands::List(args) => self.run_list(args),
             Commands::Extract(args) => self.run_extract(args),
             Commands::Checksum(args) => self.run_checksum(args),
             Commands::Ingest(args) => self.run_ingest(args),
@@ -43,7 +42,6 @@ impl CliApp {
     pub(super) fn command_name(command: &Commands) -> &'static str {
         match command {
             Commands::Probe(_) => "probe",
-            Commands::List(_) => "list",
             Commands::Extract(_) => "extract",
             Commands::Checksum(_) => "checksum",
             Commands::Ingest(_) => "ingest",
@@ -56,22 +54,5 @@ impl CliApp {
             Commands::PlanExtractBatch(_) => "plan-extract-batch",
             Commands::MatchSidecars(_) => "match-sidecars",
         }
-    }
-
-    /// Note that `--split-bin` was ignored when listing a container that does not support it (only
-    /// CHD CD listing honors split CUE + per-track BIN output).
-    pub(super) fn attach_split_bin_list_note(
-        mut report: OperationReport,
-        handler: &dyn ContainerHandler,
-        split_bin: bool,
-    ) -> OperationReport {
-        if split_bin && !handler.descriptor().matches_name("chd") {
-            report.label = format!(
-                "{}; ignored --split-bin for non-CHD input `{}`",
-                report.label,
-                handler.descriptor().name
-            );
-        }
-        report
     }
 }

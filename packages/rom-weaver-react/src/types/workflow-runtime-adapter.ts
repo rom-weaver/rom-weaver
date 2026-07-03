@@ -19,8 +19,8 @@ import type {
   CompressionCreateResult,
   CompressionExtractInput,
   CompressionExtractResult,
-  CompressionListInput,
-  CompressionListResult,
+  CompressionProbeInput,
+  CompressionProbeResult,
   CreatePatchResult,
   PublicOutput,
   TrimResult,
@@ -317,7 +317,7 @@ type WorkflowRuntimeOutput = {
 type WorkflowRuntimeCompression = {
   create?: (input: CompressionCreateInput) => Promise<CompressionCreateResult | PublicOutput>;
   extract?: (input: CompressionExtractInput) => Promise<CompressionExtractResult>;
-  list?: (input: CompressionListInput) => Promise<CompressionListResult>;
+  probe?: (input: CompressionProbeInput) => Promise<CompressionProbeResult>;
 };
 
 type WorkflowRuntimeBinary = {

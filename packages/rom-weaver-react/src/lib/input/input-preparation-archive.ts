@@ -92,15 +92,6 @@ const traceArchivePreparation = (
 const summarizeEntryNames = (entries: ArchiveEntryLike[], maxCount = 8) =>
   entries.slice(0, maxCount).map((entry) => entry.filename);
 
-const getChdCodecModeFromMediaKind = (mediaKind: unknown): ChdCodecMode | null => {
-  const normalized = String(mediaKind || "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "cd" || normalized === "gd") return "cd";
-  if (normalized === "dvd") return "dvd";
-  return null;
-};
-
 const getNamedArchiveBlobSource = (blob: Blob, fileName?: string | null): Blob => {
   const currentName = (blob as Blob & { name?: unknown }).name;
   if (typeof currentName === "string" && currentName.trim()) return blob;
@@ -255,7 +246,7 @@ const computeListCompressionEntryResult = async (
   overrides: CompressionExtractOverrides = {},
 ) => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
-  if (!resolvedRuntime.compression.list) throw new Error("Compression listing is unavailable");
+  if (!resolvedRuntime.compression.probe) throw new Error("Container probe is unavailable");
   const compressionFormat = getCompressionFormat(file);
   traceArchivePreparation(options, "input.archive.list.start", {
     compressionFormat,
@@ -264,15 +255,13 @@ const computeListCompressionEntryResult = async (
     romFilter: !!kindFilter.romFilter,
     runtime: resolvedRuntime.name,
   });
-  const result = await resolvedRuntime.compression.list({
+  const result = await resolvedRuntime.compression.probe({
     format: compressionFormat,
     options: getCompressionRuntimeOptions(options, overrides, kindFilter),
     source: getCompressionRuntimeSource(file),
   });
   const entries = result.entries || [];
-  const chdMode = getChdCodecModeFromMediaKind(result.chdMediaKind);
   traceArchivePreparation(options, "input.archive.list.finish", {
-    chdMode: chdMode || "",
     compressionFormat,
     entryCount: entries.length,
     entrySample: summarizeEntryNames(entries),
@@ -281,7 +270,7 @@ const computeListCompressionEntryResult = async (
     romFilter: !!kindFilter.romFilter,
     runtime: resolvedRuntime.name,
   });
-  return { ...result, chdMode, entries };
+  return { ...result, entries };
 };
 
 const normalizeSelectedEntryNames = (entryNames: readonly string[] | undefined): string[] =>

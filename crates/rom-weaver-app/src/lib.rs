@@ -72,7 +72,6 @@ use xdvdfs::{
 )]
 pub enum Commands {
     Probe(ProbeCommand),
-    List(ListCommand),
     Extract(ExtractCommand),
     Checksum(ChecksumCommand),
     #[cfg_attr(
@@ -901,9 +900,6 @@ mod command_dispatch;
 #[path = "probe_command.rs"]
 mod probe_command;
 
-#[path = "list_command.rs"]
-mod list_command;
-
 #[path = "extract_command.rs"]
 mod extract_command;
 
@@ -966,9 +962,9 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 
 mod command_args;
 pub use command_args::{
-    ChecksumCommand, CompressCommand, ExtractCommand, IngestCommand, ListCommand,
-    MatchSidecarsCommand, PatchApplyCommand, PatchCreateCandidatesCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, ProbeCommand, TrimCommand,
+    ChecksumCommand, CompressCommand, ExtractCommand, IngestCommand, MatchSidecarsCommand,
+    PatchApplyCommand, PatchCreateCandidatesCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, ProbeCommand, TrimCommand,
 };
 
 #[cfg(not(target_arch = "wasm32"))]

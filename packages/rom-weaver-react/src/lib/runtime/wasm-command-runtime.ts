@@ -18,7 +18,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
-import type { CompressionListResult } from "../../types/workflow-runtime-types.ts";
+import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
 import type { CompressionLevelProfile } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import {
@@ -61,8 +61,7 @@ import type { RomWeaverRunJsonResult } from "./run-result-parsing.ts";
 import {
   asRecord,
   ensureRomWeaverSuccess,
-  getChdMediaKindFromList,
-  getContainerEntriesFromList,
+  getContainerEntriesFromProbe,
   getEmittedFileDetails,
   getEmittedFiles,
   getLastEvent,
@@ -70,7 +69,6 @@ import {
   getTerminalEvent,
   parseChecksumVariants,
   toSimpleProgress,
-  type WireRecord,
 } from "./run-result-parsing.ts";
 
 const appendBrowserStorageContext = async (message: string) => {
@@ -181,53 +179,52 @@ const invokeRomWeaverCompressionCreateWorker = async (
   };
 };
 
-const runRomWeaverListWorker = async (
+// Enumerate a container's selectable entries without extracting, via the `probe` command's
+// metadata-only (`no_extract`) path. Replaces the former `list` command — `probe` is a strict
+// superset (it reports the same `details.container.entries`) and auto-detects the handler, so no
+// per-format dispatch is needed.
+const runRomWeaverProbeWorker = async (
   input: {
     logLevel?: LogLevel | string;
     romFilter?: boolean;
     patchFilter?: boolean;
     sourcePath: string;
     signal?: AbortSignal;
-    splitBin?: boolean;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ chdMediaKind?: string; entries: CompressionListResult["entries"] }> => {
+): Promise<{ entries: CompressionProbeResult["entries"] }> => {
   const sourcePath = String(input.sourcePath || "").trim();
-  if (!sourcePath) throw new Error("Compression list source path is required");
-  const command = createRomWeaverCommand("list", {
+  if (!sourcePath) throw new Error("Container probe source path is required");
+  const command = createRomWeaverCommand("probe", {
     ...(input.romFilter ? { rom_filter: true } : {}),
     ...(input.patchFilter ? { patch_filter: true } : {}),
+    no_extract: true,
     source: sourcePath,
-    ...(input.splitBin ? { split_bin: true } : {}),
   });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson list dispatch", {
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe dispatch", {
     command,
     patchFilter: !!input.patchFilter,
     romFilter: !!input.romFilter,
     sourcePath,
-    splitBin: !!input.splitBin,
   });
-  const runList = () =>
-    runRomWeaverJson(
-      command,
-      toRomWeaverOptions({
-        logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
-        onLog,
-        signal: input.signal,
-      }),
-    );
-  const result = await runList();
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      signal: input.signal,
+    }),
+  );
   if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Compression listing failed");
+    const failureMessage = getRomWeaverFailureMessage(result, "Container probe failed");
     throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
-  const entries = getContainerEntriesFromList(result);
-  return { chdMediaKind: getChdMediaKindFromList(result), entries };
+  return { entries: getContainerEntriesFromProbe(result) };
 };
 
 type LibretroSidecarMatch = { name: string; order: number };
@@ -838,7 +835,7 @@ export {
   normalizeChdCodecArgs,
   normalizeCodecEntries,
   resolvePatchApplyThreadArg,
-  runRomWeaverListWorker,
   runRomWeaverMatchSidecarsWorker,
+  runRomWeaverProbeWorker,
   selectRomWeaverOutputPath,
 };

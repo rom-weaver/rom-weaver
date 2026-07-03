@@ -9,7 +9,6 @@ import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
   normalizeCodecEntries,
-  runRomWeaverListWorker,
   selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { RomSpecificRuntimeAdapter } from "../../lib/runtime/workflow-runtime-core.ts";
@@ -25,15 +24,11 @@ import {
   emitBrowserWorkflowTrace,
   findExtractedFile,
   getFileStem,
-  getListedOutputEntryName,
   getPathDerivedFileName,
   getPathDirectory,
-  isCueEntryName,
-  isGdiEntryName,
   joinPath,
   normalizeEntryPath,
   normalizeRomSpecificEntryNameForSource,
-  normalizeRomSpecificListEntries,
   uniqueNonEmptyStrings,
 } from "./workflow-runtime-helpers.ts";
 import { browserVfs, readTextFromBrowserVfs, writeTextToBrowserVfs } from "./workflow-runtime-vfs-cleanup.ts";
@@ -57,32 +52,6 @@ const getChdCreateFormat = (requestedMode: string): string => {
   }
   return "chd";
 };
-
-const annotateChdListEntries = <
-  TEntry extends {
-    archiveEntryType?: string;
-    fileName?: string;
-    filename?: string;
-    name?: string;
-  },
->(
-  entries: TEntry[],
-): TEntry[] =>
-  entries.map((entry) => {
-    const currentType = String(entry.archiveEntryType || "")
-      .trim()
-      .toLowerCase();
-    if (currentType === "cue" || currentType === "gdi" || currentType === "track") return entry;
-    const entryName = getListedOutputEntryName(entry);
-    if (!entryName) return entry;
-    let archiveEntryType = "track";
-    if (isCueEntryName(entryName)) archiveEntryType = "cue";
-    else if (isGdiEntryName(entryName)) archiveEntryType = "gdi";
-    return {
-      ...entry,
-      archiveEntryType,
-    };
-  });
 
 const rewriteCueFileBinaryReference = async (cuePath: string, targetPath: string) => {
   const contents = await readTextFromBrowserVfs(cuePath);
@@ -120,7 +89,7 @@ const collectCueSidecarPaths = async (cuePath: string): Promise<string[]> => {
 
 const createBrowserChdRuntime = (
   workerIo: RuntimeWorkerIo,
-): Pick<RomSpecificRuntimeAdapter, "createChd" | "extractChd" | "listChd"> => ({
+): Pick<RomSpecificRuntimeAdapter, "createChd" | "extractChd"> => ({
   createChd: async ({
     source,
     fileName,
@@ -375,39 +344,6 @@ const createBrowserChdRuntime = (
       const extracted = await runExtract();
       const selected = selectChdOutputs(extracted);
       return await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
-    } finally {
-      await workerSource.cleanup().catch(() => undefined);
-    }
-  },
-  listChd: async ({ source, fileName, logLevel, onLog, onProgress, signal, splitBin }) => {
-    const workerSource = await workerIo.stageSource({
-      fallbackFileName: fileName,
-      pathPrefix: CHD_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
-      scope: CHD_ROM_SPECIFIC_FORMAT.scope,
-      source,
-      trace: { logLevel, onLog },
-    });
-    try {
-      const result = await runRomWeaverListWorker(
-        {
-          logLevel,
-          signal,
-          sourcePath: workerSource.filePath,
-          splitBin,
-        },
-        onProgress,
-        onLog,
-      );
-      return {
-        chdMediaKind: result.chdMediaKind,
-        entries: annotateChdListEntries(
-          normalizeRomSpecificListEntries(
-            result.entries,
-            getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
-            fileName,
-          ),
-        ),
-      };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

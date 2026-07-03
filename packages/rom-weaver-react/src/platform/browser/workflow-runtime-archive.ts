@@ -4,7 +4,7 @@ import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts"
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
-  runRomWeaverListWorker,
+  runRomWeaverProbeWorker,
   selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import {
@@ -19,7 +19,6 @@ import type {
   RuntimeArchiveCreateInput,
   RuntimeWorkerIo,
   WorkflowRuntime,
-  WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { forwardArchiveProgress } from "../shared/workflow-runtime-progress.ts";
@@ -138,48 +137,6 @@ const createArchiveEntrySource = (
   return null;
 };
 
-// A nested CHD that is a CD image must be extracted with `splitBin` so its tracks come out as
-// separate files. That decision needs the container's media kind, which only the list reports — the
-// one piece of the descend pass that still requires a list. (The Rust extract truncates its own
-// outputs, so there is no longer any output pre-clear to plan here.)
-const getDescendChdSplitBinEligible = async ({
-  archivePath,
-  format,
-  logLevel,
-  onLog,
-  signal,
-}: {
-  archivePath: string;
-  format?: string;
-  logLevel?: unknown;
-  onLog?: (log: WorkflowRuntimeLog) => void;
-  signal?: AbortSignal;
-}): Promise<boolean> => {
-  if (
-    String(format || "")
-      .trim()
-      .toLowerCase() !== "chd"
-  ) {
-    return false;
-  }
-  const listed = await runRomWeaverListWorker(
-    {
-      logLevel: logLevel as Parameters<typeof runRomWeaverListWorker>[0]["logLevel"],
-      signal,
-      sourcePath: archivePath,
-    },
-    undefined,
-    onLog,
-  ).catch(() => null);
-  const chdSplitBinEligible = listed?.chdMediaKind === "cd";
-  emitBrowserWorkflowTrace({ logLevel, onLog }, "archive descend chd media kind", {
-    archivePath,
-    chdMediaKind: listed?.chdMediaKind ?? "",
-    chdSplitBinEligible,
-  });
-  return chdSplitBinEligible;
-};
-
 const stageBrowserCompressionEntries = async (
   entries: RuntimeArchiveCreateInput["entries"],
   workerIo: RuntimeWorkerIo,
@@ -284,13 +241,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         const cleanupExtractedFiles = async (filePaths: string[]) => {
           await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
         };
-        const chdSplitBinEligible = await getDescendChdSplitBinEligible({
-          archivePath: archive.filePath,
-          format: workflowInput.format,
-          logLevel: workflowInput.options?.logLevel,
-          onLog: workflowInput.options?.onLog,
-          signal: workflowInput.options?.signal,
-        });
         const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
           ? workflowInput.options.extractChecksumAlgorithms
               .map((algorithm) =>
@@ -315,12 +265,23 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             select: selectedEntries,
             signal: workflowInput.options?.signal,
             sourcePath: archive.filePath,
-            splitBin: chdSplitBinEligible && workflowInput.options?.chdSplitBin === true,
+            // Pass the user's split intent raw; the Rust ingest owns CD-vs-DVD gating (it only
+            // splits a multi-track CD), matching the direct-CHD extract path.
+            splitBin: workflowInput.options?.chdSplitBin,
             workerThreads: workflowInput.options?.workerThreads,
           },
           forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
           workflowInput.options?.onLog,
         );
+        // The primary-track suffix strip below applies only to CD-class discs. Derive that from the
+        // disc format ingest already reports per asset (cd/gd), so no separate `list`/`probe`
+        // round-trip is needed.
+        const chdSplitBinEligible = extracted.assets.some((asset) => {
+          const discFormat = String(asset.discFormat || "")
+            .trim()
+            .toLowerCase();
+          return discFormat === "cd" || discFormat.includes("gd");
+        });
         const normalizedFormat = String(workflowInput.format || "")
           .trim()
           .toLowerCase();
@@ -509,7 +470,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       await archive.cleanup().catch(() => undefined);
     }
   },
-  list: async (workflowInput) => {
+  probe: async (workflowInput) => {
     const archive = await workerIo.stageSource({
       fallbackFileName: "archive.bin",
       pathPrefix: "archive-input",
@@ -518,7 +479,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
-      return await runRomWeaverListWorker(
+      return await runRomWeaverProbeWorker(
         {
           logLevel: workflowInput.options?.logLevel,
           patchFilter: workflowInput.options?.patchFilter,

@@ -3,7 +3,6 @@
 
 export const KNOWN_COMMAND_TYPES = [
   "probe",
-  "list",
   "extract",
   "checksum",
   "ingest",

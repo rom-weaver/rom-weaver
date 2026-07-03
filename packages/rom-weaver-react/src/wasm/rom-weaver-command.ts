@@ -56,7 +56,6 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
 ): RomWeaverCommand {
   switch (type) {
     case "probe":
-    case "list":
     case "extract":
     case "checksum":
     case "ingest":
@@ -108,7 +107,6 @@ function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand 
   const args = isObjectRecord(command.args) ? { ...command.args } : {};
   switch (type) {
     case "probe":
-    case "list":
     case "extract":
     case "checksum":
     case "ingest":
@@ -146,7 +144,6 @@ export function readRomWeaverRunRequestCommand(request: RomWeaverRunRequest): Ro
 function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommandBranch {
   switch (command.type) {
     case "probe":
-    case "list":
     case "extract":
     case "checksum":
     case "ingest":
@@ -182,7 +179,6 @@ export function collectRomWeaverRunInputPaths(
 
   switch (command.type) {
     case "probe":
-    case "list":
     case "extract":
     case "checksum":
     case "ingest":
@@ -272,7 +268,6 @@ export function readRomWeaverRequestedThreadCount(
 export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
   switch (command.type) {
     case "probe":
-    case "list":
       return false;
     case "extract":
     case "checksum":
@@ -373,7 +368,6 @@ function replaceRomWeaverRunRequestCommandArgs(
 function replaceRomWeaverCommandArgs(command: RomWeaverCommand, args: Record<string, unknown>): RomWeaverCommand {
   switch (command.type) {
     case "probe":
-    case "list":
     case "extract":
     case "checksum":
     case "ingest":

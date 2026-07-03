@@ -165,15 +165,6 @@ function commandArgsToRunRequest(args) {
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
       });
       break;
-    case "list":
-      Object.assign(commandArgs, {
-        source: requirePositional(parsed, 0, "list source"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-      });
-      break;
     case "compress":
       Object.assign(commandArgs, {
         input: parsed.positionals,
@@ -314,7 +305,7 @@ function locateCommand(args) {
       }
       return { command: "patch", index, subcommand: "" };
     }
-    if (token === "probe" || token === "list" || token === "compress" || token === "extract" || token === "checksum") {
+    if (token === "probe" || token === "compress" || token === "extract" || token === "checksum") {
       return { command: token, index, subcommand: "" };
     }
   }
@@ -328,7 +319,7 @@ function createCommandRequest(command, subcommand) {
     }
     throw new Error(`unsupported patch subcommand in test args: ${subcommand || "(missing)"}`);
   }
-  if (!["probe", "list", "compress", "extract", "checksum"].includes(command)) {
+  if (!["probe", "compress", "extract", "checksum"].includes(command)) {
     return { args: {}, type: command };
   }
   return createRomWeaverCommand(command, {});
@@ -625,7 +616,7 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
     await runJson(["compress", chdSourcePath, "--format", "chd", "--output", chdPath, "--threads", "1"]),
     { command: "compress" },
   );
-  assertRunJsonSucceeded(await runJson(["list", chdPath]), { command: "list" });
+  assertRunJsonSucceeded(await runJson(["probe", chdPath, "--no-extract"]), { command: "probe" });
   assertRunJsonSucceeded(await runJson(["extract", chdPath, "--out-dir", chdExtractDir, "--threads", "1"]), {
     command: "extract",
   });
@@ -634,7 +625,7 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
     await runJson(["compress", sourcePath, "--format", "zip", "--output", zipPath, "--threads", "1"]),
     { command: "compress" },
   );
-  assertRunJsonSucceeded(await runJson(["list", zipPath]), { command: "list" });
+  assertRunJsonSucceeded(await runJson(["probe", zipPath, "--no-extract"]), { command: "probe" });
   assertRunJsonSucceeded(await runJson(["extract", zipPath, "--out-dir", zipExtractDir, "--threads", "1"]), {
     command: "extract",
   });

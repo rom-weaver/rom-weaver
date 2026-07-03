@@ -174,7 +174,7 @@ type CompressionWorkflowOptions = {
   signal?: AbortSignal;
 };
 
-type CompressionListInput = {
+type CompressionProbeInput = {
   source: SourceRef;
   format?: string;
   options?: CompressionWorkflowOptions;
@@ -252,8 +252,7 @@ type CompressionCreateInput =
       options?: CompressionWorkflowOptions;
     };
 
-type CompressionListResult = {
-  chdMediaKind?: string;
+type CompressionProbeResult = {
   entries: CompressionEntryInfo[];
 };
 
@@ -318,8 +317,8 @@ export type {
   CompressionEntryInput,
   CompressionExtractInput,
   CompressionExtractResult,
-  CompressionListInput,
-  CompressionListResult,
+  CompressionProbeInput,
+  CompressionProbeResult,
   CompressionWorkflowOptions,
   CreatePatchInput,
   CreatePatchResult,

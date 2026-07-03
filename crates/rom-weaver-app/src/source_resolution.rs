@@ -79,30 +79,6 @@ impl CliApp {
         )
     }
 
-    pub(super) fn resolve_source_with_single_auto_extract(
-        &self,
-        source: &Path,
-        select: &[String],
-        kind_filter: ArchiveEntryKindFilter,
-        no_ignore: bool,
-        context: &OperationContext,
-        labels: AutoExtractResolutionLabels<'_>,
-    ) -> Result<ResolvedChecksumSource> {
-        self.resolve_source_with_auto_extract_with_mode(
-            source,
-            select,
-            context,
-            labels,
-            AutoExtractResolutionOptions {
-                no_extract: false,
-                no_ignore,
-                kind_filter,
-                mode: AutoExtractMode::SingleStep,
-                stop_on_disc_image_codec: false,
-            },
-        )
-    }
-
     fn resolve_source_with_auto_extract_with_mode(
         &self,
         source: &Path,

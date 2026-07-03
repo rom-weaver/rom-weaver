@@ -100,8 +100,8 @@ const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
   logger.trace("warmup extraction start");
   markWarmupStart();
   try {
-    const listed = await compression.list?.({ format: "zip", options, source });
-    const entries = (listed?.entries || [])
+    const probed = await compression.probe?.({ format: "zip", options, source });
+    const entries = (probed?.entries || [])
       .map((entry) => entry.filename)
       .filter((entry): entry is string => typeof entry === "string" && !!entry);
     const result = await compression.extract({ entries, format: "zip", options, source });
