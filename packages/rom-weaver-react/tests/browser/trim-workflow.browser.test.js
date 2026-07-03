@@ -113,15 +113,15 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
     expect(trimOutput).toMatch(/game \(trimmed\)\.nds$/i);
     expect(trimOutput).not.toMatch(/\/work\/game\.nds$/i);
 
-    const extractDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch");
-    expect(extractDispatches).toHaveLength(1);
+    const ingestDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson ingest dispatch");
+    expect(ingestDispatches).toHaveLength(1);
 
     await workflow.setOutputFormat("zip");
     await workflow.setOutputName("custom-trim.zip");
     const secondResult = await workflow.run();
     expect(secondResult.output.fileName).toBe("custom-trim.zip");
     await secondResult.output.dispose();
-    expect(logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch")).toHaveLength(1);
+    expect(logs.filter((entry) => String(entry?.message || "") === "runJson ingest dispatch")).toHaveLength(1);
   } finally {
     await workflow.dispose();
   }
