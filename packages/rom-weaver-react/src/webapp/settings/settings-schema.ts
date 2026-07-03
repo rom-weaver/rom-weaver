@@ -389,7 +389,6 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
-    requireOutputChecksumMatch: validation.requireOutputChecksumMatch,
     rvzBlockSize: compression.rvzBlockSize,
     rvzCodec: compression.rvzCodec,
     rvzCompressionLevel: compression.rvzCompressionLevel,
@@ -454,9 +453,6 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const requireInputChecksumMatch = readStoredField(storedBooleanSchema, loadedSettings.requireInputChecksumMatch);
     if (requireInputChecksumMatch !== undefined) settings.requireInputChecksumMatch = requireInputChecksumMatch;
-
-    const requireOutputChecksumMatch = readStoredField(storedBooleanSchema, loadedSettings.requireOutputChecksumMatch);
-    if (requireOutputChecksumMatch !== undefined) settings.requireOutputChecksumMatch = requireOutputChecksumMatch;
 
     const compressionProfile = readStoredField(storedStringSchema, loadedSettings.compressionProfile);
     if (compressionProfile !== undefined)
@@ -551,7 +547,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "requireInputChecksumMatch" || fieldKey === "requireOutputChecksumMatch") {
+    if (fieldKey === "requireInputChecksumMatch") {
       storedSettings.apply = {
         ...storedSettings.apply,
         validation: { ...storedSettings.apply?.validation, [fieldKey]: value },
@@ -605,8 +601,6 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
   applyBooleanFields(rawDraft, validation.settings, BOOLEAN_SETTINGS_FIELDS);
   validation.settings.requireInputChecksumMatch =
     readStoredField(storedBooleanSchema, rawDraft.requireInputChecksumMatch) !== false;
-  validation.settings.requireOutputChecksumMatch =
-    readStoredField(storedBooleanSchema, rawDraft.requireOutputChecksumMatch) !== false;
 
   for (const fieldKey of FORMAT_CODEC_FIELDS)
     assignSetting(
@@ -639,7 +633,6 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       language: settings.language,
       logLevel: settings.logLevel,
       requireInputChecksumMatch: settings.requireInputChecksumMatch !== false,
-      requireOutputChecksumMatch: settings.requireOutputChecksumMatch !== false,
       rvzBlockSize: settings.rvzBlockSize,
       rvzCodec: compressionLevels.rvzCodec,
       rvzCompressionLevel: compressionLevels.rvzCompressionLevel,

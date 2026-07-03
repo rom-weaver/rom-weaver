@@ -666,97 +666,6 @@ const invokeRomWeaverTrimWorker = async (
   };
 };
 
-const runRomWeaverChecksumWorker = async (
-  input: {
-    checksumAlgorithms: string[];
-    checksumStartOffset?: number;
-    fileName?: string;
-    filePath?: string;
-    fileSize?: number;
-    logLevel?: string;
-    /** Fail the checksum unless the source resolves to a known platform. Off by default —
-     * plain checksum happily hashes unidentified bytes. */
-    probe?: boolean;
-  },
-  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
-  onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ checksums: ChecksumResult }> => {
-  const filePath = String(input.filePath || "").trim();
-  if (!filePath) throw new Error("Checksum input path is required");
-  const algorithms = Array.isArray(input.checksumAlgorithms)
-    ? input.checksumAlgorithms
-        .map((algorithm) =>
-          String(algorithm || "")
-            .trim()
-            .toLowerCase(),
-        )
-        .filter((algorithm) => !!algorithm)
-    : [];
-  if (!algorithms.length) throw new Error("Checksum requires at least one algorithm");
-
-  const checksumStart =
-    typeof input.checksumStartOffset === "number" &&
-    Number.isFinite(input.checksumStartOffset) &&
-    input.checksumStartOffset > 0
-      ? BigInt(Math.floor(input.checksumStartOffset))
-      : undefined;
-  // Inject NO per-command thread cap — match the `ingest` dispatch exactly, which passes no
-  // `defaultThreads` and lets the Rust batch planner (`plan-extract-batch`) own the thread split.
-  // A previous cap pinned `threads` at the algorithm count, but the variant engine first splits the
-  // budget ACROSS the active variants (`per_variant = budget / active_variants`) and only then caps
-  // each variant at its algorithm count; a multi-variant ROM (e.g. GBA: raw + fix-header) therefore
-  // collapsed to `per_variant = 1` under the cap and hashed single-threaded — making a bare checksum
-  // slower than the inline checksum on the extract path, which feeds the engine the full budget. The
-  // checksum op is now scheduler-admitted (the I/O batch planner, with a mobile memory ceiling), so the
-  // pool-warming/OOM concern that motivated the cap is handled there, just like extract/ingest.
-  const command = createRomWeaverCommand("checksum", {
-    algo: algorithms,
-    no_extract: true,
-    source: filePath,
-    ...(checksumStart === undefined ? {} : { start: checksumStart }),
-    ...(input.probe ? { probe: true } : {}),
-  });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson checksum dispatch", {
-    algorithms,
-    command,
-    filePath,
-    startOffset: input.checksumStartOffset,
-  });
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({
-      logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
-      onLog,
-    }),
-  );
-  ensureRomWeaverSuccess(result, "Checksum calculation failed");
-
-  const terminal = getLastEvent(result);
-  const label = terminal ? getRomWeaverRunEventLabel(terminal) : "";
-  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
-  const checksums = {
-    ...parseChecksumLabel(label),
-    ...parseChecksumDetails(details),
-  };
-  const variants = parseChecksumVariants(details);
-  const romType = parseChecksumRomType(details);
-  return {
-    checksums: {
-      crc32: checksums.crc32 || 0,
-      md5: checksums.md5 || "",
-      romProbe: parseChecksumRomProbeLabel(label),
-      sha1: checksums.sha1 || "",
-      ...(checksums.adler32 === undefined ? {} : { adler32: checksums.adler32 }),
-      ...(romType ? { romType } : {}),
-      ...(variants ? { variants } : {}),
-    } as ChecksumResult,
-  };
-};
-
 // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
 // ROMs), and describe patches — the consolidated `ingest` command. One round-trip replaces the
 // webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
@@ -929,7 +838,6 @@ export {
   normalizeChdCodecArgs,
   normalizeCodecEntries,
   resolvePatchApplyThreadArg,
-  runRomWeaverChecksumWorker,
   runRomWeaverListWorker,
   runRomWeaverMatchSidecarsWorker,
   selectRomWeaverOutputPath,

@@ -345,6 +345,11 @@ msgstr "Cue"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "progress.decompress"
 msgstr "Eingabe wird entpackt"
 
@@ -705,21 +710,6 @@ msgstr "Kein kompatibler Patch gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Aktuell"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Angezeigtes Protokoll"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Vorheriges"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Keine Zeile passt zu „{q}“"
 
@@ -870,6 +860,11 @@ msgstr "vorhanden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Vorheriges"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.info.level"
 msgstr "Profil → Stufe: Min 0/−7 · Mittel 5/11 · Max 9/22 (Standard / zstd). Ein codec:stufe-Eintrag überschreibt dies."
 
@@ -980,11 +975,6 @@ msgstr "Eingabe-Übereinstimmung erzwingen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.requireOutputChecksumMatch"
-msgstr "Ausgabe-Übereinstimmung erzwingen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "Die erforderliche Worker-Unterstützung fehlt."
 
@@ -1072,6 +1062,11 @@ msgstr "Dateiname ohne Endung — das Format-Select steuert sie. Container (zip,
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Angezeigtes Protokoll"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

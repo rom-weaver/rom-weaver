@@ -46,7 +46,6 @@ type InputSettings = {
 
 type PatchValidationSettings = {
   requireInputChecksumMatch?: boolean;
-  requireOutputChecksumMatch?: boolean;
 };
 
 type PatchTransformSettings = {

@@ -250,10 +250,6 @@ const getNormalizedWorkflowSettings = (
         validation.requireInputChecksumMatch,
         source.requireInputChecksumMatch,
       ) as ApplyValidationSettings["requireInputChecksumMatch"] | undefined,
-      requireOutputChecksumMatch: readFirstDefined(
-        validation.requireOutputChecksumMatch,
-        source.requireOutputChecksumMatch,
-      ) as ApplyValidationSettings["requireOutputChecksumMatch"] | undefined,
     },
     workers: {
       ...workers,

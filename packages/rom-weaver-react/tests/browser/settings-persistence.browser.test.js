@@ -41,7 +41,6 @@ test("settings persistence round-trips every visible settings field", () => {
     language: "fr",
     logLevel: "debug",
     requireInputChecksumMatch: false,
-    requireOutputChecksumMatch: false,
     rvzBlockSize: 262144,
     rvzCodec: "zstd:7",
     rvzCompressionLevel: 7,

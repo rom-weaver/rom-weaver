@@ -34,7 +34,6 @@ type SettingsState = {
   logLevel: string;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
-  requireOutputChecksumMatch: boolean;
   compressionProfile: string;
   chdCreateCdCodecs: string;
   chdCreateDvdCodecs: string;
@@ -153,7 +152,6 @@ const SETTINGS_FIELD_ORDER = [
   "logLevel",
   "fixChecksum",
   "requireInputChecksumMatch",
-  "requireOutputChecksumMatch",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -350,15 +348,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("requireInputChecksumMatch"),
     labelDataLocalize: "Require input match",
-    layout: "large",
-  },
-  requireOutputChecksumMatch: {
-    defaultValue: true,
-    id: "settings-require-output-checksum-match",
-    key: "requireOutputChecksumMatch",
-    kind: "checkbox",
-    label: getSettingsLabel("requireOutputChecksumMatch"),
-    labelDataLocalize: "Require output match",
     layout: "large",
   },
   rvzBlockSize: {

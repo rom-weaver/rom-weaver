@@ -345,6 +345,11 @@ msgstr "Hoja cue"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Actual"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "progress.decompress"
 msgstr "Descomprimiendo entrada"
 
@@ -705,21 +710,6 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Actual"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Registro mostrado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Anterior"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Ninguna línea coincide con «{q}»"
 
@@ -870,6 +860,11 @@ msgstr "presente"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.info.level"
 msgstr "Perfil → nivel: Mín 0/−7 · Medio 5/11 · Máx 9/22 (estándar / zstd). Una entrada codec:nivel lo anula."
 
@@ -980,11 +975,6 @@ msgstr "Exigir coincidencia de entrada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.requireOutputChecksumMatch"
-msgstr "Exigir coincidencia de salida"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "El soporte de workers requerido no está disponible."
 
@@ -1072,6 +1062,11 @@ msgstr "Escribe el nombre sin extensión — el selector de formato la controla.
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Ajustes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Registro mostrado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

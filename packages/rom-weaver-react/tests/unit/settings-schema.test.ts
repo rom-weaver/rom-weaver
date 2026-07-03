@@ -51,7 +51,6 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.requireInputChecksumMatch).toBe(true);
-    expect(settings.requireOutputChecksumMatch).toBe(true);
     expect(settings.workerThreads).toBe("auto");
   });
 
@@ -127,8 +126,8 @@ describe("validateSettingsDraft", () => {
     const enabled = validateSettingsDraft(validDraft({ requireInputChecksumMatch: true }));
     expect(enabled.settings.requireInputChecksumMatch).toBe(true);
 
-    const disabled = validateSettingsDraft(validDraft({ requireOutputChecksumMatch: false }));
-    expect(disabled.settings.requireOutputChecksumMatch).toBe(false);
+    const disabled = validateSettingsDraft(validDraft({ requireInputChecksumMatch: false }));
+    expect(disabled.settings.requireInputChecksumMatch).toBe(false);
   });
 });
 
@@ -211,7 +210,6 @@ describe("buildSettingsForWebapp", () => {
     expect(typeof built.chdCreateDvdCodecs).toBe("string");
     expect(typeof built.rvzCodec).toBe("string");
     expect(built.requireInputChecksumMatch).toBe(true);
-    expect(built.requireOutputChecksumMatch).toBe(true);
   });
 
   it("merges extraSettings over the materialized base", () => {

@@ -345,6 +345,11 @@ msgstr "Cue"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Current"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "progress.decompress"
 msgstr "Decompressing input"
 
@@ -705,21 +710,6 @@ msgstr "No compatible patch was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Current"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Shown log"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Previous"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "No lines match “{q}”"
 
@@ -870,6 +860,11 @@ msgstr "present"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Previous"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.info.level"
 msgstr "Profile → level: Min 0/−7 · Medium 5/11 · Max 9/22 (standard / zstd). A codec:level entry in a codec list overrides this."
 
@@ -980,11 +975,6 @@ msgstr "Require input match"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.requireOutputChecksumMatch"
-msgstr "Require output match"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "Required worker support is unavailable."
 
@@ -1072,6 +1062,11 @@ msgstr "Set the filename without an extension — the format select controls it.
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Settings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Shown log"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

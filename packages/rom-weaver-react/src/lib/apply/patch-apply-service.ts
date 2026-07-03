@@ -11,7 +11,6 @@ import {
   type PatchFileInstance,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { verifyPatchedOutputChecksum } from "../output/output-checksum-verification.ts";
 import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
@@ -235,26 +234,6 @@ const parsePatchForApply = async (
   return createParsedPatchProxy(patchFile, requirements);
 };
 
-const verifyPatchedOutputIfRequired = async (
-  patchedRom: PatchFileInstance,
-  patches: Parameters<typeof verifyPatchedOutputChecksum>[0]["patches"],
-  options: ApplyWorkflowOptions | undefined,
-  runtime?: WorkflowRuntime,
-) => {
-  if (options?.validation?.requireOutputChecksumMatch !== true) return;
-  const calculateChecksums = runtime?.checksum.calculate;
-  const verificationResult = await verifyPatchedOutputChecksum({
-    calculateChecksums: calculateChecksums
-      ? ({ algorithms, source }) => calculateChecksums({ algorithms, source })
-      : undefined,
-    chunkSize: undefined,
-    patchedAsset: patchedRom,
-    patches,
-    runtime,
-  });
-  if (verificationResult.available && !verificationResult.matched) throw new Error(verificationResult.message);
-};
-
 const toPublicOutput = async (file: PatchFileInstance, runtime: WorkflowRuntime): Promise<PublicOutput> => {
   const cleanup = getPatchFileCleanup(file);
   const outputName = file.fileName || "patched.bin";
@@ -327,5 +306,4 @@ export {
   patchProbeRequirementsFromDescriptor,
   resolvePatchTargets,
   toPublicOutput,
-  verifyPatchedOutputIfRequired,
 };

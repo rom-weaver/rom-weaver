@@ -7,14 +7,12 @@ import {
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverTrimWorker,
-  runRomWeaverChecksumWorker,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import {
   createRuntimePreload,
   createSharedCompressionRuntime,
   createSharedPatchRuntime,
   createSharedTrimRuntime,
-  createWorkerChecksumRuntime,
   type RomSpecificRuntimeAdapter,
 } from "../../lib/runtime/workflow-runtime-core.ts";
 import { configureBrowserSourcePrimitives } from "../../storage/browser/browser-source-primitives.ts";
@@ -67,9 +65,6 @@ const createBrowserPublicOutputAdapter = (): RuntimePublicOutputAdapter => ({
     triggerBrowserDownload(blob, output.fileName);
   },
 });
-
-const createBrowserChecksumRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["checksum"] =>
-  createWorkerChecksumRuntime(workerIo, runRomWeaverChecksumWorker);
 
 // Stage the dropped source into OPFS, ingest it (classify + nested-extract + checksum ROMs in one
 // pass; describe patches), and return the parsed result plus adopted `outputs`. Archive ROM leaves
@@ -213,7 +208,6 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     binary: {
       assertSource: assertBrowserBinarySource,
     },
-    checksum: createBrowserChecksumRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),
     ingest: createBrowserIngestRuntime(workerIo),
     name: "browser",

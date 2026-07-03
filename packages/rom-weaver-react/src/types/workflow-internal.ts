@@ -23,7 +23,6 @@ type PatchWorkflowDeps = {
   reportProgress: typeof import("../lib/progress/progress-reporting.ts").reportProgress;
   resolvePatchTargets: typeof import("../lib/apply/patch-apply-service.ts").resolvePatchTargets;
   toPublicOutput: typeof import("../lib/apply/patch-apply-service.ts").toPublicOutput;
-  verifyPatchedOutputIfRequired: typeof import("../lib/apply/patch-apply-service.ts").verifyPatchedOutputIfRequired;
 };
 
 type CreateWorkflowDeps = PatchWorkflowDeps & {

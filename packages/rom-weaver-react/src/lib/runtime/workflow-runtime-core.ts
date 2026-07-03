@@ -2,7 +2,6 @@ import {
   forwardCreatePatchProgress,
   forwardRomSpecificProgress,
 } from "../../platform/shared/workflow-runtime-progress.ts";
-import type { ChecksumResult } from "../../types/checksum.ts";
 import type { PatchApplySummary } from "../../types/workflow-internal.ts";
 import type {
   RuntimePatchApplyWorkerInput,
@@ -122,19 +121,6 @@ type PatchRuntimeAdapter = {
   workerIo: RuntimeWorkerIo;
   workerOutputFailureMessage?: string;
 };
-
-type ChecksumWorkerRunner = (
-  input: {
-    checksumAlgorithms: string[];
-    checksumStartOffset?: number;
-    fileName?: string;
-    filePath?: string;
-    fileSize?: number;
-    logLevel?: string;
-  },
-  onProgress?: (progress: WorkflowRuntimeProgress) => void,
-  onLog?: (log: WorkflowRuntimeLog) => void,
-) => Promise<{ checksums: ChecksumResult }>;
 
 type RuntimePatchTraceContext = {
   logLevel?: string;
@@ -426,38 +412,6 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       );
     } finally {
       await cleanupWorkerSources(workerSources);
-    }
-  },
-});
-
-const createWorkerChecksumRuntime = (
-  workerIo: RuntimeWorkerIo,
-  runChecksumWorker: ChecksumWorkerRunner,
-): WorkflowRuntime["checksum"] => ({
-  calculate: async ({ source, algorithms, startOffset, logLevel, onLog, onProgress }) => {
-    const workerSource = await workerIo.stageSource({
-      fallbackFileName: "file.bin",
-      pathPrefix: "checksum-input",
-      scope: "checksum",
-      source,
-      trace: { logLevel, onLog },
-    });
-    try {
-      const result = await runChecksumWorker(
-        {
-          checksumAlgorithms: algorithms,
-          checksumStartOffset: startOffset,
-          fileName: workerSource.fileName || "file.bin",
-          filePath: workerSource.filePath,
-          fileSize: workerSource.size,
-          logLevel,
-        },
-        onProgress,
-        onLog,
-      );
-      return result.checksums;
-    } finally {
-      await workerSource.cleanup().catch(() => undefined);
     }
   },
 });
@@ -824,10 +778,4 @@ const emitPreloadLog = (
 };
 
 export type { RomSpecificRuntimeAdapter };
-export {
-  createRuntimePreload,
-  createSharedCompressionRuntime,
-  createSharedPatchRuntime,
-  createSharedTrimRuntime,
-  createWorkerChecksumRuntime,
-};
+export { createRuntimePreload, createSharedCompressionRuntime, createSharedPatchRuntime, createSharedTrimRuntime };

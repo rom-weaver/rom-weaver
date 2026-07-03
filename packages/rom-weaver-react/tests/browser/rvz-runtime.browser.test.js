@@ -13,7 +13,7 @@ const loadFixtureBytes = async (filePath) => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
-test("rom-weaver runtime checksum returns structured variants", async () => {
+test("rom-weaver runtime ingest returns structured checksum variants", async () => {
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -24,12 +24,13 @@ test("rom-weaver runtime checksum returns structured variants", async () => {
   await browserRuntime.vfs.truncate(source, 0);
   await browserRuntime.vfs.write(source, bytes, { fileOffset: 0 });
   try {
-    const checksums = await browserRuntime.checksum.calculate?.({
-      algorithms: ["crc32", "md5", "sha1"],
+    const { result } = await browserRuntime.ingest.run({
+      checksumAlgorithms: ["crc32", "md5", "sha1"],
       source,
     });
-    const removeHeader = checksums?.variants?.find((variant) => variant.id === "remove-header");
-    expect(checksums?.variants?.some((variant) => variant.id === "raw")).toBe(true);
+    const variants = result.assets[0]?.checksumVariants ?? [];
+    const removeHeader = variants.find((variant) => variant.id === "remove-header");
+    expect(variants.some((variant) => variant.id === "raw")).toBe(true);
     expect(removeHeader?.applyCompatibility?.removeHeader).toBe(true);
     expect(removeHeader?.applyCompatibility?.strip_header).toBe(true);
     expect(removeHeader?.checksums.crc32).toMatch(/^[0-9a-f]{8}$/i);
@@ -49,12 +50,12 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
   const checksumSourceBytes = new Uint8Array(2 * 1024 * 1024).map((_, index) => index & 0xff);
   await browserRuntime.vfs.truncate(checksumSource, 0);
   await browserRuntime.vfs.write(checksumSource, checksumSourceBytes, { fileOffset: 0 });
-  const checksums = await browserRuntime.checksum.calculate?.({
-    algorithms: ["crc32"],
+  const { result: checksumResult } = await browserRuntime.ingest.run({
+    checksumAlgorithms: ["crc32"],
     onProgress: (progress) => checksumProgress.push(progress),
     source: checksumSource,
   });
-  expect(checksums?.crc32).toBeTypeOf("number");
+  expect(checksumResult.assets[0]?.checksums.crc32).toMatch(/^[0-9a-f]{8}$/i);
   expect(checksumProgress.some((entry) => entry.percent > 0 && entry.percent < 100)).toBe(true);
 
   const source = `${WORKER_OPFS_MOUNTPOINT}/game-${runId}.rvz`;

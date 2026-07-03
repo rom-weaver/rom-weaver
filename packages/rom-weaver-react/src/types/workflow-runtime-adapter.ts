@@ -6,7 +6,7 @@ import type {
   PatchValidateCommand,
   ThreadBudget,
 } from "../wasm/index.ts";
-import type { ChecksumResult, ChecksumVariant, RomTypeTag } from "./checksum.ts";
+import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
 import type { OutputStorageKind } from "./output.ts";
@@ -229,7 +229,6 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   ppfUndoAware?: PatchApplyCommand["ppf_undo_aware"];
   removeHeader?: PatchApplyCommand["strip_header"];
   requireInputChecksumMatch?: boolean;
-  requireOutputChecksumMatch?: boolean;
   validateWithChecksums?: PatchApplyCommand["validate_with_checksums"];
   validateWithOutputChecksums?: PatchApplyCommand["validate_with_output_checksums"];
   workerThreads?: RuntimeThreadBudgetInput;
@@ -323,17 +322,6 @@ type WorkflowRuntimeCompression = {
 
 type WorkflowRuntimeBinary = {
   assertSource: (source: SourceRef, context: string) => void;
-};
-
-type WorkflowRuntimeChecksum = {
-  calculate?: (input: {
-    source: unknown;
-    algorithms: string[];
-    startOffset?: number;
-    logLevel?: LogLevel;
-    onLog?: (log: WorkflowRuntimeLog) => void;
-    onProgress?: (progress: WorkflowRuntimeProgress) => void;
-  }) => Promise<ChecksumResult>;
 };
 
 type WorkflowRuntimePatch = {
@@ -489,7 +477,6 @@ type WorkflowRuntime = {
   useBlobOutput: boolean;
   compression: WorkflowRuntimeCompression;
   binary: WorkflowRuntimeBinary;
-  checksum: WorkflowRuntimeChecksum;
   ingest?: WorkflowRuntimeIngest;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
    * one unit even though each file is staged independently. Optional — runtimes without a batch planner

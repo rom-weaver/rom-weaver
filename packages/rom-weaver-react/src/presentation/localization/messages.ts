@@ -82,10 +82,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.requireInputChecksumMatch",
     message: "Require input match",
   }),
-  "settings.requireOutputChecksumMatch": msg({
-    id: "settings.requireOutputChecksumMatch",
-    message: "Require output match",
-  }),
   "settings.rvzBlockSize": msg({ id: "settings.rvzBlockSize", message: "RVZ block size" }),
   "settings.rvzCodec": msg({ id: "settings.rvzCodec", message: "RVZ codec" }),
   "settings.rvzCompressionLevel": msg({ id: "settings.rvzCompressionLevel", message: "Level override" }),

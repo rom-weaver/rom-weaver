@@ -31,7 +31,6 @@ import {
   parsePatchForApply,
   resolvePatchTargets,
   toPublicOutput,
-  verifyPatchedOutputIfRequired,
 } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
@@ -494,10 +493,6 @@ const runApplyWorkflow = async (
               options: {
                 ...createWorkerApplyOptions(options, workerOutputName),
                 ...(ppfUndoAware ? { ppfUndoAware: true } : {}),
-                requireOutputChecksumMatch:
-                  typeof options.validation?.requireOutputChecksumMatch === "boolean"
-                    ? options.validation.requireOutputChecksumMatch
-                    : false,
                 ...(validateWithChecksums.length ? { validateWithChecksums } : {}),
                 ...(validateWithOutputChecksums.length ? { validateWithOutputChecksums } : {}),
               },
@@ -538,16 +533,6 @@ const runApplyWorkflow = async (
           sourceSize: asset.size,
           workerOutputName,
           workerReason: "worker apply required",
-        }),
-      );
-      await traceWorkflowStageBlock(
-        options,
-        "verify",
-        "output",
-        () => deps.verifyPatchedOutputIfRequired(patched, assetPatches, options, runtime),
-        () => ({
-          patchCount: assetPatches.length,
-          sourceName: asset.fileName,
         }),
       );
       if (inputAssets.length > 1) patched.fileName = asset.fileName;
@@ -636,7 +621,6 @@ const patchWorkflowDeps = {
   reportProgress,
   resolvePatchTargets,
   toPublicOutput,
-  verifyPatchedOutputIfRequired,
 };
 
 export { patchWorkflowDeps, runApplyWorkflow };
