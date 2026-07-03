@@ -1,0 +1,61 @@
+name: Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: docker
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      WASI_SDK_VERSION: "33"
+      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config sccache
+
+      - name: Install Rust toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1-threads
+
+      - name: Install mise (node, wasm-opt, ripgrep)
+        uses: https://github.com/jdx/mise-action@v2
+        with:
+          install: true
+
+      - name: Install WASI SDK
+        run: |
+          curl --fail --location --show-error \
+            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
+          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      - name: Install package dependencies
+        run: npm ci --prefix packages/rom-weaver-react
+
+      - name: Build WASM
+        run: mise run build-wasm-prod
+
+      - name: Build webapp
+        run: npm --prefix packages/rom-weaver-react run build
+
+      - name: Publish to forgejo-pages
+        uses: https://codeberg.org/git-pages/action@v2
+        with:
+          # Project page -> https://bcasey.forgejo-pages.koof.win/rom-weaver/
+          site:   https://${{ forge.event.repository.owner.username }}.forgejo-pages.koof.win/rom-weaver/
+          server: forgejo-pages.koof.win
+          token:  ${{ forge.token }}
+          source: packages/rom-weaver-react/dist/
