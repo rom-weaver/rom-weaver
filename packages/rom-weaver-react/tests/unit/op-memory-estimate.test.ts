@@ -95,11 +95,11 @@ describe("estimateScheduledThreads", () => {
     expect(estimateScheduledThreads(topLevel("list"), 100 * MIB, 0)).toBe(0);
   });
 
-  it("keeps compress heavy: full request when size is unknown, size-scaled when known", () => {
+  it("keeps compress heavy: full requested thread count regardless of size", () => {
     expect(estimateScheduledThreads(topLevel("compress"), 0, 8)).toBe(8);
-    expect(estimateScheduledThreads(topLevel("compress"), 2 * MIB, 8)).toBe(1);
+    expect(estimateScheduledThreads(topLevel("compress"), 2 * MIB, 8)).toBe(8);
     expect(estimateScheduledThreads(topLevel("compress"), 1024 * MIB, 8)).toBe(8);
-    expect(estimateScheduledThreads(topLevel("compress"), 48 * MIB, 8)).toBe(3);
+    expect(estimateScheduledThreads(topLevel("compress"), 48 * MIB, 8)).toBe(8);
   });
 
   it("never exceeds the requested thread count", () => {

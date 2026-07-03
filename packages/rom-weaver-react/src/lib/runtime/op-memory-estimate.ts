@@ -63,9 +63,8 @@ export function estimateOpWorkingSetBytes(command: RomWeaverCommand, inputBytes:
 // Commands request "auto" threads (the whole budget) by default, but most do not actually use every
 // core — a BPS/UPS apply runs a single-threaded codec, a trim just truncates, and small extracts are
 // I/O-bound. The scheduler must gate on the cores an operation will REALISTICALLY use, otherwise one
-// light operation reserves the whole machine and nothing runs beside it. Only compress is genuinely
-// CPU-parallel, so it scales with input size; everything else stays light.
-const COMPRESS_BYTES_PER_THREAD = 16 * 1024 * 1024;
+// light operation reserves the whole machine and nothing runs beside it. Compress is the exception: it
+// is genuinely CPU-parallel down to small chunk sizes, so it uses the whole budget (see below).
 const LIGHT_BYTES_PER_THREAD = 64 * 1024 * 1024;
 
 const isSequentialPatch = (command: RomWeaverCommand): boolean =>
@@ -84,14 +83,17 @@ export function estimateScheduledThreads(
 ): number {
   if (requestedThreads <= 0) return 0;
   if (command.type === "trim" || isSequentialPatch(command)) return 1;
-  const known = Number.isFinite(inputBytes) && inputBytes > 0;
+  // Compress is genuinely CPU-parallel down to small chunk sizes (CHD hunks ~19 KiB, RVZ chunks
+  // 128 KiB-2 MiB), so it uses every configured thread regardless of input size — size-scaling here
+  // would force small ROMs onto a single thread (this estimate is forced back onto the dispatched
+  // command). The scheduler's memory gate still prevents two heavy ops from overlapping.
+  if (command.type === "compress") return requestedThreads;
   // Note: extract/ingest/checksum no longer rely on this estimate — they are admitted by the Rust batch
   // planner (`plan-extract-batch`), which owns their thread split via `fair_thread_allotment`. This
-  // function now governs only the non-I/O ops (compress stays size-scaled and CPU-heavy; everything
-  // else stays light).
-  if (!known) return command.type === "compress" ? requestedThreads : 1;
-  const bytesPerThread = command.type === "compress" ? COMPRESS_BYTES_PER_THREAD : LIGHT_BYTES_PER_THREAD;
-  return Math.min(requestedThreads, Math.max(1, Math.ceil(inputBytes / bytesPerThread)));
+  // function now governs only the remaining non-I/O ops, which stay light.
+  const known = Number.isFinite(inputBytes) && inputBytes > 0;
+  if (!known) return 1;
+  return Math.min(requestedThreads, Math.max(1, Math.ceil(inputBytes / LIGHT_BYTES_PER_THREAD)));
 }
 
 type DeviceMemoryNavigator = {
