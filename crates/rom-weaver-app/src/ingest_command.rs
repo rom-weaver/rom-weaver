@@ -330,7 +330,7 @@ impl CliApp {
             },
             context,
         )?;
-        let (is_rom, _summaries, _has_rom, has_patch) =
+        let (is_rom, summaries, _has_rom, has_patch) =
             Self::classify_container_entries(&entries, !no_ignore);
         trace!(
             source = %source.display(),
@@ -365,9 +365,40 @@ impl CliApp {
 
         // Resolve split-bin only for the ROM branch: explicit arg wins; otherwise a multi-track CD
         // CHD prompts the host (per-track vs single BIN), defaulting to per-track split when the host
-        // cannot be asked (matches the prior auto-split behavior).
+        // cannot be asked (matches the prior auto-split behavior). Resolved BEFORE the patch manifest
+        // streams so the only mid-ingest host prompt (split choice) settles before the host opens the
+        // patch dialog — the two single-modal prompts never overlap.
         let resolved_split_bin =
             self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
+        // A mixed archive (ROM + sidecar patches) enumerates and extracts its patches FIRST — cheap
+        // relative to the ROM's fused extract+checksum below — and streams them in a `patch-manifest`
+        // event. That lets the host surface the patch-selection dialog while the ROM is still being
+        // hashed, instead of waiting for the whole ingest (incl. checksum) to return. The sidecar
+        // patches are enumerated independently of the ROM keep-one `select` (a chosen ROM must not hide
+        // the bundle's patches) and never prompt — every patch leaf is returned so the host drives the
+        // patch choice. `rom_hint` for libretro `sidecar_order` matching comes from the classified
+        // entries (the ROM entry's file name) since the ROM asset is not extracted yet.
+        let mut patches = if has_patch {
+            let rom_hint = summaries
+                .iter()
+                .find(|entry| entry.kind.as_deref() == Some("rom"))
+                .map(|entry| Self::archive_entry_file_name(&entry.file_name).to_string());
+            let patches = self.ingest_patch_leaves(
+                handler,
+                source,
+                out_dir,
+                &[],
+                no_ignore,
+                no_nested_extract,
+                false,
+                rom_hint.as_deref(),
+                context,
+            )?;
+            self.emit_patch_manifest(source, &patches);
+            patches
+        } else {
+            Vec::new()
+        };
         let assets = match self.ingest_rom_leaves(
             handler,
             source,
@@ -386,19 +417,23 @@ impl CliApp {
                 // When the patches actually live a level down, the rom-filtered descent finds no ROM and
                 // errors. Re-ingest as patches before surfacing that error: a bundle that is patches all
                 // the way down routes as a patch source; anything else keeps the original ROM failure.
-                let patches = self
-                    .ingest_patch_leaves(
-                        handler,
-                        source,
-                        out_dir,
-                        &raw_selections,
-                        no_ignore,
-                        no_nested_extract,
-                        true,
-                        None,
-                        context,
-                    )
-                    .unwrap_or_default();
+                // Reuse the mixed-archive pre-pass patches when it already found some (top-level patch
+                // names); otherwise (patches only nested below) enumerate now.
+                if patches.is_empty() {
+                    patches = self
+                        .ingest_patch_leaves(
+                            handler,
+                            source,
+                            out_dir,
+                            &raw_selections,
+                            no_ignore,
+                            no_nested_extract,
+                            true,
+                            None,
+                            context,
+                        )
+                        .unwrap_or_default();
+                }
                 if patches.is_empty() {
                     return Err(rom_error);
                 }
@@ -414,26 +449,6 @@ impl CliApp {
                     patches,
                 });
             }
-        };
-        // A mixed archive (ROM + sidecar patches) surfaces both so the host can offer applying the
-        // bundled patches without losing the ROM checksum. The sidecar patches are enumerated
-        // independently of the ROM keep-one `select` (a chosen ROM must not hide the bundle's patches)
-        // and never prompt — every patch leaf is returned so the host drives the patch choice.
-        let patches = if has_patch {
-            let rom_hint = assets.first().map(|asset| asset.file_name.clone());
-            self.ingest_patch_leaves(
-                handler,
-                source,
-                out_dir,
-                &[],
-                no_ignore,
-                no_nested_extract,
-                false,
-                rom_hint.as_deref(),
-                context,
-            )?
-        } else {
-            Vec::new()
         };
         Ok(IngestOutcome {
             kind: IngestKind::Rom,
@@ -966,6 +981,48 @@ impl CliApp {
             .and_then(|extension| extension.to_str())
             .map(|extension| extension.to_ascii_lowercase())
             .unwrap_or_else(|| "unknown".to_string())
+    }
+
+    /// Stream the sidecar patch descriptors the instant they are enumerated — before the ROM is
+    /// hashed — so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
+    /// instead of waiting for the whole ingest to return. Purely additive and gated on streaming
+    /// output (`emit_progress_events`), so the CLI report bytes are unchanged; the identical
+    /// descriptors also ride the terminal `details.ingest.patches`. The leaf files referenced here are
+    /// already extracted to `out_dir` by the patch sub-pass, so the host can act on the picks at once.
+    fn emit_patch_manifest(&self, source: &Path, patches: &[PatchDescriptor]) {
+        if !self.emit_progress_events || patches.is_empty() {
+            return;
+        }
+        let source_file_name = source
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut manifest = Map::new();
+        manifest.insert("source_file_name".to_string(), json!(source_file_name));
+        manifest.insert("patches".to_string(), json!(patches));
+        let mut details = Map::new();
+        details.insert("patch_manifest".to_string(), Value::Object(manifest));
+        trace!(
+            source = %source.display(),
+            patch_count = patches.len(),
+            "emitting patch manifest event"
+        );
+        self.reporter.emit(ProgressEvent {
+            command: "ingest".to_string(),
+            family: OperationFamily::Container,
+            format: None,
+            stage: "patch-manifest".to_string(),
+            label: format!(
+                "found {} sidecar patch(es) in `{}`",
+                patches.len(),
+                source.display()
+            ),
+            details: Some(Value::Object(details)),
+            percent: None,
+            elapsed_ms: None,
+            status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(None)
+        });
     }
 
     fn ingest_success_report(

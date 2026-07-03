@@ -657,6 +657,66 @@ fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
 }
 
 #[test]
+fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
+    // The sidecar patch descriptors stream in an early `patch-manifest` event — before the ROM is
+    // checksummed and before the terminal report — so the host can open the patch-selection dialog
+    // while the (slower) ROM hashing finishes instead of waiting for the whole ingest to return.
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), with_nes_header(b"mixed rom payload")).expect("rom fixture");
+    let patch = create_bps_patch(&temp, b"abcdefgh", b"abZZefgh", "game.bps");
+    let archive = temp.child("mixed-stream.zip");
+    command_stdout(
+        &[
+            "compress",
+            rom.path().to_str().expect("path"),
+            patch.to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let out_dir = temp.child("ingest-stream-out");
+
+    let events = run_json_events(
+        &[
+            "ingest",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let manifest_index = events
+        .iter()
+        .position(|event| event["stage"] == "patch-manifest")
+        .expect("expected an early patch-manifest event");
+    let terminal_index = events
+        .iter()
+        .rposition(|event| event["status"] == "succeeded")
+        .expect("expected a terminal succeeded event");
+    assert!(
+        manifest_index < terminal_index,
+        "patch-manifest must precede the terminal report"
+    );
+    let patches = events[manifest_index]["details"]["patch_manifest"]["patches"]
+        .as_array()
+        .expect("patch-manifest patches array");
+    let descriptor = patches
+        .iter()
+        .find(|descriptor| descriptor["file_name"] == "game.bps")
+        .expect("the streamed patch-manifest carries the sidecar patch descriptor");
+    assert_eq!(
+        descriptor["is_valid_patch"], true,
+        "the streamed descriptor carries the same parsed metadata as the terminal result"
+    );
+}
+
+#[test]
 fn ingest_rejects_unsupported_checksum_algorithm() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
