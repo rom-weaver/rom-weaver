@@ -217,11 +217,18 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
-  logServiceWorker("install event; calling skipWaiting", {
+  // First install (no active worker yet): take control immediately so the page can gain
+  // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
+  // must WAIT — registerType is "prompt", so activation happens only when the client sends
+  // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
+  // running app and reads as an involuntary reload.
+  const isFirstInstall = !self.registration.active;
+  logServiceWorker("install event", {
+    isFirstInstall,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
   });
-  self.skipWaiting();
+  if (isFirstInstall) self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -259,7 +266,9 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (!event.data) return;
 
-  if (event.data.action === "skip-waiting") {
+  // "SKIP_WAITING" (type) is what virtual:pwa-register posts on updateServiceWorker(true);
+  // "skip-waiting" (action) is the app's own convention. Accept both.
+  if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
     logServiceWorker("message received; calling skipWaiting");
     self.skipWaiting();
     return;
