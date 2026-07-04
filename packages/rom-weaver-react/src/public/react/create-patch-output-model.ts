@@ -1,4 +1,4 @@
-import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
+import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import type { BrowserSaveDestination, RuntimePatchCreateFormatCandidates } from "../../platform/browser/browser-api.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
@@ -18,8 +18,14 @@ import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
 const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
-  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  return appendFileNameExtension(normalizedOutputName, patchType || "bps");
+  // Ensure the name ends with the real patch extension, not just any dotted
+  // segment: a version like "Game 2.2" reads as extension ".2" to a generic
+  // check, so the format extension never gets appended and Rust's checksum-name
+  // embed jams the crc into the version ("Game 2 [crc32:…].2") — an unreadable
+  // output name. We know the target extension here, so key off it directly.
+  const extension = (patchType || "bps").toLowerCase();
+  if (normalizedOutputName.toLowerCase().endsWith(`.${extension}`)) return normalizedOutputName;
+  return appendFileNameExtension(normalizedOutputName, extension);
 };
 
 const getFileExtensionLabel = (fileName: string) => {
