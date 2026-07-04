@@ -41,13 +41,20 @@ jobs:
         with:
           targets: wasm32-wasip1-threads
 
-      # Caches ~/.cargo (registry + git) and target/ dependency artifacts.
-      # The crates.io dep tree is the bulk of the compile; workspace crates
-      # (incl. the libarchive C build) still rebuild each run.
-      - name: Rust build cache
-        uses: https://github.com/Swatinem/rust-cache@v2
+      # Full (unpruned) cargo + target cache so the libarchive C/cmake build and
+      # dependency compiles are reused, not just the registry. Keyed on Cargo.lock;
+      # restore-keys gives a partial hit when deps change. This runner's
+      # actions/cache restores absolute paths (tar -P), so ~/.cargo works too.
+      - name: Cargo + target cache
+        uses: actions/cache@v4
         with:
-          shared-key: pages-wasm
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-v1-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-v1-
 
       - name: Install mise (node, rust)
         uses: https://github.com/jdx/mise-action@v2
@@ -79,9 +86,11 @@ jobs:
           # from --sysroot alone. Point bindgen straight at the include dir that
           # actually holds sys/stat.h for our target, plus the common include.
           SYSROOT="$SDK/share/wasi-sysroot"
-          STATH="$(find "$SYSROOT" -path '*wasm32-wasip1-threads*/sys/stat.h' 2>/dev/null | head -n1)"
-          [ -z "$STATH" ] && STATH="$(find "$SYSROOT" -path '*/sys/stat.h' 2>/dev/null | head -n1)"
-          INCDIR="$(dirname "$(dirname "$STATH")")"
+          INCDIR="$SYSROOT/include/wasm32-wasip1-threads"
+          if [ ! -f "$INCDIR/sys/stat.h" ]; then
+            STATH="$(find "$SYSROOT" -path '*/sys/stat.h' 2>/dev/null | head -n1)"
+            INCDIR="$(dirname "$(dirname "$STATH")")"
+          fi
           # Only add the sysroot include paths — do NOT override --target here.
           # build.rs already sets --target=$HOST (needed for the complete
           # function set); forcing the wasm target #if's some archive_* funcs
