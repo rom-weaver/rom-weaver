@@ -20,8 +20,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config sccache
+          apt-get update
+          apt-get install --yes brotli cmake ninja-build pkg-config sccache
 
       - name: Install Rust toolchain
         uses: https://github.com/dtolnay/rust-toolchain@stable
