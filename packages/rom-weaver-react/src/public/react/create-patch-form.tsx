@@ -885,7 +885,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       title: "Patch",
     },
     sourcesEmpty: createSourcesEmpty,
-    swap: createInputsSelected ? { disabled: uploadDisabled, onSwap: swapCreateSources } : null,
+    swap: createInputsSelected
+      ? { disabled: uploadDisabled || createPreparationPending || createQueued, onSwap: swapCreateSources }
+      : null,
   };
 
   return <CreatePatchFormView {...model} />;
