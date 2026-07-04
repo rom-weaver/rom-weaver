@@ -12,10 +12,10 @@ jobs:
       CARGO_TERM_COLOR: always
       WASI_SDK_VERSION: "33"
       WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
-      # The Forgejo runner injects its own token as GITHUB_TOKEN; mise would
-      # forward it to api.github.com and get 401. Blank it so mise queries
-      # GitHub anonymously (a couple of release lookups for binaryen/ripgrep).
-      GITHUB_TOKEN: ""
+      # mise resolves binaryen/ripgrep via the GitHub API, but the Forgejo
+      # runner's injected token 401s there. Skip them in mise: ripgrep isn't
+      # needed for this build, and wasm-opt (binaryen) is installed directly below.
+      MISE_DISABLE_TOOLS: "aqua:WebAssembly/binaryen,aqua:BurntSushi/ripgrep"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,11 +32,10 @@ jobs:
         with:
           targets: wasm32-wasip1-threads
 
-      - name: Install mise (node, wasm-opt, ripgrep)
+      - name: Install mise (node, rust)
         uses: https://github.com/jdx/mise-action@v2
         with:
           install: true
-          github_token: ""
 
       - name: Install WASI SDK
         run: |
@@ -46,6 +45,14 @@ jobs:
           echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
           echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      - name: Install binaryen (wasm-opt), pinned to match mise
+        run: |
+          curl --fail --location --show-error \
+            --output "$RUNNER_TEMP/binaryen.tar.gz" \
+            "https://github.com/WebAssembly/binaryen/releases/download/version_129/binaryen-version_129-x86_64-linux.tar.gz"
+          tar --extract --gzip --file "$RUNNER_TEMP/binaryen.tar.gz" --directory "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_129/bin" >> "$GITHUB_PATH"
 
       - name: Install package dependencies
         run: npm ci --prefix packages/rom-weaver-react
