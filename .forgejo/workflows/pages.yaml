@@ -53,7 +53,17 @@ jobs:
             "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
           echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+          SDK="$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux"
+          echo "WASI_SDK_PATH=$SDK" >> "$GITHUB_ENV"
+          # libarchive-sys runs bindgen with the *host* libclang (Debian's here,
+          # not Ubuntu's), which doesn't resolve WASI SDK 33's multiarch sysroot
+          # from --sysroot alone. Point bindgen straight at the include dir that
+          # actually holds sys/stat.h for our target, plus the common include.
+          SYSROOT="$SDK/share/wasi-sysroot"
+          STATH="$(find "$SYSROOT" -path '*wasm32-wasip1-threads*/sys/stat.h' 2>/dev/null | head -n1)"
+          [ -z "$STATH" ] && STATH="$(find "$SYSROOT" -path '*/sys/stat.h' 2>/dev/null | head -n1)"
+          INCDIR="$(dirname "$(dirname "$STATH")")"
+          echo "BINDGEN_EXTRA_CLANG_ARGS=--target=wasm32-wasip1-threads --sysroot=$SYSROOT -isystem $INCDIR -isystem $SYSROOT/include" >> "$GITHUB_ENV"
 
       - name: Install binaryen (wasm-opt), pinned to match mise
         run: |
