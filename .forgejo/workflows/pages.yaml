@@ -41,19 +41,38 @@ jobs:
         with:
           targets: wasm32-wasip1-threads
 
+      # Caches ~/.cargo (registry + git) and target/ dependency artifacts.
+      # The crates.io dep tree is the bulk of the compile; workspace crates
+      # (incl. the libarchive C build) still rebuild each run.
+      - name: Rust build cache
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          shared-key: pages-wasm
+
       - name: Install mise (node, rust)
         uses: https://github.com/jdx/mise-action@v2
         with:
           install: true
 
+      - name: Cache WASI SDK
+        uses: actions/cache@v4
+        with:
+          path: /opt/wasi-sdk-${{ env.WASI_SDK_VERSION }}
+          key: wasi-sdk-${{ env.WASI_SDK_VERSION }}-x86_64-linux
+
       - name: Install WASI SDK
         run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-          SDK="$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux"
+          # Stable path (not $RUNNER_TEMP) so it's cacheable across runs.
+          SDK="/opt/wasi-sdk-${WASI_SDK_VERSION}"
+          if [ ! -x "$SDK/bin/clang" ]; then
+            curl --fail --location --show-error \
+              --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
+              "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+            echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
+            mkdir -p "$SDK"
+            tar --extract --gzip --strip-components=1 \
+              --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$SDK"
+          fi
           echo "WASI_SDK_PATH=$SDK" >> "$GITHUB_ENV"
           # libarchive-sys runs bindgen with the *host* libclang (Debian's here,
           # not Ubuntu's), which doesn't resolve WASI SDK 33's multiarch sysroot
@@ -69,13 +88,31 @@ jobs:
           # out and breaks downstream crates with E0432.
           echo "BINDGEN_EXTRA_CLANG_ARGS=-isystem $INCDIR -isystem $SYSROOT/include" >> "$GITHUB_ENV"
 
+      - name: Cache binaryen
+        uses: actions/cache@v4
+        with:
+          path: /opt/binaryen-129
+          key: binaryen-129-x86_64-linux
+
       - name: Install binaryen (wasm-opt), pinned to match mise
         run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/binaryen.tar.gz" \
-            "https://github.com/WebAssembly/binaryen/releases/download/version_129/binaryen-version_129-x86_64-linux.tar.gz"
-          tar --extract --gzip --file "$RUNNER_TEMP/binaryen.tar.gz" --directory "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/binaryen-version_129/bin" >> "$GITHUB_PATH"
+          BIN=/opt/binaryen-129
+          if [ ! -x "$BIN/bin/wasm-opt" ]; then
+            curl --fail --location --show-error \
+              --output "$RUNNER_TEMP/binaryen.tar.gz" \
+              "https://github.com/WebAssembly/binaryen/releases/download/version_129/binaryen-version_129-x86_64-linux.tar.gz"
+            mkdir -p "$BIN"
+            tar --extract --gzip --strip-components=1 \
+              --file "$RUNNER_TEMP/binaryen.tar.gz" --directory "$BIN"
+          fi
+          echo "$BIN/bin" >> "$GITHUB_PATH"
+
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('packages/rom-weaver-react/package-lock.json') }}
+          restore-keys: npm-
 
       - name: Install package dependencies
         run: npm ci --prefix packages/rom-weaver-react
