@@ -74,9 +74,12 @@ export async function openSyncAccessHandle({
   if (mode === undefined) return createSyncAccessHandleWithRetry(handle, undefined);
   try {
     return await createSyncAccessHandleWithRetry(handle, { mode });
-  } catch (error) {
-    if (mode === "read-only") return createSyncAccessHandleWithRetry(handle, undefined);
-    throw error;
+  } catch {
+    // Some WebKit/iOS builds reject the `mode` option — notably "readwrite-unsafe" — with
+    // InvalidStateError, which the proxy would otherwise surface as a fatal EIO and fail the whole
+    // run. The default (no-option) handle is plain read-write: always supported, and strictly safer
+    // than "unsafe". Fall back to it for any requested mode before giving up.
+    return createSyncAccessHandleWithRetry(handle, undefined);
   }
 }
 
