@@ -63,7 +63,11 @@ jobs:
           STATH="$(find "$SYSROOT" -path '*wasm32-wasip1-threads*/sys/stat.h' 2>/dev/null | head -n1)"
           [ -z "$STATH" ] && STATH="$(find "$SYSROOT" -path '*/sys/stat.h' 2>/dev/null | head -n1)"
           INCDIR="$(dirname "$(dirname "$STATH")")"
-          echo "BINDGEN_EXTRA_CLANG_ARGS=--target=wasm32-wasip1-threads --sysroot=$SYSROOT -isystem $INCDIR -isystem $SYSROOT/include" >> "$GITHUB_ENV"
+          # Only add the sysroot include paths — do NOT override --target here.
+          # build.rs already sets --target=$HOST (needed for the complete
+          # function set); forcing the wasm target #if's some archive_* funcs
+          # out and breaks downstream crates with E0432.
+          echo "BINDGEN_EXTRA_CLANG_ARGS=-isystem $INCDIR -isystem $SYSROOT/include" >> "$GITHUB_ENV"
 
       - name: Install binaryen (wasm-opt), pinned to match mise
         run: |
