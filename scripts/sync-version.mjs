@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, execSync } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 
 const rootDir = process.cwd();
 const packageJsonPath = join(rootDir, "package.json");
@@ -134,25 +134,17 @@ function updatePackageLock(packageDir) {
   }
 }
 
-function stageVersionFiles(cargoTomlPaths) {
-  const cargoTomlRelativePaths = cargoTomlPaths.map((filePath) => relative(rootDir, filePath));
-  const files = [
-    "package.json",
-    "package-lock.json",
-    "Cargo.toml",
-    "Cargo.lock",
-    ...cargoTomlRelativePaths.filter((filePath) => filePath !== "Cargo.toml"),
-    ...syncedPackageJsonPaths,
-    "packages/rom-weaver-react/package-lock.json",
-  ];
-
+function stageAllChanges() {
+  // Stage everything the bump touched so nothing is left out of the version
+  // commit. npm requires a clean tree to start `npm version`, so the only
+  // changes present here are the ones this bump produced.
   try {
-    execFileSync("git", ["add", "--", ...files], {
+    execFileSync("git", ["add", "-A"], {
       cwd: rootDir,
       stdio: "inherit",
     });
   } catch (_error) {
-    console.warn("Warning: Could not stage version files (git may not be available)");
+    console.warn("Warning: Could not stage changes (git may not be available)");
   }
 }
 
@@ -189,7 +181,7 @@ async function main() {
   }
 
   if (changed || bumpType) {
-    stageVersionFiles(cargoTomlPaths);
+    stageAllChanges();
   }
 
   if (bumpType) {
