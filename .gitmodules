@@ -1,6 +1,6 @@
 [submodule "vendor/libarchive"]
 	path = vendor/libarchive
-	url = https://github.com/libarchive/libarchive.git
+	url = https://forgejo.koof.win/bcasey/libarchive
 [submodule "vendor/nod"]
 	path = vendor/nod
 	url = https://forgejo.koof.win/bcasey/nod
