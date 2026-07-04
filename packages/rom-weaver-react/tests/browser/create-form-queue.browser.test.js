@@ -189,6 +189,13 @@ class MockCreateWorkflow {
     this.settings = settings;
     return Promise.resolve();
   }
+
+  swap() {
+    const original = this.original;
+    this.original = this.modified;
+    this.modified = original;
+    return Promise.resolve();
+  }
 }
 
 const getMockCreatePatchFormatCandidates = async () => ({
@@ -360,6 +367,41 @@ test("replacing the modified ROM keeps the prepared original ROM", async () => {
 
   workflowMockState.modifiedDeferred.resolve();
   await expect.poll(() => document.body.textContent || "").toContain("modified-v2.bin");
+});
+
+test("swapping prepared sources reuses them without re-extraction", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+      }),
+    ),
+  );
+
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await expect.poll(() => workflowMockState.instances[0]?.getOriginal()?.status).toBe("ready");
+  await expect.poll(() => workflowMockState.instances[0]?.getModified()?.status).toBe("ready");
+  await expect.poll(() => document.body.textContent || "").toContain("original.bin");
+  await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
+  expect(workflowMockState.originalSetCalls).toBe(1);
+  expect(workflowMockState.modifiedSetCalls).toBe(1);
+
+  const swapButton = document.getElementById("patch-builder-button-swap-sources");
+  expect(swapButton).toBeInstanceOf(HTMLButtonElement);
+  expect(swapButton.disabled).toBe(false);
+  swapButton.click();
+
+  // The swap is an in-place slot exchange; the staging effect must treat the
+  // swapped keys as unchanged and NOT re-run setOriginal/setModified (which is
+  // what re-extracts the sources). Give the effect time to (wrongly) re-run.
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 150));
+  expect(document.body.textContent || "").toContain("modified.bin");
+  expect(document.body.textContent || "").toContain("original.bin");
+  expect(workflowMockState.originalSetCalls).toBe(1);
+  expect(workflowMockState.modifiedSetCalls).toBe(1);
 });
 
 test("create output edits after completion reuse prepared sources", async () => {
