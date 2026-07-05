@@ -7,6 +7,11 @@
 .claude/
 **/__pycache__/
 
+# Local code-graph indexes (MCP servers)
+/.codegraph/
+/.tokensave/
+/dist/
+
 # Generated wasm artifacts
 /dist/wasm/
 
