@@ -1,6 +1,6 @@
 {
-  "short_name": "RomWeaver",
-  "name": "RomWeaver",
+  "short_name": "rom-weaver",
+  "name": "rom-weaver",
   "scope": "./",
   "icons": [
     {
