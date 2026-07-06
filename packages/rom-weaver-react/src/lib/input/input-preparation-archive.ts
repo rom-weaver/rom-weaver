@@ -40,7 +40,7 @@ import {
   resolveInputPreparationRuntime,
 } from "./input-preparation-compression.ts";
 import { getBaseFileName, normalizeArchiveEntryName } from "./path-utils.ts";
-import { discFormatToChdMode, parseCueFile } from "./rom-specific-file-utils.ts";
+import { parseCueFile } from "./rom-specific-file-utils.ts";
 
 type ArchiveEntryLike = {
   archiveEntryType?: string;
@@ -455,9 +455,9 @@ const resolveArchiveInputAssetsByDescent = async (
         preferExternalFilePath: !shouldMaterializeForSyncRead,
       });
       file.fileName = fileName;
-      // The CHD recompress path keys off `_chdMode`; ingest reports each leaf's optical medium.
-      const chdMode = discFormatToChdMode(ingestResult.assets[index]?.discFormat);
-      if (chdMode) file._chdMode = chdMode;
+      // The CHD recompress path keys off the disc format; ingest reports each leaf's optical medium.
+      const discFormat = ingestResult.assets[index]?.discFormat;
+      if (discFormat) file.metadata = { ...file.metadata, format: discFormat };
       return file;
     }),
   );
@@ -479,12 +479,8 @@ const resolveArchiveInputAssetsByDescent = async (
     // Prefer the sheet text Rust extract folded into the output (`attach_disc_group_details`); only
     // fall back to reading + decoding the extracted sheet when it is absent (e.g. a non-libarchive
     // container that does not carry it).
-    const cueText = cueFile
-      ? ((cueFile as { _cueText?: string })._cueText ?? decodeUtf8(getPatchFileBytes(cueFile)))
-      : undefined;
-    const gdiText = gdiFile
-      ? ((gdiFile as { _gdiText?: string })._gdiText ?? decodeUtf8(getPatchFileBytes(gdiFile)))
-      : undefined;
+    const cueText = cueFile ? (cueFile.metadata?.cueText ?? decodeUtf8(getPatchFileBytes(cueFile))) : undefined;
+    const gdiText = gdiFile ? (gdiFile.metadata?.gdiText ?? decodeUtf8(getPatchFileBytes(gdiFile))) : undefined;
     const primarySheet = cueFile ?? (gdiFile as PatchFileInstance);
     const groupId = makeInputId(sourceIndex, primarySheet.fileName, normalizeArchiveEntryName, "-group");
     const splitBinAvailable = cueText ? isChdSplitBinCue(archiveFile, cueText) : true;

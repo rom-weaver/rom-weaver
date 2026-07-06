@@ -66,20 +66,17 @@ const createPatchFileFromPublicOutput = async (
       (file as TFile & { checksumVariants?: PublicOutput["checksumVariants"] }).checksumVariants =
         output.checksumVariants;
     if (output.romType) (file as TFile & { romType?: PublicOutput["romType"] }).romType = output.romType;
-    if (output.chdCuePath) file._chdCuePath = output.chdCuePath;
     if (output.timing) (file as TFile & { _runtimeTiming?: PublicOutput["timing"] })._runtimeTiming = output.timing;
-    // Disc structure folded in by Rust extract (see `attach_disc_group_details`) rides on the file so
-    // the descent can group + render a disc without re-reading/parsing the cue/gdi sheet.
-    const discFile = file as TFile & {
-      _cueText?: string;
-      _gdiText?: string;
-      _discGroupId?: string;
-      _trackNumber?: number;
+    // Disc identity + structure folded in by Rust extract (see `attach_disc_group_details`) rides on
+    // the file so the descent can group + render a disc without re-reading/parsing the cue/gdi sheet.
+    file.metadata = {
+      ...file.metadata,
+      ...(output.chdCuePath && { cuePath: output.chdCuePath }),
+      ...(output.cueText && { cueText: output.cueText }),
+      ...(output.gdiText && { gdiText: output.gdiText }),
+      ...(output.discGroupId && { groupId: output.discGroupId }),
+      ...(typeof output.trackNumber === "number" && { trackNumber: output.trackNumber }),
     };
-    if (output.cueText) discFile._cueText = output.cueText;
-    if (output.gdiText) discFile._gdiText = output.gdiText;
-    if (output.discGroupId) discFile._discGroupId = output.discGroupId;
-    if (typeof output.trackNumber === "number") discFile._trackNumber = output.trackNumber;
     return file;
   };
   if (canUseExternalFilePath && (options.materializeBlob === false || options.preferExternalFilePath === true)) {

@@ -16,27 +16,25 @@ type WorkflowExtensionFileLike = {
   getExtension?: () => string;
 };
 
-type WorkflowChdSourceMetadata = {
-  _chdMode?: "cd" | "dvd" | string;
-  _chdCuePath?: string;
-  _chdCueText?: string;
+// All source format metadata the Rust ingest/extract pass produces, in one optional bag. Populated
+// once at the ingest/extract boundary (see `IngestRomAsset` / `attach_disc_group_details`); TS reads
+// it via the format helpers and never derives or writes format metadata itself.
+type SourceMetadata = {
+  // Disc identity/structure.
+  format?: string; // Rust `disc_format` verdict ("CD"/"GD-ROM"/"DVD") → display label
+  mode?: string; // format-specific mode: "cd"/"dvd" (chd) or "iso"/"rvz" (rvz); drives codec selection only
+  cuePath?: string;
+  cueText?: string;
+  gdiText?: string;
+  groupId?: string;
+  trackNumber?: number;
+  splitBinAvailable?: boolean;
+  // Source-filename precedence + container-format specifics for chd/rvz/z3ds create/extract.
+  // Rust derives the live values; TS only forwards them.
+  sourceFileName?: string; // unified original source name (chd/rvz/z3ds) for output naming
+  underlyingMagic?: string; // z3ds payload magic
 };
 
-type WorkflowRvzSourceMetadata = {
-  _rvzSourceFileName?: string;
-  _rvzMode?: string;
-};
+type WorkflowRomFileLike = WorkflowBinaryBackedFileLike & WorkflowExtensionFileLike & { metadata?: SourceMetadata };
 
-type WorkflowZ3dsSourceMetadata = {
-  _z3dsSourceFileName?: string;
-  _z3dsUnderlyingMagic?: string;
-  _z3dsMetadata?: JsonValue;
-};
-
-type WorkflowRomFileLike = WorkflowBinaryBackedFileLike &
-  WorkflowExtensionFileLike &
-  WorkflowChdSourceMetadata &
-  WorkflowRvzSourceMetadata &
-  WorkflowZ3dsSourceMetadata;
-
-export type { WorkflowRomFileLike };
+export type { SourceMetadata, WorkflowRomFileLike };

@@ -12,20 +12,20 @@ describe("discFormatToChdMode", () => {
 });
 
 describe("getChdAutoCreateMode", () => {
-  it("prefers the explicit _chdMode verdict", () => {
-    expect(getChdAutoCreateMode({ _chdMode: "dvd", fileName: "disc.cue" })).toBe("dvd");
-    expect(getChdAutoCreateMode({ _chdMode: "cd", fileName: "game.iso" })).toBe("cd");
+  it("prefers the explicit metadata.mode verdict", () => {
+    expect(getChdAutoCreateMode({ fileName: "disc.cue", metadata: { mode: "dvd" } })).toBe("dvd");
+    expect(getChdAutoCreateMode({ fileName: "game.iso", metadata: { mode: "cd" } })).toBe("cd");
   });
 
-  it("treats a cue path/text as a CD", () => {
-    expect(getChdAutoCreateMode({ _chdCueText: 'FILE "x.bin" BINARY', fileName: "game.iso" })).toBe("cd");
+  it("treats a cue path as a CD", () => {
+    expect(getChdAutoCreateMode({ fileName: "game.iso", metadata: { cuePath: "game.cue" } })).toBe("cd");
   });
 
-  it("uses the Rust _discFormat verdict over the filename", () => {
+  it("uses the Rust metadata.format verdict over the filename", () => {
     // A `.iso` would otherwise fall to the regex and read as DVD; the engine verdict wins.
-    expect(getChdAutoCreateMode({ _discFormat: "CD", fileName: "game.iso" })).toBe("cd");
-    expect(getChdAutoCreateMode({ _discFormat: "GD-ROM", fileName: "game.iso" })).toBe("cd");
-    expect(getChdAutoCreateMode({ _discFormat: "DVD", fileName: "track01.bin" })).toBe("dvd");
+    expect(getChdAutoCreateMode({ fileName: "game.iso", metadata: { format: "CD" } })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "game.iso", metadata: { format: "GD-ROM" } })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "track01.bin", metadata: { format: "DVD" } })).toBe("dvd");
   });
 
   it("falls back to the filename only when no engine verdict exists", () => {

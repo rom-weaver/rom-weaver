@@ -10,6 +10,7 @@ import {
   prepareMultipleDirectInputAssets,
 } from "../input/input-preparation-service.ts";
 import { getBaseFileName } from "../input/path-utils.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { resolveAutomaticSelection, selectionToArchiveEntry } from "../input/selection.ts";
 import {
   cloneCandidate,
@@ -402,8 +403,8 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
         ? preparation.sourceSize
         : stage.state.sourceSize) || stage.state.size;
     stage.state.chdMode =
-      assets.find((asset) => asset.file._chdMode === "cd" || asset.file._chdMode === "dvd")?.file._chdMode ||
-      (assets.some((asset) => asset.file._chdCuePath || asset.file._chdCueText) ? "cd" : stage.state.chdMode);
+      assets.map((asset) => chdModeFromMetadata(asset.file.metadata)).find((mode) => mode) ||
+      (assets.some((asset) => asset.file.metadata?.cuePath) ? "cd" : stage.state.chdMode);
     stage.state.decompressionTimeMs =
       typeof preparation?.decompressionTimeMs === "number" && Number.isFinite(preparation.decompressionTimeMs)
         ? preparation.decompressionTimeMs

@@ -44,13 +44,6 @@ type InputAsset = {
   // Sidecar patches bundled alongside this ROM in the source archive, harvested from the same ingest
   // pass that produced this asset. Set on the primary ROM asset of a mixed ROM+patch archive only.
   sidecarPatches?: PreparedSidecarPatch[];
-  disc?: {
-    cueText?: string;
-    gdiText?: string;
-    trackNumber?: number;
-    mode?: string;
-    splitBinAvailable?: boolean;
-  };
 };
 type CueCandidateGroup = SelectionGroupCandidate & {
   cueFileName: string;
@@ -77,20 +70,22 @@ const makeCueAsset = (
   file: PatchFileInstance,
   groupId: string,
   cueText: string,
-): InputAsset => ({
-  disc: { cueText },
-  file,
-  fileName,
-  groupId,
-  id,
-  kind: "cue",
-  patchable: false,
-  size: file.fileSize,
-});
+): InputAsset => {
+  file.metadata = { ...file.metadata, ...(cueText ? { cueText } : {}) };
+  return {
+    file,
+    fileName,
+    groupId,
+    id,
+    kind: "cue",
+    patchable: false,
+    size: file.fileSize,
+  };
+};
 
 // A GD-ROM ships a `.gdi` sheet instead of (or alongside) a `.cue`. It is a
 // non-patchable disc sidecar like the cue, so it groups with its tracks and is
-// excluded from checksums, but its text lives in `disc.gdiText` so the UI renders
+// excluded from checksums, but its text lives in `metadata.gdiText` so the UI renders
 // it in a separate GDI panel rather than the CUE panel.
 const makeGdiAsset = (
   id: string,
@@ -98,16 +93,18 @@ const makeGdiAsset = (
   file: PatchFileInstance,
   groupId: string,
   gdiText: string,
-): InputAsset => ({
-  disc: { gdiText },
-  file,
-  fileName,
-  groupId,
-  id,
-  kind: "gdi",
-  patchable: false,
-  size: file.fileSize,
-});
+): InputAsset => {
+  file.metadata = { ...file.metadata, ...(gdiText ? { gdiText } : {}) };
+  return {
+    file,
+    fileName,
+    groupId,
+    id,
+    kind: "gdi",
+    patchable: false,
+    size: file.fileSize,
+  };
+};
 
 const makeTrackAsset = (
   id: string,
@@ -116,34 +113,38 @@ const makeTrackAsset = (
   groupId: string,
   reference: { trackNumber?: number; mode?: string; patchable?: boolean },
   disc: { cueText?: string; gdiText?: string; splitBinAvailable?: boolean } = {},
-): InputAsset => ({
-  disc: {
-    cueText: disc.cueText,
-    gdiText: disc.gdiText,
-    mode: reference.mode,
-    splitBinAvailable: disc.splitBinAvailable,
-    trackNumber: reference.trackNumber,
-  },
-  file,
-  fileName,
-  groupId,
-  id,
-  kind: "track",
-  patchable: reference.patchable !== false,
-  size: file.fileSize,
-});
+): InputAsset => {
+  // `reference.mode`/`reference.trackNumber` (cue track mode + reference order) are never read and
+  // would collide with `SourceMetadata.mode`/`trackNumber`, so they are intentionally not folded.
+  file.metadata = {
+    ...file.metadata,
+    ...(disc.cueText ? { cueText: disc.cueText } : {}),
+    ...(disc.gdiText ? { gdiText: disc.gdiText } : {}),
+    ...(typeof disc.splitBinAvailable === "boolean" ? { splitBinAvailable: disc.splitBinAvailable } : {}),
+  };
+  return {
+    file,
+    fileName,
+    groupId,
+    id,
+    kind: "track",
+    patchable: reference.patchable !== false,
+    size: file.fileSize,
+  };
+};
 
-const makeRomAsset = (id: string, file: PatchFileInstance): InputAsset => ({
-  ...((file as PatchFileInstance & { _chdSplitBinAvailable?: boolean })._chdSplitBinAvailable
-    ? { disc: { splitBinAvailable: true } }
-    : {}),
-  file,
-  fileName: file.fileName,
-  id,
-  kind: "rom",
-  patchable: true,
-  size: file.fileSize,
-});
+const makeRomAsset = (id: string, file: PatchFileInstance): InputAsset => {
+  if ((file as PatchFileInstance & { _chdSplitBinAvailable?: boolean })._chdSplitBinAvailable)
+    file.metadata = { ...file.metadata, splitBinAvailable: true };
+  return {
+    file,
+    fileName: file.fileName,
+    id,
+    kind: "rom",
+    patchable: true,
+    size: file.fileSize,
+  };
+};
 
 const makeInputCandidateGroup = ({
   groupId,

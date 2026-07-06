@@ -6,6 +6,7 @@ import type {
 } from "../../types/apply-workflow.ts";
 import type { SelectionFileCandidate } from "../../types/selection.ts";
 import type { InputAsset } from "../input/input-assets.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import type {
   InternalPatchChecksumPreflight,
   InternalPatchRequirements,
@@ -152,19 +153,14 @@ const cloneResolvedInputAssetState = (
 ): ApplyWorkflowResolvedInput => {
   const checksums = getInputAssetChecksums(asset);
   return {
-    chdMode:
-      asset.file._chdMode === "cd" || asset.file._chdMode === "dvd"
-        ? asset.file._chdMode
-        : asset.file._chdCuePath || asset.file._chdCueText
-          ? "cd"
-          : undefined,
+    chdMode: chdModeFromMetadata(asset.file.metadata) ?? (asset.file.metadata?.cuePath ? "cd" : undefined),
     checksums: checksums ? cloneValue(checksums) : undefined,
     checksumTimeMs: asset.checksumTimeMs,
     checksumVariants: cloneChecksumVariants(asset.checksumVariants),
-    cueText: asset.disc?.cueText ?? asset.file._chdCueText,
+    cueText: asset.file.metadata?.cueText,
     decompressionTimeMs: getAssetDecompressionTimeMs(asset),
     fileName: asset.fileName,
-    gdiText: asset.disc?.gdiText,
+    gdiText: asset.file.metadata?.gdiText,
     groupId: asset.groupId,
     id: asset.id,
     kind: asset.kind,
@@ -177,7 +173,7 @@ const cloneResolvedInputAssetState = (
     selectedCandidateId,
     size: asset.size,
     sourceSize: getAssetSourceSize(asset),
-    splitBinAvailable: asset.disc?.splitBinAvailable,
+    splitBinAvailable: asset.file.metadata?.splitBinAvailable,
     wasDecompressed: asset.preparation?.wasDecompressed,
   };
 };

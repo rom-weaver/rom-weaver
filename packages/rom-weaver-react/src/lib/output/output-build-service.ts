@@ -27,7 +27,11 @@ import {
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
-import { getChdAutoCreateMode, replaceCuePatchFileName } from "../input/rom-specific-file-utils.ts";
+import {
+  chdModeFromMetadata,
+  getChdAutoCreateMode,
+  replaceCuePatchFileName,
+} from "../input/rom-specific-file-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import {
@@ -50,15 +54,7 @@ type RuntimeTimedPatchFile = PatchFileInstance & {
 };
 
 const hasRomSpecificCompressionMetadata = (source: PatchFileInstance | null | undefined) =>
-  !!(
-    source?._chdSourceFileName ||
-    source?._chdCuePath ||
-    source?._chdCueText ||
-    source?._chdMode === "cd" ||
-    source?._chdMode === "dvd" ||
-    source?._rvzSourceFileName ||
-    source?._z3dsSourceFileName
-  );
+  !!(source?.metadata?.sourceFileName || source?.metadata?.cuePath || chdModeFromMetadata(source?.metadata));
 
 const getOutputCompression = (options: OutputWorkflowOptions | undefined, source?: PatchFileInstance | null) => {
   if (options?.output?.compression !== undefined && options.output.compression !== null)
@@ -239,7 +235,6 @@ const createRuntimeRomSpecificOutputFiles = async (
       romSpecific: {
         z3ds: {
           compressionLevel: outputPlan.z3dsOptions?.compressionLevel as string | number | null | undefined,
-          metadata: outputPlan.z3dsMetadata,
           sourceFileName: outputPlan.z3dsSourceFileName,
           underlyingMagic: outputPlan.z3dsUnderlyingMagic,
         },
@@ -279,7 +274,6 @@ const createSingleFileRomSpecificOutput = async ({
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
-    replaceCuePatchFileName: (cueText: string, outputName: string) => replaceCuePatchFileName(cueText, outputName),
     resolveChdCodecMode: (_fileName: string, mode: string | null) =>
       mode === "auto" ? getChdAutoCreateMode(outputFile) : mode,
     resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
@@ -323,7 +317,6 @@ const buildOutputFiles = async (
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName: patchedRom.fileName,
-    replaceCuePatchFileName: (cueText: string, outputName: string) => replaceCuePatchFileName(cueText, outputName),
     resolveChdCodecMode: (_fileName: string, mode: string | null) =>
       mode === "auto" ? getChdAutoCreateMode(patchedRom) : mode,
     resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
@@ -339,17 +332,9 @@ const buildOutputFiles = async (
         ? outputPlan.archiveEntryFileName
         : patchedRom.fileName;
     const entries = [createArchiveEntryInputFromPatchFile(patchedRom, archiveEntryFileName || patchedRom.fileName)];
-    if (outputPlan.cueOutput) {
-      const data = new TextEncoder().encode(outputPlan.cueOutput.text);
-      entries.push({
-        entry: { data, filename: outputPlan.cueOutput.fileName },
-        size: data.byteLength,
-      });
-    }
     traceOutputName(options, "output.archive.plan", {
       archiveEntryFileName,
       compression,
-      cueOutputFileName: outputPlan.cueOutput?.fileName || "",
       entryFileNames: entries.map((entry) => entry.entry.filename || entry.entry.fileName || entry.entry.name || ""),
       finalOutputFileName: outputPlan.finalOutputFileName,
       patchedRomFileName: patchedRom.fileName,
@@ -402,7 +387,7 @@ const createArchiveEntryFromPatchFile = (
   cueTextOverride?: string,
 ): ArchiveOutputEntry => {
   if (asset.kind === "cue") {
-    const cueText = cueTextOverride ?? asset.disc?.cueText ?? decodeUtf8(getPatchFileBytes(file));
+    const cueText = cueTextOverride ?? asset.file.metadata?.cueText ?? decodeUtf8(getPatchFileBytes(file));
     const data = new TextEncoder().encode(cueText);
     return {
       entry: { data, filename: outputFileName },
@@ -437,7 +422,7 @@ const createArchiveEntriesFromOutputAssets = (
     let cueText: string;
     try {
       cueText = replaceCuePatchFileName(
-        cueOutput.asset.disc?.cueText || decodeUtf8(getPatchFileBytes(cueOutput.file)),
+        cueOutput.asset.file.metadata?.cueText || decodeUtf8(getPatchFileBytes(cueOutput.file)),
         trackFileName,
       );
     } catch (_error) {

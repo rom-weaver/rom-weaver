@@ -256,8 +256,8 @@ test("chd compress panel uses source mode discovered before extraction finishes"
     chdOutputMode: "auto",
     compressionProfile: "max",
   };
-  const cdPanel = buildCompressPanel("chd", settings, { _chdMode: "cd", fileName: "game.chd" });
-  const dvdPanel = buildCompressPanel("chd", settings, { _chdMode: "dvd", fileName: "game.chd" });
+  const cdPanel = buildCompressPanel("chd", settings, { fileName: "game.chd", metadata: { mode: "cd" } });
+  const dvdPanel = buildCompressPanel("chd", settings, { fileName: "game.chd", metadata: { mode: "dvd" } });
 
   expect(cdPanel?.fields[0]?.key).toBe("chdCreateCdCodecs");
   expect(cdPanel?.summary).toBe("cdlz:9,cdzl:9,cdfl:8");

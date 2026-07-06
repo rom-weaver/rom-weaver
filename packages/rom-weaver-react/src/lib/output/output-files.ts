@@ -12,6 +12,7 @@ import {
   z3dsUnderlyingExtensionForMagic,
 } from "../compression/z3ds-subtypes.ts";
 import { appendFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { CHD_EXTENSION_REGEX, getFileNameExtension } from "../path-utils.ts";
 
 const RVZ_EXTENSION_REGEX = createRomSpecificExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
@@ -86,12 +87,15 @@ const getChdIntermediateFileName = (
 ): string => {
   if (!source) return fileName;
   if (!hasFileNameExtension(fileName)) {
-    const sourceExtension = getSourceExtension(source, source?._chdMode === "cd" ? "bin" : "iso");
+    const sourceExtension = getSourceExtension(source, chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso");
     return replaceFileNameExtension(fileName, sourceExtension);
   }
   if (CHD_EXTENSION_REGEX.test(fileName)) {
     const sourceExtension = getSourceExtension(source, chdOutputMode === "cd" ? "bin" : "iso");
-    return replaceFileNameExtension(fileName, sourceExtension || (source?._chdMode === "cd" ? "bin" : "iso"));
+    return replaceFileNameExtension(
+      fileName,
+      sourceExtension || (chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso"),
+    );
   }
   return fileName;
 };
@@ -125,7 +129,7 @@ const getZ3dsDecompressedSourceExtension = (source: SourceFileLike | null | unde
   const sourceExtension = getSourceExtension(source, "");
   const specific = z3dsUnderlyingExtensionForCompressedExtension(sourceExtension);
   if (specific) return specific;
-  const magicExtension = z3dsUnderlyingExtensionForMagic(source?._z3dsUnderlyingMagic);
+  const magicExtension = z3dsUnderlyingExtensionForMagic(source?.metadata?.underlyingMagic);
   if (sourceExtension === "z3ds") return magicExtension || "3ds";
   return sourceExtension || magicExtension || "3ds";
 };

@@ -27,15 +27,13 @@ import {
 } from "../../lib/compression/compression-metadata.ts";
 import { getChdAutoCreateMode, getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
+import type { SourceMetadata } from "../../types/workflow-source.ts";
 
 type SettingsLike = Record<string, unknown>;
+// `metadata.format` is the engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the
+// ingest/checksum identity pass; it drives the CHD output-panel disc label (no TS regex).
 type SourceLike = {
-  _chdCuePath?: string;
-  _chdCueText?: string;
-  _chdMode?: string;
-  // Engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the ingest/checksum
-  // identity pass; drives the CHD output-panel disc label (no TS regex).
-  _discFormat?: string;
+  metadata?: SourceMetadata;
   fileName?: string;
   getExtension?: () => string;
 };
@@ -324,9 +322,9 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     const mode = resolveChdPanelMode(settings, source);
     // GD-ROM media reuses the CD codec set; surface the engine-detected disc type
     // so the output reflects the GD-vs-CD media the create will actually produce.
-    // The verdict comes from the Rust ingest/checksum identity pass (`_discFormat`),
+    // The verdict comes from the Rust ingest/checksum identity pass (`metadata.format`),
     // not a TS regex over the cue text / file name.
-    const discLabel = source ? getDiscFormatLabel((source as SourceLike)._discFormat) : null;
+    const discLabel = source ? getDiscFormatLabel((source as SourceLike).metadata?.format) : null;
     const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
     const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";

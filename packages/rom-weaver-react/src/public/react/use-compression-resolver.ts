@@ -113,6 +113,7 @@ const useCompressionResolver = ({
 }: CompressionResolverHookInput) => {
   const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
     const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
+    // Coarse CHD codec mode discovered pre-identity (drives codec selection, not the label).
     const chdMode = romInputs[0]?.chdMode;
     // Engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the ingest/checksum
     // identity pass; the CHD output panel reads it for the disc label instead of
@@ -126,8 +127,9 @@ const useCompressionResolver = ({
       const baseSize = romInputs[0]?.size ?? getBinarySourceSize(baseSource);
       return {
         ...(baseSource as unknown as Record<string, unknown>),
-        ...(chdMode ? { _chdMode: chdMode } : {}),
-        ...(discFormat ? { _discFormat: discFormat } : {}),
+        ...(chdMode || discFormat
+          ? { metadata: { ...(chdMode ? { mode: chdMode } : {}), ...(discFormat ? { format: discFormat } : {}) } }
+          : {}),
         ...(typeof baseSize === "number" && Number.isFinite(baseSize) ? { size: baseSize } : {}),
         fileName: selectedInputFileName,
         name: selectedInputFileName,

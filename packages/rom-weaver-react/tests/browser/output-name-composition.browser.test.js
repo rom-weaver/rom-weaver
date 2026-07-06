@@ -74,9 +74,9 @@ test("z3ds output naming preserves cci source type when requested name has no ex
     compressionSettings: {},
     patchedFileName: "Star Fox 64 3D (USA) (En,Fr,Es) (Rev 3)",
     romFile: {
-      _z3dsSourceFileName: "Star Fox 64 3D (USA) (En,Fr,Es) (Rev 3).cci",
       fileName: "Star Fox 64 3D (USA) (En,Fr,Es) (Rev 3).cci",
       getExtension: () => "cci",
+      metadata: { sourceFileName: "Star Fox 64 3D (USA) (En,Fr,Es) (Rev 3).cci" },
     },
   });
 
@@ -89,9 +89,9 @@ test("z3ds output naming falls back to z3ds metadata when source extension is mi
     compressionSettings: {},
     patchedFileName: "output",
     romFile: {
-      _z3dsUnderlyingMagic: "NCSD",
       fileName: "input",
       getExtension: () => "",
+      metadata: { underlyingMagic: "NCSD" },
     },
   });
 

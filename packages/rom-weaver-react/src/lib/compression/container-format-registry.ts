@@ -1,9 +1,11 @@
 import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { RuntimeWorkerSourceScope } from "../../types/workflow-runtime-adapter.ts";
+import type { SourceMetadata } from "../../types/workflow-source.ts";
 import {
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import {
   getFileNameExtension,
   hasFileNameExtension,
@@ -19,9 +21,8 @@ import {
 } from "./z3ds-subtypes.ts";
 
 type ByteProbeableSource = {
-  _chdMode?: string;
+  metadata?: SourceMetadata;
   _u8array?: Uint8Array;
-  _z3dsUnderlyingMagic?: string;
   fileName?: string;
   getExtension?: () => string;
   readIntoAt?: (buffer: Uint8Array, bufferOffset?: number, len?: number, fileOffset?: number) => number | undefined;
@@ -116,7 +117,7 @@ const getZ3dsOutputExtension = ({ inputFileName }: CompressionOutputExtensionCon
   z3dsCompressedExtensionForSourceExtension(getSourceFileExtension(inputFileName)) ?? "z3ds";
 
 const getChdExtractedFileName = (source: ByteProbeableSource): string =>
-  replaceFileExtension(source.fileName || "input.chd", source._chdMode === "cd" ? "bin" : "iso");
+  replaceFileExtension(source.fileName || "input.chd", chdModeFromMetadata(source.metadata) === "cd" ? "bin" : "iso");
 
 const getRvzExtractedFileName = (source: ByteProbeableSource): string =>
   replaceFileExtension(source.fileName || "input.rvz", "iso");
@@ -127,7 +128,7 @@ const getZ3dsExtractedExtension = (source: ByteProbeableSource): string => {
   // payload type by extension; the generic `.z3ds` resolves from the payload magic.
   const specific = z3dsUnderlyingExtensionForCompressedExtension(extension);
   if (specific) return specific;
-  return z3dsUnderlyingExtensionForMagic(source._z3dsUnderlyingMagic || "") || "3ds";
+  return z3dsUnderlyingExtensionForMagic(source.metadata?.underlyingMagic || "") || "3ds";
 };
 
 const getZ3dsExtractedFileName = (source: ByteProbeableSource): string => {

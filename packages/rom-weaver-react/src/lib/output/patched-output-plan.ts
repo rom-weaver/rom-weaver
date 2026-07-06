@@ -1,6 +1,6 @@
-import type { JsonValue } from "../../types/runtime.ts";
 import type { ChdCompressionCodecs, CompressionOptionValue } from "../../types/workflow-compression.ts";
 import type { WorkflowRomFileLike as RomFileLike } from "../../types/workflow-source.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { getCompressionIntermediateFileName } from "./output-files.ts";
 import { createPatchedRomSavePlan } from "./output-save-plan.ts";
 
@@ -10,17 +10,11 @@ type ArchiveEntrySaveInfo = {
   text?: string;
 };
 
-type CueOutput = {
-  fileName: string;
-  text: string;
-};
-
 type CreatePatchedOutputPlanInput = {
   romFile?: RomFileLike | null;
   patchedFileName: string;
   compressionFormat?: string | null;
   compressionSettings?: Record<string, CompressionOptionValue> | null;
-  replaceCuePatchFileName?: ((cueText: string, outputName: string) => string) | null;
   chdOutputMode?: string | null;
   resolveChdCodecMode?: ((inputFileName: string, createMode: string | null) => string | null) | null;
   resolveChdCompressionCodecs?: ((codecMode: string | null) => ChdCompressionCodecs | null) | null;
@@ -32,7 +26,6 @@ type PatchedOutputPlan = {
   kind: string;
   compression: string;
   finalOutputFileName: string;
-  cueOutput?: CueOutput | null;
   archiveEntryFileName?: string;
   archiveEntries?: ArchiveEntrySaveInfo[];
   inputFileName?: string;
@@ -45,7 +38,6 @@ type PatchedOutputPlan = {
   rvzOptions?: Record<string, CompressionOptionValue>;
   z3dsSourceFileName?: string;
   z3dsUnderlyingMagic?: string;
-  z3dsMetadata?: JsonValue;
   z3dsOptions?: Record<string, CompressionOptionValue>;
   chdCodecMode?: string | null;
 };
@@ -54,8 +46,8 @@ const resolveChdCreateMode = (
   romFile: RomFileLike | null | undefined,
   chdOutputMode: string | null | undefined,
 ): string | null => {
-  if (chdOutputMode === "auto" && romFile && (romFile._chdMode === "cd" || romFile._chdMode === "dvd"))
-    return romFile._chdMode;
+  const mode = chdModeFromMetadata(romFile?.metadata);
+  if (chdOutputMode === "auto" && mode) return mode;
   return chdOutputMode || "auto";
 };
 
@@ -64,7 +56,6 @@ const createPatchedOutputPlan = ({
   patchedFileName,
   compressionFormat,
   compressionSettings,
-  replaceCuePatchFileName,
   chdOutputMode,
   resolveChdCodecMode,
   resolveChdCompressionCodecs,
@@ -76,12 +67,10 @@ const createPatchedOutputPlan = ({
     compressionFormat: compression,
     compressionSettings: compressionSettings,
     patchedFileName: patchedFileName,
-    replaceCuePatchFileName: replaceCuePatchFileName,
     romFile: romFile,
   });
   const basePlan = {
     compression: savePlan.compression,
-    cueOutput: savePlan.cueOutput,
     finalOutputFileName: savePlan.finalOutputFileName,
     kind: savePlan.compression === "none" ? "raw" : savePlan.compression,
     savePlan: savePlan,
@@ -89,12 +78,7 @@ const createPatchedOutputPlan = ({
 
   if (compression === "7z" || compression === "zip") {
     return Object.assign({}, basePlan, {
-      archiveEntries: [
-        { fileName: savePlan.archiveEntryFileName, kind: "patched-rom" },
-        ...(savePlan.cueOutput
-          ? [{ fileName: savePlan.cueOutput.fileName, kind: "cue", text: savePlan.cueOutput.text }]
-          : []),
-      ],
+      archiveEntries: [{ fileName: savePlan.archiveEntryFileName, kind: "patched-rom" }],
       archiveEntryFileName: savePlan.archiveEntryFileName,
     });
   }
@@ -110,26 +94,25 @@ const createPatchedOutputPlan = ({
       chdCompressionCodecs:
         typeof resolveChdCompressionCodecs === "function" ? resolveChdCompressionCodecs(codecMode) : null,
       chdCreateMode: createMode,
-      chdCuePath: romFile?._chdCuePath,
-      chdSourceMode: romFile?._chdMode,
+      chdCuePath: romFile?.metadata?.cuePath,
+      chdSourceMode: chdModeFromMetadata(romFile?.metadata),
       inputFileName: inputFileName,
     });
   }
   if (compression === "rvz") {
     return Object.assign({}, basePlan, {
       inputFileName: getCompressionIntermediateFileName(patchedFileName, "rvz", romFile),
-      rvzMode: romFile?._rvzMode,
+      rvzMode: romFile?.metadata?.mode,
       rvzOptions: rvzOptions || {},
-      rvzSourceFileName: romFile?._rvzSourceFileName,
+      rvzSourceFileName: romFile?.metadata?.sourceFileName,
     });
   }
   if (compression === "z3ds") {
     return Object.assign({}, basePlan, {
       inputFileName: getCompressionIntermediateFileName(patchedFileName, "z3ds", romFile),
-      z3dsMetadata: romFile?._z3dsMetadata,
       z3dsOptions: z3dsOptions || {},
-      z3dsSourceFileName: romFile?._z3dsSourceFileName,
-      z3dsUnderlyingMagic: romFile?._z3dsUnderlyingMagic,
+      z3dsSourceFileName: romFile?.metadata?.sourceFileName,
+      z3dsUnderlyingMagic: romFile?.metadata?.underlyingMagic,
     });
   }
   return basePlan;

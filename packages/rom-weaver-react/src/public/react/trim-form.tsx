@@ -751,7 +751,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     source
       ? ({
           ...(source as unknown as Record<string, unknown>),
-          ...(sourceState?.chdMode ? { _chdMode: sourceState.chdMode } : {}),
+          ...(sourceState?.chdMode ? { metadata: { mode: sourceState.chdMode } } : {}),
           fileName: resolvedSourceFileName,
         } as Record<string, unknown>)
       : null,

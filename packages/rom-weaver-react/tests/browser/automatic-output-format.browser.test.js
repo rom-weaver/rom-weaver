@@ -37,18 +37,18 @@ test("z3ds browser extraction names preserve subtype extensions", () => {
   expect(getRomSpecificExtractedFileName("z3ds", { fileName: "game.zcia" })).toBe("game.cia");
   expect(getRomSpecificExtractedFileName("z3ds", { fileName: "game.zcxi" })).toBe("game.cxi");
   expect(getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3dsx" })).toBe("game.3dsx");
-  expect(getRomSpecificExtractedFileName("z3ds", { _z3dsUnderlyingMagic: "NCSD", fileName: "game.z3ds" })).toBe(
-    "game.cci",
-  );
-  expect(getRomSpecificExtractedFileName("z3ds", { _z3dsUnderlyingMagic: "NCCH", fileName: "game.z3ds" })).toBe(
-    "game.cxi",
-  );
-  expect(getRomSpecificExtractedFileName("z3ds", { _z3dsUnderlyingMagic: "CIA\u0000", fileName: "game.z3ds" })).toBe(
-    "game.cia",
-  );
-  expect(getRomSpecificExtractedFileName("z3ds", { _z3dsUnderlyingMagic: "3DSX", fileName: "game.z3ds" })).toBe(
-    "game.3dsx",
-  );
+  expect(
+    getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3ds", metadata: { underlyingMagic: "NCSD" } }),
+  ).toBe("game.cci");
+  expect(
+    getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3ds", metadata: { underlyingMagic: "NCCH" } }),
+  ).toBe("game.cxi");
+  expect(
+    getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3ds", metadata: { underlyingMagic: "CIA\u0000" } }),
+  ).toBe("game.cia");
+  expect(
+    getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3ds", metadata: { underlyingMagic: "3DSX" } }),
+  ).toBe("game.3dsx");
   expect(getRomSpecificExtractedFileName("z3ds", { fileName: "game.z3ds" })).toBe("game.3ds");
 });
 
@@ -58,7 +58,10 @@ test("z3ds browser extraction normalizes generic worker names using source subty
   expect(normalizeRomSpecificExtractedFileName("z3ds", "game.3ds", { fileName: "game.zcxi" })).toBe("game.cxi");
   expect(normalizeRomSpecificExtractedFileName("z3ds", "game.3ds", { fileName: "game.z3dsx" })).toBe("game.3dsx");
   expect(
-    normalizeRomSpecificExtractedFileName("z3ds", "game.3ds", { _z3dsUnderlyingMagic: "NCSD", fileName: "game.z3ds" }),
+    normalizeRomSpecificExtractedFileName("z3ds", "game.3ds", {
+      fileName: "game.z3ds",
+      metadata: { underlyingMagic: "NCSD" },
+    }),
   ).toBe("game.cci");
 });
 
@@ -80,9 +83,9 @@ test("z3ds browser intermediate names preserve decompressed subtype extensions",
   ).toBe("patched.3dsx");
   expect(
     getCompressionIntermediateFileName("patched.z3ds", "z3ds", {
-      _z3dsUnderlyingMagic: "NCSD",
       fileName: "game.z3ds",
       getExtension: () => "z3ds",
+      metadata: { underlyingMagic: "NCSD" },
     }),
   ).toBe("patched.cci");
   expect(

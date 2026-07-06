@@ -219,15 +219,15 @@ const createBrowserChdRuntime = (
           ? ""
           : shouldPreseedSingleBinCdOutputs
             ? getChdCdOutputFileName(fileName, "bin")
-            : getRomSpecificExtractedFileName("chd", { _chdMode: mode || undefined, fileName });
+            : getRomSpecificExtractedFileName("chd", { fileName, metadata: { format: mode || undefined } });
       const stagedOutputFileName =
         mode === "cd"
           ? ""
           : shouldPreseedSingleBinCdOutputs
             ? getChdCdOutputFileName(stagedSourceFileName, "bin")
             : getRomSpecificExtractedFileName("chd", {
-                _chdMode: mode || undefined,
                 fileName: stagedSourceFileName,
+                metadata: { format: mode || undefined },
               });
       const shouldSplitBin = mode === "cd" && splitBin !== false;
       const directOutputFileName = outputName || actualOutputFileName;

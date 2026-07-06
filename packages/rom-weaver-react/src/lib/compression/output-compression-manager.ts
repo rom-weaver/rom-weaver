@@ -16,10 +16,12 @@ import {
   getSourceFileName,
   replaceFileExtension,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import type { SourceMetadata } from "../../types/workflow-source.ts";
 import {
   type ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {
   COMPRESSION_DEFAULTS,
@@ -75,14 +77,7 @@ type CompressionSource = {
   name?: string;
   size?: number;
   _archiveEntryName?: string;
-  _chdSourceFileName?: string;
-  _rvzSourceFileName?: string;
-  _z3dsSourceFileName?: string;
-  _chdCueText?: string;
-  _chdCuePath?: string;
-  _chdMode?: "cd" | "dvd" | string;
-  _rvzMode?: "iso" | "rvz" | string;
-  _z3dsUnderlyingMagic?: string;
+  metadata?: SourceMetadata;
 };
 
 type OutputCompressionOptions = {
@@ -187,18 +182,14 @@ const OutputCompressionManager = (() => {
   const COMPRESSION_PROFILES = [...COMPRESSION_PROFILE_NAMES];
   const COMPRESSION_PROFILE_LEVELS = GENERATED_COMPRESSION_PROFILE_LEVELS;
 
-  const _getFileName = (source: Parameters<typeof getSourceFileName>[0]) =>
-    getSourceFileName(source, {
-      allowString: true,
-      keys: [
-        "fileName",
-        "name",
-        "_archiveEntryName",
-        "_chdSourceFileName",
-        "_rvzSourceFileName",
-        "_z3dsSourceFileName",
-      ],
-    });
+  const _getFileName = (source: Parameters<typeof getSourceFileName>[0]) => {
+    const direct = getSourceFileName(source, { allowString: true, keys: ["fileName", "name", "_archiveEntryName"] });
+    if (direct) return direct;
+    // The source-file-name precedence continues into the nested metadata bag, since
+    // `getSourceFileName` only reads flat top-level keys.
+    const meta = source && typeof source === "object" ? (source as { metadata?: SourceMetadata }).metadata : undefined;
+    return meta?.sourceFileName ?? "";
+  };
 
   const _getExtension = (source: Parameters<typeof getSourceExtension>[0]) =>
     getSourceExtension(source, _getFileName, { stripQuery: true });
@@ -212,39 +203,22 @@ const OutputCompressionManager = (() => {
   };
 
   const _isRomSpecificInput = (source: CompressionSource | null | undefined) => {
-    if (
-      source &&
-      (source._chdSourceFileName ||
-        source._chdCuePath ||
-        source._chdCueText ||
-        source._chdMode === "cd" ||
-        source._chdMode === "dvd" ||
-        source._rvzSourceFileName ||
-        source._z3dsSourceFileName)
-    )
+    if (source && (source.metadata?.sourceFileName || source.metadata?.cuePath || chdModeFromMetadata(source.metadata)))
       return true;
     return hasRomSpecificExtension(ROM_SPECIFIC_INPUT_EXTENSIONS, _getExtension(source));
   };
   const _isRawDiscInput = (source: CompressionSourceInput) =>
     hasRomSpecificExtension(RAW_DISC_INPUT_EXTENSIONS, _getExtension(source));
+  // A unified `sourceFileName` can't tell chd from rvz from z3ds, so rvz/z3ds route on extension only;
+  // chd keeps its disc-metadata signal (cue/mode), which no other format sets.
   const _hasChdSourceMetadata = (source: CompressionSource | null | undefined) =>
-    !!(
-      source &&
-      (source._chdSourceFileName ||
-        source._chdCuePath ||
-        source._chdCueText ||
-        source._chdMode === "cd" ||
-        source._chdMode === "dvd")
-    );
-  const _hasRvzSourceMetadata = (source: CompressionSource | null | undefined) => !!source?._rvzSourceFileName;
-  const _hasZ3dsSourceMetadata = (source: CompressionSource | null | undefined) => !!source?._z3dsSourceFileName;
+    !!(source && (source.metadata?.cuePath || chdModeFromMetadata(source.metadata)));
   const _isChdSource = (source: CompressionSource | null | undefined) =>
     hasRomSpecificExtension(CHD_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source)) || _hasChdSourceMetadata(source);
   const _isRvzSource = (source: CompressionSource | null | undefined) =>
-    hasRomSpecificExtension(RVZ_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source)) || _hasRvzSourceMetadata(source);
+    hasRomSpecificExtension(RVZ_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isZ3dsSource = (source: CompressionSource | null | undefined) =>
-    hasRomSpecificExtension(Z3DS_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source)) ||
-    _hasZ3dsSourceMetadata(source);
+    hasRomSpecificExtension(Z3DS_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isChdCompressionInput = (source: CompressionSource | null | undefined) =>
     hasRomSpecificExtension(CHD_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isRvzCompressionInput = (source: CompressionSource | null | undefined) =>
@@ -272,8 +246,6 @@ const OutputCompressionManager = (() => {
     const selected = _normalizeOutputCompression(options.compressionFormat);
     if (selected !== OUTPUT_COMPRESSION.AUTO) return selected;
     if (_hasChdSourceMetadata(source)) return OUTPUT_COMPRESSION.CHD;
-    if (_hasRvzSourceMetadata(source)) return OUTPUT_COMPRESSION.RVZ;
-    if (_hasZ3dsSourceMetadata(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isUnambiguousZ3dsCompressionInput(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isUnambiguousChdCompressionInput(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
@@ -404,7 +376,7 @@ const OutputCompressionManager = (() => {
     const extension = _getExtension(source);
     return (
       z3dsCompressedExtensionForSourceExtension(extension) ??
-      z3dsCompressedExtensionForMagic(source?._z3dsUnderlyingMagic) ??
+      z3dsCompressedExtensionForMagic(source?.metadata?.underlyingMagic) ??
       (() => {
         throw new Error(`Unsupported Z3DS source extension: ${extension || "(missing)"}`);
       })()

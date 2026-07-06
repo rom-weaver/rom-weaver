@@ -1,4 +1,5 @@
 import type { JsonRecord, JsonValue } from "../../../types/runtime.ts";
+import type { SourceMetadata } from "../../../types/workflow-source.ts";
 import type { SyncByteSource } from "./byte-sources.ts";
 
 export type { SyncByteSource };
@@ -60,16 +61,7 @@ type CoreRomPatchFileLike = PatchFileLike & {
   _archiveEntryType?: string;
   _archiveFileName?: string;
   _browserFileBacked?: boolean;
-  _chdCuePath?: string;
-  _chdCueText?: string;
-  _chdMode?: string;
-  _chdOutputPath?: string;
-  _chdSourceFileName?: string;
-  _rvzMode?: string;
-  _rvzSourceFileName?: string;
-  _z3dsMetadata?: Record<string, string | number | boolean | Uint8Array | null | undefined> | null;
-  _z3dsSourceFileName?: string;
-  _z3dsUnderlyingMagic?: string;
+  metadata?: SourceMetadata;
   _file?: Blob;
   fakeHeader?: boolean;
   unpatched?: boolean;
