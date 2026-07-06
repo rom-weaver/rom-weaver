@@ -120,7 +120,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         if (!destinationFileHandle) {
           const destinationFileName = getDestinationFileName(destination);
           const downloadBlob = destinationFileName ? new Blob([file], { type: "application/octet-stream" }) : file;
-          triggerBrowserDownload(downloadBlob, destinationFileName || fileName);
+          await triggerBrowserDownload(downloadBlob, destinationFileName || fileName);
           return;
         }
         await writeBlobToFileHandle(destinationFileHandle, file);

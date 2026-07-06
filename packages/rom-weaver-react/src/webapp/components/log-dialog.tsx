@@ -238,12 +238,12 @@ const LogDialog = ({
             </button>
             <button
               className="btn slim ghost"
-              onClick={() =>
-                triggerBrowserDownload(
+              onClick={() => {
+                void triggerBrowserDownload(
                   visible.map(formatCopyLine).join("\n"),
                   showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt",
-                )
-              }
+                );
+              }}
               type="button"
             >
               {localizer.message("ui.result.download")}

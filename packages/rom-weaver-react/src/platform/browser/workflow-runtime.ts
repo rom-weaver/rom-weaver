@@ -62,7 +62,7 @@ const createBrowserPublicOutputAdapter = (): RuntimePublicOutputAdapter => ({
       return;
     }
     const blob = await readRuntimeOutputBlob(output);
-    triggerBrowserDownload(blob, output.fileName);
+    await triggerBrowserDownload(blob, output.fileName);
   },
 });
 
