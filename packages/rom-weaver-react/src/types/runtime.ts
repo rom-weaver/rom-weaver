@@ -42,15 +42,8 @@ type ArchiveEntryInput = {
   cleanup?: CleanupCallback;
 };
 
-type BrowserDownload = {
-  data: BlobPart;
-  fileName: string;
-  cleanup?: CleanupCallback;
-};
-
 export type {
   ArchiveEntryInput,
-  BrowserDownload,
   BrowserFileLike,
   CleanupCallback,
   JsonObject,

@@ -1,17 +1,4 @@
-import type { BrowserDownload, CleanupCallback } from "../../types/runtime.ts";
 import { isAppleMobileWebKit } from "../shared/webkit-runtime.ts";
-
-type BrowserDownloadTriggerOptions = {
-  retainCleanupDelayMs?: number;
-};
-
-const isBrowserDownload = (value: BrowserDownload | BlobPart): value is BrowserDownload =>
-  !!value && typeof value === "object" && "data" in value && "fileName" in value;
-
-const releaseBlobDownload = (url: string, cleanup?: CleanupCallback) => {
-  URL.revokeObjectURL(url);
-  cleanup?.();
-};
 
 // An installed iOS/iPadOS PWA (standalone display mode). Only there do we take
 // the share path — a normal Safari tab keeps the anchor download (its Quick Look
@@ -54,12 +41,7 @@ const tryWebKitShare = async (blob: Blob, fileName?: string): Promise<boolean> =
   return true;
 };
 
-const triggerAnchorDownload = (
-  blob: Blob,
-  resolvedFileName: string | undefined,
-  releaseCleanup: CleanupCallback | undefined,
-  retainDelay: number,
-) => {
+const triggerAnchorDownload = (blob: Blob, resolvedFileName: string | undefined) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -69,32 +51,15 @@ const triggerAnchorDownload = (
   document.body.appendChild(anchor);
   anchor.click();
   setTimeout(() => {
-    if (retainDelay <= 0) releaseBlobDownload(url, releaseCleanup);
+    URL.revokeObjectURL(url);
     anchor.remove();
   }, 0);
-  if (retainDelay > 0) {
-    setTimeout(() => {
-      releaseBlobDownload(url, releaseCleanup);
-    }, retainDelay);
-  }
 };
 
-const triggerBrowserDownload = async (
-  download: BrowserDownload | BlobPart,
-  fileName?: string,
-  cleanup?: CleanupCallback,
-  options: BrowserDownloadTriggerOptions = {},
-): Promise<void> => {
-  const data = isBrowserDownload(download) ? download.data : download;
-  const resolvedFileName = isBrowserDownload(download) ? download.fileName : fileName;
-  const releaseCleanup = isBrowserDownload(download) ? download.cleanup : cleanup;
-  const retainDelay = typeof releaseCleanup === "function" ? Math.max(0, options.retainCleanupDelayMs || 0) : 0;
+const triggerBrowserDownload = async (data: BlobPart, fileName?: string): Promise<void> => {
   const blob = data instanceof Blob ? data : new Blob([data], { type: "application/octet-stream" });
-  if (await tryWebKitShare(blob, resolvedFileName)) {
-    releaseCleanup?.();
-    return;
-  }
-  triggerAnchorDownload(blob, resolvedFileName, releaseCleanup, retainDelay);
+  if (await tryWebKitShare(blob, fileName)) return;
+  triggerAnchorDownload(blob, fileName);
 };
 
 export { triggerBrowserDownload };
