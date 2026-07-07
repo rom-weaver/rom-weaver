@@ -3,7 +3,6 @@ import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
-import type { ChecksumResult } from "../../types/checksum.ts";
 import type { ParsedIngestResult } from "../../types/ingest.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type {
@@ -32,12 +31,6 @@ import {
   withRomWeaverFailureKind,
 } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
-import {
-  parseChecksumDetails,
-  parseChecksumLabel,
-  parseChecksumRomProbeLabel,
-  parseChecksumRomType,
-} from "./checksum-output-parsing.ts";
 import {
   isChdCompressionFormat,
   normalizeChdCodecArgs,

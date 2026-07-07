@@ -16,17 +16,6 @@ type ChecksumVariant = {
   transforms?: Record<string, unknown>;
 };
 
-type ChecksumResult = {
-  adler32?: number;
-  crc16?: number;
-  crc32: number;
-  md5: string;
-  romProbe?: ChecksumRomProbe;
-  romType?: RomTypeTag;
-  sha1: string;
-  variants?: ChecksumVariant[];
-};
-
 /** Backend-derived ROM platform/disc-format tag (e.g. "Sony PlayStation" + "CD").
  * Both fields are optional; renders next to the file size on workflow cards. */
 type RomTypeTag = {
@@ -58,4 +47,4 @@ type ExtractTiming = {
   workers?: number;
 };
 
-export type { ChecksumMap, ChecksumResult, ChecksumRomProbe, ChecksumVariant, ExtractTiming, RomTypeTag };
+export type { ChecksumMap, ChecksumRomProbe, ChecksumVariant, ExtractTiming, RomTypeTag };
