@@ -37,6 +37,9 @@ type CreatePwaServiceWorkerClientOptions = {
   onStateChange: (state: ServiceWorkerCacheState) => void;
   registerServiceWorker?: RegisterServiceWorker;
   sessionStorage?: SessionStorageLike | undefined;
+  // Return true to apply an update silently (activate + reload) instead of prompting. Called when an
+  // update is detected; use it to auto-update at first page load, while there's no in-progress work.
+  shouldAutoApplyUpdate?: () => boolean;
   updateIntervalMs: number;
   window: WindowLike | undefined;
 };
@@ -100,6 +103,7 @@ const createPwaServiceWorkerClient = ({
   onStateChange,
   registerServiceWorker: registerServiceWorkerOverride,
   sessionStorage: sessionStorageOverride,
+  shouldAutoApplyUpdate,
   updateIntervalMs,
   window,
 }: CreatePwaServiceWorkerClientOptions): PwaServiceWorkerClient => {
@@ -523,6 +527,13 @@ const createPwaServiceWorkerClient = ({
       immediate: true,
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update ready");
+        if (shouldAutoApplyUpdate?.() && updateServiceWorker) {
+          logServiceWorkerClient("auto-applying service worker update; no in-progress work");
+          clearUpdateReady();
+          onBeforeReload?.();
+          void updateServiceWorker(true);
+          return;
+        }
         markUpdateReady();
       },
       onOfflineReady: () => {

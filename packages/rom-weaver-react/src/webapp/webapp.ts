@@ -149,6 +149,7 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
     renderWebappRootIfReady();
   },
   sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
+  shouldAutoApplyUpdate: () => !shouldWarnBeforeUnload(getNavigationGuardState()),
   updateIntervalMs: SERVICE_WORKER_UPDATE_INTERVAL_MS,
   window: typeof window === "undefined" ? undefined : window,
 });

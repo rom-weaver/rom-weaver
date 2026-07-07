@@ -35,7 +35,12 @@ const createController = () => {
   };
 };
 
-const createHarness = ({ controller = null, crossOriginIsolated = false, sessionStorageSeed = {} } = {}) => {
+const createHarness = ({
+  controller = null,
+  crossOriginIsolated = false,
+  sessionStorageSeed = {},
+  shouldAutoApplyUpdate,
+} = {}) => {
   const sessionStorage = createSessionStorage(sessionStorageSeed);
   const location = {
     href: "https://example.com/webapp/index.html",
@@ -62,11 +67,14 @@ const createHarness = ({ controller = null, crossOriginIsolated = false, session
     getRegistrations: vi.fn(async () => []),
   };
   const navigatorLike = { serviceWorker };
+  const updateServiceWorker = vi.fn(async () => undefined);
+  let registerOptions;
   const registerServiceWorker = (options) => {
+    registerOptions = options;
     queueMicrotask(() => {
       options.onRegisteredSW?.("/cache-service-worker.js", registration);
     });
-    return async () => undefined;
+    return updateServiceWorker;
   };
   const client = createPwaServiceWorkerClient({
     cachePrefix: "precache-rom-weaver-",
@@ -81,6 +89,7 @@ const createHarness = ({ controller = null, crossOriginIsolated = false, session
     onStateChange: () => undefined,
     registerServiceWorker,
     sessionStorage,
+    shouldAutoApplyUpdate,
     updateIntervalMs: 5000,
     window: browserWindow,
   });
@@ -92,6 +101,8 @@ const createHarness = ({ controller = null, crossOriginIsolated = false, session
     registration,
     serviceWorker,
     sessionStorage,
+    triggerNeedRefresh: () => registerOptions?.onNeedRefresh?.(),
+    updateServiceWorker,
   };
 };
 
@@ -119,6 +130,38 @@ test("reloads once to gain control when registration is active but uncontrolled"
 
   expect(harness.location.reload).toHaveBeenCalledTimes(1);
   expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe("notcontrolling");
+});
+
+test("auto-applies an update when no work is in progress", async () => {
+  const controller = createController();
+  const harness = createHarness({
+    controller,
+    crossOriginIsolated: true,
+    shouldAutoApplyUpdate: () => true,
+  });
+
+  harness.client.initialize();
+  await flushAsync();
+  harness.triggerNeedRefresh();
+
+  expect(harness.updateServiceWorker).toHaveBeenCalledWith(true);
+  expect(harness.client.getState().updateReady).toBe(false);
+});
+
+test("defers an update to a prompt when work is in progress", async () => {
+  const controller = createController();
+  const harness = createHarness({
+    controller,
+    crossOriginIsolated: true,
+    shouldAutoApplyUpdate: () => false,
+  });
+
+  harness.client.initialize();
+  await flushAsync();
+  harness.triggerNeedRefresh();
+
+  expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+  expect(harness.client.getState().updateReady).toBe(true);
 });
 
 test("degrades to require-corp and reloads when controlled but still not isolated", async () => {
