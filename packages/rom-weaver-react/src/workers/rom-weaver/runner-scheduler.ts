@@ -339,7 +339,15 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     // Re-pump only after real progress, so arrivals during the await are planned against the updated
     // set; no progress means the remaining waiters need a finish to free capacity (avoids a tight
     // no-op planning loop).
-    if (admittedAny) void pumpIoWave();
+    if (admittedAny) {
+      void pumpIoWave();
+      return;
+    }
+    // Liveness backstop: the planner's lone-job rule always places a waiter in the first wave when the
+    // I/O lane is idle, so admitting nothing here is unreachable today. But if a plan ever placed none
+    // while nothing is in flight to re-pump on a later finish, the queued ops would hang forever.
+    // admitIoFallbackOne no-ops when I/O is in flight, so this only fires as the idle-lane rescue.
+    admitIoFallbackOne();
   };
 
   const pump = (): void => {
