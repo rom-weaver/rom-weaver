@@ -23,8 +23,8 @@ use crc32c::crc32c_append;
 use crc32fast::Hasher as Crc32Hasher;
 use md5::{Digest as Md5Digest, Md5};
 use rom_weaver_core::{
-    ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext, OperationFamily,
-    OperationReport, Result, RomWeaverError, ThreadCapability, ThreadExecution,
+    ChecksumRequest, OperationContext, OperationFamily, OperationReport, Result, RomWeaverError,
+    ThreadCapability, ThreadExecution,
 };
 use serde_json::json;
 use sha1::Sha1;
@@ -418,16 +418,12 @@ impl Default for NativeChecksumEngine {
     }
 }
 
-impl ChecksumEngine for NativeChecksumEngine {
-    fn name(&self) -> &'static str {
+impl NativeChecksumEngine {
+    pub fn name(&self) -> &'static str {
         "native"
     }
 
-    fn supported_algorithms(&self) -> &'static [&'static str] {
-        SUPPORTED_ALGORITHMS
-    }
-
-    fn checksum_file(
+    pub fn checksum_file(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
@@ -435,7 +431,7 @@ impl ChecksumEngine for NativeChecksumEngine {
         self.run_checksum(request, context, "checksum")
     }
 
-    fn checksum_range(
+    pub fn checksum_range(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
@@ -443,16 +439,6 @@ impl ChecksumEngine for NativeChecksumEngine {
         self.run_checksum(request, context, "checksum-range")
     }
 
-    fn capabilities(&self) -> ChecksumCapabilities {
-        ChecksumCapabilities {
-            checksum_file: true,
-            checksum_range: true,
-            threaded_fanout: true,
-        }
-    }
-}
-
-impl NativeChecksumEngine {
     pub fn checksum_values(
         &self,
         request: &ChecksumRequest,

@@ -264,24 +264,6 @@ where
     })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BoundedIoPolicy {
-    pub chunk_size_bytes: u64,
-    pub max_in_flight_items: usize,
-    pub max_reorder_items: usize,
-}
-
-impl BoundedIoPolicy {
-    pub fn for_effective_threads(effective_threads: usize) -> Self {
-        let bounded_items = bounded_items_for_threads(effective_threads);
-        Self {
-            chunk_size_bytes: DEFAULT_CHUNK_SIZE_BYTES,
-            max_in_flight_items: bounded_items,
-            max_reorder_items: bounded_items,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct IoWatermark {
     pub current_bytes: usize,

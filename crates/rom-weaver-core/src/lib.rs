@@ -31,18 +31,17 @@ pub use disc_sheet::{
     DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs,
     parse_disc_sheet_refs_from_text, sibling_gdi_path,
 };
-pub use env::{env_bool, env_u64, env_u64_opt};
+pub use env::{env_u64, env_u64_opt};
 pub use error::{
     ChdMediaScope, FormatOperationKind, Result, RomWeaverError, RomWeaverErrorKind, UnsupportedOp,
     ValidationCodeError, ValidationField, ValidationFieldValue,
 };
 pub use formatting::format_human_bytes;
 pub use io::{
-    BlockCacheReader, BoundedIoPolicy, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark,
-    OrderedChunkWriter, OrderedStreamingMessages, SharedBlockCacheReader, TempPathAllocator,
-    bounded_items_for_threads, create_extract_output_file, file_starts_with,
-    ordered_streaming_compress,
+    BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark, OrderedChunkWriter, OrderedStreamingMessages,
+    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    create_extract_output_file, file_starts_with, ordered_streaming_compress,
 };
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
 pub use progress::{
@@ -55,13 +54,11 @@ pub use prompt::{
     Selection, SelectionList, SelectionPrompter, parse_selection_input, parse_selection_list_input,
 };
 pub use registry::{
-    ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,
-    CodecDescriptor, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerHandler, ContainerHandlerOperations,
-    ContainerHandlerRegistration, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
-    CreateInputSource, CreateSupport, FormatDescriptor, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    traced_codec_backend, traced_container_handler, traced_patch_handler,
+    ChecksumRequest, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
+    ContainerHandler, ContainerHandlerOperations, ContainerHandlerRegistration, ContainerListEntry,
+    ContainerProbeRequest, CreateInputOverride, CreateInputSource, CreateSupport, FormatDescriptor,
+    OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, traced_container_handler, traced_patch_handler,
 };
 pub use report_details::{
     attach_emitted_file_paths, attach_extraction_details, insert_thread_execution_details,

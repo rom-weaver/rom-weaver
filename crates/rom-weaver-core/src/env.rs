@@ -7,27 +7,6 @@
 
 use tracing::warn;
 
-/// Read a boolean knob. `1`/`true`/`yes`/`on` (case-insensitive) are true;
-/// `0`/`false`/`no`/`off`/empty are false. Any other value logs a warning and
-/// is treated as false.
-pub fn env_bool(name: &str) -> bool {
-    let Ok(raw) = std::env::var(name) else {
-        return false;
-    };
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => true,
-        "" | "0" | "false" | "no" | "off" => false,
-        other => {
-            warn!(
-                env = name,
-                value = other,
-                "ignoring unrecognized boolean env value; expected 1/0/true/false"
-            );
-            false
-        }
-    }
-}
-
 /// Read an unsigned-integer knob, or `None` when unset. An unparseable value
 /// logs a warning and is treated as unset.
 pub fn env_u64_opt(name: &str) -> Option<u64> {

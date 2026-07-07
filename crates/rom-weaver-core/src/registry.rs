@@ -284,13 +284,6 @@ pub struct ChecksumRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CodecOperationRequest {
-    pub input: PathBuf,
-    pub output: PathBuf,
-    pub level: Option<i32>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerCapabilities {
     pub probe_details: bool,
     pub extract: bool,
@@ -308,23 +301,6 @@ pub struct PatchCapabilities {
     pub threaded_diff: bool,
     pub threaded_output: bool,
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChecksumCapabilities {
-    pub checksum_file: bool,
-    pub checksum_range: bool,
-    pub threaded_fanout: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CodecCapabilities {
-    pub encode: bool,
-    pub decode: bool,
-    pub encode_threads: ThreadCapability,
-    pub decode_threads: ThreadCapability,
-}
-
-pub type CodecDescriptor = FormatDescriptor;
 
 /// Whether a registered container may run `create`/`create_dry_run_size`. For
 /// extract-only formats the wrapper returns a uniform extract-only error instead
@@ -360,10 +336,6 @@ pub fn traced_container_handler(
 
 pub fn traced_patch_handler(handler: Arc<dyn PatchHandler>) -> Arc<dyn PatchHandler> {
     Arc::new(TracingPatchHandler { inner: handler })
-}
-
-pub fn traced_codec_backend(backend: Arc<dyn CodecBackend>) -> Arc<dyn CodecBackend> {
-    Arc::new(TracingCodecBackend { inner: backend })
 }
 
 pub trait ContainerHandlerOperations: Send + Sync {
@@ -525,37 +497,6 @@ pub trait PatchHandler: Send + Sync {
         context: &OperationContext,
     ) -> Result<OperationReport>;
     fn capabilities(&self) -> PatchCapabilities;
-}
-
-pub trait ChecksumEngine: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn supported_algorithms(&self) -> &'static [&'static str];
-    fn checksum_file(
-        &self,
-        request: &ChecksumRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport>;
-    fn checksum_range(
-        &self,
-        request: &ChecksumRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport>;
-    fn capabilities(&self) -> ChecksumCapabilities;
-}
-
-pub trait CodecBackend: Send + Sync {
-    fn descriptor(&self) -> &'static CodecDescriptor;
-    fn encode(
-        &self,
-        request: &CodecOperationRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport>;
-    fn decode(
-        &self,
-        request: &CodecOperationRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport>;
-    fn capabilities(&self) -> CodecCapabilities;
 }
 
 struct TracingContainerHandler {
@@ -882,61 +823,6 @@ impl PatchHandler for TracingPatchHandler {
     fn capabilities(&self) -> PatchCapabilities {
         self.inner.capabilities()
     }
-}
-
-struct TracingCodecBackend {
-    inner: Arc<dyn CodecBackend>,
-}
-
-impl CodecBackend for TracingCodecBackend {
-    fn descriptor(&self) -> &'static CodecDescriptor {
-        self.inner.descriptor()
-    }
-
-    fn encode(
-        &self,
-        request: &CodecOperationRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport> {
-        let descriptor = self.inner.descriptor();
-        trace_codec_operation("encode", descriptor, request, || {
-            self.inner.encode(request, context)
-        })
-    }
-
-    fn decode(
-        &self,
-        request: &CodecOperationRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport> {
-        let descriptor = self.inner.descriptor();
-        trace_codec_operation("decode", descriptor, request, || {
-            self.inner.decode(request, context)
-        })
-    }
-
-    fn capabilities(&self) -> CodecCapabilities {
-        self.inner.capabilities()
-    }
-}
-
-fn trace_codec_operation(
-    stage: &'static str,
-    descriptor: &CodecDescriptor,
-    request: &CodecOperationRequest,
-    operation: impl FnOnce() -> Result<OperationReport>,
-) -> Result<OperationReport> {
-    trace!(
-        family = ?descriptor.family,
-        format = descriptor.name,
-        input = %request.input.display(),
-        output = %request.output.display(),
-        level = ?request.level,
-        "codec operation start"
-    );
-    let result = operation();
-    trace_operation_result(stage, descriptor, &result);
-    result
 }
 
 fn trace_operation_result(

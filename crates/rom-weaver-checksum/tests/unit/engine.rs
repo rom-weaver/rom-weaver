@@ -9,8 +9,7 @@ use std::{
 
 use proptest::prelude::*;
 use rom_weaver_core::{
-    CancellationToken, ChecksumEngine, ChecksumRequest, NoopProgressSink, OperationContext,
-    ThreadBudget,
+    CancellationToken, ChecksumRequest, NoopProgressSink, OperationContext, ThreadBudget,
 };
 
 use super::{
