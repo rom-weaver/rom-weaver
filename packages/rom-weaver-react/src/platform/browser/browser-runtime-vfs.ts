@@ -86,6 +86,8 @@ const cleanupCachedStagedSource = async (key: string, cached: CachedStagedSource
   // Only evict our own slot: a re-stage may have replaced this key with a different live entry, and
   // deleting that would strand the new staged copy (identity guard, mirrors browser-virtual-files.ts).
   if (stagedSourceCache.get(key) === cached) stagedSourceCache.delete(key);
+  // Prune any lingering in-flight-release mark so the process-global set stays bounded.
+  releasedStagingSources.delete(key);
   await cached.staged.cleanup().catch(() => undefined);
 };
 const releaseCachedStagedSource = (key: string, cached: CachedStagedSource) => {
@@ -140,9 +142,14 @@ const createBrowserRuntimeVfsIo = ({
     for (const source of sources) {
       const key = getStagedSourceCacheKey(source);
       if (!key) continue;
-      releasedStagingSources.add(key);
       const cached = stagedSourceCache.get(key);
-      if (!cached) continue;
+      if (!cached) {
+        // Not yet cached: a stage may still be in flight, so mark the release so that pass cleans up
+        // after itself (consumed in cacheStagedSource). Only the in-flight case needs the mark — adding
+        // it for already-cached sources leaked keys into a process-global set that never shrank.
+        releasedStagingSources.add(key);
+        continue;
+      }
       cached.cleanupWhenIdle = true;
       // Release means the session no longer references this source. A holder that never returned
       // its ref (a cancelled in-flight pass) would otherwise pin the staged copy forever, so clean
@@ -239,13 +246,17 @@ const createBrowserRuntimeVfsIo = ({
     // copy surfaced as a `-2` extraction with no base file (e.g. during ingest). Awaiting the in-flight
     // stage lets this pass reuse the single bare-named copy instead.
     if (cacheKey) {
-      const inFlight = pendingStages.get(cacheKey);
-      if (inFlight) {
+      // Loop rather than a single check: several passes can wake from the SAME failed in-flight stage at
+      // once. The first to resume starts a fresh stage and republishes it in pendingStages below, so the
+      // rest must re-check and coalesce onto that one instead of each starting a duplicate (the `-2`
+      // phantom this coalescing exists to prevent).
+      let inFlight = pendingStages.get(cacheKey);
+      while (inFlight) {
         emitBrowserRuntimeVfsTrace(trace, "stageSource awaiting in-flight stage of same source", { scope });
         await inFlight.catch(() => undefined);
         const settled = stagedSourceCache.get(cacheKey);
         if (settled) return reuseCachedEntry(cacheKey, settled);
-        // The in-flight stage failed or was released before we woke; fall through to a fresh stage.
+        inFlight = pendingStages.get(cacheKey);
       }
     }
     // Cache every staged source (in-memory virtual *and* real OPFS-staged path copies) keyed on the
