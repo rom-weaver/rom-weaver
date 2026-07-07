@@ -41,9 +41,8 @@ export const OPFS_PROXY_CONTROL_OFFSET_HIGH_INDEX = 4;
  */
 export const OPFS_PROXY_CONTROL_LENGTH_INDEX = 5;
 /**
- * Auxiliary operand, low 32 bits (both directions). Consumer->proxy: rename destination-path byte
- * length, truncate size low, readdir cookie, or open oflags. Proxy->consumer: returned handle id on
- * open.
+ * Auxiliary operand, low 32 bits (both directions). Consumer->proxy: truncate size low, readdir
+ * cookie, or open oflags. Proxy->consumer: returned handle id on open.
  */
 export const OPFS_PROXY_CONTROL_AUX_LOW_INDEX = 6;
 /** Auxiliary operand, high 32 bits (both directions). truncate size high, open rights, etc. */
@@ -90,8 +89,7 @@ export const OPFS_PROXY_OP_FLUSH = 6;
 export const OPFS_PROXY_OP_CLOSE = 7;
 /** Unlink a file by path (data buffer holds the UTF-8 path). */
 export const OPFS_PROXY_OP_UNLINK = 8;
-/** Rename src->dest (data buffer holds src path [0,LENGTH) then dest path [LENGTH,LENGTH+AUX_LOW)). */
-export const OPFS_PROXY_OP_RENAME = 9;
+// 9 retired (was OP_RENAME); not reused so the wire numbering stays stable.
 /** Create a directory by path (data buffer holds the UTF-8 path). */
 export const OPFS_PROXY_OP_MKDIR = 10;
 /** Return the byte size of a handle in RESULT (proxy reads the live SyncAccessHandle size). */
@@ -125,7 +123,6 @@ export const OPFS_PROXY_HANDLE_BY_PATH = 0;
  * badly (an extract that runs ~2.8s ballooned to ~36s — not in the write path, writeMs stayed ~700ms,
  * so a smaller slot perturbs decode-thread scheduling/allocation), while 4 MiB was within noise of
  * 2 MiB (~2.8s, ~2300 MiBps writes) for double the SAB. Cost is slotCount × this; slotCount ≈
- * threadPool + 4, so ~48 MiB on a ~10-thread desktop. Must also hold any guest path pair (rename
- * serializes two paths here).
+ * threadPool + 4, so ~48 MiB on a ~10-thread desktop.
  */
 export const OPFS_PROXY_DATA_BUFFER_BYTES = 2 * 1024 * 1024;

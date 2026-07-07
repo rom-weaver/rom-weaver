@@ -36,7 +36,6 @@ import {
   OPFS_PROXY_OP_MKDIR,
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_READ,
-  OPFS_PROXY_OP_RENAME,
   OPFS_PROXY_OP_SIZE,
   OPFS_PROXY_OP_TRUNCATE,
   OPFS_PROXY_OP_UNLINK,
@@ -206,22 +205,6 @@ export class OpfsProxyClient {
 
   mkdir(path: string): void {
     this.pathOp(OPFS_PROXY_OP_MKDIR, path);
-  }
-
-  rename(srcPath: string, destPath: string): void {
-    const { slot, index } = this.acquireSlot();
-    try {
-      const srcLength = this.writePath(slot, srcPath, 0);
-      const destLength = this.writePath(slot, destPath, srcLength);
-      this.submit(slot, index, {
-        auxLow: destLength,
-        handle: OPFS_PROXY_HANDLE_BY_PATH,
-        length: srcLength,
-        opcode: OPFS_PROXY_OP_RENAME,
-      });
-    } finally {
-      this.releaseSlot(slot);
-    }
   }
 
   private simpleOp(opcode: number, handleId: number): void {

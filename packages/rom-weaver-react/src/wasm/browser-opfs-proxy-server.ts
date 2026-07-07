@@ -43,7 +43,6 @@ import {
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_PREAD,
   OPFS_PROXY_OP_READ,
-  OPFS_PROXY_OP_RENAME,
   OPFS_PROXY_OP_SIZE,
   OPFS_PROXY_OP_TRUNCATE,
   OPFS_PROXY_OP_UNLINK,
@@ -291,9 +290,6 @@ class OpfsProxyServer {
       case OPFS_PROXY_OP_MKDIR:
         await this.opMkdir(this.readPath(data, control, 0));
         return 0;
-      case OPFS_PROXY_OP_RENAME:
-        await this.opRename(slot);
-        return 0;
       default:
         throw new ProxyErrno(ERRNO_IO);
     }
@@ -418,75 +414,6 @@ class OpfsProxyServer {
     for (const part of location.parts) {
       dir = (await dir.getDirectoryHandle(part, { create: true })) as FileSystemDirectoryHandleLike;
     }
-  }
-
-  private async opRename(slot: OpfsProxyChannelSlot): Promise<void> {
-    const { control, data } = slot;
-    const srcLength = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
-    const destLength = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX);
-    const srcPath = textDecoder.decode(new Uint8Array(data.subarray(0, srcLength)));
-    const destPath = textDecoder.decode(new Uint8Array(data.subarray(srcLength, srcLength + destLength)));
-    await this.renamePath(srcPath, destPath);
-  }
-
-  private async renamePath(srcPath: string, destPath: string): Promise<void> {
-    const srcLocation = this.locate(srcPath);
-    const srcParent = await this.resolveParent(srcLocation, { create: false });
-    const srcFile = (await srcParent.dir.getFileHandle(srcParent.name)) as FileSystemFileHandleLike;
-    // Native move() is atomic but fails if either endpoint has an open SyncAccessHandle. Use it only
-    // when neither does; otherwise fall back to copy + (deferred) unlink so open fds stay valid.
-    const endpointHasOpenHandle = this.byPath.has(srcPath) || this.byPath.has(destPath);
-    if (typeof srcFile.move === "function" && !endpointHasOpenHandle) {
-      const destLocation = this.locate(destPath);
-      const destParent = await this.resolveParent(destLocation, { create: true });
-      await srcFile.move(destParent.dir as unknown as FileSystemDirectoryHandle, destParent.name);
-      this.byPath.delete(srcPath);
-      return;
-    }
-    await this.copyPath(srcPath, destPath);
-    await this.opUnlink(srcPath);
-  }
-
-  private async copyPath(srcPath: string, destPath: string): Promise<void> {
-    const srcId = await this.opOpenInternal(srcPath, { create: false, writable: false });
-    const destId = await this.opOpenInternal(destPath, { create: true, writable: true });
-    try {
-      const src = this.requireHandle(srcId);
-      const dest = this.requireHandle(destId);
-      if (!(src.handle && dest.handle)) throw new ProxyErrno(ERRNO_IO);
-      const size = src.handle.getSize();
-      dest.handle.truncate(size);
-      const buffer = new Uint8Array(Math.min(size, 8 * 1024 * 1024) || 1);
-      let offset = 0;
-      while (offset < size) {
-        const view = buffer.subarray(0, Math.min(buffer.byteLength, size - offset));
-        const read = src.handle.read(view, { at: offset });
-        if (read <= 0) break;
-        dest.handle.write(view.subarray(0, read), { at: offset });
-        offset += read;
-      }
-      dest.handle.flush();
-    } finally {
-      this.releaseHandle(srcId);
-      this.releaseHandle(destId);
-    }
-  }
-
-  private async opOpenInternal(guestPath: string, options: { create: boolean; writable: boolean }): Promise<number> {
-    const reattached = this.reattachOpenHandle(guestPath, {
-      create: options.create,
-      writableRequested: options.writable,
-    });
-    if (reattached !== undefined) return reattached;
-    const location = this.locate(guestPath);
-    const writable = options.writable || isGuestPathWithinRoots(guestPath, location.mount.writableRoots);
-    const fileHandle = await this.resolveFileHandle(location, { create: options.create });
-    const mode = writable ? writableSyncAccessMode(this.syncAccessMode) : "read-only";
-    const handle = await openSyncAccessHandle({ fileHandle, mode });
-    const id = this.allocId();
-    this.byId.set(id, { blob: null, handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable });
-    this.byPath.set(guestPath, id);
-    return id;
   }
 
   private readPath(data: Uint8Array, control: Int32Array, offset: number): string {
