@@ -66,6 +66,23 @@ pub const DEFAULT_BLOCK_CACHE_MAX_BLOCKS: usize = 32;
 
 static NEXT_TEMP_NAMESPACE_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Random u64 fixed once per process/wasm instance, folded into every temp namespace so two
+/// concurrent instances sharing an OPFS root cannot mint the same directory. `RandomState` seeds a
+/// SipHash keyed from OS entropy (getrandom under the hood); finishing an empty hasher yields a
+/// random value with no extra dependency.
+fn namespace_entropy() -> u64 {
+    use std::{
+        hash::{BuildHasher, Hasher},
+        sync::OnceLock,
+    };
+    static INSTANCE_ENTROPY: OnceLock<u64> = OnceLock::new();
+    *INSTANCE_ENTROPY.get_or_init(|| {
+        std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish()
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OrderedStreamingMessages {
     pub worker_closed: &'static str,
@@ -578,7 +595,12 @@ impl TempPathAllocator {
         #[cfg(not(target_family = "wasm"))]
         let process_id = std::process::id();
         let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
-        let namespace = format!("rw-{timestamp}-{process_id}-{sequence}");
+        // On wasm `process_id` is a constant and the sequence counter + coarsened browser clock
+        // can collide across concurrent runtime instances sharing one OPFS root, minting an
+        // identical namespace so one instance's Drop removes the other's live temp dir. Mix in a
+        // per-instance random u64 (SipHash-seeded from OS entropy, no new deps) to disambiguate.
+        let entropy = namespace_entropy();
+        let namespace = format!("rw-{timestamp}-{process_id}-{sequence}-{entropy:016x}");
         Self {
             root,
             namespace,
