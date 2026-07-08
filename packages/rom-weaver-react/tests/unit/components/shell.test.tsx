@@ -70,10 +70,21 @@ describe("UpdateBanner", () => {
   it("offers reload and dismiss for a pending update", () => {
     const onReload = vi.fn();
     const onDismiss = vi.fn();
+    const onShowChangelog = vi.fn();
     const { container } = render(
-      withSettings(<UpdateBanner onDismiss={onDismiss} onReload={onReload} open title="v1 → v2" />),
+      withSettings(
+        <UpdateBanner
+          onDismiss={onDismiss}
+          onReload={onReload}
+          onShowChangelog={onShowChangelog}
+          open
+          title="v1 → v2"
+        />,
+      ),
     );
     expect(container.querySelector(".updates .updates-ver")?.textContent).toBe("v1 → v2");
+    fireEvent.click(container.querySelector(".updates .updates-ver") as HTMLButtonElement);
+    expect(onShowChangelog).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
     expect(onReload).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);

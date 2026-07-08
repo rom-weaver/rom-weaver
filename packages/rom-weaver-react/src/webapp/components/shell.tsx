@@ -217,11 +217,13 @@ const UpdateBanner = ({
   title,
   onReload,
   onDismiss,
+  onShowChangelog,
 }: {
   open: boolean;
   title: string;
   onReload: () => void;
   onDismiss: () => void;
+  onShowChangelog: () => void;
 }) => {
   const localizer = useUiLocalizer();
   return (
@@ -229,7 +231,10 @@ const UpdateBanner = ({
       <div className="updates" role="status">
         <span aria-hidden="true" className="updates-pulse" />
         <span className="updates-text">
-          <b>{localizer.message("ui.update.ready")}</b> <span className="updates-ver mono">{title}</span>
+          <b>{localizer.message("ui.update.ready")}</b>{" "}
+          <button className="updates-ver mono" onClick={onShowChangelog} type="button">
+            {title}
+          </button>
         </span>
         <button className="btn slim primary" onClick={onReload} type="button">
           {localizer.message("ui.update.reload")}

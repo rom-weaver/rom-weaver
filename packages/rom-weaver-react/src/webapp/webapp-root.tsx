@@ -16,6 +16,7 @@ import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchFo
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { APP_BUILD_VERSION } from "./build-version.ts";
+import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { LogDialog } from "./components/log-dialog.tsx";
 import { Masthead, Selvage, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
@@ -163,6 +164,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions }: WebappRo
   }, [state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -276,9 +278,11 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions }: WebappRo
               writeUpdateDismissed();
             }}
             onReload={actions.onReloadUpdate}
+            onShowChangelog={() => setChangelogOpen(true)}
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
+          <ChangelogDialog onClose={() => setChangelogOpen(false)} open={changelogOpen} />
           <ActivityWakeLockNotice />
           <main className="workbench">
             {workflowPanel(

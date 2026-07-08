@@ -264,6 +264,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
 .rw-app .updates-ver:hover { color: var(--thread-text); }
+.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rw-app .changelog-item { display: flex; flex-direction: column; gap: 2px; }
+.rw-app .changelog-subject { font-size: .9rem; }
+.rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
+.rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: 8px 0; }
 /* banner dismiss (update + wake-lock) — sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
