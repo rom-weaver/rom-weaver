@@ -1767,7 +1767,8 @@ mod tests {
         assert_eq!(fs::read(out_dir.join("game.bin")).expect("bin"), source_iso);
         let cue_text = fs::read_to_string(out_dir.join("game.cue")).expect("cue text");
         assert!(cue_text.contains("TRACK 01 MODE2/2352"));
-        assert!(cue_text.contains("INDEX 01 00:02:00"));
+        // TOC MSF 00:02:00 (150-frame lead-in) maps to file-relative INDEX 01 00:00:00.
+        assert!(cue_text.contains("INDEX 01 00:00:00"));
 
         let _ = fs::remove_dir_all(temp_dir);
     }

@@ -713,15 +713,16 @@ impl PbpContainerHandler {
             writer.write_all(
                 format!("  TRACK {:02} {track_type}\n", track.track_number).as_bytes(),
             )?;
+            // PBP TOC times are absolute disc MSF (include the 150-frame lead-in);
+            // cue INDEX offsets are file-relative, so track 1 INDEX 01 must be 00:00:00.
+            let index01 = track.start_frames.saturating_sub(150);
             if track.track_type == 0x01 {
-                let index00 = track.start_frames.saturating_sub(150);
+                let index00 = track.start_frames.saturating_sub(300);
                 writer.write_all(
                     format!("    INDEX 00 {}\n", Self::format_msf(index00)).as_bytes(),
                 )?;
             }
-            writer.write_all(
-                format!("    INDEX 01 {}\n", Self::format_msf(track.start_frames)).as_bytes(),
-            )?;
+            writer.write_all(format!("    INDEX 01 {}\n", Self::format_msf(index01)).as_bytes())?;
         }
         writer.flush()?;
         Ok(())
