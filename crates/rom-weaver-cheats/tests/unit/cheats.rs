@@ -198,6 +198,24 @@ fn gameboy_bank0_compare() {
     assert_eq!(err_code(&err), "cheat_no_compare_match");
 }
 
+#[test]
+fn gameboy_switchable_window_skips_bank0() {
+    // "00000B000" -> address 0x4000 (switchable window, offset 0), value 0x00,
+    // compare 0xBA. The compare byte matches only in fixed bank 0; bank 1 does
+    // not. The switchable-window scan must start at bank 1, so no bank-0 write
+    // is emitted and the match fails entirely.
+    let decoded = decode("00000B000", CheatSystem::GameBoy, CheatKind::GameGenie).unwrap();
+    assert_eq!(decoded.address, 0x4000);
+    assert_eq!(decoded.compare, Some(0xBA));
+
+    let mut rom = vec![0u8; 0x8000]; // two 16 KiB banks
+    rom[0x0000] = 0xBA; // bank 0, window offset 0 -- coincidental compare match
+    // bank 1 (offset 0x4000) stays 0x00, so it does not match.
+    let layout = RomLayout::detect(&rom, CheatSystem::GameBoy);
+    let err = resolve_writes(&rom, &layout, &decoded).unwrap_err();
+    assert_eq!(err_code(&err), "cheat_no_compare_match");
+}
+
 // --- apply_writes ----------------------------------------------------------
 
 #[test]

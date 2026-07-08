@@ -312,7 +312,10 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
     let num_banks = (rom.len() / GB_BANK_BYTES).max(1);
     if let Some(compare) = decoded.compare {
         let mut writes = Vec::new();
-        for bank in 0..num_banks {
+        // Bank 0 is fixed at $0000-$3FFF and never maps into the switchable
+        // $4000-$7FFF window, so writing a bank-0 file offset here would corrupt
+        // the fixed bank; the no-compare branch below already assumes bank 1+.
+        for bank in 1..num_banks {
             let offset = bank * GB_BANK_BYTES + window_off;
             if rom.get(offset) == Some(&compare) {
                 writes.push(CheatWrite {
