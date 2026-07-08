@@ -437,6 +437,21 @@ mod tests {
     }
 
     #[test]
+    fn read_sectors_bounds_output_to_prefix_for_untrusted_count() {
+        // A crafted ISO 9660 extent length must never force a huge reservation: read_sectors
+        // caps the allocation at the prefix it actually holds and its loop stops at the prefix
+        // end (the d33c890d clamp). Without the clamp this call reserves ~8 TB and aborts.
+        let prefix = vec![0x5Au8; 4 * USER_SECTOR_BYTES];
+        let disc = PrefixDisc {
+            bytes: &prefix,
+            frame: USER_SECTOR_BYTES,
+            data_offset: 0,
+        };
+        let out = disc.read_sectors(0, u32::MAX).expect("bounded read");
+        assert_eq!(out.len(), prefix.len());
+    }
+
+    #[test]
     fn write_into_emits_present_fields_only() {
         let mut full = serde_json::Map::new();
         RomIdentity {
