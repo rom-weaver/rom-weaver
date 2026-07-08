@@ -157,6 +157,33 @@ fn authored_directory_data_len_is_block_aligned() {
 }
 
 #[test]
+fn directory_records_merge_files_and_dirs_in_identifier_order() {
+    // ECMA-119 9.3: files and subdirectories share one record list sorted by
+    // identifier. With a file whose identifier sorts between two directories,
+    // the on-disc order must interleave them (AAA, MID.BIN;1, ZZZ), not emit all
+    // files before all dirs.
+    let files = vec![
+        file("MID.BIN", vec![1; 10]),
+        file("AAA/A.DAT", vec![2; 10]),
+        file("ZZZ/Z.DAT", vec![3; 10]),
+    ];
+    let bias = GD_HIGH_DENSITY_START_LBA;
+    let image = build_iso(&files, bias, IsoTimestamp::default()).expect("build");
+    let fs = GdRomFs::open(Cursor::new(image.clone()), bias).expect("open");
+
+    let root = fs.primary_volume_descriptor().root.clone();
+    let sector = (root.extent_lba - bias) as usize;
+    let extent = &image[sector * SECTOR..sector * SECTOR + root.data_len as usize];
+    let names: Vec<String> = super::iso9660::parse_directory(extent)
+        .expect("parse root")
+        .into_iter()
+        .filter(|r| !r.name.is_empty()) // drop . and ..
+        .map(|r| r.name)
+        .collect();
+    assert_eq!(names, vec!["AAA", "MID.BIN", "ZZZ"]);
+}
+
+#[test]
 fn empty_file_is_authored_and_read_back() {
     let files = vec![file("EMPTY.DAT", Vec::new()), file("REAL.BIN", vec![9; 10])];
     let image = build_iso(&files, 0, IsoTimestamp::default()).expect("build");

@@ -483,11 +483,19 @@ fn flatten_tree(
             *len += rl;
             *sector_pos += rl;
         };
+        // ECMA-119 9.3: files and subdirectories share one record list sorted by
+        // identifier bytes. Size math must walk that same order so the
+        // no-straddle padding matches encode_directory_extent exactly.
+        let mut record_idents: Vec<&[u8]> = Vec::new();
         for (ident, _, _) in &file_children {
-            add(directory_record_len(ident.len()), &mut len, &mut sector_pos);
+            record_idents.push(ident);
         }
         for (dname, _) in &child_links {
-            add(directory_record_len(dname.len()), &mut len, &mut sector_pos);
+            record_idents.push(dname);
+        }
+        record_idents.sort_unstable();
+        for ident in &record_idents {
+            add(directory_record_len(ident.len()), &mut len, &mut sector_pos);
         }
 
         let slot = &mut placed[placed_slot];
@@ -585,17 +593,22 @@ fn encode_directory_extent(
         buf.extend(rec);
     };
 
+    // ECMA-119 9.3: all child records (files and subdirectories) live in one
+    // list sorted by identifier bytes, not two separate groups. flatten_tree's
+    // size math walks this same order.
+    let mut records: Vec<(&[u8], u32, u32, bool)> = Vec::new();
     for (ident, lba, size) in &dir.files {
-        push(
-            &mut buf,
-            encode_directory_record(lba + start_lba, *size, false, ident, timestamp),
-        );
+        records.push((ident, lba + start_lba, *size, false));
     }
     for (name, child_path_index) in &dir.child_dirs {
         let child = &placed[*child_path_index - 1];
+        records.push((name, child.lba + start_lba, child.data_len, true));
+    }
+    records.sort_by(|a, b| a.0.cmp(b.0));
+    for (ident, extent_lba, data_len, is_dir) in records {
         push(
             &mut buf,
-            encode_directory_record(child.lba + start_lba, child.data_len, true, name, timestamp),
+            encode_directory_record(extent_lba, data_len, is_dir, ident, timestamp),
         );
     }
     let padded = buf.len().div_ceil(SECTOR) * SECTOR;
