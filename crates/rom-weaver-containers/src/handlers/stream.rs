@@ -52,14 +52,21 @@ impl StreamContainerHandler {
         execution: &ThreadExecution,
     ) -> Result<u64> {
         let format_name = self.descriptor.name;
-        let total_bytes =
-            probe_stream_with_libarchive(source, format_name, self.libarchive_read_filter())?;
+        // The uncompressed size is unknown without decoding the whole stream, and a probe pass to
+        // learn it would decompress the payload a second time — emit indeterminate progress instead.
         debug!(
             format = format_name,
             compression = ?self.compression,
-            total_bytes,
             used_parallelism = execution.used_parallelism,
             "stream extract start"
+        );
+        emit_container_indeterminate_progress(
+            context,
+            "extract",
+            format_name,
+            "extract",
+            format!("extracting `{}`", format_name),
+            Some(execution),
         );
         let mut archive =
             libarchive_open_read_stream(source, format_name, self.libarchive_read_filter())?;
@@ -76,8 +83,6 @@ impl StreamContainerHandler {
                 fs::create_dir_all(parent)?;
             }
             let mut output = BufWriter::new(create_extract_output_file(output_path, overwrite)?);
-            let progress_label = format!("extracting `{}`", format_name);
-            let emitted_progress_bucket = AtomicU8::new(0);
             let mut copied = 0_u64;
             let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
             loop {
@@ -89,20 +94,8 @@ impl StreamContainerHandler {
                     break;
                 }
                 output.write_all(&buffer[..read])?;
-                copied = copied.saturating_add(read as u64).min(total_bytes);
-                maybe_emit_container_byte_progress(
-                    context,
-                    copied,
-                    total_bytes,
-                    ContainerByteProgress {
-                        command: "extract",
-                        format: format_name,
-                        stage: "extract",
-                        label: &progress_label,
-                        thread_execution: Some(execution),
-                        emitted_progress_bucket: &emitted_progress_bucket,
-                    },
-                );
+                copied = copied.saturating_add(read as u64);
+                trace!(format = format_name, copied, "stream extract progress");
             }
             output.flush()?;
             Ok(copied)

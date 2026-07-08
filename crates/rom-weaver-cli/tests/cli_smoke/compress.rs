@@ -974,7 +974,17 @@ fn extract_zst_reports_parallel_decode_threads() {
     );
 
     let events = parse_json_lines(&output);
-    assert_running_percent_event(&events, "extract", "zst");
+    // Stream extract emits indeterminate (percent-less) running progress: learning the total for a
+    // percent would decompress the whole payload a second time (see stream.rs extract_with_libarchive).
+    assert!(
+        events.iter().any(|event| {
+            event["command"] == "extract"
+                && event["status"] == "running"
+                && event["format"] == "zst"
+                && event["stage"] == "extract"
+        }),
+        "expected extract (zst) to emit a running progress event"
+    );
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
