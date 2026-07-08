@@ -15,7 +15,10 @@
     "src/presentation/localization/messages.ts"
   ],
   "project": [
-    "src/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,css}",
+    // .css intentionally excluded: knip has no built-in css compiler and a
+    // JSONC config can't hold a function compiler, so listing css only emits a
+    // "not registered as a compiler" hint without following @import.
+    "src/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
     "tests/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
     "scripts/**/*.mjs",
     "*.mjs"
