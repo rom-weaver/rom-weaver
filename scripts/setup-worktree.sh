@@ -68,4 +68,14 @@ for submodule in nod libarchive; do
   fi
 done
 
+# The vendor symlinks above make git report each submodule as a gitlink->symlink
+# typechange ("T"), which is phantom noise and blocks `git worktree remove`
+# without --force. Silence it PER WORKTREE (not in .gitmodules) so the main
+# checkout still surfaces real submodule pointer bumps in `git status`.
+echo "setup-worktree: silence vendor typechange noise (worktree-scoped)"
+git config extensions.worktreeConfig true
+for submodule in nod libarchive; do
+  git config --worktree "submodule.vendor/$submodule.ignore" all
+done
+
 echo "setup-worktree: done for $worktree_dir"
