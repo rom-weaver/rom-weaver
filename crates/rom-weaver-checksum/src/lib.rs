@@ -1,6 +1,4 @@
 mod engine;
-#[cfg(feature = "identify")]
-pub mod identify_pack;
 pub mod platform_detection;
 pub mod rom_headers;
 pub mod rom_identity;

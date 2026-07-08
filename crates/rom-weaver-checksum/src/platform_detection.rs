@@ -22,11 +22,6 @@ use std::io;
 use crate::rom_headers::KnownRomHeader;
 
 /// Canonical platform identifiers.
-///
-/// These MUST match the platform vocabulary the identify pack builder emits
-/// (`scripts/build-hasheous-identify-index.mjs` `SUPPORTED_PLATFORMS`), because
-/// the probe's hint is slugified to select a per-system pack. Keep them byte
-/// for byte in sync — including the irregular casing/underscores.
 pub mod platform {
     pub const PS1: &str = "Sony PlayStation";
     pub const PS2: &str = "Sony PlayStation 2";
