@@ -117,6 +117,7 @@ struct CdExtractSink<'a> {
     output_checksums: &'a mut Vec<ExtractedFileChecksum>,
     omitted_subcode: &'a mut bool,
     wrote_single_bin_output: &'a mut bool,
+    cleanup: &'a ChdOutputCleanup,
 }
 
 impl ChdContainerHandler {
@@ -950,6 +951,12 @@ impl ChdContainerHandler {
         let plan = self.plan_cd_selection(&layout, request, stem)?;
         let selection_requested = plan.selection_requested;
 
+        // Each writer registers its output with `cleanup` only after the file is
+        // actually created, so a mid-decode error removes the partial
+        // `.cue`/`.bin` files this op created without ever deleting a pre-existing
+        // target a `--no-overwrite` refusal left untouched.
+        let cleanup = ChdOutputCleanup::new();
+
         let inputs = CdExtractInputs {
             chd: &chd,
             layout: &layout,
@@ -959,7 +966,7 @@ impl ChdContainerHandler {
             extract_progress: &extract_progress,
         };
         let (omitted_subcode, produced_outputs, wrote_single_bin_output, output_checksums) =
-            self.build_cd_extract_result(&inputs, &plan, &cue_path)?;
+            self.build_cd_extract_result(&inputs, &plan, &cue_path, &cleanup)?;
         if request.kind_filter.enabled() && produced_outputs.is_empty() {
             return Err(RomWeaverError::Validation(format!(
                 "no extract entries from `{}` matched {}",
@@ -972,6 +979,7 @@ impl ChdContainerHandler {
                 "requested selections resolved to no extractable cd outputs".into(),
             ));
         }
+        cleanup.commit();
         let suffix = if omitted_subcode {
             "; subcode data was omitted from cue/bin output"
         } else {
@@ -1135,16 +1143,15 @@ impl ChdContainerHandler {
         inputs: &CdExtractInputs<'_>,
         plan: &CdSelectionPlan,
         cue_path: &Path,
+        cleanup: &ChdOutputCleanup,
     ) -> Result<(bool, Vec<PathBuf>, bool, Vec<ExtractedFileChecksum>)> {
         let mut omitted_subcode = false;
         let mut produced_outputs = Vec::new();
         let mut output_checksums = Vec::new();
         let mut cue_writer = if plan.write_cue {
+            let writer = cleanup.create_output(cue_path, inputs.request.overwrite)?;
             produced_outputs.push(cue_path.to_path_buf());
-            Some(BufWriter::new(create_extract_output_file(
-                cue_path,
-                inputs.request.overwrite,
-            )?))
+            Some(BufWriter::new(writer))
         } else {
             None
         };
@@ -1156,6 +1163,7 @@ impl ChdContainerHandler {
             output_checksums: &mut output_checksums,
             omitted_subcode: &mut omitted_subcode,
             wrote_single_bin_output: &mut wrote_single_bin_output,
+            cleanup,
         };
         if plan.single_bin {
             self.write_cd_single_bin(inputs, plan, &mut sink)?;
@@ -1196,12 +1204,10 @@ impl ChdContainerHandler {
         let write_single_bin = plan.write_single_bin;
         let bin_path = request.out_dir.join(single_bin_name);
         let mut bin_writer = if write_single_bin {
+            let writer = sink.cleanup.create_output(&bin_path, request.overwrite)?;
             *sink.wrote_single_bin_output = true;
             sink.produced_outputs.push(bin_path.clone());
-            Some(BufWriter::new(create_extract_output_file(
-                &bin_path,
-                request.overwrite,
-            )?))
+            Some(BufWriter::new(writer))
         } else {
             None
         };
@@ -1352,11 +1358,9 @@ impl ChdContainerHandler {
         for (track_index, track_name) in split_track_names.iter().enumerate() {
             if write_split_tracks[track_index] {
                 let track_path = request.out_dir.join(track_name);
+                let writer = sink.cleanup.create_output(&track_path, request.overwrite)?;
                 sink.produced_outputs.push(track_path.clone());
-                track_writers.push(Some(BufWriter::new(create_extract_output_file(
-                    &track_path,
-                    request.overwrite,
-                )?)));
+                track_writers.push(Some(BufWriter::new(writer)));
                 track_checksums.push(create_extract_checksum(context)?);
             } else {
                 track_writers.push(None);
@@ -1472,6 +1476,12 @@ impl ChdContainerHandler {
         }
         selections.ensure_all_matched()?;
 
+        // Each track/gdi writer registers its output with `cleanup` only after
+        // the file is created, so a mid-decode error removes the partial files
+        // this op created without ever deleting a pre-existing target a
+        // `--no-overwrite` refusal left untouched.
+        let cleanup = ChdOutputCleanup::new();
+
         let build_result: Result<(bool, Vec<PathBuf>, Vec<ExtractedFileChecksum>)> = (|| {
             let mut omitted_subcode = false;
             let mut produced_outputs = Vec::new();
@@ -1497,11 +1507,9 @@ impl ChdContainerHandler {
             for (track_index, track_name) in track_names.iter().enumerate() {
                 if write_tracks[track_index] {
                     let track_path = request.out_dir.join(track_name);
+                    let writer = cleanup.create_output(&track_path, request.overwrite)?;
                     produced_outputs.push(track_path.clone());
-                    track_writers.push(Some(BufWriter::new(create_extract_output_file(
-                        &track_path,
-                        request.overwrite,
-                    )?)));
+                    track_writers.push(Some(BufWriter::new(writer)));
                     track_checksums.push(create_extract_checksum(context)?);
                 } else {
                     track_writers.push(None);
@@ -1557,7 +1565,7 @@ impl ChdContainerHandler {
 
             if write_gdi {
                 let mut gdi_writer =
-                    BufWriter::new(create_extract_output_file(&gdi_path, request.overwrite)?);
+                    BufWriter::new(cleanup.create_output(&gdi_path, request.overwrite)?);
                 produced_outputs.push(gdi_path.clone());
                 gdi_writer.write_all(format!("{}\n", gdi_lines.len()).as_bytes())?;
                 for line in &gdi_lines {
@@ -1583,6 +1591,7 @@ impl ChdContainerHandler {
                 "requested selections resolved to no extractable gd outputs".into(),
             ));
         }
+        cleanup.commit();
         let suffix = if omitted_subcode {
             "; subcode data was omitted from gdi output"
         } else {

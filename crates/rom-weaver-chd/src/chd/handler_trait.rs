@@ -219,8 +219,12 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             chd.header().logical_bytes,
             format!("extracting `{}`", CHD.name),
         );
-        let mut output =
-            BufWriter::new(create_extract_output_file(&output_path, request.overwrite)?);
+        // `create_output` tracks `output_path` for cleanup only after the file is
+        // actually opened by this op: under `--no-overwrite` an existing target
+        // makes create fail WITHOUT touching the file and never enters the guard,
+        // so its Drop can't delete the very file the flag protects.
+        let cleanup = ChdOutputCleanup::new();
+        let mut output = BufWriter::new(cleanup.create_output(&output_path, request.overwrite)?);
         let mut output_checksum = create_extract_checksum(context)?;
         chd.stream_with_progress(
             execution.effective_threads,
@@ -258,6 +262,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             output_checksum,
         )?;
         let report = attach_extract_checksum_details(report, output_checksums);
+        cleanup.commit();
         Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
@@ -433,6 +438,24 @@ impl ChdContainerHandler {
             compression_plan.codecs,
             compression_plan.primary_codec,
         );
+        // Both create paths write `request.output` incrementally (a placeholder
+        // header first, then hunks/map): remove the partial file if any step
+        // fails so a corrupt/placeholder CHD is not left behind. Track the output
+        // only once we commit to the attempt AND only when it does not already
+        // exist — a pre-open error (unsupported codec plan, store+parent, invalid
+        // geometry) never opens the file via `File::create`, so it must not
+        // delete an unrelated pre-existing target this op never created.
+        let guard_output = should_attempt_rust && !request.output.exists();
+        trace!(
+            output = %request.output.display(),
+            should_attempt_rust,
+            guard_output,
+            "arming chd create output cleanup guard"
+        );
+        let cleanup = ChdOutputCleanup::new();
+        if guard_output {
+            cleanup.track(request.output.clone());
+        }
         let (header, media_kind) = if !should_attempt_rust {
             Err(RomWeaverError::Unsupported(
                 UnsupportedOp::ChdCodecListInvalid {
@@ -444,6 +467,7 @@ impl ChdContainerHandler {
         } else {
             rust_create()
         }?;
+        cleanup.commit();
 
         let mut report = OperationReport::succeeded(
             OperationFamily::Container,

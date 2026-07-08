@@ -1,6 +1,72 @@
+use std::cell::{Cell, RefCell};
+
 use super::*;
 
 pub struct ChdContainerHandler;
+
+/// Removes the tracked output files on drop unless [`commit`](Self::commit)ed.
+/// CHD extract/create write their outputs incrementally and propagate errors
+/// with `?` mid-write; without this a failed run leaves a partial `.bin`/`.chd`
+/// that blocks a later `--no-overwrite` retry (or looks like a corrupt file to a
+/// probe). Mirrors the cleanup-on-error the other container handlers already
+/// perform (e.g. `PartialExtractCleanup` in `rom-weaver-containers`); being
+/// Drop-based it also cleans up on a panic. A no-op once committed, so success
+/// output stays byte-identical.
+///
+/// A path is only ever tracked *after* this op has created/truncated it, via
+/// [`create_output`](Self::create_output) (or [`track`](Self::track) for the
+/// create path, which opens `request.output` unconditionally elsewhere). A
+/// `--no-overwrite` refusal returns `Err` from `create_output` without tracking
+/// the path, so the guard never deletes a pre-existing file this op left
+/// untouched — the bug that arming the guard up-front over a planned-output set
+/// caused. Interior mutability lets the guard be shared `&` across the deep
+/// CD/GD writer call chains without threading a `&mut`.
+pub(super) struct ChdOutputCleanup {
+    paths: RefCell<Vec<PathBuf>>,
+    committed: Cell<bool>,
+}
+
+impl ChdOutputCleanup {
+    pub(super) fn new() -> Self {
+        Self {
+            paths: RefCell::new(Vec::new()),
+            committed: Cell::new(false),
+        }
+    }
+
+    /// Create the extract output at `path`, tracking it for cleanup-on-drop only
+    /// once the file has actually been created/truncated by this op. On a
+    /// `--no-overwrite` refusal the error propagates and the path stays
+    /// untracked, so the pre-existing file is preserved.
+    pub(super) fn create_output(&self, path: &Path, overwrite: bool) -> Result<File> {
+        let file = create_extract_output_file(path, overwrite)?;
+        self.paths.borrow_mut().push(path.to_path_buf());
+        Ok(file)
+    }
+
+    /// Track a path whose writer this op creates/truncates unconditionally
+    /// elsewhere (the CHD create path opens `request.output` via `File::create`,
+    /// which always creates or truncates, so removing it on error is safe).
+    pub(super) fn track(&self, path: PathBuf) {
+        self.paths.borrow_mut().push(path);
+    }
+
+    pub(super) fn commit(&self) {
+        self.committed.set(true);
+    }
+}
+
+impl Drop for ChdOutputCleanup {
+    fn drop(&mut self) {
+        if self.committed.get() {
+            return;
+        }
+        for path in self.paths.borrow().iter() {
+            trace!(path = %path.display(), "removing partial chd output after error");
+            let _ = fs::remove_file(path);
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct HdGeometry {

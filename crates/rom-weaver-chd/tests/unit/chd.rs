@@ -1641,3 +1641,76 @@ fn encode_avhuff_chav_hunk_validates_and_emits_header() {
         vec![0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0x12, 0x34, 0x80]
     );
 }
+
+// --- Partial-output cleanup guard ------------------------------------------
+
+/// The CHD extract/create paths wrap their produced outputs in
+/// [`ChdOutputCleanup`]: an uncommitted drop (the error/panic path) removes the
+/// partial files, while a committed drop (the success path) leaves them intact
+/// so success output stays byte-identical.
+#[test]
+fn chd_output_cleanup_removes_partials_only_when_uncommitted() {
+    let dir =
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-cleanup-guard", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let dropped = dir.join("dropped.bin");
+    let kept = dir.join("kept.bin");
+
+    // Uncommitted: dropping the guard removes an output it created.
+    let guard = ChdOutputCleanup::new();
+    guard.create_output(&dropped, false).unwrap();
+    drop(guard);
+    assert!(
+        !dropped.exists(),
+        "uncommitted guard must remove the output it created"
+    );
+
+    // Committed: the created output survives.
+    let guard = ChdOutputCleanup::new();
+    guard.create_output(&kept, false).unwrap();
+    guard.commit();
+    drop(guard);
+    assert!(
+        kept.exists(),
+        "committed guard must leave the output in place"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Regression: under `--no-overwrite` (`overwrite = false`) `create_output` must
+/// refuse a pre-existing target WITHOUT tracking it, so dropping the uncommitted
+/// guard never deletes the file the user explicitly asked to keep. Tracking the
+/// path before the (failing) create would have destroyed protected data.
+#[test]
+fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
+    let dir = std::env::temp_dir().join(format!(
+        "rw-chd-unit-{}-cleanup-no-overwrite",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let existing = dir.join("existing.bin");
+    fs::write(&existing, b"valuable").unwrap();
+
+    let guard = ChdOutputCleanup::new();
+    let refused = guard.create_output(&existing, false);
+    assert!(
+        refused.is_err(),
+        "create_output must refuse a pre-existing target under --no-overwrite"
+    );
+    drop(guard);
+
+    assert!(
+        existing.exists(),
+        "a refused pre-existing output must survive the guard drop"
+    );
+    assert_eq!(
+        fs::read(&existing).unwrap(),
+        b"valuable",
+        "the protected file must be left byte-identical"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
