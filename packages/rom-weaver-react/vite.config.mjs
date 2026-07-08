@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
-import { getBuildInfo } from "./scripts/version.mjs";
+import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 
 const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
@@ -198,6 +198,50 @@ const writeWebappStaticAssets = () => {
   };
 };
 
+// The "What's new" changelog, emitted at the dist root so it stays OUT of the SW
+// precache globs (assets/** + named files only). The client fetches it with
+// cache: "no-store", so a pending update surfaces the NEW deploy's log rather
+// than the stale precached copy the running (old) bundle shipped with.
+const CHANGELOG_ASSET_URL = "/changelog.json";
+
+const serveChangelogAsset = () => {
+  const middleware = (req, res, next) => {
+    if ((req.url ? req.url.split("?")[0] : "") !== CHANGELOG_ASSET_URL) {
+      next();
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(JSON.stringify(getChangelog()));
+  };
+  return {
+    apply: "serve",
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    name: "rom-weaver-changelog-serve",
+  };
+};
+
+const writeChangelogAsset = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      const outputPath = path.join(path.resolve(rootDir, outDir), "changelog.json");
+      fs.writeFileSync(outputPath, JSON.stringify(getChangelog()));
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-changelog-asset",
+  };
+};
+
 const writePreviewBrotliAssets = () => {
   let outDir = "dist";
   return {
@@ -294,9 +338,11 @@ export default defineConfig(({ command }) => {
     },
     plugins: [
       serveRootStaticAssets(),
+      serveChangelogAsset(),
       deferDevHotUpdates(),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       writeWebappStaticAssets(),
+      writeChangelogAsset(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,

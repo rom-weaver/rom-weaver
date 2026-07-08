@@ -112,6 +112,25 @@ const buildVersionString = (baseVersion, gitMetadata) => {
   return `${baseVersion}+${branchPrefix}${hashToken}`;
 };
 
+// Unit separator between fields; %s (subject) and %cI (ISO date) are single-line,
+// so newline-per-record splitting is safe.
+const CHANGELOG_FIELD_SEP = "\x1f";
+
+// Recent commit log for the in-app "What's new" dialog. Capped so the emitted
+// asset stays flat-sized forever — anyone more than `limit` builds behind falls
+// off the tail, which the dialog covers with an "earlier" note.
+const getChangelog = (limit = 50) => {
+  const raw = runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);
+  if (!raw) return [];
+  return raw
+    .split(LINE_BREAK_REGEX)
+    .map((line) => {
+      const [hash, subject, date] = line.split(CHANGELOG_FIELD_SEP);
+      return { date: date || "", hash: hash || "", subject: subject || "" };
+    })
+    .filter((entry) => entry.hash);
+};
+
 const getBuildInfo = () => {
   const version = readPackageVersion();
   const gitMetadata = getGitMetadata(version);
@@ -131,4 +150,4 @@ const getBuildInfo = () => {
   };
 };
 
-export { getBuildInfo };
+export { getBuildInfo, getChangelog };
