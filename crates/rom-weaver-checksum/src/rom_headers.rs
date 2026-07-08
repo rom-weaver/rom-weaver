@@ -132,6 +132,22 @@ impl KnownRomHeader {
         }
     }
 
+    /// Whether the stripped header should return on a patched output by default: format
+    /// headers (iNES/fwNES/LNX/A78) carry emulator-required metadata, while SNES/PCE
+    /// copier headers are junk left by copier devices — the modern convention (headerless
+    /// `.sfc`) drops them. Only meaningful for strippable kinds; internal-header consoles
+    /// return true as the safe identity.
+    pub const fn retained_on_output(self) -> bool {
+        !matches!(
+            self,
+            Self::SnesCopier
+                | Self::PceCopier
+                | Self::SmcZero
+                | Self::SmcGameDoctor1
+                | Self::SmcGameDoctor2
+        )
+    }
+
     pub const fn data_offset_bytes(self) -> Option<usize> {
         match self {
             Self::A78 => Some(128),

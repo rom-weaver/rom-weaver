@@ -784,7 +784,10 @@ impl StreamingVariantChecksums {
             }),
             transforms: json!({
                 "removeHeader": {
+                    "headeredExtension": header_match.header.headered_extension(),
+                    "headerlessExtension": header_match.header.headerless_extension(),
                     "profile": header_match.profile_name(),
+                    "retainOnOutput": header_match.header.retained_on_output(),
                     "strippedBytes": stripped,
                 }
             }),
