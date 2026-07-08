@@ -508,6 +508,7 @@ const useLocalApplyPatchFormSession = ({
       }),
     [
       activePatches.length,
+      activeSettings.compatibility?.fixChecksum,
       busy,
       checksumOverrideChecked,
       disabled,
