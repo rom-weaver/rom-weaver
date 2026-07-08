@@ -1,12 +1,9 @@
 import { createTiming, formatTiming, type Timing } from "../storage/shared/timing.ts";
 import type { JsonObject, JsonValue } from "../types/runtime.ts";
+import { formatBytes } from "./formatting/index.ts";
 
 const TRAILING_ELLIPSIS_REGEX = /\.\.\.$/;
 const THREAD_COUNT_LABEL_REGEX = /\b\d+\s+threads?\b/i;
-const BYTE_SIZE_FORMATTER = new Intl.NumberFormat("en", {
-  maximumFractionDigits: 2,
-  minimumFractionDigits: 1,
-});
 
 type WorkflowScalar = string | number | boolean | null | undefined;
 type WorkflowValue = JsonValue | undefined;
@@ -368,16 +365,7 @@ const isCompressionWriteTelemetryProgress = (progress: WorkflowValue | object | 
 const formatByteSize = (value: string | number | null | undefined): string => {
   const bytes = normalizeByteCount(value);
   if (bytes === null) return "";
-  const unitBase = 1000;
-  if (bytes < unitBase) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let normalizedValue = bytes / unitBase;
-  let unitIndex = 0;
-  while (normalizedValue >= unitBase && unitIndex < units.length - 1) {
-    normalizedValue /= unitBase;
-    unitIndex++;
-  }
-  return `${BYTE_SIZE_FORMATTER.format(normalizedValue)} ${units[unitIndex]}`;
+  return formatBytes(bytes, "en");
 };
 
 const formatPercentFixed = (value: string | number | null | undefined, digits = 1): string => {
