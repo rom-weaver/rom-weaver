@@ -308,6 +308,40 @@ describe("createOperationScheduler — I/O lane (Rust plan)", () => {
     await pa;
   });
 
+  it("keeps a noted drop intact when an unrelated I/O op overlaps it", async () => {
+    const planSeen: number[][] = [];
+    const planBatch = async (sizes: number[]) => {
+      planSeen.push([...sizes]);
+      return {
+        waves: [{ jobs: sizes.map((_, index) => index), threadsPerJob: Math.max(1, Math.floor(6 / sizes.length)) }],
+      };
+    };
+    const scheduler = createOperationScheduler({ maxConcurrency: 6, planBatch, totalThreadBudget: 6 });
+    // A three-file drop is declared up front; none of its ingest ops has reached the scheduler yet.
+    scheduler.noteIoBatch([100, 100, 100]);
+    // An unrelated I/O op from a PRIOR drop (a different source size) arrives first and runs to
+    // completion. It must not claim a noted slot or mark the note consumed, so the drop's note survives.
+    const x = deferred<string>();
+    const px = scheduler.schedule(io(50), () => x.promise);
+    await tick();
+    x.resolve("x");
+    await px;
+    await tick();
+    // The drop's own first job now arrives: the note must be untouched so the plan still sees all three.
+    const a = deferred<string>();
+    let aThreads = 0;
+    const pa = scheduler.schedule(io(100), (threads) => {
+      aThreads = threads;
+      return a.promise;
+    });
+    await tick();
+    const lastPlan = planSeen[planSeen.length - 1];
+    expect(lastPlan).toHaveLength(3); // still the whole noted drop, not the lone arrived job
+    expect(aThreads).toBe(2); // floor(6/3) — full-drop share; would be 6 if the note had been wiped
+    a.resolve("a");
+    await pa;
+  });
+
   it("gives a lone (un-noted) I/O job the whole budget", async () => {
     const scheduler = createOperationScheduler({
       maxConcurrency: 6,

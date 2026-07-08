@@ -161,21 +161,20 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     return false;
   };
 
-  // Remove one declared-but-not-yet-arrived size closest to the arriving op's size, so the noted batch
-  // is consumed as its ops materialize and never counted twice in the plan.
-  const consumePendingBatchSize = (size: number): void => {
-    let bestIndex = -1;
-    let bestDelta = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < pendingIoBatchSizes.length; index += 1) {
-      const candidate = pendingIoBatchSizes[index];
-      if (candidate === undefined) continue;
-      const delta = Math.abs(candidate - size);
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        bestIndex = index;
-      }
-    }
-    if (bestIndex >= 0) pendingIoBatchSizes.splice(bestIndex, 1);
+  // Claim one declared-but-not-yet-arrived slot for an arriving op, marking it a MEMBER of the noted drop
+  // so it is counted once (as a real waiter) rather than twice (also as a pending size). Membership is
+  // keyed on the exact source size the drop point declared: an unrelated I/O op (a prior drop's
+  // checksum/extract still in flight) whose size matches no noted slot claims nothing, so it can neither
+  // mis-size the plan nor prematurely mark the note consumed. Returns whether a slot was claimed.
+  // ponytail: membership keyed by exact declared size, not a batch id threaded from the drop point; a
+  // coincidental same-size unrelated op can still false-match (perf-only: one drop wave gets the wrong
+  // thread share, never a correctness/data issue). Thread a real batch id through schedule() if that
+  // collision ever matters.
+  const consumePendingBatchSize = (size: number): boolean => {
+    const index = pendingIoBatchSizes.indexOf(size);
+    if (index < 0) return false;
+    pendingIoBatchSizes.splice(index, 1);
+    return true;
   };
 
   // Local admission gate for NON-I/O ops (unchanged contract). With nothing in flight a candidate
@@ -199,6 +198,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   const admit = <TResult>(
     operation: ScheduledOperation,
     threads: number,
+    notedMember: boolean,
     run: (assignedThreads: number) => Promise<TResult>,
     resolve: (value: TResult) => void,
     reject: (reason: unknown) => void,
@@ -213,7 +213,9 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
       threads: assignedThreads,
     };
     inFlight.add(entry);
-    if (entry.io) noteConsumed = true;
+    // Only a real member of the noted drop marks the note started, so an unrelated I/O op admitted while
+    // a note is pending can't trip the note-clear in pump() before the drop's own ops arrive.
+    if (entry.io && notedMember) noteConsumed = true;
     trace("operation admitted", {
       allocatedThreads: allocatedThreads(),
       inFlight: inFlight.size,
@@ -385,13 +387,16 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     ): Promise<TResult> {
       return new Promise<TResult>((resolve, reject) => {
         // An arriving I/O op claims its slot from the noted batch so the plan counts it once (as a real
-        // waiter) rather than twice (also as a pending size).
-        if (operation.io) consumePendingBatchSize(Math.max(0, Math.floor(operation.jobSizeBytes ?? 0)));
+        // waiter) rather than twice (also as a pending size). `notedMember` is whether this op actually
+        // belongs to the noted drop (its declared size was still pending); only members mark the note
+        // consumed on admit, so an unrelated overlapping I/O op leaves the note intact for its own ops.
+        const notedMember =
+          operation.io === true && consumePendingBatchSize(Math.max(0, Math.floor(operation.jobSizeBytes ?? 0)));
         // Both lanes go through the waiter queue so the pump (synchronous for non-I/O, asynchronous for
         // the planned I/O lane) is the single admission point. A non-I/O op that fits is admitted within
         // this call by pumpNonIo; an I/O op is admitted once the Rust plan places it in the next wave.
         waiters.push({
-          admit: (threads: number) => admit(operation, threads, run, resolve, reject),
+          admit: (threads: number) => admit(operation, threads, notedMember, run, resolve, reject),
           operation,
         });
         trace("operation queued", {
