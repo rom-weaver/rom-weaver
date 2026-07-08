@@ -218,7 +218,14 @@ const runTrimWorkflow = async (
       },
     };
   }
-  const trimmedFile = await createPatchFileFromPublicOutput(result.output, rawTrimFileName);
+  // ROM-specific (disc) compression stages the trimmed output from its VFS path (see
+  // createRuntimeSourceFromPatchFile), so keep it lazy and never materialize the (often multi-GiB)
+  // trim output on the main thread. Archive compression reads the bytes synchronously and needs them.
+  const trimmedFile = await createPatchFileFromPublicOutput(
+    result.output,
+    rawTrimFileName,
+    isRomSpecificCompressionFormat(compression) ? { materializeBlob: false, preferExternalFilePath: true } : undefined,
+  );
   const output = await createCompressedTrimOutput(trimmedFile, compression);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {

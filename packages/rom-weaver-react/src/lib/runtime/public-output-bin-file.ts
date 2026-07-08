@@ -1,4 +1,4 @@
-import { readRuntimeOutputBlob, readRuntimeOutputBytes } from "../../storage/vfs/runtime-output.ts";
+import { readRuntimeOutputBytes } from "../../storage/vfs/runtime-output.ts";
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
@@ -102,25 +102,22 @@ const createPatchFileFromPublicOutput = async (
       );
     }
   }
-  const file = canUseExternalFilePath
-    ? await createPatchFile(
-        {
-          data: await readRuntimeOutputBytes(output),
-          fileName,
-        },
-        fileName,
-      )
-    : await (async () => {
-        const directBlob = getDirectPublicOutputBlob(output);
-        if (directBlob) return createPatchFile({ fileName, source: directBlob }, fileName);
-        const directBytes = getDirectPublicOutputBytes(output);
-        if (directBytes) return createPatchFile({ data: directBytes, fileName }, fileName);
-        throw new Error("Public output is not readable: expected a VFS path, Blob, or byte source");
-      })();
   if (canUseExternalFilePath) {
+    const bytes = await readRuntimeOutputBytes(output);
+    // Blob ctor snapshots the view range, so a single read backs both the patch file and _file.
+    const blob = new Blob([bytes], { type: output.mediaType || "application/octet-stream" });
+    const file = await createPatchFile({ data: bytes, fileName }, fileName);
     (file as { filePath?: string }).filePath = output.path;
-    (file as { _file?: Blob })._file = await readRuntimeOutputBlob(output);
+    (file as { _file?: Blob })._file = blob;
+    return attachOutputMetadata(attachPatchFileSourceRef(file, sourceRef));
   }
+  const file = await (async () => {
+    const directBlob = getDirectPublicOutputBlob(output);
+    if (directBlob) return createPatchFile({ fileName, source: directBlob }, fileName);
+    const directBytes = getDirectPublicOutputBytes(output);
+    if (directBytes) return createPatchFile({ data: directBytes, fileName }, fileName);
+    throw new Error("Public output is not readable: expected a VFS path, Blob, or byte source");
+  })();
   return attachOutputMetadata(attachPatchFileSourceRef(file, sourceRef));
 };
 

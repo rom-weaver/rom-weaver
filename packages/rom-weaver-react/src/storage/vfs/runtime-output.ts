@@ -133,7 +133,9 @@ const createRuntimeOutputFromSource = async (
   });
 };
 
-const readRuntimeOutputBytes = async (output: Pick<PublicOutput, "path" | "size" | "vfs">): Promise<Uint8Array> => {
+const readRuntimeOutputBytes = async (
+  output: Pick<PublicOutput, "path" | "size" | "vfs">,
+): Promise<Uint8Array<ArrayBuffer>> => {
   const size = Math.max(0, Math.floor(output.size || 0));
   if (!size) return new Uint8Array(0);
   const bytes = new Uint8Array(size);
@@ -155,9 +157,8 @@ const readRuntimeOutputBlob = async (
   output: Pick<PublicOutput, "mediaType" | "path" | "size" | "vfs">,
 ): Promise<Blob> => {
   const bytes = await readRuntimeOutputBytes(output);
-  const blobBytes = new Uint8Array(bytes.byteLength);
-  blobBytes.set(bytes);
-  return new Blob([blobBytes.buffer], {
+  // readRuntimeOutputBytes returns a freshly-owned (never SAB-backed) array; the Blob ctor snapshots it.
+  return new Blob([bytes], {
     type: output.mediaType || "application/octet-stream",
   });
 };
