@@ -3,7 +3,11 @@ import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { LargeFileVfs } from "../../storage/vfs/types.ts";
-import type { RuntimeWorkerIo, RuntimeWorkerSourceRequest } from "../../types/workflow-runtime-adapter.ts";
+import type {
+  RuntimeWorkerIo,
+  RuntimeWorkerPathSource,
+  RuntimeWorkerSourceRequest,
+} from "../../types/workflow-runtime-adapter.ts";
 import { createBrowserOpfsSourceRef } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 
@@ -18,6 +22,10 @@ type CachedStagedSource = {
   cleanupTimer?: ReturnType<typeof setTimeout>;
   cleanupWhenIdle?: boolean;
   refCount: number;
+  // Set when a consumer picks this entry up while it had no live refs (idle under the retention timer):
+  // that is a cross-drop re-stage, so a stale releaseSources from the earlier drop must defer to this
+  // live reader instead of force-cleaning the copy out from under its in-flight command.
+  reusedWhileIdle?: boolean;
   staged: StagedBrowserSource;
 };
 
@@ -55,13 +63,17 @@ const emitBrowserRuntimeVfsTrace = (
 const stagedSourceCache = new Map<string, CachedStagedSource>();
 // In-flight stages keyed by the same content identity, so a second pass that starts before the first
 // finishes staging coalesces onto it instead of running a duplicate stage (the resolved-entry cache only
-// dedupes *after* the first pass caches). Cleared in stageSource's finally once the entry caches.
-const pendingStages = new Map<string, Promise<void>>();
+// dedupes *after* the first pass caches). Each carries a per-stage token so a release can be tied to the
+// exact in-flight stage it targets. Cleared in stageSource's finally once the entry caches.
+const pendingStages = new Map<string, { promise: Promise<void>; token: number }>();
+let nextStageToken = 0;
 // Sources released while a staging pass was still in flight: releaseSources misses the cache for those
 // (the entry is only cached after staging completes), and the cancelled consumer never calls its wrapped
 // cleanup, stranding the staged OPFS copy. Track the release so the in-flight pass cleans up after itself
-// when it lands; a later re-stage of the same source clears the mark.
-const releasedStagingSources = new Set<string>();
+// when it lands. The value is the token of the in-flight stage the release targets, so a re-stage that
+// starts later (a different token) is never destroyed by this stale release; a later re-stage of the same
+// source also clears the mark.
+const releasedStagingSources = new Map<string, number>();
 // Per-object identity key for sources that carry no derivable content identity (file handles, nameless
 // Blobs). Those are reused by reference across passes, so object identity is the right key.
 let nextObjectIdentityKey = 0;
@@ -144,16 +156,22 @@ const createBrowserRuntimeVfsIo = ({
       if (!key) continue;
       const cached = stagedSourceCache.get(key);
       if (!cached) {
-        // Not yet cached: a stage may still be in flight, so mark the release so that pass cleans up
-        // after itself (consumed in cacheStagedSource). Only the in-flight case needs the mark — adding
-        // it for already-cached sources leaked keys into a process-global set that never shrank.
-        releasedStagingSources.add(key);
+        // Not yet cached: only mark the release when a stage is actually in flight, tied to that stage's
+        // token (consumed in cacheStagedSource). Without the in-flight guard a release could re-add a
+        // mark that a concurrent re-stage just cleared, and without the token a re-stage that starts
+        // later would be destroyed by this stale release. No in-flight stage means nothing to release.
+        const pending = pendingStages.get(key);
+        if (pending) releasedStagingSources.set(key, pending.token);
         continue;
       }
       cached.cleanupWhenIdle = true;
-      // Release means the session no longer references this source. A holder that never returned
-      // its ref (a cancelled in-flight pass) would otherwise pin the staged copy forever, so clean
-      // regardless of refCount; per-wrapper released flags keep late cleanup() calls harmless.
+      // Release means the session no longer references this source. A live cross-drop reader (an idle
+      // entry a re-stage just picked up) still needs the copy: defer to its wrapper cleanup via
+      // cleanupWhenIdle instead of yanking it out from under the in-flight command. Only force-clean a
+      // truly-dead holder — a leaked ref from a cancelled pass that never returned it (never reused while
+      // idle), which cleanupWhenIdle alone would pin forever; per-wrapper released flags keep late
+      // cleanup() calls harmless.
+      if (cached.refCount > 0 && cached.reusedWhileIdle) continue;
       cleanups.push(cleanupCachedStagedSource(key, cached));
     }
     await Promise.all(cleanups);
@@ -217,6 +235,10 @@ const createBrowserRuntimeVfsIo = ({
       scope,
     });
     const cacheKey = getStagedSourceCacheKey(source);
+    // Unique per stageSource call. Ties an in-flight-release mark (releasedStagingSources) to the exact
+    // stage it targets so a later re-stage under the same key is never cleaned by a stale release.
+    nextStageToken += 1;
+    const stageToken = nextStageToken;
     // A fresh stage of this source supersedes any earlier release marker (e.g. the same File
     // re-added after a cancelled candidate selection).
     if (cacheKey) releasedStagingSources.delete(cacheKey);
@@ -226,6 +248,9 @@ const createBrowserRuntimeVfsIo = ({
         clearTimeout(entry.cleanupTimer);
         entry.cleanupTimer = undefined;
       }
+      // A consumer picking up an entry with no live refs (kept alive only by the retention timer) is a
+      // cross-drop re-stage; flag it so a stale releaseSources from the prior drop defers to this reader.
+      if (entry.refCount === 0) entry.reusedWhileIdle = true;
       entry.refCount += 1;
       emitBrowserRuntimeVfsTrace(trace, "stageSource reusing cached staged source ref", {
         fileName: entry.staged.fileName,
@@ -253,7 +278,7 @@ const createBrowserRuntimeVfsIo = ({
       let inFlight = pendingStages.get(cacheKey);
       while (inFlight) {
         emitBrowserRuntimeVfsTrace(trace, "stageSource awaiting in-flight stage of same source", { scope });
-        await inFlight.catch(() => undefined);
+        await inFlight.promise.catch(() => undefined);
         const settled = stagedSourceCache.get(cacheKey);
         if (settled) return reuseCachedEntry(cacheKey, settled);
         inFlight = pendingStages.get(cacheKey);
@@ -268,12 +293,15 @@ const createBrowserRuntimeVfsIo = ({
         refCount: 1,
         staged: resolved,
       };
-      if (releasedStagingSources.has(cacheKey)) {
-        // The source was released while this stage was in flight; its consumer belongs to a
-        // cancelled flow and will never call cleanup, so drop the staged copy now.
+      // A release landed while this stage was in flight and targets THIS stage (token match): the
+      // releasing session no longer wants the copy, but the live consumer of this fresh stage still holds
+      // its ref. Mark cleanupWhenIdle so the copy drops when that consumer releases (refCount -> 0)
+      // instead of being cleaned out from under its in-flight command; consumers release in a finally
+      // (workflow-runtime-core cleanupWorkerSources / runPathWorkerToOutput), so this cannot pin forever.
+      // A stale mark from an earlier stage carries a different token and is ignored here.
+      if (releasedStagingSources.get(cacheKey) === stageToken) {
         releasedStagingSources.delete(cacheKey);
-        void cleanupCachedStagedSource(cacheKey, entry);
-        return wrapCachedStagedSource(cacheKey, entry);
+        entry.cleanupWhenIdle = true;
       }
       // A concurrent same-key stage may have cached a live entry while this one was in flight; don't
       // clobber it (identity guard, like the delete above) — overwriting would strand its staged copy and
@@ -351,12 +379,12 @@ const createBrowserRuntimeVfsIo = ({
     // than starting a duplicate stage. Resolved in `finally` after the entry is cached, so the waiter
     // then finds it in the resolved-entry cache.
     let settleInFlight: () => void = () => undefined;
-    pendingStages.set(
-      cacheKey,
-      new Promise<void>((resolve) => {
+    pendingStages.set(cacheKey, {
+      promise: new Promise<void>((resolve) => {
         settleInFlight = resolve;
       }),
-    );
+      token: stageToken,
+    });
     try {
       return await runStaging();
     } finally {
@@ -409,7 +437,27 @@ const createBrowserRuntimeVfsIo = ({
       }
     },
     stageSource,
-    stageSources: (requests) => Promise.all(requests.map((request) => stageSource(request))),
+    stageSources: async (requests) => {
+      // allSettled, not Promise.all: if one stage rejects, the siblings that already staged must be
+      // cleaned up before rethrowing. Promise.all would drop those fulfilled wrappers on the floor, so
+      // their cleanup never runs — the staged OPFS copies and their bare visible names stay pinned (a
+      // later same-named stage then climbs to a phantom `-2`).
+      const settled = await Promise.allSettled(requests.map((request) => stageSource(request)));
+      const staged: RuntimeWorkerPathSource[] = [];
+      let firstRejection: PromiseRejectedResult | undefined;
+      for (const result of settled) {
+        if (result.status === "fulfilled") {
+          staged.push(result.value);
+          continue;
+        }
+        if (!firstRejection) firstRejection = result;
+      }
+      if (firstRejection) {
+        await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
+        throw firstRejection.reason;
+      }
+      return staged;
+    },
   };
   return workerIo;
 };
