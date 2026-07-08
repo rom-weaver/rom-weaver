@@ -33,6 +33,8 @@ pub struct ZipEntry {
     pub compressed_size: u32,
     /// Uncompressed size in bytes.
     pub uncompressed_size: u32,
+    /// CRC32 of the uncompressed contents (central-directory field).
+    pub crc32: u32,
     /// Compression method (0 = stored, 8 = deflate).
     pub method: u16,
     /// Offset of the entry's local file header from the start of the archive.
@@ -72,6 +74,7 @@ pub fn read_central_directory<R: Read + Seek>(reader: &mut R) -> Result<Vec<ZipE
             ));
         }
         let method = read_u16(&cd, pos + 10);
+        let crc32 = read_u32(&cd, pos + 16);
         let compressed_size = read_u32(&cd, pos + 20);
         let uncompressed_size = read_u32(&cd, pos + 24);
         let name_len = read_u16(&cd, pos + 28) as usize;
@@ -95,6 +98,7 @@ pub fn read_central_directory<R: Read + Seek>(reader: &mut R) -> Result<Vec<ZipE
             name,
             compressed_size,
             uncompressed_size,
+            crc32,
             method,
             local_header_offset,
         });
@@ -142,19 +146,57 @@ pub fn extract_entry<R: Read + Seek>(reader: &mut R, entry: &ZipEntry) -> Result
     let mut compressed = vec![0u8; entry.compressed_size as usize];
     reader.read_exact(&mut compressed)?;
 
-    match entry.method {
-        METHOD_STORED => Ok(compressed),
-        METHOD_DEFLATE => miniz_oxide::inflate::decompress_to_vec(&compressed).map_err(|err| {
-            RomWeaverError::Validation(format!(
-                "ZIP: failed to inflate entry `{}`: {err:?}",
+    // Bound inflation by the declared uncompressed size so a deflate bomb cannot
+    // grow the output vec without limit, and reject any stream whose real length
+    // disagrees with the central-directory field.
+    let extracted = match entry.method {
+        METHOD_STORED => compressed,
+        METHOD_DEFLATE => {
+            let out = miniz_oxide::inflate::decompress_to_vec_with_limit(
+                &compressed,
+                entry.uncompressed_size as usize,
+            )
+            .map_err(|err| {
+                RomWeaverError::Validation(format!(
+                    "ZIP: failed to inflate entry `{}`: {err:?}",
+                    entry.name
+                ))
+            })?;
+            if out.len() != entry.uncompressed_size as usize {
+                return Err(RomWeaverError::Validation(format!(
+                    "ZIP: entry `{}` inflated to {} bytes, expected {}",
+                    entry.name,
+                    out.len(),
+                    entry.uncompressed_size
+                )));
+            }
+            out
+        }
+        other => {
+            return Err(RomWeaverError::Validation(format!(
+                "ZIP: entry `{}` uses unsupported compression method {other}",
                 entry.name
-            ))
-        }),
-        other => Err(RomWeaverError::Validation(format!(
-            "ZIP: entry `{}` uses unsupported compression method {other}",
-            entry.name
-        ))),
+            )));
+        }
+    };
+
+    // Integrity: verbatim/boot-sector .dcp payloads have no other checksum, so a
+    // bit-flipped stored or deflate entry must be rejected here rather than
+    // written into the rebuilt disc.
+    let actual_crc = crc32fast::hash(&extracted);
+    if actual_crc != entry.crc32 {
+        return Err(RomWeaverError::Validation(format!(
+            "ZIP: entry `{}` CRC32 mismatch: computed {actual_crc:#010x}, expected {:#010x}",
+            entry.name, entry.crc32
+        )));
     }
+    tracing::trace!(
+        entry = %entry.name,
+        len = extracted.len(),
+        crc32 = actual_crc,
+        "extracted and verified ZIP entry"
+    );
+    Ok(extracted)
 }
 
 /// Find the End Of Central Directory record and return
@@ -221,6 +263,66 @@ mod tests {
     }
     fn le32(v: u32) -> [u8; 4] {
         v.to_le_bytes()
+    }
+
+    /// Build a valid one-entry archive with the given local payload and
+    /// central-directory metadata, so extraction can be exercised end to end.
+    fn single_entry_archive(
+        name: &[u8],
+        method: u16,
+        payload: &[u8],
+        compressed_size: u32,
+        uncompressed_size: u32,
+        crc32: u32,
+    ) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&le32(LOCAL_FILE_HEADER_SIGNATURE));
+        buf.extend_from_slice(&le16(20)); // version needed
+        buf.extend_from_slice(&le16(0)); // flags
+        buf.extend_from_slice(&le16(method));
+        buf.extend_from_slice(&le16(0)); // mod time
+        buf.extend_from_slice(&le16(0)); // mod date
+        buf.extend_from_slice(&le32(crc32));
+        buf.extend_from_slice(&le32(compressed_size));
+        buf.extend_from_slice(&le32(uncompressed_size));
+        buf.extend_from_slice(&le16(name.len() as u16));
+        buf.extend_from_slice(&le16(0)); // extra len
+        buf.extend_from_slice(name);
+        buf.extend_from_slice(payload);
+
+        let cd_offset = buf.len() as u32;
+        let mut central = Vec::new();
+        central.extend_from_slice(&le32(CENTRAL_FILE_HEADER_SIGNATURE));
+        central.extend_from_slice(&le16(20)); // version made by
+        central.extend_from_slice(&le16(20)); // version needed
+        central.extend_from_slice(&le16(0)); // flags
+        central.extend_from_slice(&le16(method));
+        central.extend_from_slice(&le16(0)); // mod time
+        central.extend_from_slice(&le16(0)); // mod date
+        central.extend_from_slice(&le32(crc32));
+        central.extend_from_slice(&le32(compressed_size));
+        central.extend_from_slice(&le32(uncompressed_size));
+        central.extend_from_slice(&le16(name.len() as u16));
+        central.extend_from_slice(&le16(0)); // extra len
+        central.extend_from_slice(&le16(0)); // comment len
+        central.extend_from_slice(&le16(0)); // disk start
+        central.extend_from_slice(&le16(0)); // internal attr
+        central.extend_from_slice(&le32(0)); // external attr
+        central.extend_from_slice(&le32(0)); // local header offset
+        central.extend_from_slice(name);
+
+        let cd_size = central.len() as u32;
+        buf.extend_from_slice(&central);
+
+        buf.extend_from_slice(&le32(EOCD_SIGNATURE));
+        buf.extend_from_slice(&le16(0)); // disk
+        buf.extend_from_slice(&le16(0)); // cd disk
+        buf.extend_from_slice(&le16(1)); // entries this disk
+        buf.extend_from_slice(&le16(1)); // total entries
+        buf.extend_from_slice(&le32(cd_size));
+        buf.extend_from_slice(&le32(cd_offset));
+        buf.extend_from_slice(&le16(0)); // comment len
+        buf
     }
 
     /// An EOCD-only buffer whose central-directory size field is just below the
@@ -304,6 +406,82 @@ mod tests {
         let mut reader = Cursor::new(buf);
         let entries = read_central_directory(&mut reader).unwrap();
         assert_eq!(entries.len(), 1);
+        let err = extract_entry(&mut reader, &entries[0]).unwrap_err();
+        assert!(matches!(err, RomWeaverError::Validation(_)));
+    }
+
+    /// Stored and deflate entries with a correct CRC32 extract to their exact
+    /// bytes.
+    #[test]
+    fn extracts_stored_and_deflate_with_valid_crc() {
+        let data = vec![0x42u8; 4096];
+        let crc = crc32fast::hash(&data);
+
+        let stored = single_entry_archive(
+            b"x.bin",
+            METHOD_STORED,
+            &data,
+            data.len() as u32,
+            data.len() as u32,
+            crc,
+        );
+        let mut reader = Cursor::new(stored);
+        let entries = read_central_directory(&mut reader).unwrap();
+        assert_eq!(extract_entry(&mut reader, &entries[0]).unwrap(), data);
+
+        let deflated = miniz_oxide::deflate::compress_to_vec(&data, 6);
+        let archive = single_entry_archive(
+            b"y.bin",
+            METHOD_DEFLATE,
+            &deflated,
+            deflated.len() as u32,
+            data.len() as u32,
+            crc,
+        );
+        let mut reader = Cursor::new(archive);
+        let entries = read_central_directory(&mut reader).unwrap();
+        assert_eq!(extract_entry(&mut reader, &entries[0]).unwrap(), data);
+    }
+
+    /// A deflate stream that expands past its declared `uncompressed_size` is
+    /// rejected rather than growing the output buffer without bound.
+    #[test]
+    fn rejects_deflate_bomb_exceeding_declared_size() {
+        let bomb = vec![0u8; 256 * 1024];
+        let deflated = miniz_oxide::deflate::compress_to_vec(&bomb, 6);
+        assert!(deflated.len() < bomb.len(), "payload must compress");
+
+        // Declare a tiny uncompressed size: inflation must stop at the limit and
+        // report a validation error instead of producing the full 256 KiB.
+        let archive = single_entry_archive(
+            b"bomb.bin",
+            METHOD_DEFLATE,
+            &deflated,
+            deflated.len() as u32,
+            16,
+            0,
+        );
+        let mut reader = Cursor::new(archive);
+        let entries = read_central_directory(&mut reader).unwrap();
+        let err = extract_entry(&mut reader, &entries[0]).unwrap_err();
+        assert!(matches!(err, RomWeaverError::Validation(_)));
+    }
+
+    /// A stored entry whose bytes do not match the central-directory CRC32 is
+    /// rejected (corrupt verbatim/boot-sector payload).
+    #[test]
+    fn rejects_entry_with_wrong_crc32() {
+        let data: &[u8] = b"hello dreamcast";
+        let archive = single_entry_archive(
+            b"track.bin",
+            METHOD_STORED,
+            data,
+            data.len() as u32,
+            data.len() as u32,
+            0xDEAD_BEEF, // deliberately wrong
+        );
+        let mut reader = Cursor::new(archive);
+        let entries = read_central_directory(&mut reader).unwrap();
         let err = extract_entry(&mut reader, &entries[0]).unwrap_err();
         assert!(matches!(err, RomWeaverError::Validation(_)));
     }

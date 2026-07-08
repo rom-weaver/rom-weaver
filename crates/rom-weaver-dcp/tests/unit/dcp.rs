@@ -44,6 +44,7 @@ struct RawEntry<'a> {
     name: &'a str,
     stored: &'a [u8],
     uncompressed_size: u32,
+    crc32: u32,
     method: u16,
 }
 
@@ -63,7 +64,7 @@ fn build_zip_general(entries: &[RawEntry]) -> Vec<u8> {
         out.extend_from_slice(&u16(e.method));
         out.extend_from_slice(&u16(0)); // mod time
         out.extend_from_slice(&u16(0)); // mod date
-        out.extend_from_slice(&u32(0)); // crc32 (unchecked by reader)
+        out.extend_from_slice(&u32(e.crc32)); // crc32
         out.extend_from_slice(&u32(e.stored.len() as u32)); // compressed
         out.extend_from_slice(&u32(e.uncompressed_size)); // uncompressed
         out.extend_from_slice(&u16(name.len() as u16));
@@ -82,7 +83,7 @@ fn build_zip_general(entries: &[RawEntry]) -> Vec<u8> {
         centrals.extend_from_slice(&u16(e.method));
         centrals.extend_from_slice(&u16(0)); // mod time
         centrals.extend_from_slice(&u16(0)); // mod date
-        centrals.extend_from_slice(&u32(0)); // crc32
+        centrals.extend_from_slice(&u32(e.crc32)); // crc32
         centrals.extend_from_slice(&u32(e.stored.len() as u32));
         centrals.extend_from_slice(&u32(e.uncompressed_size));
         centrals.extend_from_slice(&u16(name.len() as u16));
@@ -117,6 +118,7 @@ fn build_zip(entries: &[Entry]) -> Vec<u8> {
             name: e.name,
             stored: e.data,
             uncompressed_size: e.data.len() as u32,
+            crc32: crc32fast::hash(e.data),
             method: 0,
         })
         .collect();
@@ -132,6 +134,7 @@ fn build_zip_methods(entries: &[(&str, &[u8], &[u8], u16)]) -> Vec<u8> {
             name,
             stored,
             uncompressed_size: uncompressed.len() as u32,
+            crc32: crc32fast::hash(uncompressed),
             method: *method,
         })
         .collect();

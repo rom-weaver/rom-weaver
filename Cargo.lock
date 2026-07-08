@@ -1779,6 +1779,7 @@ dependencies = [
 name = "rom-weaver-dcp"
 version = "0.3.0"
 dependencies = [
+ "crc32fast",
  "miniz_oxide",
  "rom-weaver-core",
  "rom-weaver-gdrom",

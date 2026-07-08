@@ -6,6 +6,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+crc32fast.workspace = true
 miniz_oxide.workspace = true
 rom-weaver-core = { path = "../rom-weaver-core" }
 rom-weaver-gdrom = { path = "../rom-weaver-gdrom" }
