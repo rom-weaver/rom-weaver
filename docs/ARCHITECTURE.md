@@ -188,6 +188,37 @@ only (no main-thread `window`); WebKit allows **one `SyncAccessHandle` per file*
 (the proxy refcounts to one) and serializes concurrent `FileReaderSync` of one
 File (the reason for the input-read gate).
 
+## Patch apply: ROM copier headers
+
+Some dumps carry a copier header the patch author may or may not have included
+(`crates/rom-weaver-checksum/src/rom_headers.rs` is the source of truth:
+signatures, size-modulus rules, per-header `headered_extension` /
+`headerless_extension`, and `retained_on_output`). Patch apply handles this with
+two symmetric policies (`crates/rom-weaver-app/src/patch_apply.rs`):
+
+- **`--patch-header auto|keep|strip`** — which bytes each patch applies against.
+  Auto decides **per patch in the chain** on checksum proof: the patch's
+  embedded source CRC32 (or the first patch's `[crc32:..]` filename token) is
+  compared against the current bytes vs their headerless/re-headered
+  counterpart, and the header is stripped or restored between steps
+  (`chain_header_transition`) only when the proof matches. The flag is
+  positional and repeatable — each occurrence binds to the preceding `--patch`
+  and carries forward (`align_patch_header_modes` re-derives the interleave from
+  raw clap indices).
+- **`--output-header auto|keep|strip`** — whether the single final output
+  carries the header. Auto keeps emulator-required format headers (iNES/FDS/
+  LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor). When the final
+  header state changes the ROM's conventional extension, the CLI adjusts the
+  `--output` extension (`.smc` ↔ `.sfc`) and notes it in the report label.
+
+The browser mirrors the decision instead of re-hashing: staging's checksum
+variants carry a `remove-header` row (`transforms.removeHeader` with
+`strippedBytes`, `retainOnOutput`, and the extension pair), the first patch's
+mode is resolved in TS (`lib/workflow/apply-header-resolution.ts`) and sent
+concretely, later chain entries are sent as `auto` for the engine to decide from
+its own intermediates, and the download filename follows the engine's emitted
+(possibly extension-adjusted) path.
+
 ## Dreamcast `.dcp` patches (the filesystem-level apply path)
 
 Most patch formats are byte-stream transforms and fit `PatchHandler`. Universal
