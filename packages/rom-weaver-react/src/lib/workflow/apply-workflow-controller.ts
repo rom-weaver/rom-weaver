@@ -1191,19 +1191,38 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       parsePatch: (patchStage) => this.parsePatch(patchStage),
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
-      validatePatchTarget: (patchStage, target, preflight) =>
-        validateApplyPatchTarget(patchStage, target, preflight, {
-          emitProgress: (event) => this.emitProgress(event),
-          runtime: this.runtime,
-          settings: this.settings,
-          signal: this.abortController.signal,
-          workflowId: this.id,
-        }),
     });
   }
 
   private async refreshPatchReadiness() {
     for (const patch of this.patches) await this.evaluatePatchReadiness(patch);
+  }
+
+  /** Run the deferred deep dry-run validation for every patch that is staged, targeted, and not yet
+   * verified against its current target. Readiness only computes the cheap checksum preflight; this
+   * heavier pass runs afterward (driven by the form once the card is already showing) so a slow
+   * full-ROM validation does not make a freshly-dropped patch look like it is stuck. */
+  async validatePatches(): Promise<void> {
+    return this.mutate("validatePatches", async () => {
+      const assets = this.getPatchableInputAssets();
+      for (const stage of this.patches) {
+        const preflight = stage.state.checksumPreflight;
+        if (!(stage.state.status === "ready" && stage.state.targetInputId && preflight)) continue;
+        if (!(stage.parsedPatch && stage.preparedPatchFile)) continue;
+        const target = assets.find(
+          (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
+        );
+        if (!target) continue;
+        await validateApplyPatchTarget(stage, target, preflight, {
+          emitProgress: (event) => this.emitProgress(event),
+          runtime: this.runtime,
+          settings: this.settings,
+          signal: this.abortController.signal,
+          workflowId: this.id,
+        });
+      }
+      this.recomputeOutputState();
+    });
   }
 
   protected computeSnapshot(): ApplyWorkflowSnapshot {

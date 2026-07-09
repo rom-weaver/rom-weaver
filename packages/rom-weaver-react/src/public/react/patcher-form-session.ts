@@ -107,6 +107,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputNameKey,
   stageInput,
   stagePatches,
+  validatePatches,
   setPatchTarget,
   setPatchOption,
 }: LocalApplyPatchFormSessionOptions) => {
@@ -827,7 +828,7 @@ const useLocalApplyPatchFormSession = ({
       setPatchStaging,
       setRomInputs,
     },
-    stage: { stageInput, stagePatches },
+    stage: { stageInput, stagePatches, validatePatches },
   });
 
   // One coalescing window drives BOTH buckets. The ROM and patch staging decisions are the same
@@ -931,6 +932,8 @@ const useLocalApplyPatchFormSession = ({
             if (skipForReorderOrRemove) {
               emitSessionTrace("patch reorder/remove skipped re-stage", { patchCount: activePatches.length });
             } else if (!skipForInputOnlyChange) {
+              // An input-only change re-runs the deferred validation from syncRomInput's completion
+              // (race-free — after the ROM is staged and patch targets resolve), so it is skipped here.
               const freshFromIndex = patchesAppended && !inputsChanged && !settingsChanged ? previousPatchCount : 0;
               if (freshFromIndex > 0) {
                 emitSessionTrace("patch append staged incrementally", {

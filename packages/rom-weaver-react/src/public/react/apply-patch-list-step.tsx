@@ -1,4 +1,3 @@
-import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
 import X from "lucide-react/dist/esm/icons/x.js";
@@ -50,16 +49,12 @@ const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: No
 const getPatchVerificationRows = (item: PatchStackItemState) => {
   const inputRows: Array<{ label: string; value: string }> = [];
   const outputRows: Array<{ label: string; value: string }> = [];
-  let dryRun = false;
   for (const entry of item.validationValues) {
     const separatorIndex = entry.indexOf("=");
     if (separatorIndex === -1) {
-      // "dry-run apply" marks scratch-copy validation — rendered as the
-      // prototype's dry-run verdict block, not a checksum row.
-      if (/dry-?run/i.test(entry)) {
-        dryRun = true;
-        continue;
-      }
+      // "dry-run apply" marks scratch-copy validation — every patch gets it, so it is surfaced once as
+      // the shared method footnote below, never as a per-type row or a bespoke section.
+      if (/dry-?run/i.test(entry)) continue;
       inputRows.push({ label: "VALIDATION", value: entry });
       continue;
     }
@@ -72,12 +67,14 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
     }
     outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
   }
-  return { dryRun, inputRows, outputRows };
+  return { inputRows, outputRows };
 };
 
-/** One Checks drawer per patch, with INPUT / OUTPUT / DRY-RUN sub-groups — the
- * loom prototype's verification language (a single section, grouped rows; the
- * dry-run reports a verdict block, not a checksum row). */
+/** One Checks drawer per patch, identical in shape for every patch type: a branded
+ * pass/fail verdict line, the declared INPUT / OUTPUT requirement rows when the patch
+ * has them, and one shared "scratch-copy dry-run" method footnote. No patch type gets
+ * a bespoke section — a requirement-less PPF and a requirement-carrying xdelta read the
+ * same, just with more or fewer rows. */
 const PatchInfo = ({
   item,
   pending,
@@ -90,29 +87,35 @@ const PatchInfo = ({
 }) => {
   const localizer = useUiLocalizer();
   if (pending?.length) {
-    return <PendingChecks defaultOpen groupClassName="ck-group ckgrp" groups={pending} label="Checks" />;
+    return <PendingChecks defaultOpen groupClassName="ck-group" groups={pending} label="Checks" />;
   }
-  const { dryRun, inputRows, outputRows } = getPatchVerificationRows(item);
-  const hasInputDetails = !!(inputRows.length || item.validationMessage);
+  const { inputRows, outputRows } = getPatchVerificationRows(item);
   const hasOutputDetails = outputRows.length > 0;
-  if (!(hasInputDetails || hasOutputDetails || dryRun)) return null;
+  const verifying = item.validationState === "verifying";
   const bad = item.validationState === "invalid";
-  // The dry-run verdict line already says pass/fail — only surface the raw
-  // validation message alongside it when it carries failure detail.
-  const showMessage = !!item.validationMessage && (!dryRun || bad);
-  let match: { label: null; ok: boolean } | undefined;
-  if (item.validationState === "invalid") match = { label: null, ok: false };
-  else if (item.validationState === "valid") match = { label: null, ok: true };
+  const ok = item.validationState === "valid";
+  const resolved = ok || bad;
+  if (!(inputRows.length || hasOutputDetails || resolved || verifying)) return null;
+  // The drawer header carries the pass mark + timing, so a passing patch needs no in-body banner —
+  // only a failure surfaces a verdict line (red, with the reason). While the deferred dry-run runs
+  // the header shows a "Verifying…" readout (the verify-bar carries the motion).
+  const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
   return (
     <ChecksumList
-      defaultOpen={inputRows.length > 0 || hasOutputDetails || dryRun}
+      defaultOpen={inputRows.length > 0 || hasOutputDetails || resolved || verifying}
       label="Checks"
-      lead={showMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined}
       match={match}
       timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
+      verifying={verifying}
     >
+      {bad ? (
+        <div className="pverdict dryrun-verdict bad">
+          <X aria-hidden="true" />
+          <span>{item.validationMessage || "Patch validation failed"}</span>
+        </div>
+      ) : null}
       {inputRows.length ? (
-        <div className="ck-group ckgrp">
+        <div className="ck-group">
           <div className="ck-group-head">
             <span>{localizer.message("ui.verify.input")}</span>
           </div>
@@ -122,27 +125,13 @@ const PatchInfo = ({
         </div>
       ) : null}
       {hasOutputDetails ? (
-        <div className="ck-group ckgrp">
+        <div className="ck-group">
           <div className="ck-group-head">
             <span>{localizer.message("ui.verify.output")}</span>
           </div>
           {outputRows.map((row) => (
             <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
-        </div>
-      ) : null}
-      {dryRun ? (
-        <div className="ck-group ckgrp">
-          <div className="ck-group-head">
-            <span>{localizer.message("ui.verify.dryRun")}</span>
-          </div>
-          <div className="dryrun">
-            <span className="dryrun-desc">{localizer.message("ui.verify.dryRunDesc")}</span>
-            <span className={bad ? "dryrun-verdict bad" : "dryrun-verdict ok"}>
-              {bad ? <X aria-hidden="true" /> : <Check aria-hidden="true" />}
-              <span>{localizer.message(bad ? "ui.verify.dryRunFail" : "ui.verify.dryRunPass")}</span>
-            </span>
-          </div>
         </div>
       ) : null}
     </ChecksumList>
@@ -408,14 +397,16 @@ const ApplyPatchListStep = ({
       >
         {patches.map((item, index) => {
           // Mirrors the ROM card: the resolved card structure stays mounted through
-          // staging — a determinate bar on the top edge + a "Validating…" status in
-          // the meta line carry progress, and the Checks drawer reserves its
-          // verification sections as shimmer placeholders — so the stack doesn't
-          // jump when validation lands. The bar stays full once finished.
+          // staging — a determinate bar on the top edge + a "Reading…" status in the
+          // meta line carry progress, and the Checks drawer reserves its verification
+          // sections as shimmer placeholders — so the stack doesn't jump when the
+          // result lands. The bar stays full once finished. Staging a patch is extract
+          // (if archived) + parse — the patch is never hashed — so this reads "Reading",
+          // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
           const staging = !!item.progress;
           const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
           const percent = stagePercent(stagingProps);
-          // A patch pulled from a container archive extracts before it validates; the
+          // A patch pulled from a container archive extracts before it is parsed; the
           // runtime labels that stage "extracting …". (Patch rows have no validationPhase,
           // so the label is the available signal here — unlike ROM inputs.)
           const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
@@ -424,6 +415,10 @@ const ApplyPatchListStep = ({
           let verdict: "bad" | "ok" | undefined;
           if (item.validationState === "invalid") verdict = "bad";
           else if (item.validationState === "valid") verdict = "ok";
+          // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
+          // the card already shows its full body (Extract + Options + Checks). A top-edge bar carries
+          // that async work — a later phase following the "Reading…" staging bar.
+          const verifying = !staging && item.validationState === "verifying";
           // Phase A reserves the source (Input) verification group; the streamed
           // section plan will extend this to the exact sections (Input/Output/dry-run).
           const pendingSections: ChecksumPendingGroup[] = [
@@ -465,7 +460,7 @@ const ApplyPatchListStep = ({
                   {staging ? (
                     <StageStatus
                       id={`rom-weaver-progress-patch-${index}`}
-                      label={stageStatusLabel("Validating", patchExtracting)}
+                      label={stageStatusLabel("Reading", patchExtracting)}
                       percent={percent}
                     />
                   ) : null}
@@ -495,6 +490,7 @@ const ApplyPatchListStep = ({
               stageBar={stageBarValue(staging, percent)}
               state={staging ? undefined : verdict}
               target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
+              verifyBar={verifying}
             >
               <div className="patch-body">
                 <div className="patch-body-inner">

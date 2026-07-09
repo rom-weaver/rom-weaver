@@ -12,10 +12,11 @@ import type { ReactNode } from "react";
 type StageProgress = { label?: ReactNode; percent?: number | null } | null | undefined;
 
 /**
- * Phase-aware staging label: "<verb>…" while the input is only being checksummed/
- * validated, "Extracting & <verb>…" while it is also being extracted from a
- * container (extraction hashes/validates inline, so both verbs apply). `verb` is
- * "Checksumming" for ROM inputs, "Validating" for patches.
+ * Phase-aware staging label: "<verb>…" while the input is only being read/hashed,
+ * "Extracting & <verb>…" while it is also being extracted from a container. `verb` is
+ * "Checksumming" for ROM inputs (extraction hashes inline, so both verbs apply) and
+ * "Reading" for patches (staging a patch is extract + parse — it is never hashed; its
+ * deep dry-run validation is deferred and runs silently after staging).
  *
  * `extracting` is driven by the runtime's authoritative stage (a ROM input's
  * `validationPhase`, sourced from Rust's `stage` field) rather than sniffing the

@@ -397,10 +397,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.verdict.mismatch": msg({ id: "ui.verdict.mismatch", message: "Mismatch" }),
   "ui.verify.ckHint": msg({ id: "ui.verify.ckHint", message: "CRC32, MD5, or SHA-1" }),
   "ui.verify.dryRun": msg({ id: "ui.verify.dryRun", message: "Dry-run" }),
-  "ui.verify.dryRunDesc": msg({
-    id: "ui.verify.dryRunDesc",
-    message: "Apply to a scratch copy and re-hash — no source bytes touched",
-  }),
   "ui.verify.dryRunFail": msg({ id: "ui.verify.dryRunFail", message: "Failed — scratch output differs" }),
   "ui.verify.dryRunPass": msg({ id: "ui.verify.dryRunPass", message: "Passed — scratch output re-hash matches" }),
   "ui.verify.expIn": msg({ id: "ui.verify.expIn", message: "Expected input checksum" }),

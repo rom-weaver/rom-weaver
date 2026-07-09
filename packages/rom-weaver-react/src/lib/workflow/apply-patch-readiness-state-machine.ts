@@ -16,11 +16,6 @@ type PatchReadinessAdapters<TSource> = {
     stage: StagedSource<TSource>,
     error: Error & { code?: string; details?: Record<string, unknown> },
   ) => void;
-  validatePatchTarget: (
-    stage: StagedSource<TSource>,
-    target: InputAsset,
-    preflight: InternalPatchChecksumPreflight,
-  ) => Promise<void>;
 };
 
 const PATCH_TARGET_SELECTION_ERROR_CODES = new Set(["AMBIGUOUS_SELECTION", "PATCH_TARGET_MISMATCH"]);
@@ -204,8 +199,18 @@ const evaluateApplyPatchReadiness = async <TSource>(
     stage.state.status = target ? "ready" : "needsSelection";
     const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
     stage.state.checksumPreflight = preflight;
-    if (target && preflight) await adapters.validatePatchTarget(stage, target, preflight);
-    else stage.state.patchValidation = undefined;
+    if (target && preflight) {
+      // The deep dry-run validation is deferred so the patch card can surface its info + cheap
+      // preflight verdict immediately (a slow full-ROM validation no longer makes a freshly-dropped
+      // patch look like it is hanging); it runs as its own pass via `validatePatches`. Drop any cached
+      // verdict that no longer matches this target/preflight so the row falls back to the preflight
+      // result until the background dry-run refreshes it.
+      const validationKey = createApplyPatchValidationKey(stage, target, preflight);
+      if (stage.state.patchValidation && stage.state.patchValidation.validationKey !== validationKey)
+        stage.state.patchValidation = undefined;
+    } else {
+      stage.state.patchValidation = undefined;
+    }
     if (!target) {
       adapters.pushWarning(
         stage,

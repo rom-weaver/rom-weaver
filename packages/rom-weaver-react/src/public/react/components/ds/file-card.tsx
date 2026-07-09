@@ -52,6 +52,7 @@ const FileCard = ({
   meta,
   target,
   stageBar,
+  verifyBar = false,
   children,
 }: {
   state?: FileState;
@@ -78,6 +79,12 @@ const FileCard = ({
    * finishes (the meta-line status is what carries completion).
    */
   stageBar?: number | "indeterminate" | null;
+  /**
+   * The second, verification phase (a patch's deferred dry-run against the ROM):
+   * an indeterminate bar on the top edge, shown after staging clears. Same orange
+   * accent as the staging bar — it just marks a later phase of the same card.
+   */
+  verifyBar?: boolean;
   children?: ReactNode;
 }) => (
   <div
@@ -86,7 +93,7 @@ const FileCard = ({
       state,
       inputMatch && "im",
       patch && "grabbable patch",
-      stageBar != null && "has-stage-bar",
+      (stageBar != null || verifyBar) && "has-stage-bar",
       className,
     )}
     ref={rootRef}
@@ -99,6 +106,9 @@ const FileCard = ({
         style={stageBar === "indeterminate" ? undefined : { width: `${Math.max(0, Math.min(100, stageBar))}%` }}
       />
     )}
+    {stageBar == null && verifyBar ? (
+      <div aria-hidden="true" className="stage-bar verify-bar is-indeterminate" />
+    ) : null}
     {hideName ? (
       onRemove ? (
         <RemoveButton label={removeLabel} onClick={onRemove} />

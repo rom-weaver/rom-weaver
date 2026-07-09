@@ -62,6 +62,7 @@ interface InputStagingContext {
   stage: {
     stageInput?: LocalApplyPatchFormSessionOptions["stageInput"];
     stagePatches?: LocalApplyPatchFormSessionOptions["stagePatches"];
+    validatePatches?: LocalApplyPatchFormSessionOptions["validatePatches"];
   };
 }
 
@@ -71,6 +72,43 @@ interface InputStagingContext {
 const useInputStaging = (context: InputStagingContext) => {
   const contextRef = useLatestRef(context);
   return useMemo(() => {
+    // Run the deep dry-run patch validation that was deferred out of staging (so the card could show
+    // its info + cheap preflight verdict instantly) and merge the refreshed verdicts back onto the
+    // already-visible patch rows, showing a "Validating…" indicator per row while it runs.
+    const validatePatchesDeferred = (snapshot: ApplyWorkflowStageSnapshot, generationArg?: number) => {
+      const { machines, rows, session, stage } = contextRef.current;
+      const patchStageGenerationRef = machines.patchStageMachine.stageGenerationRef;
+      const generation = generationArg ?? patchStageGenerationRef.current;
+      const { getPatchKey } = rows;
+      const { setPatchInfoByKey } = session;
+      const { validatePatches } = stage;
+      if (!(validatePatches && snapshot.patches.length)) return;
+      const mergeInfos = (infos: Array<StagedInputInfo | null | undefined>) => {
+        if (patchStageGenerationRef.current !== generation) return;
+        setPatchInfoByKey((current) => {
+          const next = { ...current };
+          snapshot.patches.forEach((patch, index) => {
+            const info = infos[index];
+            if (info) next[getPatchKey(patch, snapshot.patches)] = info;
+          });
+          return next;
+        });
+      };
+      // Run silently: the card already shows its info + preflight and reads as settled, so the deep
+      // dry-run must NOT re-emit staging progress (that would drop the row back into the shimmer and
+      // make the patch look like it is hanging again — the whole point of the deferral). The card
+      // shows "Verifying…" (pre-validation infos, target resolved + verdict pending) while it runs;
+      // only the verdict is merged when it lands.
+      void validatePatches(snapshot, mergeInfos)
+        .then(mergeInfos)
+        .catch((error) => {
+          if (patchStageGenerationRef.current !== generation) return;
+          const normalized = toError(error);
+          if (isWorkflowDisposedError(normalized)) return;
+          logUiError("Patch validation failed", normalized);
+        });
+    };
+
     const syncPatchFiles = (
       snapshot: ApplyWorkflowStageSnapshot,
       options: {
@@ -130,6 +168,24 @@ const useInputStaging = (context: InputStagingContext) => {
             ),
           );
         },
+        // The patch finished its eager parse while the ROM is still staging. Surface its parsed info
+        // (format/name/requirements) and drop its staging progress so the card leaves "Reading…" the
+        // moment the patch is read — the ROM keeps staging, and the deferred dry-run flips the card to
+        // "Verifying…" once the ROM lands.
+        onPatchStaged: (info, order) => {
+          if (patchStageGenerationRef.current !== generation) return;
+          const patch = snapshot.patches[order];
+          if (!(patch && info)) return;
+          const key = getPatchKey(patch, snapshot.patches);
+          setPatchInfoByKey((current) => ({ ...current, [key]: info }));
+          if (silent) return;
+          setPatchProgressByKey((current) => {
+            if (!(key in current)) return current;
+            const next = { ...current };
+            delete next[key];
+            return next;
+          });
+        },
         onProgress: (event) => {
           if (silent) return;
           if (patchStageGenerationRef.current !== generation) return;
@@ -157,6 +213,9 @@ const useInputStaging = (context: InputStagingContext) => {
               ]),
             ),
           );
+          // The card now shows info + cheap preflight; run the deferred deep validation silently in
+          // the background so it no longer makes the patch look like it is hanging.
+          validatePatchesDeferred(snapshot, generation);
         })
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;
@@ -478,6 +537,10 @@ const useInputStaging = (context: InputStagingContext) => {
               }),
             );
           });
+          // The ROM is now staged and the controller has resolved each patch's target, so run the
+          // deferred deep validation. This is the race-free trigger for a patch dropped BEFORE its
+          // ROM: the card flips to "Verifying…" the moment the ROM lands, then shows the verdict.
+          if (snapshot.patches.length) validatePatchesDeferred(snapshot);
         })
         .catch((error) => {
           const normalizedError = toError(error);

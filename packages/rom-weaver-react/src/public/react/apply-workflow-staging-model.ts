@@ -64,6 +64,10 @@ type StageBatchHandlers = {
   onInputProgress?: (event: ProgressEvent) => void;
   onInputState?: ApplyWorkflowPrepareHandlers["onInputState"];
   onPatchProgress?: (event: ProgressEvent) => void;
+  // Fires the moment a patch finishes its eager parse (before its addPatch mutation, which is queued
+  // behind the ROM's setInput). Lets the card show the parsed info immediately instead of holding
+  // "Reading…" until the ROM finishes staging.
+  onPatchStaged?: (info: PatchStageInfo, order: number) => void;
   selection?: ApplyWorkflowPrepareHandlers["selection"];
 };
 
@@ -134,26 +138,37 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
     formatPatchValidationValue("out size", patch.requirements?.targetSize),
     formatPatchValidationValue("out crc32", patch.requirements?.targetCrc32),
   ].filter(Boolean);
-  const validationValues = requirementValues.length || !patch.patchValidation ? requirementValues : ["dry-run apply"];
   const actualValue = "";
-  const status =
-    patch.patchValidation?.status ||
-    patch.checksumPreflight?.status ||
-    (requirementValues.length ? "pending" : "unknown");
+  // The deep dry-run validation is deferred and runs silently after staging. Until its verdict
+  // lands, a targeted patch (its cheap preflight computed) reads as "verifying"; a preflight checksum
+  // mismatch fails immediately without waiting for the dry-run. Once the verdict lands it wins.
+  const deep = patch.patchValidation;
+  let status: string;
+  if (deep) status = deep.status;
+  else if (patch.checksumPreflight?.status === "invalid") status = "invalid";
+  else if (patch.checksumPreflight) status = "verifying";
+  else status = requirementValues.length ? "pending" : "unknown";
+  const validationValues = requirementValues.length
+    ? requirementValues
+    : deep || patch.checksumPreflight
+      ? ["dry-run apply"]
+      : [];
   const message =
-    patch.patchValidation?.status === "valid"
-      ? "Patch validation passed"
-      : patch.patchValidation?.status === "invalid"
-        ? patch.patchValidation.message || "Patch validation failed"
-        : patch.patchValidation?.status === "pending"
-          ? "Patch validation pending"
-          : status === "valid"
-            ? "Source requirements matched"
-            : status === "invalid"
-              ? "Source requirements mismatch"
-              : status === "pending"
-                ? "Source requirements pending"
-                : "Patch does not provide source requirements";
+    status === "verifying"
+      ? "Verifying patch against the ROM…"
+      : deep?.status === "valid"
+        ? "Patch validation passed"
+        : deep?.status === "invalid"
+          ? deep.message || "Patch validation failed"
+          : deep?.status === "pending"
+            ? "Patch validation pending"
+            : status === "valid"
+              ? "Source requirements matched"
+              : status === "invalid"
+                ? "Source requirements mismatch"
+                : status === "pending"
+                  ? "Source requirements pending"
+                  : "Patch does not provide source requirements";
   return {
     checksumMismatch: status === "invalid",
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),

@@ -67,6 +67,7 @@ const ChecksumList = ({
   label,
   timing,
   match,
+  verifying,
   sublabel,
   defaultOpen,
   open,
@@ -77,6 +78,9 @@ const ChecksumList = ({
   label: ReactNode;
   timing?: ReactNode;
   match?: { ok: boolean; label: ReactNode };
+  /** A deferred verification is still running: show a subtle "Verifying…" readout in place of the
+   * verdict chip (the card's verify-bar carries the motion; the body stays fully visible). */
+  verifying?: boolean;
   sublabel?: ReactNode;
   defaultOpen?: boolean;
   open?: boolean;
@@ -90,20 +94,26 @@ const ChecksumList = ({
     onToggle={onToggle}
     open={open}
     readouts={
-      sublabel || timing || match ? (
+      sublabel || timing || match || verifying ? (
         <>
           {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
-          {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
-          {match ? (
-            <DrawerMark
-              className={match.ok ? "cks-match" : "cks-match bad"}
-              ok={match.ok}
-              title={match.ok ? "Verified" : "Verification failed"}
-            >
-              {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-              {match.label ? <span className="sr-only">{match.label}</span> : null}
-            </DrawerMark>
-          ) : null}
+          {verifying ? (
+            <DrawerReadout muted>Verifying…</DrawerReadout>
+          ) : (
+            <>
+              {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+              {match ? (
+                <DrawerMark
+                  className={match.ok ? "cks-match" : "cks-match bad"}
+                  ok={match.ok}
+                  title={match.ok ? "Verified" : "Verification failed"}
+                >
+                  {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+                  {match.label ? <span className="sr-only">{match.label}</span> : null}
+                </DrawerMark>
+              ) : null}
+            </>
+          )}
         </>
       ) : undefined
     }

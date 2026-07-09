@@ -151,8 +151,18 @@ type LocalApplyPatchFormSessionOptions = Pick<
     input: ApplyWorkflowStageSnapshot,
     handlers: {
       onImplicitPatches?: (patches: BinarySource[], infos: Array<StagedInputInfo | null | undefined>) => void;
+      /** Fires the moment a patch finishes its eager parse (before the ROM finishes staging) so the
+       * card can show the parsed info immediately instead of holding its "Reading…" state. */
+      onPatchStaged?: (info: StagedInputInfo | null | undefined, order: number) => void;
       onProgress: (event: ProgressEvent) => void;
     },
+  ) => Promise<Array<StagedInputInfo | null | undefined>>;
+  /** Run the deferred deep dry-run patch validation (it runs silently after the patch cards already
+   * show their info + cheap preflight verdict) and resolve with the refreshed patch infos carrying
+   * the validation result. */
+  validatePatches?: (
+    input: ApplyWorkflowStageSnapshot,
+    onVerifying?: (infos: Array<StagedInputInfo | null | undefined>) => void,
   ) => Promise<Array<StagedInputInfo | null | undefined>>;
   setPatchTarget?: (
     input: ApplyWorkflowStageSnapshot,

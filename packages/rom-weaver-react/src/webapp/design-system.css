@@ -760,7 +760,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
 /* first heading gets clear air under the drawer header; later headings sit a
    touch tighter so the sections still read as one stack */
-.rw-app .ckrows > .ck-group:first-child { margin-block-start: 13px; }
+.rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
 /* section header for a checksum group — a brand accent tick + brighter, bolder
    label so each block (Unchanged / Fix header / variants) reads as its own
@@ -837,14 +837,23 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck.req .reqstat svg { width: 14px; height: 14px; color: var(--verified); }
 .rw-app .ck.req.bad .reqstat svg { color: var(--fault); }
 .rw-app .ck.req.bad dd { color: var(--fault); }
-/* dry-run: a scratch-copy apply shown actively running */
-.rw-app .dryrun { display: flex; flex-direction: column; gap: 7px; padding: 7px 9px 9px; }
-.rw-app .dryrun-desc { font-size: .78rem; color: var(--ink-2); }
 /* the actual scratch-apply verdict, not a progress bar */
 .rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 600; }
 .rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
-.rw-app .dryrun-verdict.ok { color: var(--verified); }
 .rw-app .dryrun-verdict.bad { color: var(--fault); }
+/* the unified patch verdict line (top of the Checks body) — same accent verdict for every patch
+   type, whether it was requirement-checked or dry-run validated */
+.rw-app .pverdict { padding: 8px 9px; }
+/* the verdict lands after the verify bar: the line fades + rises in, its icon pops, and a passing
+   check draws its own stroke — the signature "done" moment, replacing an abrupt swap. */
+.rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
+.rw-app .pverdict.dryrun-verdict svg { animation: pverdict-mark .34s var(--ease) both; }
+@keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .pverdict.dryrun-verdict,
+  .rw-app .pverdict.dryrun-verdict svg { animation: none; }
+}
 
 /* inline help — clickable i's. a quiet line-glyph at rest (no box, so it adds no
    visual weight or width next to the label) that reads instantly as an info mark
@@ -936,11 +945,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    their copy button ~10px inside the box; match that so the right edge is one line) */
 /* taller, center-aligned sub-heading row so the size badge sits with breathing
    room above/below instead of filling the line edge-to-edge */
-.rw-app .ckgrp .ck-group-head { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 1px 3px 0; font-size: .66rem; font-weight: 600; letter-spacing: .05em; }
-.rw-app .ckgrp .ck-group-head > span:first-child { flex: 1 1 auto; min-width: 0; }
-.rw-app .ckgrp .tsz { flex: none; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); padding: 2px 8px; border-radius: 6px; background: var(--well); border: 1px solid var(--seam-soft); }
-.rw-app .ckgrp .ckrows { padding-block: 0; }
-.rw-app .ckgrp + .ckgrp { margin-block-start: 3px; }
 .rw-app .popt { display: flex; align-items: center; gap: 7px; font-size: .78rem; color: var(--ink-2); }
 
 /* ═══ notices & fault card ═══ */

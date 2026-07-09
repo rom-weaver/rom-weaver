@@ -43,6 +43,37 @@ import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressE
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 
+// A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
+// behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
+// finishes. Build the parsed info for a single patch straight from the workflow so the card can leave
+// "Reading…" the moment the patch is read, independent of the ROM. The target label stays "None
+// selected" until the ROM resolves it; the deferred dry-run fills in the verdict afterward.
+const buildEagerPatchStageInfo = (
+  workflow: ApplyWorkflow,
+  snapshot: ApplyWorkflowSessionInput,
+  order: number,
+): PatchStageInfo | null => {
+  const patch = workflow.getPatches()[order];
+  // Only reveal once the patch is actually prepared + parsed ("ready"): its leaf name, size, format,
+  // and requirements are populated. A patch still extracting or awaiting an archive-entry selection
+  // has only its raw source info, so revealing it would replace the "Reading…" card with a bare,
+  // wrong-looking one (raw archive name, no drawers). Leave those staging until the parse lands.
+  if (!patch || patch.status !== "ready") return null;
+  const patchSource = workflow.getPatchSources().filter(isReactBinarySource)[order];
+  const fileName = getReactBinarySourceFileName(patchSource ?? snapshot.patches[order] ?? null, `Patch ${order + 1}`);
+  const inputLabelById = new Map(
+    toStagedInputInfos(workflow.getInput(), snapshot.inputs).map((entry) => [
+      entry.id || "",
+      entry.fileName || "Input",
+    ]),
+  );
+  const targetName =
+    patch.targetInputFileName ||
+    (patch.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+    "None selected";
+  return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
+};
+
 function ApplyPatchForm(props: ApplyPatchFormProps) {
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -488,6 +519,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       onProgress: (event) => {
         // Emit once, then fan the typed progress out to whichever buckets are staging, by role.
         const { progressEvent, workflowProgress } = emitWorkflowProgress(event);
+        // A patch finished its eager parse while the ROM is still staging (the controller emits this
+        // "awaiting input" event the moment the patch is read, before its queued addPatch mutation).
+        // Reveal the parsed info now so the card leaves "Reading…" independent of the ROM, and DON'T
+        // route it as progress — that would keep the card busy. The deferred dry-run flips the card to
+        // "Verifying…" once the ROM lands.
+        if (
+          workflowProgress.role === "patch" &&
+          workflowProgress.stage === "verify" &&
+          workflowProgress.id.endsWith(":patch-awaiting-input")
+        ) {
+          const order = Number(workflowProgress.details?.order);
+          const info = Number.isInteger(order) ? buildEagerPatchStageInfo(getWorkflow(), snapshot, order) : null;
+          // Only reveal (and swallow this "waiting" event) once the patch is parsed. If it isn't yet,
+          // fall through so the event routes as normal patch progress and the card keeps "Reading…".
+          if (info) {
+            for (const member of members) member.handlers.onPatchStaged?.(info, order);
+            return;
+          }
+        }
         for (const member of members) {
           if (workflowProgress.role === "input") member.handlers.onInputProgress?.(progressEvent);
           else if (workflowProgress.role === "patch") member.handlers.onPatchProgress?.(progressEvent);
@@ -505,7 +555,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ).catch((error) => {
       for (const member of members) member.fail(error);
     });
-  }, [emitWorkflowProgress, prepareWorkflow, queueMutation]);
+  }, [emitWorkflowProgress, getWorkflow, prepareWorkflow, queueMutation]);
 
   const enqueueStageBatch = useCallback(
     <TValue,>(
@@ -720,6 +770,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       input: ApplyWorkflowSessionInput,
       handlers: {
         onImplicitPatches?: (patches: BinarySource[], infos: PatchStageInfo[]) => void;
+        onPatchStaged?: (info: PatchStageInfo, order: number) => void;
         onProgress: (event: ProgressEvent) => void;
       },
     ) => {
@@ -730,6 +781,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         input,
         {
           onPatchProgress: handlers.onProgress,
+          onPatchStaged: handlers.onPatchStaged,
           selection: {
             promptInputSelection: false,
             promptPatchSelection: true,
@@ -765,6 +817,59 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       );
     },
     [enqueueStageBatch],
+  );
+
+  // The deep dry-run validation is deferred out of staging so the patch card can render its info +
+  // cheap preflight verdict instantly; this pass runs it afterward (silently — no progress) and
+  // resolves with the refreshed infos now carrying the dry-run verdict.
+  const validatePatches = useCallback(
+    async (
+      input: ApplyWorkflowSessionInput,
+      // Fires once with the pre-validation infos (target resolved, verdict pending → the card reads
+      // "Verifying…") before the deep dry-run runs — so a patch dropped before its ROM shows the
+      // verifying state the moment the ROM lands, not only the final verdict.
+      onVerifying?: (infos: Array<ReturnType<typeof toPatchStageInfo>>) => void,
+    ) => {
+      const originalNames = input.patches.map((patch, index) =>
+        getReactBinarySourceFileName(patch, `Patch ${index + 1}`),
+      );
+      return withPreparedWorkflow(
+        input,
+        {
+          // Fully silent: the deep dry-run must not surface any progress (patch-row *or* the global
+          // workflow bar via `props.onProgress`) — the card already reads as settled and only its
+          // verdict should change when validation lands.
+          onProgress: () => undefined,
+          selection: {
+            promptInputSelection: false,
+            promptPatchSelection: false,
+          },
+        },
+        async ({ input: stagedInput, workflow }) => {
+          const inputLabelById = new Map(
+            toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
+          );
+          const buildInfos = () => {
+            const patchSources = workflow.getPatchSources().filter(isReactBinarySource);
+            return workflow.getPatches().map((patch, index) => {
+              const fileName = getReactBinarySourceFileName(
+                patchSources[index] || null,
+                originalNames[index] || `Patch ${index + 1}`,
+              );
+              const targetName =
+                patch?.targetInputFileName ||
+                (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+                "None selected";
+              return toPatchStageInfo(patch, fileName, index, `Target: ${targetName}`);
+            });
+          };
+          onVerifying?.(buildInfos());
+          await workflow.validatePatches();
+          return buildInfos();
+        },
+      );
+    },
+    [withPreparedWorkflow],
   );
 
   const setPatchTarget = useCallback(
@@ -875,6 +980,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       setPatchTarget,
       stageInput,
       stagePatches,
+      validatePatches,
     });
   const resolvedUiController = controllers?.ui || localUiController;
   const resolvedStackController = controllers?.patchStack || localStackController;
