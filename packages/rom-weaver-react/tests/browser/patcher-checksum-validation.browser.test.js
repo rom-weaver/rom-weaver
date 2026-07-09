@@ -175,13 +175,15 @@ test("source-check patch formats report runtime patch validation success", async
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(patchPath));
 
+    // BPS/UPS declare source requirements, so the card keeps its Checks drawer; the
+    // pass verdict is the drawer-header mark, not an in-body banner.
     const validation = await waitForState(() => {
       const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
       if (!(element instanceof HTMLElement)) return null;
-      return /patch validation passed/i.test(element.textContent || "") ? element : null;
+      return element.querySelector(".cks-match:not(.bad)") ? element : null;
     }, 60000);
     expect(validation).toBeInstanceOf(HTMLElement);
-    expect(validation.textContent).toMatch(/patch validation passed/i);
+    expect(validation.textContent).toContain("Checks");
   }
 });
 
@@ -300,7 +302,7 @@ test("ROM info panel shows checksum variant rows", async () => {
   expect(inputRow.textContent).not.toContain("Raw");
 });
 
-test("patch stack mentions when patch validation passed", async () => {
+test("requirement-less patch passes without a Checks drawer", async () => {
   mount(
     createChecksumOverrideHarnessElement(
       vi.fn(async () => undefined),
@@ -315,12 +317,11 @@ test("patch stack mentions when patch validation passed", async () => {
     ),
   );
 
-  // Dry-run validation renders the prototype's verdict block (Dry-run group
-  // with a pass/fail line) instead of a raw message row.
+  // A dry-run-only patch declares no requirements: the ok mark rides the card
+  // itself and no Checks drawer renders.
   const validation = await waitForState(() => {
     const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
     return element instanceof HTMLElement ? element : null;
   }, 30000);
-  expect(validation.querySelector(".dryrun .dryrun-verdict.ok")).toBeInstanceOf(HTMLElement);
-  expect(validation.textContent).toMatch(/scratch output re-hash matches/i);
+  expect(validation.textContent).not.toContain("Checks");
 });

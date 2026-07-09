@@ -70,11 +70,11 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
   return { inputRows, outputRows };
 };
 
-/** One Checks drawer per patch, identical in shape for every patch type: a branded
- * pass/fail verdict line, the declared INPUT / OUTPUT requirement rows when the patch
- * has them, and one shared "scratch-copy dry-run" method footnote. No patch type gets
- * a bespoke section — a requirement-less PPF and a requirement-carrying xdelta read the
- * same, just with more or fewer rows. */
+/** One Checks drawer per patch that declares requirements, identical in shape for every
+ * patch type: the INPUT / OUTPUT requirement rows with the pass mark + timing in the
+ * drawer header. A requirement-less patch gets no drawer at all — its dry-run verdict
+ * already rides the card (state mark + verify bar) — except on failure, where the drawer
+ * carries the red reason line. */
 const PatchInfo = ({
   item,
   pending,
@@ -94,15 +94,14 @@ const PatchInfo = ({
   const verifying = item.validationState === "verifying";
   const bad = item.validationState === "invalid";
   const ok = item.validationState === "valid";
-  const resolved = ok || bad;
-  if (!(inputRows.length || hasOutputDetails || resolved || verifying)) return null;
+  if (!(inputRows.length || hasOutputDetails || bad)) return null;
   // The drawer header carries the pass mark + timing, so a passing patch needs no in-body banner —
   // only a failure surfaces a verdict line (red, with the reason). While the deferred dry-run runs
   // the header shows a "Verifying…" readout (the verify-bar carries the motion).
   const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
   return (
     <ChecksumList
-      defaultOpen={inputRows.length > 0 || hasOutputDetails || resolved || verifying}
+      defaultOpen
       label="Checks"
       match={match}
       timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
