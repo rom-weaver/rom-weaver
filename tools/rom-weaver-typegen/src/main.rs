@@ -4,10 +4,10 @@ use rom_weaver_app::{
     ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand,
     ExtractStepDetails, ExtractedFileEntry, IngestCommand, IngestKind, IngestResult,
     IngestRomAsset, MatchSidecarsCommand, N64ByteOrder, PatchApplyCommand, PatchApplyHeaderMode,
-    PatchApplyOutputHeaderMode, PatchCommands,
-    PatchCreateCandidatesCommand, PatchCreateCommand, PatchDescriptor, PatchValidateCommand,
-    PlanExtractBatchCommand, ProbeCommand, RomWeaverRunOutputOptions, RomWeaverRunRequest,
-    TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    PatchApplyOutputHeaderMode, PatchCommands, PatchCreateCandidatesCommand, PatchCreateCommand,
+    PatchDescriptor, PatchValidateCommand, PlanExtractBatchCommand, ProbeCommand,
+    RomWeaverRunOutputOptions, RomWeaverRunRequest, TrimCommand, compression_metadata,
+    patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
