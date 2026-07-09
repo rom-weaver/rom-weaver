@@ -46,58 +46,61 @@ impl CliApp {
             ManifestApplySource::InputArchive(_) => ManifestApplySourceKind::InputArchive,
         };
 
-        let (loaded, archive_source, manifest_dir, manifest_base_url) = match source {
-            ManifestApplySource::Explicit(path) => {
-                if let Some(url) = manifest_ref_as_url(&path) {
-                    // Natively the manifest itself may be a URL; its base then
-                    // anchors relative url entries. The browser prefetches
-                    // instead, so wasm rejects URL manifests outright.
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        return Err(manifest_url_unsupported("--manifest", url));
+        // The base-url slot is only ever populated natively (URL manifests are
+        // rejected on wasm), so the annotation keeps the wasm build inferable.
+        let (loaded, archive_source, manifest_dir, manifest_base_url): (_, _, _, Option<String>) =
+            match source {
+                ManifestApplySource::Explicit(path) => {
+                    if let Some(url) = manifest_ref_as_url(&path) {
+                        // Natively the manifest itself may be a URL; its base then
+                        // anchors relative url entries. The browser prefetches
+                        // instead, so wasm rejects URL manifests outright.
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            return Err(manifest_url_unsupported("--manifest", url));
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let base = super::manifest_download::manifest_url_base(url);
+                            let local = self.download_manifest_url(url, "--manifest", context)?;
+                            let dir = parent_dir(&local);
+                            (
+                                Box::new(self.load_manifest_source(&local)?),
+                                local,
+                                dir,
+                                Some(base),
+                            )
+                        }
+                    } else {
+                        if !path.exists() {
+                            return Err(RomWeaverError::Validation(format!(
+                                "manifest path does not exist: `{}`",
+                                path.display()
+                            )));
+                        }
+                        let dir = parent_dir(&path);
+                        (Box::new(self.load_manifest_source(&path)?), path, dir, None)
                     }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        let base = super::manifest_download::manifest_url_base(url);
-                        let local = self.download_manifest_url(url, "--manifest", context)?;
-                        let dir = parent_dir(&local);
-                        (
-                            Box::new(self.load_manifest_source(&local)?),
-                            local,
-                            dir,
-                            Some(base),
-                        )
-                    }
-                } else {
-                    if !path.exists() {
+                }
+                ManifestApplySource::InputIsManifest => {
+                    if !args.input.exists() {
                         return Err(RomWeaverError::Validation(format!(
-                            "manifest path does not exist: `{}`",
-                            path.display()
+                            "input path does not exist: `{}`",
+                            args.input.display()
                         )));
                     }
-                    let dir = parent_dir(&path);
-                    (Box::new(self.load_manifest_source(&path)?), path, dir, None)
+                    let dir = parent_dir(&args.input);
+                    (
+                        Box::new(self.load_manifest_source(&args.input)?),
+                        args.input.clone(),
+                        dir,
+                        None,
+                    )
                 }
-            }
-            ManifestApplySource::InputIsManifest => {
-                if !args.input.exists() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "input path does not exist: `{}`",
-                        args.input.display()
-                    )));
+                ManifestApplySource::InputArchive(loaded) => {
+                    (loaded, args.input.clone(), parent_dir(&args.input), None)
                 }
-                let dir = parent_dir(&args.input);
-                (
-                    Box::new(self.load_manifest_source(&args.input)?),
-                    args.input.clone(),
-                    dir,
-                    None,
-                )
-            }
-            ManifestApplySource::InputArchive(loaded) => {
-                (loaded, args.input.clone(), parent_dir(&args.input), None)
-            }
-        };
+            };
         let manifest = parse_manifest_bytes(&loaded.bytes)?;
         for warning in &loaded.warnings {
             warn!(manifest = %archive_source.display(), "{warning}");
