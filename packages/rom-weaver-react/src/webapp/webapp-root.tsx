@@ -29,7 +29,7 @@ const WORKFLOW_TABS = [
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
-const ROOT_LOGO_URL = "./logo.webp";
+const ROOT_LOGO_URL = "./logo.svg";
 
 const logger = createLogger("webapp-root");
 

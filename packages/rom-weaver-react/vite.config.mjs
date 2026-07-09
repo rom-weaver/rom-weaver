@@ -18,6 +18,9 @@ const packagedWasmBrotliPath = `${packagedWasmPath}.br`;
 const rootStaticAssetSources = {
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
+  "/icon-maskable-192.png": path.join(rootDir, "src", "assets", "app", "root", "icon-maskable-192.png"),
+  "/icon-maskable-512.png": path.join(rootDir, "src", "assets", "app", "root", "icon-maskable-512.png"),
+  "/logo.svg": path.join(rootDir, "src", "assets", "app", "root", "logo.svg"),
   "/logo.webp": path.join(rootDir, "src", "assets", "app", "logo.webp"),
   "/manifest.json": rootManifestSourcePath,
 };
@@ -355,9 +358,12 @@ export default defineConfig(({ command }) => {
           globPatterns: [
             "index.html",
             "manifest.json",
+            "logo.svg",
             "logo.webp",
             "favicon.ico",
             "apple-touch-icon.png",
+            "icon-maskable-192.png",
+            "icon-maskable-512.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
           ],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
