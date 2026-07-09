@@ -263,6 +263,53 @@ byte-correct, validated against the file-based xdelta handler), not necessarily
 byte-identical to UDP's own disc image. Matching UDP's image byte-for-byte would
 require reproducing DiscUtils' exact ISO9660 layout and is deferred.
 
+## rw.json manifests
+
+An `rw.json` manifest is a distributable patching-workflow definition: ordered
+`patches` (each with optional `name`/`description`, a `status` selection
+default — `required`/`default`/`optional`/`disabled` — a free-form maturity
+`label`, expected input-ROM `checks`, patch-file `integrity` checksums, and a
+per-patch `header` mode), an optional `rom` entry, and overridable `output`
+defaults (`name`/`header`/`compress`). Every entry's source is either a
+download `url` or a `path` relative to the manifest (an archive member when
+the manifest ships inside an "everything archive" that also bundles the ROM
+and patches). Schema and the single shared parser live in
+`rom-weaver-app/src/manifest_schema.rs` / `manifest_parse.rs`; validation
+failures use stable `manifest.*` `ValidationCode`s. Manifest-ness is
+filename-based: exactly `rw.json`, `rw.json.<gz|bz2|xz|zst>`, or a root-level
+`rw.json` archive member. Never name one `manifest.json` — the webapp service
+worker runtime-caches that name.
+
+- **Commands.** `manifest parse` loads any accepted packaging, resolves
+  entries (extracting referenced archive members into `--extract-dir`,
+  attaching ingest-grade patch descriptors), and returns a typed
+  `ManifestParseResult` under `details.manifest`. `manifest create` builds a
+  validated manifest from local files (checks/integrity computed from the
+  real bytes, per-patch metadata flags bound to the preceding `--patch` by
+  argv index), emits plain/`.gz`/`.zst`, and `--bundle`s manifest + sources
+  into a creatable archive. Create re-parses before writing, so it can never
+  emit what parse rejects.
+- **Manifest-driven apply.** `patch apply` routes through
+  `manifest_apply.rs` when it sees `--manifest <path-or-url>`, an
+  `rw.json[.codec]` input, or an archive with a root `rw.json` and no
+  explicit `--patch`. The resolver merges the manifest into a plain command;
+  precedence is decided by field shape (explicit CLI value > manifest >
+  built-in default — that is why `output` and `--compress-level` are
+  `Option`s). Statuses select patches (`--with`/`--without` override; an
+  interactive session prompts over default+optional entries and Cancel keeps
+  required+default). Native builds download `url` entries via `ureq`
+  (target-gated out of wasm); relative entry URLs resolve against the
+  manifest's own URL.
+- **Browser flow.** The webapp's URL API (`?manifest=<url>` or
+  `?rom=<url>&patch=<url>…`, parsed once at boot in
+  `src/webapp/url-session/`) fetches sources with JS `fetch` (hosts must
+  allow CORS), runs `manifest parse` in wasm, and delivers the resolved
+  files through the standard page-drop pipeline. Manifest metadata seeds the
+  patch enablement switches (required = on + locked, optional = off) and the
+  output defaults, all still user-editable. The apply form's output card
+  offers "Export manifest…", which drives `manifest create` in wasm and
+  downloads the resulting `rw.json` (optionally a bundled `.zip`).
+
 ## Rust ⇄ TypeScript boundary
 
 - **Type generation.** `cargo run -p rom-weaver-typegen -- --write` (or
