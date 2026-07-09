@@ -96,7 +96,7 @@ impl CliApp {
             args.no_compress,
             args.compress_format.clone(),
             args.compress_codec.clone(),
-            args.compress_level,
+            args.compress_level.unwrap_or_default(),
         ) {
             Ok(options) => options,
             Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
@@ -140,6 +140,10 @@ impl CliApp {
         let fail = |stage: &str, message: String| {
             OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
         };
+        let output = args
+            .output
+            .as_deref()
+            .expect("output presence is validated by run_patch_apply");
 
         self.emit_running(
             OperationLabel {
@@ -229,7 +233,7 @@ impl CliApp {
                     }
                 };
             self.compress_dcp_disc(
-                &args.output,
+                output,
                 &args.input,
                 self.primary_disc_sheet(disc),
                 std::slice::from_ref(&track_override),
@@ -247,7 +251,7 @@ impl CliApp {
                         return fail("prepare", error.to_string());
                     }
                 };
-            match self.write_disc_output(disc, &staged_sheet, &args.output) {
+            match self.write_disc_output(disc, &staged_sheet, output) {
                 Ok(note) => {
                     label = format!("{label}; {note}");
                     OperationReport::succeeded(

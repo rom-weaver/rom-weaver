@@ -569,8 +569,48 @@ pub struct PatchApplyCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patches: Vec<PathBuf>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
-    pub output: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Output path for the patched result. Optional when an rw.json manifest supplies output.name"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "manifest",
+            help = "Apply using an rw.json manifest (a path, or an http(s) URL on native builds). Also auto-detected when the input is rw.json[.gz|.bz2|.xz|.zst], or an archive carrying a root rw.json without explicit --patch flags"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub manifest: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "with",
+            value_name = "GLOB",
+            help = "Include manifest patches matching GLOB (by name or file name) even when their status is optional or disabled; repeatable"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub with_patches: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "without",
+            value_name = "GLOB",
+            help = "Exclude manifest patches matching GLOB (by name or file name) whose status is default; matching a required patch is an error; repeatable"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub without_patches: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -601,15 +641,17 @@ pub struct PatchApplyCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub compress_codec: Vec<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(
-        long = "compress-level",
-        value_enum,
-        default_value_t = CompressionLevelProfile::Max,
-        help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max)"
-    ))]
-    #[serde(default = "default_max_compression_level")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub compress_level: CompressionLevelProfile,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-level",
+            value_enum,
+            help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max). Defaults to max; when left unset an rw.json manifest may supply it"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub compress_level: Option<CompressionLevelProfile>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

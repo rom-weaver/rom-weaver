@@ -1,5 +1,6 @@
 use super::*;
 
+use super::manifest_parse::manifest_validation;
 use super::patch_commands::{
     DiscoveredPatchApplySidecars, PatchApplyProgressSink, PatchApplyProgressTracker,
     patch_progress_segment_start,
@@ -14,7 +15,10 @@ impl CliApp {
             rom_filter = args.rom_filter,
             patch_filter = args.patch_filter,
             patch_count = args.patches.len(),
-            output = %args.output.display(),
+            output = ?args.output,
+            manifest = ?args.manifest,
+            with_patches = args.with_patches.len(),
+            without_patches = args.without_patches.len(),
             no_extract = args.no_extract,
             no_ignore = args.no_ignore,
             no_compress = args.no_compress,
@@ -36,6 +40,27 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-apply command"
         );
+        // Everything downstream (staging, finalize, compression naming) needs a
+        // concrete output path. A manifest-driven run fills this from
+        // output.name before we get here, so only the flag-less, manifest-less
+        // case can still be empty.
+        if args.output.is_none() {
+            let thread_execution = self.context(args.threads).single_thread_execution();
+            return self.finish(
+                "patch-apply",
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    manifest_validation(
+                        "manifest.output.missing",
+                        "patch apply requires --output or a manifest output.name",
+                    )
+                    .to_string(),
+                    thread_execution,
+                ),
+            );
+        }
         // A `.dcp` (Universal Dreamcast Patcher) patch rebuilds a GD-ROM data
         // track's filesystem rather than patching bytes, so it follows a
         // dedicated path.
@@ -56,7 +81,10 @@ impl CliApp {
             no_extract,
             no_ignore,
             mut patches,
-            mut output,
+            output,
+            manifest: _,
+            with_patches: _,
+            without_patches: _,
             no_compress,
             compress_format,
             compress_codec,
@@ -75,6 +103,7 @@ impl CliApp {
             code_kind,
             threads,
         } = args;
+        let mut output = output.expect("output presence is validated above");
         let discover_implicit_patches = patches.is_empty() && codes.is_empty() && !no_extract;
         let input_kind_filter =
             Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
@@ -140,7 +169,7 @@ impl CliApp {
             no_compress,
             compress_format,
             compress_codec,
-            compress_level,
+            compress_level.unwrap_or_default(),
         ) {
             Ok(parsed) => parsed,
             Err(error) => {
