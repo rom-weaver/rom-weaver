@@ -1,6 +1,6 @@
 {
   "name": "rom-weaver-react",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "RomWeaver patcher-only webapp and React API",
   "type": "module",
   "private": true,
