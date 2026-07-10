@@ -48,7 +48,9 @@ paths; CI runs all of it unconditionally plus the full test suites.
   `packages/rom-weaver-react/src/wasm`
 - Webapp workflows/forms: `packages/rom-weaver-react/src`
 - Vendored forks: `vendor/` (`nod` and `libarchive` are submodules; push `nod`
-  changes to the fork remote, not upstream)
+  changes to the fork remote, not upstream). Never run stable `cargo fmt`
+  inside `vendor/nod` — its rustfmt config needs nightly (`cargo +nightly fmt`)
+  and stable reformats the whole tree into churn.
 
 ## Worktrees
 
