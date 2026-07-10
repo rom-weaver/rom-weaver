@@ -79,7 +79,7 @@ const hasPackageVersionTag = (version) => {
 };
 
 const getGitMetadata = (version) => {
-  const revision = runGit("git rev-parse --short HEAD");
+  const revision = sanitizeVersionToken(runGit("git rev-parse --short HEAD"));
   if (!revision) return null;
 
   const branchName = runGit("git rev-parse --abbrev-ref HEAD");
@@ -95,19 +95,21 @@ const getGitMetadata = (version) => {
   const untrackedDigest = getUntrackedFileDigestInput();
   const dirtyHash =
     dirtyDiff || untrackedDigest
-      ? crypto.createHash("sha1").update(dirtyDiff).update(untrackedDigest).digest("hex").slice(0, 12)
+      ? crypto.createHash("sha1").update(dirtyDiff).update(untrackedDigest).digest("hex").slice(0, revision.length)
       : "";
 
   return {
     dirtyHash,
     gitBranch,
     isVersionTag,
-    revision: sanitizeVersionToken(revision),
+    revision,
   };
 };
 
 const buildVersionString = (baseVersion, gitMetadata) => {
   if (!gitMetadata?.revision) return baseVersion;
+  // A clean checkout of the tagged release commit IS the release: no suffix.
+  if (gitMetadata.isVersionTag && !gitMetadata.dirtyHash) return baseVersion;
   const branchPrefix = gitMetadata.gitBranch ? `${gitMetadata.gitBranch}.` : "";
   const hashToken = gitMetadata.dirtyHash ? `dirty.${gitMetadata.dirtyHash}` : gitMetadata.revision;
   return `${baseVersion}+${branchPrefix}${hashToken}`;
@@ -138,8 +140,9 @@ const getBuildInfo = () => {
   const commitHash = gitMetadata?.revision || "unknown";
   const dirtyHash = gitMetadata?.dirtyHash || "";
   const gitBranch = gitMetadata?.gitBranch || "";
+  const isVersionTag = (gitMetadata?.isVersionTag ?? false) && !dirtyHash;
   const hashSuffix = dirtyHash ? `.dirty#${dirtyHash}` : `#${commitHash}`;
-  const displayVersion = `${version}${gitBranch ? `.${gitBranch}` : ""}${hashSuffix}`;
+  const displayVersion = isVersionTag ? version : `${version}${gitBranch ? `.${gitBranch}` : ""}${hashSuffix}`;
   return {
     buildVersion: buildVersionString(version, gitMetadata),
     commitHash,
@@ -147,6 +150,7 @@ const getBuildInfo = () => {
     displayVersion,
     gitBranch,
     hasDirtyChanges: !!dirtyHash,
+    isVersionTag,
     version,
   };
 };

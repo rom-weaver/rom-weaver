@@ -288,7 +288,7 @@ const Selvage = ({
   return (
     <footer className="selvage">
       <div className="sv-inner">
-        {version ? <span className="sv-meta mono">{version}</span> : null}
+        {version ? <span className="sv-meta mono">v{version}</span> : null}
         {threads ? (
           <span className="sv-meta mono sv-threads">
             {threads} {localizer.message("ui.env.threads")}

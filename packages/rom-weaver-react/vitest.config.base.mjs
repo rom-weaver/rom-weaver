@@ -29,6 +29,7 @@ export default defineConfig({
     __GIT_BRANCH__: JSON.stringify("dev"),
     __SERVICE_WORKER_ENABLED__: "false",
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: "0",
+    __VERSION_IS_TAGGED__: JSON.stringify(false),
   },
   oxc: {
     jsx: {

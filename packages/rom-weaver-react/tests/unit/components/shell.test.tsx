@@ -104,7 +104,7 @@ describe("Selvage", () => {
         />,
       ),
     );
-    expect(container.querySelector(".sv-meta")?.textContent).toBe("1.2.3");
+    expect(container.querySelector(".sv-meta")?.textContent).toBe("v1.2.3");
     expect(container.querySelector(".sv-threads")?.textContent).toContain("8");
     expect(container.querySelector(".sv-link.donate")).toBeTruthy();
   });

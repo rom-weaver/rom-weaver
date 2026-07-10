@@ -3,6 +3,7 @@ declare global {
   const __COMMIT_HASH__: string;
   const __GIT_BRANCH__: string;
   const __DIRTY_HASH__: string;
+  const __VERSION_IS_TAGGED__: boolean;
   const __SERVICE_WORKER_ENABLED__: boolean;
   const __SERVICE_WORKER_UPDATE_INTERVAL_MS__: number;
 

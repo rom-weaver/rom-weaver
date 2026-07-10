@@ -294,6 +294,7 @@ export default defineConfig(({ command }) => {
   const commitHash = process.env.ROM_WEAVER_COMMIT_HASH || buildInfo.commitHash || "unknown";
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
+  const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
@@ -321,6 +322,7 @@ export default defineConfig(({ command }) => {
       __COMMIT_HASH__: JSON.stringify(commitHash),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
+      __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
       ...serviceWorkerDefines,
     },
     optimizeDeps: {
