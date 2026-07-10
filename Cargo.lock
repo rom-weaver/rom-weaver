@@ -1642,7 +1642,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "rom-weaver-app"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "clap",
  "rom-weaver-cheats",
@@ -1664,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-chd"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chd",
  "crc",
@@ -1683,7 +1683,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-cheats"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rom-weaver-core",
  "tracing",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-checksum"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "adler2",
  "blake3",
@@ -1710,7 +1710,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1729,7 +1729,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-codecs"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bzip2",
  "flate2",
@@ -1740,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-containers"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chd",
  "ciso",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "assert_fs",
  "libc",
@@ -1777,7 +1777,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-dcp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-gdrom"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rom-weaver-core",
  "tracing",
@@ -1797,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-libarchive"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "akv",
  "rom-weaver-core",
@@ -1807,7 +1807,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-libarchive-sys"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-patches"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -1842,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-typegen"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rom-weaver-app",
  "rom-weaver-containers",
@@ -1854,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-xdelta"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "liblzma-sys",
  "lzma-rust2",
