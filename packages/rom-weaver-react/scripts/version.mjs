@@ -85,10 +85,11 @@ const getGitMetadata = (version) => {
   const branchName = runGit("git rev-parse --abbrev-ref HEAD");
   const normalizedBranch = sanitizeVersionToken(branchName);
   const isVersionTag = hasPackageVersionTag(version);
+  // Default-branch builds carry no branch prefix; the tag check alone can't
+  // cover them because CI's shallow checkout doesn't fetch tags.
+  const isDefaultBranch = normalizedBranch === "main" || normalizedBranch === "master";
   const gitBranch =
-    normalizedBranch && normalizedBranch !== "HEAD" && normalizedBranch !== "master" && !isVersionTag
-      ? normalizedBranch
-      : "";
+    normalizedBranch && normalizedBranch !== "HEAD" && !isDefaultBranch && !isVersionTag ? normalizedBranch : "";
 
   const dirtyDiff = runGit("git diff --binary HEAD --");
   const untrackedDigest = getUntrackedFileDigestInput();
