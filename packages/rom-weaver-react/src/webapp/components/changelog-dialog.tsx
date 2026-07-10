@@ -43,7 +43,7 @@ const fetchChangelog = async (): Promise<ChangelogEntry[]> => {
 
 const formatDate = (iso: string) => iso.split("T")[0] || "";
 
-const ChangelogDialog = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: () => void; onReload: () => void }) => {
   const localizer = useUiLocalizer();
   const [state, setState] = useState<FetchState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -100,6 +100,15 @@ const ChangelogDialog = ({ open, onClose }: { open: boolean; onClose: () => void
           ) : null}
         </>
       ) : null}
+      <div className="changelog-note">{localizer.message("ui.update.note")}</div>
+      <div className="changelog-actions">
+        <button className="btn ghost" onClick={onClose} type="button">
+          {localizer.message("ui.update.later")}
+        </button>
+        <button className="btn primary" onClick={onReload} type="button">
+          {localizer.message("ui.update.reloadNow")}
+        </button>
+      </div>
     </Modal>
   );
 };

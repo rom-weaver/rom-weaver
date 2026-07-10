@@ -282,7 +282,11 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions }: WebappRo
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
-          <ChangelogDialog onClose={() => setChangelogOpen(false)} open={changelogOpen} />
+          <ChangelogDialog
+            onClose={() => setChangelogOpen(false)}
+            onReload={actions.onReloadUpdate}
+            open={changelogOpen}
+          />
           <ActivityWakeLockNotice />
           <main className="workbench">
             {workflowPanel(

@@ -269,6 +269,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .changelog-subject { font-size: .9rem; }
 .rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: 8px 0; }
+.rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding-top: 8px; }
 /* banner dismiss (update + wake-lock) — sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
