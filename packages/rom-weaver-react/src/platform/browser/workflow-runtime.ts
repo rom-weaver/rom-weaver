@@ -213,7 +213,8 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
     description,
     outputName,
     outputHeader,
-    bundle,
+    bundleFileName,
+    noBundleRom,
     logLevel,
     onLog,
     onProgress,
@@ -246,7 +247,10 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
         patchPaths.push(stagedPatch.filePath);
       }
       const outputPath = `${WORKER_OPFS_MOUNTPOINT}/rw.json`;
-      const bundlePath = bundle ? `${WORKER_OPFS_MOUNTPOINT}/rw-bundle.zip` : undefined;
+      // The bundle name comes from the caller (its extension picks the archive
+      // format); only its base name is honored so it stays inside the mount.
+      const bundleBaseName = bundleFileName ? getPathBaseName(bundleFileName, "rw-bundle.zip") : undefined;
+      const bundlePath = bundleBaseName ? `${WORKER_OPFS_MOUNTPOINT}/${bundleBaseName}` : undefined;
       const result = await invokeRomWeaverManifestCreateWorker(
         {
           ...(bundlePath ? { bundlePath } : {}),
@@ -254,9 +258,11 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
           knownInputPaths: [...(romPath ? [romPath] : []), ...patchPaths],
           logLevel,
           ...(name ? { name } : {}),
+          ...(noBundleRom ? { noBundleRom: true } : {}),
           ...(outputHeader ? { outputHeader } : {}),
           ...(outputName ? { outputName } : {}),
           outputPath,
+          patchChecks: patches.map((patch) => patch.checks || ""),
           patchDescriptions: patches.map((patch) => patch.description || ""),
           patchHeaders: patches.map((patch) => patch.header || "auto"),
           patchLabels: patches.map((patch) => patch.label || ""),

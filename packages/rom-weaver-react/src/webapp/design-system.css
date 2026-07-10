@@ -1638,6 +1638,14 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 /* the archive/candidate picker can list long nested paths — let it use the
    full available width (the viewport-minus-padding cap still applies) */
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
+/* manifest export: patch cards + per-patch fields need room; the body stacks
+   its sections with a shared rhythm instead of per-field margins */
+.rw-modal.manifest-export-modal .rw-modal-card { width: min(720px, 100%); max-height: min(92dvh, 900px); }
+.rw-modal.manifest-export-modal .modal-body { display: flex; flex-direction: column; gap: 11px; }
+.rw-modal.manifest-export-modal .checkrow { margin-block: 0; }
+/* a growable multi-line text field in the same recessed language as .input */
+.rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
+.rw-app .ofld .input.tarea { height: auto; }
 @media (min-width: 720px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: 11px; }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }

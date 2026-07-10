@@ -448,12 +448,17 @@ type WorkflowRuntimeManifest = {
       label?: string;
       status?: ManifestPatchStatus;
       header?: ManifestHeaderMode;
+      /** Expected pre-apply ROM checksums for this entry ("algo=hex", comma-separable). */
+      checks?: string;
     }>;
     name?: string;
     description?: string;
     outputName?: string;
     outputHeader?: ManifestHeaderMode;
-    bundle?: boolean;
+    /** Bundle file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = manifest only. */
+    bundleFileName?: string;
+    /** Leave the ROM out of the bundle and emit its manifest entry with checks only. */
+    noBundleRom?: boolean;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;

@@ -842,9 +842,12 @@ const invokeRomWeaverManifestCreateWorker = async (
     logLevel?: LogLevel | string;
     name?: string;
     noCompress?: boolean;
+    noBundleRom?: boolean;
     outputHeader?: ManifestHeaderMode;
     outputName?: string;
     outputPath: string;
+    /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
+    patchChecks?: string[];
     patchDescriptions?: string[];
     patchHeaders?: ManifestHeaderMode[];
     patchLabels?: string[];
@@ -874,6 +877,7 @@ const invokeRomWeaverManifestCreateWorker = async (
   const patchNames = alignedStrings(input.patchNames);
   const patchDescriptions = alignedStrings(input.patchDescriptions);
   const patchLabels = alignedStrings(input.patchLabels);
+  const patchChecks = alignedStrings(input.patchChecks);
   const patchStatuses =
     input.patchStatuses && input.patchStatuses.length === patchPaths.length ? input.patchStatuses : undefined;
   const patchHeaders =
@@ -896,6 +900,8 @@ const invokeRomWeaverManifestCreateWorker = async (
     ...(patchLabels ? { patch_label: patchLabels } : {}),
     ...(patchStatuses ? { patch_status: patchStatuses } : {}),
     ...(patchHeaders ? { patch_header: patchHeaders } : {}),
+    ...(patchChecks ? { patch_check: patchChecks } : {}),
+    ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson manifest-create dispatch", {
     bundlePath,

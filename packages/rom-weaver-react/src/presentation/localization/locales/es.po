@@ -20,6 +20,9 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.info.threads"
 msgstr "«auto» usa el número de núcleos que reporta el navegador: {n}."
 
@@ -62,6 +65,11 @@ msgstr "{count, plural, one {Tejer # parche} other {Tejer # parches}}"
 #: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} aviso(s)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.format.bundle"
+msgstr "Paquete {format} (manifiesto + parches)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -195,8 +203,8 @@ msgstr "Bloquea la ejecución si las sumas de entrada o salida no coinciden con 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.bundle"
-msgstr "Empaquetar las fuentes en un .zip"
+msgid "ui.manifestExport.bundleRom"
+msgstr "Incluir la ROM en el archivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -525,6 +533,11 @@ msgstr "Exportar manifiesto…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.exporting"
+msgstr "Exportando manifiesto…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drawer.extract"
 msgstr "Extraer"
 
@@ -592,6 +605,11 @@ msgstr "Correcciones"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.format"
 msgstr "Formato"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.fromArchive"
+msgstr "de {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -715,6 +733,11 @@ msgstr "Nombre del manifiesto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.format.manifestOnly"
+msgstr "Solo manifiesto (rw.json)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.scale.max"
 msgstr "Máx"
 
@@ -812,6 +835,11 @@ msgstr "Opciones"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.output"
+msgstr "Salida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -917,6 +945,11 @@ msgstr "Parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.info.patches"
 msgstr "Los parches se aplican de arriba abajo — arrastra el asa para reordenar. Las pistas del nombre (crc32 / tamaño) se comprueban antes de ejecutar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.preparing"
+msgstr "Preparando archivos de parche…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1072,6 +1105,11 @@ msgstr "Reintentar"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.manifestExport.patchChecks"
+msgstr "Sumas de la ROM (previas al parche)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
