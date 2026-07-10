@@ -398,7 +398,7 @@ const Shell = (currentTab, panelView, formNode) =>
         { className: "app" },
         createElement(Masthead, {
           currentTab,
-          logoSrc: "./logo.webp",
+          logoSrc: "./logo.svg",
           onOpenLog: noop,
           onOpenSettings: noop,
           onSelectTab: noop,
@@ -755,7 +755,7 @@ describe("webapp keyboard navigation", () => {
           { className: "rw-app" },
           createElement(Masthead, {
             currentTab: "patcher",
-            logoSrc: "./logo.webp",
+            logoSrc: "./logo.svg",
             onOpenLog: noop,
             onOpenSettings: noop,
             onSelectTab,

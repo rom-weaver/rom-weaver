@@ -10,7 +10,7 @@
     localStorage.getItem("rw-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
 </script>
 <title>rom-weaver — loom workbench prototype</title>
-<link rel="icon" href="./assets/logo.webp" />
+<link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="./assets/fonts/archivo.css" />
 <link rel="stylesheet" href="./assets/fonts/inter-tight.css" />
 <script>document.write('<link rel="stylesheet" href="./prototype.css?v=' + Date.now() + '">');</script>
@@ -21,7 +21,13 @@
   <!-- ════════ header ════════ -->
   <header class="masthead">
     <a class="brand" href="#" aria-label="rom-weaver home">
-      <img class="brand-mark" src="./assets/logo-96.png" alt="" width="44" height="44" />
+      <img
+        class="brand-mark"
+        src="./assets/logo.svg"
+        alt=""
+        width="44"
+        height="44"
+      />
       <h1 class="brand-word">rom<span class="brand-hy">–</span><b>weaver</b></h1>
     </a>
 

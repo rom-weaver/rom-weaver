@@ -21,7 +21,6 @@ const rootStaticAssetSources = {
   "/icon-maskable-192.png": path.join(rootDir, "src", "assets", "app", "root", "icon-maskable-192.png"),
   "/icon-maskable-512.png": path.join(rootDir, "src", "assets", "app", "root", "icon-maskable-512.png"),
   "/logo.svg": path.join(rootDir, "src", "assets", "app", "root", "logo.svg"),
-  "/logo.webp": path.join(rootDir, "src", "assets", "app", "logo.webp"),
   "/manifest.json": rootManifestSourcePath,
 };
 const brotliAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
@@ -359,7 +358,6 @@ export default defineConfig(({ command }) => {
             "index.html",
             "manifest.json",
             "logo.svg",
-            "logo.webp",
             "favicon.ico",
             "apple-touch-icon.png",
             "icon-maskable-192.png",
