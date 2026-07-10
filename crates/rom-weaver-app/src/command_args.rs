@@ -1225,6 +1225,9 @@ pub struct ManifestCreatePatchSpec {
     /// Emitted `url` source override (the local file still supplies integrity).
     pub source_url: Option<String>,
     pub header: Option<PatchApplyHeaderMode>,
+    /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens),
+    /// emitted as the entry's `checks`.
+    pub checks: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1301,6 +1304,16 @@ pub struct ManifestCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_header: Vec<PatchApplyHeaderMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-check",
+            help = "Expected pre-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable). On the wasm path this is index-aligned with --patch (one comma-separated value per entry, empty for none)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_check: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = "Manifest display name"))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -1366,6 +1379,16 @@ pub struct ManifestCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub bundle: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "no-bundle-rom",
+            help = "Don't distribute the local --rom: leave it out of --bundle and emit its manifest entry with checks only (the applying user supplies the ROM)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_bundle_rom: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1479,6 +1502,17 @@ impl ManifestCreateCommand {
             headers.len(),
             &mut |spec, index| {
                 spec.header = Some(headers[index]);
+            },
+        );
+        // Checks accumulate (a patch may pin several algorithms) instead of
+        // last-occurrence-wins like the scalar metadata above.
+        let checks = self.patch_check.clone();
+        bind(
+            &mut specs,
+            "patch_check",
+            checks.len(),
+            &mut |spec, index| {
+                spec.checks.push(checks[index].clone());
             },
         );
         self.patch_specs = specs;

@@ -135,16 +135,20 @@ impl CliApp {
         }
         let loaded = self.load_manifest_source(source)?;
         let manifest = parse_manifest_bytes(&loaded.bytes)?;
+        // A sourceless (checks-only) rom entry resolves to no source at all:
+        // the applying user supplies the ROM.
         let rom_source = match &manifest.rom {
-            Some(rom) => Some(self.resolve_manifest_entry_source(
-                rom.url.as_deref(),
-                rom.path.as_deref(),
-                source,
-                &loaded,
-                extract_dir,
-                "rom",
-            )?),
-            None => None,
+            Some(rom) if rom.url.is_some() || rom.path.is_some() => {
+                Some(self.resolve_manifest_entry_source(
+                    rom.url.as_deref(),
+                    rom.path.as_deref(),
+                    source,
+                    &loaded,
+                    extract_dir,
+                    "rom",
+                )?)
+            }
+            _ => None,
         };
         let mut patch_sources = Vec::with_capacity(manifest.patches.len());
         for (index, patch) in manifest.patches.iter().enumerate() {

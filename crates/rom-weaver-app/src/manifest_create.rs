@@ -8,6 +8,15 @@ use super::*;
 
 const MANIFEST_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
 
+const MANIFEST_CREATE_OP: OperationLabel<'static> = OperationLabel {
+    command: "manifest-create",
+    family: OperationFamily::Command,
+    format: None,
+};
+
+/// Emit a hash-progress event at most once per this many processed bytes.
+const MANIFEST_CREATE_PROGRESS_INTERVAL: u64 = 8 * 1024 * 1024;
+
 /// The result of one `manifest create`, returned under
 /// `details.manifest_create`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -117,8 +126,26 @@ impl CliApp {
                 "unsupported checksum algorithm `{invalid}`"
             )));
         }
-        let algorithm_refs: Vec<&str> = algorithms.iter().map(String::as_str).collect();
         let mut warnings = Vec::new();
+
+        if args.no_bundle_rom && args.rom.is_none() {
+            warnings.push("--no-bundle-rom ignored: no local --rom given".to_string());
+        }
+        // Overall hash-progress denominator: the rom (when hashed locally)
+        // plus every patch file.
+        let mut total_hash_bytes: u64 = args
+            .rom
+            .as_deref()
+            .filter(|path| path.is_file())
+            .map(|path| fs::metadata(path).map(|meta| meta.len()).unwrap_or(0))
+            .unwrap_or(0);
+        for spec in &specs {
+            if spec.path.is_file() {
+                total_hash_bytes = total_hash_bytes
+                    .saturating_add(fs::metadata(&spec.path).map(|meta| meta.len()).unwrap_or(0));
+            }
+        }
+        let mut hashed_bytes: u64 = 0;
 
         let rom = match (&args.rom, &args.rom_url) {
             (None, None) => {
@@ -134,13 +161,22 @@ impl CliApp {
                         path.display()
                     )));
                 }
-                let checksums = checksum_file_values(path, &algorithm_refs, context)?;
+                let checksums = self.manifest_checksum_with_progress(
+                    path,
+                    &algorithms,
+                    context,
+                    &mut hashed_bytes,
+                    total_hash_bytes,
+                )?;
                 let size = fs::metadata(path)?.len();
                 let base_name = required_base_name(path, "rom")?;
+                // A no-bundle-rom entry keeps its checks but carries no
+                // source: the applying user supplies the ROM themselves.
+                let distribute_path = url_override.is_none() && !args.no_bundle_rom;
                 Some(ManifestRom {
                     name: args.rom_name.clone(),
                     url: url_override.clone(),
-                    path: url_override.is_none().then_some(base_name),
+                    path: distribute_path.then_some(base_name),
                     checks: Some(ManifestChecks {
                         checksums,
                         size: Some(size),
@@ -163,7 +199,13 @@ impl CliApp {
                     spec.path.display()
                 )));
             }
-            let integrity = checksum_file_values(&spec.path, &algorithm_refs, context)?;
+            let integrity = self.manifest_checksum_with_progress(
+                &spec.path,
+                &algorithms,
+                context,
+                &mut hashed_bytes,
+                total_hash_bytes,
+            )?;
             let base_name = required_base_name(&spec.path, "patch")?;
             patches.push(ManifestPatchEntry {
                 name: spec.name.clone(),
@@ -172,7 +214,7 @@ impl CliApp {
                 label: spec.label.clone(),
                 url: spec.source_url.clone(),
                 path: spec.source_url.is_none().then_some(base_name),
-                checks: None,
+                checks: manifest_entry_checks(&spec.checks)?,
                 integrity,
                 header: spec.header,
             });
@@ -244,13 +286,17 @@ impl CliApp {
         trace!(output = %args.output.display(), bytes = bytes.len(), "manifest written");
 
         let bundle_path = match &args.bundle {
-            Some(bundle) => Some(self.create_manifest_bundle(
-                bundle,
-                &bytes,
-                args.rom.as_deref().filter(|_| args.rom_url.is_none()),
-                &specs,
-                context,
-            )?),
+            Some(bundle) => Some(
+                self.create_manifest_bundle(
+                    bundle,
+                    &bytes,
+                    args.rom
+                        .as_deref()
+                        .filter(|_| args.rom_url.is_none() && !args.no_bundle_rom),
+                    &specs,
+                    context,
+                )?,
+            ),
             None => None,
         };
 
@@ -261,6 +307,66 @@ impl CliApp {
             manifest,
             warnings,
         })
+    }
+
+    /// Checksum one create source, emitting overall hash progress across the
+    /// whole file set (`hashed_bytes` accumulates; `total_bytes` is the fixed
+    /// denominator). Without progress events the plain fast path is used.
+    fn manifest_checksum_with_progress(
+        &self,
+        path: &Path,
+        algorithms: &[String],
+        context: &OperationContext,
+        hashed_bytes: &mut u64,
+        total_bytes: u64,
+    ) -> Result<BTreeMap<String, String>> {
+        let size = fs::metadata(path)?.len();
+        if !self.emit_progress_events {
+            let algorithm_refs: Vec<&str> = algorithms.iter().map(String::as_str).collect();
+            let values = checksum_file_values(path, &algorithm_refs, context)?;
+            *hashed_bytes = hashed_bytes.saturating_add(size);
+            return Ok(values);
+        }
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        let label = format!("computing checksums for `{name}`");
+        let overall_percent = |done: u64| -> f32 {
+            if total_bytes == 0 {
+                return 100.0;
+            }
+            ((done as f64 / total_bytes as f64) * 100.0).min(100.0) as f32
+        };
+        self.emit_running(
+            MANIFEST_CREATE_OP,
+            "checksum",
+            label.clone(),
+            Some(overall_percent(*hashed_bytes)),
+            None,
+        );
+        let hashed_before = *hashed_bytes;
+        let mut last_emitted = 0u64;
+        let mut file = File::open(path)?;
+        let mut on_progress = |progress: ChecksumProgress| {
+            if progress.processed_bytes < last_emitted + MANIFEST_CREATE_PROGRESS_INTERVAL {
+                return;
+            }
+            last_emitted = progress.processed_bytes;
+            self.emit_running(
+                MANIFEST_CREATE_OP,
+                "checksum",
+                label.clone(),
+                Some(overall_percent(
+                    hashed_before.saturating_add(progress.processed_bytes),
+                )),
+                None,
+            );
+        };
+        let computed =
+            checksum_reader_values_with_progress(&mut file, algorithms, context, &mut on_progress)?;
+        *hashed_bytes = hashed_before.saturating_add(size);
+        Ok(computed.values)
     }
 
     /// Stage `rw.json` + the local sources flat into a temp dir and pack them
@@ -301,6 +407,19 @@ impl CliApp {
                 )
             })?;
         let handler = self.containers.find_creatable_by_name(format)?;
+        // Archive creation reports no incremental progress here, so surface
+        // the stage as indeterminate rather than sitting on the last percent.
+        self.emit_running(
+            MANIFEST_CREATE_OP,
+            "bundle",
+            format!(
+                "bundling {} file(s) into `{}`",
+                inputs.len(),
+                bundle.display()
+            ),
+            None,
+            None,
+        );
         trace!(
             bundle = %bundle.display(),
             format = handler.descriptor().name,
@@ -335,6 +454,7 @@ fn manifest_create_patch_specs(
     let statuses = aligned_metadata(&args.patch_status, count, "--patch-status")?;
     let source_urls = aligned_metadata(&args.patch_source_url, count, "--patch-source-url")?;
     let headers = aligned_metadata(&args.patch_header, count, "--patch-header")?;
+    let checks = aligned_metadata(&args.patch_check, count, "--patch-check")?;
     Ok(args
         .patch
         .iter()
@@ -347,8 +467,32 @@ fn manifest_create_patch_specs(
             status: statuses[index],
             source_url: source_urls[index].clone(),
             header: headers[index],
+            checks: checks[index]
+                .clone()
+                .map(|value| vec![value])
+                .unwrap_or_default(),
         })
         .collect())
+}
+
+/// Parse per-patch `--patch-check` tokens (`algo=hex`, comma-separable) into
+/// the entry's emitted `checks`.
+fn manifest_entry_checks(values: &[String]) -> Result<Option<ManifestChecks>> {
+    let tokens: Vec<String> = values
+        .iter()
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+    let checksums = CliApp::parse_patch_apply_checksum_values(&tokens, "--patch-check")?;
+    Ok(Some(ManifestChecks {
+        checksums,
+        size: None,
+    }))
 }
 
 fn aligned_metadata<T: Clone>(values: &[T], count: usize, flag: &str) -> Result<Vec<Option<T>>> {

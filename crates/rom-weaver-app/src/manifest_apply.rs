@@ -153,6 +153,16 @@ impl CliApp {
                         if let Some(resolved) = resolved {
                             args.input = resolved;
                         }
+                    } else {
+                        // A checks-only rom entry means the user supplies the
+                        // ROM; the input we have IS the manifest (or its
+                        // archive), so there is nothing to patch.
+                        return Err(RomWeaverError::ValidationCode(
+                            ValidationCodeError::new("manifest.rom.missing")
+                                .with_message(
+                                    "manifest rom entry provides no source; pass the ROM as the apply input and the manifest via --manifest",
+                                ),
+                        ));
                     }
                 }
             }

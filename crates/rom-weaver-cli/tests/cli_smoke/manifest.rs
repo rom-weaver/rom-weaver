@@ -982,6 +982,152 @@ fn manifest_create_bundle_roundtrips_through_apply() {
 }
 
 #[test]
+fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
+    let temp = setup_temp_dir();
+    write_manifest_rom(&temp, "game.bin");
+    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let manifest_out = temp.child("rw.json");
+
+    run_json_events(
+        &[
+            "manifest",
+            "create",
+            "--patch",
+            main.to_str().expect("path"),
+            "--patch-check",
+            "crc32=00000000",
+            "--no-compress",
+            "--output",
+            manifest_out.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let events = run_json_events(
+        &[
+            "manifest",
+            "parse",
+            manifest_out.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let entry = &events.last().expect("terminal")["details"]["manifest"]["manifest"]["patches"][0];
+    assert_eq!(entry["checks"]["checksums"]["crc32"], "00000000");
+
+    // The deliberately wrong expected checksum must fail the apply.
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--manifest",
+            manifest_out.path().to_str().expect("path"),
+            "--output",
+            temp.child("patched.bin").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains("crc32") && label.contains("00000000"),
+        "expected crc32 mismatch in label: {label}"
+    );
+}
+
+#[test]
+fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
+    let temp = setup_temp_dir();
+    let rom = write_manifest_rom(&temp, "game.bin");
+    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let manifest_out = temp.child("rw.json");
+    let bundle = temp.child("bundle.zip");
+
+    run_json_events(
+        &[
+            "manifest",
+            "create",
+            "--rom",
+            rom.to_str().expect("path"),
+            "--no-bundle-rom",
+            "--patch",
+            main.to_str().expect("path"),
+            "--no-compress",
+            "--output",
+            manifest_out.path().to_str().expect("path"),
+            "--bundle",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let events = run_json_events(
+        &[
+            "manifest",
+            "parse",
+            manifest_out.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let result = &events.last().expect("terminal")["details"]["manifest"];
+    let rom_entry = &result["manifest"]["rom"];
+    assert!(
+        rom_entry["path"].is_null() && rom_entry["url"].is_null(),
+        "no-bundle-rom entry must be sourceless: {rom_entry}"
+    );
+    assert_eq!(
+        rom_entry["checks"]["checksums"]["crc32"],
+        crc32_hex(MANIFEST_ROM_BYTES).as_str()
+    );
+    assert!(result["rom_source"].is_null(), "no rom source to resolve");
+
+    // The applying user supplies the ROM; the bundle is patches-only.
+    let output = temp.child("patched.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            rom.to_str().expect("path"),
+            "--manifest",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output exists"),
+        patched_rom_bytes(&[(0, 0xAA)])
+    );
+
+    // Using the patches-only bundle as the apply input has no ROM to patch.
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            temp.child("nope.bin").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains("provides no source"),
+        "expected sourceless-rom guidance in label: {label}"
+    );
+}
+
+#[test]
 fn manifest_create_source_url_emits_url_entry_with_integrity() {
     let temp = setup_temp_dir();
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);

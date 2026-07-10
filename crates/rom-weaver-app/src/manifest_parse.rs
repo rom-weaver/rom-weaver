@@ -70,7 +70,17 @@ fn validate_manifest(manifest: &mut RomWeaverManifest) -> Result<()> {
         ));
     }
     if let Some(rom) = &mut manifest.rom {
-        validate_source_ref(&rom.url, &rom.path, "rom")?;
+        // A rom entry may be sourceless (checks/name only): the user supplies
+        // the ROM themselves and the checks validate it. Patches always need
+        // a source. Blank sources normalize to absent so downstream
+        // `is_some()` checks are trustworthy.
+        validate_source_conflict(&rom.url, &rom.path, "rom")?;
+        if !has_source_value(&rom.url) {
+            rom.url = None;
+        }
+        if !has_source_value(&rom.path) {
+            rom.path = None;
+        }
         validate_relative_path(&rom.path, "rom")?;
         if let Some(checks) = &mut rom.checks {
             normalize_checksum_map(&mut checks.checksums, "rom.checks")?;
@@ -98,23 +108,37 @@ fn validate_manifest(manifest: &mut RomWeaverManifest) -> Result<()> {
 
 /// Exactly one of `url` / `path` must carry a non-empty value.
 fn validate_source_ref(url: &Option<String>, path: &Option<String>, entry: &str) -> Result<()> {
-    let has_url = url.as_deref().is_some_and(|value| !value.trim().is_empty());
-    let has_path = path
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty());
-    match (has_url, has_path) {
-        (true, true) => Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("manifest.source.conflict")
-                .with_message("manifest entry provides both url and path")
-                .with_field("entry", entry),
-        )),
-        (false, false) => Err(RomWeaverError::ValidationCode(
+    validate_source_conflict(url, path, entry)?;
+    if !(has_source_value(url) || has_source_value(path)) {
+        return Err(RomWeaverError::ValidationCode(
             ValidationCodeError::new("manifest.source.missing")
                 .with_message("manifest entry provides neither url nor path")
                 .with_field("entry", entry),
-        )),
-        _ => Ok(()),
+        ));
     }
+    Ok(())
+}
+
+/// At most one of `url` / `path` may carry a non-empty value.
+fn validate_source_conflict(
+    url: &Option<String>,
+    path: &Option<String>,
+    entry: &str,
+) -> Result<()> {
+    if has_source_value(url) && has_source_value(path) {
+        return Err(RomWeaverError::ValidationCode(
+            ValidationCodeError::new("manifest.source.conflict")
+                .with_message("manifest entry provides both url and path")
+                .with_field("entry", entry),
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn has_source_value(value: &Option<String>) -> bool {
+    value
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
 }
 
 /// Manifest `path` values are relative references (archive members / files
@@ -284,6 +308,19 @@ mod tests {
             parse_err(r#"{ "version": 1, "patches": [ { "url": "  " } ] }"#),
             "manifest.source.missing"
         );
+    }
+
+    #[test]
+    fn accepts_sourceless_rom_with_checks() {
+        let manifest = parse_manifest_bytes(
+            br#"{ "version": 1,
+                  "rom": { "name": "game.sfc", "checks": { "checksums": { "crc32": "aabbccdd" } } },
+                  "patches": [ { "path": "x.ips" } ] }"#,
+        )
+        .expect("sourceless rom parses");
+        let rom = manifest.rom.expect("rom");
+        assert!(rom.url.is_none() && rom.path.is_none());
+        assert!(rom.checks.is_some());
     }
 
     #[test]
