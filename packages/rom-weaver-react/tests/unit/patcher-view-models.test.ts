@@ -256,7 +256,7 @@ describe("buildOutputViewState", () => {
 
   it("switches the button to download once an output is pending", () => {
     const state = baseOutput({ hasPendingDownload: true, pendingDownloadFileName: "rom.patched.zip" });
-    expect(state.applyButton).toMatchObject({ label: "Download output", title: "Download rom.patched.zip" });
+    expect(state.applyButton).toMatchObject({ label: "Download rom.patched.zip", title: "Download rom.patched.zip" });
     expect(state.downloadSummary).not.toBeNull();
   });
 

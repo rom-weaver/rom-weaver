@@ -80,7 +80,7 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     expect(downloadOutput).toHaveBeenCalled();
     await waitFor(() => {
       const output = result.current.localOutputController.getState();
-      expect(output.applyButton.label).toBe("Download output");
+      expect(output.applyButton.label).toBe("Download rom.patched.zip");
       expect(output.pendingDownloadFileName).toBe("rom.patched.zip");
     });
   });
