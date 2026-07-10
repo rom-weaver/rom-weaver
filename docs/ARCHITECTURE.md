@@ -270,10 +270,13 @@ An `rw.json` manifest is a distributable patching-workflow definition: ordered
 default — `required`/`default`/`optional`/`disabled` — a free-form maturity
 `label`, expected input-ROM `checks`, patch-file `integrity` checksums, and a
 per-patch `header` mode), an optional `rom` entry, and overridable `output`
-defaults (`name`/`header`/`compress`). Every entry's source is either a
+defaults (`name`/`header`/`compress`). Every patch entry's source is either a
 download `url` or a `path` relative to the manifest (an archive member when
 the manifest ships inside an "everything archive" that also bundles the ROM
-and patches). Schema and the single shared parser live in
+and patches). The `rom` entry may instead be *sourceless* (checks/name only):
+the applying user supplies the ROM themselves and the checks validate it —
+the default shape for distributable patch bundles. Schema and the single
+shared parser live in
 `rom-weaver-app/src/manifest_schema.rs` / `manifest_parse.rs`; validation
 failures use stable `manifest.*` `ValidationCode`s. Manifest-ness is
 filename-based: exactly `rw.json`, `rw.json.<gz|bz2|xz|zst>`, or a root-level
@@ -285,10 +288,14 @@ worker runtime-caches that name.
   attaching ingest-grade patch descriptors), and returns a typed
   `ManifestParseResult` under `details.manifest`. `manifest create` builds a
   validated manifest from local files (checks/integrity computed from the
-  real bytes, per-patch metadata flags bound to the preceding `--patch` by
-  argv index), emits plain/`.gz`/`.zst`, and `--bundle`s manifest + sources
-  into a creatable archive. Create re-parses before writing, so it can never
-  emit what parse rejects.
+  real bytes, per-patch metadata flags — including `--patch-check`
+  pre-apply ROM requirements — bound to the preceding `--patch` by argv
+  index), emits plain/`.gz`/`.zst`, and `--bundle`s manifest + sources into
+  a creatable archive (the extension picks the format, e.g. `.zip`/`.7z`).
+  `--no-bundle-rom` keeps the local ROM out of the bundle and emits its
+  entry checks-only. Create re-parses before writing, so it can never emit
+  what parse rejects, and reports hash progress as running events (the
+  webapp progress meter).
 - **Manifest-driven apply.** `patch apply` routes through
   `manifest_apply.rs` when it sees `--manifest <path-or-url>`, an
   `rw.json[.codec]` input, or an archive with a root `rw.json` and no
@@ -307,8 +314,13 @@ worker runtime-caches that name.
   files through the standard page-drop pipeline. Manifest metadata seeds the
   patch enablement switches (required = on + locked, optional = off) and the
   output defaults, all still user-editable. The apply form's output card
-  offers "Export manifest…", which drives `manifest create` in wasm and
-  downloads the resulting `rw.json` (optionally a bundled `.zip`).
+  offers "Export manifest…": a dialog with an auto-filled manifest name,
+  per-patch status/description/ROM-check fields, and an output-format
+  select (`.zip`/`.7z` bundle named after the manifest, or bare `rw.json`).
+  Patch sources are resolved to their extracted leaves first
+  (`prepareInputFile`), so bundles carry the actual patch files rather than
+  the archives they arrived in; the ROM stays out of the bundle (its entry
+  is checks-only) unless "Bundle ROM into the archive" is switched on.
 
 ## Rust ⇄ TypeScript boundary
 
