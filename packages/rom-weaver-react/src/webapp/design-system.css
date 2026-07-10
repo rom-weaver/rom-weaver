@@ -1606,7 +1606,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 
 /* ── modal framework: loom dialog visuals on the React-managed modal ── */
 .rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; }
-.rw-modal-backdrop { position: absolute; inset: 0; background: var(--scrim); backdrop-filter: blur(3px); }
+.rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
   /* max-width in viewport units — the grid track grows to the card's
      max-content, so a `100%` cap alone can't stop a long unbroken file name
