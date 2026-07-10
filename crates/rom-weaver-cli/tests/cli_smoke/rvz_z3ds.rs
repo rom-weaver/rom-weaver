@@ -684,3 +684,55 @@ fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::
     }
     output.flush().expect("flush rvz");
 }
+
+#[test]
+fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
+    // Regression: a disc whose junk data was generated under a different game ID than its
+    // header claims (e.g. a translation patch retagging the region byte). Junk detection must
+    // recover seeds from the data itself instead of storing ~all of it as incompressible bytes.
+    let temp = setup_temp_dir();
+    let payload_len = 2 * 1024 * 1024;
+    let mut iso_bytes = build_test_gamecube_iso(payload_len);
+    // Overwrite everything from sector 1 with junk seeded from an ID that does NOT match the
+    // header ("RWTEST"), mirroring a post-patch header.
+    let junk_start = 0x8000;
+    let mut lfg = nod::util::lfg::LaggedFibonacci::default();
+    lfg.fill_sector_chunked(&mut iso_bytes[junk_start..], *b"GKQJ", 0, junk_start as u64);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+
+    let rvz_path = temp.child("disc.rvz");
+    command_stdout(
+        &[
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "rvz",
+            "--output",
+            rvz_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let rvz_len = fs::metadata(rvz_path.path()).expect("rvz metadata").len();
+    assert!(
+        rvz_len < (payload_len / 4) as u64,
+        "junk with a mismatched game ID should pack via recovered seeds, got {rvz_len} bytes"
+    );
+
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            rvz_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
