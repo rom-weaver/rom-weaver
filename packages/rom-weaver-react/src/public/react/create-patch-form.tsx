@@ -606,7 +606,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     if (completedOutput) {
       setCreateQueued(false);
-      await completedOutput.saveAs();
+      try {
+        await completedOutput.saveAs({ interactive: true });
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        setOutputWorkflowMessage(normalizedError);
+        notifyError(normalizedError);
+      }
       return;
     }
     if (createQueueBlocked) {
@@ -674,6 +680,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         reportedOperationTimeMs: result.sizeSummary?.createTimeMs,
       });
       rememberOutputDispose(result.output.dispose);
+      // Warm the output's download snapshot so a later download tap reaches navigator.share
+      // before its user activation expires (iOS PWA share path).
+      void result.output.prepareDownload?.().catch(() => undefined);
       setCompletedOutput({
         compression: createCompression,
         compressionTimeMs: compressionTimeMs ?? undefined,

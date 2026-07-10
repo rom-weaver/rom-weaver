@@ -133,7 +133,11 @@ type LocalApplyPatchFormSessionOptions = Pick<
       onProgress: (event: ProgressEvent) => void;
     };
   }) => Promise<ApplyWorkflowResult>;
-  downloadOutput: (result: ApplyWorkflowResult, fileName?: string) => void | Promise<void>;
+  downloadOutput: (
+    result: ApplyWorkflowResult,
+    fileName?: string,
+    options?: { interactive?: boolean },
+  ) => void | Promise<void>;
   applyReady?: boolean;
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;

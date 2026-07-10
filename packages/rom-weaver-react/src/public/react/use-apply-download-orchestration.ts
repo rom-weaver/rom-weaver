@@ -203,12 +203,28 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
         const pendingDownloadResult = pendingDownloadResultRef.current;
         if (pendingDownloadResult && hasPendingDownload) {
-          await Promise.resolve(
-            downloadOutput(
-              pendingDownloadResult,
-              pendingDownloadFileNameRef.current || pendingDownloadFileName || effectiveResolvedOutputName || "output",
-            ),
-          );
+          try {
+            await Promise.resolve(
+              downloadOutput(
+                pendingDownloadResult,
+                pendingDownloadFileNameRef.current ||
+                  pendingDownloadFileName ||
+                  effectiveResolvedOutputName ||
+                  "output",
+                { interactive: true },
+              ),
+            );
+          } catch (downloadError) {
+            const normalizedDownloadError = toError(downloadError);
+            logUiError("Output download failed", normalizedDownloadError);
+            setOutputErrorMessage(
+              formatCodedErrorForDisplay(
+                normalizedDownloadError,
+                createBrowserLocalizer((activeSettings as { language?: string }).language),
+              ),
+            );
+            onError?.(normalizedDownloadError);
+          }
           return;
         }
         if (applyQueueBlocked) {
@@ -328,6 +344,9 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               : result.output.cleanup || null,
           );
           pendingDownloadResultRef.current = result;
+          // Warm the output's download snapshot now so a later "Download output" tap reaches
+          // navigator.share before its user activation expires (iOS PWA share path).
+          void result.output.prepareDownload?.().catch(() => undefined);
           const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
           setPendingDownloadReadyFileName(initialDownloadFileName);
           try {

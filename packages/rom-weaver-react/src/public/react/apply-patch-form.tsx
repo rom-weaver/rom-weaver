@@ -678,10 +678,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ],
   );
 
-  const downloadOutput = useCallback((result: ApplyWorkflowResult, fileName?: string) => {
-    if (typeof window !== "undefined") return result.output.saveAs?.(fileName ? { fileName } : undefined);
-    return undefined;
-  }, []);
+  const downloadOutput = useCallback(
+    (result: ApplyWorkflowResult, fileName?: string, options?: { interactive?: boolean }) => {
+      if (typeof window === "undefined") return undefined;
+      const destination =
+        fileName || options?.interactive ? { fileName, interactive: options?.interactive } : undefined;
+      return result.output.saveAs?.(destination);
+    },
+    [],
+  );
 
   const stageInput = useCallback(
     async (

@@ -15,6 +15,9 @@ const toUint8Array = (source: ArrayBuffer | ArrayBufferView | Uint8Array) => {
   return new Uint8Array(source);
 };
 
+const getDestinationInteractive = (destination: unknown) =>
+  !!destination && typeof destination === "object" && "interactive" in destination && destination.interactive === true;
+
 const getDestinationFileName = (destination: unknown) => {
   if (!destination || typeof destination !== "object" || !("fileName" in destination)) return "";
   const fileName = (destination as { fileName?: unknown }).fileName;
@@ -114,13 +117,21 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       fileName,
       mediaType: input.mediaType || initialFile?.type || undefined,
       path: normalizedPath,
+      // Warm the disk-backed File snapshot ahead of a user-gesture download: iOS
+      // `navigator.share` needs the tap's transient activation to still be live, so the
+      // tap-time `saveAs` must not spend it walking OPFS handles.
+      prepareDownload: async () => {
+        await getOutputFile();
+      },
       saveAs: async (destination) => {
         const file = await getOutputFile();
         const destinationFileHandle = getDestinationFileHandle(destination);
         if (!destinationFileHandle) {
           const destinationFileName = getDestinationFileName(destination);
           const downloadBlob = destinationFileName ? new Blob([file], { type: "application/octet-stream" }) : file;
-          await triggerBrowserDownload(downloadBlob, destinationFileName || fileName);
+          await triggerBrowserDownload(downloadBlob, destinationFileName || fileName, {
+            interactive: getDestinationInteractive(destination),
+          });
           return;
         }
         await writeBlobToFileHandle(destinationFileHandle, file);

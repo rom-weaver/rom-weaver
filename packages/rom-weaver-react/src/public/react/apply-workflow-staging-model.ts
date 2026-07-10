@@ -273,6 +273,7 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
     fileName: output.fileName,
     mediaType: undefined,
     path: "" as ApplyWorkflowResult["output"]["path"],
+    prepareDownload: output.prepareDownload,
     saveAs: (destination?: unknown) => output.saveAs(destination as Parameters<typeof output.saveAs>[0]),
     size: output.size || 0,
     vfs: {} as ApplyWorkflowResult["output"]["vfs"],

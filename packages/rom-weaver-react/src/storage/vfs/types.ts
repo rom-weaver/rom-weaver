@@ -14,6 +14,9 @@ type VfsOutputRef = {
   fileName: string;
   mediaType?: string;
   path: AbsoluteVfsPath;
+  /** Pre-resolves whatever `saveAs` needs (e.g. the OPFS File snapshot) so a later
+   * user-gesture download reaches `navigator.share` before the tap's activation expires. */
+  prepareDownload?: () => Promise<void>;
   saveAs: (destination?: unknown) => Promise<void>;
   size: number;
   timing?: RuntimeTiming | null;

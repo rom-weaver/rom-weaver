@@ -8,6 +8,7 @@ type PublicOutput<TDestination> = {
   size?: number;
   storage: "blob" | "opfs" | "file";
   getBlob?: () => Promise<Blob>;
+  prepareDownload?: () => Promise<void>;
   saveAs: (destination?: TDestination) => Promise<void>;
   dispose: () => Promise<void>;
 };
@@ -88,6 +89,7 @@ const wrapPublicOutput = <TDestination>(
     fileName: output.fileName,
     getBlob: canUseBlob() ? () => runtime.publicOutput.getBlob(output) : undefined,
     id: `output-${index}-${output.fileName}`,
+    prepareDownload: output.prepareDownload,
     saveAs: async (destination?: TDestination) => {
       const startedAt = Date.now();
       traceOutputStage(traceOptions, "stage.start", "output.saveAs", {

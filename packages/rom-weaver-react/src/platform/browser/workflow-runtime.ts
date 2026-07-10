@@ -44,6 +44,9 @@ const getBrowserDestinationHandle = (destination: unknown) => {
   return undefined;
 };
 
+const getBrowserDestinationInteractive = (destination: unknown) =>
+  !!destination && typeof destination === "object" && "interactive" in destination && destination.interactive === true;
+
 const getBrowserDestinationFileName = (destination: unknown) => {
   if (!destination || typeof destination !== "object" || !("fileName" in destination)) return "";
   const fileName = (destination as { fileName?: unknown }).fileName;
@@ -57,8 +60,11 @@ const createBrowserPublicOutputAdapter = (): RuntimePublicOutputAdapter => ({
   saveAs: async (output, destination) => {
     const fileHandle = getBrowserDestinationHandle(destination);
     const fileName = getBrowserDestinationFileName(destination);
-    if (fileHandle || fileName || destination == null) {
-      await output.saveAs(fileHandle || (fileName ? { fileName } : undefined));
+    const interactive = getBrowserDestinationInteractive(destination);
+    if (fileHandle || fileName || interactive || destination == null) {
+      await output.saveAs(
+        fileHandle || (fileName || interactive ? { fileName: fileName || undefined, interactive } : undefined),
+      );
       return;
     }
     const blob = await readRuntimeOutputBlob(output);

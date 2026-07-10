@@ -545,7 +545,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const runTrim = async () => {
     if (completedOutput) {
       setTrimQueued(false);
-      await completedOutput.saveAs();
+      try {
+        await completedOutput.saveAs({ interactive: true });
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        setOutputWorkflowMessage(normalizedError);
+        notifyError(normalizedError);
+      }
       return;
     }
     if (!source) return;
@@ -637,6 +643,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         workflowId: trimWorkflow.id,
       });
       rememberOutputDispose(result.output.dispose);
+      // Warm the output's download snapshot so a later download tap reaches navigator.share
+      // before its user activation expires (iOS PWA share path).
+      void result.output.prepareDownload?.().catch(() => undefined);
       setCompletedOutput({
         fileName: result.output.fileName,
         inputSize: result.sizeSummary?.inputSize,
