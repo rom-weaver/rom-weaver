@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -109,14 +109,18 @@ async function updatePackageJsonVersion(packageJsonRelativePath, version) {
 }
 
 function updateCargoLock() {
+  // `cargo metadata --no-deps` skips dependency resolution and never writes
+  // Cargo.lock; only a resolving command syncs the lock to the bumped
+  // manifests. A stale committed lock makes every CI build report a dirty
+  // version, so failure here must abort the bump rather than warn.
   try {
-    execSync("cargo metadata --format-version 1 --no-deps > /dev/null", {
+    execFileSync("cargo", ["update", "--workspace"], {
       cwd: rootDir,
       stdio: "pipe",
     });
     console.log("Updated Cargo.lock");
-  } catch (_error) {
-    console.warn("Warning: Could not update Cargo.lock (cargo may not be available)");
+  } catch (error) {
+    throw new Error(`Could not update Cargo.lock: ${error.message}`);
   }
 }
 
