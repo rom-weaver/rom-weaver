@@ -1375,6 +1375,11 @@ msgstr "The selected source type is not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.theme"
+msgstr "Theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.confirm.body"
 msgstr "This clears every staged ROM and patch from the workbench. Files on disk are not touched."
 

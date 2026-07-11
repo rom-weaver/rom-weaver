@@ -142,6 +142,9 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
       <Moon aria-hidden="true" className="ico-moon" />
       <SunMedium aria-hidden="true" className="ico-sun" />
+      <span aria-hidden="true" className="tool-text">
+        {localizer.message("ui.tools.theme")}
+      </span>
     </button>
   );
 };
@@ -159,6 +162,9 @@ const LanguageSelector = ({
   return (
     <label className="tool language-tool" title={label}>
       <Globe aria-hidden="true" />
+      <span aria-hidden="true" className="tool-text">
+        {label}
+      </span>
       <select aria-label={label} onChange={(event) => onChange(event.currentTarget.value)} value={language}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -213,6 +219,9 @@ const Masthead = ({
           type="button"
         >
           <RotateCcw aria-hidden="true" />
+          <span aria-hidden="true" className="tool-text">
+            {localizer.message("ui.settings.reset")}
+          </span>
         </button>
         <LanguageSelector
           label={localizer.message("settings.language")}
@@ -229,6 +238,9 @@ const Masthead = ({
           type="button"
         >
           <ScrollText aria-hidden="true" />
+          <span aria-hidden="true" className="tool-text">
+            {logLabel}
+          </span>
         </button>
         <button
           aria-haspopup="dialog"
@@ -239,6 +251,9 @@ const Masthead = ({
           type="button"
         >
           <Settings aria-hidden="true" />
+          <span aria-hidden="true" className="tool-text">
+            {settingsLabel}
+          </span>
         </button>
       </div>
     </header>

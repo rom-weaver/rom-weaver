@@ -437,6 +437,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),
   "ui.tools.log": msg({ id: "ui.tools.log", message: "Log" }),
+  "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.track.word": msg({ id: "ui.track.word", message: "Track" }),
   "ui.trim.detected": msg({ id: "ui.trim.detected", message: "Trailing padding detected" }),
   "ui.trim.savings": msg({ id: "ui.trim.savings", message: "{from} → {to} ({p} smaller)" }),

@@ -1375,6 +1375,11 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.theme"
+msgstr "Tema"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.confirm.body"
 msgstr "Esto limpia todos los ROM y parches preparados del banco de trabajo. Los archivos en disco no se tocan."
 
