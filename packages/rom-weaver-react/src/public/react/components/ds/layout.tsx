@@ -194,7 +194,7 @@ const DropZone = ({
       ) : null}
       <input
         accept={accept}
-        aria-label={typeof label === "string" ? label : undefined}
+        aria-label={typeof label === "string" ? label : "Add files"}
         className="sr-only"
         disabled={disabled}
         id={resolvedInputId}
