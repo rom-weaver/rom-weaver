@@ -1,5 +1,6 @@
 import Globe from "lucide-react/dist/esm/icons/globe.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
 import Settings from "lucide-react/dist/esm/icons/settings.js";
 import SunMedium from "lucide-react/dist/esm/icons/sun-medium.js";
@@ -176,6 +177,7 @@ const Masthead = ({
   onSelectTab,
   onOpenLog,
   onOpenSettings,
+  onReset,
   language,
   onLanguageChange,
 }: {
@@ -185,6 +187,7 @@ const Masthead = ({
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
   onOpenSettings: () => void;
+  onReset: () => void;
   language: string;
   onLanguageChange: (language: string) => void;
 }) => {
@@ -202,6 +205,15 @@ const Masthead = ({
       </span>
       <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
+        <button
+          aria-label={localizer.message("ui.settings.reset")}
+          className="tool"
+          onClick={onReset}
+          title={localizer.message("ui.settings.reset")}
+          type="button"
+        >
+          <RotateCcw aria-hidden="true" />
+        </button>
         <LanguageSelector
           label={localizer.message("settings.language")}
           language={language}

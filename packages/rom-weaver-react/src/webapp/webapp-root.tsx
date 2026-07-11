@@ -299,6 +299,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             onLanguageChange={actions.onLanguageChange}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
+            onReset={actions.onReset}
             onSelectTab={(id) =>
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
             }

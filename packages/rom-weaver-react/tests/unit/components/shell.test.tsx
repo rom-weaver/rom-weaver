@@ -24,6 +24,7 @@ const TABS = [
 const mastheadProps = {
   currentTab: "patcher",
   onOpenLog: () => undefined,
+  onReset: () => undefined,
   onOpenSettings: () => undefined,
   language: "en",
   onLanguageChange: () => undefined,
@@ -34,8 +35,9 @@ const mastheadProps = {
 describe("Masthead", () => {
   it("renders the Workflow tablist with the selected mode and the tool buttons", () => {
     const onSelectTab = vi.fn();
+    const onReset = vi.fn();
     const { container, getByRole } = render(
-      withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />),
+      withSettings(<Masthead {...mastheadProps} onReset={onReset} onSelectTab={onSelectTab} />),
     );
     const rail = getByRole("tablist", { name: "Workflow" });
     expect(rail.classList.contains("mode-rail")).toBe(true);
@@ -45,10 +47,17 @@ describe("Masthead", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // language + theme + log + settings tools always present
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
+    // reset is the leftmost tool; settings remains the rightmost
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
     expect(container.querySelector(".language-tool select")).toBeTruthy();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    const reset = getByRole("button", { name: "Reset" });
+    expect(container.querySelector(".masthead-tools > .tool")).toBe(reset);
+    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(
+      getByRole("button", { name: "Settings" }),
+    );
+    fireEvent.click(reset);
+    expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it("keeps diagnostics in the Log dialog", () => {

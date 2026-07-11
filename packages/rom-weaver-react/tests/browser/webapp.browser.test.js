@@ -81,6 +81,7 @@ const createNoopActions = () => ({
   onPatcherPatchesChange: () => undefined,
   onPatcherSettingsChange: () => undefined,
   onReloadUpdate: () => undefined,
+  onReset: () => undefined,
   onRestoreDefaults: () => undefined,
   onSaveClose: () => undefined,
   onSelectView: () => undefined,

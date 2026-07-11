@@ -354,6 +354,18 @@ const renderWebappRoot = (): undefined => {
           onReloadUpdate: () => {
             void reloadPendingUpdate();
           },
+          onReset: () => {
+            void (async () => {
+              const accepted = await requestConfirmation({
+                cancelLabel: "Stay here",
+                confirmLabel: "Reload page",
+                level: "warning",
+                message: "Reloading will clear the current page state. Continue?",
+                title: "Reset the page?",
+              });
+              if (accepted) window.location.reload();
+            })();
+          },
           onRestoreDefaults: () => webappController.restoreDefaults(),
           onSaveClose: () => {
             webappController.saveDraftSettings();
