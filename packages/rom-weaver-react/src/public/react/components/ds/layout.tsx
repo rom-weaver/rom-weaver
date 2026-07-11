@@ -1,8 +1,8 @@
-import Info from "lucide-react/dist/esm/icons/info.js";
 import Upload from "lucide-react/dist/esm/icons/upload.js";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
+import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { join } from "./cx.ts";
 
 // Stamp the perceived-latency start for each incoming file so the eventual
@@ -53,45 +53,14 @@ const StepSection = ({
 );
 
 /**
- * Clickable "i" info mark with a drop-in popover. Closes on outside click and
- * Escape. Content is the caller's - typically a `.info-list` bullet list.
+ * Clickable "i" info mark with a viewport-aware popover. Content is the
+ * caller's - typically a `.info-list` bullet list.
  */
-const InfoPopover = ({ title = "More info", children }: { title?: string; children: ReactNode }) => {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement | null>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const handlePointer = (event: MouseEvent) => {
-      if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setOpen(false);
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("click", handlePointer);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("click", handlePointer);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [open]);
-  return (
-    <span className="info" ref={rootRef}>
-      <button
-        aria-expanded={open}
-        aria-label={title}
-        className="info-btn"
-        onClick={() => setOpen((previous) => !previous)}
-        title={title}
-        type="button"
-      >
-        <Info aria-hidden="true" />
-      </button>
-      <span className="info-pop" hidden={!open} role="note">
-        {children}
-      </span>
-    </span>
-  );
-};
+const InfoPopover = ({ title = "More info", children }: { title?: string; children: ReactNode }) => (
+  <InfoToggle ariaLabel={title} portalPanel title={title}>
+    {children}
+  </InfoToggle>
+);
 
 /**
  * Drag-and-drop / click-to-browse file affordance backed by a hidden file

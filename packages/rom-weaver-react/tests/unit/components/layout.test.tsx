@@ -36,7 +36,7 @@ describe("StepSection", () => {
 });
 
 describe("InfoPopover", () => {
-  it("toggles the popover and closes on outside click", () => {
+  it("keeps the popover open until its info button is clicked again", () => {
     const { container } = render(
       <InfoPopover title="Input handling">
         <ul className="info-list">
@@ -45,13 +45,14 @@ describe("InfoPopover", () => {
       </InfoPopover>,
     );
     const button = container.querySelector(".info .info-btn") as HTMLButtonElement;
-    const pop = container.querySelector(".info-pop") as HTMLElement;
-    expect(pop.hidden).toBe(true);
+    expect(document.body.querySelector(".info-pop")).toBeNull();
     fireEvent.click(button);
     expect(button.getAttribute("aria-expanded")).toBe("true");
-    expect(pop.hidden).toBe(false);
+    expect(document.body.querySelector(".info-pop")).toBeTruthy();
     fireEvent.click(document.body);
-    expect(pop.hidden).toBe(true);
+    expect(document.body.querySelector(".info-pop")).toBeTruthy();
+    fireEvent.click(button);
+    expect(document.body.querySelector(".info-pop")).toBeNull();
   });
 });
 

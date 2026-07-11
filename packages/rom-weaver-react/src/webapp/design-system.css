@@ -912,7 +912,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
 .rw-app .info-pop {
   position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
-  width: min(320px, 74vw); padding: 10px 12px;
+  width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  padding: 10px 12px;
   border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
   box-shadow: var(--overlay-shadow);
   font-size: .78rem; font-weight: 500; line-height: 1.5; color: var(--ink-2);

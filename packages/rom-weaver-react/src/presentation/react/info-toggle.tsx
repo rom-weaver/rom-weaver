@@ -34,7 +34,6 @@ function InfoToggle({
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const containerRef = useRef<HTMLSpanElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | undefined>(undefined);
   const panelId = useId();
@@ -79,28 +78,6 @@ function InfoToggle({
     };
   }, [open, portalPanel, computePanelPosition]);
 
-  useEffect(() => {
-    if (!(open && typeof document !== "undefined")) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (containerRef.current?.contains(target)) return;
-      if (panelRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
   const panel = (
     <div
       className={cx("info-pop", panelClassName)}
@@ -118,7 +95,7 @@ function InfoToggle({
   }
 
   return (
-    <span className={cx("info", className)} ref={containerRef}>
+    <span className={cx("info", className)}>
       <button
         aria-controls={panelId}
         aria-expanded={open}
