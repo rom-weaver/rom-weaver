@@ -1638,7 +1638,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
      runs off the small screen */
   /* footer: one line, always - status truncates, metadata yields. hold the
      type at .76rem so the status stays on one line on a phone */
-  .rw-app .selvage { margin: 8px 8px 0; font-size: .76rem; }
+  .rw-app .selvage { margin: 8px 0 0; font-size: .76rem; }
   .rw-app .sv-inner { flex-wrap: nowrap; gap: 10px; }
   .rw-app .sv-stage { flex: 0 1 auto; }
   .rw-app .sv-link { flex: none; }
