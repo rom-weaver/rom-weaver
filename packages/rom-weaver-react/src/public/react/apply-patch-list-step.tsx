@@ -1,11 +1,12 @@
+import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
 import X from "lucide-react/dist/esm/icons/x.js";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./components/ds/checksum-list.tsx";
-import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
+import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { Drawer, DrawerMark, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -15,7 +16,7 @@ import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
-import { useUiLocalizer } from "./settings-context.tsx";
+import type { ManifestPatchMeta } from "./use-manifest-apply-session.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -24,12 +25,18 @@ const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing 
 
 const PATCH_INPUT_VERIFICATION_LABELS: Record<string, string> = {
   "in crc32": "CRC32",
+  "in md5": "MD5",
   "in min size": "MIN BYTES",
+  "in sha-1": "SHA-1",
+  "in sha1": "SHA-1",
   "in size": "BYTES",
 };
 
 const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
   "out crc32": "CRC32",
+  "out md5": "MD5",
+  "out sha-1": "SHA-1",
+  "out sha1": "SHA-1",
   "out size": "BYTES",
 };
 
@@ -46,14 +53,16 @@ const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: No
   );
 };
 
+/** Requirement rows this patch will actually verify, per side: embedded/declared
+ * hashes, sizes, and free-form validation notes. */
 const getPatchVerificationRows = (item: PatchStackItemState) => {
   const inputRows: Array<{ label: string; value: string }> = [];
   const outputRows: Array<{ label: string; value: string }> = [];
   for (const entry of item.validationValues) {
     const separatorIndex = entry.indexOf("=");
     if (separatorIndex === -1) {
-      // "dry-run apply" marks scratch-copy validation — every patch gets it, so it is surfaced once as
-      // the shared method footnote below, never as a per-type row or a bespoke section.
+      // "dry-run apply" marks scratch-copy validation — every patch gets it, so it never
+      // renders as a per-type row; the drawer-header verdict already covers it.
       if (/dry-?run/i.test(entry)) continue;
       inputRows.push({ label: "VALIDATION", value: entry });
       continue;
@@ -70,34 +79,17 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
   return { inputRows, outputRows };
 };
 
-/** One Checks drawer per patch that declares requirements, identical in shape for every
- * patch type: the INPUT / OUTPUT requirement rows with the pass mark + timing in the
- * drawer header. A requirement-less patch gets no drawer at all — its dry-run verdict
- * already rides the card (state mark + verify bar) — except on failure, where the drawer
- * carries the red reason line. */
-const PatchInfo = ({
-  item,
-  pending,
-}: {
-  item: PatchStackItemState;
-  /** When set, the patch is still staging: render shimmer placeholders for these
-   * planned verification sections (Input / Output) so the card holds its resolved
-   * height through staging — the bar + meta status carry progress. */
-  pending?: ChecksumPendingGroup[];
-}) => {
-  const localizer = useUiLocalizer();
-  if (pending?.length) {
-    return <PendingChecks defaultOpen groupClassName="ck-group" groups={pending} label="Checks" />;
-  }
+/** Read-only Checks drawer for a patch that declares real requirements: the
+ * INPUT / OUTPUT rows it will verify, with the dry-run verdict + timing riding
+ * the drawer header. Requirement-less patches render no drawer — their verdict
+ * rides the Options header instead. Authoring (editable check fields) stays in
+ * the Options drawer. */
+const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   const { inputRows, outputRows } = getPatchVerificationRows(item);
-  const hasOutputDetails = outputRows.length > 0;
+  if (!(inputRows.length || outputRows.length)) return null;
   const verifying = item.validationState === "verifying";
   const bad = item.validationState === "invalid";
   const ok = item.validationState === "valid";
-  if (!(inputRows.length || hasOutputDetails || bad)) return null;
-  // The drawer header carries the pass mark + timing, so a passing patch needs no in-body banner —
-  // only a failure surfaces a verdict line (red, with the reason). While the deferred dry-run runs
-  // the header shows a "Verifying…" readout (the verify-bar carries the motion).
   const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
   return (
     <ChecksumList
@@ -107,26 +99,20 @@ const PatchInfo = ({
       timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
       verifying={verifying}
     >
-      {bad ? (
-        <div className="pverdict dryrun-verdict bad">
-          <X aria-hidden="true" />
-          <span>{item.validationMessage || "Patch validation failed"}</span>
-        </div>
-      ) : null}
       {inputRows.length ? (
         <div className="ck-group">
           <div className="ck-group-head">
-            <span>{localizer.message("ui.verify.input")}</span>
+            <span>Input</span>
           </div>
           {inputRows.map((row) => (
             <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
         </div>
       ) : null}
-      {hasOutputDetails ? (
+      {outputRows.length ? (
         <div className="ck-group">
           <div className="ck-group-head">
-            <span>{localizer.message("ui.verify.output")}</span>
+            <span>Output</span>
           </div>
           {outputRows.map((row) => (
             <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -137,67 +123,201 @@ const PatchInfo = ({
   );
 };
 
-const CHECKSUM_HINT = "CRC32, MD5, or SHA-1";
+const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
+const CHECK_LABELS = { crc32: "CRC32", md5: "MD5", sha1: "SHA-1" } as const;
+const CHECK_HEX_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
+
+const normalizeCheckInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
+
+const isValidCheckValue = (algorithm: (typeof CHECK_ALGORITHMS)[number], value: string) =>
+  value.length === CHECK_HEX_LENGTHS[algorithm] && /^[0-9a-f]+$/.test(value);
+
+/** Grow a textarea to its content (`field-sizing: content` isn't in every
+ * target browser yet); runs on mount and on every input. */
+const autosizeTextarea = (element: HTMLTextAreaElement | null) => {
+  if (!element) return;
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight + 2}px`;
+};
+
+const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "output") => {
+  const prefix = side === "input" ? "in " : "out ";
+  const checks: Partial<Record<(typeof CHECK_ALGORITHMS)[number], string>> = {};
+  for (const entry of item.validationValues) {
+    const [rawLabel, rawValue] = entry.split("=", 2);
+    const label = rawLabel?.trim().toLowerCase();
+    const value = rawValue?.trim();
+    if (!(label?.startsWith(prefix) && value)) continue;
+    const algorithm = label.slice(prefix.length).replace("sha-1", "sha1");
+    if (CHECK_ALGORITHMS.includes(algorithm as (typeof CHECK_ALGORITHMS)[number])) {
+      checks[algorithm as (typeof CHECK_ALGORITHMS)[number]] = value;
+    }
+  }
+  return checks;
+};
 
 const PatchOptions = ({
+  disabled,
   index,
+  isChainInput,
+  isChainOutput,
   item,
+  meta,
+  onMetaChange,
   patchStack,
+  showVerdict,
 }: {
+  /** The patch is toggled out of the run: verification state is not part of the
+   * plan, so the header verdict/timing readouts stay off — the drawer remains
+   * editable for manifest authors. */
+  disabled?: boolean;
   index: number;
+  /** First/last enabled patch in the stack: user-entered input checks on the chain
+   * input verify the ROM live (and gate the apply); output checks on the chain
+   * output verify the run's result. Mid-chain checks are metadata only — they
+   * describe intermediates that cannot be verified before applying. */
+  isChainInput?: boolean;
+  isChainOutput?: boolean;
   item: PatchStackItemState;
+  meta?: ManifestPatchMeta;
+  onMetaChange?: (updates: Partial<ManifestPatchMeta>) => void;
   patchStack: PatcherStackController;
+  /** Carry the dry-run verdict/timing on this header — off when the card renders
+   * a Checks drawer, which owns the verdict instead. */
+  showVerdict?: boolean;
 }) => {
   const setOption = patchStack.setPatchOption;
-  // The drawer only appears when there is a real decision to make: the PPF undo
-  // toggle, or an ambiguous ROM copier header (strippable header present and the
-  // patch's required checksums didn't decide). Every other card stays clean.
-  if (!(setOption && (item.showPpfUndo || item.showHeaderOption))) return null;
+  const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   const ppfUndoChecked = item.ppfUndo !== false;
   const stripHeaderChecked = item.headerChoice === "strip";
   const headerLabel = item.headerStrippedBytes
     ? `Strip ${item.headerStrippedBytes}-byte ROM header before patching`
     : "Strip ROM header before patching";
+  const embeddedInput = getEmbeddedChecks(item, "input");
+  const embeddedOutput = getEmbeddedChecks(item, "output");
+  const commitCheck = (side: "input" | "output", algorithm: (typeof CHECK_ALGORITHMS)[number], raw: string) => {
+    const value = normalizeCheckInput(raw);
+    const fieldKey = `${side}:${algorithm}`;
+    const invalid = !!value && !isValidCheckValue(algorithm, value);
+    setInvalidChecks((previous) => (previous[fieldKey] === invalid ? previous : { ...previous, [fieldKey]: invalid }));
+    if (invalid) return;
+    const field = side === "input" ? "inputChecks" : "outputChecks";
+    const checksums = { ...(meta?.[field]?.checksums || {}), [algorithm]: value };
+    onMetaChange?.({ [field]: { ...(meta?.[field] || {}), checksums } });
+    // A valid check on a chain endpoint feeds the run's validation option so the
+    // ROM re-verifies immediately (card coloring) and the apply enforces it.
+    const preferred = checksums.sha1 || checksums.md5 || checksums.crc32 || "";
+    if (side === "input" && isChainInput) void setOption?.(index, { validateInputChecksum: preferred });
+    if (side === "output" && isChainOutput) void setOption?.(index, { validateOutputChecksum: preferred });
+  };
+  // The dry-run verdict rides this drawer's header (pass/fail mark + timing, or a
+  // "Verifying…" readout while the deferred dry-run runs) ONLY when the patch has no
+  // Checks drawer of its own — a patch with real requirements carries the verdict
+  // on that drawer instead.
+  const verifying = !!showVerdict && !disabled && item.validationState === "verifying";
+  const bad = !!showVerdict && !disabled && item.validationState === "invalid";
+  const ok = !!showVerdict && !disabled && item.validationState === "valid";
+  const timing = showVerdict && !disabled ? CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks") : undefined;
   return (
     <Drawer
       bodyClassName="optsbody"
       className="optsblock"
       label="Options"
-      readouts={item.format ? <DrawerReadout>{item.format}</DrawerReadout> : undefined}
+      readouts={
+        <>
+          {item.format ? <DrawerReadout>{item.format}</DrawerReadout> : null}
+          {verifying ? (
+            <DrawerReadout muted>Verifying…</DrawerReadout>
+          ) : (
+            <>
+              {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+              {ok || bad ? (
+                <DrawerMark
+                  className={ok ? "cks-match" : "cks-match bad"}
+                  ok={ok}
+                  title={ok ? "Verified" : "Verification failed"}
+                >
+                  {ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+                </DrawerMark>
+              ) : null}
+            </>
+          )}
+        </>
+      }
     >
       <div className="optsgrid">
-        <div className="ofld">
-          <label className="ofld-l" htmlFor={`rom-weaver-patch-validate-input-${index}`}>
-            Validate input
+        <div className="ofld patch-name-field">
+          <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
+            Patch name
           </label>
           <input
-            className="input mono popt-input"
-            defaultValue={item.validateInputChecksum || ""}
-            disabled={item.optionsDisabled}
-            id={`rom-weaver-patch-validate-input-${index}`}
-            key={`validate-input:${item.key ?? index}`}
-            onBlur={(event) => setOption(index, { validateInputChecksum: event.currentTarget.value })}
-            placeholder={CHECKSUM_HINT}
-            spellCheck={false}
+            className="input popt-input"
+            defaultValue={meta?.name || ""}
+            id={`rom-weaver-patch-name-${index}`}
+            key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
+            onBlur={(event) => onMetaChange?.({ name: event.currentTarget.value.trim() || undefined })}
+            placeholder={item.fileName.replace(/\.[^.]+$/, "")}
             type="text"
           />
         </div>
-        <div className="ofld">
-          <label className="ofld-l" htmlFor={`rom-weaver-patch-validate-output-${index}`}>
-            Validate output
+        <div className="ofld patch-description-field">
+          <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
+            Description
           </label>
-          <input
-            className="input mono popt-input"
-            defaultValue={item.validateOutputChecksum || ""}
-            disabled={item.optionsDisabled}
-            id={`rom-weaver-patch-validate-output-${index}`}
-            key={`validate-output:${item.key ?? index}`}
-            onBlur={(event) => setOption(index, { validateOutputChecksum: event.currentTarget.value })}
-            placeholder={CHECKSUM_HINT}
-            spellCheck={false}
-            type="text"
+          <textarea
+            className="input popt-input"
+            defaultValue={meta?.description || ""}
+            id={`rom-weaver-patch-description-${index}`}
+            key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
+            onBlur={(event) => onMetaChange?.({ description: event.currentTarget.value.trim() || undefined })}
+            onInput={(event) => autosizeTextarea(event.currentTarget)}
+            placeholder="What this patch changes"
+            ref={autosizeTextarea}
+            rows={1}
           />
         </div>
+      </div>
+      <div className="verification-pair">
+        {(["input", "output"] as const).map((side) => {
+          const embedded = side === "input" ? embeddedInput : embeddedOutput;
+          const field = side === "input" ? "inputChecks" : "outputChecks";
+          return (
+            <div className="patch-check-group" key={side}>
+              <div className="ck-group-head">
+                <span>{side === "input" ? "Input verification" : "Output verification"}</span>
+              </div>
+              <div className="verification-list">
+                {CHECK_ALGORITHMS.map((algorithm) => {
+                  const builtIn = embedded[algorithm];
+                  const value = builtIn || meta?.[field]?.checksums?.[algorithm] || "";
+                  const invalid = !builtIn && !!invalidChecks[`${side}:${algorithm}`];
+                  return (
+                    <div className="verification-row" key={`${side}:${algorithm}`}>
+                      <label className="ofld-l" htmlFor={`rom-weaver-patch-${side}-${algorithm}-${index}`}>
+                        {CHECK_LABELS[algorithm]}
+                        {builtIn ? <span className="built-in">Built in</span> : null}
+                      </label>
+                      <input
+                        aria-invalid={invalid || undefined}
+                        className="input mono popt-input"
+                        defaultValue={value}
+                        id={`rom-weaver-patch-${side}-${algorithm}-${index}`}
+                        key={`${side}:${algorithm}:${item.key ?? index}:${value}`}
+                        onBlur={
+                          builtIn ? undefined : (event) => commitCheck(side, algorithm, event.currentTarget.value)
+                        }
+                        readOnly={!!builtIn}
+                        spellCheck={false}
+                        title={invalid ? `Expected ${CHECK_HEX_LENGTHS[algorithm]} hex characters` : value || undefined}
+                        type="text"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
       {item.showPpfUndo || item.showHeaderOption ? (
         <div className="optschecks">
@@ -206,7 +326,7 @@ const PatchOptions = ({
               <input
                 checked={ppfUndoChecked}
                 disabled={item.optionsDisabled}
-                onChange={(event) => setOption(index, { ppfUndo: event.currentTarget.checked })}
+                onChange={(event) => setOption?.(index, { ppfUndo: event.currentTarget.checked })}
                 type="checkbox"
               />
               <span>PPF undo (safe re-apply)</span>
@@ -220,7 +340,7 @@ const PatchOptions = ({
               <input
                 checked={stripHeaderChecked}
                 disabled={item.optionsDisabled}
-                onChange={(event) => setOption(index, { header: event.currentTarget.checked ? "strip" : "keep" })}
+                onChange={(event) => setOption?.(index, { header: event.currentTarget.checked ? "strip" : "keep" })}
                 type="checkbox"
               />
               <span>{headerLabel}</span>
@@ -295,26 +415,20 @@ const PatchTarget = ({
   );
 };
 
-/** The loom On/Off switch leading a patch card's meta line. A locked patch (a
- * manifest's `required` entry) renders the switch disabled — it stays On. */
+/** The loom On/Off switch leading a patch card's meta line. */
 const PatchEnableToggle = ({
   disabled,
   fileName,
-  locked,
-  lockedTitle,
   onToggle,
 }: {
   disabled: boolean;
   fileName: string;
-  locked?: boolean;
-  lockedTitle?: string;
   onToggle: () => void;
 }) => (
-  <label className="patch-enable" title={locked ? lockedTitle : undefined}>
+  <label className="patch-enable">
     <input
       aria-label={`Include ${fileName.replace(/\.[^.]+$/, "")}`}
       checked={!disabled}
-      disabled={locked}
       onChange={onToggle}
       type="checkbox"
     />
@@ -329,8 +443,9 @@ const ApplyPatchListStep = ({
   disabledFlags,
   emptyState,
   fault,
-  lockedFlags,
+  internalDescription,
   manifestMeta,
+  onManifestMetaChange,
   onTogglePatch,
   patchInput,
   patchNotice,
@@ -343,10 +458,11 @@ const ApplyPatchListStep = ({
   /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
   emptyState?: ReactNode;
   fault?: boolean;
-  /** Per-index toggle locks (a manifest's `required` patches stay On). */
-  lockedFlags?: readonly boolean[];
-  /** Per-index manifest metadata: label chip + muted description on the card. */
-  manifestMeta?: readonly ({ label?: string; description?: string } | undefined)[];
+  /** Embedded description fallback for the first patch; manifest metadata wins. */
+  internalDescription?: string;
+  /** Per-index editable manifest metadata. */
+  manifestMeta?: readonly (ManifestPatchMeta | undefined)[];
+  onManifestMetaChange?: (index: number, updates: Partial<ManifestPatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   patchInput: PatcherUiState["patchInput"];
   patchNotice: NoticeState;
@@ -355,7 +471,6 @@ const ApplyPatchListStep = ({
   ui: PatcherUiController;
   woven?: boolean;
 }) => {
-  const localizer = useUiLocalizer();
   const total = patches.length;
   // Reordering only makes sense for a multi-patch stack. Dragging is additionally
   // suspended while any patch is staging or the stack is otherwise busy.
@@ -368,6 +483,14 @@ const ApplyPatchListStep = ({
     0,
   );
   const enabledCount = total - disabledCount;
+  // Chain endpoints among the ENABLED patches: the first one's input checks
+  // describe the base ROM, the last one's output checks describe the run's
+  // final result — the only two states verifiable without applying.
+  const enabledIndexes = patches
+    .map((_, patchIndex) => patchIndex)
+    .filter((patchIndex) => !disabledFlags?.[patchIndex]);
+  const chainInputIndex = enabledIndexes[0] ?? -1;
+  const chainOutputIndex = enabledIndexes[enabledIndexes.length - 1] ?? -1;
   return (
     <StepSection
       fault={fault}
@@ -407,11 +530,12 @@ const ApplyPatchListStep = ({
         ref={reorderList.containerRef}
       >
         {patches.map((item, index) => {
-          // Mirrors the ROM card: the resolved card structure stays mounted through
-          // staging — a determinate bar on the top edge + a "Reading…" status in the
-          // meta line carry progress, and the Checks drawer reserves its verification
-          // sections as shimmer placeholders — so the stack doesn't jump when the
-          // result lands. The bar stays full once finished. Staging a patch is extract
+          const description = manifestMeta?.[index]?.description || (index === 0 ? internalDescription : "");
+          // Mirrors the ROM card: the resolved card structure (collapsed Extract +
+          // Options drawers) stays mounted through staging — a determinate bar on the
+          // top edge + a "Reading…" status in the meta line carry progress — so the
+          // stack doesn't jump when the result lands.
+          // The bar stays full once finished. Staging a patch is extract
           // (if archived) + parse — the patch is never hashed — so this reads "Reading",
           // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
           const staging = !!item.progress;
@@ -422,26 +546,25 @@ const ApplyPatchListStep = ({
           // so the label is the available signal here — unlike ROM inputs.)
           const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
           const rowProps = reorderList.rowProps(index);
-          const disabledClass = disabledFlags?.[index] ? "is-disabled" : undefined;
+          const isDisabled = !!disabledFlags?.[index];
+          const disabledClass = isDisabled ? "is-disabled" : undefined;
+          // A disabled patch is out of the run: its (stale) verification verdict
+          // stays off the card, and the body keeps only the Options drawer so
+          // manifest authors can still edit name/description/checks.
           let verdict: "bad" | "ok" | undefined;
           if (item.validationState === "invalid") verdict = "bad";
           else if (item.validationState === "valid") verdict = "ok";
+          if (isDisabled) verdict = undefined;
           // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
-          // the card already shows its full body (Extract + Options + Checks). A top-edge bar carries
+          // the card already shows its full body (Extract + Options). A top-edge bar carries
           // that async work — a later phase following the "Reading…" staging bar.
-          const verifying = !staging && item.validationState === "verifying";
-          // Phase A reserves the source (Input) verification group; the streamed
-          // section plan will extend this to the exact sections (Input/Output/dry-run).
-          const pendingSections: ChecksumPendingGroup[] = [
-            {
-              id: "input",
-              label: localizer.message("ui.verify.input"),
-              rows: [
-                { label: "CRC32", length: 8 },
-                { label: "BYTES", length: 8 },
-              ],
-            },
-          ];
+          const verifying = !(staging || isDisabled) && item.validationState === "verifying";
+          // A read-only Checks drawer appears once the patch declares real requirements
+          // (embedded hashes, sizes, validation notes) — it owns the dry-run verdict, so
+          // the Options header only carries it for requirement-less patches. Disabled
+          // patches keep just the Options drawer.
+          const checksRows = getPatchVerificationRows(item);
+          const hasChecksDrawer = !isDisabled && !!(checksRows.inputRows.length || checksRows.outputRows.length);
           return (
             <FileCard
               key={item.key ?? `${index}:${item.fileName}`}
@@ -463,8 +586,6 @@ const ApplyPatchListStep = ({
                     <PatchEnableToggle
                       disabled={!!disabledFlags?.[index]}
                       fileName={item.fileName}
-                      locked={!!lockedFlags?.[index]}
-                      lockedTitle={localizer.message("ui.manifestSession.requiredLock")}
                       onToggle={() => onTogglePatch(index)}
                     />
                   ) : null}
@@ -484,6 +605,7 @@ const ApplyPatchListStep = ({
               }
               name={
                 <ExtractName
+                  displayName={manifestMeta?.[index]?.name}
                   fileName={item.fileName}
                   fileSize={item.fileSize}
                   // The first archive-path entry is the source archive itself (shown
@@ -508,19 +630,39 @@ const ApplyPatchListStep = ({
               target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
               verifyBar={verifying}
             >
+              {description ? (
+                <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
+                  {description}
+                </p>
+              ) : null}
               <div className="patch-body">
                 <div className="patch-body-inner">
-                  {manifestMeta?.[index]?.description ? (
-                    <p className="pdesc">{manifestMeta[index]?.description}</p>
+                  {verdict === "bad" ? (
+                    <div className="pverdict dryrun-verdict bad">
+                      <X aria-hidden="true" />
+                      <span>{item.validationMessage || "Patch validation failed"}</span>
+                    </div>
                   ) : null}
-                  <ExtractDrawer
-                    fileName={item.fileName}
-                    fileSize={item.fileSize}
-                    parentCompressions={item.archivePathEntries}
-                    timing={TIMING_LABEL(item.decompressionTimeMs)}
+                  {isDisabled ? null : (
+                    <ExtractDrawer
+                      fileName={item.fileName}
+                      fileSize={item.fileSize}
+                      parentCompressions={item.archivePathEntries}
+                      timing={TIMING_LABEL(item.decompressionTimeMs)}
+                    />
+                  )}
+                  <PatchOptions
+                    disabled={isDisabled}
+                    index={index}
+                    isChainInput={index === chainInputIndex}
+                    isChainOutput={index === chainOutputIndex}
+                    item={item}
+                    meta={manifestMeta?.[index]}
+                    onMetaChange={onManifestMetaChange ? (updates) => onManifestMetaChange(index, updates) : undefined}
+                    patchStack={patchStack}
+                    showVerdict={!hasChecksDrawer}
                   />
-                  <PatchOptions index={index} item={item} patchStack={patchStack} />
-                  <PatchInfo item={item} pending={staging ? pendingSections : undefined} />
+                  {hasChecksDrawer ? <PatchInfo item={item} /> : null}
                 </div>
               </div>
             </FileCard>

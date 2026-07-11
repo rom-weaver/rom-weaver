@@ -10,6 +10,7 @@ import {
   installPatcherTestHooks,
   loadFixtureFile,
   mount,
+  RAW_PATCH,
   RAW_ROM,
   selectFileInput,
   VALID_BPS,
@@ -224,8 +225,8 @@ test("source-check patch formats report runtime patch validation success", async
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(patchPath));
 
-    // BPS/UPS declare source requirements, so the card keeps its Checks drawer; the
-    // pass verdict is the drawer-header mark, not an in-body banner.
+    // BPS/UPS declare embedded requirements, so the card renders a Checks drawer
+    // carrying the pass mark (requirement-less patches carry it on Options instead).
     const validation = await waitForState(() => {
       const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
       if (!(element instanceof HTMLElement)) return null;
@@ -233,6 +234,7 @@ test("source-check patch formats report runtime patch validation success", async
     }, 60000);
     expect(validation).toBeInstanceOf(HTMLElement);
     expect(validation.textContent).toContain("Checks");
+    expect(validation.querySelector(".optsblock .cks-match")).toBeNull();
   }
 });
 
@@ -351,7 +353,7 @@ test("ROM info panel shows checksum variant rows", async () => {
   expect(inputRow.textContent).not.toContain("Raw");
 });
 
-test("requirement-less patch passes without a Checks drawer", async () => {
+test("requirement-less patch passes without requirement rows", async () => {
   mount(
     createChecksumOverrideHarnessElement(
       vi.fn(async () => undefined),
@@ -367,10 +369,63 @@ test("requirement-less patch passes without a Checks drawer", async () => {
   );
 
   // A dry-run-only patch declares no requirements: the ok mark rides the card
-  // itself and no Checks drawer renders.
+  // (and the Options drawer header), and no aux requirement rows render inside
+  // the verification groups.
   const validation = await waitForState(() => {
     const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
     return element instanceof HTMLElement ? element : null;
   }, 30000);
-  expect(validation.textContent).not.toContain("Checks");
+  expect(validation.querySelector(".optsblock .ck")).toBeNull();
+  expect(validation.textContent).not.toContain("VALIDATION");
+});
+
+test("typed input checksum is format-validated and re-verifies the ROM", async () => {
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: {
+        output: { compression: "none" },
+      },
+    }),
+  );
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  // An IPS patch declares no built-in checks, so the input verification fields are
+  // empty and editable.
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
+  await waitForApplyButtonEnabled();
+
+  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
+  const crcInput = await waitForState(() => document.getElementById("rom-weaver-patch-input-crc32-0"), 30000);
+  expect(crcInput).toBeInstanceOf(HTMLInputElement);
+  expect(crcInput.value).toBe("");
+  expect(crcInput.readOnly).toBe(false);
+  const commit = (value) => {
+    const input = document.getElementById("rom-weaver-patch-input-crc32-0");
+    input.value = value;
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  };
+
+  // Malformed hex flags the field and never reaches verification.
+  commit("nothex!!");
+  await expect
+    .poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.getAttribute("aria-invalid"))
+    .toBe("true");
+  expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
+
+  // A well-formed but wrong crc32 verifies against the ROM and flags it.
+  commit("00000000");
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack .file.bad"), { timeout: 30000 })
+    .not.toBeNull();
+  await expect
+    .poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.getAttribute("aria-invalid"))
+    .toBe(null);
+
+  // The ROM's actual crc32 re-verifies to a match.
+  commit("c6fb1252");
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack .file.ok"), { timeout: 30000 })
+    .not.toBeNull();
+  expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
 });

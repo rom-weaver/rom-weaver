@@ -183,13 +183,14 @@ const LegacyExtractionLabel = ({
 
 /** The card name line (plus the legacy sr-only metadata span tests read). */
 const ExtractName = ({
+  displayName,
   fileName,
   fileSize,
   folderPath,
   legacyArchiveClassName = "rom-weaver-patch-stack-archive",
   legacyFileClassName,
   parentCompressions,
-}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing">) => (
+}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & { displayName?: string }) => (
   <>
     {legacyFileClassName ? (
       <LegacyExtractionLabel
@@ -206,8 +207,9 @@ const ExtractName = ({
       <span className="sr-only">{fileName}</span>
       <span aria-hidden="true" className="nm" title={folderPath ? `${folderPath} › ${fileName}` : fileName}>
         {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
-        {getDisplayName(fileName)}
+        {displayName?.trim() || getDisplayName(fileName)}
       </span>
+      {displayName?.trim() ? <span className="nm-file mono">{fileName}</span> : null}
     </div>
   </>
 );
