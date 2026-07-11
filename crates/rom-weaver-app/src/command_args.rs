@@ -594,7 +594,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "with",
             value_name = "GLOB",
-            help = "Include manifest patches matching GLOB (by name or file name) even when their status is optional or disabled; repeatable"
+            help = "Include manifest patches matching GLOB (by name or file name) even when default is false; repeatable"
         )
     )]
     #[serde(default)]
@@ -605,7 +605,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "without",
             value_name = "GLOB",
-            help = "Exclude manifest patches matching GLOB (by name or file name) whose status is default; matching a required patch is an error; repeatable"
+            help = "Exclude manifest patches matching GLOB (by name or file name), overriding their default; repeatable"
         )
     )]
     #[serde(default)]
@@ -646,7 +646,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "compress-level",
             value_enum,
-            help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max). Defaults to max; when left unset an rw.json manifest may supply it"
+            help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max). Defaults to max"
         )
     )]
     #[serde(default)]
@@ -1221,13 +1221,17 @@ pub struct ManifestCreatePatchSpec {
     pub name: Option<String>,
     pub description: Option<String>,
     pub label: Option<String>,
-    pub status: Option<ManifestPatchStatus>,
-    /// Emitted `url` source override (the local file still supplies integrity).
+    pub optional: Option<bool>,
+    /// Emitted `url` source override for the entry.
     pub source_url: Option<String>,
     pub header: Option<PatchApplyHeaderMode>,
     /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens),
-    /// emitted as the entry's `checks`.
-    pub checks: Vec<String>,
+    /// emitted as the entry's `inputChecks` when they differ from the rom's.
+    pub input_checks: Vec<String>,
+    /// Expected post-apply ROM checksums for this entry, emitted as the
+    /// entry's `outputChecks` when they differ from the manifest's final
+    /// `output.checks`.
+    pub output_checks: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1268,7 +1272,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch file to include, in apply order; repeat --patch for each entry. Per-patch metadata flags (--patch-name/-description/-label/-status/-source-url/-header) bind to the most recent preceding --patch"
+            help = "Patch file to include, in apply order; repeat --patch for each entry. Per-patch metadata flags (--patch-name/-description/-label/-default/-source-url/-header) bind to the most recent preceding --patch"
         )
     )]
     #[serde(default)]
@@ -1286,15 +1290,21 @@ pub struct ManifestCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_label: Vec<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "patch-status", value_enum))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-optional",
+            help = "Mark the preceding --patch as optional (deselected by default)"
+        )
+    )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_status: Vec<ManifestPatchStatus>,
+    pub patch_optional: Vec<bool>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "patch-source-url",
-            help = "Emitted url source for the preceding --patch (the local file still supplies integrity checksums)"
+            help = "Emitted url source for the preceding --patch (the local file is still read for the bundle)"
         )
     )]
     #[serde(default)]
@@ -1307,21 +1317,33 @@ pub struct ManifestCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-check",
-            help = "Expected pre-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable). On the wasm path this is index-aligned with --patch (one comma-separated value per entry, empty for none)"
+            long = "patch-input-check",
+            help = "Expected pre-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as inputChecks only when it differs from the rom checks. On the wasm path this is index-aligned with --patch (one comma-separated value per entry, empty for none)"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_check: Vec<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = "Manifest display name"))]
+    pub patch_input_check: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-output-check",
+            help = "Expected post-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as outputChecks only when it differs from the final output checks"
+        )
+    )]
     #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub name: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = "Manifest description"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_output_check: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "output-check",
+            help = "Expected checksum of the final output once the full patch chain is applied (algo=hex; repeatable and comma-separable); emitted as output.checks"
+        )
+    )]
     #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub description: Option<String>,
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub output_check: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1340,31 +1362,6 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Emit output.compress: false (raw patched bytes by default)"
-        )
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_compress: bool,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "compress-format"))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub compress_format: Option<String>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(long = "compress-codec", action = ArgAction::Append)
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub compress_codec: Vec<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "compress-level", value_enum))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub compress_level: Option<CompressionLevelProfile>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
             help = "Where to write the manifest: rw.json, or rw.json.gz / rw.json.zst for a compressed one"
         )
     )]
@@ -1379,6 +1376,11 @@ pub struct ManifestCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub bundle: Option<PathBuf>,
+    /// Optional packaged ROM payload. Checks are still calculated from `rom`.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "bundle-rom"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub bundle_rom: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1393,7 +1395,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
-            help = "Checksum algorithm(s) for rom checks and patch integrity (repeatable; default crc32, md5, sha1)"
+            help = "Checksum algorithm(s) for rom checks (repeatable; default crc32, md5, sha1)"
         )
     )]
     #[serde(default)]
@@ -1477,13 +1479,13 @@ impl ManifestCreateCommand {
                 spec.label = Some(labels[index].clone());
             },
         );
-        let statuses = self.patch_status.clone();
+        let optionals = self.patch_optional.clone();
         bind(
             &mut specs,
-            "patch_status",
-            statuses.len(),
+            "patch_optional",
+            optionals.len(),
             &mut |spec, index| {
-                spec.status = Some(statuses[index]);
+                spec.optional = Some(optionals[index]);
             },
         );
         let source_urls = self.patch_source_url.clone();
@@ -1506,13 +1508,22 @@ impl ManifestCreateCommand {
         );
         // Checks accumulate (a patch may pin several algorithms) instead of
         // last-occurrence-wins like the scalar metadata above.
-        let checks = self.patch_check.clone();
+        let input_checks = self.patch_input_check.clone();
         bind(
             &mut specs,
-            "patch_check",
-            checks.len(),
+            "patch_input_check",
+            input_checks.len(),
             &mut |spec, index| {
-                spec.checks.push(checks[index].clone());
+                spec.input_checks.push(input_checks[index].clone());
+            },
+        );
+        let output_checks = self.patch_output_check.clone();
+        bind(
+            &mut specs,
+            "patch_output_check",
+            output_checks.len(),
+            &mut |spec, index| {
+                spec.output_checks.push(output_checks[index].clone());
             },
         );
         self.patch_specs = specs;

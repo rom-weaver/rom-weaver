@@ -11,10 +11,15 @@ use super::patch_filename_checksum::FilenameRequirements;
 use super::*;
 
 /// What a manifest contributed beyond the merged command fields: expected
-/// input-ROM requirements enforced after the CLI checksum flags parse.
+/// input-ROM requirements enforced after the CLI checksum flags parse, and
+/// the expected checksums of the final output for this selection.
 pub(super) struct ManifestApplyResolution {
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<(String, FilenameRequirements)>,
+    /// `(source label, requirements)` for the final output: the last selected
+    /// patch's `outputChecks`, or the manifest's `output.checks` when the
+    /// selection ends the full chain.
+    pub output_checks: Option<(String, FilenameRequirements)>,
 }
 
 enum ManifestApplySource {
@@ -28,8 +33,8 @@ enum ManifestApplySource {
 
 impl CliApp {
     /// Route a `patch apply` through its manifest when one is present. Mutates
-    /// `args` into a fully-resolved plain command (input/patches/output/
-    /// compression merged) and returns the leftover manifest contribution.
+    /// `args` into a fully-resolved plain command (input/patches/output merged)
+    /// and returns the leftover manifest contribution.
     /// Extracted archive members land in `context`'s temp namespace — the
     /// caller must keep that context alive until the apply completes.
     pub(super) fn resolve_manifest_apply(
@@ -156,13 +161,32 @@ impl CliApp {
                     } else {
                         // A checks-only rom entry means the user supplies the
                         // ROM; the input we have IS the manifest (or its
-                        // archive), so there is nothing to patch.
-                        return Err(RomWeaverError::ValidationCode(
-                            ValidationCodeError::new("manifest.rom.missing")
-                                .with_message(
-                                    "manifest rom entry provides no source; pass the ROM as the apply input and the manifest via --manifest",
-                                ),
-                        ));
+                        // archive), so there is nothing to patch. Surface the
+                        // expected ROM so the user knows what to supply.
+                        let mut coded = ValidationCodeError::new("manifest.rom.missing")
+                            .with_message(
+                                "manifest rom entry provides no source; pass the ROM as the apply input and the manifest via --manifest",
+                            );
+                        if let Some(name) = rom
+                            .name
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|name| !name.is_empty())
+                        {
+                            coded.push_field("expected_name", name.to_owned());
+                        }
+                        if let Some(rom_checks) = &rom.checks {
+                            if !rom_checks.checksums.is_empty() {
+                                coded.push_field(
+                                    "expected_checksums",
+                                    format_manifest_checksums(&rom_checks.checksums),
+                                );
+                            }
+                            if let Some(size) = rom_checks.size {
+                                coded.push_field("expected_size", size);
+                            }
+                        }
+                        return Err(RomWeaverError::ValidationCode(coded));
                     }
                 }
             }
@@ -177,6 +201,7 @@ impl CliApp {
 
         // Explicit --patch flags replace the manifest patch list wholesale;
         // the manifest still contributes rom checks and output defaults.
+        let mut output_checks: Option<(String, FilenameRequirements)> = None;
         if args.patches.is_empty() {
             let selected =
                 self.select_manifest_patches(&manifest, &args.with_patches, &args.without_patches)?;
@@ -187,7 +212,7 @@ impl CliApp {
                 ));
             }
             let mut header_modes = Vec::with_capacity(selected.len());
-            for index in &selected {
+            for (position, index) in selected.iter().enumerate() {
                 let entry = &manifest.patches[*index];
                 let entry_label = format!("patches[{index}]");
                 let resolved = self
@@ -203,24 +228,80 @@ impl CliApp {
                         &entry_label,
                     )?
                     .expect("patch entries always carry a source");
-                self.verify_manifest_integrity(&resolved, &entry.integrity, context, &entry_label)?;
-                if let Some(entry_checks) = &entry.checks {
+                // Only the FIRST applied patch's input state describes the
+                // supplied ROM; without its own inputChecks it relies on
+                // rom.checks (already merged). Later patches' inputChecks are
+                // mid-chain states, validated by construction of the chain.
+                if position == 0
+                    && let Some(entry_checks) = &entry.input_checks
+                {
                     checks.push((
-                        format!("manifest {entry_label}.checks"),
+                        format!("manifest {entry_label}.inputChecks"),
                         FilenameRequirements {
                             checksums: entry_checks.checksums.clone(),
                             size: entry_checks.size,
                         },
                     ));
                 }
+                // A skipped chain step is detectable when both sides declare
+                // their state: warn instead of failing so intentionally
+                // reordered/partial selections still run.
+                if position > 0
+                    && let Some(previous_output) = selected
+                        .get(position - 1)
+                        .and_then(|previous| manifest.patches[*previous].output_checks.as_ref())
+                    && let Some(entry_input) = &entry.input_checks
+                    && !manifest_checks_agree(previous_output, entry_input)
+                {
+                    warn!(
+                        entry = %entry_label,
+                        "manifest chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
+                    );
+                }
                 header_modes.push(entry.header.unwrap_or_default());
                 trace!(
                     patch = %resolved.display(),
-                    status = ?entry.status,
+                    optional = entry.optional,
                     header = ?entry.header,
                     "selected manifest patch"
                 );
                 args.patches.push(resolved);
+            }
+            // The last applied patch pins the expected output; a patch without
+            // its own outputChecks ends the full chain, whose result is the
+            // manifest's output.checks.
+            if let Some(last) = selected.last() {
+                let last_entry = &manifest.patches[*last];
+                let (label, entry_checks) = match &last_entry.output_checks {
+                    Some(entry_checks) => (
+                        format!("manifest patches[{last}].outputChecks"),
+                        Some(entry_checks),
+                    ),
+                    // output.checks describes the FULL chain: it only gates
+                    // when every manifest patch is selected — a partial
+                    // selection that happens to end on the final entry (some
+                    // optionals skipped) produces a different, legitimate
+                    // result.
+                    None if selected.len() == manifest.patches.len() => (
+                        "manifest output.checks".to_string(),
+                        manifest
+                            .output
+                            .as_ref()
+                            .and_then(|output| output.checks.as_ref()),
+                    ),
+                    // A partial chain without a declared endpoint has no
+                    // recorded result to verify against.
+                    None => (String::new(), None),
+                };
+                if let Some(entry_checks) = entry_checks {
+                    output_checks = Some((
+                        label,
+                        FilenameRequirements {
+                            checksums: entry_checks.checksums.clone(),
+                            size: entry_checks.size,
+                        },
+                    ));
+                }
             }
             // Only pin per-patch header modes when the manifest sets any;
             // otherwise the all-auto default (empty list) applies. Explicit
@@ -248,33 +329,12 @@ impl CliApp {
             if args.output_header.is_none() {
                 args.output_header = output.header;
             }
-            match &output.compress {
-                // Validation rejected `true`, so `Disabled` means
-                // `compress: false`; any explicit compression flag overrides it.
-                Some(ManifestCompress::Disabled(_))
-                    if !args.no_compress
-                        && args.compress_format.is_none()
-                        && args.compress_codec.is_empty()
-                        && args.compress_level.is_none() =>
-                {
-                    args.no_compress = true;
-                }
-                Some(ManifestCompress::Settings(settings)) if !args.no_compress => {
-                    if args.compress_format.is_none() {
-                        args.compress_format = settings.format.clone();
-                    }
-                    if args.compress_codec.is_empty() {
-                        args.compress_codec = settings.codecs.clone();
-                    }
-                    if args.compress_level.is_none() {
-                        args.compress_level = settings.level;
-                    }
-                }
-                _ => {}
-            }
         }
 
-        Ok(Some(ManifestApplyResolution { checks }))
+        Ok(Some(ManifestApplyResolution {
+            checks,
+            output_checks,
+        }))
     }
 
     fn detect_manifest_apply_source(
@@ -411,47 +471,9 @@ impl CliApp {
         Ok(Some(resolved))
     }
 
-    /// Verify a resolved patch file against the manifest's `integrity`
-    /// checksums (checksums of the patch file itself).
-    fn verify_manifest_integrity(
-        &self,
-        file: &Path,
-        integrity: &BTreeMap<String, String>,
-        context: &OperationContext,
-        entry_label: &str,
-    ) -> Result<()> {
-        if integrity.is_empty() {
-            return Ok(());
-        }
-        let algorithms: Vec<&str> = integrity.keys().map(String::as_str).collect();
-        let actual = checksum_file_values(file, &algorithms, context)?;
-        for (algorithm, expected) in integrity {
-            let Some(found) = actual.get(algorithm) else {
-                continue;
-            };
-            if !found.eq_ignore_ascii_case(expected) {
-                return Err(RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("manifest.integrity.mismatch")
-                        .with_message("manifest patch integrity checksum mismatch")
-                        .with_field("entry", entry_label.to_owned())
-                        .with_field("algorithm", algorithm.clone())
-                        .with_field("expected", expected.clone())
-                        .with_field("actual", found.clone()),
-                ));
-            }
-        }
-        trace!(
-            file = %file.display(),
-            algorithms = integrity.len(),
-            "manifest patch integrity verified"
-        );
-        Ok(())
-    }
-
     /// Decide which manifest patches apply this run, ordered by manifest
-    /// index. Statuses drive the default; `--with`/`--without` override;
-    /// an interactive session prompts for the default/optional set when no
-    /// override flags were given (Cancel keeps required + default).
+    /// index. Non-optional entries seed the selection; `--with`/`--without`
+    /// override it; an interactive session may toggle every entry.
     pub(super) fn select_manifest_patches(
         &self,
         manifest: &RomWeaverManifest,
@@ -466,21 +488,7 @@ impl CliApp {
         for (index, entry) in manifest.patches.iter().enumerate() {
             let excluded = matches_manifest_entry(&mut without_matcher, entry);
             let included = matches_manifest_entry(&mut with_matcher, entry);
-            let apply = match entry.status {
-                ManifestPatchStatus::Required => {
-                    if excluded {
-                        return Err(RomWeaverError::ValidationCode(
-                            ValidationCodeError::new("manifest.status.required-excluded")
-                                .with_message("--without matched a required manifest patch")
-                                .with_field("entry", format!("patches[{index}]"))
-                                .with_field("name", manifest_entry_display_name(entry).to_owned()),
-                        ));
-                    }
-                    true
-                }
-                ManifestPatchStatus::Default => !excluded,
-                ManifestPatchStatus::Optional | ManifestPatchStatus::Disabled => included,
-            };
+            let apply = !excluded && (!entry.optional || included);
             if apply {
                 selected.push(index);
             }
@@ -491,18 +499,7 @@ impl CliApp {
             && without_patterns.is_empty()
             && self.interactive_selection_enabled
         {
-            let prompt_indices: Vec<usize> = manifest
-                .patches
-                .iter()
-                .enumerate()
-                .filter(|(_, entry)| {
-                    matches!(
-                        entry.status,
-                        ManifestPatchStatus::Default | ManifestPatchStatus::Optional
-                    )
-                })
-                .map(|(index, _)| index)
-                .collect();
+            let prompt_indices: Vec<usize> = (0..manifest.patches.len()).collect();
             if !prompt_indices.is_empty() {
                 let candidates: Vec<PromptCandidate> = prompt_indices
                     .iter()
@@ -524,28 +521,14 @@ impl CliApp {
                             .into_iter()
                             .filter_map(|position| prompt_indices.get(position).copied())
                             .collect();
-                        selected = manifest
-                            .patches
-                            .iter()
-                            .enumerate()
-                            .filter(|(index, entry)| match entry.status {
-                                ManifestPatchStatus::Required => true,
-                                ManifestPatchStatus::Default | ManifestPatchStatus::Optional => {
-                                    picked.contains(index)
-                                }
-                                ManifestPatchStatus::Disabled => false,
-                            })
-                            .map(|(index, _)| index)
-                            .collect();
+                        selected = picked.into_iter().collect();
                     }
                     // Cancel (or an empty pick, which the protocol folds into
-                    // Cancelled) keeps the non-interactive default: required +
-                    // default. Deselecting everything optional is legitimate,
+                    // Cancelled) keeps the non-interactive defaults.
+                    // Deselecting everything is legitimate,
                     // so cancelling must not abort the run.
                     SelectionList::Cancelled => {
-                        trace!(
-                            "manifest patch prompt cancelled; applying required + default patches"
-                        );
+                        trace!("manifest patch prompt cancelled; applying default patches");
                     }
                 }
             }
@@ -561,6 +544,32 @@ enum ManifestApplySourceKind {
     Explicit,
     InputIsManifest,
     InputArchive,
+}
+
+/// Render an `algorithm -> hex` map as a `algo=hex, algo=hex` display string
+/// (error-field payloads shown to the user).
+fn format_manifest_checksums(checksums: &BTreeMap<String, String>) -> String {
+    checksums
+        .iter()
+        .map(|(algorithm, hex)| format!("{algorithm}={hex}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Whether two declared chain states agree on every checksum algorithm (and
+/// size) they BOTH pin. Disjoint declarations cannot disagree.
+fn manifest_checks_agree(left: &ManifestChecks, right: &ManifestChecks) -> bool {
+    let checksums_agree = left.checksums.iter().all(|(algorithm, hex)| {
+        right
+            .checksums
+            .get(algorithm)
+            .is_none_or(|other| other.eq_ignore_ascii_case(hex))
+    });
+    let sizes_agree = match (left.size, right.size) {
+        (Some(left_size), Some(right_size)) => left_size == right_size,
+        _ => true,
+    };
+    checksums_agree && sizes_agree
 }
 
 fn parent_dir(path: &Path) -> PathBuf {
@@ -612,7 +621,7 @@ fn manifest_entry_file_name(entry: &ManifestPatchEntry) -> Option<&str> {
 
 fn manifest_entry_prompt_label(entry: &ManifestPatchEntry) -> String {
     let mut label = manifest_entry_display_name(entry).to_string();
-    if entry.status == ManifestPatchStatus::Optional {
+    if entry.optional {
         label.push_str(" [optional]");
     }
     if let Some(tag) = entry

@@ -90,18 +90,17 @@ fn validate_manifest(manifest: &mut RomWeaverManifest) -> Result<()> {
         let entry = format!("patches[{index}]");
         validate_source_ref(&patch.url, &patch.path, &entry)?;
         validate_relative_path(&patch.path, &entry)?;
-        if let Some(checks) = &mut patch.checks {
-            normalize_checksum_map(&mut checks.checksums, &format!("{entry}.checks"))?;
+        if let Some(checks) = &mut patch.input_checks {
+            normalize_checksum_map(&mut checks.checksums, &format!("{entry}.inputChecks"))?;
         }
-        normalize_checksum_map(&mut patch.integrity, &format!("{entry}.integrity"))?;
+        if let Some(checks) = &mut patch.output_checks {
+            normalize_checksum_map(&mut checks.checksums, &format!("{entry}.outputChecks"))?;
+        }
     }
-    if let Some(output) = &manifest.output
-        && matches!(output.compress, Some(ManifestCompress::Disabled(true)))
+    if let Some(output) = &mut manifest.output
+        && let Some(checks) = &mut output.checks
     {
-        return Err(manifest_validation(
-            "manifest.compress.invalid",
-            "manifest output.compress must be false or a compression settings object",
-        ));
+        normalize_checksum_map(&mut checks.checksums, "output.checks")?;
     }
     Ok(())
 }
@@ -217,25 +216,23 @@ mod tests {
         .expect("minimal manifest parses");
         assert_eq!(manifest.version, MANIFEST_VERSION);
         assert_eq!(manifest.patches.len(), 1);
-        assert_eq!(manifest.patches[0].status, ManifestPatchStatus::Default);
+        assert!(!manifest.patches[0].optional);
         assert_eq!(manifest.patches[0].header, None);
         assert!(manifest.rom.is_none() && manifest.output.is_none());
     }
 
     #[test]
-    fn parses_statuses_and_labels() {
+    fn parses_optional_and_labels() {
         let manifest = parse_manifest_bytes(
             br#"{ "version": 1, "patches": [
-                { "path": "a.ips", "status": "required", "label": "stable" },
-                { "path": "b.ips", "status": "optional" },
-                { "path": "c.ips", "status": "disabled" }
+                { "path": "a.ips", "label": "stable" },
+                { "path": "b.ips", "optional": true }
             ] }"#,
         )
-        .expect("statuses parse");
-        assert_eq!(manifest.patches[0].status, ManifestPatchStatus::Required);
+        .expect("optional parses");
+        assert!(!manifest.patches[0].optional);
         assert_eq!(manifest.patches[0].label.as_deref(), Some("stable"));
-        assert_eq!(manifest.patches[1].status, ManifestPatchStatus::Optional);
-        assert_eq!(manifest.patches[2].status, ManifestPatchStatus::Disabled);
+        assert!(manifest.patches[1].optional);
     }
 
     #[test]
@@ -324,11 +321,11 @@ mod tests {
     }
 
     #[test]
-    fn normalizes_checks_and_integrity_hex() {
+    fn normalizes_checks_hex() {
         let manifest = parse_manifest_bytes(
             br#"{ "version": 1,
                   "rom": { "path": "rom.sfc", "checks": { "checksums": { "CRC32": "0xAABBCCDD" }, "size": 524288 } },
-                  "patches": [ { "path": "x.ips", "integrity": { "crc32": "0XDEADBEEF" } } ] }"#,
+                  "patches": [ { "path": "x.ips", "inputChecks": { "checksums": { "crc32": "0XDEADBEEF" } } } ] }"#,
         )
         .expect("checks parse");
         let rom_checks = manifest.rom.expect("rom").checks.expect("checks");
@@ -339,7 +336,10 @@ mod tests {
         assert_eq!(rom_checks.size, Some(524288));
         assert_eq!(
             manifest.patches[0]
-                .integrity
+                .input_checks
+                .as_ref()
+                .expect("inputChecks")
+                .checksums
                 .get("crc32")
                 .map(String::as_str),
             Some("deadbeef")
@@ -352,7 +352,7 @@ mod tests {
         assert_eq!(
             parse_err(
                 r#"{ "version": 1,
-                     "patches": [ { "path": "x.ips", "checks": { "checksums": { "crc32": "abcd" } } } ] }"#
+                     "patches": [ { "path": "x.ips", "inputChecks": { "checksums": { "crc32": "abcd" } } } ] }"#
             ),
             "manifest.checks.invalid"
         );
@@ -360,49 +360,9 @@ mod tests {
         assert_eq!(
             parse_err(
                 r#"{ "version": 1,
-                     "patches": [ { "path": "x.ips", "checks": { "checksums": { "crc99": "aabbccdd" } } } ] }"#
+                     "patches": [ { "path": "x.ips", "outputChecks": { "checksums": { "crc99": "aabbccdd" } } } ] }"#
             ),
             "manifest.checks.invalid"
-        );
-    }
-
-    #[test]
-    fn parses_output_compress_variants() {
-        let disabled = parse_manifest_bytes(
-            br#"{ "version": 1, "patches": [ { "path": "x.ips" } ],
-                  "output": { "compress": false } }"#,
-        )
-        .expect("compress false parses");
-        assert_eq!(
-            disabled.output.expect("output").compress,
-            Some(ManifestCompress::Disabled(false))
-        );
-
-        let settings = parse_manifest_bytes(
-            br#"{ "version": 1, "patches": [ { "path": "x.ips" } ],
-                  "output": { "name": "out.sfc", "header": "keep",
-                              "compress": { "format": "zip", "codecs": ["deflate:9"], "level": "max" } } }"#,
-        )
-        .expect("compress settings parse");
-        let output = settings.output.expect("output");
-        assert_eq!(output.name.as_deref(), Some("out.sfc"));
-        assert_eq!(output.header, Some(PatchApplyOutputHeaderMode::Keep));
-        let Some(ManifestCompress::Settings(compress)) = output.compress else {
-            panic!("expected compress settings");
-        };
-        assert_eq!(compress.format.as_deref(), Some("zip"));
-        assert_eq!(compress.codecs, vec!["deflate:9".to_string()]);
-        assert_eq!(compress.level, Some(CompressionLevelProfile::Max));
-    }
-
-    #[test]
-    fn rejects_compress_true() {
-        assert_eq!(
-            parse_err(
-                r#"{ "version": 1, "patches": [ { "path": "x.ips" } ],
-                     "output": { "compress": true } }"#
-            ),
-            "manifest.compress.invalid"
         );
     }
 
@@ -410,8 +370,6 @@ mod tests {
     fn round_trips_serialized_manifest() {
         let manifest = RomWeaverManifest {
             version: MANIFEST_VERSION,
-            name: Some("Example Pack".to_owned()),
-            description: None,
             rom: Some(ManifestRom {
                 name: Some("Game (USA).sfc".to_owned()),
                 url: Some("https://example.test/game.sfc".to_owned()),
@@ -424,22 +382,27 @@ mod tests {
             patches: vec![ManifestPatchEntry {
                 name: Some("Main hack".to_owned()),
                 description: Some("The main event".to_owned()),
-                status: ManifestPatchStatus::Required,
+                optional: true,
                 label: Some("stable".to_owned()),
                 url: None,
                 path: Some("patches/main.bps".to_owned()),
-                checks: None,
-                integrity: BTreeMap::from([("crc32".to_owned(), "deadbeef".to_owned())]),
+                input_checks: Some(ManifestChecks {
+                    checksums: BTreeMap::from([("crc32".to_owned(), "aabbccdd".to_owned())]),
+                    size: None,
+                }),
+                output_checks: None,
                 header: Some(PatchApplyHeaderMode::Strip),
             }],
             output: Some(ManifestOutput {
                 name: Some("out.sfc".to_owned()),
                 header: Some(PatchApplyOutputHeaderMode::Auto),
-                compress: Some(ManifestCompress::Settings(ManifestCompressSettings {
-                    format: Some("zip".to_owned()),
-                    codecs: Vec::new(),
-                    level: Some(CompressionLevelProfile::Max),
-                })),
+                checks: Some(ManifestChecks {
+                    checksums: BTreeMap::from([(
+                        "sha1".to_owned(),
+                        "da39a3ee5e6b4b0d3255bfef95601890afd80709".to_owned(),
+                    )]),
+                    size: None,
+                }),
             }),
         };
         let json = serde_json::to_vec_pretty(&manifest).expect("manifest serializes");
@@ -458,8 +421,8 @@ mod tests {
             "unset options must be omitted: {json}"
         );
         assert!(
-            !json.contains("\"integrity\""),
-            "empty maps must be omitted: {json}"
+            !json.contains("\"optional\""),
+            "non-optional patches must omit the flag: {json}"
         );
     }
 

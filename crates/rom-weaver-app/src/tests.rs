@@ -1179,10 +1179,10 @@ fn validate_patch_apply_expected_checksums_uses_hints_for_match_and_mismatch() {
 fn manifest_for_selection() -> RomWeaverManifest {
     crate::manifest_parse::parse_manifest_bytes(
         br#"{ "version": 1, "patches": [
-            { "path": "main.ips",     "name": "Main hack",  "status": "required" },
-            { "path": "balance.ips",  "name": "Rebalance",  "status": "default" },
-            { "path": "extra.ips",    "name": "Extra maps", "status": "optional" },
-            { "path": "debug.ips",    "name": "Debug menu", "status": "disabled" }
+            { "path": "main.ips",     "name": "Main hack" },
+            { "path": "balance.ips",  "name": "Rebalance" },
+            { "path": "extra.ips",    "name": "Extra maps", "optional": true },
+            { "path": "debug.ips",    "name": "Debug menu", "optional": true }
         ] }"#,
     )
     .expect("selection manifest parses")
@@ -1229,38 +1229,32 @@ fn manifest_selection_without_excludes_default() {
 }
 
 #[test]
-fn manifest_selection_without_on_required_errors() {
+fn manifest_selection_without_can_disable_any_patch() {
     let app = noninteractive_app();
-    let error = app
+    let selected = app
         .select_manifest_patches(&manifest_for_selection(), &[], &["main*".to_string()])
-        .expect_err("excluding a required patch must fail");
-    match error {
-        RomWeaverError::ValidationCode(coded) => {
-            assert_eq!(coded.code(), "manifest.status.required-excluded");
-        }
-        other => panic!("expected coded validation error, got: {other}"),
-    }
+        .expect("every patch is toggleable");
+    assert_eq!(selected, vec![1]);
 }
 
 #[test]
 fn manifest_selection_interactive_prompt_picks_subset() {
-    // Prompt candidates are the default+optional entries: [balance, extra].
-    // Picking position 1 selects `extra` and drops the default `balance`.
+    // Every entry is offered. Picking position 1 selects only `balance`.
     let app = test_app_with_prompt(vec![1]);
     let selected = app
         .select_manifest_patches(&manifest_for_selection(), &[], &[])
         .expect("selection succeeds");
     assert_eq!(
         selected,
-        vec![0, 2],
-        "required stays; only the picked optional joins"
+        vec![1],
+        "interactive selection controls every patch"
     );
 }
 
 #[test]
 fn manifest_selection_interactive_cancel_keeps_defaults() {
     // Cancel (or an empty pick — the protocol folds both into Cancelled) must
-    // fall back to required + default rather than aborting the run.
+    // fall back to the boolean defaults rather than aborting the run.
     let app = test_app_with_prompt(vec![]);
     let selected = app
         .select_manifest_patches(&manifest_for_selection(), &[], &[])

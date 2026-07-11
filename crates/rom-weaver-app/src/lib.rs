@@ -155,7 +155,7 @@ pub enum ManifestCommands {
         not(target_arch = "wasm32"),
         command(
             about = "Build, validate, and write an rw.json manifest from local ROM/patch files",
-            long_about = "Build, validate, and write an rw.json manifest from local ROM/patch files.\n\nROM checks and per-patch integrity checksums are computed from the actual files (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-name/-description/-label/-status/-source-url/-header) bind to the most recent preceding --patch. --output accepts rw.json, rw.json.gz, or rw.json.zst; --bundle additionally packs the manifest plus the local sources into one archive whose path entries reference the archived names."
+            long_about = "Build, validate, and write an rw.json manifest from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-name/-description/-label/-default/-source-url/-header) bind to the most recent preceding --patch. --output accepts rw.json, rw.json.gz, or rw.json.zst; --bundle additionally packs the manifest plus the local sources into one archive whose path entries reference the archived names."
         )
     )]
     Create(Box<ManifestCreateCommand>),
@@ -1023,8 +1023,8 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 
 mod manifest_schema;
 pub use manifest_schema::{
-    MANIFEST_VERSION, ManifestChecks, ManifestCompress, ManifestCompressSettings, ManifestOutput,
-    ManifestPatchEntry, ManifestPatchStatus, ManifestRom, RomWeaverManifest,
+    MANIFEST_VERSION, ManifestChecks, ManifestOutput, ManifestPatchEntry, ManifestRom,
+    RomWeaverManifest,
 };
 
 mod manifest_parse;

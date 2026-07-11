@@ -4,22 +4,19 @@ use super::*;
 pub const MANIFEST_VERSION: u32 = 1;
 
 /// A distributable patching workflow definition (`rw.json`): ordered patches
-/// with selection status and expected input-ROM checks, optionally the ROM
-/// itself, and default output settings. Every entry's source is either a
-/// download URL or a path relative to the manifest (an archive member when the
-/// manifest ships inside an archive). Defaults defined here are overridable by
-/// explicit CLI flags / webapp edits.
+/// with an optional/required selection seed and expected input/output ROM
+/// checks, optionally the ROM itself, and default output settings. Every
+/// entry's source is either a download URL or a path relative to the manifest
+/// (an archive member when the manifest ships inside an archive). The rom
+/// entry's `checks` describe the chain's input; `output.checks` describe the
+/// final output; a patch only carries its own `inputChecks`/`outputChecks`
+/// when they differ from those endpoints (mid-chain steps). Defaults defined
+/// here are overridable by explicit CLI flags / webapp edits.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
 pub struct RomWeaverManifest {
     pub version: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom: Option<ManifestRom>,
@@ -64,9 +61,11 @@ pub struct ManifestPatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub description: Option<String>,
-    /// Selection default: whether this patch starts (and must stay) selected.
-    #[serde(default)]
-    pub status: ManifestPatchStatus,
+    /// An optional patch starts deselected; omitted/false means the patch is
+    /// applied by default. Every patch remains toggleable.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub optional: bool,
     /// Free-form maturity/display label (for example `stable`, `beta`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -79,38 +78,29 @@ pub struct ManifestPatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub path: Option<String>,
-    /// Expected checksums/size of the ORIGINAL input ROM this patch was
-    /// authored against (feeds pre-apply input validation).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Expected checksums/size of the ROM state this patch applies to, ONLY
+    /// when it differs from `rom.checks` (a mid-chain step). Absent means the
+    /// patch relies on the rom's own checks.
+    #[serde(
+        default,
+        rename = "inputChecks",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub checks: Option<ManifestChecks>,
-    /// Checksums of the patch FILE itself, keyed by algorithm (verifies
-    /// downloaded patch bytes; distinct from `checks`).
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub integrity: BTreeMap<String, String>,
+    pub input_checks: Option<ManifestChecks>,
+    /// Expected checksums/size immediately after this patch is applied, ONLY
+    /// when it differs from the manifest's final `output.checks`.
+    #[serde(
+        default,
+        rename = "outputChecks",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output_checks: Option<ManifestChecks>,
     /// Per-patch header mode override (`auto` when omitted).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub header: Option<PatchApplyHeaderMode>,
-}
-
-/// Selection default for a manifest patch entry.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(rename_all = "kebab-case")]
-pub enum ManifestPatchStatus {
-    /// Always applied; cannot be deselected.
-    Required,
-    /// Applied unless explicitly deselected.
-    #[default]
-    Default,
-    /// Skipped unless explicitly selected.
-    Optional,
-    /// Skipped and never offered interactively; only explicit selection
-    /// (`--with` / a webapp toggle unlock) includes it.
-    Disabled,
 }
 
 /// Expected checksums (algorithm -> lowercase hex) and/or exact byte size.
@@ -141,35 +131,10 @@ pub struct ManifestOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub header: Option<PatchApplyOutputHeaderMode>,
+    /// Expected checksums/size of the final output once the full patch chain
+    /// (every patch, in manifest order) has been applied. A partial selection
+    /// validates against its last patch's `outputChecks` instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub compress: Option<ManifestCompress>,
-}
-
-/// `"compress": false` disables output compression; an object configures it.
-/// (`true` is rejected during validation — there is nothing to enable beyond
-/// the default.)
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(untagged)]
-pub enum ManifestCompress {
-    Disabled(bool),
-    Settings(ManifestCompressSettings),
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(deny_unknown_fields)]
-pub struct ManifestCompressSettings {
-    /// Compression container format (for example `zip`, `7z`, `chd`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub format: Option<String>,
-    /// Codec overrides, `codec[:level]` (same shape as `--compress-codec`).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub codecs: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub level: Option<CompressionLevelProfile>,
+    pub checks: Option<ManifestChecks>,
 }

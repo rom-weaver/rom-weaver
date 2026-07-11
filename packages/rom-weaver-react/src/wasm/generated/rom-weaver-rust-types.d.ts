@@ -286,8 +286,6 @@ export type PatchCreateCommand = { original: string, modified?: string, format?:
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create-candidates", "args": PatchCreateCandidatesCommand } | { "type": "create", "args": PatchCreateCommand };
 
-export type ManifestPatchStatus = "required" | "default" | "optional" | "disabled";
-
 export type ManifestChecks = { checksums?: { [key in string]: string },
 /**
  * Exact byte size. Emitted as a JSON `number` on the wasm wire, so
@@ -315,9 +313,10 @@ checks?: ManifestChecks, };
 
 export type ManifestPatchEntry = { name?: string, description?: string,
 /**
- * Selection default: whether this patch starts (and must stay) selected.
+ * An optional patch starts deselected; omitted/false means the patch is
+ * applied by default. Every patch remains toggleable.
  */
-status: ManifestPatchStatus,
+optional?: boolean,
 /**
  * Free-form maturity/display label (for example `stable`, `beta`).
  */
@@ -331,39 +330,34 @@ url?: string,
  */
 path?: string,
 /**
- * Expected checksums/size of the ORIGINAL input ROM this patch was
- * authored against (feeds pre-apply input validation).
+ * Expected checksums/size of the ROM state this patch applies to, ONLY
+ * when it differs from `rom.checks` (a mid-chain step). Absent means the
+ * patch relies on the rom's own checks.
  */
-checks?: ManifestChecks,
+inputChecks?: ManifestChecks,
 /**
- * Checksums of the patch FILE itself, keyed by algorithm (verifies
- * downloaded patch bytes; distinct from `checks`).
+ * Expected checksums/size immediately after this patch is applied, ONLY
+ * when it differs from the manifest's final `output.checks`.
  */
-integrity?: { [key in string]: string },
+outputChecks?: ManifestChecks,
 /**
  * Per-patch header mode override (`auto` when omitted).
  */
 header?: PatchApplyHeaderMode, };
 
-export type ManifestCompressSettings = {
-/**
- * Compression container format (for example `zip`, `7z`, `chd`).
- */
-format?: string,
-/**
- * Codec overrides, `codec[:level]` (same shape as `--compress-codec`).
- */
-codecs?: Array<string>, level?: CompressionLevelProfile, };
-
-export type ManifestCompress = boolean | ManifestCompressSettings;
-
 export type ManifestOutput = {
 /**
  * Default output file name.
  */
-name?: string, header?: PatchApplyOutputHeaderMode, compress?: ManifestCompress, };
+name?: string, header?: PatchApplyOutputHeaderMode,
+/**
+ * Expected checksums/size of the final output once the full patch chain
+ * (every patch, in manifest order) has been applied. A partial selection
+ * validates against its last patch's `outputChecks` instead.
+ */
+checks?: ManifestChecks, };
 
-export type RomWeaverManifest = { version: number, name?: string, description?: string, rom?: ManifestRom,
+export type RomWeaverManifest = { version: number, rom?: ManifestRom,
 /**
  * Ordered: array order is the apply order.
  */
@@ -405,7 +399,11 @@ warnings: Array<string>, };
 
 export type ManifestParseCommand = { source: string, extract_dir?: string, threads?: ThreadBudget, };
 
-export type ManifestCreateCommand = { rom?: string, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_label?: Array<string>, patch_status?: Array<ManifestPatchStatus>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_check?: Array<string>, name?: string, description?: string, output_name?: string, output_header?: PatchApplyOutputHeaderMode, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, output: string, bundle?: string, no_bundle_rom?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+export type ManifestCreateCommand = { rom?: string, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+/**
+ * Optional packaged ROM payload. Checks are still calculated from `rom`.
+ */
+bundle_rom?: string, no_bundle_rom?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
 export type ManifestCreateResult = { manifest_path: string, bundle_path?: string | null,
 /**

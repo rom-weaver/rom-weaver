@@ -24,13 +24,12 @@ fn manifest_parse_plain_json_resolves_refs_verbatim() {
         manifest.path(),
         r#"{
             "version": 1,
-            "name": "Example Pack",
             "rom": { "url": "https://example.test/roms/game.sfc" },
             "patches": [
-                { "path": "main.ips", "status": "required", "label": "stable" },
-                { "url": "patches/extra.bps", "status": "optional" }
+                { "path": "main.ips", "label": "stable" },
+                { "url": "patches/extra.bps", "optional": true }
             ],
-            "output": { "name": "out.sfc", "compress": false }
+            "output": { "name": "out.sfc" }
         }"#,
     )
     .expect("manifest fixture");
@@ -49,10 +48,17 @@ fn manifest_parse_plain_json_resolves_refs_verbatim() {
     let result = &terminal["details"]["manifest"];
     assert_eq!(result["source_kind"], "json");
     assert_eq!(result["manifest"]["version"], 1);
-    assert_eq!(result["manifest"]["name"], "Example Pack");
-    assert_eq!(result["manifest"]["patches"][0]["status"], "required");
+    assert!(
+        result["manifest"].get("name").is_none(),
+        "manifests carry no display name"
+    );
+    assert!(
+        result["manifest"]["patches"][0].get("optional").is_none(),
+        "non-optional patches omit the flag"
+    );
+    assert_eq!(result["manifest"]["patches"][1]["optional"], true);
     assert_eq!(result["manifest"]["patches"][0]["label"], "stable");
-    assert_eq!(result["manifest"]["output"]["compress"], false);
+    assert!(result["manifest"]["output"].get("compress").is_none());
     assert_eq!(
         result["rom_source"]["url"], "https://example.test/roms/game.sfc",
         "url refs pass through verbatim"
@@ -235,15 +241,22 @@ fn manifest_apply_plain_manifest_input_uses_output_name() {
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
-            "patches": [ { "path": "main.ips", "status": "required" } ],
-            "output": { "name": "out.bin", "compress": false }
+            "patches": [ { "path": "main.ips" } ],
+            "output": { "name": "out.bin" }
         }"#,
     )
     .expect("manifest fixture");
 
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     command.current_dir(temp.path());
-    command.args(["patch", "apply", "--input", "rw.json", "--json"]);
+    command.args([
+        "patch",
+        "apply",
+        "--input",
+        "rw.json",
+        "--no-compress",
+        "--json",
+    ]);
     let stdout = command.assert().code(0).get_output().stdout.clone();
     let terminal = parse_json_lines(&stdout).last().expect("terminal").clone();
     assert_eq!(terminal["status"], "succeeded");
@@ -262,7 +275,7 @@ fn manifest_apply_gzipped_manifest_with_cli_output() {
     let json = r#"{ "version": 1,
                     "rom": { "path": "game.bin" },
                     "patches": [ { "path": "main.ips" } ],
-                    "output": { "compress": false } }"#;
+                    "output": {} }"#;
     let file = File::create(manifest.path()).expect("create rw.json.gz");
     let mut encoder = GzEncoder::new(file, DeflateCompression::default());
     encoder.write_all(json.as_bytes()).expect("gzip manifest");
@@ -276,6 +289,7 @@ fn manifest_apply_gzipped_manifest_with_cli_output() {
             manifest.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -310,10 +324,10 @@ const EVERYTHING_MANIFEST: &str = r#"{
     "version": 1,
     "rom": { "path": "roms/game.bin" },
     "patches": [
-        { "path": "patches/main.ips",  "name": "Main hack", "status": "required" },
-        { "path": "patches/extra.ips", "name": "Extra",     "status": "optional" }
+        { "path": "patches/main.ips",  "name": "Main hack" },
+        { "path": "patches/extra.ips", "name": "Extra",     "optional": true }
     ],
-    "output": { "compress": false }
+    "output": {}
 }"#;
 
 #[test]
@@ -329,6 +343,7 @@ fn manifest_apply_everything_archive_skips_optional() {
             bundle.to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -356,6 +371,7 @@ fn manifest_apply_with_flag_includes_optional() {
             "Extra",
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -368,7 +384,7 @@ fn manifest_apply_with_flag_includes_optional() {
 }
 
 #[test]
-fn manifest_apply_without_required_errors() {
+fn manifest_apply_without_can_disable_default_patch() {
     let temp = setup_temp_dir();
     let bundle = write_everything_archive(&temp, EVERYTHING_MANIFEST);
 
@@ -379,21 +395,20 @@ fn manifest_apply_without_required_errors() {
             bundle.to_str().expect("path"),
             "--without",
             "Main*",
+            "--with",
+            "Extra",
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
-        1,
+        0,
     );
     let terminal = events.last().expect("terminal");
-    assert_eq!(terminal["status"], "failed");
-    assert!(
-        terminal["label"]
-            .as_str()
-            .expect("label")
-            .contains("manifest.status.required-excluded"),
-        "unexpected label: {}",
-        terminal["label"]
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("patched.bin").path()).expect("output exists"),
+        patched_rom_bytes(&[(1, 0xBB)])
     );
 }
 
@@ -408,7 +423,7 @@ fn manifest_apply_rom_checks_mismatch_fails() {
             "version": 1,
             "rom": { "path": "game.bin", "checks": { "checksums": { "crc32": "00000000" } } },
             "patches": [ { "path": "main.ips" } ],
-            "output": { "compress": false }
+            "output": {}
         }"#,
     )
     .expect("manifest fixture");
@@ -434,45 +449,6 @@ fn manifest_apply_rom_checks_mismatch_fails() {
 }
 
 #[test]
-fn manifest_apply_integrity_mismatch_fails() {
-    let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
-    write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    fs::write(
-        temp.child("rw.json").path(),
-        r#"{
-            "version": 1,
-            "rom": { "path": "game.bin" },
-            "patches": [ { "path": "main.ips", "integrity": { "crc32": "00000000" } } ],
-            "output": { "compress": false }
-        }"#,
-    )
-    .expect("manifest fixture");
-
-    let events = run_json_events(
-        &[
-            "patch-apply",
-            "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
-            "--output",
-            temp.child("patched.bin").path().to_str().expect("path"),
-            "--json",
-        ],
-        1,
-    );
-    let terminal = events.last().expect("terminal");
-    assert_eq!(terminal["status"], "failed");
-    assert!(
-        terminal["label"]
-            .as_str()
-            .expect("label")
-            .contains("manifest.integrity.mismatch"),
-        "unexpected label: {}",
-        terminal["label"]
-    );
-}
-
-#[test]
 fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
     let temp = setup_temp_dir();
     let rom = write_manifest_rom(&temp, "game.bin");
@@ -486,7 +462,7 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
             "version": 1,
             "rom": { "url": "https://example.test/never-fetched.bin" },
             "patches": [ { "path": "main.ips" } ],
-            "output": { "compress": false }
+            "output": {}
         }"#,
     )
     .expect("manifest fixture");
@@ -501,6 +477,7 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
             temp.child("rw.json").path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -523,7 +500,7 @@ fn manifest_apply_cli_output_overrides_manifest_name() {
             "version": 1,
             "rom": { "path": "game.bin" },
             "patches": [ { "path": "main.ips" } ],
-            "output": { "name": "manifest-named.bin", "compress": false }
+            "output": { "name": "manifest-named.bin" }
         }"#,
     )
     .expect("manifest fixture");
@@ -538,6 +515,7 @@ fn manifest_apply_cli_output_overrides_manifest_name() {
         "rw.json",
         "--output",
         "cli-named.bin",
+        "--no-compress",
         "--json",
     ]);
     command.assert().code(0);
@@ -559,7 +537,7 @@ fn manifest_apply_missing_output_fails_with_code() {
             "version": 1,
             "rom": { "path": "game.bin" },
             "patches": [ { "path": "main.ips" } ],
-            "output": { "compress": false }
+            "output": {}
         }"#,
     )
     .expect("manifest fixture");
@@ -586,7 +564,7 @@ fn manifest_apply_missing_output_fails_with_code() {
 }
 
 #[test]
-fn manifest_apply_manifest_compression_settings_apply() {
+fn manifest_parse_rejects_output_compression() {
     let temp = setup_temp_dir();
     write_manifest_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
@@ -601,16 +579,16 @@ fn manifest_apply_manifest_compression_settings_apply() {
     )
     .expect("manifest fixture");
 
-    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
-    command.current_dir(temp.path());
-    command.args(["patch", "apply", "--input", "rw.json", "--json"]);
-    command.assert().code(0);
-    let zipped = fs::read(temp.child("out.zip").path()).expect("zip output exists");
-    assert_eq!(
-        &zipped[..2],
-        b"PK",
-        "manifest compression must produce a zip"
+    let events = run_json_events(
+        &[
+            "manifest",
+            "parse",
+            temp.child("rw.json").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
     );
+    assert_eq!(events.last().expect("terminal")["status"], "failed");
 }
 
 /// One-shot threaded HTTP responder: serves `files` (matched by path suffix)
@@ -671,7 +649,7 @@ fn crc32_hex(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn manifest_apply_url_patch_downloads_and_verifies() {
+fn manifest_apply_url_patch_downloads_and_applies() {
     let temp = setup_temp_dir();
     write_manifest_rom(&temp, "game.bin");
     let patch_bytes = build_ips_patch(
@@ -681,7 +659,6 @@ fn manifest_apply_url_patch_downloads_and_verifies() {
         }],
         None,
     );
-    let integrity = crc32_hex(&patch_bytes);
     let base_url = serve_files(vec![("/main.ips", patch_bytes)], 1);
     fs::write(
         temp.child("rw.json").path(),
@@ -689,8 +666,8 @@ fn manifest_apply_url_patch_downloads_and_verifies() {
             r#"{{
                 "version": 1,
                 "rom": {{ "path": "game.bin" }},
-                "patches": [ {{ "url": "{base_url}/main.ips", "integrity": {{ "crc32": "{integrity}" }} }} ],
-                "output": {{ "compress": false }}
+                "patches": [ {{ "url": "{base_url}/main.ips" }} ],
+                "output": {{}}
             }}"#
         ),
     )
@@ -704,6 +681,7 @@ fn manifest_apply_url_patch_downloads_and_verifies() {
             temp.child("rw.json").path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -712,54 +690,6 @@ fn manifest_apply_url_patch_downloads_and_verifies() {
     assert_eq!(
         fs::read(output.path()).expect("output exists"),
         patched_rom_bytes(&[(0, 0xAA)])
-    );
-}
-
-#[test]
-fn manifest_apply_url_download_integrity_mismatch_fails() {
-    let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
-    let patch_bytes = build_ips_patch(
-        vec![TestIpsRecord::Literal {
-            offset: 0,
-            data: vec![0xAA],
-        }],
-        None,
-    );
-    let base_url = serve_files(vec![("/main.ips", patch_bytes)], 1);
-    fs::write(
-        temp.child("rw.json").path(),
-        format!(
-            r#"{{
-                "version": 1,
-                "rom": {{ "path": "game.bin" }},
-                "patches": [ {{ "url": "{base_url}/main.ips", "integrity": {{ "crc32": "00000000" }} }} ],
-                "output": {{ "compress": false }}
-            }}"#
-        ),
-    )
-    .expect("manifest fixture");
-
-    let events = run_json_events(
-        &[
-            "patch-apply",
-            "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
-            "--output",
-            temp.child("patched.bin").path().to_str().expect("path"),
-            "--json",
-        ],
-        1,
-    );
-    let terminal = events.last().expect("terminal");
-    assert_eq!(terminal["status"], "failed");
-    assert!(
-        terminal["label"]
-            .as_str()
-            .expect("label")
-            .contains("manifest.integrity.mismatch"),
-        "unexpected label: {}",
-        terminal["label"]
     );
 }
 
@@ -777,7 +707,7 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
     let manifest_json = br#"{
         "version": 1,
         "patches": [ { "url": "patches/main.ips" } ],
-        "output": { "compress": false }
+        "output": {}
     }"#
     .to_vec();
     let base_url = serve_files(
@@ -798,6 +728,7 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
             &format!("{base_url}/packs/rw.json"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -827,21 +758,18 @@ fn manifest_create_computes_checks_and_aligns_metadata() {
             main.to_str().expect("path"),
             "--patch-name",
             "Main hack",
-            "--patch-status",
-            "required",
+            "--patch-optional",
+            "false",
             "--patch-label",
             "stable",
             "--patch",
             extra.to_str().expect("path"),
-            "--patch-status",
-            "optional",
+            "--patch-optional",
+            "true",
             "--patch-description",
             "extra maps",
-            "--name",
-            "Example Pack",
             "--output-name",
             "patched.bin",
-            "--no-compress",
             "--output",
             manifest_out.path().to_str().expect("path"),
             "--json",
@@ -869,7 +797,7 @@ fn manifest_create_computes_checks_and_aligns_metadata() {
         0,
     );
     let parsed = &events.last().expect("terminal")["details"]["manifest"]["manifest"];
-    assert_eq!(parsed["name"], "Example Pack");
+    assert!(parsed.get("name").is_none(), "manifests carry no name");
     assert_eq!(parsed["rom"]["path"], "game.bin");
     assert_eq!(
         parsed["rom"]["checks"]["checksums"]["crc32"],
@@ -881,19 +809,22 @@ fn manifest_create_computes_checks_and_aligns_metadata() {
     );
     let first = &parsed["patches"][0];
     assert_eq!(first["name"], "Main hack");
-    assert_eq!(first["status"], "required");
+    assert!(
+        first.get("optional").is_none(),
+        "explicit --patch-optional false emits nothing"
+    );
     assert_eq!(first["label"], "stable");
     assert!(first["description"].is_null());
-    assert_eq!(
-        first["integrity"]["crc32"],
-        crc32_hex(&fs::read(&main).expect("main bytes")).as_str()
+    assert!(
+        first.get("integrity").is_none(),
+        "patch entries carry no file hashes"
     );
     let second = &parsed["patches"][1];
-    assert_eq!(second["status"], "optional");
+    assert_eq!(second["optional"], true);
     assert_eq!(second["description"], "extra maps");
     assert!(second["name"].is_null());
     assert_eq!(parsed["output"]["name"], "patched.bin");
-    assert_eq!(parsed["output"]["compress"], false);
+    assert!(parsed["output"].get("compress").is_none());
 }
 
 #[test]
@@ -944,7 +875,6 @@ fn manifest_create_bundle_roundtrips_through_apply() {
             rom.to_str().expect("path"),
             "--patch",
             main.to_str().expect("path"),
-            "--no-compress",
             "--output",
             manifest_out.path().to_str().expect("path"),
             "--bundle",
@@ -970,6 +900,7 @@ fn manifest_create_bundle_roundtrips_through_apply() {
             bundle.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -994,9 +925,8 @@ fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
             "create",
             "--patch",
             main.to_str().expect("path"),
-            "--patch-check",
+            "--patch-input-check",
             "crc32=00000000",
-            "--no-compress",
             "--output",
             manifest_out.path().to_str().expect("path"),
             "--json",
@@ -1013,7 +943,7 @@ fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
         0,
     );
     let entry = &events.last().expect("terminal")["details"]["manifest"]["manifest"]["patches"][0];
-    assert_eq!(entry["checks"]["checksums"]["crc32"], "00000000");
+    assert_eq!(entry["inputChecks"]["checksums"]["crc32"], "00000000");
 
     // The deliberately wrong expected checksum must fail the apply.
     let events = run_json_events(
@@ -1055,7 +985,6 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
             "--no-bundle-rom",
             "--patch",
             main.to_str().expect("path"),
-            "--no-compress",
             "--output",
             manifest_out.path().to_str().expect("path"),
             "--bundle",
@@ -1096,6 +1025,7 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
             bundle.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ],
         0,
@@ -1125,10 +1055,185 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
         label.contains("provides no source"),
         "expected sourceless-rom guidance in label: {label}"
     );
+    // The user must be told WHICH ROM to supply: the entry's checks surface
+    // as expected_* fields in the failure.
+    let expected_crc = crc32_hex(MANIFEST_ROM_BYTES);
+    assert!(
+        label.contains("expected_checksums") && label.contains(&expected_crc),
+        "expected rom expectation details in label: {label}"
+    );
+    assert!(
+        label.contains("expected_size"),
+        "expected rom size expectation in label: {label}"
+    );
 }
 
 #[test]
-fn manifest_create_source_url_emits_url_entry_with_integrity() {
+fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
+    let temp = setup_temp_dir();
+    let rom = write_manifest_rom(&temp, "game.bin");
+    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let extra = write_offset_ips(&temp, "extra.ips", 1, 0xBB);
+    let manifest_out = temp.child("rw.json");
+    let rom_crc = crc32_hex(MANIFEST_ROM_BYTES);
+    let mid_crc = crc32_hex(&patched_rom_bytes(&[(0, 0xAA)]));
+    let final_crc = crc32_hex(&patched_rom_bytes(&[(0, 0xAA), (1, 0xBB)]));
+
+    run_json_events(
+        &[
+            "manifest",
+            "create",
+            "--rom",
+            rom.to_str().expect("path"),
+            "--patch",
+            main.to_str().expect("path"),
+            "--patch-input-check",
+            &format!("crc32={rom_crc}"),
+            "--patch-output-check",
+            &format!("crc32={mid_crc}"),
+            "--patch",
+            extra.to_str().expect("path"),
+            "--patch-input-check",
+            &format!("crc32={mid_crc}"),
+            "--patch-output-check",
+            &format!("crc32={final_crc}"),
+            "--output-check",
+            &format!("crc32={final_crc}"),
+            "--output",
+            manifest_out.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let events = run_json_events(
+        &[
+            "manifest",
+            "parse",
+            manifest_out.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let parsed = &events.last().expect("terminal")["details"]["manifest"]["manifest"];
+    // Endpoint checks live on rom/output; only mid-chain states stay on the
+    // patches (first input == rom.checks, last output == output.checks).
+    assert_eq!(parsed["output"]["checks"]["checksums"]["crc32"], final_crc);
+    let first = &parsed["patches"][0];
+    assert!(
+        first.get("inputChecks").is_none(),
+        "first patch relies on rom.checks: {first}"
+    );
+    assert_eq!(first["outputChecks"]["checksums"]["crc32"], mid_crc);
+    let second = &parsed["patches"][1];
+    assert_eq!(second["inputChecks"]["checksums"]["crc32"], mid_crc);
+    assert!(
+        second.get("outputChecks").is_none(),
+        "last patch's output is output.checks: {second}"
+    );
+
+    // Applying the full chain validates the final output against
+    // output.checks and succeeds.
+    let output = temp.child("patched.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rw.json").path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output exists"),
+        patched_rom_bytes(&[(0, 0xAA), (1, 0xBB)])
+    );
+
+    // A partial selection validates against ITS last patch's outputChecks...
+    let partial_manifest = fs::read_to_string(manifest_out.path())
+        .expect("manifest readable")
+        .replace(
+            &format!("\"crc32\": \"{mid_crc}\""),
+            "\"crc32\": \"00000000\"",
+        );
+    // ...so corrupting the first patch's recorded outputChecks fails a
+    // main-only apply with the recorded (wrong) expectation.
+    fs::write(temp.child("rw.json").path(), partial_manifest).expect("manifest rewrite");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rw.json").path().to_str().expect("path"),
+            "--without",
+            "extra*",
+            "--output",
+            temp.child("partial.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains("00000000"),
+        "expected output checksum mismatch in label: {label}"
+    );
+}
+
+#[test]
+fn manifest_apply_partial_chain_skips_full_chain_output_checks() {
+    // output.checks records the FULL chain's result. A partial selection that
+    // happens to end on the final entry (earlier patches skipped) produces a
+    // different, legitimate output and must not be gated by it.
+    let temp = setup_temp_dir();
+    write_manifest_rom(&temp, "game.bin");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    write_offset_ips(&temp, "extra.ips", 1, 0xBB);
+    fs::write(
+        temp.child("rw.json").path(),
+        r#"{
+            "version": 1,
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "name": "main", "path": "main.ips" },
+                { "name": "extra", "optional": true, "path": "extra.ips" }
+            ],
+            "output": { "checks": { "checksums": { "crc32": "00000000" } } }
+        }"#,
+    )
+    .expect("manifest fixture");
+    let output = temp.child("partial.bin");
+
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rw.json").path().to_str().expect("path"),
+            "--with",
+            "extra",
+            "--without",
+            "main",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output exists"),
+        patched_rom_bytes(&[(1, 0xBB)])
+    );
+}
+
+#[test]
+fn manifest_create_source_url_emits_url_entry() {
     let temp = setup_temp_dir();
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
     let manifest_out = temp.child("rw.json");
@@ -1159,8 +1264,4 @@ fn manifest_create_source_url_emits_url_entry_with_integrity() {
     let entry = &events.last().expect("terminal")["details"]["manifest"]["manifest"]["patches"][0];
     assert_eq!(entry["url"], "https://example.test/patches/main.ips");
     assert!(entry["path"].is_null());
-    assert_eq!(
-        entry["integrity"]["crc32"],
-        crc32_hex(&fs::read(&main).expect("main bytes")).as_str()
-    );
 }

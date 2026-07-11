@@ -128,23 +128,23 @@ impl CliApp {
         }
         let mut warnings = Vec::new();
 
+        if args.bundle_rom.is_some() && args.rom.is_none() {
+            return Err(RomWeaverError::Validation(
+                "--bundle-rom requires --rom so checks describe the logical ROM bytes".to_string(),
+            ));
+        }
+
         if args.no_bundle_rom && args.rom.is_none() {
             warnings.push("--no-bundle-rom ignored: no local --rom given".to_string());
         }
-        // Overall hash-progress denominator: the rom (when hashed locally)
-        // plus every patch file.
-        let mut total_hash_bytes: u64 = args
+        // Overall hash-progress denominator: only the rom is hashed (when
+        // given locally) — patch files carry no checksums in the manifest.
+        let total_hash_bytes: u64 = args
             .rom
             .as_deref()
             .filter(|path| path.is_file())
             .map(|path| fs::metadata(path).map(|meta| meta.len()).unwrap_or(0))
             .unwrap_or(0);
-        for spec in &specs {
-            if spec.path.is_file() {
-                total_hash_bytes = total_hash_bytes
-                    .saturating_add(fs::metadata(&spec.path).map(|meta| meta.len()).unwrap_or(0));
-            }
-        }
         let mut hashed_bytes: u64 = 0;
 
         let rom = match (&args.rom, &args.rom_url) {
@@ -169,12 +169,24 @@ impl CliApp {
                     total_hash_bytes,
                 )?;
                 let size = fs::metadata(path)?.len();
-                let base_name = required_base_name(path, "rom")?;
+                let bundle_source = args.bundle_rom.as_deref().unwrap_or(path);
+                if !bundle_source.is_file() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "bundle rom path does not exist: `{}`",
+                        bundle_source.display()
+                    )));
+                }
+                let base_name = required_base_name(bundle_source, "rom")?;
                 // A no-bundle-rom entry keeps its checks but carries no
-                // source: the applying user supplies the ROM themselves.
+                // source: the applying user supplies the ROM themselves. A
+                // sourceless entry always gets a name (the local file's base
+                // name) so consumers can tell the user WHICH ROM to supply.
                 let distribute_path = url_override.is_none() && !args.no_bundle_rom;
+                let sourceless_name = (url_override.is_none() && !distribute_path)
+                    .then(|| required_base_name(path, "rom"))
+                    .transpose()?;
                 Some(ManifestRom {
-                    name: args.rom_name.clone(),
+                    name: args.rom_name.clone().or(sourceless_name),
                     url: url_override.clone(),
                     path: distribute_path.then_some(base_name),
                     checks: Some(ManifestChecks {
@@ -191,6 +203,8 @@ impl CliApp {
             }),
         };
 
+        let output_checks = manifest_entry_checks(&args.output_check, "--output-check")?;
+
         let mut patches = Vec::with_capacity(specs.len());
         for spec in &specs {
             if !spec.path.is_file() {
@@ -199,23 +213,29 @@ impl CliApp {
                     spec.path.display()
                 )));
             }
-            let integrity = self.manifest_checksum_with_progress(
-                &spec.path,
-                &algorithms,
-                context,
-                &mut hashed_bytes,
-                total_hash_bytes,
-            )?;
             let base_name = required_base_name(&spec.path, "patch")?;
+            // Patches rely on the manifest's endpoint checks unless they
+            // differ: an inputChecks equal to rom.checks (the chain start) or
+            // an outputChecks equal to output.checks (the chain end) is
+            // implied and stays out of the entry.
+            let entry_input_checks =
+                manifest_entry_checks(&spec.input_checks, "--patch-input-check")?.filter(
+                    |checks| {
+                        !checks_implied_by(checks, rom.as_ref().and_then(|rom| rom.checks.as_ref()))
+                    },
+                );
+            let entry_output_checks =
+                manifest_entry_checks(&spec.output_checks, "--patch-output-check")?
+                    .filter(|checks| !checks_implied_by(checks, output_checks.as_ref()));
             patches.push(ManifestPatchEntry {
                 name: spec.name.clone(),
                 description: spec.description.clone(),
-                status: spec.status.unwrap_or_default(),
+                optional: spec.optional.unwrap_or(false),
                 label: spec.label.clone(),
                 url: spec.source_url.clone(),
                 path: spec.source_url.is_none().then_some(base_name),
-                checks: manifest_entry_checks(&spec.checks)?,
-                integrity,
+                input_checks: entry_input_checks,
+                output_checks: entry_output_checks,
                 header: spec.header,
             });
         }
@@ -235,32 +255,16 @@ impl CliApp {
             }
         }
 
-        let compress = if args.no_compress {
-            Some(ManifestCompress::Disabled(false))
-        } else if args.compress_format.is_some()
-            || !args.compress_codec.is_empty()
-            || args.compress_level.is_some()
-        {
-            Some(ManifestCompress::Settings(ManifestCompressSettings {
-                format: args.compress_format.clone(),
-                codecs: args.compress_codec.clone(),
-                level: args.compress_level,
-            }))
-        } else {
-            None
-        };
         let output =
-            (args.output_name.is_some() || args.output_header.is_some() || compress.is_some())
+            (args.output_name.is_some() || args.output_header.is_some() || output_checks.is_some())
                 .then(|| ManifestOutput {
                     name: args.output_name.clone(),
                     header: args.output_header,
-                    compress,
+                    checks: output_checks,
                 });
 
         let manifest = RomWeaverManifest {
             version: MANIFEST_VERSION,
-            name: args.name.clone(),
-            description: args.description.clone(),
             rom,
             patches,
             output,
@@ -290,8 +294,9 @@ impl CliApp {
                 self.create_manifest_bundle(
                     bundle,
                     &bytes,
-                    args.rom
+                    args.bundle_rom
                         .as_deref()
+                        .or(args.rom.as_deref())
                         .filter(|_| args.rom_url.is_none() && !args.no_bundle_rom),
                     &specs,
                     context,
@@ -451,10 +456,11 @@ fn manifest_create_patch_specs(
     let names = aligned_metadata(&args.patch_name, count, "--patch-name")?;
     let descriptions = aligned_metadata(&args.patch_description, count, "--patch-description")?;
     let labels = aligned_metadata(&args.patch_label, count, "--patch-label")?;
-    let statuses = aligned_metadata(&args.patch_status, count, "--patch-status")?;
+    let optionals = aligned_metadata(&args.patch_optional, count, "--patch-optional")?;
     let source_urls = aligned_metadata(&args.patch_source_url, count, "--patch-source-url")?;
     let headers = aligned_metadata(&args.patch_header, count, "--patch-header")?;
-    let checks = aligned_metadata(&args.patch_check, count, "--patch-check")?;
+    let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-input-check")?;
+    let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-output-check")?;
     Ok(args
         .patch
         .iter()
@@ -464,10 +470,14 @@ fn manifest_create_patch_specs(
             name: names[index].clone(),
             description: descriptions[index].clone(),
             label: labels[index].clone(),
-            status: statuses[index],
+            optional: optionals[index],
             source_url: source_urls[index].clone(),
             header: headers[index],
-            checks: checks[index]
+            input_checks: input_checks[index]
+                .clone()
+                .map(|value| vec![value])
+                .unwrap_or_default(),
+            output_checks: output_checks[index]
                 .clone()
                 .map(|value| vec![value])
                 .unwrap_or_default(),
@@ -475,9 +485,9 @@ fn manifest_create_patch_specs(
         .collect())
 }
 
-/// Parse per-patch `--patch-check` tokens (`algo=hex`, comma-separable) into
-/// the entry's emitted `checks`.
-fn manifest_entry_checks(values: &[String]) -> Result<Option<ManifestChecks>> {
+/// Parse check-flag tokens (`algo=hex`, comma-separable) into an emitted
+/// checks value.
+fn manifest_entry_checks(values: &[String], flag: &str) -> Result<Option<ManifestChecks>> {
     let tokens: Vec<String> = values
         .iter()
         .flat_map(|value| value.split(','))
@@ -488,11 +498,34 @@ fn manifest_entry_checks(values: &[String]) -> Result<Option<ManifestChecks>> {
     if tokens.is_empty() {
         return Ok(None);
     }
-    let checksums = CliApp::parse_patch_apply_checksum_values(&tokens, "--patch-check")?;
+    let checksums = CliApp::parse_patch_apply_checksum_values(&tokens, flag)?;
     Ok(Some(ManifestChecks {
         checksums,
         size: None,
     }))
+}
+
+/// Whether `checks` adds nothing over `baseline`: every checksum it pins has
+/// the same value in the baseline (and its size, when set, matches). Such an
+/// entry is implied and gets omitted from the manifest.
+fn checks_implied_by(checks: &ManifestChecks, baseline: Option<&ManifestChecks>) -> bool {
+    let Some(baseline) = baseline else {
+        return false;
+    };
+    if checks.checksums.is_empty() && checks.size.is_none() {
+        return true;
+    }
+    let checksums_covered = checks.checksums.iter().all(|(algorithm, value)| {
+        baseline
+            .checksums
+            .get(algorithm)
+            .is_some_and(|expected| expected.eq_ignore_ascii_case(value))
+    });
+    let size_covered = match checks.size {
+        Some(size) => baseline.size == Some(size),
+        None => true,
+    };
+    checksums_covered && size_covered
 }
 
 fn aligned_metadata<T: Clone>(values: &[T], count: usize, flag: &str) -> Result<Vec<Option<T>>> {
