@@ -14,9 +14,14 @@
   --thread-ink: #1c1206;        /* text on a thread-colored surface */
   --font: "Archivo", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
   --ctl: 40px;
-  --ctrl-h: 30px;               /* row-button size (handle / remove / progress cancel) - bigger on desktop, scaled down for narrow + up for touch below */
-  --badge-fs: 0.72rem;          /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
-  --pad: 20px;                  /* section gutter */
+  /* fluid rhythm tokens: one continuous scale from phone to desktop instead of
+     discrete breakpoint jumps. Each clamp hits its old mobile value at ≤560px
+     and its old desktop value by ~840-880px. */
+  --ctrl-h: clamp(24px, 12px + 2.15vw, 30px); /* row-button size (handle / remove / progress cancel) - 24px floor is the WCAG 2.5.8 target minimum */
+  --badge-fs: clamp(0.7rem, 0.684rem + 0.1vw, 0.72rem); /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
+  --pad: clamp(12px, 2.5vw - 2px, 20px); /* section gutter */
+  --step-pt: clamp(10px, 2vw - 1px, 16px);   /* step-head top padding */
+  --step-pb: clamp(14px, 3.2vw - 4px, 24px); /* step-body bottom padding */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
   --ease: cubic-bezier(.2, .85, .3, 1);
   /* the one dropdown chevron, shared by selects, combo inputs and the inline target select */
@@ -164,7 +169,7 @@
 }
 
 /* ═══ masthead ═══ */
-.rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: 12px 10px; flex-wrap: wrap; }
+.rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; transition: transform .45s var(--ease); }
 .rw-app .brand:hover .brand-mark { transform: rotate(-6deg) scale(1.06); }
@@ -344,7 +349,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* ═══ workbench grid ═══ */
 /* align-content:start so the form panel hugs its content instead of stretching
    to fill the viewport (which left a tall empty container below short forms) */
-.rw-app .workbench { position: relative; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding-block-end: 16px; }
+.rw-app .workbench { position: relative; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding-block-end: clamp(8px, 2.9vw - 8px, 16px); }
 
 /* ═══ panel + loom rail ═══ */
 /* the page IS the form on every size (the mobile flattening promoted to base):
@@ -361,7 +366,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .step:first-child { border-block-start: 0; }
 /* a touch more air above each section so straddling controls (the create-mode
    swap hinge) have room to breathe */
-.rw-app .step-head { display: flex; align-items: baseline; gap: 10px; padding: 16px var(--pad) 2px; position: relative; }
+.rw-app .step-head { display: flex; align-items: baseline; gap: 10px; padding: var(--step-pt) var(--pad) 2px; position: relative; }
 .rw-app .step-num { font-size: .9rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
 .rw-app .step.is-woven .step-num { color: var(--thread-text); }
 .rw-app .step.is-fault .step-num { color: var(--fault); }
@@ -382,7 +387,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* 24px bottom (vs the prototype's 18px) so the seam rule between sections sits
    visually centred: below the rule the next head contributes ~24px to its
    heading's cap height (16px padding + line-box lead). */
-.rw-app .step-body { padding: 6px var(--pad) 24px; }
+.rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
 
 /* ═══ dropzone ═══ */
 .rw-app .drop {
@@ -509,10 +514,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .drop:not(.hero) .hint.fine { display: block; }
 .rw-app .drop .hint.coarse { display: none; }
 @media (pointer: coarse) {
-  /* bumping the one variable grows the badges + buttons together (they all read
-     --ctrl-h) so a card row stays uniform on touch. 30px (not the old 36px) -
-     the bigger boxes crowded the card text on phones; ≤560px trims further */
-  :root { --ctrl-h: 30px; }
+  /* touch sizing rides the same fluid --ctrl-h as everyone else: 24px (the
+     WCAG floor) on phones, growing to 30px on tablets - no discrete jump */
   /* the :not(.hero) selector below outranks a plain .drop .hint.fine - match
      its specificity so touch devices show ONLY the tap hint, never both lines */
   .rw-app .drop .hint.fine, .rw-app .drop:not(.hero) .hint.fine { display: none; }
@@ -667,7 +670,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   color: var(--ink-3); cursor: grab; touch-action: none;
   transition: color .15s, border-color .15s;
 }
-.rw-app .handle svg { width: 18px; height: 18px; }
+.rw-app .handle svg { width: calc(var(--ctrl-h) * .6); height: calc(var(--ctrl-h) * .6); }
 .rw-app .handle:hover:not(:disabled), .rw-app .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
 /* press feedback so the handle reads as live on touch (no hover on mobile) - mirrors
    the remove button's tactility, same box/size via --ctrl-h */
@@ -711,7 +714,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .rm:hover, .rw-app .rm:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
 /* icon buttons: drop the UA <button> padding so glyphs center exactly */
 .rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
-.rw-app .rm svg { width: 14px; height: 14px; }
+.rw-app .rm svg { width: calc(var(--ctrl-h) * .47); height: calc(var(--ctrl-h) * .47); }
 /* the on/off switch leads the sub-heading line - the shared switch primitive scaled
    down to the meta text (via the --sw-* vars), with a state word beside it. the two
    words share one grid cell so the row never shifts width when toggled */
@@ -1694,16 +1697,9 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
   .rw-app .selvage { max-width: none; width: 100%; border-radius: 0; }
   /* keep the form container (just inset from the screen); cards run to its
      inner edge, and the 0x* headers keep a gutter that lines up with card text */
-  /* shrink the row controls on a phone so the badges + buttons don't crowd the
-     name/description out of its column (this overrides the coarse 36px) */
-  /* badges read daintier on a phone: smaller text + tighter padding so the
-     size/type/system pills hug their text and don't crowd the name column */
-  /* row controls (handle / remove / cancel) drop to 24px - the WCAG 2.5.8
-     floor - so they stop crowding the name and progress readouts */
-  :root { --pad: 12px; --ctrl-h: 24px; --badge-fs: 0.7rem; }
+  /* row controls, badges and section gutters now ride the fluid :root tokens -
+     they've already eased down to their phone sizes by this width */
   :root:has(.rw-app) { scrollbar-gutter: auto; }
-  .rw-app .handle svg { width: 14px; height: 14px; }
-  .rw-app .rm svg, .rw-app .cancel svg { width: 12px; height: 12px; }
   .rw-app .step-meta .rb, .rw-app .ckgrp .tsz, .rw-app .cks > .cks-head .rb { padding: 1px 6px; }
   /* mobile leans harder into Archivo's width axis - the whole UI condenses and
      the hash rows tighten further so long checksums pack onto one line */
@@ -1717,14 +1713,9 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
   .rw-app .prog .sub { font-size: .76rem; }
   .rw-app .step-body { padding-inline: 0; }
   /* every section's content shares ONE left/right inset (6px) so the 0x* headers,
-     cards, drop zones and notices all line up on the same vertical edge */
+     cards, drop zones and notices all line up on the same vertical edge.
+     (the vertical rhythm eases down via the fluid --step-pt/--step-pb tokens) */
   .rw-app .step-head { padding-inline: 6px; }
-  /* phones scroll: shave the vertical rhythm (section head/body padding, masthead,
-     workbench tail) so the whole workflow needs less page height */
-  .rw-app .step-head { padding-block: 10px 2px; }
-  .rw-app .step-body { padding-block: 4px 14px; }
-  .rw-app .masthead { padding-block: 8px 6px; }
-  .rw-app .workbench { padding-block-end: 8px; }
   .rw-app .step.is-input .drop:not(.hero) { padding-block: 9px; }
   /* cards stay framed on all four sides (the verified/fault border must read as
      a full outline, not just top+bottom) - inset slightly from the container and
