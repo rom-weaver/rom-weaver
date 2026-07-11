@@ -5,8 +5,8 @@ footer to the trimmed ROM so that a later `rom-weaver trim --revert` can reconst
 original file **byte-for-byte**, regardless of whether the original padding was `0x00` or
 `0xFF`. The footer is **opt-in**: a plain `trim` produces a clean truncation with no footer.
 
-The trimmed file is `[trimmed ROM data][footer]`. The footer sits where padding used to be —
-past the ROM header's used-size — so emulators and flashcarts that read up to the used-size
+The trimmed file is `[trimmed ROM data][footer]`. The footer sits where padding used to be -
+past the ROM header's used-size - so emulators and flashcarts that read up to the used-size
 ignore it, and playability is unaffected.
 
 ## Layout (14 bytes, appended at end of file)

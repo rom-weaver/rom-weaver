@@ -21,7 +21,7 @@ import { asRecord, getTerminalEvent } from "./run-result-parsing.ts";
 // Below this source size a patch apply/validate is forced onto the runner's
 // no-pool, single-threaded path. In the browser the wasm engine reads the
 // source on the main thread and applies serially for inputs under the in-memory
-// apply cap, so a worker thread pool is never used — yet the runner otherwise
+// apply cap, so a worker thread pool is never used - yet the runner otherwise
 // pre-allocates and tears down a full pool command per run (measured at ~50 ms
 // of pure setup/teardown for a tiny IPS). Gating well under the 256 MiB
 // in-memory cap keeps this provably serial (and therefore byte-identical) for

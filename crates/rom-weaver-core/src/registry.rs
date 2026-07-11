@@ -186,7 +186,7 @@ pub struct ContainerExtractRequest {
     pub overwrite: bool,
     /// Parent CHD for a differential (parented) CHD source. Only meaningful to the CHD handler,
     /// which fails if the source declares a parent linkage and this is `None`. Top-level and
-    /// nested non-parented sources leave this `None`. Do NOT use this to flag run-local provenance —
+    /// nested non-parented sources leave this `None`. Do NOT use this to flag run-local provenance -
     /// that is `containing_archive` (conflating the two made nested CHDs try to open their
     /// containing archive as a parent CHD).
     pub parent: Option<PathBuf>,
@@ -245,7 +245,7 @@ pub enum CreateInputSource {
 /// Redirect one resolved create input to alternate bytes without restaging the
 /// rest. Disc-image create handlers (CHD) use this to read every untouched
 /// track in place from the original disc while sourcing only the freshly
-/// produced track from a temp file or memory — avoiding a whole-disc scratch
+/// produced track from a temp file or memory - avoiding a whole-disc scratch
 /// copy. `original_path` matches the on-disk path the handler would otherwise
 /// open for that input (e.g. a track resolved relative to the disc sheet).
 #[derive(Clone)]
@@ -313,8 +313,8 @@ pub enum CreateSupport {
 /// Static, per-handler metadata folded into the single container wrapper.
 ///
 /// Containers register through exactly ONE wrapper (matching patches/codecs):
-/// keeping capabilities + the create gate as data here — rather than in a second
-/// hand-forwarding wrapper — is what prevents a newly added
+/// keeping capabilities + the create gate as data here - rather than in a second
+/// hand-forwarding wrapper - is what prevents a newly added
 /// `ContainerHandlerOperations` method from silently resolving to its trait
 /// default in a layer someone forgot to update.
 pub struct ContainerHandlerRegistration {
@@ -738,7 +738,7 @@ impl PatchHandler for TracingPatchHandler {
 
     fn probe(&self, patch_path: &Path) -> ProbeConfidence {
         let descriptor = self.inner.descriptor();
-        // No "start" line: see TracingContainerHandler::probe — fast, per-handler, high-frequency.
+        // No "start" line: see TracingContainerHandler::probe - fast, per-handler, high-frequency.
         let confidence = self.inner.probe(patch_path);
         trace!(
             family = ?descriptor.family,

@@ -21,7 +21,7 @@ const normalizeDiscImageExtension = (extension: string | null | undefined): stri
 const isAmbiguousDiscImageExtension = (extension: string | null | undefined): boolean =>
   AMBIGUOUS_DISC_IMAGE_EXTENSIONS.includes(normalizeDiscImageExtension(extension));
 
-/** Whether `size` is a whole number of CD/DVD logical sectors (or unknown — then assume disc). */
+/** Whether `size` is a whole number of CD/DVD logical sectors (or unknown - then assume disc). */
 const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
   if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return true;
   return CD_SECTOR_SIZES.some((sectorSize) => size % sectorSize === 0);

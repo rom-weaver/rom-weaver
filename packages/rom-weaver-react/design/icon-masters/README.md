@@ -2,7 +2,7 @@
 
 Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wraps the inner
 content of `../../src/assets/app/root/logo.svg` in an opaque `#31343a` background rect plus a
-scale/offset transform — regenerate them from `logo.svg` if the logo changes.
+scale/offset transform - regenerate them from `logo.svg` if the logo changes.
 
 ## Geometry
 

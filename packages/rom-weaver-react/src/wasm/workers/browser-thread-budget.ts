@@ -2,7 +2,7 @@ import type { RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 
 // Floor for the implicit default browser worker-thread count. The UI advertises that "auto" resolves
 // to the browser-reported core count (settings.threadsHint / getDefaultThreadCount in
-// compression-options.ts), so the engine scales `navigator.hardwareConcurrency` up from this floor —
+// compression-options.ts), so the engine scales `navigator.hardwareConcurrency` up from this floor -
 // it is NOT a cap.
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 

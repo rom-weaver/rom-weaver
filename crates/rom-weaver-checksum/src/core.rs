@@ -69,7 +69,7 @@ pub struct ChecksumValues {
 }
 
 /// How much wall time a [`StreamingChecksum`] spent hashing, and whether it ran on its own worker
-/// threads. `hash_busy_ns` is the max across workers — their parallel hashing wall — so a caller can
+/// threads. `hash_busy_ns` is the max across workers - their parallel hashing wall - so a caller can
 /// report how much of the checksum cost overlapped a concurrent producer (extraction) versus ran on
 /// its own. It is zero for the synchronous fan-out, where hashing happens inline on the caller's
 /// thread and is captured by that caller's own feed timing instead.

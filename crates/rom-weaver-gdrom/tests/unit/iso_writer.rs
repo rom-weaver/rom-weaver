@@ -1,5 +1,5 @@
 //! Round-trip tests for the ISO9660 writer: author an image, read it back with
-//! [`GdRomFs`], and confirm the file tree and bytes survive — including through
+//! [`GdRomFs`], and confirm the file tree and bytes survive - including through
 //! raw `MODE1/2352` re-encoding (the real rebuilt-track path).
 
 use std::io::Cursor;

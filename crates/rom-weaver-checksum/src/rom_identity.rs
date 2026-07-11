@@ -5,11 +5,11 @@
 //! hash→name database and never names the exact title. It answers only "what
 //! console is this, and what optical medium" from on-disc signatures
 //! ([`crate::platform_detection`]) and cartridge header magics
-//! ([`crate::rom_headers`]). Wrong guesses are impossible by construction —
+//! ([`crate::rom_headers`]). Wrong guesses are impossible by construction -
 //! every signature is specific, and an unknown input yields `None`.
 //!
 //! The caller reads at most [`DETECT_PREFIX_BYTES`] from the start of the file
-//! (on the wasm main thread — see "Read-on-main" in `docs/ARCHITECTURE.md`) and
+//! (on the wasm main thread - see "Read-on-main" in `docs/ARCHITECTURE.md`) and
 //! hands the slice to [`detect_rom_identity`]. Detection runs over that buffer
 //! with no further I/O, so it adds no extra OPFS handles and cannot alter any
 //! output bytes.
@@ -107,7 +107,7 @@ impl DiscSectorSource for PrefixDisc<'_> {
     fn read_sectors(&self, lba: u64, count: u32) -> io::Result<Vec<u8>> {
         // `count` derives from an untrusted ISO9660 directory/extent length, so cap the
         // reservation at the prefix we can actually return (the loop below stops at its end)
-        // instead of trusting `count` — a bogus length must not force a multi-GiB allocation.
+        // instead of trusting `count` - a bogus length must not force a multi-GiB allocation.
         let capacity = (count as usize)
             .saturating_mul(USER_SECTOR_BYTES)
             .min(self.bytes.len());
@@ -158,8 +158,8 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
 /// A streaming sink that captures the first ≤[`DETECT_PREFIX_BYTES`] of a byte
 /// stream for identity detection, independent of any checksum being computed over
 /// the same bytes. Feed it alongside a [`crate::StreamingChecksum`] /
-/// [`crate::StreamingVariantChecksums`] — each consumer is fed separately, none
-/// embeds another — then call [`detect`](Self::detect) once the stream ends.
+/// [`crate::StreamingVariantChecksums`] - each consumer is fed separately, none
+/// embeds another - then call [`detect`](Self::detect) once the stream ends.
 #[derive(Clone, Debug, Default)]
 pub struct IdentityPrefix {
     buf: Vec<u8>,
@@ -195,7 +195,7 @@ impl IdentityPrefix {
         detect_rom_identity(&self.buf, total_len, extension)
     }
 
-    /// Whether the bounded prefix has filled to [`DETECT_PREFIX_BYTES`] — i.e. enough bytes have
+    /// Whether the bounded prefix has filled to [`DETECT_PREFIX_BYTES`] - i.e. enough bytes have
     /// streamed through to detect every disc/cartridge signature without waiting for EOF. Lets a
     /// streaming producer surface identity mid-extraction (once it is fully determinable) instead of
     /// only at the end.
@@ -207,7 +207,7 @@ impl IdentityPrefix {
 /// Read a bounded prefix from a decoded file on disk and detect its identity.
 ///
 /// Intended for callers holding a path to *decoded* bytes (an extracted ISO/BIN
-/// or a bare ROM) — not a compressed container, whose prefix is not disc data.
+/// or a bare ROM) - not a compressed container, whose prefix is not disc data.
 /// Reads on the calling thread (keep it the wasm main thread for OPFS inputs).
 /// Any I/O error yields an empty identity rather than failing the operation.
 pub fn detect_rom_identity_for_path(path: &Path) -> RomIdentity {
@@ -349,7 +349,7 @@ mod tests {
         assert_eq!(identity.disc_format, Some(DiscFormat::Dvd));
     }
 
-    /// Minimal ISO 9660 logical image with a SYSTEM.CNF naming BOOT2 — detected as PS2, whose
+    /// Minimal ISO 9660 logical image with a SYSTEM.CNF naming BOOT2 - detected as PS2, whose
     /// optical medium then depends on the total length (CD below the DVD threshold, DVD above).
     fn ps2_iso_image() -> Vec<u8> {
         let mut image = logical_image(32);

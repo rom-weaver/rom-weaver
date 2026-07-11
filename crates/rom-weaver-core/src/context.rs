@@ -294,7 +294,7 @@ impl OperationContext {
     /// variants (each capping internally at its algorithm count) so their crc32/md5/sha1 hash in
     /// parallel and overlap the byte producer instead of serializing on it.
     ///
-    /// Both variant-hashing callers — the `checksum` command and the extract write path — negotiate
+    /// Both variant-hashing callers - the `checksum` command and the extract write path - negotiate
     /// the budget through here so they hash with identical parallelism and cannot drift (the command
     /// previously forced single-threaded while extract did not, making the command slower). The cap
     /// must stay `None`: capping at the algorithm count here would collapse the per-variant split to
@@ -321,7 +321,7 @@ impl OperationContext {
         // shared operation pool so nested/sequential extracts reuse one fixed set of worker threads.
         let (pool, pool_execution) = self.operation_pool()?;
         // If the shared pool itself degraded to single-thread (e.g. the OS refused to build a
-        // multi-thread pool), every operation drawing on it genuinely runs serially — so propagate
+        // multi-thread pool), every operation drawing on it genuinely runs serially - so propagate
         // that fallback into this caller's reported execution instead of advertising parallelism it
         // never got.
         let mut execution = execution;

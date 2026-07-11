@@ -119,7 +119,7 @@ impl ProgressSink for HumanReporter {
 
 fn progress_bar_style() -> ProgressStyle {
     // A fixed, moderate bar width (not the full terminal) with no surrounding padding. The percent
-    // sits before the bar so the terminal cursor — which rests at the end of the line — never lands
+    // sits before the bar so the terminal cursor - which rests at the end of the line - never lands
     // on it. The filled portion is the brand orange (256-color 166 ≈ #d75f00, the closest palette
     // match so it renders without truecolor support too).
     ProgressStyle::with_template("{msg}  {percent:>3}%  {bar:30.166}")

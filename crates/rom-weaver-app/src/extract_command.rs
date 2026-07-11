@@ -80,8 +80,8 @@ impl CliApp {
                 (split_bin, None)
             };
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
-        // Stream an early identity/type manifest the moment the container is listed — before the
-        // heavy descent below — so the host can route the drop and render its card immediately.
+        // Stream an early identity/type manifest the moment the container is listed - before the
+        // heavy descent below - so the host can route the drop and render its card immediately.
         // Best-effort and streaming-only; the authoritative identity still rides the terminal report.
         self.emit_probe_manifest(
             handler.as_ref(),
@@ -277,7 +277,7 @@ impl CliApp {
     ) -> Result<(Vec<Value>, usize)> {
         // Container handlers report their COMPLETE output set in `report.details["emitted_files"]`, so
         // that report is authoritative: it is exactly what THIS extract wrote. There is deliberately no
-        // out_dir filesystem scan — a scan can't tell this op's outputs from a concurrent sibling op's
+        // out_dir filesystem scan - a scan can't tell this op's outputs from a concurrent sibling op's
         // files written into a shared out_dir, so a blind diff would mis-claim a sibling's file as an
         // emitted output and feed it to the nested-extract candidate list.
         let primary_emitted_files =
@@ -352,7 +352,7 @@ impl CliApp {
     /// Ensure a `--probe` extract carries the decoded payload's platform identity and,
     /// for single-payload disc images, fails when nothing resolves. Identity already
     /// streamed in by `--checksum` is reused as-is (no extra read); otherwise a single
-    /// bounded-prefix read of the emitted output backfills it — the same detection the
+    /// bounded-prefix read of the emitted output backfills it - the same detection the
     /// checksum/probe surfaces use. Multi-entry archives are left untouched (per-entry
     /// identity granularity, never failed here).
     fn attach_extract_probe_identity(

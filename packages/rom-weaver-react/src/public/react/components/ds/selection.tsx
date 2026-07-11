@@ -100,7 +100,7 @@ const SelectionCheckList = ({
       <div className="seltree picklist">
         {items.map((item) =>
           item.selectable ? (
-            // The highlighted row IS the selection state — the checkbox stays
+            // The highlighted row IS the selection state - the checkbox stays
             // real but visually hidden (.pick-input) for keyboard + SR.
             <label className={join("selnode", "selrow", "selcheck", "pick-row")} key={item.id}>
               <input

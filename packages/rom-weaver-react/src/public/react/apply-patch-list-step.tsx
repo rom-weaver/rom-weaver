@@ -61,7 +61,7 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
   for (const entry of item.validationValues) {
     const separatorIndex = entry.indexOf("=");
     if (separatorIndex === -1) {
-      // "dry-run apply" marks scratch-copy validation — every patch gets it, so it never
+      // "dry-run apply" marks scratch-copy validation - every patch gets it, so it never
       // renders as a per-type row; the drawer-header verdict already covers it.
       if (/dry-?run/i.test(entry)) continue;
       inputRows.push({ label: "VALIDATION", value: entry });
@@ -81,7 +81,7 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
 
 /** Read-only Checks drawer for a patch that declares real requirements: the
  * INPUT / OUTPUT rows it will verify, with the dry-run verdict + timing riding
- * the drawer header. Requirement-less patches render no drawer — their verdict
+ * the drawer header. Requirement-less patches render no drawer - their verdict
  * rides the Options header instead. Authoring (editable check fields) stays in
  * the Options drawer. */
 const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
@@ -168,13 +168,13 @@ const PatchOptions = ({
   showVerdict,
 }: {
   /** The patch is toggled out of the run: verification state is not part of the
-   * plan, so the header verdict/timing readouts stay off — the drawer remains
+   * plan, so the header verdict/timing readouts stay off - the drawer remains
    * editable for manifest authors. */
   disabled?: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
-   * output verify the run's result. Mid-chain checks are metadata only — they
+   * output verify the run's result. Mid-chain checks are metadata only - they
    * describe intermediates that cannot be verified before applying. */
   isChainInput?: boolean;
   isChainOutput?: boolean;
@@ -182,7 +182,7 @@ const PatchOptions = ({
   meta?: ManifestPatchMeta;
   onMetaChange?: (updates: Partial<ManifestPatchMeta>) => void;
   patchStack: PatcherStackController;
-  /** Carry the dry-run verdict/timing on this header — off when the card renders
+  /** Carry the dry-run verdict/timing on this header - off when the card renders
    * a Checks drawer, which owns the verdict instead. */
   showVerdict?: boolean;
 }) => {
@@ -211,7 +211,7 @@ const PatchOptions = ({
   };
   // The dry-run verdict rides this drawer's header (pass/fail mark + timing, or a
   // "Verifying…" readout while the deferred dry-run runs) ONLY when the patch has no
-  // Checks drawer of its own — a patch with real requirements carries the verdict
+  // Checks drawer of its own - a patch with real requirements carries the verdict
   // on that drawer instead.
   const verifying = !!showVerdict && !disabled && item.validationState === "verifying";
   const bad = !!showVerdict && !disabled && item.validationState === "invalid";
@@ -364,7 +364,7 @@ const PatchDragHandle = ({
   </button>
 );
 
-/** The patch's track/target on the meta line — inline select when there is a choice. */
+/** The patch's track/target on the meta line - inline select when there is a choice. */
 const PatchTarget = ({
   index,
   item,
@@ -471,7 +471,7 @@ const ApplyPatchListStep = ({
   const enabledCount = total - disabledCount;
   // Chain endpoints among the ENABLED patches: the first one's input checks
   // describe the base ROM, the last one's output checks describe the run's
-  // final result — the only two states verifiable without applying.
+  // final result - the only two states verifiable without applying.
   const enabledIndexes = patches
     .map((_, patchIndex) => patchIndex)
     .filter((patchIndex) => !disabledFlags?.[patchIndex]);
@@ -518,18 +518,18 @@ const ApplyPatchListStep = ({
         {patches.map((item, index) => {
           const description = manifestMeta?.[index]?.description || (index === 0 ? internalDescription : "");
           // Mirrors the ROM card: the resolved card structure (collapsed Extract +
-          // Options drawers) stays mounted through staging — a determinate bar on the
-          // top edge + a "Reading…" status in the meta line carry progress — so the
+          // Options drawers) stays mounted through staging - a determinate bar on the
+          // top edge + a "Reading…" status in the meta line carry progress - so the
           // stack doesn't jump when the result lands.
           // The bar stays full once finished. Staging a patch is extract
-          // (if archived) + parse — the patch is never hashed — so this reads "Reading",
+          // (if archived) + parse - the patch is never hashed - so this reads "Reading",
           // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
           const staging = !!item.progress;
           const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
           const percent = stagePercent(stagingProps);
           // A patch pulled from a container archive extracts before it is parsed; the
           // runtime labels that stage "extracting …". (Patch rows have no validationPhase,
-          // so the label is the available signal here — unlike ROM inputs.)
+          // so the label is the available signal here - unlike ROM inputs.)
           const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
           const rowProps = reorderList.rowProps(index);
           const isDisabled = !!disabledFlags?.[index];
@@ -543,10 +543,10 @@ const ApplyPatchListStep = ({
           if (isDisabled) verdict = undefined;
           // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
           // the card already shows its full body (Extract + Options). A top-edge bar carries
-          // that async work — a later phase following the "Reading…" staging bar.
+          // that async work - a later phase following the "Reading…" staging bar.
           const verifying = !(staging || isDisabled) && item.validationState === "verifying";
           // A read-only Checks drawer appears once the patch declares real requirements
-          // (embedded hashes, sizes, validation notes) — it owns the dry-run verdict, so
+          // (embedded hashes, sizes, validation notes) - it owns the dry-run verdict, so
           // the Options header only carries it for requirement-less patches. Disabled
           // patches keep just the Options drawer.
           const checksRows = getPatchVerificationRows(item);

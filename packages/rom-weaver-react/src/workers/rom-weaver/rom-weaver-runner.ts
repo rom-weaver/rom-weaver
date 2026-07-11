@@ -111,7 +111,7 @@ const RUNNER_DISPOSE_GRACE_MS = 2000;
 // worker's heap near the cap, so the first real op OOMs and forces a worker recycle ON the critical
 // path (~2.5s observed: dispatch a `list`/`extract`, OOM, then tear down the wedged worker + stand up
 // a replacement before the extract can run). These three toggles attack that; flip any to false to
-// A/B test its contribution. (#4 — caching the compiled WebAssembly.Module — is intentionally NOT
+// A/B test its contribution. (#4 - caching the compiled WebAssembly.Module - is intentionally NOT
 // implemented: the post-recycle instantiate measured ~25ms, i.e. the browser already caches the
 // compiled module, so recompile is not the cost; the recycle teardown is.)
 //
@@ -314,7 +314,7 @@ type InputSelectionHandler = (request: string) => number[] | Promise<number[]>;
 let inputSelectionHandler: InputSelectionHandler | undefined;
 
 /** Register the UI selection handler invoked when the wasm app needs the user to pick an input
- * candidate. When unset, selection is cancelled (returns -1) — the app always registers a handler. */
+ * candidate. When unset, selection is cancelled (returns -1) - the app always registers a handler. */
 const setInputSelectionHandler = (handler?: InputSelectionHandler) => {
   logger.trace(handler ? "input selection handler registered" : "input selection handler cleared");
   inputSelectionHandler = handler;
@@ -345,7 +345,7 @@ const resolveInputSelection: InputSelectionHandler = (request) => {
     .catch(() => undefined)
     .then(() => {
       if (!inputSelectionHandler) {
-        logger.trace("input selection requested but no handler registered — cancelling", {
+        logger.trace("input selection requested but no handler registered - cancelling", {
           requestBytes: typeof request === "string" ? request.length : 0,
         });
         return [];
@@ -380,8 +380,8 @@ const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): 
   return {
     dispose: async () => {
       // Gracefully release the worker's resources (OPFS sync access handles, thread pool) first,
-      // then terminate the Worker thread itself. `dispose()` alone leaves the worker — and its wasm
-      // linear memory, which only ever grows — alive, so recycling it would leak the grown heap.
+      // then terminate the Worker thread itself. `dispose()` alone leaves the worker - and its wasm
+      // linear memory, which only ever grows - alive, so recycling it would leak the grown heap.
       // The graceful request must be time-bounded: a worker blocked in a synchronous wait (e.g. an
       // interactive selection prompt that was abandoned mid-flight) never acknowledges dispose, and
       // an unbounded await here deadlocks every later reset/warmup behind it.
@@ -468,7 +468,7 @@ const recycleWarmRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
 // forces an out-of-memory recycle onto the critical path). After a heavy op, once the runtime goes
 // quiet, recycle to a fresh clean-heap runner (which the eager pool pre-warm re-warms) so the next
 // action starts from the same clean+warm baseline as the first. Debounced + idle-gated so a burst of
-// back-to-back ops never recycles mid-burst — the warm runner stays available for immediate reuse, and
+// back-to-back ops never recycles mid-burst - the warm runner stays available for immediate reuse, and
 // only a genuine pause stands up the clean replacement. Skipped for light ops, whose heap growth is
 // small enough that the reactive out-of-memory recycle already covers the rare exhaustion.
 const IDLE_RECYCLE_DEBOUNCE_MS = 600;
@@ -494,7 +494,7 @@ const scheduleIdleRecycle = (operationBytes: number) => {
 
 // The wasm runner's linear memory only ever grows, so the browser surfaces an exhausted heap as an
 // out-of-memory error. V8 reports it as `RangeError: Out of memory`, but the wasi/Emscripten layer
-// can also surface "cannot enlarge memory", "ENOMEM", etc. — reuse the canonical matcher so every
+// can also surface "cannot enlarge memory", "ENOMEM", etc. - reuse the canonical matcher so every
 // OOM phrasing triggers a clean-heap worker recycle, while still catching a RangeError mentioning
 // memory whose exact wording the shared regex might not enumerate.
 const isRunnerOutOfMemoryError = (error: unknown): boolean => {
@@ -571,7 +571,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   }
   const threadBudget = getDefaultBrowserThreadCount();
   // probe/list spawn no workers (0 budget). Threaded commands request "auto" (the full budget), but
-  // most do not use every core — gate the scheduler on the threads the operation will realistically use
+  // most do not use every core - gate the scheduler on the threads the operation will realistically use
   // (a single-threaded apply reserves 1, not all of them) so light operations can overlap.
   const requestedThreads = readRomWeaverRequestedThreadCount(commandOrRequest, { defaultThreads: threadBudget });
   const requested = romWeaverCommandSupportsThreads(command) ? (requestedThreads ?? threadBudget) : 0;
@@ -599,7 +599,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         const abortRun = () => {
           if (settled) return;
           settled = true;
-          // Terminate only this operation's runner — a sibling operation on another pooled runner keeps
+          // Terminate only this operation's runner - a sibling operation on another pooled runner keeps
           // running, unlike the previous singleton where any abort tore down the shared worker.
           emitRunnerTraceLine(options, "runJson aborted; terminating active runner");
           lease.terminate();
@@ -610,7 +610,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           removeAbortListener = () => signal.removeEventListener("abort", abortRun);
         }
         // Force this op to the worker-thread count the scheduler assigned it. For an I/O op that's the
-        // Rust plan's wave `threadsPerJob` (`fair_thread_allotment` over the whole admitted wave — incl.
+        // Rust plan's wave `threadsPerJob` (`fair_thread_allotment` over the whole admitted wave - incl.
         // a noted simultaneous drop); for a non-I/O op it's the op's own reservation. A full-budget
         // assignment is left as "auto" (no force). This keeps K concurrent jobs' WASI thread pools
         // summing to the budget instead of each grabbing it whole (which oversubscribed the pool →
@@ -675,7 +675,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   const submittedAtMs = perfNow();
   const threadCapable = romWeaverCommandSupportsThreads(command);
   // `plan-extract-batch` is the scheduler's OWN decision oracle (the browser asks Rust how to group the
-  // pending I/O ops). It is thread-less and pure, so it bypasses the scheduler entirely — routing it
+  // pending I/O ops). It is thread-less and pure, so it bypasses the scheduler entirely - routing it
   // through schedule() would re-enter the scheduler from inside its admission step and deadlock.
   // Extract/ingest/checksum are I/O-bound: admit them via the Rust batch plan (it owns memory fit and
   // which jobs overlap) rather than the local thread/memory gates. The runner's per-dispatch
@@ -735,10 +735,10 @@ const parseRomWeaverBatchPlan = (details: unknown): RomWeaverBatchPlan | undefin
 
 // Plan a concurrent extraction schedule via the shared Rust planner (`plan-extract-batch`): the single
 // source of truth the native batch executor also uses, so both group jobs identically. The browser
-// passes only what it alone knows — its resolved (mobile-capped) memory ceiling and thread budget —
+// passes only what it alone knows - its resolved (mobile-capped) memory ceiling and thread budget -
 // plus each job's source size; Rust owns the working-set multiplier, wave packing, and thread split.
 // Lives in the runner (not the wasm-command layer) so the OperationScheduler's planBatch can call it
-// WITHOUT the runner importing wasm-command-runtime — which would re-form the runner⇄command module
+// WITHOUT the runner importing wasm-command-runtime - which would re-form the runner⇄command module
 // cycle. It runs OUTSIDE the scheduler (runRomWeaverJson dispatches plan-extract-batch directly) because
 // the scheduler itself calls this to decide admission.
 const invokeRomWeaverPlanExtractBatchWorker = async (input: {
@@ -791,7 +791,7 @@ const warmupRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
   // A thread-budget change must not silently reuse the old warm pool: getRunnerPool().acquire reuses a
   // warm idle runner regardless of the requested thread count, so without this the next op keeps the
   // stale-sized pool and grows it on demand. Drop the pooled runners when the seed changes so a fresh
-  // runner is created at the new budget and self-pre-warms to it — keeping ops warm after a thread change.
+  // runner is created at the new budget and self-pre-warms to it - keeping ops warm after a thread change.
   const seedChanged =
     normalizeWorkerThreadsSeed(runnerCreateWorkerThreads) !== normalizeWorkerThreadsSeed(workerThreads);
   runnerCreateWorkerThreads = workerThreads;
@@ -904,7 +904,7 @@ const getRomWeaverFailureMessage = (
 type RomWeaverFailureKind = NonNullable<ReturnType<typeof getRomWeaverRunEventErrorKind>>;
 
 // The typed `RomWeaverErrorKind` the Rust core attached to the failing terminal
-// event, if any. This is the canonical, generated-enum classification — the JS
+// event, if any. This is the canonical, generated-enum classification - the JS
 // `inferCoreWorkerErrorKind` regex is only a fallback for failures that arrive
 // without it (worker/panic strings, or messages wrapped in extra context).
 const getRomWeaverFailureKind = (

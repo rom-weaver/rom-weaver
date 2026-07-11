@@ -13,9 +13,9 @@ type BrowserVirtualFileTraceContext = {
 
 // A registered browser input is read one of two ways, decided per input (see createBrowserOpfsSourceRef):
 //   * fast path (useProxyHandle=false): each wasm decode thread opens its own FileReaderSync over the
-//     same File, so reads run in parallel — used for Chrome/Firefox and for small WebKit inputs.
+//     same File, so reads run in parallel - used for Chrome/Firefox and for small WebKit inputs.
 //   * proxy handle (useProxyHandle=true): a single OPFS proxy worker owns the File and serves every
-//     thread's reads — used only for WebKit inputs at/above the proxy size threshold, where concurrent
+//     thread's reads - used only for WebKit inputs at/above the proxy size threshold, where concurrent
 //     FileReaderSync reads of one File serialize at the file layer.
 // `useProxyHandle` rides on the record so the mount picks the proxy inode only for inputs that opted in.
 type BrowserVirtualFile = {

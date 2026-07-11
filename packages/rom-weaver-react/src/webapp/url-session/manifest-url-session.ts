@@ -1,5 +1,5 @@
 // The `?manifest=` boot flow's I/O half: fetch the rw.json (plain, compressed, or archive), parse it
-// through the wasm runtime, build the session plan, then acquire every non-disabled source — URL
+// through the wasm runtime, build the session plan, then acquire every non-disabled source - URL
 // entries via the shared remote fetch layer, bundled entries from the parse call's materialized
 // Files. Returns the ordered drop-pipeline Files (ROM first, patches in manifest order) plus the
 // decorated session the apply form consumes. Kept out of the React hook so tests drive the same code.

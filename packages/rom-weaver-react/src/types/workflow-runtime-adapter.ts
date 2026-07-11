@@ -383,11 +383,11 @@ type WorkflowRuntimePatch = {
 
 type WorkflowRuntimeIngest = {
   // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
-  // ROMs), and describe patches — one consolidated call the drop/staging flow routes on. Archive ROM
+  // ROMs), and describe patches - one consolidated call the drop/staging flow routes on. Archive ROM
   // leaves are adopted into `outputs` (path-backed PublicOutputs carrying the ingest checksums + disc
   // structure), aligned with `result.assets` for non-`copiedInPlace` assets, so the staging pipeline
   // reuses its existing PublicOutput→PatchFileInstance bridge. A bare ROM (`copiedInPlace`) yields no
-  // output — the caller keeps its own source ref and uses the result's checksums.
+  // output - the caller keeps its own source ref and uses the result's checksums.
   run?: (input: {
     source: unknown;
     fileName?: string;
@@ -405,7 +405,7 @@ type WorkflowRuntimeIngest = {
     signal?: AbortSignal;
     // Archive PATCH leaves are adopted into `patchOutputs` (aligned with `result.patches`), same as ROM
     // leaves into `outputs`, so the patch-staging path reuses the PublicOutput→PatchFileInstance
-    // bridge. A bare patch yields no `patchOutput` (its leaf is the staged source, cleaned up here —
+    // bridge. A bare patch yields no `patchOutput` (its leaf is the staged source, cleaned up here -
     // the caller keeps its own file and uses the descriptor's metadata).
   }) => Promise<{ result: ParsedIngestResult; outputs: PublicOutput[]; patchOutputs: PublicOutput[] }>;
 };
@@ -413,7 +413,7 @@ type WorkflowRuntimeIngest = {
 type WorkflowRuntimeManifest = {
   // Parse a dropped/fetched rw.json (plain, compressed, or an archive carrying one). Bundled
   // ROM/patch members are extracted, materialized as plain `File`s keyed by their reported
-  // `extracted` path, and cleaned out of the runtime's staging area before returning — the caller
+  // `extracted` path, and cleaned out of the runtime's staging area before returning - the caller
   // routes the Files through the standard drop pipeline.
   parse?: (input: {
     source: unknown;
@@ -526,7 +526,7 @@ type WorkflowRuntime = {
   ingest?: WorkflowRuntimeIngest;
   manifest?: WorkflowRuntimeManifest;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
-   * one unit even though each file is staged independently. Optional — runtimes without a batch planner
+   * one unit even though each file is staged independently. Optional - runtimes without a batch planner
    * omit it and ops are admitted as they arrive. */
   noteIoBatch?: (jobSizes: number[]) => void;
   output: WorkflowRuntimeOutput;

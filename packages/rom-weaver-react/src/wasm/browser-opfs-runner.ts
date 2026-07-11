@@ -117,14 +117,14 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       : null;
   const mountCache = createBrowserOpfsMountCache();
   const baseSyncAccessMode = resolveRunSyncAccessMode({ baseMode: options.syncAccessMode, threaded });
-  // The single OPFS-handle-owning proxy worker is spawned once for the runner's lifetime. Every mount —
-  // the runner thread and every spawned WASI compute thread — routes its OPFS I/O through it, which is
+  // The single OPFS-handle-owning proxy worker is spawned once for the runner's lifetime. Every mount -
+  // the runner thread and every spawned WASI compute thread - routes its OPFS I/O through it, which is
   // the one model that respects WebKit's "one SyncAccessHandle per file" rule while letting spawned
   // threads (which cannot path_open OPFS files themselves) perform real I/O.
   // Only mount METADATA is posted; the proxy worker re-resolves its own directory handle (Safari/iOS
   // cannot structured-clone a FileSystemDirectoryHandle to a nested worker). For each mount we compute
   // the path from the OPFS root to its handle via `root.resolve(handle)` so the worker can navigate the
-  // same directory — empty for the app (the mount IS the root), or subdir segments for a nested handle.
+  // same directory - empty for the app (the mount IS the root), or subdir segments for a nested handle.
   const opfsRootForResolve = await navigator.storage.getDirectory();
   const proxyMounts: OpfsProxyMountBootstrap[] = [];
   for (const mountPath of runtimeMounts) {
@@ -214,7 +214,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
       // Phase timings for the per-op latency breakdown (logged in the finally below). `setup` is the
-      // "before the operation starts" cost — mount/fd build, wasm instantiate, and any thread-pool
+      // "before the operation starts" cost - mount/fd build, wasm instantiate, and any thread-pool
       // pre-warm wait up to wasi.start; `compute` is wasi.start itself; `teardown` is the
       // drain/flush/cleanup after it returns ("after finish"). performance.now() is available in workers.
       const nowMs = (): number => (typeof performance === "undefined" ? 0 : performance.now());

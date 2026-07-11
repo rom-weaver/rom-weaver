@@ -2,7 +2,7 @@
 //!
 //! Unlike Game Genie, these schemes are (mostly) un-obfuscated address:value
 //! pairs. Many of them target system RAM rather than the cartridge ROM and so
-//! cannot be baked into a ROM file — that rejection happens later in the layout
+//! cannot be baked into a ROM file - that rejection happens later in the layout
 //! stage where each system's ROM address range is known.
 
 use rom_weaver_core::Result;
@@ -126,7 +126,7 @@ fn decode_genesis(code: &str, raw: &str) -> Result<DecodedCode> {
     })
 }
 
-/// Game Boy GameShark: `TTVVAAAA` — type byte, value byte, little-endian
+/// Game Boy GameShark: `TTVVAAAA` - type byte, value byte, little-endian
 /// 16-bit address.
 fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
     require_hex(code, raw)?;

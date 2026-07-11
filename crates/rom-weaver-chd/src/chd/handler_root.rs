@@ -18,7 +18,7 @@ pub struct ChdContainerHandler;
 /// create path, which opens `request.output` unconditionally elsewhere). A
 /// `--no-overwrite` refusal returns `Err` from `create_output` without tracking
 /// the path, so the guard never deletes a pre-existing file this op left
-/// untouched — the bug that arming the guard up-front over a planned-output set
+/// untouched - the bug that arming the guard up-front over a planned-output set
 /// caused. Interior mutability lets the guard be shared `&` across the deep
 /// CD/GD writer call chains without threading a `&mut`.
 pub(super) struct ChdOutputCleanup {
@@ -129,7 +129,7 @@ impl DiscLayout {
     /// bytes), so a freshly produced track is read in place of the original
     /// while every untouched track still reads from the source disc. A
     /// shared-bin FILE backing several tracks redirects them all, each keeping
-    /// its own `file_offset_bytes`. Errors if an override matches no track —
+    /// its own `file_offset_bytes`. Errors if an override matches no track -
     /// that would silently emit the original (unpatched) bytes and break parity.
     fn apply_input_overrides(&mut self, overrides: &[CreateInputOverride]) -> Result<()> {
         for ovr in overrides {
@@ -178,7 +178,7 @@ struct DiscTrack {
     mode: DiscTrackMode,
     file_path: PathBuf,
     /// When set, the track's bytes are read from this in-memory buffer instead
-    /// of `file_path` — used for a freshly produced track (e.g. a patched track)
+    /// of `file_path` - used for a freshly produced track (e.g. a patched track)
     /// sourced from memory rather than a staged file. `file_offset_bytes` still
     /// indexes into the buffer, matching the file case so the emitted stream is
     /// byte-identical.

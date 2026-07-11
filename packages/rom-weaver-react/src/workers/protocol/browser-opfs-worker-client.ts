@@ -5,7 +5,7 @@ type WorkerAssetRoot = typeof globalThis & {
   __romWeaverWorkerBaseUrl?: string;
 };
 
-// Input staging is retired (browser inputs read directly — see browser-opfs-source-ref), so this client
+// Input staging is retired (browser inputs read directly - see browser-opfs-source-ref), so this client
 // only drives output-side OPFS writes and truncates. "stage-error" remains the generic failure reply for
 // every action.
 type BrowserOpfsStorageAction = "truncate" | "write";
@@ -77,7 +77,7 @@ const requestBrowserOpfsStorage = async (request: BrowserOpfsStorageRequest): Pr
       // good: a cached dead worker silently no-ops every later postMessage, so a retry's promise would
       // never settle. Drop the cached worker so the next request respawns a fresh one. The identity guard
       // makes this idempotent across the concurrent in-flight requests that all receive this same error
-      // event (only the first replaces it) — no respawn storm, and respawn is driven by the next request,
+      // event (only the first replaces it) - no respawn storm, and respawn is driven by the next request,
       // not a loop here.
       if (opfsWorker === worker) {
         worker.terminate();

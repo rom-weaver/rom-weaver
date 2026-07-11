@@ -146,7 +146,7 @@ describe("buildManifestApplySessionPlan", () => {
         version: 1,
       }),
     ).toEqual({ input: midChecks, output: midChecks });
-    // Plan entries are never decorated with inherited rom/output checks — a patch
+    // Plan entries are never decorated with inherited rom/output checks - a patch
     // that declared none shows none.
     const plan = buildManifestApplySessionPlan(
       parsedResult({

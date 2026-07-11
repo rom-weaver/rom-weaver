@@ -10,7 +10,7 @@ const COPY_PROGRESS_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
 /// Independent zstd frame size used by z3ds create. Each frame is compressed in isolation so the
 /// pipeline can fan frames across worker threads and zeekstd can seek to any frame, but a frame is
 /// also the largest window zstd can match within. 256 KiB frames capped high levels (19+ plateaued
-/// because the window — not the search — was the limit); 1 MiB lifts that ceiling while keeping
+/// because the window - not the search - was the limit); 1 MiB lifts that ceiling while keeping
 /// thousands of frames for parallelism and bounding per-context memory in the browser runtime. The
 /// value is self-describing (stored as `maxframesize` metadata) and decode derives frame layout
 /// from the seek table, so changing it stays backward compatible with already-created archives.
@@ -20,7 +20,7 @@ pub(crate) const Z3DS_MIN_COMPRESSION_LEVEL: i32 = -7;
 pub(crate) const Z3DS_MAX_COMPRESSION_LEVEL: i32 = 22;
 /// Upper bound on the decompressed span handed to each extract worker. Tasks are built from whole
 /// frames (always frame-aligned, so no worker re-decodes a prefix it discards) and grow up to this
-/// cap to amortize decoder setup over several frames on large archives — but shrink toward a single
+/// cap to amortize decoder setup over several frames on large archives - but shrink toward a single
 /// frame on smaller ones so every requested thread still gets work (see
 /// [`Z3DS_EXTRACT_TASKS_PER_THREAD`]), bounding the cap's effect on per-task memory either way.
 pub(crate) const Z3DS_EXTRACT_MAX_CHUNK_BYTES: usize = 4 * 1024 * 1024;

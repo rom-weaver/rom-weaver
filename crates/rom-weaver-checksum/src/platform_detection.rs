@@ -52,7 +52,7 @@ pub mod platform {
 /// Map a detected cartridge header to its identify platform, where one exists.
 ///
 /// Some headers are inherently ambiguous (Game Boy vs Color, SMS vs Game Gear,
-/// NGP vs Color); we emit the most common member and let CRC32 lookup decide —
+/// NGP vs Color); we emit the most common member and let CRC32 lookup decide -
 /// a wrong guess simply yields no match, never a false identification. Headers
 /// with no corresponding identify database (e.g. MSX) return `None`.
 pub const fn platform_for_rom_header(header: KnownRomHeader) -> Option<&'static str> {

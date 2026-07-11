@@ -21,8 +21,8 @@ fn main() -> ExitCode {
 
 /// Under `wasm32-wasip1-threads` every worker shares one linear memory, so a panic (which
 /// aborts with `panic = "abort"`) tears down the whole instance and otherwise surfaces to the
-/// JS host as an opaque dead worker. Install a global hook — it applies to every spawned
-/// thread — that emits a single marked line to stderr (which the host collects) so the failure
+/// JS host as an opaque dead worker. Install a global hook - it applies to every spawned
+/// thread - that emits a single marked line to stderr (which the host collects) so the failure
 /// is diagnosable and machine-detectable. This does not recover the instance; per-thread
 /// recovery would require `panic = "unwind"` and a `catch_unwind` boundary.
 #[cfg(target_arch = "wasm32")]

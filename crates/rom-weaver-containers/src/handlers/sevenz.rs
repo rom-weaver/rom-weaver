@@ -109,7 +109,7 @@ const LZMA2_MT_MIN_CHUNK_BYTES: u64 = 1 << 20;
 #[cfg(target_family = "wasm")]
 const LZMA2_MT_WASM_MAX_THREADS: usize = 2;
 
-/// Estimate how many LZMA2 worker blocks the 7z encoder will actually run — the
+/// Estimate how many LZMA2 worker blocks the 7z encoder will actually run - the
 /// real parallelism ceiling. Files at or below the split threshold run as a
 /// single block; larger files split into `ceil(total / min_chunk)` blocks,
 /// capped further by the core and memory budgets. Keeps the reported
@@ -136,7 +136,7 @@ fn lzma2_preset_dict_bytes(level: u32) -> u64 {
 }
 
 /// Round up to the smallest representable LZMA2 dictionary (`2^n` or `3*2^(n-1)`),
-/// capped at `cap` — mirrors `lzma_reduce_dict_size` in the C writer.
+/// capped at `cap` - mirrors `lzma_reduce_dict_size` in the C writer.
 fn lzma2_round_up_dict(size: u64, cap: u64) -> u64 {
     for b in 0u32..=40 {
         let candidate = (2u64 | u64::from(b & 1)) << (b / 2 + 11);

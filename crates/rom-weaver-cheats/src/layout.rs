@@ -3,7 +3,7 @@
 //! A decoded code carries a CPU/bus address; turning that into a file offset
 //! needs the ROM's header presence and banking scheme. [`RomLayout::detect`]
 //! derives those purely from the ROM bytes, and [`resolve_writes`] maps a
-//! [`DecodedCode`] onto one or more [`CheatWrite`]s — scanning banks for a
+//! [`DecodedCode`] onto one or more [`CheatWrite`]s - scanning banks for a
 //! compare match where one is supplied, and rejecting RAM-only codes that
 //! cannot be baked into a ROM file.
 
@@ -213,7 +213,7 @@ fn resolve_nes(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Result<
         return Ok(writes);
     }
 
-    // No compare: pick the naive bank — the fixed last bank for $C000-$FFFF,
+    // No compare: pick the naive bank - the fixed last bank for $C000-$FFFF,
     // otherwise bank 0. Ambiguous on banked carts; documented best effort.
     let bank = if cpu >= 0xC000 { num_banks - 1 } else { 0 };
     let offset = layout.header_bytes + bank * NES_BANK_BYTES + window_off;

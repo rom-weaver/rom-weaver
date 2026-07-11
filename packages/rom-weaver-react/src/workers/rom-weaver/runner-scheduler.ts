@@ -7,9 +7,9 @@ const logger = createLogger("runner-scheduler");
  *
  * - **Non-I/O ops** (compress, patch, probe, …) keep the local gates: a concurrency cap, a summed
  *   worker-thread budget, a summed working-set ceiling, and OPFS path exclusivity.
- * - **I/O ops** (extract/ingest/checksum — `io: true`) are admitted by the shared **Rust planner**
- *   (`plan-extract-batch`) instead. The browser passes only what it alone knows — its mobile-capped
- *   memory ceiling and thread budget — plus each job's source size (`jobSizeBytes`); Rust owns the
+ * - **I/O ops** (extract/ingest/checksum - `io: true`) are admitted by the shared **Rust planner**
+ *   (`plan-extract-batch`) instead. The browser passes only what it alone knows - its mobile-capped
+ *   memory ceiling and thread budget - plus each job's source size (`jobSizeBytes`); Rust owns the
  *   working-set multiplier, the memory-ceiling fit, and which jobs may overlap. This is the single
  *   source of truth the native batch executor also uses, so both group identically. Path exclusivity
  *   and the concurrency cap still apply on top (OPFS handle exclusivity is a browser-only concern the
@@ -17,21 +17,21 @@ const logger = createLogger("runner-scheduler");
  *   `fair_thread_allotment`), passed to the run callback so the runner forces exactly that count.
  *
  * A simultaneous multi-file drop stages each file asynchronously, so the I/O ops reach the scheduler
- * staggered (not in one tick). {@link OperationScheduler.noteIoBatch} lets the drop point — which knows
- * every file's size synchronously — declare the whole batch up front, so the very first plan call sees
+ * staggered (not in one tick). {@link OperationScheduler.noteIoBatch} lets the drop point - which knows
+ * every file's size synchronously - declare the whole batch up front, so the very first plan call sees
  * all of them and the first job's thread share already reflects the full drop.
  */
 type ScheduledOperation = {
   /**
    * Worker-thread count for a non-I/O op (its reservation and its forced count). Thread-less commands
-   * (`probe`/`list`) pass 0 so they never count against the budget. Ignored for I/O ops — their count
+   * (`probe`/`list`) pass 0 so they never count against the budget. Ignored for I/O ops - their count
    * is the planner's per-wave `threadsPerJob`.
    */
   threads: number;
   /**
    * Estimated peak resident working set in bytes (non-I/O ops). Two non-I/O ops whose summed estimate
-   * would exceed the memory ceiling are not run concurrently. I/O ops ignore this — their memory fit is
-   * decided by the Rust plan from `jobSizeBytes` — and contribute 0 to the local memory gate.
+   * would exceed the memory ceiling are not run concurrently. I/O ops ignore this - their memory fit is
+   * decided by the Rust plan from `jobSizeBytes` - and contribute 0 to the local memory gate.
    */
   bytes?: number;
   /**
@@ -118,7 +118,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   // Guards against overlapping `plan-extract-batch` round-trips: only one I/O planning pass runs at a
   // time; arrivals during the await are picked up by the re-pump after it resolves.
   let planningIoWave = false;
-  // Sizes of a declared I/O drop that have NOT yet reached the scheduler — see noteIoBatch. Each is
+  // Sizes of a declared I/O drop that have NOT yet reached the scheduler - see noteIoBatch. Each is
   // removed as its op arrives (so it is never double-counted) and they feed the plan so the first
   // arriving job is grouped against the whole drop. `noteConsumed` tracks that the batch actually
   // started, so a stale note is cleared only after its ops have run and drained (never mid-staging).
@@ -275,7 +275,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   // (plus any noted-but-not-yet-arrived batch jobs, so the first arrival is grouped against the whole
   // drop), then admit that first wave with the wave's thread allotment (subject to the concurrency cap
   // and OPFS path exclusivity). Re-pumps on successful progress so jobs that arrived during the
-  // round-trip — the staggered Promise.all case — are planned against the now-larger set.
+  // round-trip - the staggered Promise.all case - are planned against the now-larger set.
   const pumpIoWave = async (): Promise<void> => {
     if (planningIoWave) return;
     if (inFlight.size >= maxConcurrency) return;
@@ -291,7 +291,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
       const ioWaiters = waiters.filter((waiter) => waiter.operation.io);
       const inFlightIo = [...inFlight].filter((entry) => entry.io);
       // Order: in-flight, then arrived waiters, then declared-not-yet-arrived. Greedy first-fit fills a
-      // wave by ascending index, so arrived waiters are always preferred over not-yet-arrived ones — a
+      // wave by ascending index, so arrived waiters are always preferred over not-yet-arrived ones - a
       // pending slot never displaces a real waiter; it only shrinks the per-job thread share to match
       // the full drop.
       const sizes = [
@@ -308,7 +308,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
       const threadsPerJob = Math.max(1, Math.floor(wave?.threadsPerJob ?? availableThreads));
       for (let index = 0; index < ioWaiters.length; index += 1) {
         if (inFlight.size >= maxConcurrency) break;
-        if (!waveJobs.has(offset + index)) continue; // a later wave — wait for the current one to drain
+        if (!waveJobs.has(offset + index)) continue; // a later wave - wait for the current one to drain
         const waiter = ioWaiters[index];
         if (!waiter) continue;
         const position = waiters.indexOf(waiter);

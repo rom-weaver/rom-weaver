@@ -16,7 +16,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.verify.dryRunDesc"
-#~ msgstr "Apply to a scratch copy and re-hash — no source bytes touched"
+#~ msgstr "Apply to a scratch copy and re-hash - no source bytes touched"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -46,7 +46,7 @@ msgstr "{count, plural, one {# file} other {# files}}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
-msgstr "{count, plural, one {# patch is off — tick it to include it} other {# patches are off — tick them to include them}}"
+msgstr "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -261,12 +261,12 @@ msgstr "Choose which {role} to use from {sourceName}."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.hint"
-msgstr "click or drop files anywhere on the page — archives, containers, cue sheets and softpatches resolve automatically"
+msgstr "click or drop files anywhere on the page - archives, containers, cue sheets and softpatches resolve automatically"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.anywhereShort"
-msgstr "click to browse — or drop files anywhere on the page"
+msgstr "click to browse - or drop files anywhere on the page"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -411,7 +411,7 @@ msgstr "Diff window"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.window"
-msgstr "Diff window for create — larger spans find moved data but use more memory."
+msgstr "Diff window for create - larger spans find moved data but use more memory."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -441,7 +441,7 @@ msgstr "Download"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.reorder"
-msgstr "Drag to reorder — arrow keys move"
+msgstr "Drag to reorder - arrow keys move"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "failed"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunFail"
-msgstr "Failed — scratch output differs"
+msgstr "Failed - scratch output differs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -571,12 +571,12 @@ msgstr "file"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.asDumped"
-msgstr "File — as dumped"
+msgstr "File - as dumped"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.withHeader"
-msgstr "File — as dumped (with 512 B header)"
+msgstr "File - as dumped (with 512 B header)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -666,7 +666,7 @@ msgstr "Inputs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.warn.ipsNoChecksum"
-msgstr "IPS carries no embedded checksums — gated by the filename hint only."
+msgstr "IPS carries no embedded checksums - gated by the filename hint only."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -811,7 +811,7 @@ msgstr "Optional (off)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.compressType"
-msgstr "Optionally wrap the output in a compressed container — “none” writes the raw file."
+msgstr "Optionally wrap the output in a compressed container - “none” writes the raw file."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -881,7 +881,7 @@ msgstr "Parsing patch"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunPass"
-msgstr "Passed — scratch output re-hash matches"
+msgstr "Passed - scratch output re-hash matches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -946,7 +946,7 @@ msgstr "Patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.patches"
-msgstr "Patches apply top to bottom — drag the handle to reorder. Filename hints (crc32 / size) are checked before the run."
+msgstr "Patches apply top to bottom - drag the handle to reorder. Filename hints (crc32 / size) are checked before the run."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1171,7 +1171,7 @@ msgstr "Selecting file"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.output"
-msgstr "Set the filename without an extension — the format select controls it. Containers (zip, 7z, chd, rvz) are written directly."
+msgstr "Set the filename without an extension - the format select controls it. Containers (zip, 7z, chd, rvz) are written directly."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1241,7 +1241,7 @@ msgstr "Switch to light theme"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.trimRom"
-msgstr "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) — the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore."
+msgstr "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) - the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1266,7 +1266,7 @@ msgstr "target blockcheck"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.picker.hint"
-msgstr "The archive contains more than one candidate — pick the ones to stage."
+msgstr "The archive contains more than one candidate - pick the ones to stage."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1396,7 +1396,7 @@ msgstr "Trimming ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.confirm.trimBody"
-msgstr "Trimming writes a new, smaller ROM — this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it."
+msgstr "Trimming writes a new, smaller ROM - this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1511,7 +1511,7 @@ msgstr "Writing output"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.createModified"
-msgstr "Your edited build — the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported)."
+msgstr "Your edited build - the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

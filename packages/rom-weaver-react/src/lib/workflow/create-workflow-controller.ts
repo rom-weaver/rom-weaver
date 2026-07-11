@@ -139,7 +139,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   /**
    * Swap the original and modified sources without re-staging them. The sessions
-   * already hold the extracted/prepared source, so the swap is a slot exchange —
+   * already hold the extracted/prepared source, so the swap is a slot exchange -
    * no decompression or checksum work is repeated. Used by the UI's "Swap"
    * action so flipping the patch direction stays instant.
    */

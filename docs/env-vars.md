@@ -8,7 +8,7 @@ default.
 > **Not an env var:** the generated `packages/rom-weaver-react/src/wasm/generated/rom-weaver-format-metadata.ts`
 > exports compile-time data tables named `ROM_WEAVER_CONTAINER_FORMATS`,
 > `ROM_WEAVER_FORMAT_METADATA`, etc. Despite the `ROM_WEAVER_` prefix these are
-> TypeScript `export const`s, **not** environment variables — a `grep ROM_WEAVER_`
+> TypeScript `export const`s, **not** environment variables - a `grep ROM_WEAVER_`
 > will surface them alongside the real knobs below.
 
 ## Runtime knobs
@@ -24,7 +24,7 @@ default.
 ## Solid-patch metadata (`patch create --format solid`)
 
 These eight strings are currently the **only** way to populate Solid patch
-header metadata — there is no equivalent CLI flag. Read in
+header metadata - there is no equivalent CLI flag. Read in
 `rom-weaver-patches/src/solid.rs`.
 
 `ROM_WEAVER_SOLID_GAME`, `ROM_WEAVER_SOLID_HACK`, `ROM_WEAVER_SOLID_VERSION`,
@@ -42,7 +42,7 @@ Not for production use.
 | `ROM_WEAVER_WASI_THREADS` | crate `build.rs` scripts | Forces the `rom_weaver_wasi_threads` cfg on (otherwise gated on the `wasm32-wasip1-threads` target). |
 
 > **Retired knobs.** `ROM_WEAVER_CONTAINER_MAIN_THREAD_READER` and
-> `ROM_WEAVER_PATCH_MAIN_THREAD_READER` are gone — the OPFS proxy worker made
+> `ROM_WEAVER_PATCH_MAIN_THREAD_READER` are gone - the OPFS proxy worker made
 > per-worker OPFS reads work, so the read-on-main gates were removed (see
 > "Browser I/O paths" in `docs/ARCHITECTURE.md`). The names survive only in
 > cli_smoke tests (`rvz_z3ds.rs`, `compress.rs`) that assert they are no-ops.
@@ -56,7 +56,7 @@ They do **not** affect the native CLI or the browser runtime.
 | Variable | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `ROM_WEAVER_WASM_THREAD_POOL_SIZE` | positive int (clamped 1–256) | 4 | Size of the harness thread pool. Rejected with an error if not a positive integer. |
-| `ROM_WEAVER_WASM_PREWARM_THREADS` | bool | off | **Parsed but intentionally ignored** — WASI threads spawn one Worker per `thread-spawn`, so prewarming is a no-op (logs a notice when set). |
+| `ROM_WEAVER_WASM_PREWARM_THREADS` | bool | off | **Parsed but intentionally ignored** - WASI threads spawn one Worker per `thread-spawn`, so prewarming is a no-op (logs a notice when set). |
 | `ROM_WEAVER_WASM_SHARED_MEMORY_INITIAL_PAGES` | positive int | harness default | Initial pages for the shared `WebAssembly.Memory`. |
 | `ROM_WEAVER_WASM_SHARED_MEMORY_MAX_PAGES` | positive int | harness default | Maximum pages for the shared `WebAssembly.Memory`; must be `>=` the initial pages or the harness throws. |
 | `ROM_WEAVER_WASI_THREAD_DEBUG` | bool | off | Enables `[wasi-thread]` debug logging from the harness. |
@@ -66,7 +66,7 @@ They do **not** affect the native CLI or the browser runtime.
 
 > **Not env vars:** these are `window` globals injected into / exposed by the
 > webapp at runtime (page-level config and diagnostic handles), **not** process
-> environment variables — same caveat as the TypeScript `export const`s above.
+> environment variables - same caveat as the TypeScript `export const`s above.
 > A `grep ROM_WEAVER_` surfaces them under
 > `packages/rom-weaver-react/src/webapp` alongside the real knobs.
 
@@ -81,7 +81,7 @@ They do **not** affect the native CLI or the browser runtime.
 | `window.ROM_WEAVER_IOS_SAFARI_MATRIX` | exposed by app | `webapp/mobile-safari-matrix.ts` | iOS-Safari format-matrix diagnostic harness API (diagnostic page only). |
 
 `ROM_WEAVER_SERVICE_WORKER_URL_PATTERN`
-(`webapp/pwa/pwa-service-worker-client.ts`) is **not** a knob — it is an
+(`webapp/pwa/pwa-service-worker-client.ts`) is **not** a knob - it is an
 internal module-level regex `const` (service-worker script-URL matcher), not a
 `window` global or configuration input. It is listed here only because a
 `grep ROM_WEAVER_` matches it.
@@ -89,7 +89,7 @@ internal module-level regex `const` (service-worker script-URL matcher), not a
 ## Webapp build/test/bench tooling (`*.mjs`)
 
 The webapp build/test/bench also reads a `ROM_WEAVER_*` family in `*.mjs`
-(vite/vitest configs, scripts) — e.g. `ROM_WEAVER_APP_VERSION`,
+(vite/vitest configs, scripts) - e.g. `ROM_WEAVER_APP_VERSION`,
 `ROM_WEAVER_COMMIT_HASH`, `ROM_WEAVER_WASM_ARTIFACT_DIR`, `ROM_WEAVER_COVERAGE`,
 `ROM_WEAVER_BROWSER`, `ROM_WEAVER_WASM_STRESS_1GB`, and the
 `ROM_WEAVER_WASM_BENCH*` benchmark toggles. Those are front-end tooling knobs,

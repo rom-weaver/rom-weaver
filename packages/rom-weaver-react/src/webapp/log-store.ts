@@ -36,9 +36,9 @@ const listeners = new Set<() => void>();
 // in-memory ring buffer dies with the tab, but a synchronous localStorage write survives the reload.
 // Stored as a JSON array of the WHOLE session (not just the viewer's MAX_LOG_LINES ring) so a long trace
 // run isn't truncated to its tail; structured (not flattened text) so the previous-session view renders
-// with full fidelity — no lossy re-parse. Two keys: this session streams into `currentLog`; on boot the
+// with full fidelity - no lossy re-parse. Two keys: this session streams into `currentLog`; on boot the
 // previous session's `currentLog` is promoted to `lastLog` (below) before this session overwrites it, so
-// the prior — possibly crashed — run is what the Log panel can show. The write rides the snapshot flush
+// the prior - possibly crashed - run is what the Log panel can show. The write rides the snapshot flush
 // (coalesced to once per animation frame, only when new lines landed), so the freshest lines before a
 // crash are saved without an O(n^2) rewrite-the-whole-log-per-line.
 const CURRENT_LOG_STORAGE_KEY = "currentLog";
@@ -59,7 +59,7 @@ const writeLocalStorage = (key: string, value: string) => {
   try {
     if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
   } catch {
-    // quota exceeded / disabled — the in-memory store still works, only crash-recovery is lost
+    // quota exceeded / disabled - the in-memory store still works, only crash-recovery is lost
   }
 };
 
@@ -77,7 +77,7 @@ const parseStoredEntries = (raw: string | null): LogStoreEntry[] => {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as LogStoreEntry[]) : [];
   } catch {
-    return []; // corrupt/partial JSON (e.g. a write cut off by the crash) — drop it rather than throw
+    return []; // corrupt/partial JSON (e.g. a write cut off by the crash) - drop it rather than throw
   }
 };
 
@@ -146,7 +146,7 @@ const push = (record: LogRecord) => {
 };
 
 /* Rust `tracing` lines ride inside log messages ("2026-…Z TRACE
-   rom_weaver_app::detect: message") — via the workflow sink (namespace
+   rom_weaver_app::detect: message") - via the workflow sink (namespace
    runtime:rom-weaver) and occasionally the raw console. Parse them back into
    structured records so the dialog's caller column shows the Rust target,
    like the loom prototype's inspector. */
@@ -168,7 +168,7 @@ const parseRustTraceRecord = (record: LogRecord): LogRecord => {
 const toConsoleEntry = (record: ConsoleLogRecord): LogRecord | null => {
   const first = record.args[0];
   if (typeof first !== "string") return null;
-  // logger-formatted lines (%c…) already arrive through the sink — skip the
+  // logger-formatted lines (%c…) already arrive through the sink - skip the
   // duplicate the default console sink produces
   if (first.startsWith("%c")) return null;
   if (RUST_TRACE_LINE.test(first)) {
@@ -179,7 +179,7 @@ const toConsoleEntry = (record: ConsoleLogRecord): LogRecord | null => {
       timestamp: record.timestamp,
     } as LogRecord);
   }
-  // other console output (vite client, libraries) — keep, attributed to console
+  // other console output (vite client, libraries) - keep, attributed to console
   const rest = record.args
     .slice(1)
     .map((value) => (typeof value === "string" ? value : JSON.stringify(value)))

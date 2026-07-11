@@ -42,7 +42,7 @@ type ReadCacheOptions = {
 };
 
 // Fixed-capacity, block-aligned LRU read cache used by BrowserVirtualRandomAccessFile. Behavior (block
-// size/count, LRU eviction, hit/miss accounting, and the fill-on-miss path) is generic — only the
+// size/count, LRU eviction, hit/miss accounting, and the fill-on-miss path) is generic - only the
 // backing read and the bumped ioStats counters differ, both injected via options. This is a hot path.
 class LruReadCache {
   private readonly blockBytes: number;

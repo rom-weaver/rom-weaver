@@ -214,7 +214,7 @@ fn extract_payload_selection_keeps_one_rom_from_several() {
 #[test]
 fn extract_payload_selection_keeps_one_disc_from_two() {
     // Two complete discs (each a `.cue` + its `(Track N)` bins) are two logical ROMs. Keeping one
-    // returns the WHOLE chosen disc — its sheet and every track — so it extracts together.
+    // returns the WHOLE chosen disc - its sheet and every track - so it extracts together.
     let app = test_app_with_prompt(vec![1]);
     let context = app.context(ThreadBudget::Fixed(1));
     let handler = TestListHandler {
@@ -1253,7 +1253,7 @@ fn manifest_selection_interactive_prompt_picks_subset() {
 
 #[test]
 fn manifest_selection_interactive_cancel_keeps_defaults() {
-    // Cancel (or an empty pick — the protocol folds both into Cancelled) must
+    // Cancel (or an empty pick - the protocol folds both into Cancelled) must
     // fall back to the boolean defaults rather than aborting the run.
     let app = test_app_with_prompt(vec![]);
     let selected = app

@@ -14,7 +14,7 @@ pub enum ManifestSourceKind {
 }
 
 /// Where a manifest entry's bytes come from, as resolved by `manifest parse`:
-/// a download URL (returned verbatim — the caller resolves relative URLs
+/// a download URL (returned verbatim - the caller resolves relative URLs
 /// against the manifest's own location), an archive member already extracted
 /// to disk, or a still-relative path the caller resolves itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

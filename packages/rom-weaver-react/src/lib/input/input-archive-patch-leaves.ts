@@ -37,7 +37,7 @@ type PatchArchiveLeaf = {
 
 // Each ambiguous patch selection extracts every branch ONCE; the resulting (materialized) leaf files
 // are stashed against the emitted selection request so the controller can reuse the exact extracted
-// file for whichever candidate(s) the user picks — no re-extraction (which would collide on OPFS
+// file for whichever candidate(s) the user picks - no re-extraction (which would collide on OPFS
 // paths) and correct addressing even for two sibling patches in one branch. Keyed by request, so the
 // stash is GC'd once the controller drops the request (e.g. on re-stage or source removal).
 type RegisteredPatchLeaf = { file: PatchFileInstance; parentCompressions: InputParentCompression[] };
@@ -88,7 +88,7 @@ const enumeratePatchLeaves = async (
   const { result, patchOutputs } = await resolvedRuntime.ingest.run({
     fileName: archiveFile.fileName,
     // Unpack EVERY patch leaf without Rust prompting for a subset: the flat multi-select below is the
-    // single place the user chooses patches. Without this, an ambiguous patch archive prompts twice —
+    // single place the user chooses patches. Without this, an ambiguous patch archive prompts twice -
     // once in ingest's extract selection, then again here.
     interactiveSelectionEnabled: false,
     logLevel: options?.logging?.level,
@@ -127,7 +127,7 @@ const buildPatchArchiveLeaves = async (
     const descriptor = patches[index];
     if (!descriptor) continue;
     const displayPath = descriptor.leafPath;
-    // Archive leaves are adopted 1:1 into patchOutputs (a bare patch — never an archive — yields none).
+    // Archive leaves are adopted 1:1 into patchOutputs (a bare patch - never an archive - yields none).
     const output = patchOutputs.find((candidate) => candidate.path === displayPath);
     if (!output) continue;
     const fileName = getBaseFileName(descriptor.fileName || `patch-${index + 1}.bin`);
@@ -136,7 +136,7 @@ const buildPatchArchiveLeaves = async (
       file = await createPatchFileFromPublicOutput(output, fileName, { materializeBlob: true });
       file.fileName = fileName;
     }
-    // Trust ingest's name-based patch identification (the Rust set) and surface ALL of its leaves —
+    // Trust ingest's name-based patch identification (the Rust set) and surface ALL of its leaves -
     // only an archive leaf is excluded. The TS magic-byte re-check used to drop name-valid patches the
     // header probe mis-read, hiding real choices; ingest already classified these as patches and the
     // apply-time validate still guards a genuinely bad one.
@@ -154,7 +154,7 @@ const buildPatchArchiveLeaves = async (
     const breadcrumbs = [archiveFile.fileName || "archive", ...derivePatchLeafBreadcrumbs(displayPath)];
     // Surface the same chain as parentCompressions so a fanned-out patch keeps its "extract section"
     // (the archive › nested-archive path) in the patch stack row. Attach the elapsed time to the root
-    // entry but leave parent sizes unset — synthesizing the whole-archive size as a single leaf's
+    // entry but leave parent sizes unset - synthesizing the whole-archive size as a single leaf's
     // parent would compute a nonsensical compression ratio (archive ÷ leaf).
     const parentCompressions: InputParentCompression[] = breadcrumbs.map((entryName, depth) => ({
       depth,

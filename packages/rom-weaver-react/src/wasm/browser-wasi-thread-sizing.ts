@@ -18,7 +18,7 @@ export function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount: numb
   const requested = Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
   // Two distinct thread waves can be live at once. The Rust shared operation pool is a rayon pool
   // sized to the full budget (~`requested`), and rayon keeps its workers parked for the whole
-  // operation — they permanently occupy that many pooled wasi workers. On top of that, container
+  // operation - they permanently occupy that many pooled wasi workers. On top of that, container
   // decoders (e.g. CHD) spawn a transient `std::thread::scope` decode wave that needs *additional*
   // pooled workers concurrently. The pooled-worker spawn is synchronous and cannot grow the pool
   // on demand, so if the transient wave can't find a free worker it deadlocks waiting on a

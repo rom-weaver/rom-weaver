@@ -77,7 +77,7 @@ const getVariantExtension = (
  * CLI's `--patch-header auto` rule: the ROM's checksum variants (already computed at staging)
  * are matched against the patch's required input crc32 (embedded UPS/BPS source crc32,
  * else the filename `[crc32:..]` token). Returns undefined when the ROM has no
- * strippable header — there is nothing header-related to decide or show. */
+ * strippable header - there is nothing header-related to decide or show. */
 const resolveApplyHeaderMode = (
   requirements: HeaderRequirements | undefined,
   target: Pick<InputAsset, "checksums" | "checksumVariants">,
@@ -104,7 +104,7 @@ const resolveApplyHeaderMode = (
   const rawCrc32 = toNormalizedCrc32(target.checksums?.crc32);
   if (rawCrc32 && rawCrc32 === requiredCrc32) return { ...base, decided: true, mode: "keep" };
   if (headerlessCrc32 && headerlessCrc32 === requiredCrc32) return { ...base, decided: true, mode: "strip" };
-  // The requirement matches neither variant — the apply will likely fail validation
+  // The requirement matches neither variant - the apply will likely fail validation
   // either way, so stay on the untouched bytes and let the user override.
   return { ...base, decided: false, mode: "keep" };
 };

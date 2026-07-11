@@ -71,7 +71,7 @@ const deriveApplyCompletion = (
   return { applyTimeMs, compressionTimeMs, sizeSummary };
 };
 
-// What to apply and whether a run/download is currently permitted — a snapshot of the session.
+// What to apply and whether a run/download is currently permitted - a snapshot of the session.
 interface ApplyRunRequest {
   activePatches: BinarySource[];
   /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed by the run. */

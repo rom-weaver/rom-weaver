@@ -28,7 +28,7 @@ function PatcherPrimaryAction({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
-    // The button shows the output FORMAT (the loom dl-kind), not the filename —
+    // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on
     // the accessible label.
     const extension = (state.pendingDownloadFileName.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();

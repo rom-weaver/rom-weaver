@@ -1,6 +1,6 @@
 use super::*;
 
-/// One extracted entry as it appears in a progress event's `details` — both the
+/// One extracted entry as it appears in a progress event's `details` - both the
 /// early `probe-manifest` listing (`probe_manifest.entries`) and each per-level
 /// `extract-step` (`extract_step.outputs`) carry this exact three-field shape.
 /// The webapp reads these to size/name nested archive payloads; typing it here
@@ -14,7 +14,7 @@ pub struct ExtractedFileEntry {
     /// forward-slash normalized for nested sources).
     pub file_name: String,
     /// Uncompressed size of this entry in bytes. Serialized as `null` (not
-    /// omitted) when the container handler does not report a size — the default
+    /// omitted) when the container handler does not report a size - the default
     /// `list_entry_records` impl reports `None` for libarchive-backed formats, so
     /// preserving the explicit `null` keeps the emitted JSON byte-identical.
     ///
@@ -54,7 +54,7 @@ impl ExtractedFileEntry {
 /// The `extract_step` payload nested under a per-level `extract-step` progress
 /// event's `details`. The host renders one extraction-tree row per level from
 /// this; the leaf level carries the final output entries. Status is the
-/// per-level lifecycle (`running`/`succeeded`/`failed`) — distinct from the
+/// per-level lifecycle (`running`/`succeeded`/`failed`) - distinct from the
 /// command-terminal status on the event itself.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -139,8 +139,8 @@ impl CliApp {
         (is_rom, entry_summaries, has_rom, has_patch)
     }
 
-    /// Emit an early `probe-manifest` event the instant the container is listed — before any
-    /// heavy extraction — so the host can route a dropped file (ROM input vs patch bundle) and
+    /// Emit an early `probe-manifest` event the instant the container is listed - before any
+    /// heavy extraction - so the host can route a dropped file (ROM input vs patch bundle) and
     /// render its identity card right away instead of awaiting a separate probe roundtrip. The
     /// event is purely additive: it is gated on streaming output (`emit_progress_events`), so the
     /// CLI report bytes are unchanged. Status stays `Running` because extraction continues; the
@@ -179,7 +179,7 @@ impl CliApp {
         let (is_rom, entry_summaries, _has_rom, _has_patch) =
             Self::classify_container_entries(&entries, ignore_common_files);
         // A bare disc image / ROM source resolves its platform from a bounded prefix read of the
-        // source itself — cheap, no decode. We deliberately do NOT decode a prefix of the inner ROM
+        // source itself - cheap, no decode. We deliberately do NOT decode a prefix of the inner ROM
         // payload for archives here: that duplicated decode work ahead of the real extraction and
         // measurably slowed every extract, for only a slightly-earlier platform tag (archives get
         // their identity at completion as before).
@@ -293,7 +293,7 @@ mod tests {
 
     // These tests pin the exact JSON shape the typed detail structs emit. The keys and
     // null/omit semantics must reproduce the previous hand-built `json!`/`Map` output byte-for-byte
-    // so existing webapp consumers and cli_smoke snapshots keep parsing — see the `extract-step`
+    // so existing webapp consumers and cli_smoke snapshots keep parsing - see the `extract-step`
     // assertions in `compress.rs` and the `probe-manifest` assertions in `probe_extract.rs`.
 
     #[test]

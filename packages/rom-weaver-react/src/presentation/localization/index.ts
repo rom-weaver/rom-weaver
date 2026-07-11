@@ -58,8 +58,8 @@ const getBrowserLocaleCandidates = (): string[] => {
  * Per-locale Lingui instances, cached. Each loads its own compiled catalog plus
  * the English source as a fallback so any gap (which `lingui compile --strict`
  * forbids at build time) degrades to English rather than showing a raw id. The
- * UI consumes the `Localizer` facade below — not Lingui's `<Trans>`/`useLingui`
- * — so no `<I18nProvider>` is needed; `useUiLocalizer`'s memo on the language
+ * UI consumes the `Localizer` facade below - not Lingui's `<Trans>`/`useLingui`
+ * - so no `<I18nProvider>` is needed; `useUiLocalizer`'s memo on the language
  * setting already re-renders consumers on a locale switch.
  */
 const i18nCache = new Map<LocaleCode, I18n>();

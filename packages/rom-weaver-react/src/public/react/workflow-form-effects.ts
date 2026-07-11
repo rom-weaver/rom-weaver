@@ -59,7 +59,7 @@ type QueuedRunEffectOptions = {
   canQueue: boolean;
   /** A blocking warning/error that should drop the queued run. */
   blocked: boolean;
-  /** Sources are still preparing — stay queued and wait. */
+  /** Sources are still preparing - stay queued and wait. */
   pending: boolean;
   /** Everything is ready to start the run right now. */
   canStart: boolean;
@@ -72,7 +72,7 @@ type QueuedRunEffectOptions = {
  * queued, drop it if the workflow is busy/completed, can no longer be queued, or
  * is blocked; keep waiting while preparation is pending; otherwise start the run
  * as soon as it can. Runs on every render (no dependency array) so it re-checks
- * readiness as staging state settles — matching the original inline effects.
+ * readiness as staging state settles - matching the original inline effects.
  */
 const useQueuedRunEffect = ({
   queued,
@@ -132,14 +132,14 @@ type WorkbenchActivityOptions = {
  * running while busy or queued, done once an output is ready, idle otherwise.
  * (The apply form keeps a richer staging/failed-aware variant inline.) Keyed by
  * the caller's stable workflow id so each mounted form owns its own activity slot
- * — a sibling form mounting/settling can no longer clobber a live run.
+ * - a sibling form mounting/settling can no longer clobber a live run.
  */
 const useWorkbenchActivity = (workflowId: string, { busy, queued, completed }: WorkbenchActivityOptions) => {
   useEffect(() => {
     if (busy || queued) setWorkbenchActivity(workflowId, { state: "running" });
     else if (completed) setWorkbenchActivity(workflowId, { state: "done" });
     else setWorkbenchActivity(workflowId, { state: "idle" });
-    // ponytail: no unmount cleanup — the webapp forms never unmount, and normal
+    // ponytail: no unmount cleanup - the webapp forms never unmount, and normal
     // settling already clears the slot to idle. Add a cleanup here if a form can
     // unmount mid-run (would otherwise leave a stale 'running' pinned).
   }, [workflowId, busy, queued, completed]);
@@ -147,7 +147,7 @@ const useWorkbenchActivity = (workflowId: string, { busy, queued, completed }: W
 
 /**
  * Forwards a page-level drop (dragging anywhere on the page) to the form's
- * unified drop handler, so the whole tab is a drop target — not just the
+ * unified drop handler, so the whole tab is a drop target - not just the
  * dropzone box. Each drop id is handled once; the handler runs in a microtask so
  * it does not fire synchronously during render. `isCancelled` lets handlers that
  * await async work bail out if the effect was torn down meanwhile.

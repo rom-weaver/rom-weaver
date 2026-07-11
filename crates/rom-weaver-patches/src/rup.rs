@@ -649,7 +649,7 @@ fn select_matching_file_for_input<'a>(
             )),
         },
         0 => {
-            // Only needed for this diagnostic — computed lazily so the common
+            // Only needed for this diagnostic - computed lazily so the common
             // (matching) path does not pay a redundant full-file MD5 pass.
             let raw_input_md5 = md5_file(input_path)?;
             Err(RomWeaverError::Validation(format!(

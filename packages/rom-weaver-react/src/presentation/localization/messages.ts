@@ -7,7 +7,7 @@ import type { MessageId } from "./catalog.ts";
  * is the catalog devs edit to add/change UI text. `lingui extract` reads these
  * `msg(...)` calls via static analysis to build the en/es/de `.po` catalogs.
  *
- * This module is intentionally NOT imported by app code — it carries the
+ * This module is intentionally NOT imported by app code - it carries the
  * `@lingui/core/macro` import, which only resolves under the Babel macro
  * transform. The runtime instead reads the `lingui compile`d output via
  * `MESSAGE_CATALOGS` in `./catalog.ts`. Plural ids carry an ICU
@@ -111,7 +111,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.confirm.trimBody": msg({
     id: "ui.confirm.trimBody",
     message:
-      "Trimming writes a new, smaller ROM — this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it.",
+      "Trimming writes a new, smaller ROM - this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it.",
   }),
   "ui.confirm.trimConfirm": msg({ id: "ui.confirm.trimConfirm", message: "Trim ROM" }),
   "ui.confirm.trimTitle": msg({ id: "ui.confirm.trimTitle", message: "Trim ROM?" }),
@@ -126,7 +126,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.addTrim": msg({ id: "ui.drop.addTrim", message: "Replace the ROM" }),
   "ui.drop.anywhereShort": msg({
     id: "ui.drop.anywhereShort",
-    message: "click to browse — or drop files anywhere on the page",
+    message: "click to browse - or drop files anywhere on the page",
   }),
   "ui.drop.cancelStage": msg({ id: "ui.drop.cancelStage", message: "Cancel reading" }),
   "ui.drop.hero": msg({ id: "ui.drop.hero", message: "Drop a ROM or patches" }),
@@ -135,7 +135,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.hint": msg({
     id: "ui.drop.hint",
     message:
-      "click or drop files anywhere on the page — archives, containers, cue sheets and softpatches resolve automatically",
+      "click or drop files anywhere on the page - archives, containers, cue sheets and softpatches resolve automatically",
   }),
   "ui.drop.modified": msg({ id: "ui.drop.modified", message: "Drop the modified ROM" }),
   "ui.drop.original": msg({ id: "ui.drop.original", message: "Drop the original ROM" }),
@@ -158,12 +158,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.info.chdDvd": msg({ id: "ui.info.chdDvd", message: "Valid: lzma, zlib, huff, flac. huff has no level." }),
   "ui.info.compressType": msg({
     id: "ui.info.compressType",
-    message: "Optionally wrap the output in a compressed container — “none” writes the raw file.",
+    message: "Optionally wrap the output in a compressed container - “none” writes the raw file.",
   }),
   "ui.info.createModified": msg({
     id: "ui.info.createModified",
     message:
-      "Your edited build — the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported).",
+      "Your edited build - the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported).",
   }),
   "ui.info.createOriginal": msg({
     id: "ui.info.createOriginal",
@@ -182,7 +182,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.info.output": msg({
     id: "ui.info.output",
     message:
-      "Set the filename without an extension — the format select controls it. Containers (zip, 7z, chd, rvz) are written directly.",
+      "Set the filename without an extension - the format select controls it. Containers (zip, 7z, chd, rvz) are written directly.",
   }),
   "ui.info.outputOptions": msg({
     id: "ui.info.outputOptions",
@@ -191,7 +191,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.info.patches": msg({
     id: "ui.info.patches",
     message:
-      "Patches apply top to bottom — drag the handle to reorder. Filename hints (crc32 / size) are checked before the run.",
+      "Patches apply top to bottom - drag the handle to reorder. Filename hints (crc32 / size) are checked before the run.",
   }),
   "ui.info.romInput": msg({
     id: "ui.info.romInput",
@@ -218,7 +218,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.info.trimRom": msg({
     id: "ui.info.trimRom",
     message:
-      "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) — the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore.",
+      "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) - the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore.",
   }),
   "ui.info.units": msg({
     id: "ui.info.units",
@@ -230,7 +230,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.info.window": msg({
     id: "ui.info.window",
-    message: "Diff window for create — larger spans find moved data but use more memory.",
+    message: "Diff window for create - larger spans find moved data but use more memory.",
   }),
   "ui.info.zipCodec": msg({
     id: "ui.info.zipCodec",
@@ -315,17 +315,17 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",
     message:
-      "{count, plural, one {# patch is off — tick it to include it} other {# patches are off — tick them to include them}}",
+      "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}",
   }),
   "ui.patch.on": msg({ id: "ui.patch.on", message: "On" }),
   "ui.patch.parsing": msg({ id: "ui.patch.parsing", message: "Parsing {name}…" }),
-  "ui.patch.reorder": msg({ id: "ui.patch.reorder", message: "Drag to reorder — arrow keys move" }),
+  "ui.patch.reorder": msg({ id: "ui.patch.reorder", message: "Drag to reorder - arrow keys move" }),
   "ui.patch.stateOff": msg({ id: "ui.patch.stateOff", message: "Off" }),
   "ui.patch.target": msg({ id: "ui.patch.target", message: "Target" }),
   "ui.patch.toggle": msg({ id: "ui.patch.toggle", message: "Include {name}" }),
   "ui.picker.hint": msg({
     id: "ui.picker.hint",
-    message: "The archive contains more than one candidate — pick the ones to stage.",
+    message: "The archive contains more than one candidate - pick the ones to stage.",
   }),
   "ui.picker.skipped": msg({ id: "ui.picker.skipped", message: "skipped" }),
   "ui.picker.use": msg({ id: "ui.picker.use", message: "Use selection" }),
@@ -434,15 +434,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
-  "ui.variant.asDumped": msg({ id: "ui.variant.asDumped", message: "File — as dumped" }),
+  "ui.variant.asDumped": msg({ id: "ui.variant.asDumped", message: "File - as dumped" }),
   "ui.variant.autoTrimmed": msg({ id: "ui.variant.autoTrimmed", message: "Auto-trimmed" }),
   "ui.variant.noHeader": msg({ id: "ui.variant.noHeader", message: "Without copier header" }),
-  "ui.variant.withHeader": msg({ id: "ui.variant.withHeader", message: "File — as dumped (with 512 B header)" }),
+  "ui.variant.withHeader": msg({ id: "ui.variant.withHeader", message: "File - as dumped (with 512 B header)" }),
   "ui.verdict.mismatch": msg({ id: "ui.verdict.mismatch", message: "Mismatch" }),
   "ui.verify.ckHint": msg({ id: "ui.verify.ckHint", message: "CRC32, MD5, or SHA-1" }),
   "ui.verify.dryRun": msg({ id: "ui.verify.dryRun", message: "Dry-run" }),
-  "ui.verify.dryRunFail": msg({ id: "ui.verify.dryRunFail", message: "Failed — scratch output differs" }),
-  "ui.verify.dryRunPass": msg({ id: "ui.verify.dryRunPass", message: "Passed — scratch output re-hash matches" }),
+  "ui.verify.dryRunFail": msg({ id: "ui.verify.dryRunFail", message: "Failed - scratch output differs" }),
+  "ui.verify.dryRunPass": msg({ id: "ui.verify.dryRunPass", message: "Passed - scratch output re-hash matches" }),
   "ui.verify.expIn": msg({ id: "ui.verify.expIn", message: "Expected input checksum" }),
   "ui.verify.expOut": msg({ id: "ui.verify.expOut", message: "Expected output checksum" }),
   "ui.verify.input": msg({ id: "ui.verify.input", message: "Input" }),
@@ -450,7 +450,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.wakelock.text": msg({ id: "ui.wakelock.text", message: "Screen stays awake while a job is running." }),
   "ui.warn.ipsNoChecksum": msg({
     id: "ui.warn.ipsNoChecksum",
-    message: "IPS carries no embedded checksums — gated by the filename hint only.",
+    message: "IPS carries no embedded checksums - gated by the filename hint only.",
   }),
 };
 

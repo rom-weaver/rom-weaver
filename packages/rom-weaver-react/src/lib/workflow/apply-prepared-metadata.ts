@@ -61,7 +61,7 @@ const applyPreparedPatchMetadata = <TSource>(
   stage.state.size = prepared.file.fileSize;
   stage.state.sourceSize = prepared.sourceSize || prepared.file.fileSize;
   // The leaf patch itself often isn't decompressed (an already-extracted multi-select pick, or a
-  // re-staged raw leaf) — its extract time lives on the nesting chain's root archive. Surface that
+  // re-staged raw leaf) - its extract time lives on the nesting chain's root archive. Surface that
   // root time from whichever chain is active (prepared or the carried side-channel) so the patch
   // row's "extract:" timing renders instead of going blank.
   const chainRootTime = activeChain?.[0]?.decompressionTimeMs;

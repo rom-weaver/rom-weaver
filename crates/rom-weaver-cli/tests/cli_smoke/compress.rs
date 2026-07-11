@@ -858,10 +858,10 @@ fn archive_container_formats_round_trip() {
 
 // libarchive extract no longer buffers the whole archive on the main thread: each worker opens
 // its own reader over the source and extracts its assigned entries (the OPFS proxy makes worker
-// `path_open` work in the browser). So the legacy read-on-main knobs — forcing the main-thread
+// `path_open` work in the browser). So the legacy read-on-main knobs - forcing the main-thread
 // reader (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`) and a zero buffer cap
 // (`ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT`) that used to demote an over-cap archive to a serial
-// single-pass extract — are now no-ops here. This compresses a multi-file archive over the MT
+// single-pass extract - are now no-ops here. This compresses a multi-file archive over the MT
 // floor and asserts that, even with those knobs set, the extract still runs in parallel
 // per-worker and is byte-for-byte identical to a default extract.
 #[test]
@@ -1349,7 +1349,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
         0,
     );
 
-    // Terminal report carries only the bottom/leaf output, with its checksum — not the intermediate
+    // Terminal report carries only the bottom/leaf output, with its checksum - not the intermediate
     // `inner.zip` container we descended through.
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["status"], "succeeded");

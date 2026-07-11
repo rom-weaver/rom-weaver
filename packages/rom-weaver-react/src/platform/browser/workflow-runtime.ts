@@ -79,7 +79,7 @@ const createBrowserPublicOutputAdapter = (): RuntimePublicOutputAdapter => ({
 // pass; describe patches), and return the parsed result plus adopted `outputs`. Archive ROM leaves
 // land under the worker OPFS mount and are wrapped as path-backed PublicOutputs (carrying the ingest
 // checksums + disc structure) so the staging pipeline reuses its PublicOutput→PatchFileInstance
-// bridge; each output's cleanup removes its leaf. Only the staged source is cleaned up here — a bare
+// bridge; each output's cleanup removes its leaf. Only the staged source is cleaned up here - a bare
 // ROM is checksummed in place (`copiedInPlace`), so it produces no leaf/output.
 const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["ingest"] => ({
   run: async ({
@@ -150,7 +150,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       );
       // Adopt each ARCHIVE patch leaf (extracted into the worker OPFS mount) as a path-backed output so
       // the patch-staging path reuses the same PublicOutput→PatchFileInstance bridge. A bare patch's
-      // leaf IS the staged source (cleaned up in `finally`), so it is skipped — the caller keeps its
+      // leaf IS the staged source (cleaned up in `finally`), so it is skipped - the caller keeps its
       // own dropped file and only consumes the descriptor's metadata.
       const patchOutputs = await Promise.all(
         result.patches

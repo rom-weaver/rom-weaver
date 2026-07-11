@@ -1,8 +1,8 @@
 //! Memory- and thread-aware admission for running independent jobs concurrently.
 //!
 //! This is the native/wasm-shared analog of the browser runner scheduler (which lives in
-//! TypeScript and reasons over separate wasm workers). Here a single process — or a single wasm
-//! instance whose main thread plus spawned WASI threads share one linear memory — owns a batch of
+//! TypeScript and reasons over separate wasm workers). Here a single process - or a single wasm
+//! instance whose main thread plus spawned WASI threads share one linear memory - owns a batch of
 //! independent jobs and decides which may run at the same time, gated by three limits:
 //!
 //! 1. a hard cap on the number of concurrent jobs,
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// One schedulable job's resource demand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JobDemand {
-    /// Estimated peak resident working set in bytes. `0` means unknown/negligible — such a job is
+    /// Estimated peak resident working set in bytes. `0` means unknown/negligible - such a job is
     /// treated as free against the memory ceiling so it still overlaps others.
     pub bytes: u64,
     /// Worker threads the job will use once admitted. `0` marks thread-less work (e.g. a metadata
@@ -82,7 +82,7 @@ impl ConcurrencyLimits {
     }
 }
 
-/// Greedily group jobs — referenced by their original index — into sequential "waves" of
+/// Greedily group jobs - referenced by their original index - into sequential "waves" of
 /// concurrently-runnable jobs. First-fit from the front mirrors the runner scheduler's pump: a
 /// job that does not fit the current wave is deferred rather than blocking jobs behind it.
 ///
@@ -153,7 +153,7 @@ pub struct BatchWave {
 }
 
 /// A serializable concurrent schedule: ordered waves run one after another, the jobs within a wave
-/// run together. This is the canonical hand-off the planner produces — the native batch executor
+/// run together. This is the canonical hand-off the planner produces - the native batch executor
 /// runs it directly, and (across the wasm boundary) the browser multi-worker scheduler obeys the
 /// same plan, so one Rust policy drives both.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

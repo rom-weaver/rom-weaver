@@ -28,7 +28,7 @@ rust = "1.95.0"
 # WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
 # explicit $WASI_SDK_PATH, then legacy install locations. When no SDK is present
 # these resolve to broken paths and the build tasks fail with a clear toolchain
-# error — harmless for non-wasm commands.
+# error - harmless for non-wasm commands.
 WASI_SDK_PATH = "{{ exec(command='bash ' ~ config_root ~ '/scripts/wasm/detect-wasi-sdk.sh') }}"
 WASI_SYSROOT = "{{ env.WASI_SDK_PATH }}/share/wasi-sysroot"
 WASI_CLANG = "{{ env.WASI_SDK_PATH }}/bin/clang"
@@ -153,7 +153,7 @@ run = "cargo test --workspace"
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
 # Requires cargo-llvm-cov + the llvm-tools-preview component. llvm-cov recompiles
 # the workspace with instrumentation into its own target subdir, so this does not
-# reuse the normal `cargo test` artifacts — run it on demand, not in the gate.
+# reuse the normal `cargo test` artifacts - run it on demand, not in the gate.
 # Collect once with --no-report, then emit both formats from the same profdata.
 run = '''
 #!/usr/bin/env bash

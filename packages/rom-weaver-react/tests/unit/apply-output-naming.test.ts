@@ -5,7 +5,7 @@ import {
 } from "../../src/lib/workflow/apply-output-state-machine.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowResolvedInput } from "../../src/types/apply-workflow.ts";
 
-// Pins the controller's automatic apply output-name derivation — the single source of truth the
+// Pins the controller's automatic apply output-name derivation - the single source of truth the
 // apply form reads from `snapshot.output`. The disc cases guard the multi-track behaviour the form
 // used to special-case (`getDiscInputOutputFileName`): a disc's "primary" resolved file is a track
 // (e.g. `track01.bin`), a poor output name, so the disc/archive/cue sheet name is used instead.

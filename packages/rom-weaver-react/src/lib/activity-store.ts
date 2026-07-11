@@ -3,7 +3,7 @@ import { createLogger } from "./logging.ts";
 /**
  * Workbench activity for the selvage status strip: which state the bench is
  * in (idle / staging / ready / running / failed / done) and an optional stage
- * line ("Apply — Track 1.bin"). Forms publish per workflow; the selvage
+ * line ("Apply - Track 1.bin"). Forms publish per workflow; the selvage
  * subscribes to the derived published state. A vanilla store so non-React
  * controllers can publish too.
  *

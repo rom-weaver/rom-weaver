@@ -8,7 +8,7 @@ import type {
  * Compile-time exhaustiveness guard for the *set* of core (Rust) error kinds.
  * Keyed by the generated {@link RomWeaverErrorKind}, so adding a new Rust kind
  * (which regenerates that union) makes tsc fail here until the new kind is
- * handled. This locks the recognized kind set — NOT the message-prefix
+ * handled. This locks the recognized kind set - NOT the message-prefix
  * classification below. Runtime classification of a Rust failure now comes from
  * the typed `error_kind` the core attaches to failed events (preferred by
  * {@link resolveWorkerErrorKind}); the {@link inferCoreWorkerErrorKind} regex is

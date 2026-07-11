@@ -86,7 +86,7 @@ const getVariantBytes = (variant: ChecksumVariant, sourceBytes: number | undefin
 };
 
 /* Checksum variants (headerless, auto-trimmed…) render as labeled sub-groups
-   inside the same Checks drawer as the raw checksums — the prototype's single
+   inside the same Checks drawer as the raw checksums - the prototype's single
    "Checks" section, not a separate drawer. */
 const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: ChecksumVariant[] }) => {
   const rows = (variants || []).filter((variant) => variant.id !== "raw");
@@ -152,7 +152,7 @@ const SourceInfoList = ({
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present, the base
   // checksums become one of several groups, so they get their own labeled head
-  // ("Unchanged") to match — an unlabeled block alongside labeled variants reads
+  // ("Unchanged") to match - an unlabeled block alongside labeled variants reads
   // as if it belonged to the first variant.
   const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
   const baseGroupLabel = "Unchanged";
@@ -200,7 +200,7 @@ type DiscTrackPanelInfo = {
 
 /**
  * A multi-track disc's per-bin checksums under a single collapsible
- * "Checks & Tracks" section — each track is a labeled sub-group rather than its
+ * "Checks & Tracks" section - each track is a labeled sub-group rather than its
  * own top-level panel, so the tracks read as one unit. This is the disc form of
  * the single-file "Checks" panel: it carries the checksums, just grouped by
  * track, so a disc card has no separate Checks drawer.

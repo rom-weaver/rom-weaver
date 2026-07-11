@@ -53,7 +53,7 @@ impl StreamContainerHandler {
     ) -> Result<u64> {
         let format_name = self.descriptor.name;
         // The uncompressed size is unknown without decoding the whole stream, and a probe pass to
-        // learn it would decompress the payload a second time — emit indeterminate progress instead.
+        // learn it would decompress the payload a second time - emit indeterminate progress instead.
         debug!(
             format = format_name,
             compression = ?self.compression,

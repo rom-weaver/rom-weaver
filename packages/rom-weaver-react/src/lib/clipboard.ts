@@ -1,6 +1,6 @@
 /**
  * Copy text to the clipboard with a fallback for contexts where
- * navigator.clipboard is unavailable or rejects — a non-secure context (a
+ * navigator.clipboard is unavailable or rejects - a non-secure context (a
  * self-signed LAN cert on iOS) or a browser that gates the async Clipboard
  * API. Selection + execCommand still copies in those cases. Resolves on
  * success; rejects only when no method works.
@@ -10,7 +10,7 @@
 // outside it inert, so a textarea appended to document.body cannot be focused
 // or selected and execCommand("copy") silently fails. Mount the scratch
 // textarea inside the open dialog instead. Prefer a :modal match (the truly
-// inert-inducing one); fall back to any [open] dialog — a non-modal dialog is
+// inert-inducing one); fall back to any [open] dialog - a non-modal dialog is
 // not inert, so mounting inside it is harmless when :modal is unavailable.
 const modalMatch = (dialog: HTMLDialogElement): boolean => {
   try {
@@ -34,7 +34,7 @@ const copyHost = (): HTMLElement => {
 
 // iOS Safari ignores textarea.select() for copy and refuses to select a
 // readonly field, so the plain "appendChild + select()" recipe copies nothing
-// there. Select via an explicit Range + setSelectionRange with readOnly off —
+// there. Select via an explicit Range + setSelectionRange with readOnly off -
 // the combination WebKit actually honours. font-size:16px avoids the iOS
 // focus-zoom. Keep the element non-readonly only during selection.
 const selectTextareaContents = (textarea: HTMLTextAreaElement): void => {
@@ -77,8 +77,8 @@ const execCommandCopy = (value: string): boolean => {
 const copyToClipboard = async (text: string): Promise<void> => {
   const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
   // The async Clipboard API rejects (NotAllowedError: "Document is not focused")
-  // whenever the page lacks focus — DevTools or another window is focused, or the
-  // click landed during a focus handoff — which made copy fail intermittently. And
+  // whenever the page lacks focus - DevTools or another window is focused, or the
+  // click landed during a focus handoff - which made copy fail intermittently. And
   // recovering by awaiting that rejection then calling execCommand is too late: the
   // await defers it to a microtask where the user gesture is gone, so execCommand
   // fails too. When the document is focused, use the clean modern API; otherwise go

@@ -2,7 +2,7 @@
 //!
 //! A `.dcp` (Universal Dreamcast Patcher patch) is a plain ZIP archive. To
 //! describe its contents we only need each entry's name and sizes, which live
-//! in the central directory — no decompression and therefore no DEFLATE
+//! in the central directory - no decompression and therefore no DEFLATE
 //! dependency. This reader scans the End Of Central Directory record and parses
 //! the central-directory file headers; entry payload extraction is a separate
 //! concern handled by the apply pipeline.
@@ -117,7 +117,7 @@ const METHOD_DEFLATE: u16 = 8;
 /// Seeks to the entry's local file header (re-reading the local name/extra
 /// lengths, which may differ from the central directory), reads the stored
 /// bytes, and inflates them when DEFLATE-compressed. Only the STORED (0) and
-/// DEFLATE (8) methods — the only ones a `.dcp` uses — are supported.
+/// DEFLATE (8) methods - the only ones a `.dcp` uses - are supported.
 pub fn extract_entry<R: Read + Seek>(reader: &mut R, entry: &ZipEntry) -> Result<Vec<u8>> {
     let file_len = reader.seek(SeekFrom::End(0))?;
     reader.seek(SeekFrom::Start(u64::from(entry.local_header_offset)))?;

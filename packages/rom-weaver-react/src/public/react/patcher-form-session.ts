@@ -77,7 +77,7 @@ const DEFAULT_COMPRESSION_OPTIONS = [
 // Coalesce ROM- and patch-bucket staging that lands close together into ONE staging tick
 // so their archive extractions overlap (prepareWorkflow already fans out setInput + addPatch
 // within a single pass) instead of the ROM bucket finishing before the patch bucket's pass
-// begins. Kept short — a lone upload (or a single multi-file drop, which already arrives in
+// begins. Kept short - a lone upload (or a single multi-file drop, which already arrives in
 // one render) still stages almost immediately; this only buys the brief moment needed to fold
 // a ROM and its patches dropped a beat apart into the same concurrent batch.
 const STAGE_COALESCE_WINDOW_MS = 80;
@@ -861,8 +861,8 @@ const useLocalApplyPatchFormSession = ({
   // One coalescing window drives BOTH buckets. The ROM and patch staging decisions are the same
   // independent choreographies as before, but a short debounce defers them by a tick so a ROM and
   // its patches that arrive a beat apart (separate drops/picks) collapse into a single staging pass
-  // — syncRomInput's snapshot already carries the patches, so prepareWorkflow extracts the input and
-  // every patch concurrently — instead of the ROM bucket staging first and the patch bucket queueing
+  // - syncRomInput's snapshot already carries the patches, so prepareWorkflow extracts the input and
+  // every patch concurrently - instead of the ROM bucket staging first and the patch bucket queueing
   // behind it. Reading the latest snapshot at fire time means rapid successive changes fold into the
   // final batch; the input block runs before the patch block so the input mutation is still enqueued
   // first and every patch's readiness evaluates against a fully staged input.
@@ -936,7 +936,7 @@ const useLocalApplyPatchFormSession = ({
         const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
         const patchesChanged = !sameBinarySourceLists(previousSync.patches, activePatches);
         // Reordering and removing patches only rearrange/drop files already staged in OPFS;
-        // as long as no current patch is new, there is nothing to (re-)stage — just record order.
+        // as long as no current patch is new, there is nothing to (re-)stage - just record order.
         const previousPatchIds = new Set(getBinarySourceListStableIds(previousSync.patches));
         const noNewPatches =
           patchesChanged && getBinarySourceListStableIds(activePatches).every((id) => previousPatchIds.has(id));
@@ -960,7 +960,7 @@ const useLocalApplyPatchFormSession = ({
               emitSessionTrace("patch reorder/remove skipped re-stage", { patchCount: activePatches.length });
             } else if (!skipForInputOnlyChange) {
               // An input-only change re-runs the deferred validation from syncRomInput's completion
-              // (race-free — after the ROM is staged and patch targets resolve), so it is skipped here.
+              // (race-free - after the ROM is staged and patch targets resolve), so it is skipped here.
               const freshFromIndex = patchesAppended && !inputsChanged && !settingsChanged ? previousPatchCount : 0;
               if (freshFromIndex > 0) {
                 emitSessionTrace("patch append staged incrementally", {

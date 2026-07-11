@@ -22,7 +22,7 @@ const MARK_PREFIX = "romweaver";
 // Pending file drops in FIFO order. We correlate by *time*, not by name: input
 // staging sanitizes and collision-suffixes filenames (".rom.zip" -> "rom.zip",
 // then "rom-2.zip", "rom-3.zip" on re-stage), and an archive drop produces inner
-// files with entirely different names — so a dropped basename rarely equals the
+// files with entirely different names - so a dropped basename rarely equals the
 // name a command references. The oldest pending drop is the file the user is
 // waiting on; it is consumed by the first thread-capable command (the heavy
 // extract/checksum/apply/create), since the probe `list`s that may run first

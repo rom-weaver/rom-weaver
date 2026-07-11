@@ -80,7 +80,7 @@ impl PatchHandler for BpsPatchHandler {
         _context: &OperationContext,
     ) -> Result<OperationReport> {
         // The ingest "describe" path only needs the embedded requirements (sizes + checksums), which
-        // BPS stores in its fixed header + 12-byte footer — so skip decoding the (often million-plus)
+        // BPS stores in its fixed header + 12-byte footer - so skip decoding the (often million-plus)
         // action stream. The patch-checksum footer is still verified, so a structurally-broken patch
         // is rejected exactly as a full `parse` would reject it.
         let metadata = parse_bps_metadata(patch_path)?;
@@ -343,7 +343,7 @@ struct BpsMetadata {
 
 /// Read a BPS patch's embedded metadata (header sizes + footer checksums) WITHOUT decoding the action
 /// stream. The patch-checksum footer is verified (a single sequential read), so a corrupt/truncated
-/// patch is rejected with the same verdict a full [`parse_bps_file`] would reach — only the per-action
+/// patch is rejected with the same verdict a full [`parse_bps_file`] would reach - only the per-action
 /// decode + buffering is skipped.
 fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
     let file_len = fs::metadata(path)?.len();
@@ -1877,7 +1877,7 @@ fn copy_target_range(
     // (`output[start + i] == period[i % period]`). When `period >= buffer`, every buffer-sized
     // chunk reads bytes that were written before this copy began, so a plain chunked copy never
     // overlaps the write region. When `period < buffer` (the common RLE fill, e.g. period 1), the
-    // old code copied only `period` bytes per seek+read+write — up to four syscalls per output byte
+    // old code copied only `period` bytes per seek+read+write - up to four syscalls per output byte
     // for a period-1 run. Instead, read the period once, tile it across the buffer, and bulk-write.
     let period = *output_offset - start;
     let mut buffer = [0u8; COPY_BUFFER_SIZE];

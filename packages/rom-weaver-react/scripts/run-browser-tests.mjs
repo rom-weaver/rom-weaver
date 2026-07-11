@@ -3,7 +3,7 @@
 // Parallel browser-test runner: one vitest process per test file.
 //
 // Each vitest invocation starts its own vite dev server on its own port, so
-// every file gets a distinct origin — and therefore its own OPFS. That isolation
+// every file gets a distinct origin - and therefore its own OPFS. That isolation
 // is the whole point: the in-process suite shares one origin's OPFS across files,
 // which cascades state between them and hangs the no-arg `vitest run` at a file
 // boundary. One-file-per-process removes the shared origin, so failure counts are
@@ -31,7 +31,7 @@ const CONFIG_PATH = path.join(ROOT_DIR, "vitest.browser.config.mjs");
 const VITEST_BIN = path.join(ROOT_DIR, "node_modules", ".bin", "vitest");
 const TEST_FILE_SUFFIX = ".browser.test.js";
 // Vitest's summary line ("  Tests  1 failed | 9 passed (10)"), not the
-// "⎯ Failed Tests 2 ⎯" section banner — hence the line-start + digit anchors.
+// "⎯ Failed Tests 2 ⎯" section banner - hence the line-start + digit anchors.
 const TESTS_LINE_REGEX = /^\s*Tests\s+(\d.*?)\s*$/gm;
 
 const resolveConcurrency = () => {
@@ -111,7 +111,7 @@ const main = async () => {
     results.set(file, result);
     const name = path.basename(file);
     const status = result.code === 0 ? "PASS" : "FAIL";
-    process.stdout.write(`  ${status}  ${name}  —  ${summarizeOutput(result.output)}\n`);
+    process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
   };
 
   await runPool(files, concurrency, recordResult);
@@ -125,7 +125,7 @@ const main = async () => {
       results.set(file, result);
       const name = path.basename(file);
       const status = result.code === 0 ? "PASS (recovered)" : "FAIL";
-      process.stdout.write(`  ${status}  ${name}  —  ${summarizeOutput(result.output)}\n`);
+      process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
     }
   }
 

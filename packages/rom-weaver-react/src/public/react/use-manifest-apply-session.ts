@@ -43,7 +43,7 @@ const useManifestApplySession = ({
   seedPatchEnablement,
 }: {
   manifestSession: ManifestApplySession | null;
-  /** Latest-controller ref — the local controllers are recreated per render, so reads go through here. */
+  /** Latest-controller ref - the local controllers are recreated per render, so reads go through here. */
   controllersRef: MutableRefObject<ManifestSessionControllers>;
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
 }) => {
@@ -91,7 +91,7 @@ const useManifestApplySession = ({
       });
       setManifestMetaById(meta);
       // The controller work runs task-chained straight from the match, so everything lands while the
-      // patches are still staging — well before the apply button arms. Deferring longer would race a
+      // patches are still staging - well before the apply button arms. Deferring longer would race a
       // fast apply click: any settings commit cancels a queued apply (by design for real user edits).
       void (async () => {
         // Let the patch-list state commit so the option mutations snapshot the new list.
@@ -108,7 +108,7 @@ const useManifestApplySession = ({
         }
         // Per-patch header modes ride the normal option path (the same call the Options drawer's
         // strip-header checkbox makes); `auto` entries stay with the engine's per-step decision.
-        // Validation checksums seed only the chain ENDPOINTS — the manifest's ROM/final-output
+        // Validation checksums seed only the chain ENDPOINTS - the manifest's ROM/final-output
         // expectations, session-level rather than per-patch: they verify the ROM (card coloring +
         // apply-time input validation) without being attributed to the patches' own check fields,
         // and mid-chain states describe intermediates the webapp cannot verify before applying.
@@ -126,7 +126,7 @@ const useManifestApplySession = ({
         }
         // Output defaults emulate user edits so later real edits win. Each setter merges into the
         // settings snapshot captured at ITS render, so consecutive same-tick calls would clobber one
-        // another — yield a task between calls so each reads the committed result of the previous.
+        // another - yield a task between calls so each reads the committed result of the previous.
         const defaults = session.outputDefaults;
         if (defaults.name) {
           controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name));

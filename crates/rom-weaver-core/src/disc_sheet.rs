@@ -5,7 +5,7 @@
 //! crates parse these sheets into fully-resolved track geometry (frame math,
 //! MSF parsing, sector sizing, GD-ROM high-density layout), which requires the
 //! data files to exist on disk. The app layer only needs a far smaller fact:
-//! *which files, in order, does this sheet reference?* — for example to apply a
+//! *which files, in order, does this sheet reference?* - for example to apply a
 //! `--target` glob or to stage a disc for patching before the bins are present.
 //!
 //! This module provides exactly that: a pure, dependency-free text scan that
@@ -77,7 +77,7 @@ pub fn enumerate_disc_sheet_refs(path: &Path) -> Result<DiscSheetRefs> {
 }
 
 /// Parse disc-sheet `text` of the given `kind` into its ordered, de-duplicated
-/// referenced-file list — the text-only half of [`enumerate_disc_sheet_refs`]
+/// referenced-file list - the text-only half of [`enumerate_disc_sheet_refs`]
 /// for callers that already hold the sheet bytes (e.g. a browser extracted the
 /// `.cue` from an archive) and must not touch the filesystem. `label` is used in
 /// error messages only. Same `FILE`/track grammar, no disc geometry, no I/O.

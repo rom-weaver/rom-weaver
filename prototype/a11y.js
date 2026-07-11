@@ -3,7 +3,7 @@
    Lazy-loads axe-core (assets/axe.min.js) and runs it across every
    mode × scenario × theme, deduping violations by rule. Triggered from
    the "Check a11y" button in the prototype dock. Nothing here ships with
-   the real app — it drives the prototype via window.__rwA11y.
+   the real app - it drives the prototype via window.__rwA11y.
    ═══════════════════════════════════════════════════════════════════ */
 (() => {
   const THEMES = ["dark", "light"];
@@ -33,20 +33,20 @@
     const findings = new Map(); // ruleId -> { rule, impact, help, helpUrl, nodes, states }
     const combos = [];
     for (const theme of THEMES) for (const mode of rw.modes) for (const sc of rw.scenarios) combos.push({ theme, mode, sc });
-    // one FULL-DOCUMENT pass per theme — the per-state scans are scoped to the
+    // one FULL-DOCUMENT pass per theme - the per-state scans are scoped to the
     // visible workflow panel, which can never see page-level rules (meta-viewport,
     // landmarks, html lang, heading order, the masthead/footer/dialog chrome)
     for (const theme of THEMES) combos.push({ theme, mode: null, sc: null });
 
     // each re-render restarts the entrance animations (panel-in/drop-in fade
     // opacity 0→1 over .3s). axe would otherwise sample text mid-fade (≈22%
-    // opacity) and report bogus dark-on-dark contrast failures — kill all
+    // opacity) and report bogus dark-on-dark contrast failures - kill all
     // animation/transition timing for the duration of the sweep so every state
     // is measured at its final, settled colours.
     const noMotion = document.createElement("style");
     noMotion.textContent = "*, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important; }";
     document.head.appendChild(noMotion);
-    // also skip the scenario-change view transitions (vt-quiet morphs) — 38
+    // also skip the scenario-change view transitions (vt-quiet morphs) - 38
     // back-to-back transitions would overlay snapshots while axe samples
     document.documentElement.dataset.vtOff = "1";
 
@@ -60,7 +60,7 @@
         }
         await settle();
         const stateLabel = mode ? `${theme}·${mode}·${sc}` : `${theme}·page`;
-        // page scans exclude the sweep's own results panel + the scenario dock —
+        // page scans exclude the sweep's own results panel + the scenario dock -
         // prototype tooling that never ships with the app
         const ctx = mode
           ? document.querySelector(".workflow:not([hidden])") || document.body
@@ -141,7 +141,7 @@
               const detail = d.contrastRatio !== undefined
                 ? `ratio ${d.contrastRatio} (need ${d.expectedContrastRatio}) · fg ${d.fgColor} on bg ${d.bgColor} · ${d.fontSize || ""} ${d.fontWeight || ""}`
                 : JSON.stringify(d);
-              return `<div class="a11y-f-target mono" style="opacity:.8">${esc(s.state)} — ${esc(detail)}<br>${esc(s.target)}</div>`;
+              return `<div class="a11y-f-target mono" style="opacity:.8">${esc(s.state)} - ${esc(detail)}<br>${esc(s.target)}</div>`;
             })
             .join("")}
         </div>`,
@@ -155,7 +155,7 @@
     const status = panel.querySelector(".a11y-status");
     try {
       const result = await sweep((done, total, label) => {
-        status.textContent = `scanning ${done}/${total} — ${label}`;
+        status.textContent = `scanning ${done}/${total} - ${label}`;
       });
       const counts = result.findings.reduce((m, f) => ((m[f.impact || "minor"] = (m[f.impact || "minor"] || 0) + 1), m), {});
       status.textContent = result.findings.length
@@ -165,7 +165,7 @@
       // full detail for the console
       // eslint-disable-next-line no-console
       console.groupCollapsed(`[a11y] ${result.findings.length} violation rules across ${result.states} states`);
-      for (const f of result.findings) console.log(`${(f.impact || "minor").toUpperCase()} ${f.rule} — ${f.help} (${f.nodes.size} nodes)`, { states: [...f.states], targets: [...f.nodes] });
+      for (const f of result.findings) console.log(`${(f.impact || "minor").toUpperCase()} ${f.rule} - ${f.help} (${f.nodes.size} nodes)`, { states: [...f.states], targets: [...f.nodes] });
       console.groupEnd();
     } catch (err) {
       status.textContent = "error";

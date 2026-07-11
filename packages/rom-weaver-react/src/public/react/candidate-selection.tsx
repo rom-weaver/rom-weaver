@@ -46,7 +46,7 @@ function CandidateSelectionDialog({
   const selectableCount = displayItems.filter(({ candidate }) => candidate.selectable).length;
   const items: SelectionItem[] = displayItems.map(({ candidate, sizeLabel, warningLabel }) => {
     const primaryLabel = candidate.type === "file" ? candidate.fileName : candidate.label;
-    // breadcrumbs are [archive, …folders/nested-archives, ] — the first segment is the
+    // breadcrumbs are [archive, …folders/nested-archives, ] - the first segment is the
     // source archive (shown as a sub-heading), the rest is the folder path within it
     // (folded into the name so the entry reads "folder › patch").
     const breadcrumbs = (candidate.breadcrumbs || []).map((segment) => segment.trim()).filter(Boolean);
@@ -95,7 +95,7 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
   const selectionStateRef = useRef<CandidateSelectionState | null>(null);
   // Two independent serialization domains (the per-controller modal lock and the
   // runner's host-prompt chain) can each open a dialog without knowing about the
-  // other. Queue a second request behind the open one instead of replacing it —
+  // other. Queue a second request behind the open one instead of replacing it -
   // replacing without settling orphaned the open dialog's promise and hung the
   // mutation awaiting it.
   const pendingQueueRef = useRef<CandidateSelectionState[]>([]);
@@ -134,7 +134,7 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
     const current = selectionStateRef.current;
     advanceSelection();
     if (!current) {
-      logger.trace("candidate selection cancel ignored — no dialog open");
+      logger.trace("candidate selection cancel ignored - no dialog open");
       return;
     }
     logger.trace("candidate selection dialog cancelled by user", {

@@ -256,7 +256,7 @@ describe("opfs proxy create-after-unlink", () => {
       });
       expect(written.result).toBe(payload.byteLength);
 
-      // Release both refs. The deferred removal must NOT fire — the recreated file survives.
+      // Release both refs. The deferred removal must NOT fire - the recreated file survives.
       await request(channel, { handle: first.result, opcode: OPFS_PROXY_OP_CLOSE });
       await request(channel, { handle: first.result, opcode: OPFS_PROXY_OP_CLOSE });
       await tick();

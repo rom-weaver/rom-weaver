@@ -76,7 +76,7 @@ interface OpfsProxyMountDescriptor {
 }
 
 /**
- * Mount metadata posted to the proxy worker — the directory handle is intentionally NOT included.
+ * Mount metadata posted to the proxy worker - the directory handle is intentionally NOT included.
  * Safari/iOS cannot structured-clone a FileSystemDirectoryHandle to a (nested) worker (DataCloneError),
  * so the worker re-resolves its own handle from the per-origin OPFS root. `rootRelativeParts` is the
  * path from the OPFS root to the mount's directory (computed by the runner via `root.resolve(handle)`):
@@ -145,7 +145,7 @@ class OpfsProxyServer {
   private readonly byPath = new Map<string, number>();
   // Paths unlinked while a handle was still open: the OPFS entry has NOT been removed yet (removeEntry
   // is deferred to the last close), so the underlying file is still live with exactly one open handle.
-  // A reopen of such a path must reattach to that same handle — opening a second SyncAccessHandle on the
+  // A reopen of such a path must reattach to that same handle - opening a second SyncAccessHandle on the
   // same OPFS file violates WebKit/Safari's one-handle-per-file rule and risks a double removeEntry.
   private readonly pendingByPath = new Map<string, number>();
   private readonly freeIds: number[] = [];
@@ -340,13 +340,13 @@ class OpfsProxyServer {
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const target = data.subarray(0, Math.min(length, data.byteLength));
     // Blob-backed input: slice asynchronously (the servicing loop awaits this). The dedicated worker's
-    // free event loop is what makes this safe — consumers block synchronously on the SAB while we yield.
+    // free event loop is what makes this safe - consumers block synchronously on the SAB while we yield.
     if (entry.blob) return this.readBlobAt(entry.blob, offset, target);
     if (!entry.handle) throw new ProxyErrno(ERRNO_IO);
     return entry.handle.read(target, { at: offset });
   }
 
-  // Slice a read range out of a Blob input into the (SAB-backed) slot buffer. Async — only the dedicated
+  // Slice a read range out of a Blob input into the (SAB-backed) slot buffer. Async - only the dedicated
   // proxy worker runs it, so yielding here never blocks a consumer (they wait synchronously on the SAB).
   private async readBlobAt(blob: Blob, offset: number, target: Uint8Array): Promise<number> {
     const end = Math.min(offset + target.byteLength, blob.size);
@@ -402,7 +402,7 @@ class OpfsProxyServer {
       await dir.removeEntry(name);
     } catch (error) {
       // A NoModificationAllowedError here means a handle is still open on the file even though it is no
-      // longer in byPath — i.e. a prior unlink already deferred its removal to that handle's close. The
+      // longer in byPath - i.e. a prior unlink already deferred its removal to that handle's close. The
       // entry gets removed then, so treat this duplicate unlink as success rather than a spurious error.
       if ((error as { name?: string } | null)?.name !== "NoModificationAllowedError") throw error;
     }
@@ -455,7 +455,7 @@ class OpfsProxyServer {
 
   // Reattach an open request to an existing live handle for `guestPath`, bumping its refcount. Covers two
   // cases: a normally-open path (byPath), and a path unlinked while still open (pendingByPath) whose OPFS
-  // file is not yet removed — reattaching there guarantees we never open a second SyncAccessHandle on the
+  // file is not yet removed - reattaching there guarantees we never open a second SyncAccessHandle on the
   // same file. Returns the handle id on reattach, or undefined when no live handle exists.
   private reattachOpenHandle(
     guestPath: string,
@@ -485,7 +485,7 @@ class OpfsProxyServer {
     // (unlinked while still open) must not let the deferred removeEntry delete the freshly written
     // output at the old handle's last close. We cannot open a second SyncAccessHandle on the
     // not-yet-removed file, so revive this still-live handle as a normal entry and cancel its deferred
-    // removal — the reopened path becomes the live file again instead of a doomed one.
+    // removal - the reopened path becomes the live file again instead of a doomed one.
     if (options.create && !fromByPath && entry.pendingRemoval) {
       entry.pendingRemoval = null;
       this.pendingByPath.delete(guestPath);

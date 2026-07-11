@@ -140,7 +140,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (previousOrder !== patchOrder) {
       // A pure append leaves the existing patches (and their staged OPFS copies + resolved
       // selections) untouched, so prepareWorkflow's patchesAppended path can addPatch just the new
-      // tail. Forcing a full refresh there would clearPatches and re-stage everything — re-extracting
+      // tail. Forcing a full refresh there would clearPatches and re-stage everything - re-extracting
       // unchanged inputs and racing their still-open OPFS handles, which is what made re-uploading the
       // same archive to pick a second entry fail. Only a rearranged/shrunken prefix needs the refresh.
       const isAppend = previousOrder !== "" && patchOrder.startsWith(`${previousOrder}|`);
@@ -373,7 +373,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           });
           inputPromise = workflow
             // Surface the ROM row's done state (clear "checksumming" + populate checksums) the moment
-            // the input is checksummed, before the patch (re)validation inside setInput runs — that
+            // the input is checksummed, before the patch (re)validation inside setInput runs - that
             // validation is a patch concern and reports only on the patch row.
             .setInput(snapshot.inputs, {
               onFinalized: (state) => {
@@ -401,8 +401,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           });
         }
 
-        // Fire every addPatch synchronously (no await between iterations) so each source's staging — the
-        // archive extraction inside stageSource — starts at once, overlapping the input extraction above
+        // Fire every addPatch synchronously (no await between iterations) so each source's staging - the
+        // archive extraction inside stageSource - starts at once, overlapping the input extraction above
         // and any sibling patch. The controller still applies each patch's readiness through its
         // serialized mutation queue in call order (after setInput's), so order/state is preserved; only
         // the heavy extraction now runs concurrently.
@@ -440,7 +440,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           if (firstFailure) throw firstFailure.reason;
         }
 
-        // A clear-and-re-add rebuilt every stage with default options — replay the
+        // A clear-and-re-add rebuilt every stage with default options - replay the
         // session's per-patch user options (header/PPF-undo/checks) so a filtered
         // run doesn't silently drop them.
         if (patchesChanged && !patchesAppended && snapshot.patchOptions?.length) {
@@ -540,7 +540,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   // The session fires ROM and patch staging in the same tick (its coalescing window). Batch those
   // calls into ONE prepareWorkflow pass so the input and every patch extract concurrently (the pass
-  // fans out setInput + addPatch) while BOTH buckets keep live progress — progress is emitted once
+  // fans out setInput + addPatch) while BOTH buckets keep live progress - progress is emitted once
   // and routed by role below. Each caller still resolves with its own staged infos.
   const stageBatchRef = useRef<{
     members: StageBatchMember[];
@@ -566,7 +566,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         // A patch finished its eager parse while the ROM is still staging (the controller emits this
         // "awaiting input" event the moment the patch is read, before its queued addPatch mutation).
         // Reveal the parsed info now so the card leaves "Reading…" independent of the ROM, and DON'T
-        // route it as progress — that would keep the card busy. The deferred dry-run flips the card to
+        // route it as progress - that would keep the card busy. The deferred dry-run flips the card to
         // "Verifying…" once the ROM lands.
         if (
           workflowProgress.role === "patch" &&
@@ -872,13 +872,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
 
   // The deep dry-run validation is deferred out of staging so the patch card can render its info +
-  // cheap preflight verdict instantly; this pass runs it afterward (silently — no progress) and
+  // cheap preflight verdict instantly; this pass runs it afterward (silently - no progress) and
   // resolves with the refreshed infos now carrying the dry-run verdict.
   const validatePatches = useCallback(
     async (
       input: ApplyWorkflowSessionInput,
       // Fires once with the pre-validation infos (target resolved, verdict pending → the card reads
-      // "Verifying…") before the deep dry-run runs — so a patch dropped before its ROM shows the
+      // "Verifying…") before the deep dry-run runs - so a patch dropped before its ROM shows the
       // verifying state the moment the ROM lands, not only the final verdict.
       onVerifying?: (infos: Array<ReturnType<typeof toPatchStageInfo>>) => void,
     ) => {
@@ -889,7 +889,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         input,
         {
           // Fully silent: the deep dry-run must not surface any progress (patch-row *or* the global
-          // workflow bar via `props.onProgress`) — the card already reads as settled and only its
+          // workflow bar via `props.onProgress`) - the card already reads as settled and only its
           // verdict should change when validation lands.
           onProgress: () => undefined,
           selection: {

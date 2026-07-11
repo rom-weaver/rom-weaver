@@ -85,7 +85,7 @@ const OutputCard = ({
           id={fileNameId}
           onChange={(event) => onFileNameChange(event.currentTarget.value)}
           onKeyDown={(event) => {
-            // The output name is a textarea only so it can grow — a filename
+            // The output name is a textarea only so it can grow - a filename
             // must never contain a newline.
             if (event.key === "Enter") event.preventDefault();
           }}

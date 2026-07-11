@@ -114,7 +114,7 @@ jobs:
           npm --prefix packages/rom-weaver-react run build
 
   # Report-only coverage. Runs in parallel with `quality`, has no thresholds,
-  # and is not wired into branch protection — the test steps use
+  # and is not wired into branch protection - the test steps use
   # continue-on-error so known-flaky browser tests never fail the job; it exists
   # to publish HTML + lcov reports as a build artifact.
   coverage:

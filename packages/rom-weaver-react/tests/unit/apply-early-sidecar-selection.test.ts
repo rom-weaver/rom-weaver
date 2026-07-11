@@ -6,7 +6,7 @@ import type { CandidateSelectionRequest, SelectionChoice } from "../../src/types
 // Exercise the streamed `patch-manifest` early-surface path the apply controller adds: when the
 // ingest streams a mixed archive's sidecar patches before the ROM is hashed, the multi-select dialog
 // opens immediately (off the progress event) and the pick is reconciled later. These tests drive that
-// logic directly through the controller's protected/private surface (runtime cast — no real wasm).
+// logic directly through the controller's protected/private surface (runtime cast - no real wasm).
 
 type SelectFileSpy = (request: CandidateSelectionRequest) => SelectionChoice | Promise<SelectionChoice>;
 

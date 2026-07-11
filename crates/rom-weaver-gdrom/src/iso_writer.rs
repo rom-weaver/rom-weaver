@@ -11,7 +11,7 @@
 //! uppercase identifiers, directory records, and both path tables (L/M). No
 //! Joliet, El Torito, or extended attributes. Layout after the volume
 //! descriptors is: L-path table, M-path table, directory extents (path-table
-//! order), then file data — each aligned to a logical sector.
+//! order), then file data - each aligned to a logical sector.
 
 use std::collections::BTreeMap;
 
@@ -37,7 +37,7 @@ pub struct IsoFile {
     pub data: Vec<u8>,
 }
 
-/// A file's path and size, without its bytes — the input to [`plan_iso`]. The
+/// A file's path and size, without its bytes - the input to [`plan_iso`]. The
 /// streaming writer plans the whole layout from sizes alone, so file contents
 /// never need to be buffered up front.
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ pub struct PlannedFile {
 
 /// A fully planned ISO9660 layout: the rendered header region (system area,
 /// volume descriptors, path tables, directory extents) plus the placement of
-/// every file. File data is *not* included — it is streamed at write time.
+/// every file. File data is *not* included - it is streamed at write time.
 pub struct IsoPlan {
     /// The extent bias (track start LBA).
     pub start_lba: u32,
@@ -341,7 +341,7 @@ pub fn build_iso(files: &[IsoFile], start_lba: u32, timestamp: IsoTimestamp) -> 
 /// re-encoding every cooked sector on the fly. `boot_area` (the IP.BIN system
 /// area, [`super::gdrom::BOOT_AREA_SIZE`] bytes) overlays the first sectors;
 /// `fetch` is called once per file, in write order, to supply its bytes. Memory
-/// stays bounded by the header plus one file at a time — the cooked image and
+/// stays bounded by the header plus one file at a time - the cooked image and
 /// raw track are never fully materialized.
 pub fn write_track<W, F>(plan: &IsoPlan, boot_area: &[u8], mut fetch: F, sink: &mut W) -> Result<()>
 where

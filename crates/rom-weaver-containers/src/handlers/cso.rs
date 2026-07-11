@@ -319,7 +319,7 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         // Each worker opens its own file-backed `ciso` reader and decodes its assigned task range,
         // reading only the compressed blocks that range spans (peak memory is one task's decoded
         // output per worker, not the whole file). In the browser the OPFS proxy worker owns the
-        // source handle, so a spawned wasm thread's `path_open` is marshalled to it and succeeds —
+        // source handle, so a spawned wasm thread's `path_open` is marshalled to it and succeeds -
         // the old read-on-main path (buffer the whole compressed source on the main thread, or
         // serial-decode it over a cap) is no longer needed.
         let decode_result = if execution.used_parallelism {

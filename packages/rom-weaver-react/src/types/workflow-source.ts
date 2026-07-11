@@ -33,7 +33,7 @@ type SourceMetadata = {
   // Rust derives the live values; TS only forwards them.
   sourceFileName?: string; // unified original source name (chd/rvz/z3ds) for output naming
   underlyingMagic?: string; // z3ds payload magic
-  // Rust ingest identity verdict: content-detected container (chd/rvz/z3ds) — works on a bare .iso,
+  // Rust ingest identity verdict: content-detected container (chd/rvz/z3ds) - works on a bare .iso,
   // so it drives the auto output format ahead of extension heuristics.
   recommendedFormat?: string;
 };

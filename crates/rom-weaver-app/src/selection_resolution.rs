@@ -220,7 +220,7 @@ impl CliApp {
             })?;
         // Collapse the container's entries into the LOGICAL ROMs it carries: a CD/GD-ROM disc
         // (its `.cue`/`.gdi` sheet plus every track) becomes one unit, while each loose ROM stays
-        // its own unit. A disc must extract as a whole — sheet + all tracks together — so a chosen
+        // its own unit. A disc must extract as a whole - sheet + all tracks together - so a chosen
         // unit expands back to every member file.
         let groups = Self::build_logical_payload_groups(
             &entries,
@@ -240,7 +240,7 @@ impl CliApp {
         );
         match groups.len() {
             // 0 or 1 logical payload: extract everything at this level. This keeps a single logical
-            // payload whole — notably a CD image whose cue + bin/iso/img tracks were grouped into one
+            // payload whole - notably a CD image whose cue + bin/iso/img tracks were grouped into one
             // unit must be extracted together, not just the cue.
             0 | 1 => Ok(Vec::new()),
             _ => {
@@ -312,7 +312,7 @@ impl CliApp {
                 candidate_names.push(name);
             }
         }
-        // Disc sheets from the full listing — a sheet anchors its disc even when the kind filter
+        // Disc sheets from the full listing - a sheet anchors its disc even when the kind filter
         // excludes it (e.g. a `--rom-filter` run drops the non-payload `.cue`).
         let sheet_names: Vec<String> = entries
             .iter()
@@ -453,7 +453,7 @@ impl CliApp {
         // name; group those into a SINGLE candidate so the disc reads as one ROM rather than
         // prompting per track (and dropping the sheet). Selecting the disc expands to every member.
         let groups = Self::group_disc_selection_entries(&unique_entries);
-        // A single logical payload (e.g. one disc) needs no prompt — extract its whole group.
+        // A single logical payload (e.g. one disc) needs no prompt - extract its whole group.
         if groups.len() == 1 {
             return Ok(groups
                 .into_iter()

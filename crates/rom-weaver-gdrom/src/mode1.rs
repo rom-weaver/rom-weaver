@@ -1,5 +1,5 @@
 //! Re-encode a cooked 2048-byte ISO9660 logical sector back into a raw
-//! `MODE1/2352` physical sector — the exact inverse of the cooking that
+//! `MODE1/2352` physical sector - the exact inverse of the cooking that
 //! [`crate::sector`] performs when reading.
 //!
 //! Rebuilding a Dreamcast GD-ROM data track byte-for-byte requires regenerating
@@ -154,7 +154,7 @@ fn to_bcd(v: u8) -> u8 {
 ///
 /// The MSF minute field is a single packed-BCD byte and so can only hold two
 /// decimal digits. A full-size GD-ROM high-density track runs past 99 minutes
-/// of address (~LBA 445350), so the minute wraps modulo 100 to stay valid BCD —
+/// of address (~LBA 445350), so the minute wraps modulo 100 to stay valid BCD -
 /// the standard MSF/CD-subcode behavior for a value that overflows its field.
 /// The EDC/ECC are computed over the encoded bytes afterwards, so they remain
 /// self-consistent regardless of how the minute is represented.

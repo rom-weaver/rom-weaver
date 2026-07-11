@@ -119,7 +119,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   let runSucceeded = false;
   let mounts: Awaited<ReturnType<typeof buildBrowserOpfsWasiFds>>["mounts"] = [];
   // Build a client over the forwarded channel so this thread's I/O goes through the runner's single
-  // OPFS proxy — the only way a spawned WASI thread (which cannot path_open OPFS files itself) can
+  // OPFS proxy - the only way a spawned WASI thread (which cannot path_open OPFS files itself) can
   // reach real OPFS files. The runner always forwards the channel, so the transfer is always present.
   if (!runtime?.opfsProxyTransfer) {
     throw new Error("browser OPFS thread runtime requires an opfsProxyTransfer channel");

@@ -45,7 +45,7 @@ the WASM build over a JSON event protocol.
 | `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-react/src/wasm/generated/`. |
 | `packages/rom-weaver-react/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-react` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `qbsdiff`, `akv`). `nod` and `libarchive` are git submodules; `nod` points at a fork — push `nod` changes to the fork remote, not upstream. |
+| `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `qbsdiff`, `akv`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
@@ -71,7 +71,7 @@ keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI
 - `CodecBackend`: standalone encode/decode.
 
 Handlers return `OperationReport` (family, format, stage, label, JSON details,
-percent, thread execution, status) — the single progress/result currency that
+percent, thread execution, status) - the single progress/result currency that
 flows from format code through `rom-weaver-app` to the CLI reporters and, in
 JSON mode, to the browser. `OperationContext` carries cancellation, temp-path
 allocation, progress sinks, and thread budgets downward.
@@ -100,15 +100,15 @@ Patterns that matter when touching this code:
   bounded (~1 GiB cap on CHD decode batches).
 - **Per-worker reads under WASM (via the OPFS proxy).** Spawned wasm threads
   cannot `path_open` an OPFS file directly (WASI `os error 44`, worst on Safari).
-  The dedicated OPFS proxy worker resolves this — threads open and read through
-  it — so container/patch decode reads per-worker like native does, and the old
+  The dedicated OPFS proxy worker resolves this - threads open and read through
+  it - so container/patch decode reads per-worker like native does, and the old
   read-on-main gates (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER` /
   `ROM_WEAVER_PATCH_MAIN_THREAD_READER`) are retired. (Lone remaining
   read-on-main: RVZ *create* in the vendored `nod` fork.) See **Browser I/O
   paths** below for the full picture.
 - **Browser thread budgets.** "auto" is resolved on the JS side
   (`packages/rom-weaver-react/src/wasm/workers/browser-thread-budget.ts` and the
-  React `toThreadBudget` path) before it reaches wasm — the wasm fallback is a
+  React `toThreadBudget` path) before it reaches wasm - the wasm fallback is a
   fixed 4 threads, so passing "auto" through literally caps throughput.
 - **Byte-identical parity.** Compression outputs are validated against
   reference tools (chdman, dolphin-tool). Performance changes to encode paths
@@ -135,14 +135,14 @@ direct writes >=2 MiB bypass it) so per-sector decode output doesn't become
 round-trip-bound. Note the WASI contract gotcha: a `readAt` of **0 bytes is
 success**, which Rust `read_exact` surfaces as a generic "read error".
 
-**Input reads** — chosen per source in `workers/protocol/browser-opfs-source-ref.ts`:
+**Input reads** - chosen per source in `workers/protocol/browser-opfs-source-ref.ts`:
 
 | source | backend | notes |
 | --- | --- | --- |
 | already on OPFS (extracted file, patch output) | `BrowserProxyRandomAccessFile` by path | no copy; how multi-step workflows chain |
 | Blob/File, fast path (`useProxyHandle=false`) | `BrowserVirtualRandomAccessFile` + per-thread `FileReaderSync` + 16 MiB LRU | N readers run at once |
 | Blob/File, proxy handle (`useProxyHandle=true`) | `BrowserProxyRandomAccessFile` -> OPFS proxy worker (Blob-backed handle) | exactly one reader, over SAB |
-| in-memory `Uint8Array`/`ArrayBuffer` | `BrowserVirtualRandomAccessFile` in-memory | defensive only — no current caller |
+| in-memory `Uint8Array`/`ArrayBuffer` | `BrowserVirtualRandomAccessFile` in-memory | defensive only - no current caller |
 
 The fast-path/proxy choice is browser-gated:
 `useProxyHandle = isWebKitInputRuntime() && size >= ~64 MiB`. Concurrent reads of
@@ -152,38 +152,38 @@ extract ~5747 ms stalled vs ~4612 ms balanced). Small inputs are single-threaded
 (no contention), so they take the lower-overhead fast path even on Safari. OPFS
 input *staging* (copying a Blob into OPFS up front) is fully retired.
 
-**Output writes** — wasm-produced files (extracted ISO, created CHD/RVZ, patched
+**Output writes** - wasm-produced files (extracted ISO, created CHD/RVZ, patched
 ROM) write through `BrowserProxyRandomAccessFile.writeAt` (4 MiB write-back
 coalescing) -> `OpfsProxyClient.write` -> proxy server `SyncAccessHandle.write`.
 A separate storage worker (`workers/storage/browser-opfs-staging.worker.ts`,
 actions `write`/`truncate`/`cleanup`) backs the app-side large-file VFS and path
 cleanup, not the per-op wasm output.
 
-**Output -> user** — `storage/browser/browser-large-file-vfs.ts`
+**Output -> user** - `storage/browser/browser-large-file-vfs.ts`
 `createOutputRef()` exposes the OPFS result as a lazy `getFile()` plus `saveAs()`
-(browser download, or write into a user-picked `FileSystemFileHandle`) — the
+(browser download, or write into a user-picked `FileSystemFileHandle`) - the
 bytes stay OPFS-backed instead of round-tripping the JS heap.
 
-**OPFS proxy topology** — one **dedicated** proxy worker per runner
+**OPFS proxy topology** - one **dedicated** proxy worker per runner
 (`wasm/browser-opfs-proxy-runtime.ts` spawns `wasm/workers/browser-opfs-proxy-worker.ts`).
 It is the single owner of every `SyncAccessHandle` (and Blob input handle); its
 loop is async (`Atomics.waitAsync` doorbell) while **consumers block
-synchronously** (`Atomics.wait`) — that free event loop is what makes the
+synchronously** (`Atomics.wait`) - that free event loop is what makes the
 Blob-handle reads deadlock-free. The SAB channel is forwarded into every spawned
 WASI thread so they share the one proxy; the mount
 (`wasm/browser-opfs-mount.ts`) builds proxy vs virtual inodes and caches inode
 trees across runs.
 
-**Native (CLI)** — plain `std::fs::File` + `BufReader`/`BufWriter`,
+**Native (CLI)** - plain `std::fs::File` + `BufReader`/`BufWriter`,
 `SplitFileReader` for split inputs, `create_extract_output_file` for outputs
 (`rom-weaver-core`). Container decode uses the same **per-worker** reader shape
 as wasm (each worker opens its own range), differing only in backend (`File` vs
-proxy) — there is no read-on-main on native.
+proxy) - there is no read-on-main on native.
 
 **Constraints that shape all of this:** `SharedArrayBuffer` needs
 crossOriginIsolation (COOP/COEP headers from
 `packages/rom-weaver-react/scripts/dev-server.mjs` / the prod
-service worker) — no SAB means no proxy and no threads; OPFS is dedicated-worker
+service worker) - no SAB means no proxy and no threads; OPFS is dedicated-worker
 only (no main-thread `window`); WebKit allows **one `SyncAccessHandle` per file**
 (the proxy refcounts to one) and serializes concurrent `FileReaderSync` of one
 File (the reason for the input-read gate).
@@ -196,18 +196,18 @@ signatures, size-modulus rules, per-header `headered_extension` /
 `headerless_extension`, and `retained_on_output`). Patch apply handles this with
 two symmetric policies (`crates/rom-weaver-app/src/patch_apply.rs`):
 
-- **`--patch-header auto|keep|strip`** — which bytes each patch applies against.
+- **`--patch-header auto|keep|strip`** - which bytes each patch applies against.
   Auto decides **per patch in the chain** on checksum proof: the patch's
   embedded source CRC32 (or the first patch's `[crc32:..]` filename token) is
   compared against the current bytes vs their headerless/re-headered
   counterpart, and the header is stripped or restored between steps
   (`chain_header_transition`) only when the proof matches. The flag is
-  positional and repeatable — each occurrence binds to the preceding `--patch`
+  positional and repeatable - each occurrence binds to the preceding `--patch`
   and carries forward (`align_patch_header_modes` re-derives the interleave from
   raw clap indices).
-- **`--output-header auto|keep|strip`** — whether the single final output
+- **`--output-header auto|keep|strip`** - whether the single final output
   carries the header. Auto keeps emulator-required format headers (iNES/FDS/
-  LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor) — except an
+  LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor) - except an
   NSRT-signed SNES copier header (`NSRT` at 0x1e8), which carries real dump
   metadata and comes back, matching the RUP handler's own normalization. When
   the final header state changes the ROM's conventional extension, the CLI
@@ -237,7 +237,7 @@ dedicated path that rebuilds a whole disc track.
   parses the PVD/directory tree resolving extents at `lba − start_lba`;
   `iso_writer::build_iso` authors a cooked image back (deterministic, pinnable
   timestamp, +start_lba bias); `mode1::encode_mode1_sector` re-adds sync/header/
-  EDC (poly `0x8001801B`) /ECC (GF(2⁸), poly `0x11D`) — validated byte-for-byte
+  EDC (poly `0x8001801B`) /ECC (GF(2⁸), poly `0x11D`) - validated byte-for-byte
   against real disc sectors. The first 16 sectors are the IP.BIN boot area and
   are carried through (or replaced) on rebuild.
 - **`rom-weaver-dcp`** owns the format: `zip` reads the central directory and
@@ -250,7 +250,7 @@ dedicated path that rebuilds a whole disc track.
   bytes on demand (delta applied against its freshly-read source, verbatim
   inflated, or untouched file read through) and dropping them immediately. The
   cooked image and raw track are never materialized, so peak memory scales with
-  the largest single file's apply working set — not the disc or the patch.
+  the largest single file's apply working set - not the disc or the patch.
 - **CLI wiring.** `patch apply` detects a `.dcp` patch and routes to
   `rom-weaver-app/src/patch_apply_dcp.rs`, which requires a disc-sheet
   (`.cue`/`.gdi`) input, auto-selects the data track (largest track that opens
@@ -273,21 +273,21 @@ overridable `output` defaults (`name`/`header`). ROM state checks live on the
 chain's endpoints: `rom.checks` describes the input ROM and `output.checks`
 the result of applying the full chain. A patch only carries its own
 `inputChecks`/`outputChecks` when they differ from those endpoints (mid-chain
-steps) — `manifest create` drops endpoint-equal per-patch checks
+steps) - `manifest create` drops endpoint-equal per-patch checks
 automatically, so patches rely on the rom/output checks unless they differ.
 Output compression always remains the applying user's choice. Every patch
 entry's source is either a download `url` or a `path` relative to the manifest
 (an archive member when the manifest ships inside an "everything archive" that
 also bundles the ROM and patches). The `rom` entry may instead be *sourceless*
 (checks/name only): the applying user supplies the ROM themselves and the
-checks validate it — the default shape for distributable patch bundles; the
+checks validate it - the default shape for distributable patch bundles; the
 apply error for a sourceless bundle input and the webapp's ROM step both
 surface the expected name/checksums/size so the user knows which ROM to
 supply. Schema and the single shared parser live in
 `rom-weaver-app/src/manifest_schema.rs` / `manifest_parse.rs`; validation
 failures use stable `manifest.*` `ValidationCode`s. Manifest-ness is
 filename-based: exactly `rw.json`, `rw.json.<gz|bz2|xz|zst>`, or a root-level
-`rw.json` archive member. Never name one `manifest.json` — the webapp service
+`rw.json` archive member. Never name one `manifest.json` - the webapp service
 worker runtime-caches that name.
 
 - **Commands.** `manifest parse` loads any accepted packaging, resolves
@@ -295,8 +295,8 @@ worker runtime-caches that name.
   attaching ingest-grade patch descriptors), and returns a typed
   `ManifestParseResult` under `details.manifest`. `manifest create` builds a
   validated manifest from local files (ROM checks computed from the
-  real bytes, per-patch metadata flags — including
-  `--patch-input-check`/`--patch-output-check` chain-state requirements —
+  real bytes, per-patch metadata flags - including
+  `--patch-input-check`/`--patch-output-check` chain-state requirements -
   bound to the preceding `--patch` by argv index; `--output-check` pins the
   final `output.checks`), emits plain/`.gz`/`.zst`, and `--bundle`s manifest + sources into
   a creatable archive (the extension picks the format, e.g. `.zip`/`.7z`).
@@ -347,18 +347,18 @@ worker runtime-caches that name.
   `packages/rom-weaver-react/src/wasm/generated/`. CI runs `--check`; any change to
   a `#[derive(TS)]` type or format registry metadata requires regenerating and
   committing. The generated format metadata is the single source for codec
-  pickers and format tables in the webapp — do not hand-maintain duplicates.
+  pickers and format tables in the webapp - do not hand-maintain duplicates.
 - **Event protocol.** The wasm CLI is invoked with argv and `--json`; progress
   and results stream back as JSON lines (`RomWeaverRunJsonEvent`). The browser
-  side never calls Rust functions directly — everything goes through the
+  side never calls Rust functions directly - everything goes through the
   runner's argv/stdio surface, which is what keeps the native and browser CLIs
   behaviorally identical.
-- **`ingest` — the mainline browser drop path.** The webapp routes every
+- **`ingest` - the mainline browser drop path.** The webapp routes every
   dropped input through the shared `ingest` command
   (`rom-weaver-app/src/ingest_command.rs`), one wasm call per source. It
   classifies the source into a `rom` or `patch` bucket, does nested archive/
   codec extraction, checksums each ROM leaf (variants + platform identity), and
-  describes any patches — replacing the webapp's older separate classify →
+  describes any patches - replacing the webapp's older separate classify →
   nested-extract → checksum (ROM) and classify → describe (patch) round-trips.
   A ROM source that also bundled sidecar patches carries both. The consolidated
   `IngestResult` rides the standard `OperationReport.details` envelope (under
@@ -386,7 +386,7 @@ The WASM build needs a WASI SDK (v33+, auto-detected; see
 files are
 committed and drift-checked.
 
-## Webapp UI — the loom workbench
+## Webapp UI - the loom workbench
 
 The React webapp's presentation layer is the "loom workbench" design ported
 from `prototype/` (charcoal chassis, cartridge-orange thread accent, cream
@@ -404,7 +404,7 @@ hash readouts, sage verification).
   `src/webapp/log-store.ts`, which chains a capturing sink onto the logger).
   The selvage state comes from `src/lib/activity-store.ts`, which the workflow
   forms publish to (idle/running/done/failed + the active stage line).
-- **Primitives.** `src/public/react/components/ds/` — the collapsible drawer
+- **Primitives.** `src/public/react/components/ds/` - the collapsible drawer
   (`drawer.tsx`, the `.cks` grid-rows pattern; replaces `<details>`), file
   cards, checksum rows (the whole row is the copy control), the weave meter +
   recessed progress panels, the 0x01 INPUTS hero/add-row drop zone, and the
@@ -432,7 +432,7 @@ axe-core a11y sweep harness); the app no longer shares code with it.
 | --- | --- | --- |
 | Rust unit | `crates/*/tests/unit/`, inline `#[test]` | Per-format parsers, registry, I/O, threads (~800 tests). |
 | CLI smoke | `crates/rom-weaver-cli/tests/cli_smoke/` | End-to-end CLI runs against synthesized fixtures, per command family. Shared helpers in `shared.rs`. |
-| React unit | `packages/rom-weaver-react/tests/unit/` | Patcher state layer plus the loom UI contract (DS primitives, shell, stores, apply-view markup) — vitest, node/happy-dom. |
+| React unit | `packages/rom-weaver-react/tests/unit/` | Patcher state layer plus the loom UI contract (DS primitives, shell, stores, apply-view markup) - vitest, node/happy-dom. |
 | WASM node | `packages/rom-weaver-react/tests/wasm/` | Worker client, OPFS protocols, format metadata (vitest, node). |
 | Browser | `packages/rom-weaver-react/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
 
@@ -443,10 +443,10 @@ checks pre-commit, scoped by changed paths.
 
 ## Other docs
 
-- `docs/browser-concurrency.md` — browser thread/worker rules
-- `docs/env-vars.md` — every `ROM_WEAVER_*` runtime/test/build knob
-- `docs/mobile-safari-verification.md` — iOS Safari/WebKit verification steps
-- `docs/chd-native-rust-migration.md` — history of the native CHD backend
-- `docs/trim-revert-footer.md` — trim revert footer format
-- `TODO.md` — delivery board / known gaps
-- `REFERENCES.md` — format specs and reference implementations
+- `docs/browser-concurrency.md` - browser thread/worker rules
+- `docs/env-vars.md` - every `ROM_WEAVER_*` runtime/test/build knob
+- `docs/mobile-safari-verification.md` - iOS Safari/WebKit verification steps
+- `docs/chd-native-rust-migration.md` - history of the native CHD backend
+- `docs/trim-revert-footer.md` - trim revert footer format
+- `TODO.md` - delivery board / known gaps
+- `REFERENCES.md` - format specs and reference implementations

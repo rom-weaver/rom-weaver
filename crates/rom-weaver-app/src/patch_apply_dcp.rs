@@ -170,7 +170,7 @@ impl CliApp {
             Err(error) => return fail("prepare", error.to_string()),
         };
 
-        // Stream the rebuilt track straight to a temp file for staging — the
+        // Stream the rebuilt track straight to a temp file for staging - the
         // cooked image and raw track are never fully held in memory.
         let mut temp_paths: Vec<PathBuf> = Vec::new();
         let rebuilt_path = context

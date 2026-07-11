@@ -52,7 +52,7 @@ const collectEntryFiles = async (entry: FileSystemEntry): Promise<File[]> => {
 
 const readDataTransferFiles = async (dataTransfer: DataTransfer | null): Promise<File[]> => {
   if (!dataTransfer) return [];
-  // Capture entries synchronously before any await — the transfer is cleared
+  // Capture entries synchronously before any await - the transfer is cleared
   // once the drop handler returns.
   const entries: FileSystemEntry[] = [];
   let hasEntrySupport = false;

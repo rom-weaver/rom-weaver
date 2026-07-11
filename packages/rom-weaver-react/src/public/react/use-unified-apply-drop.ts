@@ -8,7 +8,7 @@ import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-cla
 /**
  * Drop orchestration for the Apply tab.
  *
- * Bare ROMs/patches route by extension. An archive is classified by its CONTENTS — a cheap entry
+ * Bare ROMs/patches route by extension. An archive is classified by its CONTENTS - a cheap entry
  * listing (no byte extraction), the same authoritative signal Rust uses (`is_rom = has_rom ||
  * !has_patch` over the entries; see `emit_probe_manifest`). A real ROM archive joins the ROM
  * bucket; a patch-only bundle goes straight to the patch bucket. Crucially, a patch-only archive
@@ -21,7 +21,7 @@ import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-cla
 
 const logger = createLogger("unified-apply-drop");
 
-/** Retained for API compatibility — bare files and classified archives stage into their resolved
+/** Retained for API compatibility - bare files and classified archives stage into their resolved
  * bucket directly, so no placeholder cards are needed. */
 type PendingDrop = {
   id: string;
@@ -44,7 +44,7 @@ const NO_PENDING_DROPS: PendingDrop[] = [];
 
 /**
  * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-manifest verdict
- * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure — the safe
+ * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
  * direction, since Rust's reclassify still moves a misrouted patch bundle afterwards.
  */
 const classifyArchiveBucket = async (archive: File): Promise<"rom" | "patch"> => {

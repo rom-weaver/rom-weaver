@@ -3,7 +3,7 @@ use rom_weaver_checksum::IdentityPrefix;
 use tracing::{debug, trace};
 
 /// `(bytes_written, optional per-file checksums, identity prefix)` from the RVZ
-/// extract copy loop — the identity prefix is fed the same decoded stream as the
+/// extract copy loop - the identity prefix is fed the same decoded stream as the
 /// checksum so the caller can detect platform/medium without a second read.
 type RvzExtractOutput = (u64, Option<BTreeMap<String, String>>, IdentityPrefix);
 
@@ -38,7 +38,7 @@ impl RvzContainerHandler {
     /// number of bytes filled. The disc reader returns short reads (~1.3 MiB), so writing each one
     /// directly lands every `write_all` just under the host file shim's direct-write threshold,
     /// forcing a full-size staging-buffer copy on the OPFS/wasm side. Coalescing the short reads into
-    /// one large buffer here lets each downstream write clear that threshold and skip the copy —
+    /// one large buffer here lets each downstream write clear that threshold and skip the copy -
     /// without adding a copy of our own, since each read writes straight into `buffer` at its offset.
     fn fill_extract_buffer<R: Read>(reader: &mut R, buffer: &mut [u8]) -> Result<usize> {
         let mut filled = 0;
@@ -160,7 +160,7 @@ impl RvzContainerHandler {
     ) -> Result<RvzExtractOutput> {
         let buffer_size = copy_progress_buffer_size(total_bytes);
         // Identity detection is a separate consumer of the same decoded stream as the
-        // checksum — fed alongside it, no extra read.
+        // checksum - fed alongside it, no extra read.
         let mut identity = IdentityPrefix::new();
         // Tracks the one-shot mid-extract `probe-identity` emission so the ROM-type tag pops as soon
         // as the disc header has decoded, not only at completion.

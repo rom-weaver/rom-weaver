@@ -487,7 +487,7 @@ where
         chunk_size, batch_chunks, "streaming checksum range as batched parallel chunk partials"
     );
 
-    // Single reader on the calling thread — Safari/OPFS forbids parallel same-file reads —
+    // Single reader on the calling thread - Safari/OPFS forbids parallel same-file reads -
     // filling a batch of up to `batch_chunks` owned buffers, then hashing the batch
     // concurrently on the pool workers. Peak memory stays bounded to batch_chunks *
     // chunk_size regardless of range length, and the ordered partials combine identically.

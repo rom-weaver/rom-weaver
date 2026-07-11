@@ -42,7 +42,7 @@ impl CliApp {
         );
         // Manifest-driven runs merge the rw.json into a plain command first.
         // The context built here owns the temp namespace any manifest-extracted
-        // archive members live in, so it must outlive the whole apply — it is
+        // archive members live in, so it must outlive the whole apply - it is
         // dropped (and its files cleaned) only after the run completes.
         let mut args = args;
         let manifest_context = self.context(args.threads);
@@ -334,7 +334,7 @@ impl CliApp {
             // Manifest output checks merge after the CLI output flags with
             // the same conflict rule as input requirements. Disc inputs
             // reassemble into multiple files, so there is no single output to
-            // checksum — skip rather than fail an otherwise valid manifest.
+            // checksum - skip rather than fail an otherwise valid manifest.
             match (&resolution.output_checks, disc_context.is_some()) {
                 (Some((source_label, _)), true) => {
                     trace!(
@@ -599,7 +599,7 @@ impl CliApp {
             // The output-header decision: on a headerless final state, `--output-header`
             // decides whether the stripped header returns (auto re-adds emulator-required
             // headers like iNES/fwNES/LNX/A78 and drops junk copier headers like SNES/PCE/
-            // Game Doctor — except NSRT-signed copier headers, which carry real dump
+            // Game Doctor - except NSRT-signed copier headers, which carry real dump
             // metadata and come back, matching the RUP handler's own normalization).
             // Explicit `--output-header strip` on a headered state removes
             // the still-present header during finalize. Evaluated here for the patch-0
@@ -642,7 +642,7 @@ impl CliApp {
             // Single-patch runs know the final header state before anything is
             // written, so the extension swap lands here and every writer (direct
             // handler output, finalize, compression entry naming) targets the
-            // adjusted path — no post-hoc rename, which the browser VFS cannot
+            // adjusted path - no post-hoc rename, which the browser VFS cannot
             // observe. Chains re-evaluate after the loop; they always stage, so
             // the finalize/compression writers pick the adjusted path up there.
             let mut extension_swap_note: Option<String> = None;
@@ -1088,9 +1088,9 @@ impl CliApp {
     /// produced, matching the previous inline loops.
     /// Decide the default (`--patch-header auto`) handling for the FIRST patch: strip
     /// the detected copier header before apply only when the patch's required input
-    /// checksum proves it was authored against the headerless bytes. Any doubt — no
+    /// checksum proves it was authored against the headerless bytes. Any doubt - no
     /// strippable header, no checksum evidence, or a checksum matching neither
-    /// variant — keeps the input as-is, so runs without evidence behave exactly like
+    /// variant - keeps the input as-is, so runs without evidence behave exactly like
     /// the pre-policy default. Later chain steps decide per patch in
     /// [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
@@ -1165,7 +1165,7 @@ impl CliApp {
     /// Adjust the requested output path when the final header state changes the
     /// ROM's conventional extension (SNES `.smc` vs headerless `.sfc`, LNX `.lnx`
     /// vs `.lyx`, ...). Fires only when the requested extension IS the known
-    /// counterpart — unrelated extensions are never touched — and only when a
+    /// counterpart - unrelated extensions are never touched - and only when a
     /// header was actually in play (a strip somewhere in the chain, or an explicit
     /// output strip, whose header is detected from `detect_source`). Returns the
     /// swapped path plus the report-label note; mirrors the compression step's
@@ -1255,7 +1255,7 @@ impl CliApp {
     /// Transition the on-disk header state between chain steps so patch `mode`'s
     /// step applies against the bytes it was authored for. Explicit keep/strip
     /// force the state (a keep with nothing ever stripped is a no-op); auto acts
-    /// only on checksum proof from this patch's embedded source CRC32 — no
+    /// only on checksum proof from this patch's embedded source CRC32 - no
     /// evidence, or evidence matching the current bytes, carries the state over
     /// untouched, and evidence matching neither variant is left for the handler's
     /// own strict validation to report.
@@ -1570,7 +1570,7 @@ impl CliApp {
     /// `temp_paths`; the final step writes `staged_output`). Returns the last
     /// successful apply report plus the patched-output path and applied formats
     /// on full success, or `Err(report)` carrying the failure report when a
-    /// patch handler is missing or an apply fails — the exact reports the
+    /// patch handler is missing or an apply fails - the exact reports the
     /// inline loop produced. Extracted from `run_patch_apply` to shrink it; the
     /// `Err` early-exits map one-to-one onto the loop's former `return`s.
     #[allow(clippy::too_many_arguments)]
@@ -1770,9 +1770,9 @@ impl CliApp {
     /// they attach, so status-check and label assembly stay at the call sites;
     /// only this byte-for-byte-identical core (handler resolution, codec label,
     /// thread plan, running event, request build, create + create-error
-    /// fallback) is shared. A missing handler — unreachable once `plan` came
+    /// fallback) is shared. A missing handler - unreachable once `plan` came
     /// from [`Self::resolve_patch_apply_compression_plan`], which already
-    /// validated registration/create capability — surfaces as the original
+    /// validated registration/create capability - surfaces as the original
     /// "requested output format is not registered" validation error for the
     /// caller to wrap.
     pub(super) fn run_patch_apply_compression(

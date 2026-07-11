@@ -5,8 +5,8 @@ import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser
 // browser-runtime-vfs stages each dropped source as a read-only, Blob-backed virtual file. A single
 // input load stages the same source for several passes (probe -> listings -> extract); those passes can
 // overlap. The resolved-entry cache dedupes a *sequential* re-stage, but a second pass that begins
-// before the first finishes staging used to run its own stage and — because the first copy still held
-// the bare visible name — be handed `name-2.ext`. Codec/disc extractors name outputs from the staged
+// before the first finishes staging used to run its own stage and - because the first copy still held
+// the bare visible name - be handed `name-2.ext`. Codec/disc extractors name outputs from the staged
 // stem, so that surfaced as a phantom `-2` extraction with no base file. Concurrent same-source stages
 // must now coalesce onto one bare-named copy.
 const stubVfs = /** @type {never} */ ({
@@ -56,7 +56,7 @@ test("concurrent stages of the same source coalesce onto one bare-named copy (no
 test("a failed first stage coalesces its waiters onto one retry (no -2)", async () => {
   const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
   let getFileCalls = 0;
-  // First stage attempt throws; every later attempt succeeds — so a duplicate retry would show up as a
+  // First stage attempt throws; every later attempt succeeds - so a duplicate retry would show up as a
   // second successful stage (extra getFile call + a game-2.bin virtual file).
   const handle = makeHandle(async () => {
     getFileCalls += 1;
@@ -79,7 +79,7 @@ test("a failed first stage coalesces its waiters onto one retry (no -2)", async 
   try {
     expect(rejected.length).toBe(1);
     expect(fulfilled.length).toBe(3);
-    // Exactly one failed stage plus exactly one retry — not one retry per waiter.
+    // Exactly one failed stage plus exactly one retry - not one retry per waiter.
     expect(getFileCalls).toBe(2);
     // All three survivors share the single bare-named retry copy; none climbs to game-2.bin.
     expect(fulfilled.every((result) => result.value.filePath === "/work/game.bin")).toBe(true);

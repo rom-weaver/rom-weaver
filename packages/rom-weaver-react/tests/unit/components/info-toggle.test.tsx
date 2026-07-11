@@ -6,7 +6,7 @@ import { InfoToggle } from "../../../src/presentation/react/info-toggle.tsx";
 /**
  * The portaled (position:fixed) popover lives inside scrollable panels, so it must
  * recompute its position on scroll/resize. Scroll events don't bubble, hence the
- * capture-phase listener — and both listeners must be torn down when it closes.
+ * capture-phase listener - and both listeners must be torn down when it closes.
  */
 
 afterEach(() => {

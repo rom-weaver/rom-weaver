@@ -178,7 +178,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
 };
 
 // Enumerate a container's selectable entries without extracting, via the `probe` command's
-// metadata-only (`no_extract`) path. Replaces the former `list` command — `probe` is a strict
+// metadata-only (`no_extract`) path. Replaces the former `list` command - `probe` is a strict
 // superset (it reports the same `details.container.entries`) and auto-detects the handler, so no
 // per-format dispatch is needed.
 const runRomWeaverProbeWorker = async (
@@ -312,7 +312,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
   // Some validates fan worker threads across the source: bps block-check CRCs, xdelta's per-window
   // decode, or a caller-requested source-checksum verification. Those MUST keep the runner's worker
-  // pool — without it the engine spawns from an empty pool and panics (os error 6). The rest (PPF/
+  // pool - without it the engine spawns from an empty pool and panics (os error 6). The rest (PPF/
   // IPS/UPS structural + block checks) read a few hundred bytes single-threaded, so the pool spin-up
   // is pure setup/teardown and is skipped. The apply path keeps its own input-size gate since it
   // always reads+writes the source.
@@ -414,7 +414,7 @@ const invokeRomWeaverPatchApplyWorker = async (
   // One header mode per patch (chain order). The browser resolved the FIRST patch
   // against the staged checksum variants, so entry 0 is always concrete ("keep"/
   // "strip") and suppresses an engine re-hash of the OPFS input; later entries may
-  // be "auto" — the engine decides those per step from its own local intermediates.
+  // be "auto" - the engine decides those per step from its own local intermediates.
   // Legacy compatibility booleans (settings.compatibility add/remove header) remap
   // onto the same enums: removeHeader => strip for the whole chain, with the
   // output-header choosing whether the header returns.
@@ -731,7 +731,7 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
 };
 
 // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
-// ROMs), and describe patches — the consolidated `ingest` command. One round-trip replaces the
+// ROMs), and describe patches - the consolidated `ingest` command. One round-trip replaces the
 // webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
 const invokeRomWeaverIngestWorker = async (
   input: {

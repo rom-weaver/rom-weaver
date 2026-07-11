@@ -56,10 +56,10 @@ const emitBrowserRuntimeVfsTrace = (
 // input-preparation and output-verification runtimes), and one dropped input is staged by passes that
 // land on *different* instances. The virtual-file path allocator (browser-opfs-source-ref) is already a
 // module global, so two instances staging the same input concurrently collide there and the loser is
-// handed a phantom `name-2.ext` — which the codec/disc extractors then bake into `-2` outputs. Keeping
+// handed a phantom `name-2.ext` - which the codec/disc extractors then bake into `-2` outputs. Keeping
 // the dedup cache global (keyed by content identity, namespaced by mount) makes every pass on any
 // instance reuse one staged copy and one bare visible name. String-keyed (not a WeakMap), so entries are
-// pruned explicitly in cleanupCachedStagedSource — which already runs for every staged source.
+// pruned explicitly in cleanupCachedStagedSource - which already runs for every staged source.
 const stagedSourceCache = new Map<string, CachedStagedSource>();
 // In-flight stages keyed by the same content identity, so a second pass that starts before the first
 // finishes staging coalesces onto it instead of running a duplicate stage (the resolved-entry cache only
@@ -168,7 +168,7 @@ const createBrowserRuntimeVfsIo = ({
       // Release means the session no longer references this source. A live cross-drop reader (an idle
       // entry a re-stage just picked up) still needs the copy: defer to its wrapper cleanup via
       // cleanupWhenIdle instead of yanking it out from under the in-flight command. Only force-clean a
-      // truly-dead holder — a leaked ref from a cancelled pass that never returned it (never reused while
+      // truly-dead holder - a leaked ref from a cancelled pass that never returned it (never reused while
       // idle), which cleanupWhenIdle alone would pin forever; per-wrapper released flags keep late
       // cleanup() calls harmless.
       if (cached.refCount > 0 && cached.reusedWhileIdle) continue;
@@ -266,7 +266,7 @@ const createBrowserRuntimeVfsIo = ({
     // Coalesce concurrent stages of the SAME source onto one in-flight stage. The resolved-entry cache
     // above only dedupes once the first pass has finished staging *and* cached its entry; a second pass
     // that starts inside that window would otherwise run its own stageFromSource, copy the input into
-    // OPFS a second time, and — because the first copy still holds the bare visible name — be handed a
+    // OPFS a second time, and - because the first copy still holds the bare visible name - be handed a
     // phantom `name-2.ext`. Codec/disc extractors derive output names from the staged stem, so the stray
     // copy surfaced as a `-2` extraction with no base file (e.g. during ingest). Awaiting the in-flight
     // stage lets this pass reuse the single bare-named copy instead.
@@ -304,7 +304,7 @@ const createBrowserRuntimeVfsIo = ({
         entry.cleanupWhenIdle = true;
       }
       // A concurrent same-key stage may have cached a live entry while this one was in flight; don't
-      // clobber it (identity guard, like the delete above) — overwriting would strand its staged copy and
+      // clobber it (identity guard, like the delete above) - overwriting would strand its staged copy and
       // let our later cleanup evict the wrong entry. Keep ours untracked; its wrapper cleanup still
       // releases the duplicate staged copy.
       if (stagedSourceCache.get(cacheKey)) {
@@ -440,7 +440,7 @@ const createBrowserRuntimeVfsIo = ({
     stageSources: async (requests) => {
       // allSettled, not Promise.all: if one stage rejects, the siblings that already staged must be
       // cleaned up before rethrowing. Promise.all would drop those fulfilled wrappers on the floor, so
-      // their cleanup never runs — the staged OPFS copies and their bare visible names stay pinned (a
+      // their cleanup never runs - the staged OPFS copies and their bare visible names stay pinned (a
       // later same-named stage then climbs to a phantom `-2`).
       const settled = await Promise.allSettled(requests.map((request) => stageSource(request)));
       const staged: RuntimeWorkerPathSource[] = [];

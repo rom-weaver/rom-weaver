@@ -203,7 +203,7 @@ const ExtractName = ({
     ) : null}
     <div className="nmline">
       {/* assistive tech (and text-based assertions) get the full filename;
-          the visible face drops the extension — the format badge carries it */}
+          the visible face drops the extension - the format badge carries it */}
       <span className="sr-only">{fileName}</span>
       <span aria-hidden="true" className="nm" title={folderPath ? `${folderPath} › ${fileName}` : fileName}>
         {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
@@ -214,7 +214,7 @@ const ExtractName = ({
   </>
 );
 
-/** Just the Extract drawer (no name line) — for cards that render the name separately. */
+/** Just the Extract drawer (no name line) - for cards that render the name separately. */
 const ExtractDrawer = ({ decompressionTimeMs, fileName, fileSize, parentCompressions, timing }: ExtractPanelProps) => {
   const levels = buildExtractionLevels(fileName, fileSize, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);

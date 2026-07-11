@@ -59,7 +59,7 @@ const cleanupWarmupOutputs = async (outputs: ReadonlyArray<{ cleanup?: () => Pro
 
 // Removes warmup artifacts (staged input + extracted outputs, all named with the warmup marker) left in
 // OPFS by a previous page load. The current session's staged input stays locked by the live worker pool
-// and cannot be removed until the next load — this runs at
+// and cannot be removed until the next load - this runs at
 // the start of warmup so each session cleans the prior session's now-unlocked leftovers, bounding
 // accumulation to a single generation.
 const sweepWarmupArtifacts = async (): Promise<void> => {
@@ -125,7 +125,7 @@ const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
 // Defers the warmup extraction to browser idle time so it never competes with initial render or the
 // runner init it follows. Falls back to a macrotask when requestIdleCallback is unavailable. Note: the
 // warmup is chained off preload completion (wasm compile + runner warm), by which point the main thread
-// is already idle, so the timeout below is a backstop, not the binding constraint — a measured sweep of
+// is already idle, so the timeout below is a backstop, not the binding constraint - a measured sweep of
 // 50/250/2000ms showed no effect on when warmup starts.
 const scheduleBrowserRuntimeWarmupExtraction = (): void => {
   if (warmupExtractionStarted) return;

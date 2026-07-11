@@ -6,7 +6,7 @@ import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
 // Reported-vs-measured run timing, shared by the apply/create/trim runs. Each run reports its operation
 // and compression durations when it can; when it doesn't, the durations are measured from the run's
 // start timestamps (operation start → compression start → completion). Returning `null`/`undefined` is
-// left to the caller — this normalizes a missing value to `null` and callers map it to their own shape.
+// left to the caller - this normalizes a missing value to `null` and callers map it to their own shape.
 const deriveWorkflowRunTiming = ({
   completedAt,
   compressionStartedAt,
@@ -43,8 +43,8 @@ const deriveWorkflowRunTiming = ({
 };
 
 // The `finally` block always runs the latest cleanup the body registered (detach the progress
-// listener, dispose a non-reused workflow, …). Registering eagerly — right after the listener is
-// attached, before the throwable staging/run — means cleanup still runs if the body throws, matching
+// listener, dispose a non-reused workflow, …). Registering eagerly - right after the listener is
+// attached, before the throwable staging/run - means cleanup still runs if the body throws, matching
 // the original per-form try/finally. The body owns its own progress wiring and result handling; the
 // lifecycle owns the AbortController, busy flag, and catch/finally.
 type WorkflowRunCleanup = () => Promise<void> | void;

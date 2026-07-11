@@ -1,7 +1,7 @@
 import { coverageConfigDefaults, defineConfig } from "vitest/config";
 
 // Coverage is collected by the v8 provider in browser mode (V8 precise coverage
-// over CDP — low overhead, not source instrumentation). It is gated on
+// over CDP - low overhead, not source instrumentation). It is gated on
 // ROM_WEAVER_COVERAGE so normal/bench runs are unaffected. Each suite's config
 // spreads this and sets its own `reportsDirectory` to keep the two reports
 // separate (cross-config merging is out of scope).

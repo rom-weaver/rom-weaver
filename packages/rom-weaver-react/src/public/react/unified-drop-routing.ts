@@ -54,7 +54,7 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): (File | null)[] => 
   return assignment;
 };
 
-/** Trim-tab strategy: a single ROM source — take the first dropped ROM, if any. */
+/** Trim-tab strategy: a single ROM source - take the first dropped ROM, if any. */
 const routeSingleRom = (files: File[]): File | null => {
   const roms = collectRomDropFiles(files);
   const first = roms[0];

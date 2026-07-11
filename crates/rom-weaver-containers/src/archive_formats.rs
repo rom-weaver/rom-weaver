@@ -1,10 +1,10 @@
 //! Canonical archive-format detection table.
 //!
-//! The web UI routes a dropped file synchronously — before staging it into
-//! libarchive — to decide whether it is an archive and, if so, which archive
+//! The web UI routes a dropped file synchronously - before staging it into
+//! libarchive - to decide whether it is an archive and, if so, which archive
 //! type it is (so it can pick the right extraction path and naming). That
 //! routing needs magic-byte signatures and the full universe of extensions our
-//! bundled libarchive can open (squashfs/qcow/wim/xar/dmg/vmdk/ext4/… — formats
+//! bundled libarchive can open (squashfs/qcow/wim/xar/dmg/vmdk/ext4/… - formats
 //! with no dedicated [`crate::ContainerRegistry`] handler). Those facts are a
 //! property of the Rust/libarchive build, so they live here and are mirrored to
 //! TypeScript via typegen (`ROM_WEAVER_ARCHIVE_FORMATS`) rather than being

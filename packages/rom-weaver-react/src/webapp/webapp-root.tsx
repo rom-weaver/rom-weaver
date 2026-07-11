@@ -107,7 +107,7 @@ const useEntryAnimationLock = () => {
   }, []);
 };
 
-/* Mode switches crossfade flat — shared with the forms' empty-bench
+/* Mode switches crossfade flat - shared with the forms' empty-bench
    transition so all layout swaps use one mechanism. */
 const selectViewWithTransition = (select: () => void) => runFlatViewTransition(select);
 
@@ -216,7 +216,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
 
   // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
   // fires continuously, so a short debounce clears the flag once it stops (drag
-  // left the window or dropped) — `dragleave`/`dragend` are unreliable here.
+  // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
     let clearTimer: ReturnType<typeof setTimeout> | undefined;
     const onDragOver = (event: DragEvent) => {

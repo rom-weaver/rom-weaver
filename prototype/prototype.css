@@ -1,17 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════
-   rom-weaver — "loom workbench" prototype
+   rom-weaver - "loom workbench" prototype
    A bench instrument for ROM preservation: charcoal chassis, cartridge-
    orange thread, cream hash readouts, sage verification. Borders-only
    depth; shadows are reserved for true overlays. Spacing base: 4px.
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --thread: #d9690f;            /* cartridge-label orange — the weft */
+  --thread: #d9690f;            /* cartridge-label orange - the weft */
   --thread-ink: #1c1206;        /* text on a thread-colored surface */
   --font: "Archivo", "Inter Tight", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
   --ctl: 40px;
-  --ctrl-h: 30px;               /* row-button size (handle / remove / progress cancel) — bigger on desktop, scaled down for narrow + up for touch below */
-  --badge-fs: 0.72rem;          /* badge text — sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
+  --ctrl-h: 30px;               /* row-button size (handle / remove / progress cancel) - bigger on desktop, scaled down for narrow + up for touch below */
+  --badge-fs: 0.72rem;          /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
   --pad: 20px;                  /* section gutter */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
   --ease: cubic-bezier(.2, .85, .3, 1);
@@ -20,7 +20,7 @@
 }
 
 /* registered so the count-up keyframe can interpolate it numerically.
-   inherits MUST be true — the ::after that typesets the counter reads the
+   inherits MUST be true - the ::after that typesets the counter reads the
    animated value through inheritance */
 @property --t { syntax: "<integer>"; inherits: true; initial-value: 0; }
 
@@ -29,11 +29,11 @@
   --chassis: #0c0f13;           /* console shell */
   --plate: #161b21;             /* mounted plate */
   --plate-2: #1c222a;           /* raised plate */
-  --well: #0f1318;              /* inset well — inputs sit *into* the bench */
+  --well: #0f1318;              /* inset well - inputs sit *into* the bench */
   /* borders lifted off the panel colors so seams/rows actually read on the dark bench */
   --seam: #39414e; --seam-soft: #2c333f; --seam-strong: #4b5564;
   --ink: #edf0f5; --ink-2: #b3bbc8; --ink-3: #9aa3b1; --ink-4: #939cab;
-  --weft: #e7d3a8;              /* cream label-stock — hash readouts */
+  --weft: #e7d3a8;              /* cream label-stock - hash readouts */
   --thread-text: #ef8534;       /* accent as text, lifted for contrast */
   --verified: #69aa84;          /* sage quadrant */
   --verified-deep: #2c5c42;
@@ -52,12 +52,12 @@
   --ink: #1a1d22; --ink-2: #4b5159; --ink-3: #62686f; --ink-4: #686d76;
   --weft: #92400e;              /* cream goes rich amber on paper */
   /* deep enough that badge-sized text clears 4.5:1 on every light surface
-     (was #c2410c — 4.42:1 on the --well chips, just under) */
+     (was #c2410c - 4.42:1 on the --well chips, just under) */
   --thread-text: #b03a0a;
   --verified: #047857;
   --verified-deep: #d9eadf;
   /* deep enough that fault-card titles/codes clear 4.5:1 on the pink-tinted
-     light surfaces (was #dc2626 — 4.41:1 on the fault card) */
+     light surfaces (was #dc2626 - 4.41:1 on the fault card) */
   --fault: #b91c1c;
   --care: #c4870f;              /* golden caution (was burnt #b45309 → salmon tint) */
   --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / .35), 0 4px 14px rgb(35 30 18 / .14);
@@ -67,7 +67,7 @@
 /* ── base ── */
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-/* base scale — bumped up (text read a touch small) but still responsive so it
+/* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
 html { font-size: clamp(15px, 13px + .42vw, 17px); scrollbar-gutter: stable; }
 /* metric-adjusted fallback ≈ Inter Tight: no reflow when the webfont swaps in */
@@ -103,7 +103,7 @@ a:hover { color: var(--thread-text); }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; border-radius: 4px; }
 /* a dialog body is only focused programmatically (to park initial focus off the
-   action buttons) — it must never draw a focus ring */
+   action buttons) - it must never draw a focus ring */
 .dlg-body:focus, .dlg-body:focus-visible { outline: none; }
 
 .loom-app {
@@ -140,13 +140,13 @@ a:hover { color: var(--thread-text); }
 }
 html.vt-theme .mode-thumb { view-transition-name: none !important; }
 /* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
-   during the mode-switch transition — without this the thumb's group renders
+   during the mode-switch transition - without this the thumb's group renders
    over the root snapshot and the orange briefly covers the tab text */
 .mode-rail .mode:nth-of-type(1) { view-transition-name: vt-tab-1; }
 .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
 .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
 html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
-/* where CSS anchors exist, the thumb pins itself to the selected tab —
+/* where CSS anchors exist, the thumb pins itself to the selected tab -
    placement survives resize/font-swap with no JS measuring at all */
 @supports (anchor-name: --rw-tab) {
   .mode[aria-selected="true"] { anchor-name: --rw-tab; }
@@ -211,7 +211,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
 .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
 .updates-text b { font-weight: 650; }
-/* the version IS the "what's new" affordance — a quiet dotted-underline link
+/* the version IS the "what's new" affordance - a quiet dotted-underline link
    that opens the changelog, instead of a second button crowding the banner */
 .updates-ver {
   appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
@@ -219,7 +219,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
 .updates-ver:hover { color: var(--thread-text); }
-/* banner dismiss (update + wake-lock) — sized to --ctrl-h so it reads as a
+/* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
 .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
@@ -272,7 +272,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ panel + loom rail ═══ */
 /* the page IS the form on every size (the mobile flattening promoted to base):
-   no outer panel chrome — what remains is card → drawer, the one nesting that
+   no outer panel chrome - what remains is card → drawer, the one nesting that
    carries meaning. Step hairlines still separate the sections. */
 .panel { overflow: clip; }
 .workflow-body { min-width: 0; animation: panel-in .3s var(--ease); }
@@ -287,7 +287,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .step.is-woven .step-num { color: var(--thread-text); }
 .step.is-fault .step-num { color: var(--fault); }
 /* section titles speak in the same voice as the card names and drawer headers
-   (sentence case, 650) — one type family across the page, size = hierarchy */
+   (sentence case, 650) - one type family across the page, size = hierarchy */
 .step-title { margin: 0; font-size: .9rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; justify-content: flex-end; }
 .step-meta .t { color: var(--thread-text); }
@@ -337,7 +337,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
-/* the add action reads as a button for everyone — tap-first users see tap copy.
+/* the add action reads as a button for everyone - tap-first users see tap copy.
    Once content is staged the row shrinks out of the way: tiny pill, hint only on hover. */
 .drop .main.btnish {
   border: 1px solid var(--seam-strong); border-radius: 99px; background: var(--plate-2);
@@ -351,17 +351,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .drop:hover .main.btnish svg, .drop:focus-within .main.btnish svg { color: var(--thread-text); }
 .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: 5px; }
 .drop:not(.hero) .main svg { width: 13px; height: 13px; }
-/* the add-row hint is ALWAYS shown inline beneath the pill — never a hover-only
-   tooltip — so a page that already has files still explains how to add more */
+/* the add-row hint is ALWAYS shown inline beneath the pill - never a hover-only
+   tooltip - so a page that already has files still explains how to add more */
 .drop:not(.hero) .hint { display: none; font-size: .72rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
 .drop:not(.hero) .hint.fine { display: block; }
 .drop .hint.coarse { display: none; }
 @media (pointer: coarse) {
   /* bumping the one variable grows the badges + buttons together (they all read
-     --ctrl-h) so a card row stays uniform on touch. 30px (not the old 36px) —
+     --ctrl-h) so a card row stays uniform on touch. 30px (not the old 36px) -
      the bigger boxes crowded the card text on phones; ≤560px trims further */
   :root { --ctrl-h: 30px; }
-  /* the :not(.hero) selector below outranks a plain .drop .hint.fine — match
+  /* the :not(.hero) selector below outranks a plain .drop .hint.fine - match
      its specificity so touch devices show ONLY the tap hint, never both lines */
   .drop .hint.fine, .drop:not(.hero) .hint.fine { display: none; }
   .drop .hint.coarse { display: block; }
@@ -404,7 +404,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .step.is-input.is-empty .drop.hero { min-height: clamp(190px, 28dvh, 280px); padding-block: 30px; }
 
 /* secondary input sections (patches, modified), when empty, don't offer their
-   own drop target — they point the user UP to the 0x01 hero. a quiet, non-boxy
+   own drop target - they point the user UP to the 0x01 hero. a quiet, non-boxy
    directive so it never competes with 0x01 for "the place to add files". */
 .needs-input {
   display: flex; align-items: center; justify-content: center; gap: 9px;
@@ -423,9 +423,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ file cards ═══ */
 .cards { display: flex; flex-direction: column; gap: 13px; }
-/* patches read as discrete, reorderable units — a touch more air between them */
+/* patches read as discrete, reorderable units - a touch more air between them */
 .patch-cards { gap: 16px; }
-/* no trailing margin — the step-body's own bottom padding closes the section,
+/* no trailing margin - the step-body's own bottom padding closes the section,
    so card lists don't stack ~28px of dead space at every section's end */
 .card {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
@@ -434,17 +434,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .card:nth-child(2) { animation-delay: .05s; } .card:nth-child(3) { animation-delay: .1s; } .card:nth-child(4) { animation-delay: .15s; }
 .workflow-body.quiet .card { animation: none; }
-/* verdict borders are a PATCH concept (verified / weakly-verified / failed) —
+/* verdict borders are a PATCH concept (verified / weakly-verified / failed) -
    ROM cards always keep the plain --seam border */
 .card.ok { border-color: color-mix(in oklab, var(--verified) 42%, var(--seam)); }
 .card.warn { border-color: color-mix(in oklab, var(--care) 55%, var(--seam)); }
 .card.bad { border-color: color-mix(in oklab, var(--fault) 48%, var(--seam)); }
 
 /* the meta + action buttons ride the NAME line (the heading), not the optical
-   centre of the name+description block — so they stay in line with the title even
+   centre of the name+description block - so they stay in line with the title even
    when a description wraps below */
 /* the card header is two columns: the name over its size·type sub-line on the
-   left, and a stacked actions column on the right — the action buttons on top
+   left, and a stacked actions column on the right - the action buttons on top
    and the target right-aligned directly beneath them */
 .card-top { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
 /* the name + sub-line sit at the card's content edge, lined up with the LEFT EDGE
@@ -454,7 +454,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .card-meta { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-inline-start: 0; }
 .card-actions {
   flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-  /* the button boxes are taller than the name's text line — pull them up so
+  /* the button boxes are taller than the name's text line - pull them up so
      their CENTRE sits on the name line (1.3 × the .nm font size) */
   margin-block-start: calc((1.3 * clamp(.8rem, 1.1vw + .55rem, 1.06rem) - var(--ctrl-h)) / 2);
 }
@@ -468,7 +468,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .handle svg { width: 18px; height: 18px; }
 .handle:hover:not(:disabled), .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
-/* press feedback so the handle reads as live on touch (no hover on mobile) — mirrors
+/* press feedback so the handle reads as live on touch (no hover on mobile) - mirrors
    the remove button's tactility, same box/size via --ctrl-h */
 .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .handle:disabled { cursor: default; opacity: .4; }
@@ -487,7 +487,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* patch description rides under the name (some patch types provide one) */
 /* the description is a full-width row below the header, at the card content edge */
 .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
-/* weak-verification note under the name — explains the yellow card border */
+/* weak-verification note under the name - explains the yellow card border */
 .patch-warn { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .76rem; color: var(--care); }
 .patch-warn svg { width: 13px; height: 13px; flex: none; }
 :root[data-theme="light"] .patch-warn { color: #7a5300; }
@@ -496,7 +496,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
 }
 .tag.fmt { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, var(--seam-strong)); }
-/* remove reads as a sibling button to the drag handle — same box and size so
+/* remove reads as a sibling button to the drag handle - same box and size so
    the two line up, with a destructive (red) hover */
 .rm {
   flex: none; appearance: none; padding: 0; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center;
@@ -508,7 +508,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* icon buttons: drop the UA <button> padding so glyphs center exactly */
 .copy, .cue-copy, .notice .x, .banner-x, .dlg-x, .cancel, .stage-cancel, .info-btn { padding: 0; }
 .rm svg { width: 14px; height: 14px; }
-/* the on/off switch leads the sub-heading line — the shared switch primitive scaled
+/* the on/off switch leads the sub-heading line - the shared switch primitive scaled
    down to the meta text (via the --sw-* vars), with a state word beside it. the two
    words share one grid cell so the row never shifts width when toggled */
 .patch-enable { flex: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 5px; margin: -5px 4px -5px -3px; }
@@ -558,7 +558,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .card.is-disabled > .patch-body > .patch-body-inner { opacity: 0; transition: opacity .1s; }
 /* the header reads clearly "off" by DESATURATING (not opacity-dimming, which
    tanks text contrast / trips a11y): the name + size go muted grey and the type
-   badge loses its thread accent — all still legible. only the enable checkbox +
+   badge loses its thread accent - all still legible. only the enable checkbox +
    remove keep their crisp state so re-enabling/dropping is the obvious action. */
 .card.is-disabled .nm { color: var(--ink-3); }
 /* the card's gap collapses to 0 when disabled, so give the description a little
@@ -568,11 +568,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .card.is-disabled .meta-fmt { color: var(--ink-3); border-color: var(--seam); }
 .card.is-disabled .handle { color: var(--ink-4); }
 @media (prefers-reduced-motion: reduce) { .patch-body, .card { transition: none; } }
-/* the "N patches off" mention above the apply button — no extra bottom margin,
+/* the "N patches off" mention above the apply button - no extra bottom margin,
    the card's own grid gap separates it from the run button */
 .patch-off-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8rem; color: var(--care); }
 .patch-off-note svg { width: 15px; height: 15px; flex: none; }
-/* light mode: the golden --care is ~2.9:1 on the pale card face — too light for
+/* light mode: the golden --care is ~2.9:1 on the pale card face - too light for
    small text. Use the same deep amber as the notice emphasis (clears 4.5:1). */
 :root[data-theme="light"] .patch-off-note,
 :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
@@ -596,17 +596,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .tree-size { color: var(--ink-3); min-width: 62px; text-align: end; }
 .tree-time { color: var(--thread-text); min-width: 44px; text-align: end; }
 
-/* ═══ collapsible drawers — "summary-first" ═══
+/* ═══ collapsible drawers - "summary-first" ═══
    the headline value IS the row: a quiet chevron, the label, then the section's
    key value as an inset "instrument readout" chip on the right. expanding only
    reveals the detail, so the card scans unopened. */
 /* a section is ONE rounded plate in both states: a filled, tappable plate when
-   collapsed, and the same plate opened up — a hairline splits the header from
-   the content that now sits inside it — so collapse↔expand reads as one
+   collapsed, and the same plate opened up - a hairline splits the header from
+   the content that now sits inside it - so collapse↔expand reads as one
    component growing, not two different things. the readout badge lines up with
    the header's inset on either side. */
 /* structure: <div.cks><button.cks-head aria-expanded>…</button>
-   <div.cks-body><div.cks-inner>content</div></div></div> — the body collapses
+   <div.cks-body><div.cks-inner>content</div></div></div> - the body collapses
    via grid-rows (pure CSS, same pattern as .reveal); visibility rides the
    transition so collapsed content is unreachable by tab/AT */
 .cks {
@@ -614,7 +614,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   transition: background .14s, border-color .14s;
 }
 .cks.is-open { background: color-mix(in oklab, var(--well) 45%, transparent); }
-/* on the dark bench the well plates sink into the card — a stronger seam +
+/* on the dark bench the well plates sink into the card - a stronger seam +
    a touch more lift separates each section header from its container.
    (light mode already reads well, so it's left alone) */
 :root[data-theme="dark"] .cks { border-color: var(--seam-strong); background: color-mix(in oklab, var(--plate-2) 45%, var(--well)); }
@@ -624,7 +624,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
   width: 100%; cursor: pointer; display: flex; align-items: center; gap: 5px;
   min-height: 36px; padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
-  /* the WHOLE header toggles — a tap on the label or the right-hand readout chip
+  /* the WHOLE header toggles - a tap on the label or the right-hand readout chip
      must register as a tap, not start a text selection / iOS callout */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
@@ -638,7 +638,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the body collapses via grid-rows; visibility (discretely transitioned) keeps
    collapsed content out of the tab order and the accessibility tree */
 .cks > .cks-body {
-  /* minmax(0,1fr) column + min-width:0 on the item — wide content (the cue
+  /* minmax(0,1fr) column + min-width:0 on the item - wide content (the cue
      sheet's <pre>) must scroll inside its own box, not push the drawer wider
      than the card on narrow screens */
   display: grid; grid-template-rows: 0fr; grid-template-columns: minmax(0, 1fr); visibility: hidden;
@@ -651,20 +651,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .cks.is-open > .cks-body > .cks-inner { opacity: 1; translate: 0 0; transition: opacity .22s .08s, translate .26s .08s var(--ease); }
 /* opened content sits inside the plate, inset from its border. The bottom
-   inset is a MARGIN on the last child, not padding — border-box height can't
+   inset is a MARGIN on the last child, not padding - border-box height can't
    collapse below its own padding, which left a 9px lip on closed drawers */
 .cks .cks-inner { padding-inline: 10px; }
 .cks .cks-inner > :last-child { margin-block-end: 9px; }
-/* chevron is a quiet affordance — lights to thread when the section is open */
+/* chevron is a quiet affordance - lights to thread when the section is open */
 .cks .chev { width: .82rem; height: .82rem; flex: none; color: var(--ink-4); opacity: .6; transition: transform .22s var(--ease), color .18s, opacity .18s; }
 .cks > .cks-head:hover .chev { opacity: 1; }
 .cks.is-open > .cks-head .chev { transform: rotate(90deg); color: var(--thread-text); opacity: 1; }
 /* drawer headers read in the same voice as the card name above them (sentence
-   case, 650 weight) — one type family for every header on the card, just a
+   case, 650 weight) - one type family for every header on the card, just a
    step smaller so the hierarchy holds */
 .cks .lab { margin-inline-end: auto; font-size: .8rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
 .cks.is-open > .cks-head .lab { color: var(--ink); }
-/* ONE readout-chip language for every drawer header — a recessed grey pill.
+/* ONE readout-chip language for every drawer header - a recessed grey pill.
    multiple data points (e.g. a track count + a hash time) are separate chips, not
    one combined string. the .readouts wrapper groups them at the right edge. */
 .cks > .cks-head .readouts { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 66%; }
@@ -677,12 +677,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* only the last chip may shrink/ellipsize; short leading chips (count, container)
    keep their full width */
 .cks > .cks-head .readouts > .rb:not(:last-child) { flex: none; }
-/* on a collapsed plate the chip already sits on a well — recess it instead */
+/* on a collapsed plate the chip already sits on a well - recess it instead */
 .cks:not(.is-open) > .cks-head .rb { background: var(--plate-2); border-color: transparent; }
 /* timing chips carry the orange accent so a duration reads as distinct from a
    count / type / system value (which stay cream) */
 .cks > .cks-head .rb.time { color: var(--thread-text); }
-/* verify / verified marks ride beside the time chip as a bare icon — NOT their own
+/* verify / verified marks ride beside the time chip as a bare icon - NOT their own
    differently-coloured pill, so every header badge reads as one family */
 .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
@@ -691,7 +691,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* verified mark in the Details header (a verified known-good game) */
 /* checksum + verify rows are a contiguous TABLE: the group is framed once and the
    rows sit flush (no gap), split only by hairline dividers */
-/* frameless on every size — the drawer plate is the container; rows divide
+/* frameless on every size - the drawer plate is the container; rows divide
    with hairlines, and the sub-headers get clear air instead of touching an
    inner table border */
 .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
@@ -700,13 +700,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .ck-group-head { font-size: .64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 2px 1px; }
 .ck {
   /* label column sized just to the widest label (CRC32/SHA-1) so values still
-     line up in a column, but without the old wide gap — leaves room for a
+     line up in a column, but without the old wide gap - leaves room for a
      larger value. Each row is its own grid, so this width must be fixed. */
   margin: 0; display: grid; grid-template-columns: 47px minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
   border: 0; border-block-end: 1px solid var(--seam-soft); transition: background .15s;
 }
-/* the whole row is a copy button — ON TOUCH, block text selection / the iOS
+/* the whole row is a copy button - ON TOUCH, block text selection / the iOS
    callout so tapping the hash fires a clean click instead of starting a
    selection. Mouse/keyboard users keep normal select-to-copy. */
 @media (pointer: coarse) {
@@ -724,12 +724,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* checksum / verification rows need a clearer edge on paper */
 :root[data-theme="light"] .ck { border-color: var(--seam-strong); }
 /* tinted row backgrounds (bad / hover / woven) drop the grey label to ~4.4:1 in
-   light mode — one shade darker keeps the label clear on every row state */
+   light mode - one shade darker keeps the label clear on every row state */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
 .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
 .ck:hover .copy { opacity: 1; color: var(--thread-text); }
 /* on touch the :hover state sticks until the next tap, so the expand/collapse
-   tint would linger after a tap — restore the resting backgrounds on touch */
+   tint would linger after a tap - restore the resting backgrounds on touch */
 @media (hover: none) {
   .cks:not(.is-open) > .cks-head:hover { background: transparent; }
   .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
@@ -740,12 +740,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .ck .copy svg { width: 13px; height: 13px; }
 /* patch verification rows: the same checksum-row look (label · VALUE · marks),
    all-caps value, with every value lined up to the widest label across the
-   whole drawer — a subgrid threads one shared column set through the INPUT /
+   whole drawer - a subgrid threads one shared column set through the INPUT /
    OUTPUT groups so the columns don't drift between them. */
 .cks .trackrows:has(.ck.req) { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: center; }
 .cks .trackrows:has(.ck.req) > .ckgrp { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; padding-inline-start: 0; }
 /* group heads + non-row content (dry-run) span every column so only the actual
-   dt labels size column 1 — otherwise the long dry-run line inflates it */
+   dt labels size column 1 - otherwise the long dry-run line inflates it */
 .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
 .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
 .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 10px; }
@@ -764,10 +764,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .dryrun-verdict.ok { color: var(--verified); }
 .dryrun-verdict.bad { color: var(--fault); }
 
-/* inline help — clickable i's. a quiet line-glyph at rest (no box, so it adds no
+/* inline help - clickable i's. a quiet line-glyph at rest (no box, so it adds no
    visual weight or width next to the label) that reads instantly as an info mark
    and lights to thread on hover / when open. centered on the line, not baseline. */
-/* the "i" tracks the text it sits beside — its box is sized in em so the glyph is
+/* the "i" tracks the text it sits beside - its box is sized in em so the glyph is
    always the same height as that text (default to a small-label size; step heads
    match the uppercase title) */
 .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
@@ -842,7 +842,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* tracks + per-file task history */
 .trackrows, .taskbody { display: flex; flex-direction: column; gap: 2px; padding-block: 4px 2px; }
 /* nested groups are static (not collapsible): a quiet sub-header sits above its
-   always-visible rows. no left indent — the uppercase head is cue enough, and the
+   always-visible rows. no left indent - the uppercase head is cue enough, and the
    indent only wasted space on the left of the expanded section */
 .ckgrp { padding-inline-start: 0; }
 /* track-head size hugs the same right column as the rows' copy icons (rows inset
@@ -870,7 +870,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .notice.warn { color: var(--ink); background: color-mix(in oklab, var(--care) 12%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--care) 40%, var(--seam)); }
 .notice.warn svg, .notice.warn b { color: var(--care); }
 /* light mode: the golden --care is too light for bold body text on the cream
-   notice (2.5:1) — darken the emphasised word to a deep amber that clears 4.5:1 */
+   notice (2.5:1) - darken the emphasised word to a deep amber that clears 4.5:1 */
 :root[data-theme="light"] .notice.warn b { color: #7a5300; }
 /* notice dismiss matches the row-control size (--ctrl-h) like the card buttons */
 .notice .x { appearance: none; border: 0; border-radius: var(--r-s); background: transparent; color: currentColor; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center; flex: none; opacity: .6; }
@@ -917,7 +917,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .input[aria-invalid="true"], .select[aria-invalid="true"] { border-color: var(--fault); box-shadow: 0 0 0 1px color-mix(in oklab, var(--fault) 50%, transparent); }
 .input:disabled, .select:disabled { opacity: .5; cursor: not-allowed; }
 .input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: 1; }
-/* every boolean control is a sliding switch — one shared primitive so option
+/* every boolean control is a sliding switch - one shared primitive so option
    drawers, settings, the patch enable, checksum overrides and the archive picker
    all read identically: the input IS the recessed track, ::after is the knob.
    per-context size lives in the --sw-* vars so callers only retune dimensions. */
@@ -946,7 +946,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
 .fname .input:focus-visible { box-shadow: none; }
-/* output name grows with its content instead of truncating — natively via
+/* output name grows with its content instead of truncating - natively via
    field-sizing where supported; the JS measure-and-set is the fallback */
 .fname .outname {
   height: auto; min-height: var(--ctl); resize: none; overflow: hidden;
@@ -956,7 +956,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .fname .sep { width: 1px; background: var(--seam); flex: none; }
 /* the name textarea grows multi-line; the format control fills the full height
    of the box beside it (override the fixed control height so align-self:stretch
-   can grow it — otherwise it pins to the top and leaves an empty notch) */
+   can grow it - otherwise it pins to the top and leaves an empty notch) */
 .fname .select { flex: none; align-self: stretch; height: auto; width: auto; border: 0; background-color: var(--plate-2); font-weight: 650; }
 .fname .select:focus-visible { box-shadow: none; }
 
@@ -970,9 +970,9 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .ofld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .ofld-l { display: inline-flex; align-items: center; gap: 6px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .ofld .input, .ofld .select { height: 32px; font-size: .82rem; }
-/* toggles are weighted, recessed rows — same well language as the task/ck rows */
+/* toggles are weighted, recessed rows - same well language as the task/ck rows */
 .optschecks { display: flex; flex-direction: column; gap: 6px; }
-/* label leads, switch sits on the right edge — the row uses its full width instead
+/* label leads, switch sits on the right edge - the row uses its full width instead
    of leaving dead space after a small box on the left */
 .optschecks .popt {
   flex-direction: row-reverse; justify-content: space-between;
@@ -1044,7 +1044,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
   padding: 16px 14px; min-height: 116px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate-2);
 }
 /* the label/bar/stats spread to fill the panel height + a taller bar, so the
-   progress doesn't float in empty space. the bar runs the full panel width — the
+   progress doesn't float in empty space. the bar runs the full panel width - the
    actions (cancel, plus a drag handle on a staging patch) sit in the top-right
    corner (consistent placement across stage + run) and the label reserves room so
    its percentage clears them (wider when a handle rides alongside the cancel) */
@@ -1068,23 +1068,23 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
    the card's content width and its label/bar/stats line up with the rows above; the
    top+bottom border keeps it reading as a contained instrument row */
 .runprog .prog-actions { inset-inline-end: 0; }
-/* the run panel lives inside the output card, which already adds 10px below it — so
+/* the run panel lives inside the output card, which already adds 10px below it - so
    trim its own height + bottom padding by that much, keeping the same content spread
    as the standalone staging panel (no extra dead space under the bar) */
 .runprog { border-inline: 0; border-block-end: 0; border-radius: 0; padding-inline: 0; padding-block-end: 6px; min-height: 106px; }
-/* threads sit at the left of the foot row, the percentage at the right — the run's
+/* threads sit at the left of the foot row, the percentage at the right - the run's
    headline number, a touch larger + accented. while indeterminate (staging) the same
-   slot shows a — placeholder, styled identically so the layout + colour match */
+   slot shows a - placeholder, styled identically so the layout + colour match */
 .prog-panel .sub { align-items: baseline; }
 .prog-panel .sub .run-pct { font-size: .92rem; font-weight: 650; color: var(--thread-text); font-variant-numeric: tabular-nums; }
 
 /* ═══ result ═══ */
 /* the result is its own card within the output section, matching the form */
-/* the result IS the download row now — the status + per-stage timings live up in
+/* the result IS the download row now - the status + per-stage timings live up in
    the step header, so this is just the orange action button */
 .result { margin-block-start: 2px; animation: drop-in .4s var(--ease); }
 /* the download button carries output size + delta on the left and the total
-   time at the right — ONE line, every segment nowrap. The icon/kind/size are
+   time at the right - ONE line, every segment nowrap. The icon/kind/size are
    pinned (flex none); only the delta text may shrink + ellipsize, so create's
    longer "N delta records" can't crush the icon to zero width */
 .download-btn { gap: 10px; font-size: .9rem; white-space: nowrap; flex-wrap: nowrap; min-width: 0; }
@@ -1115,7 +1115,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .step-meta .rb { gap: 5px; }
 .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
 .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
-/* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 —
+/* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 -
    ease the tint and step the stage name up a shade so both stay legible */
 :root[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
 :root[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
@@ -1136,7 +1136,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
   overscroll-behavior: contain;
 }
 /* rows size to their longest line (not the container) so the log scroller gets
-   a real horizontal extent — long trace lines scroll instead of clipping.
+   a real horizontal extent - long trace lines scroll instead of clipping.
    each line is a hairline-separated, hoverable click-to-copy row */
 .tracelog .ln {
   display: flex; gap: 8px; white-space: nowrap; width: max-content; min-width: 100%;
@@ -1155,10 +1155,10 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .tracelog .lv.trace { color: var(--ink-4); } .tracelog .lv.debug { color: var(--ink-3); }
 .tracelog .lv.info { color: var(--verified); } .tracelog .lv.warn { color: var(--care); } .tracelog .lv.error { color: var(--fault); }
 .tracelog .msg { color: var(--ink-2); }
-.tracelog:empty::after { content: "—"; color: var(--ink-4); }
+.tracelog:empty::after { content: "-"; color: var(--ink-4); }
 
 /* ═══ selvage status strip ═══ */
-/* a direct <body> child OUTSIDE the centered app column — it spans the
+/* a direct <body> child OUTSIDE the centered app column - it spans the
    viewport edge to edge at the very end of the page (body is a flex column;
    .loom-app flexes to fill, so the strip lands at the bottom) */
 .selvage {
@@ -1191,7 +1191,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .dlg { border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%; }
 /* open AND close animate: transitions + @starting-style drive the entry, and
    allow-discrete display/overlay transitions keep the dialog (and backdrop)
-   rendered while the exit plays — no JS choreography needed */
+   rendered while the exit plays - no JS choreography needed */
 .dlg { transition: display .26s allow-discrete, overlay .26s allow-discrete; }
 .dlg .dlg-frame { opacity: 0; transform: translateY(10px) scale(.97); transition: opacity .22s ease, transform .26s var(--ease); }
 .dlg[open] .dlg-frame { opacity: 1; transform: none; }
@@ -1220,11 +1220,11 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .dlg-copy { margin: 0; font-size: .9rem; color: var(--ink-2); line-height: 1.55; }
 .dlg-note { margin: 12px 0 0; font-size: .76rem; color: var(--ink-3); }
 .confirm-dlg { max-width: min(440px, calc(100vw - 32px)); }
-/* settings is the longest dialog — let it use most of the viewport height so
+/* settings is the longest dialog - let it use most of the viewport height so
    the groups don't live behind a short internal scroll */
 .settings-dlg { max-width: min(820px, calc(100vw - 32px)); }
 .settings-dlg .dlg-frame { max-height: min(94dvh, 1020px); }
-/* with enough width, the groups pack into two masonry columns — content height
+/* with enough width, the groups pack into two masonry columns - content height
    roughly halves, so a tall-enough viewport needs no scrollbar at all */
 @media (min-width: 720px) {
   #settings-body { columns: 2; column-gap: 11px; }
@@ -1233,7 +1233,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
   #settings-body .validation { column-span: all; }
 }
 /* log dialog: a tall, readable trace with a level filter + copy in the header */
-/* the log is tall — fill the available dialog height so more lines are visible */
+/* the log is tall - fill the available dialog height so more lines are visible */
 .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
 .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
 .log-actions { display: inline-flex; gap: 8px; align-items: center; margin-inline-start: auto; }
@@ -1265,7 +1265,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .pick-row:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
 .pick-row.skip { opacity: .55; cursor: not-allowed; }
 .pick-row { align-items: flex-start; position: relative; }
-/* no visible checkbox — the highlighted row IS the selection state. The input
+/* no visible checkbox - the highlighted row IS the selection state. The input
    stays real (clipped away, not display:none) so keyboard toggling and SR
    state announcements keep working. clip-path (not opacity) so the :disabled
    opacity rule can't resurface the switch knob as a stray dot. */
@@ -1284,7 +1284,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .pick-row:has(.pick-input:checked)::before { background: var(--thread); }
 .pick-row:has(.pick-input:checked) .pick-name { font-weight: 750; }
 .pick-row .pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-/* the archive path WRAPS instead of truncating — on a phone the crumb is the
+/* the archive path WRAPS instead of truncating - on a phone the crumb is the
    only way to tell two same-named candidates apart */
 .pick-row .pick-crumb { font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .pick-row .pick-name { min-width: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
@@ -1293,7 +1293,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 
 /* settings groups */
 /* each group is a 2-col grid (label column sized to its WIDEST label) and the
-   rows are subgrids — labels and controls align in clean columns within the
+   rows are subgrids - labels and controls align in clean columns within the
    group while the label column still hugs its text */
 .setgroup {
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
@@ -1326,7 +1326,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 /* ═══ scenario dock (prototype-only chrome) ═══ */
 /* the prototype selector is pinned to the very top, above the header, and stays
    put while the page scrolls. the full-width container is click-through so it
-   never blocks the masthead — only the pill + panel are interactive */
+   never blocks the masthead - only the pill + panel are interactive */
 .dock { position: fixed; inset-block-start: 6px; inset-inline: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .dock > * { pointer-events: auto; }
 .dock-toggle {
@@ -1356,12 +1356,12 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 .dock-btn[aria-pressed="true"] { background: var(--thread); border-color: var(--thread); color: var(--thread-ink); }
 
 /* cross-document navigations (reload, hash entry) crossfade instead of
-   flashing white — same-origin only, no-op in browsers without support */
+   flashing white - same-origin only, no-op in browsers without support */
 @view-transition { navigation: auto; }
 /* theme change: the new theme clip-reveals as a circle expanding from the
-   toggle button. The wipe is a pure CSS keyframe — JS only sets the origin
+   toggle button. The wipe is a pure CSS keyframe - JS only sets the origin
    custom properties (--wipe-x/y/r) and starts the transition. ONLY during the
-   wipe (vt-theme) is the default root crossfade replaced — every other view
+   wipe (vt-theme) is the default root crossfade replaced - every other view
    transition keeps it, so scenario/mode changes crossfade instead of snapping. */
 :root.vt-theme::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
 :root.vt-theme::view-transition-new(root) {
@@ -1376,7 +1376,7 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 ::view-transition-new(root) { z-index: 1; }
 /* scenario morphs (vt-rom / vt-<pid> / vt-action) share one longer, softer
    ease, and the snapshots STRETCH to the morphing box (height/width 100%)
-   instead of sliding past it — the stretch is what makes a button→panel or
+   instead of sliding past it - the stretch is what makes a button→panel or
    reading-card→card morph read smooth rather than janky */
 ::view-transition-group(*) { animation-duration: .34s; animation-timing-function: cubic-bezier(.22, .9, .26, 1); }
 ::view-transition-old(*), ::view-transition-new(*) {
@@ -1385,10 +1385,10 @@ input[type="range"] { accent-color: var(--thread); width: 100%; }
 }
 /* morph names are suppressed during the THEME wipe (they'd crossfade outside
    the expanding circle) and during MODE switches (no real continuity between
-   panels — a flat crossfade reads cleaner than cards morphing across modes) */
+   panels - a flat crossfade reads cleaner than cards morphing across modes) */
 html.vt-theme [style*="view-transition-name"],
 html.vt-flat [style*="view-transition-name"] { view-transition-name: none !important; }
-/* while a scenario view transition runs, the morph IS the animation — suppress
+/* while a scenario view transition runs, the morph IS the animation - suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card, .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
 /* drop acknowledgment / "files go here" ring */
@@ -1427,17 +1427,17 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
      name/description out of its column (this overrides the coarse 36px) */
   /* badges read daintier on a phone: smaller text + tighter padding so the
      size/type/system pills hug their text and don't crowd the name column */
-  /* row controls (handle / remove / cancel) drop to 24px — the WCAG 2.5.8
-     floor — so they stop crowding the name and progress readouts */
+  /* row controls (handle / remove / cancel) drop to 24px - the WCAG 2.5.8
+     floor - so they stop crowding the name and progress readouts */
   :root { --pad: 12px; --ctrl-h: 24px; --badge-fs: 0.7rem; }
   .handle svg { width: 14px; height: 14px; }
   .rm svg, .cancel svg { width: 12px; height: 12px; }
   .step-meta .rb, .ckgrp .tsz, .cks > .cks-head .rb { padding: 1px 6px; }
-  /* mobile leans harder into Archivo's width axis — the whole UI condenses and
+  /* mobile leans harder into Archivo's width axis - the whole UI condenses and
      the hash rows tighten further so long checksums pack onto one line */
   .loom-app { padding-inline: 8px; font-stretch: 82%; }
   .mono { font-stretch: 74%; }
-  /* the progress label + sub-line condense too far on a phone — nudge them up so
+  /* the progress label + sub-line condense too far on a phone - nudge them up so
      the running/staging readouts stay legible (and keep --lab-lh in step) */
   .prog .lab { font-size: .85rem; }
   .prog-panel { --lab-lh: 1.275rem; }
@@ -1447,13 +1447,13 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
      cards, drop zones and notices all line up on the same vertical edge */
   .step-head { padding-inline: 6px; }
   /* cards stay framed on all four sides (the verified/fault border must read as
-     a full outline, not just top+bottom) — inset slightly from the container and
+     a full outline, not just top+bottom) - inset slightly from the container and
      keep tight inline padding so checksum hashes still get room */
   .card { border-radius: var(--r-s); margin-inline: 6px; padding-inline: 7px; }
-  /* staging reading-cards share the settled cards' 6px inset — they sit in the
+  /* staging reading-cards share the settled cards' 6px inset - they sit in the
      same list and must be the same width */
   .cards > .prog-panel { margin-inline: 6px; border-radius: var(--r-s); }
-  /* …but bordered drop zones / directives must NOT run to the screen edge —
+  /* …but bordered drop zones / directives must NOT run to the screen edge -
      keep a gutter so their rounded frame reads as a contained panel */
   /* drop surfaces (empty hero AND the compact add-row) + "needs input" directives
      match the cards' 6px inset so 0x01 is the same width as every other section */
@@ -1463,13 +1463,13 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
   .selvage { padding-inline: 8px; }
   .confirm-dlg { max-width: min(380px, calc(100vw - 56px)); }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
-     dismiss — the text wraps internally, Reload stays an inline slim button */
+     dismiss - the text wraps internally, Reload stays an inline slim button */
   .updates { gap: 8px; }
   /* width-hungry dialogs go edge-to-edge on a phone: the log + settings as
      full-height sheets, the picker + update full width at their own height.
      only the confirm stays a centered small card. */
   .log-dlg, .settings-dlg, .picker-dlg, .update-dlg { max-width: 100vw; width: 100vw; }
-  /* full-screen sheets must size the <dialog> ITSELF — the UA default
+  /* full-screen sheets must size the <dialog> ITSELF - the UA default
      max-height (100% − 2em − 6px) + auto margins otherwise clip a 100dvh
      frame at the top */
   .log-dlg, .settings-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
@@ -1484,7 +1484,7 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
   .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   .mode span:not(.mode-thumb) { font-size: .72rem; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
-     on a phone — drop the group indent, trim row padding, shrink the copy
+     on a phone - drop the group indent, trim row padding, shrink the copy
      control. Values still line up via the fixed label column. */
   .ckgrp { padding-inline-start: 0; }
   .ck { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 3px 6px; padding-inline: 6px; }
@@ -1492,9 +1492,9 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
   .ck .ck-v { font-size: clamp(.72rem, 3.3vw, .94rem); line-height: 1.35; font-stretch: 62%; }
   .ck .copy { width: 20px; height: 20px; }
   /* verification labels are descriptive ("target blockcheck"), not 5-char hash
-     names — let the label column size to its content so the label always fits
+     names - let the label column size to its content so the label always fits
      and the value moves right, instead of forcing the narrow hash-label width */
-  /* keep the subgrid (set on .ck.req above) — only tune size/gap on mobile */
+  /* keep the subgrid (set on .ck.req above) - only tune size/gap on mobile */
   .ck.req { column-gap: 8px; }
   .ck.req .ck-k { font-size: .72rem; }
   .ck.req .ck-v { font-size: clamp(.72rem, 3.3vw, .94rem); }
@@ -1503,11 +1503,11 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
   .dock-panel { max-height: 76dvh; overflow-y: auto; }
-  /* footer: one line, always — status truncates, metadata yields. bump the type a
+  /* footer: one line, always - status truncates, metadata yields. bump the type a
      step up from the desktop .66rem so the status stays readable on a phone */
   .selvage { flex-wrap: nowrap; gap: 10px; font-size: .76rem; }
   /* version/cache/threads stay visible on a phone (stage text yields first);
-     only the live heap readout is desktop-only — it's the widest and least useful */
+     only the live heap readout is desktop-only - it's the widest and least useful */
   .selvage .sv-mem { display: none; }
   .sv-stage { flex: 0 1 auto; }
   .sv-link { flex: none; }
@@ -1529,12 +1529,12 @@ html.vt-flat [style*="view-transition-name"] { view-transition-name: none !impor
   .card.ok, .card.warn, .card.bad { border-width: 2px; }
   .dropveil { background: Canvas; }
   /* the custom switch is drawn entirely with backgrounds, which forced-colors
-     strips — redraw the track/knob in system colors so on/off stays visible */
+     strips - redraw the track/knob in system colors so on/off stays visible */
   input[type="checkbox"] { border-color: CanvasText; }
   input[type="checkbox"]::after { background: CanvasText; box-shadow: none; }
   input[type="checkbox"]:checked { background: Highlight; border-color: Highlight; }
   input[type="checkbox"]:checked::after { background: HighlightText; }
-  /* picker selection relies on a tinted border + left bar — both stripped here */
+  /* picker selection relies on a tinted border + left bar - both stripped here */
   .pick-row:has(.pick-input:checked) { outline: 3px solid Highlight; outline-offset: -1px; }
 }
 

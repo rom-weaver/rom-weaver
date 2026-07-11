@@ -21,11 +21,11 @@ pub(super) const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELT
 pub(super) const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
 
 /// Output buffer for the windowed VCDIFF apply paths. Each window's decoded target is often only
-/// ~16 KiB, so writing it straight to the file costs one `write` syscall per window — tens of
+/// ~16 KiB, so writing it straight to the file costs one `write` syscall per window - tens of
 /// thousands for a large patch (measured: ~27k writes → ~270 on a 443 MiB apply). Buffering
 /// coalesces those into far fewer, larger writes: a large win for native syscall count, and it
 /// improves browser read-cache locality by dropping the per-window seek. (Browser write *time* is
-/// bandwidth-bound on the data copy, so larger buffers don't help there — 1 MiB matched 4 MiB on
+/// bandwidth-bound on the data copy, so larger buffers don't help there - 1 MiB matched 4 MiB on
 /// wall time at a quarter of the memory.)
 pub(super) const APPLY_OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
 pub(super) const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
@@ -1108,7 +1108,7 @@ pub(super) fn apply_windows_with_target_sources(
 
     let mut input_reader = BufReader::new(File::open(input_path)?);
     // The window decoder seeks to each window's absolute patch offsets, so one
-    // reader can serve every window — no need to reopen the patch file per window.
+    // reader can serve every window - no need to reopen the patch file per window.
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
     let mut output = BufWriter::with_capacity(
         APPLY_OUTPUT_BUFFER_BYTES,
@@ -1243,7 +1243,7 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
 
 /// The decoded output (target) size of a VCDIFF/xdelta patch, read from the
 /// window headers without decoding any data. Lets callers plan output layout
-/// before applying — e.g. the `.dcp` rebuild sizes each patched file up front.
+/// before applying - e.g. the `.dcp` rebuild sizes each patched file up front.
 pub fn vcdiff_output_size(patch_bytes: &[u8]) -> Result<u64> {
     let patch = parse_patch(&mut std::io::Cursor::new(patch_bytes))?;
     patch.target_size()
@@ -1341,7 +1341,7 @@ pub(super) fn create_native_compress_options(
 /// Shared, monotonic progress for the whole `patch-create` operation. The encode, the optional
 /// app-header/secondary recode passes, and finalization each emit into a slice of the 0→100 range
 /// (a "band"), so the reported percentage reflects the *entire* process and only reaches 100% once
-/// the patch is finished — the percentage where it stalls also identifies the slow phase. All
+/// the patch is finished - the percentage where it stalls also identifies the slow phase. All
 /// emission happens on the calling (main) thread, so interior mutability via `Cell`/`RefCell` is
 /// sufficient (the parallel encode never captures this).
 pub(super) struct CreateProgress<'a> {
@@ -2033,7 +2033,7 @@ pub(super) fn recode_window_section(
 /// baseline patch would have if materialized by [`recode_loaded_patch_with_xdelta_options`] with no
 /// secondary compressor. The uncompressed recode keeps every section's length, so each window's size
 /// is fully determined by the parsed metadata. This lets `create` compare the baseline against the
-/// secondary candidates without writing it — a full-patch rewrite that a candidate almost always
+/// secondary candidates without writing it - a full-patch rewrite that a candidate almost always
 /// makes redundant. `create_xdelta_appheader_baseline_size_matches_materialized` guards the formula
 /// against serialization drift.
 pub(super) fn measure_appheader_baseline_size(

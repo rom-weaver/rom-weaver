@@ -3,7 +3,7 @@
 //!
 //! On a GD-ROM the high-density data track does not begin at LBA 0; its
 //! ISO9660 volume records every extent location as an *absolute* disc LBA,
-//! biased by the track's start LBA (45000 for the standard high-density area —
+//! biased by the track's start LBA (45000 for the standard high-density area -
 //! see [`GD_HIGH_DENSITY_START_LBA`]). The Primary Volume Descriptor still sits
 //! at volume sector 16 (i.e. `start_lba + 16`), so the bias is the track's
 //! start LBA: a file recorded at absolute LBA `L` lives at track-relative

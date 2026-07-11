@@ -83,7 +83,7 @@ function ProgressActionButton({
 
   // Swapping the run <button> for the progress <div> unmounts the focused element and
   // drops focus to <body>. On that transition move focus to the cancel control while
-  // running, and restore it to the run button when finished — but only if focus was lost,
+  // running, and restore it to the run button when finished - but only if focus was lost,
   // so we never steal it from somewhere the user has since moved.
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -96,7 +96,7 @@ function ProgressActionButton({
     target?.focus();
   }, [isRunning]);
 
-  // While running, the button is replaced by the loom live-run panel — the
+  // While running, the button is replaced by the loom live-run panel - the
   // borderless instrument row that spans the output card's content width.
   if (progress) {
     return (
@@ -123,7 +123,7 @@ function ProgressActionButton({
           <div className="sub mono">
             <span>{progressLabelParts?.threadsText || progress.threadsText || ""}</span>
             {progress.throughputText ? <span className="run-rate">{progress.throughputText}</span> : null}
-            <span className="run-pct">{progressLabelParts?.percentText || "—"}</span>
+            <span className="run-pct">{progressLabelParts?.percentText || "-"}</span>
           </div>
         </div>
         {onCancel ? (

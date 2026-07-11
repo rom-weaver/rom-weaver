@@ -4,8 +4,8 @@
 //! files, and an optional replacement IP.BIN boot sector) applied inside a
 //! Dreamcast GD-ROM's ISO9660 filesystem. This crate owns the format knowledge:
 //!
-//! - [`zip`] — read the ZIP central directory (entry names + sizes).
-//! - [`manifest`] — classify entries into typed [`DcpOperation`]s per the DCP
+//! - [`zip`] - read the ZIP central directory (entry names + sizes).
+//! - [`manifest`] - classify entries into typed [`DcpOperation`]s per the DCP
 //!   naming convention.
 //!
 //! The orchestration that reads source files (via `rom-weaver-gdrom`), applies

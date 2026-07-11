@@ -75,14 +75,14 @@ const FileCard = ({
   /**
    * Progress bar on the card's top edge while staging: a determinate width
    * (0–100) when the percent is known, or `"indeterminate"` for an animated
-   * sliding bar. Omit/null to render no bar — the bar is removed once the work
+   * sliding bar. Omit/null to render no bar - the bar is removed once the work
    * finishes (the meta-line status is what carries completion).
    */
   stageBar?: number | "indeterminate" | null;
   /**
    * The second, verification phase (a patch's deferred dry-run against the ROM):
    * an indeterminate bar on the top edge, shown after staging clears. Same orange
-   * accent as the staging bar — it just marks a later phase of the same card.
+   * accent as the staging bar - it just marks a later phase of the same card.
    */
   verifyBar?: boolean;
   children?: ReactNode;

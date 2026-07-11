@@ -6,7 +6,7 @@ import { copyToClipboard } from "../../src/lib/clipboard.ts";
  * The execCommand fallback (used when navigator.clipboard is unavailable, e.g.
  * a non-secure LAN context) must mount its scratch <textarea> inside an open
  * <dialog>. A modal dialog makes document.body inert, so a textarea appended
- * there cannot be selected and the copy silently fails — the log dialog bug.
+ * there cannot be selected and the copy silently fails - the log dialog bug.
  */
 
 const stubNoAsyncClipboard = () => {
@@ -86,8 +86,8 @@ describe("copyToClipboard execCommand fallback host", () => {
 /**
  * The async Clipboard API rejects when the document is not focused (DevTools or
  * another window focused, or a focus handoff). Recovering by awaiting that
- * rejection and then calling execCommand is too late — the user gesture is gone
- * — so copy failed intermittently. When unfocused, skip the async API and copy
+ * rejection and then calling execCommand is too late - the user gesture is gone
+ * - so copy failed intermittently. When unfocused, skip the async API and copy
  * synchronously inside the live gesture instead.
  */
 describe("copyToClipboard focus handling", () => {

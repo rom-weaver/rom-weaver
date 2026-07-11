@@ -1,5 +1,5 @@
 //! Native-only downloads for rw.json manifest `url` entries. The wasm build
-//! never compiles this module — the browser prefetches URLs with JS `fetch`
+//! never compiles this module - the browser prefetches URLs with JS `fetch`
 //! and hands the CLI core plain paths.
 
 use std::time::Duration;
@@ -10,7 +10,7 @@ use super::*;
 
 const DOWNLOAD_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_MAX_REDIRECTS: u32 = 5;
-/// Ceiling on one downloaded file — a sanity guard against endless streams,
+/// Ceiling on one downloaded file - a sanity guard against endless streams,
 /// far above any real ROM.
 const DOWNLOAD_MAX_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const DOWNLOAD_READ_CHUNK: usize = 64 * 1024;
@@ -159,14 +159,14 @@ fn url_tail_file_name(url: &str) -> Option<String> {
     let path_start = without_query.find("://").map(|index| index + 3)?;
     let path = &without_query[path_start..];
     if !path.contains('/') {
-        // Authority only — no path segment to name the download after.
+        // Authority only - no path segment to name the download after.
         return None;
     }
     let tail = path.trim_end_matches('/').rsplit('/').next()?;
     if tail.is_empty() {
         return None;
     }
-    // Keep `:` — `[crc32:..]` file-name requirement tokens depend on it.
+    // Keep `:` - `[crc32:..]` file-name requirement tokens depend on it.
     let sanitized: String = tail
         .chars()
         .map(|value| if value == '\\' { '-' } else { value })

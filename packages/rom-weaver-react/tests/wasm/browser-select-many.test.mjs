@@ -7,7 +7,7 @@ import {
   writeGuestFile,
 } from "./test-helpers.mjs";
 
-// A two-entry zip (`game.bin`, `bonus.sfc`) — two distinct top-level payloads, so an interactive
+// A two-entry zip (`game.bin`, `bonus.sfc`) - two distinct top-level payloads, so an interactive
 // extract with no `--select` is ambiguous and the wasm app prompts via `select_many`.
 const MULTI_ROM_ZIP_URL = new URL("../fixtures/archives/multi-rom.zip", import.meta.url);
 

@@ -3,7 +3,7 @@
 // Builds the SharedArrayBuffer channel, spawns the dedicated proxy worker, hands it the mount handles,
 // and exposes: a synchronous OpfsProxyClient for the runner thread, the serializable channel transfer
 // to forward into spawned WASI threads (so they share the same proxy), and a stop() for teardown.
-// Gated behind the I/O-mode flag in the runner — when off, none of this is constructed.
+// Gated behind the I/O-mode flag in the runner - when off, none of this is constructed.
 
 import { createOpfsProxyChannel, type OpfsProxyChannelTransfer } from "./browser-opfs-proxy-channel.ts";
 import { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";

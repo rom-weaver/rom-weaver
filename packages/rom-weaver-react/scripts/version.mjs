@@ -120,7 +120,7 @@ const buildVersionString = (baseVersion, gitMetadata) => {
 const CHANGELOG_FIELD_SEP = "\x1f";
 
 // Recent commit log for the in-app "What's new" dialog. Capped so the emitted
-// asset stays flat-sized forever — anyone more than `limit` builds behind falls
+// asset stays flat-sized forever - anyone more than `limit` builds behind falls
 // off the tail, which the dialog covers with an "earlier" note.
 const getChangelog = (limit = 50) => {
   const raw = runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);

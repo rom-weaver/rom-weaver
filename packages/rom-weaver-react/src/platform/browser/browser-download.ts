@@ -10,22 +10,22 @@ type BrowserDownloadOptions = {
 };
 
 // An installed iOS/iPadOS PWA (standalone display mode). Only there do we take
-// the share path — a normal Safari tab keeps the anchor download (its Quick Look
+// the share path - a normal Safari tab keeps the anchor download (its Quick Look
 // preview at least carries a share button), and a standalone PWA has no such
 // affordance, so the blob would otherwise dead-end. `navigator.standalone` is
 // the legacy iOS signal; the `display-mode` query is the modern cross-browser
-// one — check both so old and new iOS PWAs are covered.
+// one - check both so old and new iOS PWAs are covered.
 const isIosStandalonePwa = (): boolean => {
   if (typeof navigator === "undefined" || !isAppleMobileWebKit(navigator)) return false;
   if ((navigator as { standalone?: boolean }).standalone === true) return true;
   return typeof window !== "undefined" && !!window.matchMedia?.("(display-mode: standalone)").matches;
 };
 
-// The share sheet was dismissed by the user — not a failure.
+// The share sheet was dismissed by the user - not a failure.
 const isShareCancellation = (error: unknown): boolean =>
   typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError";
 
-// Inside a standalone iOS PWA the `<a download>` anchor can't save — WebKit has
+// Inside a standalone iOS PWA the `<a download>` anchor can't save - WebKit has
 // no Files integration for it there. The Web Share API's native sheet ("Save to
 // Files") is the only path that writes to a real location; `showSaveFilePicker`
 // isn't implemented on iOS at all. So in that context we share exclusively and
@@ -34,9 +34,9 @@ const isShareCancellation = (error: unknown): boolean =>
 // Safari tab, desktop, Android) → anchor download.
 //
 // `navigator.share` needs live user activation. The armed "Download output" tap
-// supplies it (`interactive`). The automatic post-apply download does NOT — its
+// supplies it (`interactive`). The automatic post-apply download does NOT - its
 // activation from the original "Apply & download" tap has expired by the time
-// apply finishes — so there it throws `NotAllowedError`, which we swallow and
+// apply finishes - so there it throws `NotAllowedError`, which we swallow and
 // leave the armed button for a real tap. Fast ops whose apply completes within
 // the activation window will still pop the sheet automatically. On the
 // interactive path a share failure (other than the user cancelling the sheet)
@@ -76,7 +76,7 @@ const tryWebKitShare = async (blob: Blob, fileName?: string, options?: BrowserDo
     }
     // Swallow: cancel, expired activation (auto path), or any non-interactive share
     // error. On iOS the anchor fallback only previews, never saves, so there is
-    // nothing better to do — the armed "Download output" button remains for a real tap.
+    // nothing better to do - the armed "Download output" button remains for a real tap.
     logger.debug("iOS share sheet dismissed or unavailable", {
       error: error instanceof Error ? error.name : String(error),
       interactive: !!options?.interactive,

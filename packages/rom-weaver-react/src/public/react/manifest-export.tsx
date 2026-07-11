@@ -97,7 +97,7 @@ type UseManifestExportOptions = {
   /** Live per-patch stack items (index-aligned with patches) for leaf names + header round-trips. */
   getStackItems: () => PatchStackItemState[];
   getName?: () => string;
-  /** The output card's ROM header choice — a non-auto pick (only offered when the
+  /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the manifest's `output.header`. */
   getOutputHeader?: () => "auto" | "keep" | "strip" | undefined;
   disabledPatchIds: ReadonlySet<string>;
@@ -253,7 +253,7 @@ const useManifestExport = ({
     // Resolve a session source to its patch/ROM leaf so bundles carry the
     // actual file, not the archive it arrived in. Degrades to the original
     // source when the leaf cannot be materialized. Only leaves the resolver
-    // actually extracted are cleaned up afterwards — a passthrough leaf shares
+    // actually extracted are cleaned up afterwards - a passthrough leaf shares
     // its backing resources with the live form session.
     const prepareLeafSource = async (
       source: BinarySource,
@@ -316,7 +316,7 @@ const useManifestExport = ({
         };
       };
       // Per-patch entries carry ONLY checks the author specified (typed in the
-      // dialog or the patch's Options) — chain intermediates are never hashed
+      // dialog or the patch's Options) - chain intermediates are never hashed
       // or attached. A typed check may not contradict one built into the patch
       // file itself.
       const validateRowChecks = (raw: string, builtIn: Record<string, string>, label: string): string => {
@@ -369,7 +369,7 @@ const useManifestExport = ({
         const originalName = rom ? getReactBinarySourceFileName(rom, romLeaf.fileName) : romLeaf.fileName;
         const existingFormat = originalName.split(".").pop()?.toLowerCase();
         // The ROM is hashed only here, and only for the packaging-format
-        // recommendation — rom.checks come from Rust during create.
+        // recommendation - rom.checks come from Rust during create.
         const recommendedRomFormat =
           rom && existingFormat && ["chd", "rvz", "z3ds"].includes(existingFormat)
             ? undefined

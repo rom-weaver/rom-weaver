@@ -20,7 +20,7 @@ const inputTarget = (overrides: { id: string; fileName: string; size: number; fi
   }) as unknown as InputAsset;
 
 // No source requirements: the preflight carries no required size/crc, so id/name/size are the only
-// other distinguishing fields — exactly the case where two archive entries can collide.
+// other distinguishing fields - exactly the case where two archive entries can collide.
 const preflight: InternalPatchChecksumPreflight = { status: "unknown" } as InternalPatchChecksumPreflight;
 
 describe("createApplyPatchValidationKey", () => {

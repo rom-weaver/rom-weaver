@@ -9,7 +9,7 @@
   document.documentElement.dataset.theme =
     localStorage.getItem("rw-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
 </script>
-<title>rom-weaver — loom workbench prototype</title>
+<title>rom-weaver - loom workbench prototype</title>
 <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="./assets/fonts/archivo.css" />
 <link rel="stylesheet" href="./assets/fonts/inter-tight.css" />
@@ -116,7 +116,7 @@
   </main>
 </div>
 
-<!-- ════════ status strip — outside the centered column so it runs edge to edge ════════ -->
+<!-- ════════ status strip - outside the centered column so it runs edge to edge ════════ -->
 <footer class="selvage" aria-label="Status">
   <span class="sv-state" id="sv-state"><span class="sv-dot" aria-hidden="true"></span><span class="mono" id="sv-state-text">idle</span></span>
   <span class="sv-stage mono" id="sv-stage" aria-live="polite"></span>
@@ -169,7 +169,7 @@
 <dialog class="dlg update-dlg" id="update-dialog" aria-labelledby="upd-title">
   <form method="dialog" class="dlg-frame">
     <header class="dlg-head">
-      <h2 class="dlg-title" id="upd-title"><span data-i18n="update.dialogTitle">Update</span><span class="mono"> — v2.5.0</span></h2>
+      <h2 class="dlg-title" id="upd-title"><span data-i18n="update.dialogTitle">Update</span><span class="mono"> - v2.5.0</span></h2>
       <button class="dlg-x" value="cancel" aria-label="Close" data-i18n-aria="common.close" type="submit">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
@@ -280,13 +280,13 @@
           const tag = r.headers.get("last-modified") || r.headers.get("etag") || r.headers.get("content-length");
           if (stamps[f] !== undefined && stamps[f] !== tag) {
             /* navigate to a UNIQUE url so the browser can't serve a cached (or
-               half-cached) index.html — that was the source of stale/partial css */
+               half-cached) index.html - that was the source of stale/partial css */
             location.replace(location.pathname + "?_r=" + Date.now() + location.hash);
             return;
           }
           stamps[f] = tag;
         }
-      } catch (_) { /* server momentarily unavailable — keep polling */ }
+      } catch (_) { /* server momentarily unavailable - keep polling */ }
       setTimeout(check, 1000);
     };
     check();

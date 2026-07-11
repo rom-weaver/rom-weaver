@@ -442,10 +442,10 @@ const runApplyWorkflow = async (
             // Per-patch user options for this target's chain drive the header modes below.
             // The pasted / manifest-seeded input/output checksums are deliberately NOT
             // forwarded to the engine: in the browser they verify reactively (ROM/patch
-            // card coloring) and a mismatch never blocks or fails the run — the CLI keeps
+            // card coloring) and a mismatch never blocks or fails the run - the CLI keeps
             // hard enforcement.
             const patchOptions = Array.isArray(input.patchOptions) ? input.patchOptions : [];
-            // One header mode per patch. The first patch's mode is concrete — the
+            // One header mode per patch. The first patch's mode is concrete - the
             // browser resolved it against the staged checksum variants, so the engine
             // never re-hashes the OPFS input. Later patches send their explicit
             // choice/decided mode, or "auto" so the engine decides per step from its

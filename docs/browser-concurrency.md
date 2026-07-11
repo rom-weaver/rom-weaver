@@ -34,7 +34,7 @@ access and a silent hang (8-thread browser decode). The fix is to make spawning
 `thread-spawn`. That blocking ack is the start barrier. See the memory notes
 "CHD browser decode grow-race root cause" and "Browser thread-count cap".
 
-**Control word** — `Int32Array` over each pooled worker's `startControlBuffer`:
+**Control word** - `Int32Array` over each pooled worker's `startControlBuffer`:
 
 | Index | Constant                      | Meaning                                  |
 |-------|-------------------------------|------------------------------------------|
@@ -84,7 +84,7 @@ busy-retry `25 ms` interval / `30 s` ceiling when no pooled worker is free.
   `packages/rom-weaver-react/src/workers/protocol/browser-virtual-files.ts`
 - Consumer (wasm worker thread, `BrowserVirtualRandomAccessFile`):
   `packages/rom-weaver-react/src/wasm/browser-opfs-io-adapters.ts`
-- Shared constants (the wire contract): **`browser-virtual-file-protocol.ts`** — both
+- Shared constants (the wire contract): **`browser-virtual-file-protocol.ts`** - both
   files above import from it so they can never disagree on the layout or state values.
 
 **Why it exists.** A virtual file lets the wasm engine read a user-picked file's bytes
@@ -136,7 +136,7 @@ Status is `VIRTUAL_FILE_STATUS_OK` (0) / `VIRTUAL_FILE_STATUS_ERROR` (1).
 5. Consumer (blocking `Atomics.wait` in 100 ms slices) wakes on `DONE`, copies out,
    and `releaseProxySlot` → `store IDLE` + `notify`.
 
-**Invariants — do not break these:**
+**Invariants - do not break these:**
 
 - **The two private markers (`CONSUMER_LOCKED = 3`, `PRODUCER_READING = 4`) must never
   share a value** with each other or with a shared state. They are defined together in
@@ -161,13 +161,13 @@ chunk size clamped to `[256 KiB, 2 MiB]`.
 
 These are intentionally left as-is for now; flagged so a future cleanup is deliberate:
 
-- There are **two separate** `waitForAtomicsStateChange` implementations — one in
+- There are **two separate** `waitForAtomicsStateChange` implementations - one in
   `browser-wasi-thread-protocol.ts` (thread start barrier) and one in
   `browser-opfs-io-adapters.ts` (virtual-file channel). They are **not** identical: the
   thread one uses `Date.now()` and falls back to a single bounded `Atomics.wait`; the
   io-adapters one uses `performance.now()` and always loops in slices, with different
   return values. Unifying them means reconciling those semantics, so it is a separate
-  change with its own perf check — not a mechanical de-dup.
+  change with its own perf check - not a mechanical de-dup.
 - Read-cache geometry constants (block bytes/count) differ between the OPFS sync-handle
   path and the virtual-blob path by design (different access patterns); see the comments
   in `browser-opfs-io-adapters.ts`.

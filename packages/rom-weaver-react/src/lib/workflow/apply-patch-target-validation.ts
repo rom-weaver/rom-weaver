@@ -128,7 +128,7 @@ const validateApplyPatchTarget = async <TSource>(
       options: {
         // The effective header decision (drawer choice, else checksum-proven auto) must
         // reach the dry-run too: a headerless-targeting patch validates against the
-        // stripped bytes — strip in the engine and cache the headerless checksums, not
+        // stripped bytes - strip in the engine and cache the headerless checksums, not
         // the raw file's.
         checksumCache: headerRemoved
           ? stage.state.headerResolution?.headerlessChecksums

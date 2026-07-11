@@ -12,8 +12,8 @@ pub use reporter::HumanReporter;
 use owo_colors::OwoColorize;
 use rom_weaver_core::format_human_bytes;
 
-/// The webapp's brand accent (`--rw-accent`, `#d9690f`) — a saturated orange that reads on both
-/// light and dark backgrounds — used to color labels.
+/// The webapp's brand accent (`--rw-accent`, `#d9690f`) - a saturated orange that reads on both
+/// light and dark backgrounds - used to color labels.
 const ACCENT: (u8, u8, u8) = (0xD9, 0x69, 0x0F);
 
 /// How human output is rendered. Chosen by the CLI from whether stdout is a terminal.

@@ -125,7 +125,7 @@ export function createBrowserWasiThreadWorkerPool({
   let disposed = false;
   let nextCommandId = 1;
   // Eager non-blocking self-pre-warm. `ready` resolves once the pool has pre-warmed to `initialSize`;
-  // it is informational — nothing blocks on it (threaded runs negotiate their own shells via
+  // it is informational - nothing blocks on it (threaded runs negotiate their own shells via
   // createCommand -> ensureSize), so the pre-warm is only a head start for the next op.
   let resolvePrewarm: () => void = () => undefined;
   const ready: Promise<void> = new Promise<void>((resolve) => {
@@ -294,8 +294,8 @@ export function createBrowserWasiThreadWorkerPool({
     let pass = 0;
     // Bring shells online in bounded batches. Starting every missing shell at once fires a burst of
     // simultaneous module-worker script loads; under a limited connection pool (notably the dev
-    // server) the loads past the first several fail their fetch — surfacing as an empty-message
-    // worker `error`, not a code crash — which previously aborted the whole run. Limiting how many
+    // server) the loads past the first several fail their fetch - surfacing as an empty-message
+    // worker `error`, not a code crash - which previously aborted the whole run. Limiting how many
     // loads are in flight at a time keeps each batch within what the host can serve, and the
     // replacement budget below still bounds retries so a genuine failure can't loop forever.
     while (true) {
@@ -550,8 +550,8 @@ export function createBrowserWasiThreadWorkerPool({
 
   // Pre-warm the pool to `initialSize` immediately (non-blocking). Runner init does not wait on it and
   // threaded runs grow the pool on demand via createCommand, so this is purely a head start that lets a
-  // freshly created runner — at boot, after a reset/thread-change, or after an idle recycle between ops
-  // — be warm for the next op. No artificial delay: the sooner the pool warms, the sooner an op that
+  // freshly created runner - at boot, after a reset/thread-change, or after an idle recycle between ops
+  // - be warm for the next op. No artificial delay: the sooner the pool warms, the sooner an op that
   // arrives mid-warm-up benefits.
   const startPrewarm = () => {
     if (disposed || initialSize <= 0) {

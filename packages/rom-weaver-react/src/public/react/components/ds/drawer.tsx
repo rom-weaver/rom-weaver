@@ -3,7 +3,7 @@ import { type ReactNode, useId, useState } from "react";
 import { join } from "./cx.ts";
 
 /**
- * Loom collapsible drawer — the "summary-first" card section: a quiet chevron,
+ * Loom collapsible drawer - the "summary-first" card section: a quiet chevron,
  * the label, then the section's key values as recessed readout chips on the
  * right. The body collapses via the CSS grid-rows trick (`.cks` rules); this
  * component only flips `is-open` + aria-expanded. Replaces the old

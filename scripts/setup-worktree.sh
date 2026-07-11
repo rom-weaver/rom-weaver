@@ -3,8 +3,8 @@
 #
 # History: this script used to mirror the main checkout's node_modules into the
 # worktree (third-party deps symlinked, workspace deps copied as symlinks).
-# That mirror silently stalls vitest browser mode — the node-side module
-# runner never dispatches test files, with no error — so worktrees needed a
+# That mirror silently stalls vitest browser mode - the node-side module
+# runner never dispatches test files, with no error - so worktrees needed a
 # manual `npm ci` before browser tests anyway. With the wasm package merged
 # into rom-weaver-react there is a single package install, and npm's cache
 # makes a real `npm ci` take seconds, so the mirror is gone.
@@ -16,7 +16,7 @@
 #   - links vendor/* submodules (nod, libarchive) from the main checkout so the
 #     fork-tracked / cmake-built C deps need no re-init or rebuild
 #
-# The cargo target dir is NOT handled here — keep a worktree-local target;
+# The cargo target dir is NOT handled here - keep a worktree-local target;
 # sharing main's target breaks cmake-built wasm C deps like libarchive.
 #
 # Usage (from inside the worktree):  scripts/setup-worktree.sh

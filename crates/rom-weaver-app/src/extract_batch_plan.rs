@@ -1,6 +1,6 @@
 //! Memory-/thread-aware extraction-batch PLANNING, shared by the native batch executor
-//! (`extract_batch.rs`) and the `plan-extract-batch` command. It is pure — no threads, no
-//! filesystem — so unlike the native executor it compiles and runs in the browser too, which is the
+//! (`extract_batch.rs`) and the `plan-extract-batch` command. It is pure - no threads, no
+//! filesystem - so unlike the native executor it compiles and runs in the browser too, which is the
 //! point: one Rust policy schedules both. The browser drives the existing multi-worker pool; this
 //! tells it how many extractions to run at once and how many threads to give each.
 
@@ -36,7 +36,7 @@ pub(crate) fn plan_extract_batch(
     explicit_ceiling: Option<u64>,
 ) -> BatchPlan {
     // An explicit ceiling (the browser's own resolved, mobile-capped working-set budget) is used
-    // verbatim — the browser owns the device-memory signal the native fraction/clamp cannot see. The
+    // verbatim - the browser owns the device-memory signal the native fraction/clamp cannot see. The
     // native path passes `None` and derives the ceiling from the platform's physical memory.
     let memory_ceiling = explicit_ceiling
         .filter(|&value| value > 0)

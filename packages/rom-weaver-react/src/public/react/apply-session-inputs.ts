@@ -114,8 +114,8 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
 };
 
 // Rust stages that mean "pulling the ROM out of a container" (the early probe manifest
-// rides on the first of these for an archive). A bare ROM never emits them — it goes
-// straight to the checksum stage — so seeing one is a positive "is extracting" signal.
+// rides on the first of these for an archive). A bare ROM never emits them - it goes
+// straight to the checksum stage - so seeing one is a positive "is extracting" signal.
 const EXTRACT_PROGRESS_STAGES = new Set(["extract", "extract-step", "decompress", "nested-extract", "probe-manifest"]);
 
 const getChecksumProgressInfoPatch = (
@@ -124,8 +124,8 @@ const getChecksumProgressInfoPatch = (
   const stage = typeof details.stage === "string" ? details.stage : "";
   const fileName = typeof details.fileName === "string" ? details.fileName : "";
   const isChecksum = stage === "checksum";
-  // A compressed source name resolves the phase on the very first tick — before any
-  // extract-stage event lands — so a container ROM never flashes a bare "Checksumming…"
+  // A compressed source name resolves the phase on the very first tick - before any
+  // extract-stage event lands - so a container ROM never flashes a bare "Checksumming…"
   // while it spins up. The stage/manifest checks carry it once the name resolves to the
   // extracted payload.
   const isExtracting =

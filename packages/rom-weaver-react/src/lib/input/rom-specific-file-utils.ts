@@ -5,7 +5,7 @@ const BIN_EXTENSION_REGEX = /\.bin$/i;
 const CUE_EXTENSION_REGEX = /\.cue$/i;
 
 // Map the engine's `disc_format` verdict (Rust `rom_identity::DiscFormat::label()`
-// — "CD"/"GD-ROM"/"DVD") to the optical-media label the CHD output panel shows.
+// - "CD"/"GD-ROM"/"DVD") to the optical-media label the CHD output panel shows.
 // The verdict is computed once by the Rust ingest/checksum identity pass from
 // disc signatures (not a TS filename/cue regex), so the UI mirrors exactly the
 // media the CHD create produces. Returns `null` for a non-disc/unknown source.

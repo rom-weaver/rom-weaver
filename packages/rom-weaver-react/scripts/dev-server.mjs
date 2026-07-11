@@ -97,7 +97,7 @@ const parseArguments = (argv) => {
     }
     // Explicit positive form (default already on): force server-set COOP/COEP/CORP headers so cross-origin
     // isolation does not depend on the service worker. Useful for verifying the production bundle in
-    // `preview` — the SW can fail to register behind the self-signed cert, but server headers still isolate.
+    // `preview` - the SW can fail to register behind the self-signed cert, but server headers still isolate.
     if (arg === "--coop-coep") {
       options.noCoopCoep = false;
       continue;

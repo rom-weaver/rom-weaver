@@ -284,7 +284,7 @@ struct BspVm<'a, 'pool> {
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
     /// The frame currently executing. A frame always exists, so frame access is
-    /// infallible — the "empty stack" state the VM previously guarded with a
+    /// infallible - the "empty stack" state the VM previously guarded with a
     /// panic is unrepresentable by construction.
     current_frame: Frame<'a>,
     /// Frames suspended by a nested BSP patch (`bsppatch`), innermost last. Each

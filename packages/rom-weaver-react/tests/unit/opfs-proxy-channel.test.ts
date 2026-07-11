@@ -301,7 +301,7 @@ describe("opfs proxy channel", () => {
     expect(root.files.has("temp.bin")).toBe(true);
 
     // Unlink while the handle is still open: POSIX unlink-while-open detaches the name now but keeps
-    // the OPFS file (and the open handle) valid until the last reference closes — OPFS cannot removeEntry
+    // the OPFS file (and the open handle) valid until the last reference closes - OPFS cannot removeEntry
     // a file with a live SyncAccessHandle, and force-closing it would break the still-open fd.
     const unlink = await request(channel, { opcode: OPFS_PROXY_OP_UNLINK, path: "/work/temp.bin" });
     expect(unlink.status).toBe(OPFS_PROXY_STATUS_OK);

@@ -135,7 +135,7 @@ fn build_extract_checksum_emitted_file_detail(
     entry.insert("size_bytes".to_string(), json!(metadata.len()));
     entry.insert("checksums".to_string(), json!(checksums));
     // Detect the decoded disc's platform/medium from the extracted track (a bounded prefix read of
-    // the just-written output — no re-decode of the CHD) so a CHD's emitted_files carry the same
+    // the just-written output - no re-decode of the CHD) so a CHD's emitted_files carry the same
     // platform tag as other formats. A `.cue` sheet / non-disc track simply yields nothing.
     detect_rom_identity_for_path(&canonical).write_into(&mut entry);
     Some(Value::Object(entry))

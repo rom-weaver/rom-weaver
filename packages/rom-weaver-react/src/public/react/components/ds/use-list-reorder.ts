@@ -62,7 +62,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   const [drag, setDrag] = useState<DragState | null>(null);
 
   // Snap a row to its natural slot with no transition (the base `.file` transition
-  // would otherwise animate the removal of its drag transform — a second, unwanted move).
+  // would otherwise animate the removal of its drag transform - a second, unwanted move).
   const settleRow = (element: HTMLElement) => {
     element.style.transition = "none";
     element.style.transform = "";
@@ -72,7 +72,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
 
   // Record current row positions and arm a FLIP; called immediately before each
   // reorder commit. When `animateOnly` is set (a pointer drop), only that row glides
-  // to its slot — every other row already moved during the drag and is settled flat.
+  // to its slot - every other row already moved during the drag and is settled flat.
   const captureFlip = (animateOnly?: HTMLElement | null) => {
     if (prefersReducedMotion()) return;
     const tops = new Map<HTMLElement, number>();
@@ -120,7 +120,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
 
   // Target index for the grabbed row given its drag offset. The dragged card's
   // *leading* edge (its bottom when moving down, top when moving up) only has to
-  // reach a neighbour's centre to claim that slot — about half a card of travel,
+  // reach a neighbour's centre to claim that slot - about half a card of travel,
   // so reordering doesn't require dragging a full card past the next one.
   const targetFor = (from: number, dy: number): number => {
     const snapshot = snapshotRef.current;

@@ -1,7 +1,7 @@
 # rom-weaver
 
 ROM workflow CLI (native + WASM) with a React webapp. Read
-`docs/ARCHITECTURE.md` first — it covers the crate graph, registry traits,
+`docs/ARCHITECTURE.md` first - it covers the crate graph, registry traits,
 threading model, and the Rust⇄TypeScript boundary.
 
 ## Commands
@@ -30,12 +30,12 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - **One error type.** Add variants to `RomWeaverError`
   (`crates/rom-weaver-core/src/error.rs`); never introduce per-crate error
   enums.
-- **Browser OPFS code runs in Dedicated Workers only** — no main-thread
+- **Browser OPFS code runs in Dedicated Workers only** - no main-thread
   (`window`) usage. All OPFS access goes through the dedicated OPFS proxy
   worker; spawned wasm threads open and read their own OPFS files through it
   (the old read-on-main gates are retired). See "Browser I/O paths" in
   `docs/ARCHITECTURE.md`.
-- **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines —
+- **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines -
   trace output is the primary debugging tool for wasm/browser issues.
 - Relative imports only in TypeScript (no path aliases).
 
@@ -49,15 +49,15 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - Webapp workflows/forms: `packages/rom-weaver-react/src`
 - Vendored forks: `vendor/` (`nod` and `libarchive` are submodules; push `nod`
   changes to the fork remote, not upstream). Never run stable `cargo fmt`
-  inside `vendor/nod` — its rustfmt config needs nightly (`cargo +nightly fmt`)
+  inside `vendor/nod` - its rustfmt config needs nightly (`cargo +nightly fmt`)
   and stable reformats the whole tree into churn.
 
 ## Worktrees
 
 Fresh worktrees need `scripts/setup-worktree.sh` (real `npm ci` installs +
-wasm artifact copy — symlink-mirrored node_modules silently stall vitest's
+wasm artifact copy - symlink-mirrored node_modules silently stall vitest's
 browser mode) and `vendor/*` symlinked from the main checkout. Don't share the
-main checkout's `target/` for wasm builds — cmake-built C deps (libarchive)
+main checkout's `target/` for wasm builds - cmake-built C deps (libarchive)
 break; use a fresh target dir. Never put `/` or `+` in a worktree name (vitest
 browser mode hangs on `+` in test paths).
 

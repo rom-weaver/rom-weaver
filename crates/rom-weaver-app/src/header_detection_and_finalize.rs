@@ -166,7 +166,7 @@ impl CliApp {
         let header_bytes = if add_header { stripped_header } else { None };
         // `--output-header strip` on an apply that ran against the headered bytes:
         // drop the still-present header while writing the final output. A missing
-        // header is not an error — the request is "make the output headerless" and
+        // header is not an error - the request is "make the output headerless" and
         // it already is.
         let skip_prefix_bytes = if strip_output_header && header_bytes.is_none() {
             match Self::detect_strippable_rom_header(staged_output) {

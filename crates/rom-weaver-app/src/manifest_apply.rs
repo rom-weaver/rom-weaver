@@ -1,6 +1,6 @@
 //! rw.json-driven `patch apply`: detection, selection, and merging of manifest
 //! defaults into a plain [`PatchApplyCommand`]. Precedence is decided by field
-//! shape — an explicit CLI value (`Some`/non-empty) always wins over the
+//! shape - an explicit CLI value (`Some`/non-empty) always wins over the
 //! manifest, which wins over built-in defaults.
 
 use rom_weaver_core::ValidationCodeError;
@@ -35,7 +35,7 @@ impl CliApp {
     /// Route a `patch apply` through its manifest when one is present. Mutates
     /// `args` into a fully-resolved plain command (input/patches/output merged)
     /// and returns the leftover manifest contribution.
-    /// Extracted archive members land in `context`'s temp namespace — the
+    /// Extracted archive members land in `context`'s temp namespace - the
     /// caller must keep that context alive until the apply completes.
     pub(super) fn resolve_manifest_apply(
         &self,
@@ -278,7 +278,7 @@ impl CliApp {
                         Some(entry_checks),
                     ),
                     // output.checks describes the FULL chain: it only gates
-                    // when every manifest patch is selected — a partial
+                    // when every manifest patch is selected - a partial
                     // selection that happens to end on the final entry (some
                     // optionals skipped) produces a different, legitimate
                     // result.
@@ -638,7 +638,7 @@ fn manifest_entry_prompt_label(entry: &ManifestPatchEntry) -> String {
         .map(str::trim)
         .filter(|description| !description.is_empty())
     {
-        label.push_str(&format!(" — {description}"));
+        label.push_str(&format!(" - {description}"));
     }
     label
 }

@@ -1,6 +1,6 @@
 # TODO
 
-`TODO.md` is the canonical delivery board for `rom-weaver`. Add support rows here before implementation starts, keep exactly one support row `in-progress` after scaffolding, and do not move a row to `done` until fixture tests and CLI smoke coverage are green for that row. Shipped rows are pruned once landed — this board tracks what is left, not a completed-work archive (git history preserves the rest).
+`TODO.md` is the canonical delivery board for `rom-weaver`. Add support rows here before implementation starts, keep exactly one support row `in-progress` after scaffolding, and do not move a row to `done` until fixture tests and CLI smoke coverage are green for that row. Shipped rows are pruned once landed - this board tracks what is left, not a completed-work archive (git history preserves the rest).
 
 ## Commands
 
@@ -31,7 +31,7 @@
 | PAT-025 | patch | cheat-patch-create | n/a | n/a | n/a | n/a | todo | scan,diff,write flags | fixture-parity,cli-smoke,json-contract | todo | Add cheat patch creation support that emits deterministic cheat-code outputs from original/modified inputs. |
 | PAT-027 | patch | DCP (Dreamcast) | done | n/a | n/a | done | todo | streaming write | unit,crate-roundtrip (no cli-smoke yet) | partial | Universal Dreamcast Patcher apply landed (disc input → rebuild GD-ROM data track → reassemble → CHD/GDI), validated byte-correct per file on the real Space Channel 5 disc. NOT a `PatchHandler` (separate disc-rebuild path via `rom-weaver-gdrom` + `rom-weaver-dcp`). Remaining work tracked below. |
 
-### Dreamcast `.dcp` — remaining work
+### Dreamcast `.dcp` - remaining work
 
 Apply is implemented and engine-tested; these items are not done:
 
@@ -45,9 +45,9 @@ Apply is implemented and engine-tested; these items are not done:
 
 **Webapp / browser (Phase 6)**
 - DONE: `.dcp` added to the shared patch-extension list (`PATCH_FILTER_FILE_EXTENSIONS` in `rom-weaver-core/src/common_files.rs`), regenerated into `rom-weaver-format-metadata.ts`; the webapp classifier, file-picker `accept`, and patch-probe tolerance all derive from it, so a dropped `.dcp` routes to the patch bucket automatically (tsc + biome clean). No hardcoded patch list or format gate elsewhere.
-- TODO (form wiring — the main webapp gap): the only `.dcp` reference in `packages/rom-weaver-react/src` is the generated extension list; there is **no UI that pairs a `.dcp` with its disc source or dispatches the apply**. A `.dcp` is byte-stream→byte-stream-incompatible (it rebuilds a whole disc, not a single ROM), so the standard apply form's patch→ROM pairing does not model it. Needs: recognize a `.dcp` in the patch bucket as a disc-rebuild patch, require/pair a grouped disc ROM (`.gdi`/`.cue` + tracks, the disc-as-single-ROM grouping) as its source, and dispatch `run_dcp_apply` (same wasm CLI entry the native path uses) → CHD/GDI. Until this exists, `.dcp` apply is CLI-only despite the file routing to the right bucket.
-- TODO: end-to-end browser validation via the dev server (user-driven, after the form wiring above) — drop a disc (`.gdi` + tracks) + a `.dcp`, confirm it stages to OPFS, runs `run_dcp_apply` in the wasm CLI, and produces a CHD. Measure peak browser memory (the per-file VCDIFF apply is the floor — see Memory/perf). Check mobile Safari.
-- TODO: needs a fresh DCP-capable wasm build (`mise run build-wasm`) — the local/built wasm artifact must be rebuilt to include DCP.
+- TODO (form wiring - the main webapp gap): the only `.dcp` reference in `packages/rom-weaver-react/src` is the generated extension list; there is **no UI that pairs a `.dcp` with its disc source or dispatches the apply**. A `.dcp` is byte-stream→byte-stream-incompatible (it rebuilds a whole disc, not a single ROM), so the standard apply form's patch→ROM pairing does not model it. Needs: recognize a `.dcp` in the patch bucket as a disc-rebuild patch, require/pair a grouped disc ROM (`.gdi`/`.cue` + tracks, the disc-as-single-ROM grouping) as its source, and dispatch `run_dcp_apply` (same wasm CLI entry the native path uses) → CHD/GDI. Until this exists, `.dcp` apply is CLI-only despite the file routing to the right bucket.
+- TODO: end-to-end browser validation via the dev server (user-driven, after the form wiring above) - drop a disc (`.gdi` + tracks) + a `.dcp`, confirm it stages to OPFS, runs `run_dcp_apply` in the wasm CLI, and produces a CHD. Measure peak browser memory (the per-file VCDIFF apply is the floor - see Memory/perf). Check mobile Safari.
+- TODO: needs a fresh DCP-capable wasm build (`mise run build-wasm`) - the local/built wasm artifact must be rebuilt to include DCP.
 
 **Parity / correctness**
 - Byte-identical-to-UDP disc image: current output is *file-level* parity (every rebuilt file byte-correct), not the same `.gdi`/CHD bytes UDP emits. Would require reproducing DiscUtils' ISO9660 layout exactly and a UDP reference output to diff against.
@@ -57,7 +57,7 @@ Apply is implemented and engine-tested; these items are not done:
 - Per-file VCDIFF apply is still fully in-memory, so a single large patched file (e.g. SC5's ~174 MB `MAKUMA.AFS`) dominates peak RSS (~1.14 GB). The rebuild itself no longer scales with disc size; streaming the xdelta decode would lower the per-file floor.
 
 **Format coverage**
-- DCP *create* (generate a `.dcp` from two discs: diff the file trees, emit per-file xdelta deltas + verbatim files + optional `IP.BIN`, zip) — not implemented.
+- DCP *create* (generate a `.dcp` from two discs: diff the file trees, emit per-file xdelta deltas + verbatim files + optional `IP.BIN`, zip) - not implemented.
 - ZIP64 `.dcp` archives are rejected (large patches); Joliet/Rock Ridge in the source ISO is ignored (primary-descriptor only); non-45000 start LBAs / CDI layouts unsupported; xdelta-LZMA-secondary deltas are rejected (stock UDP uses `flags=0`, so unaffected).
 
 ## Codecs

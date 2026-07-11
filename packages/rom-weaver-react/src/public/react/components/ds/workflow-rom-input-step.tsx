@@ -30,7 +30,7 @@ const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) =
   if (!item.card) return null;
   const { children, extract, panels, ...cardProps } = item.card;
   // The name line leads the card header; below it the drawers follow the shared
-  // card order — Extract first, then the info panels (Options → sheets → Checks).
+  // card order - Extract first, then the info panels (Options → sheets → Checks).
   return (
     <FileCard {...cardProps} name={<ExtractName {...extract} />}>
       <ExtractDrawer {...extract} />

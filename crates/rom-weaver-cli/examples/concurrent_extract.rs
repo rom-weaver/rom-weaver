@@ -83,7 +83,7 @@ fn main() {
     let prompter: Arc<dyn SelectionPrompter> = Arc::new(NoninteractivePrompter);
 
     println!(
-        "extracting {} input(s) — mode={} threads={threads}",
+        "extracting {} input(s) - mode={} threads={threads}",
         jobs.len(),
         if sequential {
             "sequential"

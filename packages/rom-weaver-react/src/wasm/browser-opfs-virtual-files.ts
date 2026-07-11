@@ -115,7 +115,7 @@ function addVirtualFileEntry(
   }
   const name = lastPathPart(parts);
   // useProxyHandle inputs read through the OPFS proxy worker (single owner of the Blob) by guest path,
-  // exactly like a staged OPFS file — no per-thread FileReaderSync. Avoid file.size() here: on the proxy
+  // exactly like a staged OPFS file - no per-thread FileReaderSync. Avoid file.size() here: on the proxy
   // path it would force an open round-trip at mount-build time (per thread).
   const file: RandomAccessFileLike = proxyOptions.useProxyHandle
     ? new BrowserProxyRandomAccessFile(proxyOptions.proxyClient, proxyOptions.guestPath, { writable: false })

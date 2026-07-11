@@ -136,7 +136,7 @@ export const SELECT_REQUEST_READY_INDEX = 0;
 export const SELECT_REQUEST_COUNT_INDEX = 1;
 export const SELECT_REQUEST_PENDING = 0;
 export const SELECT_REQUEST_READY = 1;
-/** Sentinel count meaning "no selection" — cancelled or no handler registered. */
+/** Sentinel count meaning "no selection" - cancelled or no handler registered. */
 export const SELECT_REQUEST_CANCEL_COUNT = -1;
 
 export type RomWeaverWorkerResponse =

@@ -61,7 +61,7 @@ describe("resolveMemoryCeilingBytes", () => {
     const iosSafari =
       "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1";
     expect(resolveMemoryCeilingBytes({ navigator: { userAgent: iosSafari } })).toBe(1 * GIB);
-    // iPadOS desktop mode masquerades as MacIntel with touch — still mobile, still capped.
+    // iPadOS desktop mode masquerades as MacIntel with touch - still mobile, still capped.
     expect(
       resolveMemoryCeilingBytes({ navigator: { maxTouchPoints: 5, platform: "MacIntel", userAgent: "Macintosh" } }),
     ).toBe(1 * GIB);

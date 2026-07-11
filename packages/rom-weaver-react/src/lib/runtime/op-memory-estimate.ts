@@ -5,7 +5,7 @@ import type { RomWeaverCommand } from "../../wasm/index.ts";
 // the scheduler from overlapping operations whose *combined* working set would exhaust the device. The
 // thread gate already serializes two full-budget operations (the worst case), so this is a refinement
 // for the medium-operation overlap case. We only restrict concurrency when there is positive evidence
-// of a large working set — an operation of unknown size is treated as small so it still overlaps.
+// of a large working set - an operation of unknown size is treated as small so it still overlaps.
 
 // Fixed per-operation overhead (wasm runtime, buffers, OPFS staging) charged on top of the input-scaled
 // estimate. Also the value returned when the input size is unknown, so unknown ops never trip the gate.
@@ -39,7 +39,7 @@ const operationMultiplier = (command: RomWeaverCommand): number => {
       return MULTIPLIER_COMPRESS;
     case "extract":
     // Ingest now drives disc decompression + archive extraction (formerly `extract`), so it
-    // decodes the same working set — keep its memory multiplier equal to extract's.
+    // decodes the same working set - keep its memory multiplier equal to extract's.
     case "ingest":
       return MULTIPLIER_DECODED;
     case "patch":
@@ -60,7 +60,7 @@ export function estimateOpWorkingSetBytes(command: RomWeaverCommand, inputBytes:
 }
 
 // Commands request "auto" threads (the whole budget) by default, but most do not actually use every
-// core — a BPS/UPS apply runs a single-threaded codec, a trim just truncates, and small extracts are
+// core - a BPS/UPS apply runs a single-threaded codec, a trim just truncates, and small extracts are
 // I/O-bound. The scheduler must gate on the cores an operation will REALISTICALLY use, otherwise one
 // light operation reserves the whole machine and nothing runs beside it. Compress is the exception: it
 // is genuinely CPU-parallel down to small chunk sizes, so it uses the whole budget (see below).
@@ -83,11 +83,11 @@ export function estimateScheduledThreads(
   if (requestedThreads <= 0) return 0;
   if (command.type === "trim" || isSequentialPatch(command)) return 1;
   // Compress is genuinely CPU-parallel down to small chunk sizes (CHD hunks ~19 KiB, RVZ chunks
-  // 128 KiB-2 MiB), so it uses every configured thread regardless of input size — size-scaling here
+  // 128 KiB-2 MiB), so it uses every configured thread regardless of input size - size-scaling here
   // would force small ROMs onto a single thread (this estimate is forced back onto the dispatched
   // command). The scheduler's memory gate still prevents two heavy ops from overlapping.
   if (command.type === "compress") return requestedThreads;
-  // Note: extract/ingest/checksum no longer rely on this estimate — they are admitted by the Rust batch
+  // Note: extract/ingest/checksum no longer rely on this estimate - they are admitted by the Rust batch
   // planner (`plan-extract-batch`), which owns their thread split via `fair_thread_allotment`. This
   // function now governs only the remaining non-I/O ops, which stay light.
   const known = Number.isFinite(inputBytes) && inputBytes > 0;
@@ -106,7 +106,7 @@ type DeviceMemoryRoot = { navigator?: DeviceMemoryNavigator };
 const MIN_MEMORY_CEILING_BYTES = 512 * 1024 * 1024;
 const MAX_MEMORY_CEILING_BYTES = 2 * 1024 * 1024 * 1024;
 const FALLBACK_MEMORY_CEILING_BYTES = Math.floor(1.5 * 1024 * 1024 * 1024);
-// Tighter ceiling on mobile. Phones/tablets — iOS/iPadOS especially — kill a tab that overcommits
+// Tighter ceiling on mobile. Phones/tablets - iOS/iPadOS especially - kill a tab that overcommits
 // (the jetsam reloads we fought for large checksums), and their `deviceMemory` is optimistic or absent,
 // so cap the combined concurrent working set well below the desktop ceiling regardless of what is
 // reported. Only ever lowers the derived ceiling (`Math.min`), never raises a smaller one.

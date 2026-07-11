@@ -233,7 +233,7 @@ function createBrowserWasiThreadSpawnerForCommand({
 }): BrowserWasiThreadSpawner {
   const activeWorkers = new Map<number, ThreadPoolCommandSlot>();
   // Slots whose start was never acknowledged: kept tracked (so no later spawn reuses them) and signalled
-  // SHUTDOWN, but drained without blocking in waitForWorkers — the bounded command.shutdown owns their
+  // SHUTDOWN, but drained without blocking in waitForWorkers - the bounded command.shutdown owns their
   // final teardown so a worker wedged inside wasi_thread_start cannot hang the run.
   const poisonedSlots = new Set<ThreadPoolCommandSlot>();
   let firstThreadFailure: Error | null = null;
@@ -396,7 +396,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     while (activeWorkers.size > 0) {
       for (const [tid, slot] of activeWorkers.entries()) {
         // A poisoned slot (start never acknowledged) is already failing and SHUTDOWN-signalled; do not
-        // block on its state — the bounded command.shutdown tears it down.
+        // block on its state - the bounded command.shutdown tears it down.
         if (poisonedSlots.has(slot)) {
           poisonedSlots.delete(slot);
           activeWorkers.delete(tid);

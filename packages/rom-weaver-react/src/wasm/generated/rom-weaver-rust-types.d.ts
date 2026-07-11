@@ -33,7 +33,7 @@ export type ExtractedFileEntry = {
 file_name: string,
 /**
  * Uncompressed size of this entry in bytes. Serialized as `null` (not
- * omitted) when the container handler does not report a size — the default
+ * omitted) when the container handler does not report a size - the default
  * `list_entry_records` impl reports `None` for libarchive-backed formats, so
  * preserving the explicit `null` keeps the emitted JSON byte-identical.
  *
@@ -146,7 +146,7 @@ gdi_text?: string | null,
 /**
  * Wall-clock milliseconds the extract step that produced this leaf took. Carried only for
  * nested leaves (the archive level that emitted them); a depth-0 / single-level leaf leaves
- * this `None` and the host falls back to the run-level timing — matching the `extract`
+ * this `None` and the host falls back to the run-level timing - matching the `extract`
  * command's per-file timing semantics.
  */
 extract_time_ms?: number | null,
@@ -164,7 +164,7 @@ checksum_ms?: number | null, };
 
 export type PatchDescriptor = {
 /**
- * Absolute path of the patch (forward-slash normalized) — the bare source or an extracted leaf.
+ * Absolute path of the patch (forward-slash normalized) - the bare source or an extracted leaf.
  */
 leaf_path: string,
 /**

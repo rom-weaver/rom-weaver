@@ -182,7 +182,7 @@ const createApplyOutputOptions = createOutputOptions;
  * Compression-type options for the output "Options" panel. The uncompressed
  * choice collapses to a single "None" entry floated to the top, while compressed
  * formats keep their extension labels. The separate output-extension selector
- * still surfaces the real rom/patch extension for the uncompressed choice — only
+ * still surfaces the real rom/patch extension for the uncompressed choice - only
  * the compression-type dropdown shows "None".
  */
 const createCompressionTypeOptions = (

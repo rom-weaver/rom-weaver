@@ -5,18 +5,18 @@
  * THREE call sites historically hand-rolled their own copy-pasted (and subtly
  * DIVERGENT) regexes:
  *
- *   1. `webapp/browser-runtime-diagnostics.ts` (`isMobileSafariLike`) — the
+ *   1. `webapp/browser-runtime-diagnostics.ts` (`isMobileSafariLike`) - the
  *      mobile-Safari diagnostic flag.
- *   2. `public/react/file-input-accept.ts` (`isMobileSafari`) — whether to fall
+ *   2. `public/react/file-input-accept.ts` (`isMobileSafari`) - whether to fall
  *      back to a MIME `accept` list because mobile Safari ignores
  *      extension-only `accept`.
- *   3. `workers/protocol/browser-opfs-source-ref.ts` (`isWebKitInputRuntime`) —
+ *   3. `workers/protocol/browser-opfs-source-ref.ts` (`isWebKitInputRuntime`) -
  *      load-bearing: picks the OPFS proxy-handle read path over the
  *      FileReaderSync fast path on WebKit.
  *
  * Their results intentionally differ (different Chromium-on-iOS exclusion sets,
  * different "is this a mobile/Apple device" notions), and those differences are
- * deliberate — site 3 must include desktop Safari, site 2 only treats CriOS/
+ * deliberate - site 3 must include desktop Safari, site 2 only treats CriOS/
  * FxiOS/EdgiOS as Safari, etc. The goal of this module is NOT to make the three
  * identical; it is to own the regex/token building blocks in ONE place so a
  * future UA fix is a single edit and the divergence between sites is visible
@@ -64,7 +64,7 @@ const SAFARI_LIKE_NON_SAFARI_REGEX = /(Chrome|Chromium|CriOS|FxiOS|EdgiOS)/;
 
 // Site 3 (`isWebKitInputRuntime` desktop branch): excludes Chrome/Chromium,
 // Edge (`Edg`), Opera (`OPR`), and Samsung Internet. Deliberately does NOT list
-// CriOS/FxiOS/EdgiOS — those iOS apps are caught by the Apple-mobile branch, so
+// CriOS/FxiOS/EdgiOS - those iOS apps are caught by the Apple-mobile branch, so
 // the desktop branch keeps treating bare-WebKit-ish desktop UAs as Safari.
 const WEBKIT_DESKTOP_NON_SAFARI_REGEX = /(Chrome|Chromium|Edg|OPR|SamsungBrowser)/;
 
@@ -89,7 +89,7 @@ const hasIosDeviceToken = (environment: WebKitRuntimeEnvironment) =>
 const hasMobileToken = (environment: WebKitRuntimeEnvironment) => MOBILE_TOKEN_REGEX.test(getUserAgent(environment));
 
 /**
- * Desktop-class macOS reporting touch input — i.e. iPadOS in desktop mode,
+ * Desktop-class macOS reporting touch input - i.e. iPadOS in desktop mode,
  * which masquerades as `MacIntel` but exposes `maxTouchPoints > 1`. Real Macs
  * report `maxTouchPoints === 0`.
  */
@@ -107,7 +107,7 @@ const isSafariBrowser = (environment: WebKitRuntimeEnvironment) =>
 /**
  * Site 3's desktop-Safari branch: the `Safari` token without
  * Chrome/Chromium/Edg/OPR/SamsungBrowser. Distinct from {@link isSafariBrowser}
- * (different exclusion set) by design — keep them separate so neither site's
+ * (different exclusion set) by design - keep them separate so neither site's
  * classification shifts.
  */
 const isWebKitDesktopSafari = (environment: WebKitRuntimeEnvironment) =>

@@ -1,7 +1,7 @@
 /**
  * Snapshot of the browser/runtime environment, logged once at startup so
  * browser-specific bug reports (clipboard, OPFS, threading) carry the context
- * needed to reproduce — userAgent, secure-context/cross-origin-isolation
+ * needed to reproduce - userAgent, secure-context/cross-origin-isolation
  * state, core count, touch/standalone hints, and async-clipboard availability.
  * Every field is guarded so it is safe under SSR and in tests.
  */

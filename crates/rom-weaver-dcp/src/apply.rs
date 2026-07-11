@@ -1,8 +1,8 @@
 //! Apply a `.dcp` patch against a GD-ROM data track's filesystem.
 //!
 //! This drives the per-file half of DCP apply: for each manifest operation it
-//! produces the resulting bytes — a delta applied to its source file, a
-//! verbatim new file, or a replacement IP.BIN — and hands them to a caller
+//! produces the resulting bytes - a delta applied to its source file, a
+//! verbatim new file, or a replacement IP.BIN - and hands them to a caller
 //! supplied sink. It deliberately performs no filesystem or OPFS I/O of its
 //! own so the same code runs natively and in the browser; the caller decides
 //! where each emitted file lands. Reassembling the full disc (carrying through

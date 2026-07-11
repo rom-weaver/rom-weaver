@@ -20,8 +20,8 @@ type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, 
 /**
  * A `JSON.parse`d wire object for a generated Rust type `T`: every field of `T` present as an optional
  * `unknown` (the raw parsed value, before the coercion helpers below normalize it). Casting a parsed
- * record to `WireRecord<T>` ties each field read to `keyof T`, so renaming a Rust field — regenerated
- * into the `*.d.ts` — turns a now-stale reader into a tsc error instead of a silent `undefined`.
+ * record to `WireRecord<T>` ties each field read to `keyof T`, so renaming a Rust field - regenerated
+ * into the `*.d.ts` - turns a now-stale reader into a tsc error instead of a silent `undefined`.
  * Values stay `unknown` (typegen carries `u64` as `bigint`/`number` and `JSON.parse` yields plain
  * `number`), so the per-field coercions remain the single source of runtime truth.
  */
@@ -107,7 +107,7 @@ type RomWeaverEmittedFile = {
   platform?: string;
   sizeBytes?: number;
   /** Disc structure (see Rust `attach_disc_group_details`): the cue/gdi sheet text, the shared
-   * disc group id, and a track's 1-based number — so the host groups + renders a disc without
+   * disc group id, and a track's 1-based number - so the host groups + renders a disc without
    * parsing the sheet itself. */
   cueText?: string;
   gdiText?: string;

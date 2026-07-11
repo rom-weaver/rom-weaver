@@ -359,7 +359,7 @@ mod disc_group_tests {
     fn multi_disc_tracks_with_same_basename_are_scoped_by_directory() {
         // Two discs whose data tracks share the basename `track01.bin`. The
         // annotation map keys on directory + basename, so each sheet annotates
-        // only the track sitting beside it — never the other disc's track.
+        // only the track sitting beside it - never the other disc's track.
         let base = std::env::temp_dir().join(format!(
             "rw-disc-group-{}-{}",
             std::process::id(),

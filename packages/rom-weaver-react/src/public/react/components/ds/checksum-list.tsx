@@ -8,7 +8,7 @@ import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
 /**
  * Checksum drawer + rows in the loom readout language. The whole row IS the
- * copy control (role=button), with the copy glyph as decoration — no nested
+ * copy control (role=button), with the copy glyph as decoration - no nested
  * interactive elements. Shared by ROM inputs, patch info, and create-output
  * verification so the copy behaviour lives in one place.
  */

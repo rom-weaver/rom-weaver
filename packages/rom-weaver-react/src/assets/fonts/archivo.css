@@ -1,4 +1,4 @@
-/* Archivo — variable weight (100–900) + width (62%–125%) axes.
+/* Archivo - variable weight (100–900) + width (62%–125%) axes.
    The width axis drives font-stretch: the UI sits gently condensed and the
    dense rows (checksums, mono) and narrow viewports tighten further. */
 @font-face {

@@ -19,7 +19,7 @@ Toolchain versions and build tasks are managed with [mise](https://mise.jdx.dev)
 Install it (`brew install mise`, or see the mise docs), then from the repo root:
 
 ```bash
-mise install        # rust, node, wasm-opt (binaryen), ripgrep — pinned in .mise.toml
+mise install        # rust, node, wasm-opt (binaryen), ripgrep - pinned in .mise.toml
 mise trust          # trust this repo's mise config (first time only)
 ```
 
@@ -28,7 +28,7 @@ separately:
 
 - **WASI SDK** (for the WebAssembly build). Install [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases)
   to `/opt/wasi-sdk`, `/opt/homebrew/opt/wasi-sdk`, or `~/.local/toolchains/wasi-sdk-<ver>`
-  — or set `WASI_SDK_PATH` to wherever it lives. `mise run build-wasm` finds it
+  - or set `WASI_SDK_PATH` to wherever it lives. `mise run build-wasm` finds it
   automatically (see `scripts/wasm/detect-wasi-sdk.sh`).
 - **brotli** (compresses the wasm artifact): `brew install brotli` (or your OS
   package manager).

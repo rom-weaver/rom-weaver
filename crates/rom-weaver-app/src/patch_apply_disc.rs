@@ -5,7 +5,7 @@
 //! user target one track within such a disc with `--target <glob>` (the same
 //! glob matching as `--select`), patch only that track, and emit the full disc
 //! (the patched track plus every other track and the sheet copied through
-//! verbatim) — which is then usually compressed to CHD by the existing
+//! verbatim) - which is then usually compressed to CHD by the existing
 //! compression path.
 //!
 //! This module owns the disc-specific pieces: detecting a sheet input,
@@ -59,7 +59,7 @@ fn disc_track_in_memory_limit_bytes() -> u64 {
 
 /// Directory holding the disc sheet's tracks. `Path::parent` returns `Some("")`
 /// (not `None`) for a bare filename, so a plain `unwrap_or(".")` never fires and
-/// `read_dir("")` fails ENOENT — breaking "cd into the disc folder, pass
+/// `read_dir("")` fails ENOENT - breaking "cd into the disc folder, pass
 /// game.cue". Normalize an empty parent to `.`.
 fn sheet_directory(input: &Path) -> &Path {
     match input.parent() {
@@ -390,7 +390,7 @@ impl CliApp {
 
     /// The original disc sheet to feed the compressor when reassembling in
     /// place: its directory still holds every untouched track (and any sibling
-    /// `.gdi`), so the create handler resolves and reads them where they sit —
+    /// `.gdi`), so the create handler resolves and reads them where they sit -
     /// only the patched/rebuilt track is redirected via a create input override.
     pub(super) fn primary_disc_sheet<'a>(&self, disc: &'a DiscContext) -> &'a Path {
         &disc.sheet_paths[0]
@@ -399,8 +399,8 @@ impl CliApp {
     /// Build the single create input override that redirects the disc's target
     /// track to a freshly produced track at `track_path` (the patched or
     /// `.dcp`-rebuilt track temp). When the track fits under the in-memory cap
-    /// it is read into memory and its temp deleted — so no whole-disc copy and
-    /// no lingering scratch — otherwise it streams from the temp file. Every
+    /// it is read into memory and its temp deleted - so no whole-disc copy and
+    /// no lingering scratch - otherwise it streams from the temp file. Every
     /// untouched track stays read in place from the original disc.
     pub(super) fn disc_target_track_override(
         &self,

@@ -492,7 +492,7 @@ impl Z3dsContainerHandler {
     /// Group the seekable frames into frame-aligned extract tasks.
     ///
     /// Every task starts exactly on a frame boundary (`frame_start_decomp`), so the decoder seeks
-    /// straight to a frame start and decompresses zero bytes it then discards — unlike a fixed
+    /// straight to a frame start and decompresses zero bytes it then discards - unlike a fixed
     /// byte-grid, which would force a worker landing mid-frame to re-inflate that frame's prefix.
     /// Deriving boundaries from the seek table (rather than the create-time frame constant) keeps
     /// extract optimal for archives written with any frame size, including older 256 KiB ones.
@@ -688,7 +688,7 @@ impl Z3dsContainerHandler {
     /// Stream one finished frame straight to the output and record it in the running seek table,
     /// updating the running totals. Frames must arrive in `index` order (the streaming pipeline and
     /// the sequential path both deliver them ordered), which lets create avoid buffering the entire
-    /// compressed file in memory before writing — critical under the browser's wasm memory cap.
+    /// compressed file in memory before writing - critical under the browser's wasm memory cap.
     fn write_create_frame(
         &self,
         output: &mut BufWriter<File>,
@@ -891,7 +891,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let decode_result: Result<()> = if execution.used_parallelism {
             // Each worker opens its own windowed reader over the source and decodes its assigned
             // frame-aligned task range (the zeekstd seek table + offset limits make it read only
-            // those frames, so peak memory is one task's working set per worker — not the whole
+            // those frames, so peak memory is one task's working set per worker - not the whole
             // payload). In the browser the OPFS proxy worker owns the source handle, so a spawned
             // wasm thread's `path_open` is marshalled to it and succeeds; the old streaming
             // read-on-main pipeline that read each frame range on the main thread is no longer
@@ -1045,8 +1045,8 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 // Single threaded-reader/parallel-compressor pipeline for every target. The calling
                 // thread reads each frame and hands it to `std::thread::scope` workers that run zstd
                 // in parallel, reading ahead up to `inflight` frames and draining compressed frames
-                // in order. Reading on one thread is required in the browser — only the main OPFS
-                // runner can open the source — and costs nothing on native because create is
+                // in order. Reading on one thread is required in the browser - only the main OPFS
+                // runner can open the source - and costs nothing on native because create is
                 // compression-bound, so the reader stays ahead of the compressors. It also keeps
                 // the worker count exactly `effective_threads`, so it never double-books the
                 // bounded wasm thread pool.

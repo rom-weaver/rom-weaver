@@ -149,8 +149,8 @@ export class BrowserOpfsMount {
   }
 
   /**
-   * Close and forget every proxy adapter created during the run — preopened/created output files and
-   * lazily hydrated inputs — reverting ownedFiles to the persistent set built at mount creation. A
+   * Close and forget every proxy adapter created during the run - preopened/created output files and
+   * lazily hydrated inputs - reverting ownedFiles to the persistent set built at mount creation. A
    * cached mount reused across many ops would otherwise hold one open proxy handle per distinct
    * output/hydrated-input file until dispose, exhausting the proxy handle table (EIO) after ~1020 files.
    * The matching inodes are dropped from the in-memory tree so a later run recreates/rehydrates them

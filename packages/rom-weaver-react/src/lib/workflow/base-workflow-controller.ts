@@ -93,7 +93,7 @@ abstract class BaseWorkflowController<
    * one open dialog at a time, so two `selectFile` calls must never overlap. {@link selectFile} is
    * wrapped to run through this lock, so every actual dialog serializes while auto-resolved
    * (no-dialog) selections never block. This lets an eagerly-surfaced patch dialog open as soon as it
-   * is ready — gated only behind another open dialog — rather than behind a whole mutation. */
+   * is ready - gated only behind another open dialog - rather than behind a whole mutation. */
   private selectionLock: Promise<void> = Promise.resolve();
 
   constructor(
@@ -125,7 +125,7 @@ abstract class BaseWorkflowController<
   }
 
   /** Run a selection dialog under the single-modal lock (see {@link selectionLock}). Only the dialog
-   * is serialized — the caller's surrounding work runs unlocked. */
+   * is serialized - the caller's surrounding work runs unlocked. */
   private async withSelectionLock<T>(run: () => Promise<T>): Promise<T> {
     const previous = this.selectionLock;
     let release!: () => void;

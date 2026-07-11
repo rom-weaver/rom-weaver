@@ -1,4 +1,4 @@
-//! Decode console cheat codes — Game Genie and Pro Action Replay / GameShark —
+//! Decode console cheat codes - Game Genie and Pro Action Replay / GameShark -
 //! into concrete ROM byte writes so a cheat can be baked permanently into a ROM
 //! image (the same idea as "Game Genie Good Guy", reimplemented from public
 //! format references).
@@ -10,7 +10,7 @@
 //! Pipeline: [`decode`] (or [`decode_auto`]) turns a textual code into a
 //! [`DecodedCode`] (CPU/bus address + value + optional compare byte), then
 //! [`resolve_writes`] maps that onto file offsets via a [`RomLayout`] derived
-//! from the ROM bytes — handling copier/iNES headers, SNES LoROM/HiROM mapping,
+//! from the ROM bytes - handling copier/iNES headers, SNES LoROM/HiROM mapping,
 //! bank/compare scans, and rejection of RAM-only codes that cannot live in a
 //! ROM file.
 
@@ -108,7 +108,7 @@ pub fn split_codes(input: &str) -> Vec<&str> {
 }
 
 /// Strip intra-code separators and upper-case a single code for decoding. Note
-/// `+` is NOT stripped here — it separates codes (see [`split_codes`]) — so a
+/// `+` is NOT stripped here - it separates codes (see [`split_codes`]) - so a
 /// stray `+` left in a single token surfaces as an invalid character rather
 /// than silently merging two codes.
 fn normalize(code: &str) -> String {
@@ -154,7 +154,7 @@ pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<Decode
 /// codes are longer/colon-separated hex; Game Boy GameShark codes are 8 hex
 /// digits where Game Genie codes are 6 or 9. SNES Game Genie and Pro Action
 /// Replay are both 8 hex-ish chars and cannot be told apart reliably, so SNES
-/// defaults to Game Genie — pass an explicit kind for SNES Pro Action Replay.
+/// defaults to Game Genie - pass an explicit kind for SNES Pro Action Replay.
 pub fn decode_auto(code: &str, system: CheatSystem) -> Result<DecodedCode> {
     let kind = infer_kind(&normalize(code), system);
     decode(code, system, kind)
@@ -163,7 +163,7 @@ pub fn decode_auto(code: &str, system: CheatSystem) -> Result<DecodedCode> {
 fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
     let all_hex = !normalized.is_empty() && normalized.bytes().all(|b| b.is_ascii_hexdigit());
     match system {
-        // GG uses A P Z L G I T Y E O X U K S V N — no decimal digits.
+        // GG uses A P Z L G I T Y E O X U K S V N - no decimal digits.
         CheatSystem::Nes => {
             if normalized.bytes().any(|b| b.is_ascii_digit()) {
                 CheatKind::ProActionReplay

@@ -693,7 +693,7 @@ pub struct PatchApplyCommand {
             long = "patch-header",
             value_enum,
             action = ArgAction::Append,
-            help = "Which bytes patches apply against: auto (default; strip the detected ROM copier header only when that patch's required input checksum matches the headerless bytes — decided per patch in a chain), keep (patch the current bytes as-is), or strip (strip the detected header). Repeatable: each occurrence applies to the most recent preceding --patch and carries forward until the next occurrence; an occurrence before any --patch applies to every patch. Detected headers: A78/LNX/NES/FDS/SMC signatures plus SNES/PCE copier-size rules."
+            help = "Which bytes patches apply against: auto (default; strip the detected ROM copier header only when that patch's required input checksum matches the headerless bytes - decided per patch in a chain), keep (patch the current bytes as-is), or strip (strip the detected header). Repeatable: each occurrence applies to the most recent preceding --patch and carries forward until the next occurrence; an occurrence before any --patch applies to every patch. Detected headers: A78/LNX/NES/FDS/SMC signatures plus SNES/PCE copier-size rules."
         )
     )]
     #[serde(default)]
@@ -1104,7 +1104,7 @@ pub struct PatchCreateCommand {
 /// Compute a memory-/thread-aware concurrent extraction schedule from per-job source sizes, without
 /// touching any files. The result (an `extract_batch_plan` in the report details) groups the jobs
 /// into concurrent waves with a per-job thread allotment, so the host can run a batch of extractions
-/// at a safe concurrency for the device. Pure planning — no I/O — so it runs the same on native and
+/// at a safe concurrency for the device. Pure planning - no I/O - so it runs the same on native and
 /// in the browser: one Rust policy schedules both.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]

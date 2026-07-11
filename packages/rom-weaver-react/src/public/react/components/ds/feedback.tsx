@@ -146,7 +146,7 @@ const FileProgress = ({
       <ProgressTrack indeterminate={progress.indeterminate} percent={progress.percent} />
       <div className="sub mono">
         <span />
-        <span className="run-pct">{progress.value ?? "—"}</span>
+        <span className="run-pct">{progress.value ?? "-"}</span>
       </div>
     </div>
     {onCancel ? (

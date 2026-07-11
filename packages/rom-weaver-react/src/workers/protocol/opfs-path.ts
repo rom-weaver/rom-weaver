@@ -40,7 +40,7 @@ const normalizeOpfsPathParts = (filePath: string): string[] => {
     .filter((part) => part && part !== "." && part !== "..");
   // Absolute guest paths are mounted under a single leading root segment (the guest mount root,
   // e.g. the VFS root); strip it so the remainder maps to an OPFS-relative storage path. Never
-  // strip the only segment — that would leave the file without a name.
+  // strip the only segment - that would leave the file without a name.
   if (LEADING_SLASHES_REGEX.test(raw) && parts.length > 1) parts.shift();
   return parts;
 };

@@ -6,7 +6,7 @@
 //! straight to a writer, producing each file's bytes on demand as it is written
 //! and dropping them immediately. Nothing accumulates across files: the cooked
 //! image, the raw track, and the full file set are never buffered. Peak memory
-//! is one file's working set (its delta + source + decoded output) at a time —
+//! is one file's working set (its delta + source + decoded output) at a time -
 //! it scales with the largest single file, not the disc or the patch.
 //!
 //! Reassembling the full disc (the low-density tracks + sheet, then optional
@@ -54,7 +54,7 @@ where
     T: Read + Seek,
     W: Write,
 {
-    // 1. Classify the patch into per-target ZIP entries (metadata only — no
+    // 1. Classify the patch into per-target ZIP entries (metadata only - no
     //    bytes held).
     let manifest = DcpManifest::from_entries(&read_central_directory(dcp)?);
     let mut delta_by_key: BTreeMap<String, ZipEntry> = BTreeMap::new();

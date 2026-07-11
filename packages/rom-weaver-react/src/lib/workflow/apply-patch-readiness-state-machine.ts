@@ -41,7 +41,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
   const requirements = stage.state.requirements;
   // Header decision first: when the effective handling is "strip" (auto-decided from the
   // patch's required checksum, or user-chosen in the drawer), the apply runs against the
-  // headerless bytes — so the preflight must compare those, not the raw file.
+  // headerless bytes - so the preflight must compare those, not the raw file.
   const headerResolution = resolveApplyHeaderMode(requirements, {
     checksums: getInputAssetChecksums(target),
     checksumVariants: target.checksumVariants,
@@ -189,7 +189,7 @@ const evaluateApplyPatchReadiness = async <TSource>(
   if (!(assets.length && stage.parsedPatch)) {
     clearApplyPatchTarget(stage);
     stage.state.status = "needsSelection";
-    // The patch itself is fully prepared — it's only blocked because no ROM is ready to verify
+    // The patch itself is fully prepared - it's only blocked because no ROM is ready to verify
     // against yet. Surface that explicitly so the row stops showing its stale extract label.
     if (!assets.length && stage.parsedPatch && stage.preparedPatchFile) adapters.notifyAwaitingInputTarget?.(stage);
     return previousStatus !== stage.state.status;

@@ -1,22 +1,22 @@
 ---
 name: run-rom-weaver
-description: Build, run, and drive rom-weaver — the native ROM-workflow CLI and the React webapp. Use to launch the CLI, start the webapp dev server, screenshot the webapp, or confirm a change works end-to-end (apply a patch, extract/compress a ROM) in the real app, not just tests.
+description: Build, run, and drive rom-weaver - the native ROM-workflow CLI and the React webapp. Use to launch the CLI, start the webapp dev server, screenshot the webapp, or confirm a change works end-to-end (apply a patch, extract/compress a ROM) in the real app, not just tests.
 ---
 
 # Run rom-weaver
 
 rom-weaver ships two deployable surfaces from one repo:
 
-- **Native CLI** (`rom-weaver`) — probe / list / checksum / extract / compress / trim / patch. Drive it with `cli-smoke.sh` (this dir).
-- **React webapp** — the same engine compiled to wasm, run in-browser with OPFS + SharedArrayBuffer threads. Drive it headless with `webapp-driver.mjs` (this dir) over Playwright.
+- **Native CLI** (`rom-weaver`) - probe / list / checksum / extract / compress / trim / patch. Drive it with `cli-smoke.sh` (this dir).
+- **React webapp** - the same engine compiled to wasm, run in-browser with OPFS + SharedArrayBuffer threads. Drive it headless with `webapp-driver.mjs` (this dir) over Playwright.
 
-All paths below are relative to the repo root (the directory containing this `.claude/`). The two committed harnesses are the primary agent path — use them, don't hand-drive.
+All paths below are relative to the repo root (the directory containing this `.claude/`). The two committed harnesses are the primary agent path - use them, don't hand-drive.
 
 ## Prerequisites
 
-Verified on macOS with these already on PATH: `node` 26, `cargo`/`rustc` 1.95. The React package's `node_modules` (incl. **Playwright + its chromium**) and the wasm artifact (`packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm`, git-ignored build output) were both already present in the checkout — the harnesses reuse them, no extra install needed.
+Verified on macOS with these already on PATH: `node` 26, `cargo`/`rustc` 1.95. The React package's `node_modules` (incl. **Playwright + its chromium**) and the wasm artifact (`packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm`, git-ignored build output) were both already present in the checkout - the harnesses reuse them, no extra install needed.
 
-On a clean clone you would first install JS deps and build the wasm artifact (project's documented commands — not re-run here because both were already built):
+On a clean clone you would first install JS deps and build the wasm artifact (project's documented commands - not re-run here because both were already built):
 
 ```bash
 npm --prefix packages/rom-weaver-react ci   # JS deps + Playwright browsers
@@ -39,7 +39,7 @@ cargo build -p rom-weaver-cli --release     # → target/release/rom-weaver
 
 Last run ended with `OK: CLI smoke passed (patch round-trip matches target 221d2d6c)`. It auto-picks `target/release/rom-weaver`, falling back to `target/debug`; override with `RW_BIN=/path/to/rom-weaver`.
 
-Ad-hoc invocations (note the per-subcommand arg shapes — they differ):
+Ad-hoc invocations (note the per-subcommand arg shapes - they differ):
 
 ```bash
 target/release/rom-weaver checksum --algo crc32 tests/fixtures/vcdiff/secondary-source.bin
@@ -49,10 +49,10 @@ target/release/rom-weaver patch apply --input tests/fixtures/vcdiff/secondary-so
 
 ## Run: webapp (agent path)
 
-Start the bundled dev server (sets the COOP/COEP cross-origin-isolation headers the wasm thread pool requires — a plain static server will not), then drive it with the Playwright harness. **Run both from `packages/rom-weaver-react`.**
+Start the bundled dev server (sets the COOP/COEP cross-origin-isolation headers the wasm thread pool requires - a plain static server will not), then drive it with the Playwright harness. **Run both from `packages/rom-weaver-react`.**
 
 ```bash
-# 1. dev server — HTTPS, self-signed cert, binds all interfaces (pick a free PORT)
+# 1. dev server - HTTPS, self-signed cert, binds all interfaces (pick a free PORT)
 cd packages/rom-weaver-react
 node scripts/dev-server.mjs dev --port 5191      # → https://localhost:5191/   (leave running)
 
@@ -67,14 +67,14 @@ Env knobs: `RW_URL` (default `https://localhost:5191/`), `RW_OUT`, `RW_HEAD=1` f
 
 ## Run: webapp (human path)
 
-`npm --prefix packages/rom-weaver-react run dev` opens the same server for a real browser. Useless headless — you need the Playwright harness above to interact programmatically. Ctrl-C to stop.
+`npm --prefix packages/rom-weaver-react run dev` opens the same server for a real browser. Useless headless - you need the Playwright harness above to interact programmatically. Ctrl-C to stop.
 
 ## Gotchas
 
 - **The driver resolves Playwright from `packages/rom-weaver-react`, not from its own dir.** A bare `import "playwright"` from `.claude/skills/...` fails `ERR_MODULE_NOT_FOUND` (no `node_modules` ancestor). `webapp-driver.mjs` handles this with `createRequire` anchored at the package; if you write your own, do the same or run from inside the package.
 - **Dev server is HTTPS with a self-signed cert.** Playwright needs `ignoreHTTPSErrors: true` (the driver sets it); `curl` needs `-k`.
 - **Cross-origin isolation is mandatory.** The wasm engine uses SharedArrayBuffer worker threads, which only work under COOP/COEP. The bundled `dev-server.mjs` sets those headers; a plain `python -m http.server` / `vite preview` without them boots the page but breaks threading. Always serve via `dev-server.mjs`.
-- **The wasm artifact is git-ignored.** If `src/wasm/rom-weaver-app.wasm` is missing, the page boots but the runtime can't compile — rebuild with `mise run build-wasm`.
+- **The wasm artifact is git-ignored.** If `src/wasm/rom-weaver-app.wasm` is missing, the page boots but the runtime can't compile - rebuild with `mise run build-wasm`.
 - **Apply output defaults to a compressed `.chd`** in both surfaces. The webapp download is a 4.98 KB CHD even though the patched bytes are 70000; the CLI errors on a raw `.bin` output unless you pass `--no-compress` (or a supported compressed extension).
 - **CLI arg shapes vary per subcommand:** `checksum` requires `--algo`; `extract` uses `--out-dir` (not `--output`); `patch apply` uses `--input`/`--patch`/`--output`. Guessing one from another fails.
 - **Wait on `#rom-weaver-input-file-unified`, not a tab button.** That hidden unified file input is the stable "app mounted" anchor; `getByRole("button", {name:"Apply"})` was not reliably visible during warmup.

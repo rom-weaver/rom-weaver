@@ -1,5 +1,5 @@
 /**
- * On-device format DIAGNOSTIC harness — not part of the core wasm runtime.
+ * On-device format DIAGNOSTIC harness - not part of the core wasm runtime.
  *
  * Stands up fixtures and runs every compress/extract/patch round-trip through
  * the browser OPFS/wasm stack, asserting pass/fail patterns. Reachable only

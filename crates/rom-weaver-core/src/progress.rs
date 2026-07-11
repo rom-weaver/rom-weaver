@@ -83,7 +83,7 @@ impl ProgressEvent {
     /// Base event carrying only the six flattened thread-execution fields,
     /// derived from `execution` (all `None` when it is `None`). Intended for
     /// struct-update syntax so each emit site maps a `ThreadExecution` in
-    /// exactly one place — add or rename a thread field here, not at 8 call
+    /// exactly one place - add or rename a thread field here, not at 8 call
     /// sites:
     ///
     /// ```ignore

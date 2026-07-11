@@ -138,7 +138,7 @@ impl CliApp {
             warnings.push("--no-bundle-rom ignored: no local --rom given".to_string());
         }
         // Overall hash-progress denominator: only the rom is hashed (when
-        // given locally) — patch files carry no checksums in the manifest.
+        // given locally) - patch files carry no checksums in the manifest.
         let total_hash_bytes: u64 = args
             .rom
             .as_deref()
@@ -241,7 +241,7 @@ impl CliApp {
         }
 
         // Path entries reference files by base name (next to the manifest, or
-        // as flat bundle members) — duplicates would alias each other.
+        // as flat bundle members) - duplicates would alias each other.
         let mut seen_names = BTreeSet::new();
         let path_names = rom
             .iter()

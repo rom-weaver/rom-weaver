@@ -154,7 +154,7 @@ where
     }
 
     // `effective_threads` is the compute-worker budget: spawn that many workers and let the calling
-    // thread (which reads source data and collects/hashes results — e.g. CHD create folds the raw
+    // thread (which reads source data and collects/hashes results - e.g. CHD create folds the raw
     // SHA-1 here) coordinate on top. The coordinator is intentionally not subtracted from the
     // worker count, so a configured budget of N runs N parallel compressors.
     let worker_count = effective_threads.max(1).min(total);

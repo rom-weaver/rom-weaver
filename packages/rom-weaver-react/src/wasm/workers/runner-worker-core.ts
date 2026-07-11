@@ -137,7 +137,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
               requestId,
               "[runner-worker] hostSelect posted selectRequest, blocking worker until the user responds",
             );
-            // No timeout — block until the main thread resolves the selection. The user may take an
+            // No timeout - block until the main thread resolves the selection. The user may take an
             // arbitrarily long time to pick (or dismiss, which resolves to the cancel count).
             Atomics.wait(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_PENDING);
             const count = Atomics.load(control, SELECT_REQUEST_COUNT_INDEX);

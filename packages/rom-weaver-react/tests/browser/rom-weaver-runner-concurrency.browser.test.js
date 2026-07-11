@@ -56,7 +56,7 @@ test("runs two compress operations concurrently on separate pooled runners", asy
   const cleanup = [aIn, bIn, aOut, bOut];
 
   try {
-    // Fire both without awaiting between them — each requests a single thread, so the scheduler admits
+    // Fire both without awaiting between them - each requests a single thread, so the scheduler admits
     // both at once (1 + 1 <= budget, two disjoint path sets, concurrency cap 2).
     const [aResult, bResult] = await Promise.all([
       runRomWeaverJson({ args: { format: "zip", input: [aIn], output: aOut, threads: 1 }, type: "compress" }),

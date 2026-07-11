@@ -38,7 +38,7 @@ describe("normalizePatcherUiState", () => {
     expect(normalized.romInputs).toEqual([]);
     expect(normalized.inputNotice).toMatchObject({ message: "", visible: false });
     // Unlike createEmptyPatcherUiState (disabled: true), the normalizer coerces
-    // missing booleans to false — pin that so the projection cannot drift silently.
+    // missing booleans to false - pin that so the projection cannot drift silently.
     expect(normalized.romInput.disabled).toBe(false);
     expect(normalized.patchInput.disabled).toBe(false);
   });

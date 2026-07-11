@@ -129,7 +129,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     if (!session?.view) return null;
     const selectedOwner = this.getSelectedInputOwner();
     // A synthetic session bundles several separately-provided ROMs. Once one is chosen, expose only
-    // it — the unchosen ROMs are discarded ("ask which one" keeps a single input). Until a choice is
+    // it - the unchosen ROMs are discarded ("ask which one" keeps a single input). Until a choice is
     // made, surface every ready stage so the selection prompt can list them.
     const resolvedInputs = session.synthetic
       ? selectedOwner
@@ -198,7 +198,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           hasChecksums: !!this.inputSession.view.state.checksums,
           status: this.inputSession.view.state.status,
         });
-        // The input is fully checksummed here — surface its terminal state now so the ROM row stops
+        // The input is fully checksummed here - surface its terminal state now so the ROM row stops
         // showing "checksumming" while the patch (re)validation below runs. That validation is a patch
         // concern and reports only on the patch row, so it must not keep the ROM row busy.
         options?.onFinalized?.(this.getInput());
@@ -244,7 +244,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.patches.push(stage);
     // Eager staging runs OUTSIDE the mutation queue so the patch's I/O overlaps the ROM's setInput.
     // The interactive pick is surfaced here too (not deferred to the queued mutation), gated only by
-    // the single-modal mutex so it can't race setInput's ROM prompt — but it does NOT wait for the
+    // the single-modal mutex so it can't race setInput's ROM prompt - but it does NOT wait for the
     // ROM's extract/checksum. The user picks while the ROM is still hashing; the state-mutating apply
     // + validation still run in the queued addPatch mutation below, serialized after setInput.
     const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
@@ -339,8 +339,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return (stage.preparedInputAssets ?? []).flatMap((asset) => asset.sidecarPatches ?? []);
   }
 
-  /** Intercept staging progress for the streamed `patch-manifest` event — the ingest enumerates a
-   * mixed archive's sidecar patches BEFORE it hashes the ROM and streams them here — and open the
+  /** Intercept staging progress for the streamed `patch-manifest` event - the ingest enumerates a
+   * mixed archive's sidecar patches BEFORE it hashes the ROM and streams them here - and open the
    * multi-select dialog right away. The user picks while the ROM checksum is still running; the pick
    * is reconciled in {@link discoverImplicitPatches} once the input session finishes staging. */
   protected override emitProgress(event: WorkflowProgressEvent): void {
@@ -349,7 +349,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private maybeSurfaceEarlySidecarPatches(event: WorkflowProgressEvent): void {
-    // Headless soft-patching applies name-matched sidecars without a dialog — nothing to open early.
+    // Headless soft-patching applies name-matched sidecars without a dialog - nothing to open early.
     if (!this.selectFile) return;
     const details = event.details;
     if (!isRecord(details)) return;
@@ -416,7 +416,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   /** Apply a pick captured by an early `patch-manifest` dialog: wait for an in-flight dialog, then
    * fan the chosen sidecars out from the already-materialized leaves (no second dialog, no re-ingest).
-   * Returns whether an early pick was handled (including an empty pick — the user chose nothing). */
+   * Returns whether an early pick was handled (including an empty pick - the user chose nothing). */
   private async applyEarlySidecarSelection(
     stage: StagedSource<TSource>,
     sidecarPatches: PreparedSidecarPatch[],
@@ -444,7 +444,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private async discoverImplicitPatches(): Promise<void> {
     if (this.patches.length || !this.inputSession) return;
     const stages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
-    // No interactive selection handler — headless / libretro-style automatic soft-patching — so apply
+    // No interactive selection handler - headless / libretro-style automatic soft-patching - so apply
     // only the sidecar patch(es) whose name matches the ROM, with no prompt. With a handler (the webapp)
     // every sidecar patch the archive carried is surfaced through the selection flow instead.
     if (!this.selectFile) {
@@ -455,7 +455,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const sidecarPatches = this.stageSidecarPatches(stage);
       if (!sidecarPatches.length) continue;
       // Preferred path: the dialog was already opened from the streamed `patch-manifest` while the ROM
-      // was hashing; apply that pick directly off the materialized leaves — no second dialog, no
+      // was hashing; apply that pick directly off the materialized leaves - no second dialog, no
       // re-ingest of the archive.
       if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) continue;
       // A lone sidecar patch auto-adds (no prompt), reusing the leaf the ROM-staging ingest already
@@ -468,7 +468,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         }
         continue;
       }
-      // Fallback (the early streamed dialog never ran — e.g. the manifest event was missed): surface
+      // Fallback (the early streamed dialog never ran - e.g. the manifest event was missed): surface
       // the multi-select now by re-staging the archive as a patch source.
       this.trace("patch.implicit.sidecar-surface", { count: sidecarPatches.length, fileName: stage.state.fileName });
       await this.surfaceArchivePatchSelection(this.cloneArchiveAsPatchSource(stage.source));
@@ -1029,7 +1029,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private async parsePatch(stage: StagedSource<TSource>): Promise<void> {
-    // Already described — nothing to re-ingest.
+    // Already described - nothing to re-ingest.
     if (stage.parsedPatch) return;
     // The eager stageSource parse and setInput's readiness pass both reach here while the input is
     // still staging; share the one in-flight ingest instead of describing the same patch twice.
@@ -1145,7 +1145,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const session = this.inputSession;
     if (!session) return [];
     // A synthetic session bundles several separately-provided ROMs. Apply keeps only the chosen one
-    // ("ask which one"), so once a pick is made expose just that stage's assets — patch targeting,
+    // ("ask which one"), so once a pick is made expose just that stage's assets - patch targeting,
     // checksums, and the run all operate on the single selected ROM, not every uploaded file.
     if (session.synthetic) {
       const selectedOwner = this.getSelectedInputOwner();
@@ -1162,7 +1162,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
    * ("checking nested archives in extracted outputs") that lingers while the input is still loading. */
   private emitPatchAwaitingInputProgress(stage: StagedSource<TSource>): void {
     const status = this.inputSession?.view.state.status;
-    // Only when a ROM is actually being prepared — if none was provided the row's normal "target
+    // Only when a ROM is actually being prepared - if none was provided the row's normal "target
     // selection required" warning is the right message, not a "waiting" one.
     if (status !== "loading") return;
     this.emitProgress({

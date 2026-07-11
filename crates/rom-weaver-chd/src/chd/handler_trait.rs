@@ -114,8 +114,8 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         _context: &OperationContext,
     ) -> Result<Vec<ContainerListEntry>> {
         // Enumerate the produced output files and their sizes from the CHD header/track metadata
-        // only (no hunk decode), so input discovery can list a `.cue` + `.bin`(s) — or the single
-        // raw image — without performing a full extract.
+        // only (no hunk decode), so input discovery can list a `.cue` + `.bin`(s) - or the single
+        // raw image - without performing a full extract.
         let chd = ChdReadSession::open(&request.source, None)?;
         let media_kind = chd.media_kind();
         let stem = request
@@ -339,7 +339,7 @@ impl ChdContainerHandler {
         }
         // When the codec is auto-selected (no explicit `--codec`) and resolves to a
         // level-less codec such as avhuff (e.g. an auto-detected A/V stream), the
-        // caller's default level profile does not apply — drop it rather than
+        // caller's default level profile does not apply - drop it rather than
         // rejecting. An explicit `--codec avhuff --level N` still errors.
         let level_for_codec = if request.codec.is_none()
             && !Self::codec_accepts_level(compression_plan.primary_codec)
@@ -442,7 +442,7 @@ impl ChdContainerHandler {
         // header first, then hunks/map): remove the partial file if any step
         // fails so a corrupt/placeholder CHD is not left behind. Track the output
         // only once we commit to the attempt AND only when it does not already
-        // exist — a pre-open error (unsupported codec plan, store+parent, invalid
+        // exist - a pre-open error (unsupported codec plan, store+parent, invalid
         // geometry) never opens the file via `File::create`, so it must not
         // delete an unrelated pre-existing target this op never created.
         let guard_output = should_attempt_rust && !request.output.exists();

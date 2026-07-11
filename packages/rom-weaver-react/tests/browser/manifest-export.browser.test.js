@@ -90,7 +90,7 @@ test("export manifest bundles the session from main-page options with a checks-o
 
   exportButton.click();
 
-  // The runtime create call resolves with the canonical manifest — assert on it directly rather
+  // The runtime create call resolves with the canonical manifest - assert on it directly rather
   // than intercepting the browser download.
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();
@@ -118,7 +118,7 @@ test("export manifest bundles the session from main-page options with a checks-o
   // on the entry.
   expect(patchEntry.outputChecks).toBeUndefined();
   expect(Object.keys(result.manifest.output?.checks?.checksums || {})).toEqual(["crc32", "md5", "sha1"]);
-  // Patch entries carry no file hashes — the format has no integrity field.
+  // Patch entries carry no file hashes - the format has no integrity field.
   expect(patchEntry.integrity).toBeUndefined();
 
   await expect.poll(() => exportButton.disabled).toBe(false);

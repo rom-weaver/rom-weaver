@@ -22,9 +22,9 @@ import { getFileInputAcceptAttributes } from "../../src/public/react/file-input-
  * is an independent oracle: if a primitive or a composition drifts, these break.
  *
  * The three site compositions, exactly as they shipped before centralization:
- *   site 1 — isMobileSafariLike (browser-runtime-diagnostics.ts)
- *   site 2 — isMobileSafari (file-input-accept.ts)
- *   site 3 — isWebKitInputRuntime (browser-opfs-source-ref.ts; LOAD-BEARING)
+ *   site 1 - isMobileSafariLike (browser-runtime-diagnostics.ts)
+ *   site 2 - isMobileSafari (file-input-accept.ts)
+ *   site 3 - isWebKitInputRuntime (browser-opfs-source-ref.ts; LOAD-BEARING)
  */
 
 const SAFARI_TOKEN = /Safari/;

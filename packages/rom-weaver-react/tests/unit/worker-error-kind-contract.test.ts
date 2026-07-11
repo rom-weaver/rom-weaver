@@ -32,7 +32,7 @@ describe("worker-error kind contract", () => {
     // The Rust core attaches the generated RomWeaverErrorKind to a failed event
     // (propagated onto the thrown error as `kind`). resolveWorkerErrorKind must
     // trust that typed kind even when the message text would regex-classify
-    // differently — this is what makes the typed kind the contract and the
+    // differently - this is what makes the typed kind the contract and the
     // inferCoreWorkerErrorKind regex a mere fallback.
     const unmatchable = Object.assign(new Error("totally unrelated text"), {
       kind: "validation",

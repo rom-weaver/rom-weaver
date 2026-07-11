@@ -10,7 +10,7 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 /**
  * The masthead Log dialog: a native <dialog> trace inspector over the
  * in-app log store, with a capture-level selector, text search, copy-all, and
- * click-to-copy lines — the loom prototype's inspector wired to the real
+ * click-to-copy lines - the loom prototype's inspector wired to the real
  * logger sink. The level selector drives the persisted `logLevel` setting (the
  * same source `configureLogger` and every workflow run read), so raising it to
  * debug/trace here makes the next run capture detailed logs for a bug report.
@@ -48,10 +48,10 @@ const formatDetails = (details: LogStoreEntry["details"]) => {
   }
 };
 
-// The line number (`id`) is a UI-only column (see TraceLine) — copy/download text omits it so the output
+// The line number (`id`) is a UI-only column (see TraceLine) - copy/download text omits it so the output
 // is clean, paste-ready log lines. A gap in the on-screen numbers still shows where the ring dropped lines.
 // Lines use the short time column shown on screen and a fixed-width level so pasted/downloaded logs stay
-// aligned in a monospace view. `formatLine` (capped details) feeds the filter — capping keeps a giant
+// aligned in a monospace view. `formatLine` (capped details) feeds the filter - capping keeps a giant
 // payload from being re-serialized on every keystroke; `formatCopyLine` (full details) feeds copy/download,
 // where the on-screen cap and its "…(N chars)" marker would just corrupt a saved log.
 const renderLine = (entry: LogStoreEntry, detailsText: string) =>
@@ -281,13 +281,13 @@ const LogDialog = ({
           <div aria-atomic="false" aria-live="polite" className="tracelog mono" ref={traceRef}>
             {visible.length === 0 ? (
               <div className="tracelog-empty">
-                {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "—"}
+                {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
               </div>
             ) : (
               <>
                 {hiddenLineCount > 0 ? (
                   <div className="tracelog-truncated">
-                    {`${hiddenLineCount} earlier line(s) hidden — filter to narrow, or Download for the full log`}
+                    {`${hiddenLineCount} earlier line(s) hidden - filter to narrow, or Download for the full log`}
                   </div>
                 ) : null}
                 {rendered.map((entry) => (

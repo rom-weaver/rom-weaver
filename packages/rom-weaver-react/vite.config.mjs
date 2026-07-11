@@ -130,9 +130,9 @@ const packagedBrotliPathForDistAsset = (filePath) => {
   if (!(fs.existsSync(packagedWasmPath) && fs.existsSync(packagedWasmBrotliPath))) return null;
   if (sha256File(filePath) !== sha256File(packagedWasmPath)) return null;
   // The prebuilt `.br` sibling exists only to skip the slow quality-11 compress of the ~6 MB wasm. But
-  // it is a gitignored build artifact that can lag the wasm (e.g. the wasm is rebuilt — gaining a new
-  // command — without regenerating its `.br`). Shipping a stale `.br` serves an OUTDATED wasm to every
-  // brotli-capable browser (i.e. all of them) while the raw `.wasm` is current — silently breaking the
+  // it is a gitignored build artifact that can lag the wasm (e.g. the wasm is rebuilt - gaining a new
+  // command - without regenerating its `.br`). Shipping a stale `.br` serves an OUTDATED wasm to every
+  // brotli-capable browser (i.e. all of them) while the raw `.wasm` is current - silently breaking the
   // app in prod even though dev (raw wasm) works. Verify the sibling decodes back to the wasm; if it is
   // stale or corrupt, fall through to compress the real asset.
   try {
@@ -258,7 +258,7 @@ const writePreviewBrotliAssets = () => {
   };
 };
 
-// Primary (latin) Archivo woff2 — but not the latin-ext subset, which is only
+// Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
 // fetched on demand via unicode-range and is wasteful to preload eagerly.
 const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
 

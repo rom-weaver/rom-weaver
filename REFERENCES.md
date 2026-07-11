@@ -11,7 +11,7 @@ It is intentionally a living document. Some patch families do not have stable fo
 - VCDIFF: RFC 3284 <https://www.rfc-editor.org/rfc/rfc3284.html>
 - DLDI (Dynamically Linked Device Interface): <https://www.chishm.com/DLDI/>
 - BSDIFF family background paper: <https://www.daemonology.net/papers/bsdiff.pdf>
-- DCP (Universal Dreamcast Patcher): no formal spec — a ZIP of per-file
+- DCP (Universal Dreamcast Patcher): no formal spec - a ZIP of per-file
   xdelta3/VCDIFF deltas applied inside a GD-ROM ISO9660 filesystem; convention
   documented from the UDP source (see implementations below).
 - ISO9660 / ECMA-119 (volume descriptors, directory records, path tables):
@@ -48,7 +48,7 @@ It is intentionally a living document. Some patch families do not have stable fo
   - Vendored Flips snapshot: <https://github.com/Alcaro/Flips/tree/5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761>
 - xdelta3 (VCDIFF-compatible toolchain): <https://github.com/jmacd/xdelta>
 - open-vcdiff (RFC 3284 implementation): <https://github.com/google/open-vcdiff>
-- Universal Dreamcast Patcher (the `.dcp` reference; GPL-3.0, study only — do
+- Universal Dreamcast Patcher (the `.dcp` reference; GPL-3.0, study only - do
   not copy): <https://github.com/DerekPascarella/UniversalDreamcastPatcher>
   - GD-ROM ISO9660 build/extract (DiscUtilsGD, MIT) used by it and by
     `buildgdi`: <https://github.com/Sappharad/GDIbuilder>

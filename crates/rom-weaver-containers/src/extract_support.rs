@@ -55,7 +55,7 @@ pub(crate) fn emit_container_indeterminate_progress(
 
 /// Surface a decoded output's detected platform identity mid-extraction as a `probe-identity`
 /// progress event, the moment enough bytes have streamed to determine it (see
-/// [`ExtractHasher::take_ready_identity`]) — so the host can light up the ROM-type tag without
+/// [`ExtractHasher::take_ready_identity`]) - so the host can light up the ROM-type tag without
 /// waiting for the whole file. The payload mirrors the early `probe-manifest` shape
 /// (`details.probe_manifest.{platform,disc_format}`) so the host consumes it through one path.
 pub(crate) fn emit_extract_identity(
@@ -88,7 +88,7 @@ pub(crate) fn emit_extract_identity(
 /// fills, emit the streaming `probe-identity` event exactly ONCE (tracked by `emitted`). Used by
 /// the disc-image extract handlers that decode their own stream (rvz, cso, z3ds) so the ROM-type
 /// tag pops mid-extraction instead of only in `emitted_files` at completion. Detection uses the
-/// KNOWN final output length these handlers already have — more accurate than the bytes-consumed
+/// KNOWN final output length these handlers already have - more accurate than the bytes-consumed
 /// length the prefix tracks, since it resolves size-dependent media (e.g. PS2 CD vs DVD) correctly.
 pub(crate) fn stream_extract_identity(
     context: &OperationContext,
@@ -244,7 +244,7 @@ pub(crate) fn create_extract_checksum(
 /// Timing for an inline extract checksum, surfaced from [`ExtractHasher::finish_timed`] so the
 /// extract loop can log how much of the hashing overlapped decoding. `threaded`/`workers` describe a
 /// worker-backed [`StreamingChecksum`]; the synchronous variant engine hashes inline on the extract
-/// thread (its cost is the loop's own per-chunk feed timing) and reports the default — not threaded,
+/// thread (its cost is the loop's own per-chunk feed timing) and reports the default - not threaded,
 /// zero busy.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ExtractChecksumTiming {
@@ -296,7 +296,7 @@ impl ExtractHasher {
         // different writer and always emit a ROM, so this gate only affects multi-entry archives.
         //
         // A `.cue`/`.gdi` disc sheet still counts as part of the ROM (it stays a ROM-filter
-        // candidate and is extracted alongside its tracks) but is itself a text index, not data —
+        // candidate and is extracted alongside its tracks) but is itself a text index, not data -
         // so it is never hashed here; only its referenced data tracks are.
         if context.extract_checksum_rom_only() {
             let is_rom = output_path
@@ -517,7 +517,7 @@ fn build_extract_checksum_emitted_file_detail(
     entry.insert("size_bytes".to_string(), json!(metadata.len()));
     entry.insert("checksums".to_string(), json!(checksums));
     // Console + optical medium of this decoded entry (no exact-title lookup), detected
-    // from the streamed output by the producing path — no extra read here.
+    // from the streamed output by the producing path - no extra read here.
     rom_identity.write_into(&mut entry);
     if let Some(timing) = timing {
         entry.insert(
@@ -582,7 +582,7 @@ where
 /// Wraps the write half shared by the seekable single-file extract handlers (cso, z3ds): each
 /// decoded chunk is validated against its task's expected length, folded into the optional extract
 /// checksum, written to the [`OrderedChunkWriter`] in ascending index order, and counted toward the
-/// byte-progress stream. Hashing the bytes here — in their final on-disk order — computes a
+/// byte-progress stream. Hashing the bytes here - in their final on-disk order - computes a
 /// requested `--checksum` during extract instead of forcing a second full read of the output.
 pub(crate) struct ExtractChunkWriter<'a> {
     context: &'a OperationContext,

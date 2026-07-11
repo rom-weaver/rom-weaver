@@ -21,7 +21,7 @@ export interface ParsedIngestRomAsset {
   cueText?: string;
   gdiText?: string;
   /** Wall time (ms) of the extract step that produced this leaf; present only for nested leaves
-   * (the archive level that emitted them). Absent for a depth-0/single-level leaf — callers fall
+   * (the archive level that emitted them). Absent for a depth-0/single-level leaf - callers fall
    * back to the run-level timing. */
   extractTimeMs?: number;
   copiedInPlace: boolean;

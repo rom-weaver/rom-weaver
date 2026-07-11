@@ -1,4 +1,4 @@
-// WASI thread-start handshake — the "start barrier" that serializes wasi.thread-spawn so concurrent
+// WASI thread-start handshake - the "start barrier" that serializes wasi.thread-spawn so concurrent
 // memory.grow calls (from per-thread stack allocation) cannot race V8's shared-memory size
 // propagation and trip an out-of-bounds hang. The requester publishes one spawn request on a
 // pooled worker's control word and blocks here until the worker acknowledges it has started; only

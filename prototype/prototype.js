@@ -1,4 +1,4 @@
-/* rom-weaver — loom workbench prototype.
+/* rom-weaver - loom workbench prototype.
    Static demo driver: i18n, theming, mode tabs, scenario engine with a
    simulated job run, dialogs, and the inspector. Every scenario (empty,
    drag-over, staging, ready, running, error, complete) renders in every
@@ -22,7 +22,7 @@
       "confirm.title": "Remove all inputs?", "confirm.confirm": "Remove all",
       "confirm.body": "This clears every staged ROM and patch from the workbench. Files on disk are not touched.",
       "confirm.trimTitle": "Trim ROM?", "confirm.trimConfirm": "Trim ROM",
-      "confirm.trimBody": "Trimming writes a new, smaller ROM — this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it.",
+      "confirm.trimBody": "Trimming writes a new, smaller ROM - this is permanent. Your original file is left untouched and an untrimmed copy is kept, so you can restore it.",
       "settings.title": "Settings", "settings.save": "Save", "settings.reset": "Reset",
       "settings.general": "General", "settings.language": "Language", "settings.logLevel": "Log level", "settings.units": "Size units",
       "settings.devTools": "Dev tools", "settings.fixes": "Fixes", "settings.fixChecksum": "Fix ROM header",
@@ -37,14 +37,14 @@
             "scale.min": "Min", "scale.veryLow": "Very Low", "scale.low": "Low", "scale.medium": "Medium",
       "scale.high": "High", "scale.veryHigh": "Very High", "scale.max": "Max",
       "opts.output": "Options",
-      "drawer.tracks": "Tracks & checks", "drawer.extract": "Extract", "drawer.verifications": "Verify", "verify.input": "Input", "verify.output": "Output", "verify.dryRun": "Dry-run", "verify.dryRunDesc": "Apply to a scratch copy and re-hash — no source bytes touched", "verify.dryRunPass": "Passed — scratch output re-hash matches", "verify.dryRunFail": "Failed — scratch output differs",
+      "drawer.tracks": "Tracks & checks", "drawer.extract": "Extract", "drawer.verifications": "Verify", "verify.input": "Input", "verify.output": "Output", "verify.dryRun": "Dry-run", "verify.dryRunDesc": "Apply to a scratch copy and re-hash - no source bytes touched", "verify.dryRunPass": "Passed - scratch output re-hash matches", "verify.dryRunFail": "Failed - scratch output differs",
       "verify.expIn": "Expected input checksum", "verify.expOut": "Expected output checksum", "verify.ckHint": "CRC32, MD5, or SHA-1",
       "info.aria": "More info",
       "info.romInput": "Archives are decompressed and the ROM is located automatically; chd/rvz/z3ds containers are unpacked before patching; nested archives resolve recursively. RetroArch softpatch naming is supported.",
-      "info.patches": "Patches apply top to bottom — drag the handle to reorder. Filename hints (crc32 / size) are checked before the run.",
-      "info.output": "Set the filename without an extension — the format select controls it. Containers (zip, 7z, chd, rvz) are written directly.",
+      "info.patches": "Patches apply top to bottom - drag the handle to reorder. Filename hints (crc32 / size) are checked before the run.",
+      "info.output": "Set the filename without an extension - the format select controls it. Containers (zip, 7z, chd, rvz) are written directly.",
       "info.outputOptions": "Codec and level defaults come from Settings › Compression; changes here affect only this job.",
-      "info.compressType": "Optionally wrap the output in a compressed container — “none” writes the raw file.",
+      "info.compressType": "Optionally wrap the output in a compressed container - “none” writes the raw file.",
       "info.level": "Profile → level: Min 0/−7 · Medium 5/11 · Max 9/22 (standard / zstd). A codec:level entry in a codec list overrides this.",
       "info.threads": "“auto” resolves to the browser-reported core count of {n}.",
       "info.units": "MB counts in decimal (10⁶ bytes), MiB in binary (2²⁰ bytes). Sizes everywhere follow this choice.",
@@ -56,18 +56,18 @@
       "info.chdCd": "Valid: cdlz, cdzl, cdfl. Entries without a level use the Level profile.",
       "info.chdDvd": "Valid: lzma, zlib, huff, flac. huff has no level.",
       "info.rvzBlock": "Default 128 KiB. Larger blocks compress better but seek slower.",
-      "info.window": "Diff window for create — larger spans find moved data but use more memory.",
+      "info.window": "Diff window for create - larger spans find moved data but use more memory.",
       "info.trimPad": "Byte expected in the tail run; auto detects 0x00 or 0xFF.",
-      "info.trimRom": "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) — the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore.",
+      "info.trimRom": "Tail trim: nds, dsi, srl (0x00 padding) and gba, 3ds (0xFF) - the trailing run is detected and removed; Xbox xiso images (.xiso or .iso) trim their unused tail; GameCube/Wii images (iso, gcm, wbfs, rvz) trim by scrubbing junk blocks during RVZ conversion; the original file is untouched and an untrimmed copy is kept for restore.",
       "info.createOriginal": "The clean, unmodified dump that players already own; its checksum is embedded in the patch as the apply requirement; archives and containers resolve automatically.",
-      "info.createModified": "Your edited build — the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported).",
+      "info.createModified": "Your edited build - the file the patch should reproduce; only the differences from the original are encoded; the size may differ from the original (growth is supported).",
       "drop.hero": "Drop a ROM or patches", "drop.heroCreate": "Drop the original and modified ROMs",
       "drop.heroTrim": "Drop a ROM to trim", "drop.add": "Replace the ROM or add patches",
       "drop.addCreate": "Add or replace a ROM", "drop.addTrim": "Replace the ROM",
       "drop.original": "Drop the original ROM", "drop.modified": "Drop the modified ROM", "drop.addPatches": "Drop patch files",
-      "drop.hint": "click or drop files anywhere on the page — archives, containers, cue sheets and softpatches resolve automatically", "drop.tapAnywhere": "Tap anywhere to choose files",
+      "drop.hint": "click or drop files anywhere on the page - archives, containers, cue sheets and softpatches resolve automatically", "drop.tapAnywhere": "Tap anywhere to choose files",
       "drop.staging": "Reading dropped files…",
-      "drop.anywhereShort": "click to browse — or drop files anywhere on the page", "drop.tap": "Tap to choose files", "drop.release": "Release to stage files",
+      "drop.anywhereShort": "click to browse - or drop files anywhere on the page", "drop.tap": "Tap to choose files", "drop.release": "Release to stage files",
       "step.rom": "ROM", "step.patches": "Patches", "step.apply": "Apply",
       "step.original": "Original", "step.modified": "Modified", "step.patch": "Patch", "step.output": "Output",
       "empty.needsInput": "Add your files in {loc} above to begin", "empty.needsInputNoun": "Add {noun} in {loc} above",
@@ -75,20 +75,20 @@
       "roms.files.one": "{n} file", "roms.files.other": "{n} files", "roms.tracks.one": "{n} track", "roms.tracks.other": "{n} tracks", "roms.track": "Track {n}", "roms.extracting": "Extracting {name}…", "patch.parsing": "Parsing {name}…",
       "patch.target": "Target", "patch.format": "Format", "track.word": "Track",
       "patch.toggle": "Include {name}", "patch.on": "On", "patch.stateOff": "Off",
-      "patch.offCount.one": "{n} patch is off — tick it to include it", "patch.offCount.other": "{n} patches are off — tick them to include them",
+      "patch.offCount.one": "{n} patch is off - tick it to include it", "patch.offCount.other": "{n} patches are off - tick them to include them",
       "patch.off.one": "{n} disabled", "patch.off.other": "{n} disabled",
       "patch.undo": "Undo-aware re-apply (revalidates patched blocks)",
       "patch.embed": "Embed source crc32 in the output filename",
       "verdict.mismatch": "Mismatch",
       "footer.donate": "Donate",
-      "warn.ipsNoChecksum": "IPS carries no embedded checksums — gated by the filename hint only.",
+      "warn.ipsNoChecksum": "IPS carries no embedded checksums - gated by the filename hint only.",
       "cks.label": "Checks", "cue.label": "Cue", "gdi.label": "GDI",
-      "variant.asDumped": "File — as dumped", "variant.withHeader": "File — as dumped (with 512 B header)",
+      "variant.asDumped": "File - as dumped", "variant.withHeader": "File - as dumped (with 512 B header)",
       "variant.noHeader": "Without copier header", "variant.autoTrimmed": "Auto-trimmed",
       "req.targetBlockcheck": "target blockcheck", "req.undoData": "undo data", "req.present": "present",
       "req.patchedCrc32": "patched crc32", "req.rebuiltCue": "rebuilt cue", "req.rebuiltGdi": "rebuilt gdi",
       "req.embeddedSizes": "embedded sizes", "req.sizesInOut": "in {in} → out {out}",
-      "picker.hint": "The archive contains more than one candidate — pick the ones to stage.",
+      "picker.hint": "The archive contains more than one candidate - pick the ones to stage.",
       "picker.use": "Use selection", "picker.skipped": "skipped",
       "opts.title": "Options", "opts.rom": "Options", "opts.patch": "Options", "opts.window": "Diff window", "opts.trimPad": "Padding byte", "opts.trimVerify": "Verify output after trim",
       "opt.rebuildCue": "Rebuild cue sheet for the patched output", "opt.rebuildCueShort": "rebuild cue",
@@ -99,7 +99,7 @@
       "opt.sourceWindow": "Source window", "opt.sourceWindowShort": "window",
       "out.placeholder": "Output filename (no extension)",
       "run.apply.one": "Weave {n} patch", "run.apply.other": "Weave {n} patches", "run.applyEmpty": "Weave patches", "run.create": "Create patch", "run.trim": "Trim ROM",
-      "running.cancel": "Cancel job", "drop.cancelStage": "Cancel reading", "patch.reorder": "Drag to reorder — arrow keys move",
+      "running.cancel": "Cancel job", "drop.cancelStage": "Cancel reading", "patch.reorder": "Drag to reorder - arrow keys move",
       "stage.detect": "Detect", "stage.extract": "Extract", "stage.checksum": "Checksum", "stage.apply": "Apply",
       "stage.compress": "Compress", "stage.write": "Write", "stage.verify": "Verify",
       "stage.diff": "Diff", "stage.encode": "Encode", "stage.scan": "Scan", "stage.trim": "Trim",
@@ -110,23 +110,23 @@
       "result.download": "Download",
       "fault.remedyK": "Remedy", "fault.copy": "Copy report",
       "fault.apply.title": "Patch target mismatch",
-      "fault.apply.body": "“SOTN - Randomizer (v1.8).ppf” was built for Rev 1 — it expects Track 1 CRC32 0xE2B40FA2, but this dump’s Track 1 hashes to 0xACBC1C34 (Rev 0). The patch was not applied.",
-      "fault.apply.remedy": "Use a Rev 1 dump — or tick the override to force-apply (undo data still allows rollback).",
-      "fault.apply.override": "Apply anyway — skip the target checksum gate (output may be corrupt)",
+      "fault.apply.body": "“SOTN - Randomizer (v1.8).ppf” was built for Rev 1 - it expects Track 1 CRC32 0xE2B40FA2, but this dump’s Track 1 hashes to 0xACBC1C34 (Rev 0). The patch was not applied.",
+      "fault.apply.remedy": "Use a Rev 1 dump - or tick the override to force-apply (undo data still allows rollback).",
+      "fault.apply.override": "Apply anyway - skip the target checksum gate (output may be corrupt)",
       "fault.applySingle.title": "Patch target mismatch",
       "fault.applySingle.body": "“Mother 3 Fan Translation v1.3.ips” expects source CRC32 0xA6CAA62E, but “Mother 3 (Japan).gba” hashes to 0x2A2074B6. The patch was not applied.",
-      "fault.applySingle.remedy": "Use a clean, unheadered dump — or tick the override below to force-apply.",
-      "fault.applySingle.override": "Apply anyway — skip the source checksum gate (output may be corrupt)",
+      "fault.applySingle.remedy": "Use a clean, unheadered dump - or tick the override below to force-apply.",
+      "fault.applySingle.override": "Apply anyway - skip the source checksum gate (output may be corrupt)",
       "input.disc": "Multi-track disc", "input.gdi": "GD-ROM disc", "input.single": "Single file",
-      "notice.disc": "<b>Patch order matters</b> — the randomizer rewrites Track 1 blocks before the retranslation’s xdelta.",
-      "notice.gdi": "<b>Patch order matters</b> — the framerate restore rewrites Track 3 blocks before the widescreen xdelta.",
-      "notice.single": "<b>RetroArch softpatch</b> — “Mother 3 Fan Translation v1.3.ips” matches its ROM by name; order matters when stacking.",
-      "create.identical": "Identical to Original — same SHA-1",
+      "notice.disc": "<b>Patch order matters</b> - the randomizer rewrites Track 1 blocks before the retranslation’s xdelta.",
+      "notice.gdi": "<b>Patch order matters</b> - the framerate restore rewrites Track 3 blocks before the widescreen xdelta.",
+      "notice.single": "<b>RetroArch softpatch</b> - “Mother 3 Fan Translation v1.3.ips” matches its ROM by name; order matters when stacking.",
+      "create.identical": "Identical to Original - same SHA-1",
       "fault.create.title": "Patch creation failed",
-      "fault.create.body": "“Chrono Trigger (USA).sfc” and “Chrono Trigger - Flames of Eternity (v2.5).sfc” are byte-identical (SHA-1 match) — there is nothing to diff.",
+      "fault.create.body": "“Chrono Trigger (USA).sfc” and “Chrono Trigger - Flames of Eternity (v2.5).sfc” are byte-identical (SHA-1 match) - there is nothing to diff.",
       "fault.create.remedy": "Stage the unmodified dump as Original and the hacked build as Modified.",
       "fault.trim.title": "Nothing to trim",
-      "fault.trim.body": "No trailing padding found — “Pokemon HeartGold (USA).nds” has no 0x00/0xFF tail run. The ROM is already at minimal size.",
+      "fault.trim.body": "No trailing padding found - “Pokemon HeartGold (USA).nds” has no 0x00/0xFF tail run. The ROM is already at minimal size.",
       "fault.trim.remedy": "This dump is already trimmed; re-trimming would only rewrite the file.",
       "status.idle": "idle", "status.staging": "staging", "status.ready": "ready",
       "status.running": "running", "status.failed": "failed", "status.done": "done",
@@ -153,7 +153,7 @@
       "confirm.title": "¿Quitar todas las entradas?", "confirm.confirm": "Quitar todo",
       "confirm.body": "Esto limpia todos los ROM y parches preparados del banco de trabajo. Los archivos en disco no se tocan.",
       "confirm.trimTitle": "¿Recortar ROM?", "confirm.trimConfirm": "Recortar ROM",
-      "confirm.trimBody": "Recortar escribe un ROM nuevo y más pequeño — es permanente. Tu archivo original queda intacto y se conserva una copia sin recortar para restaurarlo.",
+      "confirm.trimBody": "Recortar escribe un ROM nuevo y más pequeño - es permanente. Tu archivo original queda intacto y se conserva una copia sin recortar para restaurarlo.",
       "settings.title": "Ajustes", "settings.save": "Guardar", "settings.reset": "Restablecer",
       "settings.general": "General", "settings.language": "Idioma", "settings.logLevel": "Nivel de registro", "settings.units": "Unidades de tamaño",
       "settings.devTools": "Herramientas dev", "settings.fixes": "Correcciones", "settings.fixChecksum": "Corregir cabecera ROM",
@@ -168,14 +168,14 @@
             "scale.min": "Mín", "scale.veryLow": "Muy bajo", "scale.low": "Bajo", "scale.medium": "Medio",
       "scale.high": "Alto", "scale.veryHigh": "Muy alto", "scale.max": "Máx",
       "opts.output": "Opciones",
-      "drawer.tracks": "Pistas y sumas", "drawer.extract": "Extraer", "drawer.verifications": "Verificar", "verify.input": "Entrada", "verify.output": "Salida", "verify.dryRun": "Simulación", "verify.dryRunDesc": "Aplica sobre una copia temporal y re-hashea — sin tocar los bytes de origen", "verify.dryRunPass": "Correcto — el re-hash de la copia coincide", "verify.dryRunFail": "Fallo — la salida de la copia difiere",
+      "drawer.tracks": "Pistas y sumas", "drawer.extract": "Extraer", "drawer.verifications": "Verificar", "verify.input": "Entrada", "verify.output": "Salida", "verify.dryRun": "Simulación", "verify.dryRunDesc": "Aplica sobre una copia temporal y re-hashea - sin tocar los bytes de origen", "verify.dryRunPass": "Correcto - el re-hash de la copia coincide", "verify.dryRunFail": "Fallo - la salida de la copia difiere",
       "verify.expIn": "Suma de entrada esperada", "verify.expOut": "Suma de salida esperada", "verify.ckHint": "CRC32, MD5 o SHA-1",
       "info.aria": "Más información",
       "info.romInput": "Los archivos se descomprimen y el ROM se localiza solo; los contenedores chd/rvz/z3ds se desempaquetan antes de parchear; los archivos anidados se resuelven recursivamente. Se admite el softpatch de RetroArch.",
-      "info.patches": "Los parches se aplican de arriba abajo — arrastra el asa para reordenar. Las pistas del nombre (crc32 / tamaño) se comprueban antes de ejecutar.",
-      "info.output": "Escribe el nombre sin extensión — el selector de formato la controla. Los contenedores (zip, 7z, chd, rvz) se escriben directamente.",
+      "info.patches": "Los parches se aplican de arriba abajo - arrastra el asa para reordenar. Las pistas del nombre (crc32 / tamaño) se comprueban antes de ejecutar.",
+      "info.output": "Escribe el nombre sin extensión - el selector de formato la controla. Los contenedores (zip, 7z, chd, rvz) se escriben directamente.",
       "info.outputOptions": "Los códecs y niveles por defecto vienen de Ajustes › Compresión; los cambios aquí solo afectan a este trabajo.",
-      "info.compressType": "Opcionalmente envuelve la salida en un contenedor comprimido — «none» escribe el archivo tal cual.",
+      "info.compressType": "Opcionalmente envuelve la salida en un contenedor comprimido - «none» escribe el archivo tal cual.",
       "info.level": "Perfil → nivel: Mín 0/−7 · Medio 5/11 · Máx 9/22 (estándar / zstd). Una entrada codec:nivel lo anula.",
       "info.threads": "«auto» usa el número de núcleos que reporta el navegador: {n}.",
       "info.units": "MB cuenta en decimal (10⁶ bytes), MiB en binario (2²⁰ bytes). Todos los tamaños siguen esta elección.",
@@ -187,18 +187,18 @@
       "info.chdCd": "Válidos: cdlz, cdzl, cdfl. Las entradas sin nivel usan el perfil de Nivel.",
       "info.chdDvd": "Válidos: lzma, zlib, huff, flac. huff no tiene nivel.",
       "info.rvzBlock": "Por defecto 128 KiB. Bloques mayores comprimen mejor pero buscan más lento.",
-      "info.window": "Ventana de diff al crear — más grande encuentra datos movidos pero usa más memoria.",
+      "info.window": "Ventana de diff al crear - más grande encuentra datos movidos pero usa más memoria.",
       "info.trimPad": "Byte esperado en la cola; auto detecta 0x00 o 0xFF.",
-      "info.trimRom": "Recorte de cola: nds, dsi, srl (relleno 0x00) y gba, 3ds (0xFF) — la cola se detecta y se elimina; las imágenes Xbox xiso (.xiso o .iso) recortan su cola sin usar; las imágenes de GameCube/Wii (iso, gcm, wbfs, rvz) recortan limpiando bloques basura al convertir a RVZ; tu archivo original no se toca y se conserva una copia sin recortar para restaurar.",
+      "info.trimRom": "Recorte de cola: nds, dsi, srl (relleno 0x00) y gba, 3ds (0xFF) - la cola se detecta y se elimina; las imágenes Xbox xiso (.xiso o .iso) recortan su cola sin usar; las imágenes de GameCube/Wii (iso, gcm, wbfs, rvz) recortan limpiando bloques basura al convertir a RVZ; tu archivo original no se toca y se conserva una copia sin recortar para restaurar.",
       "info.createOriginal": "El volcado limpio y sin modificar que ya tienen los jugadores; su suma se incrusta en el parche como requisito de aplicación; archivos y contenedores se resuelven solos.",
-      "info.createModified": "Tu versión modificada — el archivo que el parche debe reproducir; solo se codifican las diferencias con el original; el tamaño puede diferir del original (se admite el crecimiento).",
+      "info.createModified": "Tu versión modificada - el archivo que el parche debe reproducir; solo se codifican las diferencias con el original; el tamaño puede diferir del original (se admite el crecimiento).",
       "drop.hero": "Suelta un ROM o parches", "drop.heroCreate": "Suelta el ROM original y el modificado",
       "drop.heroTrim": "Suelta un ROM para recortar", "drop.add": "Reemplaza el ROM o añade parches",
       "drop.addCreate": "Añadir o reemplazar un ROM", "drop.addTrim": "Reemplazar el ROM",
       "drop.original": "Suelta el ROM original", "drop.modified": "Suelta el ROM modificado", "drop.addPatches": "Suelta archivos de parche",
-      "drop.hint": "haz clic o suelta archivos en cualquier parte de la página — archivos, contenedores, hojas cue y softpatches se resuelven solos", "drop.tapAnywhere": "Toca en cualquier parte para elegir archivos",
+      "drop.hint": "haz clic o suelta archivos en cualquier parte de la página - archivos, contenedores, hojas cue y softpatches se resuelven solos", "drop.tapAnywhere": "Toca en cualquier parte para elegir archivos",
       "drop.staging": "Leyendo archivos soltados…",
-      "drop.anywhereShort": "haz clic para explorar — o suelta archivos en cualquier parte de la página", "drop.tap": "Toca para elegir archivos", "drop.release": "Suelta para preparar los archivos",
+      "drop.anywhereShort": "haz clic para explorar - o suelta archivos en cualquier parte de la página", "drop.tap": "Toca para elegir archivos", "drop.release": "Suelta para preparar los archivos",
       "step.rom": "ROM", "step.patches": "Parches", "step.apply": "Aplicar",
       "step.original": "Original", "step.modified": "Modificado", "step.patch": "Parche", "step.output": "Salida",
       "empty.needsInput": "Añade tus archivos en {loc} arriba para empezar", "empty.needsInputNoun": "Añade {noun} en {loc} arriba",
@@ -206,20 +206,20 @@
       "roms.files.one": "{n} archivo", "roms.files.other": "{n} archivos", "roms.tracks.one": "{n} pista", "roms.tracks.other": "{n} pistas", "roms.track": "Pista {n}", "roms.extracting": "Extrayendo {name}…", "patch.parsing": "Analizando {name}…",
       "patch.target": "Destino", "patch.format": "Formato", "track.word": "Pista",
       "patch.toggle": "Incluir {name}", "patch.on": "Sí", "patch.stateOff": "No",
-      "patch.offCount.one": "{n} parche está desactivado — márcalo para incluirlo", "patch.offCount.other": "{n} parches están desactivados — márcalos para incluirlos",
+      "patch.offCount.one": "{n} parche está desactivado - márcalo para incluirlo", "patch.offCount.other": "{n} parches están desactivados - márcalos para incluirlos",
       "patch.off.one": "{n} desactivado", "patch.off.other": "{n} desactivados",
       "patch.undo": "Reaplicación con deshacer (revalida los bloques parcheados)",
       "patch.embed": "Incluir el crc32 de origen en el nombre de salida",
       "verdict.mismatch": "Discrepancia",
       "footer.donate": "Donar",
-      "warn.ipsNoChecksum": "IPS no incluye sumas de comprobación — solo se valida con la pista del nombre de archivo.",
+      "warn.ipsNoChecksum": "IPS no incluye sumas de comprobación - solo se valida con la pista del nombre de archivo.",
       "cks.label": "Sumas", "cue.label": "Hoja cue", "gdi.label": "Índice GDI",
-      "variant.asDumped": "Archivo — tal como se volcó", "variant.withHeader": "Archivo — tal como se volcó (con cabecera de 512 B)",
+      "variant.asDumped": "Archivo - tal como se volcó", "variant.withHeader": "Archivo - tal como se volcó (con cabecera de 512 B)",
       "variant.noHeader": "Sin cabecera de copiador", "variant.autoTrimmed": "Auto-recortado",
       "req.targetBlockcheck": "blockcheck de destino", "req.undoData": "datos de deshacer", "req.present": "presente",
       "req.patchedCrc32": "crc32 parcheado", "req.rebuiltCue": "cue regenerada", "req.rebuiltGdi": "gdi regenerado",
       "req.embeddedSizes": "tamaños integrados", "req.sizesInOut": "entrada {in} → salida {out}",
-      "picker.hint": "El archivo contiene más de un candidato — elige cuáles preparar.",
+      "picker.hint": "El archivo contiene más de un candidato - elige cuáles preparar.",
       "picker.use": "Usar selección", "picker.skipped": "omitido",
       "opts.title": "Opciones", "opts.rom": "Opciones", "opts.patch": "Opciones", "opts.window": "Ventana de diff", "opts.trimPad": "Byte de relleno", "opts.trimVerify": "Verificar la salida tras recortar",
       "opt.rebuildCue": "Regenerar la hoja cue para la salida parcheada", "opt.rebuildCueShort": "regenerar cue",
@@ -230,7 +230,7 @@
       "opt.sourceWindow": "Ventana de origen", "opt.sourceWindowShort": "ventana",
       "out.placeholder": "Nombre de salida (sin extensión)",
       "run.apply.one": "Tejer {n} parche", "run.apply.other": "Tejer {n} parches", "run.applyEmpty": "Tejer parches", "run.create": "Crear parche", "run.trim": "Recortar ROM",
-      "running.cancel": "Cancelar trabajo", "drop.cancelStage": "Cancelar lectura", "patch.reorder": "Arrastra para reordenar — las flechas mueven",
+      "running.cancel": "Cancelar trabajo", "drop.cancelStage": "Cancelar lectura", "patch.reorder": "Arrastra para reordenar - las flechas mueven",
       "stage.detect": "Detectar", "stage.extract": "Extraer", "stage.checksum": "Suma", "stage.apply": "Aplicar",
       "stage.compress": "Comprimir", "stage.write": "Escribir", "stage.verify": "Verificar",
       "stage.diff": "Comparar", "stage.encode": "Codificar", "stage.scan": "Escanear", "stage.trim": "Recortar",
@@ -241,23 +241,23 @@
       "result.download": "Descargar",
       "fault.remedyK": "Solución", "fault.copy": "Copiar informe",
       "fault.apply.title": "El destino del parche no coincide",
-      "fault.apply.body": "«SOTN - Randomizer (v1.8).ppf» se creó para Rev 1 — espera CRC32 de Pista 1 0xE2B40FA2, pero la Pista 1 de este volcado da 0xACBC1C34 (Rev 0). El parche no se aplicó.",
-      "fault.apply.remedy": "Usa un volcado Rev 1 — o marca la anulación para forzar (los datos de deshacer permiten revertir).",
-      "fault.apply.override": "Aplicar igualmente — omitir la verificación de destino (la salida puede corromperse)",
+      "fault.apply.body": "«SOTN - Randomizer (v1.8).ppf» se creó para Rev 1 - espera CRC32 de Pista 1 0xE2B40FA2, pero la Pista 1 de este volcado da 0xACBC1C34 (Rev 0). El parche no se aplicó.",
+      "fault.apply.remedy": "Usa un volcado Rev 1 - o marca la anulación para forzar (los datos de deshacer permiten revertir).",
+      "fault.apply.override": "Aplicar igualmente - omitir la verificación de destino (la salida puede corromperse)",
       "fault.applySingle.title": "El destino del parche no coincide",
       "fault.applySingle.body": "«Mother 3 Fan Translation v1.3.ips» espera CRC32 de origen 0xA6CAA62E, pero «Mother 3 (Japan).gba» da 0x2A2074B6. El parche no se aplicó.",
-      "fault.applySingle.remedy": "Usa un volcado limpio sin cabecera — o marca la anulación para forzar la aplicación.",
-      "fault.applySingle.override": "Aplicar igualmente — omitir la verificación de origen (la salida puede corromperse)",
+      "fault.applySingle.remedy": "Usa un volcado limpio sin cabecera - o marca la anulación para forzar la aplicación.",
+      "fault.applySingle.override": "Aplicar igualmente - omitir la verificación de origen (la salida puede corromperse)",
       "input.disc": "Disco multipista", "input.gdi": "Disco GD-ROM", "input.single": "Archivo único",
-      "notice.disc": "<b>El orden de los parches importa</b> — el randomizer reescribe bloques de la Pista 1 antes del xdelta de la retraducción.",
-      "notice.gdi": "<b>El orden de los parches importa</b> — la restauración de framerate reescribe bloques de la Pista 3 antes del xdelta de pantalla ancha.",
-      "notice.single": "<b>Softpatch de RetroArch</b> — «Mother 3 Fan Translation v1.3.ips» empareja su ROM por nombre; el orden importa al apilar.",
-      "create.identical": "Idéntico al Original — mismo SHA-1",
+      "notice.disc": "<b>El orden de los parches importa</b> - el randomizer reescribe bloques de la Pista 1 antes del xdelta de la retraducción.",
+      "notice.gdi": "<b>El orden de los parches importa</b> - la restauración de framerate reescribe bloques de la Pista 3 antes del xdelta de pantalla ancha.",
+      "notice.single": "<b>Softpatch de RetroArch</b> - «Mother 3 Fan Translation v1.3.ips» empareja su ROM por nombre; el orden importa al apilar.",
+      "create.identical": "Idéntico al Original - mismo SHA-1",
       "fault.create.title": "Fallo al crear el parche",
-      "fault.create.body": "«Chrono Trigger (USA).sfc» y «Chrono Trigger - Flames of Eternity (v2.5).sfc» son idénticos byte a byte (SHA-1 igual) — no hay nada que comparar.",
+      "fault.create.body": "«Chrono Trigger (USA).sfc» y «Chrono Trigger - Flames of Eternity (v2.5).sfc» son idénticos byte a byte (SHA-1 igual) - no hay nada que comparar.",
       "fault.create.remedy": "Pon el volcado sin modificar como Original y la versión modificada como Modificado.",
       "fault.trim.title": "Nada que recortar",
-      "fault.trim.body": "No se encontró relleno final — «Pokemon HeartGold (USA).nds» no tiene cola de 0x00/0xFF. El ROM ya está en su tamaño mínimo.",
+      "fault.trim.body": "No se encontró relleno final - «Pokemon HeartGold (USA).nds» no tiene cola de 0x00/0xFF. El ROM ya está en su tamaño mínimo.",
       "fault.trim.remedy": "Este volcado ya está recortado; volver a recortar solo reescribiría el archivo.",
       "status.idle": "inactivo", "status.staging": "preparando", "status.ready": "listo",
       "status.running": "ejecutando", "status.failed": "fallido", "status.done": "hecho",
@@ -284,7 +284,7 @@
       "confirm.title": "Alle Eingaben entfernen?", "confirm.confirm": "Alle entfernen",
       "confirm.body": "Entfernt alle eingelegten ROMs und Patches von der Werkbank. Dateien auf der Festplatte bleiben unberührt.",
       "confirm.trimTitle": "ROM trimmen?", "confirm.trimConfirm": "ROM trimmen",
-      "confirm.trimBody": "Trimmen schreibt ein neues, kleineres ROM — das ist dauerhaft. Deine Originaldatei bleibt unberührt und eine ungetrimmte Kopie wird aufbewahrt, sodass du sie wiederherstellen kannst.",
+      "confirm.trimBody": "Trimmen schreibt ein neues, kleineres ROM - das ist dauerhaft. Deine Originaldatei bleibt unberührt und eine ungetrimmte Kopie wird aufbewahrt, sodass du sie wiederherstellen kannst.",
       "settings.title": "Einstellungen", "settings.save": "Speichern", "settings.reset": "Zurücksetzen",
       "settings.general": "Allgemein", "settings.language": "Sprache", "settings.logLevel": "Protokollstufe", "settings.units": "Größeneinheiten",
       "settings.devTools": "Dev-Werkzeuge", "settings.fixes": "Korrekturen", "settings.fixChecksum": "ROM-Header korrigieren",
@@ -299,14 +299,14 @@
             "scale.min": "Min", "scale.veryLow": "Sehr niedrig", "scale.low": "Niedrig", "scale.medium": "Mittel",
       "scale.high": "Hoch", "scale.veryHigh": "Sehr hoch", "scale.max": "Max",
       "opts.output": "Optionen",
-      "drawer.tracks": "Tracks & Prüfungen", "drawer.extract": "Entpacken", "drawer.verifications": "Prüfen", "verify.input": "Eingang", "verify.output": "Ausgang", "verify.dryRun": "Probelauf", "verify.dryRunDesc": "Auf eine Kopie anwenden und neu hashen — Quellbytes bleiben unberührt", "verify.dryRunPass": "Bestanden — Scratch-Ausgabe stimmt überein", "verify.dryRunFail": "Fehlgeschlagen — Scratch-Ausgabe weicht ab",
+      "drawer.tracks": "Tracks & Prüfungen", "drawer.extract": "Entpacken", "drawer.verifications": "Prüfen", "verify.input": "Eingang", "verify.output": "Ausgang", "verify.dryRun": "Probelauf", "verify.dryRunDesc": "Auf eine Kopie anwenden und neu hashen - Quellbytes bleiben unberührt", "verify.dryRunPass": "Bestanden - Scratch-Ausgabe stimmt überein", "verify.dryRunFail": "Fehlgeschlagen - Scratch-Ausgabe weicht ab",
       "verify.expIn": "Erwartete Eingangsprüfsumme", "verify.expOut": "Erwartete Ausgangsprüfsumme", "verify.ckHint": "CRC32, MD5 oder SHA-1",
       "info.aria": "Mehr Infos",
       "info.romInput": "Archive werden entpackt und das ROM automatisch gefunden; chd/rvz/z3ds-Container werden vor dem Patchen ausgepackt; verschachtelte Archive rekursiv aufgelöst. RetroArch-Softpatch-Namen werden unterstützt.",
-      "info.patches": "Patches werden von oben nach unten angewendet — zum Umsortieren am Griff ziehen. Dateinamen-Hinweise (crc32 / Größe) werden vor dem Lauf geprüft.",
-      "info.output": "Dateiname ohne Endung — das Format-Select steuert sie. Container (zip, 7z, chd, rvz) werden direkt geschrieben.",
+      "info.patches": "Patches werden von oben nach unten angewendet - zum Umsortieren am Griff ziehen. Dateinamen-Hinweise (crc32 / Größe) werden vor dem Lauf geprüft.",
+      "info.output": "Dateiname ohne Endung - das Format-Select steuert sie. Container (zip, 7z, chd, rvz) werden direkt geschrieben.",
       "info.outputOptions": "Codec- und Stufen-Defaults kommen aus Einstellungen › Kompression; Änderungen hier gelten nur für diesen Job.",
-      "info.compressType": "Verpackt die Ausgabe optional in einen komprimierten Container — „none“ schreibt die Datei direkt.",
+      "info.compressType": "Verpackt die Ausgabe optional in einen komprimierten Container - „none“ schreibt die Datei direkt.",
       "info.level": "Profil → Stufe: Min 0/−7 · Mittel 5/11 · Max 9/22 (Standard / zstd). Ein codec:stufe-Eintrag überschreibt dies.",
       "info.threads": "„auto“ nutzt die vom Browser gemeldete Kernanzahl: {n}.",
       "info.units": "MB zählt dezimal (10⁶ Bytes), MiB binär (2²⁰ Bytes). Alle Größen folgen dieser Wahl.",
@@ -318,18 +318,18 @@
       "info.chdCd": "Gültig: cdlz, cdzl, cdfl. Einträge ohne Stufe nutzen das Stufen-Profil.",
       "info.chdDvd": "Gültig: lzma, zlib, huff, flac. huff hat keine Stufe.",
       "info.rvzBlock": "Standard 128 KiB. Größere Blöcke komprimieren besser, suchen aber langsamer.",
-      "info.window": "Diff-Fenster beim Erstellen — größer findet verschobene Daten, braucht mehr Speicher.",
+      "info.window": "Diff-Fenster beim Erstellen - größer findet verschobene Daten, braucht mehr Speicher.",
       "info.trimPad": "Erwartetes Byte im Schwanz; auto erkennt 0x00 oder 0xFF.",
-      "info.trimRom": "Tail-Trim: nds, dsi, srl (0x00-Padding) und gba, 3ds (0xFF) — der Füllbereich am Ende wird erkannt und entfernt; Xbox-xiso-Images (.xiso oder .iso) trimmen ihren ungenutzten Schwanz; GameCube/Wii-Images (iso, gcm, wbfs, rvz) trimmen durch Entfernen von Junk-Blöcken bei der RVZ-Konvertierung; die Originaldatei bleibt unberührt, eine ungetrimmte Kopie wird zum Wiederherstellen aufbewahrt.",
+      "info.trimRom": "Tail-Trim: nds, dsi, srl (0x00-Padding) und gba, 3ds (0xFF) - der Füllbereich am Ende wird erkannt und entfernt; Xbox-xiso-Images (.xiso oder .iso) trimmen ihren ungenutzten Schwanz; GameCube/Wii-Images (iso, gcm, wbfs, rvz) trimmen durch Entfernen von Junk-Blöcken bei der RVZ-Konvertierung; die Originaldatei bleibt unberührt, eine ungetrimmte Kopie wird zum Wiederherstellen aufbewahrt.",
       "info.createOriginal": "Der saubere, unveränderte Dump, den Spieler bereits besitzen; seine Prüfsumme wird als Anwendungsvoraussetzung in den Patch eingebettet; Archive und Container werden automatisch aufgelöst.",
-      "info.createModified": "Dein bearbeiteter Build — die Datei, die der Patch erzeugen soll; nur die Unterschiede zum Original werden kodiert; die Größe darf vom Original abweichen (Wachstum wird unterstützt).",
+      "info.createModified": "Dein bearbeiteter Build - die Datei, die der Patch erzeugen soll; nur die Unterschiede zum Original werden kodiert; die Größe darf vom Original abweichen (Wachstum wird unterstützt).",
       "drop.hero": "ROM oder Patches ablegen", "drop.heroCreate": "Original- und modifiziertes ROM ablegen",
       "drop.heroTrim": "ROM zum Trimmen ablegen", "drop.add": "ROM ersetzen oder Patches hinzufügen",
       "drop.addCreate": "ROM hinzufügen oder ersetzen", "drop.addTrim": "ROM ersetzen",
       "drop.original": "Original-ROM ablegen", "drop.modified": "Modifiziertes ROM ablegen", "drop.addPatches": "Patch-Dateien ablegen",
-      "drop.hint": "klicken oder Dateien irgendwo auf der Seite ablegen — Archive, Container, Cue-Sheets und Softpatches werden automatisch aufgelöst", "drop.tapAnywhere": "Irgendwo tippen, um Dateien zu wählen",
+      "drop.hint": "klicken oder Dateien irgendwo auf der Seite ablegen - Archive, Container, Cue-Sheets und Softpatches werden automatisch aufgelöst", "drop.tapAnywhere": "Irgendwo tippen, um Dateien zu wählen",
       "drop.staging": "Abgelegte Dateien werden gelesen…",
-      "drop.anywhereShort": "klicken zum Durchsuchen — oder Dateien irgendwo auf der Seite ablegen", "drop.tap": "Tippen, um Dateien zu wählen", "drop.release": "Loslassen, um Dateien einzulegen",
+      "drop.anywhereShort": "klicken zum Durchsuchen - oder Dateien irgendwo auf der Seite ablegen", "drop.tap": "Tippen, um Dateien zu wählen", "drop.release": "Loslassen, um Dateien einzulegen",
       "step.rom": "ROM", "step.patches": "Patches", "step.apply": "Anwenden",
       "step.original": "Original", "step.modified": "Modifiziert", "step.patch": "Patch", "step.output": "Ausgabe",
       "empty.needsInput": "Dateien in {loc} oben hinzufügen, um zu starten", "empty.needsInputNoun": "{noun} in {loc} oben hinzufügen",
@@ -337,20 +337,20 @@
       "roms.files.one": "{n} Datei", "roms.files.other": "{n} Dateien", "roms.tracks.one": "{n} Track", "roms.tracks.other": "{n} Tracks", "roms.track": "Track {n}", "roms.extracting": "Entpacke {name}…", "patch.parsing": "Analysiere {name}…",
       "patch.target": "Ziel", "patch.format": "Format", "track.word": "Track",
       "patch.toggle": "{name} einschließen", "patch.on": "An", "patch.stateOff": "Aus",
-      "patch.offCount.one": "{n} Patch ist aus — ankreuzen zum Einschließen", "patch.offCount.other": "{n} Patches sind aus — ankreuzen zum Einschließen",
+      "patch.offCount.one": "{n} Patch ist aus - ankreuzen zum Einschließen", "patch.offCount.other": "{n} Patches sind aus - ankreuzen zum Einschließen",
       "patch.off.one": "{n} deaktiviert", "patch.off.other": "{n} deaktiviert",
       "patch.undo": "Undo-fähiges Wiederanwenden (prüft gepatchte Blöcke erneut)",
       "patch.embed": "Quell-crc32 in den Ausgabedateinamen einbetten",
       "verdict.mismatch": "Abweichung",
       "footer.donate": "Spenden",
-      "warn.ipsNoChecksum": "IPS enthält keine eingebetteten Prüfsummen — nur durch den Dateinamen-Hinweis abgesichert.",
+      "warn.ipsNoChecksum": "IPS enthält keine eingebetteten Prüfsummen - nur durch den Dateinamen-Hinweis abgesichert.",
       "cks.label": "Prüfungen", "cue.label": "Cue", "gdi.label": "GDI",
-      "variant.asDumped": "Datei — wie gedumpt", "variant.withHeader": "Datei — wie gedumpt (mit 512-B-Header)",
+      "variant.asDumped": "Datei - wie gedumpt", "variant.withHeader": "Datei - wie gedumpt (mit 512-B-Header)",
       "variant.noHeader": "Ohne Copier-Header", "variant.autoTrimmed": "Automatisch getrimmt",
       "req.targetBlockcheck": "Ziel-Blockcheck", "req.undoData": "Undo-Daten", "req.present": "vorhanden",
       "req.patchedCrc32": "gepatchter crc32", "req.rebuiltCue": "neu erzeugtes Cue", "req.rebuiltGdi": "neu erzeugtes GDI",
       "req.embeddedSizes": "eingebettete Größen", "req.sizesInOut": "ein {in} → aus {out}",
-      "picker.hint": "Das Archiv enthält mehrere Kandidaten — wähle die einzulegenden Dateien.",
+      "picker.hint": "Das Archiv enthält mehrere Kandidaten - wähle die einzulegenden Dateien.",
       "picker.use": "Auswahl verwenden", "picker.skipped": "übersprungen",
       "opts.title": "Optionen", "opts.rom": "Optionen", "opts.patch": "Optionen", "opts.window": "Diff-Fenster", "opts.trimPad": "Füllbyte", "opts.trimVerify": "Ausgabe nach dem Trimmen verifizieren",
       "opt.rebuildCue": "Cue-Sheet für die gepatchte Ausgabe neu erzeugen", "opt.rebuildCueShort": "Cue neu",
@@ -361,7 +361,7 @@
       "opt.sourceWindow": "Quellfenster", "opt.sourceWindowShort": "Fenster",
       "out.placeholder": "Ausgabedateiname (ohne Endung)",
       "run.apply.one": "{n} Patch verweben", "run.apply.other": "{n} Patches verweben", "run.applyEmpty": "Patches verweben", "run.create": "Patch erstellen", "run.trim": "ROM trimmen",
-      "running.cancel": "Job abbrechen", "drop.cancelStage": "Lesen abbrechen", "patch.reorder": "Zum Umsortieren ziehen — Pfeiltasten verschieben",
+      "running.cancel": "Job abbrechen", "drop.cancelStage": "Lesen abbrechen", "patch.reorder": "Zum Umsortieren ziehen - Pfeiltasten verschieben",
       "stage.detect": "Erkennen", "stage.extract": "Entpacken", "stage.checksum": "Prüfsumme", "stage.apply": "Anwenden",
       "stage.compress": "Komprimieren", "stage.write": "Schreiben", "stage.verify": "Verifizieren",
       "stage.diff": "Vergleichen", "stage.encode": "Kodieren", "stage.scan": "Scannen", "stage.trim": "Trimmen",
@@ -372,23 +372,23 @@
       "result.download": "Herunterladen",
       "fault.remedyK": "Abhilfe", "fault.copy": "Bericht kopieren",
       "fault.apply.title": "Patch-Ziel stimmt nicht überein",
-      "fault.apply.body": "„SOTN - Randomizer (v1.8).ppf“ wurde für Rev 1 erstellt — erwartet Track-1-CRC32 0xE2B40FA2, aber Track 1 dieses Dumps ergibt 0xACBC1C34 (Rev 0). Der Patch wurde nicht angewendet.",
-      "fault.apply.remedy": "Einen Rev-1-Dump verwenden — oder das Überschreiben aktivieren (Undo-Daten erlauben Rollback).",
-      "fault.apply.override": "Trotzdem anwenden — Ziel-Prüfsummen-Gate überspringen (Ausgabe kann defekt sein)",
+      "fault.apply.body": "„SOTN - Randomizer (v1.8).ppf“ wurde für Rev 1 erstellt - erwartet Track-1-CRC32 0xE2B40FA2, aber Track 1 dieses Dumps ergibt 0xACBC1C34 (Rev 0). Der Patch wurde nicht angewendet.",
+      "fault.apply.remedy": "Einen Rev-1-Dump verwenden - oder das Überschreiben aktivieren (Undo-Daten erlauben Rollback).",
+      "fault.apply.override": "Trotzdem anwenden - Ziel-Prüfsummen-Gate überspringen (Ausgabe kann defekt sein)",
       "fault.applySingle.title": "Patch-Ziel stimmt nicht überein",
       "fault.applySingle.body": "„Mother 3 Fan Translation v1.3.ips“ erwartet Quell-CRC32 0xA6CAA62E, aber „Mother 3 (Japan).gba“ ergibt 0x2A2074B6. Der Patch wurde nicht angewendet.",
-      "fault.applySingle.remedy": "Einen sauberen Dump ohne Header verwenden — oder unten das Überschreiben aktivieren.",
-      "fault.applySingle.override": "Trotzdem anwenden — Quell-Prüfsummen-Gate überspringen (Ausgabe kann defekt sein)",
+      "fault.applySingle.remedy": "Einen sauberen Dump ohne Header verwenden - oder unten das Überschreiben aktivieren.",
+      "fault.applySingle.override": "Trotzdem anwenden - Quell-Prüfsummen-Gate überspringen (Ausgabe kann defekt sein)",
       "input.disc": "Multi-Track-Disc", "input.gdi": "GD-ROM-Disc", "input.single": "Einzeldatei",
-      "notice.disc": "<b>Die Patch-Reihenfolge zählt</b> — der Randomizer überschreibt Track-1-Blöcke vor dem xdelta der Neuübersetzung.",
-      "notice.gdi": "<b>Die Patch-Reihenfolge zählt</b> — die Framerate-Wiederherstellung überschreibt Track-3-Blöcke vor dem Widescreen-xdelta.",
-      "notice.single": "<b>RetroArch-Softpatch</b> — „Mother 3 Fan Translation v1.3.ips“ findet sein ROM über den Namen; beim Stapeln zählt die Reihenfolge.",
-      "create.identical": "Identisch mit dem Original — gleicher SHA-1",
+      "notice.disc": "<b>Die Patch-Reihenfolge zählt</b> - der Randomizer überschreibt Track-1-Blöcke vor dem xdelta der Neuübersetzung.",
+      "notice.gdi": "<b>Die Patch-Reihenfolge zählt</b> - die Framerate-Wiederherstellung überschreibt Track-3-Blöcke vor dem Widescreen-xdelta.",
+      "notice.single": "<b>RetroArch-Softpatch</b> - „Mother 3 Fan Translation v1.3.ips“ findet sein ROM über den Namen; beim Stapeln zählt die Reihenfolge.",
+      "create.identical": "Identisch mit dem Original - gleicher SHA-1",
       "fault.create.title": "Patch-Erstellung fehlgeschlagen",
-      "fault.create.body": "„Chrono Trigger (USA).sfc“ und „Chrono Trigger - Flames of Eternity (v2.5).sfc“ sind byte-identisch (SHA-1 gleich) — es gibt nichts zu vergleichen.",
+      "fault.create.body": "„Chrono Trigger (USA).sfc“ und „Chrono Trigger - Flames of Eternity (v2.5).sfc“ sind byte-identisch (SHA-1 gleich) - es gibt nichts zu vergleichen.",
       "fault.create.remedy": "Den unveränderten Dump als Original und den modifizierten Build als Modifiziert einlegen.",
       "fault.trim.title": "Nichts zu trimmen",
-      "fault.trim.body": "Kein Padding am Ende gefunden — „Pokemon HeartGold (USA).nds“ hat keinen 0x00/0xFF-Schwanz. Das ROM ist bereits minimal groß.",
+      "fault.trim.body": "Kein Padding am Ende gefunden - „Pokemon HeartGold (USA).nds“ hat keinen 0x00/0xFF-Schwanz. Das ROM ist bereits minimal groß.",
       "fault.trim.remedy": "Dieser Dump ist bereits getrimmt; erneutes Trimmen würde die Datei nur neu schreiben.",
       "status.idle": "inaktiv", "status.staging": "lädt", "status.ready": "bereit",
       "status.running": "läuft", "status.failed": "fehlgeschlagen", "status.done": "fertig",
@@ -455,7 +455,7 @@
     if (!m) return s;
     return fmtSize(parseFloat(m[1].replace(/,/g, "")) * (SIZE_UNITS[m[2]] ?? 1));
   };
-  /* reformat a literal timing ("0.08s") — sub-second reads as ms; the decimal
+  /* reformat a literal timing ("0.08s") - sub-second reads as ms; the decimal
      separator follows the locale (fmtNum) like every other number */
   const fmtTime = (s) => {
     const m = /^([\d.]+)\s*s$/.exec(String(s).trim());
@@ -469,14 +469,14 @@
   const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ════════ demo data ════════ */
-  /* Apply works on ONE rom at a time — here a multi-track CD image. */
+  /* Apply works on ONE rom at a time - here a multi-track CD image. */
   const DISC_ROM = {
     name: "Castlevania - Symphony of the Night (USA).cue", tag: "PSX · CD",
     size: "631.1 MiB", time: "3.46s", parts: 2,
     game: "Castlevania - Symphony of the Night (USA)",
     showExtract: true,
     chain: [
-      { d: 0, fn: "Castlevania Collection.rar", sz: "498.2 MiB", t: "—" },
+      { d: 0, fn: "Castlevania Collection.rar", sz: "498.2 MiB", t: "-" },
       { d: 1, fn: "Castlevania - Symphony of the Night (USA).7z", sz: "412.0 MiB", t: "1.84s" },
       { d: 2, fn: "Castlevania - Symphony of the Night (USA).cue", sz: "1.2 KiB", t: "0.02s" },
       { d: 2, fn: "Castlevania - Symphony of the Night (USA) (Track 1).bin", sz: "593.0 MiB", t: "2.41s" },
@@ -509,7 +509,7 @@
     tasks: [
       { detail: "Castlevania Collection.rar → rar, nested 7z inside", label: "Detected archive", t: "0.04s" },
       { detail: "rar → 7z → cue + 2 bin tracks · 631.1 MiB total", label: "Extracted 4 files", t: "4.56s" },
-      { detail: "2 tracks — MODE2/2352 data + audio", label: "Parsed cue sheet", t: "0.02s" },
+      { detail: "2 tracks - MODE2/2352 data + audio", label: "Parsed cue sheet", t: "0.02s" },
       { detail: "crc32 + md5 + sha1 single pass @ 412 MiB/s", label: "Hashed 2 tracks", t: "1.62s" },
       { detail: "Track 1 crc32 matches both patches’ requirements", label: "Checked against patches", t: "0.01s" },
     ],
@@ -525,7 +525,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     name: "Chrono Trigger (USA).sfc", tag: "SFC", size: "4.0 MiB", time: "0.84s",
     game: "Chrono Trigger (USA)",
     chain: [
-      { d: 0, fn: "Chrono Trigger (USA).7z", sz: "2.4 MiB", t: "—" },
+      { d: 0, fn: "Chrono Trigger (USA).7z", sz: "2.4 MiB", t: "-" },
       { d: 1, fn: "Chrono Trigger (USA).sfc", sz: "4.0 MiB", t: "0.31s" },
     ],
     cks: [
@@ -577,15 +577,15 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     ],
     ckTime: "0.55s",
     tasks: [
-      { detail: "rom/sfc — no container", label: "Detected file", t: "0.01s" },
+      { detail: "rom/sfc - no container", label: "Detected file", t: "0.01s" },
       { detail: "crc32 + md5 + sha1 single pass", label: "Hashed file", t: "0.55s" },
-      { detail: "differs from original — 4.0 → 6.0 MiB", label: "Compared with original", t: "0.01s" },
+      { detail: "differs from original - 4.0 → 6.0 MiB", label: "Compared with original", t: "0.01s" },
     ],
   };
   const TRIM_ROM = {
     name: "Pokemon HeartGold (USA).nds", tag: "NDS", size: "128.0 MiB", time: "2.31s",
     game: "Pokémon HeartGold Version (USA)",
-    chain: [{ d: 0, fn: "Pokemon HeartGold (USA).nds", sz: "128.0 MiB", t: "—" }],
+    chain: [{ d: 0, fn: "Pokemon HeartGold (USA).nds", sz: "128.0 MiB", t: "-" }],
     cks: [
       { k: "CRC32", v: "4DFFB475" },
       { k: "MD5", v: "258E67FE0B6FF67A6A2DCA29E5C7CFF2" },
@@ -615,10 +615,10 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     ckTime: "2.18s",
     id: "IPKE · NTSC-U", region: "USA",
     tasks: [
-      { detail: "rom/nds — no container", label: "Detected file", t: "0.01s" },
+      { detail: "rom/nds - no container", label: "Detected file", t: "0.01s" },
       { detail: "crc32 + md5 + sha1 single pass", label: "Hashed file", t: "2.18s" },
       { detail: "0xFF run 86.0 MiB @ 0x02A00000", label: "Scanned tail", t: "0.66s" },
-      { detail: "trimmable — 67.2% smaller, checksum recorded for verify", label: "Confirmed candidate", t: "0.01s" },
+      { detail: "trimmable - 67.2% smaller, checksum recorded for verify", label: "Confirmed candidate", t: "0.01s" },
     ],
   };
   /* multi-part inputs: every patch must name the binary part it rewrites
@@ -656,7 +656,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
         { detail: "sha1 2426AC1D… = Track 1", label: "Matched source", t: "0.01s" },
       ],
     },
-    /* optional extras shared by the patch author, staged but turned OFF — the
+    /* optional extras shared by the patch author, staged but turned OFF - the
        user ticks them to include them in the weave */
     {
       name: "SOTN - Map Rando Add-on (v0.9).ppf", fmt: "PPF", size: "0.4 MiB", disabled: true,
@@ -676,7 +676,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     id: "AGB-A3UJ-JPN", region: "Japan",
     options: [{ checked: false, labelKey: "opt.autoTrim", labelVars: { size: "12.4 MiB" }, shortKey: "opt.autoTrimShort" }],
     chain: [
-      { d: 0, fn: "m3-fanpack.rar", sz: "84.3 MiB", t: "—" },
+      { d: 0, fn: "m3-fanpack.rar", sz: "84.3 MiB", t: "-" },
       { d: 1, fn: "patches+roms.7z", sz: "44.6 MiB", t: "0.41s" },
       { d: 2, fn: "mother3.zip", sz: "12.1 MiB", t: "0.22s" },
       { d: 3, fn: "Mother 3 (Japan).gba", sz: "32.0 MiB", t: "0.66s" },
@@ -719,7 +719,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
   const SINGLE_PATCHES = [
     {
       name: "Mother 3 Fan Translation v1.3.ips", fmt: "IPS", size: "412 KiB",
-      /* ips has no embedded checksum data — the only gate is the filename hint,
+      /* ips has no embedded checksum data - the only gate is the filename hint,
          so the card carries the YELLOW weak-verification border */
       warnKey: "warn.ipsNoChecksum",
       options: [{ checked: true, labelKey: "opt.sizeGrowth", shortKey: "opt.sizeGrowthShort" }],
@@ -752,7 +752,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     size: "1.19 GiB", time: "5.1s", parts: 3,
     game: "Sonic Adventure (USA)",
     chain: [
-      { d: 0, fn: "Sonic Adventure (USA).7z", sz: "842.0 MiB", t: "—" },
+      { d: 0, fn: "Sonic Adventure (USA).7z", sz: "842.0 MiB", t: "-" },
       { d: 1, fn: "Sonic Adventure (USA).gdi", sz: "0.4 KiB", t: "0.01s" },
       { d: 1, fn: "Sonic Adventure (USA) (Track 1).bin", sz: "1.6 MiB", t: "0.04s" },
       { d: 1, fn: "Sonic Adventure (USA) (Track 2).raw", sz: "3.0 MiB", t: "0.06s" },
@@ -794,7 +794,7 @@ FILE "Castlevania - Symphony of the Night (USA) (Track 2).bin" BINARY
     tasks: [
       { detail: "Sonic Adventure (USA).7z → 7z archive", label: "Detected archive", t: "0.02s" },
       { detail: "7z → .gdi + 3 tracks · 1.19 GiB total", label: "Extracted 4 files", t: "5.03s" },
-      { detail: "3 tracks — 2 low-density + 1 high-density", label: "Parsed .gdi index", t: "0.01s" },
+      { detail: "3 tracks - 2 low-density + 1 high-density", label: "Parsed .gdi index", t: "0.01s" },
       { detail: "crc32 + md5 + sha1 single pass @ 388 MiB/s", label: "Hashed 3 tracks", t: "3.18s" },
       { detail: "Track 3 sha1 matches both patches’ requirements", label: "Checked against patches", t: "0.02s" },
     ],
@@ -860,7 +860,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       ],
       compressSummary: "chd · cdlz,cdzl,cdfl",
       /* 631 MiB CD: extract from nested archive → bins, hash, apply ppf/xdelta,
-         recompress to CHD (cdlz,cdzl,cdfl) — the compress stage dominates */
+         recompress to CHD (cdlz,cdzl,cdfl) - the compress stage dominates */
       plan: [
         { dur: 0.21, id: "detect" }, { dur: 2.44, id: "extract" }, { dur: 1.62, id: "checksum" },
         { dur: 0.38, id: "apply" }, { dur: 3.12, id: "compress" }, { dur: 0.96, id: "write" }, { dur: 0.71, id: "verify" },
@@ -885,7 +885,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         { lv: "debug", msg: "opfs: staging root /work mounted" },
         { lv: "trace", msg: "detect: Castlevania Collection.rar → archive/rar" },
         { lv: "trace", msg: "nested: Castlevania … (USA).7z inside rar" },
-        { lv: "trace", msg: "cue: 2 tracks — data 593.0 MiB + audio 38.1 MiB" },
+        { lv: "trace", msg: "cue: 2 tracks - data 593.0 MiB + audio 38.1 MiB" },
         { lv: "debug", msg: "extract: read-on-main, 2 workers" },
         { lv: "trace", msg: "checksum: crc32+md5+sha1 single-pass engine" },
         { lv: "info", msg: "verify: track checksums match patch requirements" },
@@ -907,7 +907,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       ],
       compressSummary: "chd · cdlz,cdzl,cdfl",
       /* 1.19 GiB GD-ROM: extract from 7z → gdi + 3 tracks, hash, apply ppf/xdelta
-         to the high-density track, recompress to CHD — compress dominates */
+         to the high-density track, recompress to CHD - compress dominates */
       plan: [
         { dur: 0.24, id: "detect" }, { dur: 5.03, id: "extract" }, { dur: 3.18, id: "checksum" },
         { dur: 0.52, id: "apply" }, { dur: 6.41, id: "compress" }, { dur: 1.88, id: "write" }, { dur: 1.36, id: "verify" },
@@ -931,7 +931,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         { lv: "info", msg: `runtime: wasm32-wasi threads=${CORES} simd=on` },
         { lv: "debug", msg: "opfs: staging root /work mounted" },
         { lv: "trace", msg: "detect: Sonic Adventure (USA).7z → archive/7z" },
-        { lv: "trace", msg: "gdi: 3 tracks — 2 low-density + high-density 1.18 GiB" },
+        { lv: "trace", msg: "gdi: 3 tracks - 2 low-density + high-density 1.18 GiB" },
         { lv: "debug", msg: "extract: read-on-main, 4 workers" },
         { lv: "trace", msg: "checksum: crc32+md5+sha1 single-pass engine" },
         { lv: "info", msg: "verify: track 3 checksum matches patch requirements" },
@@ -948,7 +948,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       outFormats: [".gba", ".zip", ".7z"],
       compressSummary: "7z · lzma2",
       /* 32 MiB GBA: light extract from nested rar/7z/zip, hash, apply ips,
-         repack to 7z (lzma2) — an order of magnitude faster than the disc */
+         repack to 7z (lzma2) - an order of magnitude faster than the disc */
       plan: [
         { dur: 0.05, id: "detect" }, { dur: 0.34, id: "extract" }, { dur: 0.19, id: "checksum" },
         { dur: 0.14, id: "apply" }, { dur: 1.18, id: "compress" }, { dur: 0.08, id: "write" }, { dur: 0.12, id: "verify" },
@@ -991,7 +991,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       resultKey: "result.done",
       /* the label counts ENABLED patches (base − toggled-off + extras), matching
          the step-header badge and what the weave will actually apply. With
-         nothing staged yet there is no count to claim — use the bare verb. */
+         nothing staged yet there is no count to claim - use the bare verb. */
       runLabel: () => {
         if (state.scenario === "empty" || state.scenario === "dragging") return t("run.applyEmpty");
         return tCount("run.apply", buildPatchItems(applyInput(), false).filter((it) => !it.disabled).length);
@@ -1052,7 +1052,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       { lv: "trace", msg: "detect: Flames of Eternity (v2.5).sfc → rom/sfc" },
       { lv: "debug", msg: "extract: read-on-main, 1 worker" },
       { lv: "trace", msg: "checksum: crc32+md5+sha1 single-pass engine" },
-      { lv: "trace", msg: "diff: inputs ready — 4.0 vs 6.0 MiB" },
+      { lv: "trace", msg: "diff: inputs ready - 4.0 vs 6.0 MiB" },
     ],
     trim: [
       { lv: "info", msg: `runtime: wasm32-wasi threads=${CORES} simd=on` },
@@ -1080,7 +1080,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
   const CHANGELOG = [
     { tag: "feat", text: "Nested archive patches: pick every patch inside 7z/rar stacks in one pass." },
-    { tag: "feat", text: "Patch filename requirements — crc32/size hints parsed and pre-verified." },
+    { tag: "feat", text: "Patch filename requirements - crc32/size hints parsed and pre-verified." },
     { tag: "perf", text: "CHD create now beats chdman on CD images (streaming hunk pipeline)." },
     { tag: "fix", text: "Safari: staged OPFS inputs reuse identical uploads instead of re-copying." },
     { tag: "fix", text: "Worker threads “auto” resolves to all cores in the browser (was capped at 4)." },
@@ -1100,7 +1100,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     tune: '<svg class="tune" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11m4 0h1M4 17h1m4 0h11"/><circle cx="17" cy="7" r="2.4"/><circle cx="7" cy="17" r="2.4"/></svg>',
     up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5m-5.5 5.5L12 5l5.5 5.5"/></svg>',
     /* canonical per-mode action icons, matching the real webapp (band-aid /
-       git-compare / scissors) — shared by the nav tabs and the run buttons */
+       git-compare / scissors) - shared by the nav tabs and the run buttons */
     bandaid: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8.364" width="9" height="19" rx="4.5" transform="rotate(-45 2 8.364)"/><path d="m11.9 18.264-.354.353a4.5 4.5 0 0 1-6.364 0 4.5 4.5 0 0 1 0-6.364l.354-.353M11.9 5.536l.353-.354a4.5 4.5 0 0 1 6.364 0 4.5 4.5 0 0 1 0 6.364l-.354.354m-8.484 0h0M11.9 9.778h0M14.021 11.9h0M11.9 14.021h0"/></svg>',
     compare: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>',
     scissors: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>',
@@ -1124,7 +1124,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       .join("")}</div>`;
 
   /* the whole row IS the copy button (role=button + aria-label), so the label
-     and value are plain spans and the copy glyph is decorative — no dt/dd (they
+     and value are plain spans and the copy glyph is decorative - no dt/dd (they
      can't live in an interactive non-<dl> element) and no nested <button> */
   const renderCkRow = (c) =>
     `<div class="ck mono" data-copy="${esc(c.copy || c.v)}" role="button" tabindex="0" aria-label="${t("common.copy")} ${c.k} ${esc(c.v)}"><span class="ck-k">${c.k}</span><span class="ck-v">${esc(c.v)}${c.exp ? ` <span class="exp">≠ ${esc(c.exp)}</span>` : ""}</span><span class="copy" aria-hidden="true">${ICONS.copy}</span></div>`;
@@ -1139,7 +1139,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     return `<div class="ck req mono${bad ? " bad" : ""}" data-copy="${esc(value)}" role="button" tabindex="0" aria-label="${t("common.copy")} ${esc(label)} ${esc(value)}"><span class="ck-k">${esc(label)}</span><span class="ck-v">${esc(value)}</span><span class="reqstat${bad ? " bad" : ""}" aria-hidden="true">${bad ? ICONS.cross : ICONS.check}</span><span class="copy" aria-hidden="true">${ICONS.copy}</span></div>`;
   };
 
-  /* the dry-run: apply to a scratch copy and re-hash — reports the actual
+  /* the dry-run: apply to a scratch copy and re-hash - reports the actual
      pass/fail verdict, not an in-flight progress bar */
   const renderDryRun = (bad = false) =>
     `<div class="dryrun">
@@ -1148,7 +1148,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     </div>`;
 
   /* shared collapsible drawer: a real <button aria-expanded> header over a
-     grid-rows-collapsed body — open/close is pure CSS (.cks rules); the click
+     grid-rows-collapsed body - open/close is pure CSS (.cks rules); the click
      handler in wireDrawers only flips the class + attribute. Replaces the old
      <details>/<summary> + JS height tween. */
   let drawerUid = 0;
@@ -1227,7 +1227,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     return renderDrawer(`<span class="lab">${label}</span>`, bodies);
   };
   /* extraction is only surfaced where it's the point of the example (a ROM pulled
-     out of a nested archive) — not on every card that happens to carry a chain */
+     out of a nested archive) - not on every card that happens to carry a chain */
   const renderExtractDrawer = (rom) =>
     rom.showExtract && rom.chain && rom.chain.length > 1
       ? renderDrawer(
@@ -1239,7 +1239,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     /* the game name leads; the file name + system fold into a Details drawer.
        the verdict rides in the tracks/checksums header, and size lives in the
        extraction header when there is one (else in the compact meta line).
-       ROM cards keep the PLAIN card border — verdict borders (green/red/yellow)
+       ROM cards keep the PLAIN card border - verdict borders (green/red/yellow)
        belong to patches, whose verification can pass/warn/fail */
     return `
     <article class="card"${opts.vt ? ` style="view-transition-name: ${opts.vt}"` : ""} aria-label="${esc(rom.name)}">
@@ -1295,14 +1295,14 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
 
   /* a staging patch keeps a WORKING drag handle + data-pid so it reorders mid-parse
-     like a settled card — the id carries the new order into the re-render. ROM reading
+     like a settled card - the id carries the new order into the re-render. ROM reading
      cards pass no pid and stay non-draggable (single ROM, nothing to reorder) */
   const renderReadingCard = (idx, name, labelKey = "roms.extracting", pid = null) => `
     <div class="prog-panel${pid ? " has-handle" : ""}" style="view-transition-name: ${pid ? `vt-${pid}` : "vt-rom"}" aria-busy="true"${pid ? ` data-pid="${pid}"` : ""}>
       <div class="prog">
         <div class="lab"><span class="what mono">${t(labelKey, { name: esc(name) })}</span></div>
         <div class="meter indet live" aria-hidden="true"><div class="fill"></div></div>
-        <div class="sub mono"><span>${t("progress.threads", { n: CORES })}</span><span class="run-pct">—</span></div>
+        <div class="sub mono"><span>${t("progress.threads", { n: CORES })}</span><span class="run-pct">-</span></div>
       </div>
       <div class="prog-actions">
         ${pid ? `<button class="handle" type="button" data-drag aria-label="${t("patch.reorder")}">${ICONS.grip}</button>` : ""}
@@ -1310,20 +1310,20 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       </div>
     </div>`;
 
-  /* optional manual checksum gates — paste an expected input/output digest to
+  /* optional manual checksum gates - paste an expected input/output digest to
      enforce, alongside the auto verifications */
   const patchVerifyInputs = (idx) =>
     optField(t("verify.expIn"), `<input class="input mono" name="patch-in-ck-${idx}" placeholder="${t("verify.ckHint")}" aria-label="${t("verify.expIn")}" />`) +
     optField(t("verify.expOut"), `<input class="input mono" name="patch-out-ck-${idx}" placeholder="${t("verify.ckHint")}" aria-label="${t("verify.expOut")}" />`);
 
-  /* a patch targets one binary part of a multi-part disc — show just the track
+  /* a patch targets one binary part of a multi-part disc - show just the track
      ("Track 1"), not the whole disc filename, so the target stays compact */
   const trackLabel = (name) => {
     const m = name.match(/\(Track\s*(\d+)\)/i);
     if (m) return `${t("track.word")} ${Number(m[1])}`;
     return name.replace(/\.[^.]+$/, "");
   };
-  /* a labelled switch leads the sub-line and toggles a patch on/off — checked =
+  /* a labelled switch leads the sub-line and toggles a patch on/off - checked =
      enabled. role="switch" announces the on/off state; the accessible name is the
      patch itself (state-neutral + unique) and lives on the INPUT. both state words
      share one grid cell so the label needs no JS update and never shifts the row */
@@ -1332,11 +1332,11 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   const renderPatchCard = (p, idx, opts = {}) => {
     const reqDrawer = renderVerifyDrawer(p, opts);
     /* the body (verify + options drawers) collapses behind the name/desc header
-       when the patch is disabled — toggled IN PLACE via a class so there's no
+       when the patch is disabled - toggled IN PLACE via a class so there's no
        full re-render blink */
     /* the target leads the sub-line: the target ICON sits OUTSIDE the badge (at the
        card's content edge, lining up with the name above), then the track rides a
-       small badge — a borderless dropdown when there's more than one part to pick */
+       small badge - a borderless dropdown when there's more than one part to pick */
     const targetBadge = p.target
       ? `<span class="target-grp${opts.bad ? " bad" : ""}" title="${esc(p.target)}">${ICONS.target}${
           opts.targetOptions
@@ -1383,9 +1383,9 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
      sections, so its hero asks for the original only */
   const HERO_LABEL = { apply: "drop.hero", create: "drop.original", trim: "drop.heroTrim" };
   const ADD_LABEL = { apply: "drop.add", create: "drop.addCreate", trim: "drop.addTrim" };
-  /* 0x01 is the one INPUTS section — the single drop/add surface. the type
+  /* 0x01 is the one INPUTS section - the single drop/add surface. the type
      sections below (ROM, Patches, …), when empty, don't present their own drop
-     target — they point the user up to 0x01. clicking scrolls to + focuses it. */
+     target - they point the user up to 0x01. clicking scrolls to + focuses it. */
   const renderNeedsInput = (nounKey) =>
     `<button class="needs-input" type="button" data-goto-input>
       ${ICONS.up}<span>${t(nounKey ? "empty.needsInputNoun" : "empty.needsInput", { noun: nounKey ? t(nounKey) : "", loc: '<b class="hexref mono">0x01</b>' })}</span>
@@ -1412,7 +1412,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       </div>`;
     }
     if (variant === "staging") {
-      // the brief "deciding which section each file belongs to" phase — styled as
+      // the brief "deciding which section each file belongs to" phase - styled as
       // the compact add-pill it settles into, so the transition reads as one control
       return `<div class="drop staging" role="status" aria-busy="true" aria-label="${t("drop.staging")}">
         <span class="main btnish"><span class="spinner" aria-hidden="true"></span><span>${t("drop.staging")}</span></span>
@@ -1425,7 +1425,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     </div>`;
   };
 
-  /* clickable "i" — self-documenting forms; catalog text is split into bullet
+  /* clickable "i" - self-documenting forms; catalog text is split into bullet
      points (on "; ") to match the real app's info popovers */
   const info = (key, vars) => {
     const points = t(key, vars).split("; ");
@@ -1444,11 +1444,11 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     /* the live run only surfaces what the engine actually reports: the active stage
        (what's happening), the bar, the thread count, and the percentage. there's no
        byte/size/throughput stream, so the bottom row carries threads on the left and
-       the percentage on the right — which also lets the percentage sit at the panel's
+       the percentage on the right - which also lets the percentage sit at the panel's
        right edge (the cancel owns the top-right corner alone) */
     return `<div class="prog-panel runprog" style="view-transition-name: vt-action">
       <div class="prog run-prog">
-        <div class="lab"><span class="what run-stage-label">${t(`stage.${io.plan[0].id}`)} — ${esc(io.runFile(0))}</span></div>
+        <div class="lab"><span class="what run-stage-label">${t(`stage.${io.plan[0].id}`)} - ${esc(io.runFile(0))}</span></div>
         <div class="meter live" aria-hidden="true"><div class="fill run-fill"></div></div>
         <div class="sub mono"><span>${t("progress.threads", { n: CORES })}</span><span class="run-pct">0%</span></div>
       </div>
@@ -1489,10 +1489,10 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     return t("result.raw", { t: ext });
   };
   /* the complete-state per-stage timings + verified mark ride the step header as
-     badges (only the meaningful stages — apply/verify · diff/encode · trim · the
-     output compress — not detect/extract/checksum/write boilerplate) */
+     badges (only the meaningful stages - apply/verify · diff/encode · trim · the
+     output compress - not detect/extract/checksum/write boilerplate) */
   /* one chip per result stage; the verify stage carries the verified check + accent
-     instead of a separate "Verified" badge, so its timing IS the pass signal — and
+     instead of a separate "Verified" badge, so its timing IS the pass signal - and
      three chips (not four) fit one row on a phone */
   const applyDoneMeta = (mode) => {
     const stages = jobIO(mode).plan.filter((s) => RESULT_STAGES.has(s.id));
@@ -1504,7 +1504,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       })
       .join("");
   };
-  /* the result IS the download action — a full-width orange button carrying the
+  /* the result IS the download action - a full-width orange button carrying the
      output size + delta, with the total time + thread count on its right */
   const renderResult = (mode) => {
     const cfg = MODE_CFG[mode];
@@ -1520,15 +1520,15 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     /* nothing to weave when every staged patch is toggled off */
     const noPatches = mode === "apply" && buildPatchItems(applyInput(), false).every((it) => it.disabled);
     /* vt-action: the button MORPHS into the run-progress panel, which morphs
-       into the download button — one continuous action element across the job */
+       into the download button - one continuous action element across the job */
     return `<button class="btn primary run run-btn" type="button" style="view-transition-name: vt-action"${disabled || noPatches ? " disabled" : ""}>${MODE_ICONS[mode]}<span>${MODE_CFG[mode].runLabel()}</span></button>`;
   };
 
-  /* output options: one component for all modes — codec/level/threads plus
+  /* output options: one component for all modes - codec/level/threads plus
      mode-specific fields, stacked label-over-control in a responsive grid */
   const optField = (label, control, infoKey) =>
     `<div class="ofld"><span class="ofld-l">${label}${infoKey ? info(infoKey) : ""}</span>${control}</div>`;
-  /* an editable combobox field (input + datalist + chevron) — the codec selectors
+  /* an editable combobox field (input + datalist + chevron) - the codec selectors
      mirror the real app's codec combobox: type a custom list or pick a suggestion */
   const comboField = (label, name, value, suggestions, infoKey, disabled) => {
     const listId = `${name}-list`;
@@ -1547,10 +1547,10 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   const levelField = (disabled) =>
     optField(t("settings.profile"), `<select class="select" name="compress-profile"${disabled} aria-label="${t("settings.profile")}">${profileOptions("max")}</select>`, "info.level");
   /* the output options badge shows resolved codec:level pairs (like the real
-     app) rather than the profile name — "chd · cdlz,cdzl,cdfl" → "chd cdlz:9,cdzl:9,cdfl:8".
+     app) rather than the profile name - "chd · cdlz,cdzl,cdfl" → "chd cdlz:9,cdzl:9,cdfl:8".
      levels are the Max-profile values per codec (standard 0-9, FLAC 8, zstd 22). */
   const CODEC_MAX = { cdlz: 9, cdzl: 9, cdfl: 8, cdzs: 22, lzma: 9, lzma2: 9, deflate: 9, zstd: 22, bzip2: 9, flac: 8, zlib: 9 };
-  /* returns the badge as separate parts — [container, codec:level list] — so they
+  /* returns the badge as separate parts - [container, codec:level list] - so they
      render as distinct chips (e.g. `chd` and `cdlz:9,cdzl:9,cdfl:8`) */
   const outputBadge = (compressSummary) => {
     const [container, codecs] = compressSummary.split(" · ");
@@ -1564,7 +1564,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     if (mode === "apply") {
       const inp = applyInput();
       summary = outputBadge(inp.compressSummary);
-      /* the type select mirrors the summary badge — both read the input's container */
+      /* the type select mirrors the summary badge - both read the input's container */
       const container = inp.compressSummary.split(" · ")[0];
       fields = compressTypeField(disabled, container, [container]) + inp.codecField(disabled) + levelField(disabled);
     }
@@ -1590,7 +1590,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     );
   };
 
-  /* stages worth a time chip in the result — the mode's core work + compress */
+  /* stages worth a time chip in the result - the mode's core work + compress */
   const RESULT_STAGES = new Set(["apply", "verify", "diff", "encode", "trim", "compress"]);
   /** Last step's action area: run button / live progress / fault / result download.
    *  every state renders in this same slot inside the output card, so the action
@@ -1774,7 +1774,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
           ${empty
             ? renderNeedsInput("needs.source")
             : `<div class="cards">${staging ? renderReadingCard(0, TRIM_ROM.name) : renderRomCard(TRIM_ROM, 0, { openChecksums: true, vt: "vt-rom" })}</div>
-          ${bad || staging ? "" : `<div class="notice warn" role="status" style="margin-block-start:11px">${ICONS.fault}<span class="body"><b>${t("trim.detected")}</b> — <span class="mono">${t("trim.savings", { from: fmtSizeStr("128.0 MiB"), p: "67.2%", to: fmtSizeStr("42.0 MiB") })}</span></span></div>`}`}
+          ${bad || staging ? "" : `<div class="notice warn" role="status" style="margin-block-start:11px">${ICONS.fault}<span class="body"><b>${t("trim.detected")}</b> - <span class="mono">${t("trim.savings", { from: fmtSizeStr("128.0 MiB"), p: "67.2%", to: fmtSizeStr("42.0 MiB") })}</span></span></div>`}`}
         </div>
       </section>
       <section class="step${sc === "complete" ? " is-woven" : ""}${bad ? " is-fault" : ""}" aria-label="${t("mode.trim")}">
@@ -1810,7 +1810,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     const { caller, message } = splitTrace(l.msg);
     return `<div class="ln"><span class="ts">${l.ts}</span><span class="lv ${l.lv}">${l.lv}</span><span class="caller">${esc(caller)}</span><span class="msg">${esc(message)}</span></div>`;
   };
-  /* full rebuild — used when the level/filter changes or a scenario reseeds.
+  /* full rebuild - used when the level/filter changes or a scenario reseeds.
      live lines go through pushTrace's APPEND path instead: the log is a polite
      live region, and rewriting its whole innerHTML would make screen readers
      re-announce every existing line on each new entry */
@@ -1832,7 +1832,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     const log = $("#trace-log");
     if (!log) return;
     const shown = visibleTraceLines();
-    if (!shown.includes(line)) return; // filtered out — nothing to show
+    if (!shown.includes(line)) return; // filtered out - nothing to show
     log.querySelector(".tracelog-empty")?.remove();
     log.insertAdjacentHTML("beforeend", traceLineHtml(line));
     while (log.children.length > shown.length) log.firstElementChild.remove();
@@ -1854,7 +1854,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       jobIO(state.mode).plan.forEach((s) => stageTraceFor(state.mode, s.id).forEach((l) => pushTrace(l.lv, l.msg)));
       pushTrace("info", `done: ${planTotal(state.mode).toFixed(2)}s wall, ${CORES} threads`);
     }
-    if (!visibleTraceLines().length) renderTrace(); // nothing passed the filters — show the empty-state line
+    if (!visibleTraceLines().length) renderTrace(); // nothing passed the filters - show the empty-state line
   };
 
   /* footer meta: thread count + live memory (when the browser exposes it) */
@@ -1883,7 +1883,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     const KIND = { complete: "done", dragging: "idle", empty: "idle", fault: "failed", ready: "ready", running: "running", staging: "staging" };
     const kind = KIND[sc] || "idle";
     const msg = (() => {
-      // ready shows no message — the state chip already says ready, and the
+      // ready shows no message - the state chip already says ready, and the
       // footer never describes the staged ROMs/patches (that's the form's job)
       if (sc === "fault") return t("status.faultMsg", { code: cfg.fault.code, stage: t(`stage.${jobIO(state.mode).plan[cfg.faultIdx].id}`) });
       if (sc === "complete") return t("status.doneMsg", { t: totalLabel(state.mode) });
@@ -1893,7 +1893,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     const cls = kind === "running" || kind === "done" || kind === "failed" || kind === "ready" ? kind : "";
     $("#sv-state").className = `sv-state ${cls}`;
     $("#sv-state-text").textContent = t(`status.${kind}`);
-    // running shows no footer message — progress lives in the run panel only
+    // running shows no footer message - progress lives in the run panel only
     $("#sv-stage").textContent = msg;
   };
 
@@ -1923,7 +1923,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       const sim = elapsed * (reducedMotion() ? 3 : 1);
       if (sim >= total) {
         // let the meter visibly reach 100% before the panel morphs into the
-        // download button — completion reads as earned, not as a cut
+        // download button - completion reads as earned, not as a cut
         stopRun();
         const panelEl = $(`#panel-${runMode}`);
         const fillEl = $(".run-fill", panelEl);
@@ -1948,12 +1948,12 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       const panel = $(`#panel-${runMode}`);
       const fill = $(".run-fill", panel);
       if (fill) {
-        // UNROUNDED width per frame — whole-percent steps land ~90ms apart on
+        // UNROUNDED width per frame - whole-percent steps land ~90ms apart on
         // a long run and read as stutter; the text/aria keep the rounded value
         fill.style.width = `${Math.min(99.5, (sim / total) * 100)}%`;
         $(".run-pct", panel).textContent = `${pct}%`;
         const stageName = t(`stage.${io.plan[idx].id}`);
-        $(".run-stage-label", panel).textContent = `${stageName} — ${io.runFile(idx)}`;
+        $(".run-stage-label", panel).textContent = `${stageName} - ${io.runFile(idx)}`;
         $(".run-pbar", panel)?.setAttribute("aria-valuenow", String(pct));
       }
       if (idx !== lastStage) {
@@ -1971,13 +1971,13 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   const decSep = () => new Intl.NumberFormat(state.locale).format(1.1).charAt(1);
 
   /* ════════ drawers + output-name field ════════ */
-  /* drawer open/close is pure CSS (grid-rows on .cks-body) — JS only flips the
+  /* drawer open/close is pure CSS (grid-rows on .cks-body) - JS only flips the
      state class + aria-expanded */
   const wireDrawers = () => {
     document.addEventListener("input", (e) => {
       if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains("outname")) autoSizeOutname(e.target);
     });
-    // the output name is a textarea only so it can grow — a filename must never
+    // the output name is a textarea only so it can grow - a filename must never
     // contain a newline, so Enter is swallowed (paste is sanitized on input)
     document.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && e.target instanceof HTMLTextAreaElement && e.target.classList.contains("outname")) e.preventDefault();
@@ -1997,7 +1997,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     const sel = (label, id, options, selected, infoKey) => `
       <div class="setrow"><span class="slabel"><label for="${id}">${label}</label>${infoKey ? info(infoKey) : ""}</span>
         <select class="select" id="${id}">${options.map((o) => `<option${o === selected ? " selected" : ""}>${o}</option>`).join("")}</select></div>`;
-    /* a combo box (editable input + datalist) when `suggestions` is given —
+    /* a combo box (editable input + datalist) when `suggestions` is given -
        matching the live UI's codec fields; else a plain text input */
     const txt = (label, id, value, ph, infoKey, suggestions) => {
       const listId = suggestions ? `${id}-list` : "";
@@ -2098,7 +2098,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
 
   /* output-name fields grow with their content instead of truncating; pasted
      newlines collapse to spaces (a filename can't contain a line break).
-     Growth is CSS field-sizing where supported — the JS measure is the fallback */
+     Growth is CSS field-sizing where supported - the JS measure is the fallback */
   const FIELD_SIZING = CSS.supports("field-sizing", "content");
   const autoSizeOutname = (el) => {
     if (/[\r\n]/.test(el.value)) el.value = el.value.replace(/[\r\n]+/g, " ");
@@ -2108,7 +2108,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
   const sizeAllOutnames = () => $$(".outname").forEach(autoSizeOutname);
 
-  /* only the VISIBLE panel renders eagerly — rebuilding all three inside a view
+  /* only the VISIBLE panel renders eagerly - rebuilding all three inside a view
      transition's update callback cost ~80ms frames; hidden panels are marked
      dirty and render lazily when their tab is opened (setMode) */
   const PANEL_RENDERERS = { apply: renderApply, create: renderCreate, trim: renderTrim };
@@ -2146,7 +2146,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     if (ENTRY_ANIMS.has(e.animationName) && e.target instanceof HTMLElement) e.target.style.animation = "none";
   });
   const lockEntryAnimations = () => {
-    // the done-chips are deliberately NOT locked here — their stagger outlives
+    // the done-chips are deliberately NOT locked here - their stagger outlives
     // the transition; the animationend listener locks each as it lands
     for (const el of $$(".workflow-body, .card, .notice, .result, .prog-panel, .fault")) {
       el.style.animation = "none";
@@ -2158,13 +2158,13 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       update();
       return Promise.resolve();
     }
-    // flat: suppress the per-element morph names — a plain crossfade for
+    // flat: suppress the per-element morph names - a plain crossfade for
     // changes with no real continuity (e.g. switching modes)
     const classes = ["vt-quiet", ...(opts.flat ? ["vt-flat"] : [])];
     document.documentElement.classList.add(...classes);
     const vt = document.startViewTransition(update);
     // a transition interrupted by the next one rejects ready/finished with
-    // "Transition was skipped" — that's normal flow here, not an error
+    // "Transition was skipped" - that's normal flow here, not an error
     const clear = () => {
       lockEntryAnimations(); // BEFORE un-suppressing, or they'd start now
       document.documentElement.classList.remove(...classes);
@@ -2175,7 +2175,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
 
   /* transitions touching the empty/drag-over layouts have NO element
-     continuity — a morph would send the (disabled) run button and cards flying
+     continuity - a morph would send the (disabled) run button and cards flying
      across the layout change and float them above the drop veil. Those go FLAT
      (plain crossfade); everything else keeps the morphs. */
   const FLAT_SCENARIOS = new Set(["empty", "dragging"]);
@@ -2213,7 +2213,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
 
   /* banner slide open/closed is pure CSS now (.reveal grid-rows + two-beat
-     opacity + display allow-discrete) — this only flips the class + hidden.
+     opacity + display allow-discrete) - this only flips the class + hidden.
      Setting hidden during the exit is safe: the display transition keeps the
      element rendered until the collapse finishes. */
   const slideToggle = (el, show) => {
@@ -2236,12 +2236,12 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       e.preventDefault();
       try { handle.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
       document.body.style.userSelect = "none";
-      // on touch, pointer capture alone doesn't stop the page from scrolling —
+      // on touch, pointer capture alone doesn't stop the page from scrolling -
       // a non-passive touchmove blocker keeps the drag from being cancelled by
       // the browser's scroll gesture (so reordering works on mobile)
       const blockTouchScroll = (ev) => ev.preventDefault();
       window.addEventListener("touchmove", blockTouchScroll, { passive: false });
-      // read the REAL list gap — a hardcoded value drifts from the stylesheet
+      // read the REAL list gap - a hardcoded value drifts from the stylesheet
       // (the patch list uses 16px) and left settled cards a few px off after
       // the drag, causing a tiny correction jump on commit
       const GAP = parseFloat(getComputedStyle(list).rowGap) || 13;
@@ -2255,7 +2255,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       const onMove = (ev) => {
         const dy = ev.clientY - startY;
         card.style.transform = `translateY(${dy}px)`;
-        // use the dragged card's leading EDGE, not its centre — the swap fires
+        // use the dragged card's leading EDGE, not its centre - the swap fires
         // as soon as that edge reaches a neighbour's midpoint, so a short drag
         // (about half a card) reorders instead of needing to drag fully past it
         const dragTop = rects.get(card).top + dy;
@@ -2296,13 +2296,13 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         card.classList.add("rw-settling");
         card.style.transform = `translateY(${delta}px)`;
         window.setTimeout(() => {
-          // commit by moving the node — re-rendering would replay entry
+          // commit by moving the node - re-rendering would replay entry
           // animations (flicker) and close open drawers
           if (commit && toIdx !== fromIdx) {
             const order = cards.map((c) => c.dataset.pid);
             order.splice(toIdx, 0, order.splice(fromIdx, 1)[0]);
             state.patchOrder[state.input] = order;
-            // re-inserting a node restarts its CSS entry animation — suppress it
+            // re-inserting a node restarts its CSS entry animation - suppress it
             card.style.animation = "none";
             list.insertBefore(card, toIdx > fromIdx ? cards[toIdx].nextSibling : cards[toIdx]);
             announce(t("announce.reordered", { n: toIdx + 1 }));
@@ -2332,7 +2332,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       const order = cards.map((c) => c.dataset.pid);
       order.splice(to, 0, order.splice(idx, 1)[0]);
       state.patchOrder[state.input] = order;
-      // the cards carry vt-<pid> names — a view transition morphs the swap,
+      // the cards carry vt-<pid> names - a view transition morphs the swap,
       // replacing the old hand-rolled FLIP measurement/animation
       const list = card.parentElement;
       withViewTransition(() => {
@@ -2347,7 +2347,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   /* ════════ real drag & drop + click-to-browse ════════ */
   const PATCH_EXTS = new Set(["aps", "bdf", "bps", "ips", "ppf", "rup", "ups", "vcdiff", "xdelta"]);
   const fileExt = (name) => (name.split(".").pop() || "").toLowerCase();
-  /* one ring pulse on an element — acknowledges a drop landing / points the eye
+  /* one ring pulse on an element - acknowledges a drop landing / points the eye
      at the 0x01 input. Re-trigger safe (reflow restarts the animation). */
   const pulseTarget = (el) => {
     if (!el || reducedMotion()) return;
@@ -2366,7 +2366,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     }
     if (files.length > 4) pushTrace("debug", `drop: +${files.length - 4} more files`);
     if (patchOnly && patchList && state.scenario !== "running") {
-      // in-place: append a parsing card, then settle it into a real patch card —
+      // in-place: append a parsing card, then settle it into a real patch card -
       // no scenario takeover, the rest of the form never re-mounts. The card
       // carries the next extra pid so the settle re-render MORPHS it in place.
       const idx = patchList.querySelectorAll(".card").length;
@@ -2422,7 +2422,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       if (picker.files?.length) stageDroppedFiles(Array.from(picker.files));
       picker.value = "";
     });
-    // toggle a patch on/off IN PLACE — collapse/expand the card, no full re-render
+    // toggle a patch on/off IN PLACE - collapse/expand the card, no full re-render
     document.addEventListener("change", (e) => {
       const cb = e.target instanceof Element ? e.target.closest("[data-enable]") : null;
       if (!cb) return;
@@ -2431,7 +2431,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       else state.patchToggles.add(key);
       const card = cb.closest(".card[data-pid]");
       if (card) card.classList.toggle("is-disabled", !cb.checked);
-      // update the "N patches off" note in place (no re-render) — slides
+      // update the "N patches off" note in place (no re-render) - slides
       // open/closed instead of popping, like the banners
       const note = $(".workflow:not([hidden]) .patch-off-note");
       if (note) {
@@ -2443,7 +2443,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       // refresh the patches step-header badges (enabled count / off / enabled size)
       const meta = $(".workflow:not([hidden]) .step-meta:has(.rb)");
       if (meta) meta.innerHTML = patchStepMeta(applyInput(), false);
-      // the run button counts enabled patches — keep its label + disabled state in sync
+      // the run button counts enabled patches - keep its label + disabled state in sync
       const runBtn = $(".workflow:not([hidden]) .run-btn");
       if (runBtn) {
         const enabled = buildPatchItems(applyInput(), false).filter((it) => !it.disabled).length;
@@ -2454,7 +2454,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     });
     document.addEventListener("click", (e) => {
       if (!(e.target instanceof Element)) return;
-      // a "needs input" directive adds files just like the 0x01 dropzone — the
+      // a "needs input" directive adds files just like the 0x01 dropzone - the
       // picked files go through the same stageDroppedFiles auto-sort flow; the
       // 0x01 surface pulses so the eye lands where the files will arrive
       if (e.target.closest("[data-goto-input]")) {
@@ -2469,7 +2469,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         return;
       }
       // only the file-requesting surfaces (dropzone + "add files" directives,
-      // both handled above) open the picker on click — NOT the whole page.
+      // both handled above) open the picker on click - NOT the whole page.
       // Dropping files anywhere on the page still works (the page-wide drop handler).
     });
     document.addEventListener("keydown", (e) => {
@@ -2484,7 +2484,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   /* ════════ tabs ════════ */
   const MODES = ["apply", "create", "trim"];
   /* with CSS anchor positioning the thumb pins itself to the selected tab and
-     resize/font-swap reposition natively — this JS measure is only the
+     resize/font-swap reposition natively - this JS measure is only the
      fallback for browsers without anchors. The slide between tabs rides the
      mode-switch view transition either way (vt-thumb). */
   const ANCHORED_THUMB = CSS.supports("anchor-name", "--rw-tab");
@@ -2500,12 +2500,12 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     if (!animate) requestAnimationFrame(() => { thumb.style.transition = ""; });
   };
   const setMode = (mode, focus) => {
-    // already on this tab — re-clicking must not replay the transition
+    // already on this tab - re-clicking must not replay the transition
     if (thumbReady && mode === state.mode) return;
     const wasRunning = state.scenario === "running";
     stopRun();
     state.mode = mode;
-    // the panel swap runs inside a FLAT view transition (plain crossfade — the
+    // the panel swap runs inside a FLAT view transition (plain crossfade - the
     // panels have no real continuity), replacing the old panel-in replay that
     // made every switch blink from opacity 0
     const update = () => {
@@ -2515,7 +2515,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         tab.tabIndex = on ? 0 : -1;
         if (on && focus) tab.focus();
       });
-      // panels render lazily — catch up if this one went stale while hidden
+      // panels render lazily - catch up if this one went stale while hidden
       if (dirtyPanels.has(mode)) {
         PANEL_RENDERERS[mode]();
         dirtyPanels.delete(mode);
@@ -2536,7 +2536,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
       renderPanelState();
       if (wasRunning) startRun();
     };
-    if (!thumbReady) { update(); after(); return; } // boot paint — no transition
+    if (!thumbReady) { update(); after(); return; } // boot paint - no transition
     withViewTransition(update, { flat: true }).then(after);
   };
   const wireTabs = () => {
@@ -2560,7 +2560,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
   };
 
   /* ════════ theme ════════ */
-  /* every theme change wipes in from the toggle button — the origin is read
+  /* every theme change wipes in from the toggle button - the origin is read
      from the button itself, so no click event is needed and ANY caller (the
      toggle, an OS preference change, a future setting) animates identically */
   const setTheme = (next, { persist = true } = {}) => {
@@ -2569,7 +2569,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     if (persist) localStorage.setItem("rw-theme", next);
     const apply = () => { root.dataset.theme = next; translateStatic(); };
     if (!document.startViewTransition || reducedMotion()) { apply(); return; }
-    // the wipe must cover EVERYTHING — vt-theme suppresses the per-element
+    // the wipe must cover EVERYTHING - vt-theme suppresses the per-element
     // morph names so cards don't split into their own crossfading groups.
     // The animation itself is the CSS theme-wipe keyframe; JS only feeds it
     // the circle origin/radius via custom properties.
@@ -2582,14 +2582,14 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     root.style.setProperty("--wipe-r", `${end}px`);
     root.classList.add("vt-theme");
     const vt = document.startViewTransition(apply);
-    vt.ready.catch(() => { /* interrupted — theme still applied */ });
+    vt.ready.catch(() => { /* interrupted - theme still applied */ });
     const unTheme = () => root.classList.remove("vt-theme");
     vt.finished.then(unTheme, unTheme);
   };
   const wireTheme = () => {
     $("#theme-toggle").addEventListener("click", () =>
       setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-    // follow the OS while the user hasn't chosen explicitly — same wipe, no click
+    // follow the OS while the user hasn't chosen explicitly - same wipe, no click
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", (e) => {
       if (localStorage.getItem("rw-theme")) return;
       setTheme(e.matches ? "light" : "dark", { persist: false });
@@ -2729,7 +2729,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
         return;
       }
       if (target.closest("[data-retry]")) { setScenario("ready"); return; }
-      // swap which staged file is Original vs Modified — the content-keyed vt
+      // swap which staged file is Original vs Modified - the content-keyed vt
       // names make the two cards morph past each other
       if (target.closest(".swap-btn")) {
         withViewTransition(() => {
@@ -2787,7 +2787,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     { disabled: true, name: "scans/manual.pdf", size: "14.2 MiB", tag: "", path: ["Castlevania Collection.rar"] },
   ];
   const renderPicker = () => {
-    // the title IS the archive name — the hint below already says what to do
+    // the title IS the archive name - the hint below already says what to do
     $("#picker-title").textContent = "Castlevania Collection.rar";
     $("#picker-hint").textContent = t("picker.hint");
     /* tag + size ride a meta line UNDER the name so the file name and its
@@ -2841,7 +2841,7 @@ FILE "Sonic Adventure (USA) (Track 2).raw" BINARY
     $("#dock-wakelock").setAttribute("aria-pressed", String(state.wakeLock));
   };
   const wireDock = () => {
-    // on a phone the open panel would overlay the form and steal taps — start it
+    // on a phone the open panel would overlay the form and steal taps - start it
     // collapsed so only the "Prototype" pill shows; the user opens it on demand
     if (window.matchMedia("(max-width: 860px)").matches) {
       $("#dock-panel").setAttribute("data-closed", "");

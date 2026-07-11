@@ -1,7 +1,7 @@
 # Minimal two-stage image for the RomWeaver webapp.
 #
 # The wasm module (src/wasm/rom-weaver-app.wasm[.br]) is gitignored and built
-# out-of-band — run `mise run build-wasm` from the repo root BEFORE building
+# out-of-band - run `mise run build-wasm` from the repo root BEFORE building
 # this image. The build below only bundles the existing wasm and serves the
 # static SPA; it does not compile Rust.
 
@@ -9,7 +9,7 @@
 FROM node:22-slim AS builder
 WORKDIR /app
 
-# Don't pull Playwright browsers during `npm ci` — they aren't needed to build.
+# Don't pull Playwright browsers during `npm ci` - they aren't needed to build.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 COPY package.json package-lock.json ./

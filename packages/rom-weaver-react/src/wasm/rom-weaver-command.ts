@@ -241,7 +241,7 @@ export function collectRomWeaverRunInputPaths(
       pushPathValue(paths, command.args.args.patch);
       break;
     case "plan-extract-batch":
-      // Pure planning over sizes passed in the args — no file inputs to reference.
+      // Pure planning over sizes passed in the args - no file inputs to reference.
       break;
     default:
       assertNever(command);

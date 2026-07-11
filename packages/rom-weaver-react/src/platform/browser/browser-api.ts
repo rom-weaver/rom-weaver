@@ -118,7 +118,7 @@ const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfU
   }
 };
 
-// The public browser workflows ARE their UI-agnostic controllers — a thin subclass adds only the
+// The public browser workflows ARE their UI-agnostic controllers - a thin subclass adds only the
 // browser binding (asset-base config + runtime pre-warm + browserRuntime/source-validation wiring).
 // All staging/run/progress/`subscribe`/`getSnapshot` methods are inherited directly from the
 // controller, so there is no forwarding layer between the webapp and the controller.

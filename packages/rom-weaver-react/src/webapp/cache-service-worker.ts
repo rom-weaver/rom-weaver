@@ -219,7 +219,7 @@ cleanupOutdatedCaches();
 self.addEventListener("install", () => {
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
-  // must WAIT — registerType is "prompt", so activation happens only when the client sends
+  // must WAIT - registerType is "prompt", so activation happens only when the client sends
   // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
   // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;

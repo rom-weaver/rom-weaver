@@ -95,7 +95,7 @@ const createServiceWorkerBootGate = ({
 
   const start = (onReady: () => void) => {
     if (!gated) {
-      // Reached a good (isolated, or isolation-not-needed) document — reset the retry budget.
+      // Reached a good (isolated, or isolation-not-needed) document - reset the retry budget.
       clearReloadCount();
       onReady();
       return;

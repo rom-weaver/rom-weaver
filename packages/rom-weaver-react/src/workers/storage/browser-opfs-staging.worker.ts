@@ -1,7 +1,7 @@
 import { getManagedOpfsFileHandle } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
-// OPFS write/truncate worker. Input staging (copying a Blob into OPFS) was retired — browser inputs now
+// OPFS write/truncate worker. Input staging (copying a Blob into OPFS) was retired - browser inputs now
 // read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
 // browser-opfs-source-ref). This worker only services output-side writes and truncates. The
 // "stage-error" response action is kept as the generic failure reply for every action.

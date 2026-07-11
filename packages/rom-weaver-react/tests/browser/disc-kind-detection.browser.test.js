@@ -3,7 +3,7 @@ import { getDiscFormatLabel } from "../../src/lib/input/rom-specific-file-utils.
 import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 
 // The disc-media label is now driven by the engine's `disc_format` verdict
-// (Rust `rom_identity::DiscFormat::label()` — "CD"/"GD-ROM"/"DVD") threaded onto
+// (Rust `rom_identity::DiscFormat::label()` - "CD"/"GD-ROM"/"DVD") threaded onto
 // the compress source as `metadata.format`, not a TS filename/cue-text regex.
 
 test("getDiscFormatLabel maps the engine disc_format verdict to a media label", () => {

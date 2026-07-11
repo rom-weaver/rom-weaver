@@ -375,7 +375,7 @@ fn ingest_nested_rom_archive_descends_to_leaf() {
 fn ingest_nested_patch_archive_routes_as_patch_source() {
     // A patch bundled inside a nested archive: the OUTER archive's only entry is the inner container,
     // so the top-level classify sees no patch name and defaults to `is_rom = true`. The rom-filtered
-    // descent then finds no ROM in the inner archive — ingest must fall back to patch ingestion and
+    // descent then finds no ROM in the inner archive - ingest must fall back to patch ingestion and
     // route the whole bundle as a patch source instead of erroring with "no entries matched --rom-filter".
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
@@ -790,8 +790,8 @@ fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
 
 #[test]
 fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
-    // The sidecar patch descriptors stream in an early `patch-manifest` event — before the ROM is
-    // checksummed and before the terminal report — so the host can open the patch-selection dialog
+    // The sidecar patch descriptors stream in an early `patch-manifest` event - before the ROM is
+    // checksummed and before the terminal report - so the host can open the patch-selection dialog
     // while the (slower) ROM hashing finishes instead of waiting for the whole ingest to return.
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
@@ -874,7 +874,7 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
 #[test]
 fn ingest_disc_asset_carries_engine_disc_format() {
     // The webapp's CHD output-panel disc label is now driven by this `disc_format`
-    // verdict (engine identity), not a TS filename/cue regex — lock the contract.
+    // verdict (engine identity), not a TS filename/cue regex - lock the contract.
     let temp = setup_temp_dir();
     let iso = temp.child("game.iso");
     fs::write(iso.path(), build_test_gamecube_iso(0x8000)).expect("iso fixture");

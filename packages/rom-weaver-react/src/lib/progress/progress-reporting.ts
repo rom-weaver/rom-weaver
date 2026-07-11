@@ -19,7 +19,7 @@ const isRecord = (value: JsonValue | object | null | undefined): value is JsonOb
 const logger = createLogger("workflow:progress");
 // Bounded LRU of the last-logged value per `stage:label`. Labels embed per-file/per-op names, so a
 // long-lived page produces an unbounded stream of distinct keys; without a cap this Map would grow
-// for the page lifetime. Capping it keeps recent dedupe behavior while bounding memory — an evicted
+// for the page lifetime. Capping it keeps recent dedupe behavior while bounding memory - an evicted
 // key simply re-logs once the next time it appears.
 const PROGRESS_LOG_DEDUPE_CAP = 256;
 const progressLogState = new Map<string, number | string>();

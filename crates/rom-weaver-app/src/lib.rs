@@ -251,13 +251,13 @@ impl RunCommandOptions {
 
 /// Browser host selection callback. The wasm prompter serializes the choice request to JSON and
 /// hands it to the JS runner, which blocks the worker until the UI resolves the pick (or a negative
-/// return cancels — also used when no interactive handler is registered). Lives in the `env` import
+/// return cancels - also used when no interactive handler is registered). Lives in the `env` import
 /// module the runner already supplies at instantiation.
 /// Pure encode/decode helpers for the browser selection-prompt channel, kept out of the
 /// `wasm32`-gated module so they can be unit-tested on the native target. The wasm prompter owns
 /// only the raw `extern` calls; everything testable (request shape, response decoding, bounds and
-/// cancel handling) lives here. Compiled only where it is exercised — the wasm build (used by the
-/// prompter) or any test build (used by the unit tests) — so it is never dead code on the native
+/// cancel handling) lives here. Compiled only where it is exercised - the wasm build (used by the
+/// prompter) or any test build (used by the unit tests) - so it is never dead code on the native
 /// release path.
 #[cfg(any(target_arch = "wasm32", test))]
 mod wasm_host_prompt_protocol {
@@ -295,7 +295,7 @@ mod wasm_host_prompt_protocol {
     /// Decode the host's multi-select reply. `written` is the host's return value (negative =
     /// cancel, otherwise the number of indices it wrote); `out` is the caller-owned buffer the host
     /// filled. Indices are clamped to what was actually written, bounds-checked against the
-    /// candidate count, deduplicated, and sorted. An empty result decodes to cancel — selecting
+    /// candidate count, deduplicated, and sorted. An empty result decodes to cancel - selecting
     /// nothing is never a valid outcome.
     pub(super) fn decode_many(written: i32, out: &[u32], candidate_count: usize) -> SelectionList {
         let Ok(count) = usize::try_from(written) else {
@@ -922,7 +922,7 @@ struct N64ByteOrderTransform {
 
 /// Which bytes a patch applies against. `Auto` (the default) strips the detected
 /// copier header only when that patch's required input checksum proves it was
-/// authored against the headerless bytes — decided per patch in a chain, so a
+/// authored against the headerless bytes - decided per patch in a chain, so a
 /// later patch can strip (or restore) the header mid-chain on checksum proof.
 /// Whether the header appears on the final output is [`PatchApplyOutputHeaderMode`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -992,7 +992,7 @@ pub use extract_progress::{ExtractStepDetails, ExtractedFileEntry};
 #[path = "compress_trim_batch.rs"]
 mod compress_trim_batch;
 
-// Pure planning (no threads/fs), so it compiles on wasm too — the browser calls `plan-extract-batch`
+// Pure planning (no threads/fs), so it compiles on wasm too - the browser calls `plan-extract-batch`
 // to schedule its multi-worker pool with the same Rust policy the native executor uses.
 #[path = "extract_batch_plan.rs"]
 mod extract_batch_plan;

@@ -66,8 +66,8 @@ pub fn physical_memory_bytes() -> Option<u64> {
 /// Realistic memory budget for a single wasm instance, in bytes.
 ///
 /// The link-time `--max-memory` in `.cargo/config.toml` caps linear memory at 2 GiB, but that is
-/// the hard address-space ceiling, not what the runtime can actually use: mobile browsers —
-/// notably iOS Safari — terminate a tab whose memory grows well before that, around ~1 GiB. So the
+/// the hard address-space ceiling, not what the runtime can actually use: mobile browsers -
+/// notably iOS Safari - terminate a tab whose memory grows well before that, around ~1 GiB. So the
 /// budget the concurrency planner (and memory-hungry per-op parallelism) reasons about is set to
 /// what the constrained platform actually sustains. A single operation can still grow toward the 2
 /// GiB hard cap; this only governs how aggressively independent work is overlapped.
@@ -75,7 +75,7 @@ pub fn physical_memory_bytes() -> Option<u64> {
 pub const WASM_MEMORY_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// On wasm, "physical" memory is the realistic instance budget ([`WASM_MEMORY_BUDGET_BYTES`]): the
-/// whole instance — main thread plus every spawned WASI thread — shares one growable linear memory,
+/// whole instance - main thread plus every spawned WASI thread - shares one growable linear memory,
 /// so that budget bounds how much concurrent work can be resident at once.
 #[cfg(target_arch = "wasm32")]
 pub fn physical_memory_bytes() -> Option<u64> {
@@ -353,7 +353,7 @@ impl ThreadExecution {
     }
 
     /// Downgrade a planned execution to single-threaded *without* marking it a
-    /// fallback — used by in-memory apply paths that buffer the whole output and
+    /// fallback - used by in-memory apply paths that buffer the whole output and
     /// apply on the calling thread regardless of the planned parallelism.
     pub fn force_serial(&mut self) {
         self.effective_threads = 1;

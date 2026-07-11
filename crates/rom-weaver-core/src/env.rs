@@ -1,7 +1,7 @@
 //! Centralized parsing for `ROM_WEAVER_*` runtime environment knobs.
 //!
-//! Runtime knobs go through these helpers so an unparseable value is logged —
-//! a silent parse-fail-to-default hides typos in benchmark/debug runs — and
+//! Runtime knobs go through these helpers so an unparseable value is logged -
+//! a silent parse-fail-to-default hides typos in benchmark/debug runs - and
 //! truthiness is consistent across the workspace. Build-script (`build.rs`) and
 //! some test-only knobs cannot depend on this crate and parse inline.
 

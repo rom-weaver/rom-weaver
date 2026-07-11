@@ -45,7 +45,7 @@ interface InputStagingContext {
     getPatchKey: (source: BinarySource, sources?: BinarySource[]) => string;
     getStableInputInfo: (info: StagedInputInfo, sources: BinarySource[]) => StagedInputInfo;
     mergeRomInput: (info: StagedInputInfo, patch?: RomInputPatch) => void;
-    /** Move a staged archive out of the ROM bucket into the patch bucket — invoked when Rust's
+    /** Move a staged archive out of the ROM bucket into the patch bucket - invoked when Rust's
      * probe-manifest identifies it as a patch-only container (`is_rom === false`). */
     reclassifyArchiveToPatch: (source: BinarySource) => void;
     updatePatches: (nextPatches: BinarySource[]) => void;
@@ -96,7 +96,7 @@ const useInputStaging = (context: InputStagingContext) => {
       };
       // Run silently: the card already shows its info + preflight and reads as settled, so the deep
       // dry-run must NOT re-emit staging progress (that would drop the row back into the shimmer and
-      // make the patch look like it is hanging again — the whole point of the deferral). The card
+      // make the patch look like it is hanging again - the whole point of the deferral). The card
       // shows "Verifying…" (pre-validation infos, target resolved + verdict pending) while it runs;
       // only the verdict is merged when it lands.
       void validatePatches(snapshot, mergeInfos)
@@ -170,7 +170,7 @@ const useInputStaging = (context: InputStagingContext) => {
         },
         // The patch finished its eager parse while the ROM is still staging. Surface its parsed info
         // (format/name/requirements) and drop its staging progress so the card leaves "Reading…" the
-        // moment the patch is read — the ROM keeps staging, and the deferred dry-run flips the card to
+        // moment the patch is read - the ROM keeps staging, and the deferred dry-run flips the card to
         // "Verifying…" once the ROM lands.
         onPatchStaged: (info, order) => {
           if (patchStageGenerationRef.current !== generation) return;
@@ -294,7 +294,7 @@ const useInputStaging = (context: InputStagingContext) => {
                 archiveName: existing?.info.archiveName || "",
                 fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
                 // A dropped container extracts before/while it hashes, so seed the extract
-                // phase up front — the card reads "Extracting & Checksumming…" from the first
+                // phase up front - the card reads "Extracting & Checksumming…" from the first
                 // frame instead of flashing a bare "Checksumming…" until the first extract
                 // event lands. A real phase already observed (extract/checksum) wins; the seed
                 // only overrides the "idle" default, and a bare ROM stays "idle" → "Checksumming…".
@@ -409,7 +409,7 @@ const useInputStaging = (context: InputStagingContext) => {
           }
           const info = getStableInputInfo(getProgressStagedInputInfo(event), snapshot.inputs);
           const source = typeof info.order === "number" ? snapshot.inputs[info.order] : undefined;
-          // Rust's probe-manifest identified this archive as a patch-only container — move it to the
+          // Rust's probe-manifest identified this archive as a patch-only container - move it to the
           // patch bucket instead of dead-ending the ROM extract. The move re-stages without this source
           // (superseding this run), and the patch bucket's extract-all fans the bundle's patches out.
           if (source && info.isRom === false) {

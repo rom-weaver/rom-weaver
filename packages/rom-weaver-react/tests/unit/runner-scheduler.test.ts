@@ -252,7 +252,7 @@ describe("createOperationScheduler", () => {
   });
 });
 
-describe("createOperationScheduler — I/O lane (Rust plan)", () => {
+describe("createOperationScheduler - I/O lane (Rust plan)", () => {
   const io = (jobSizeBytes: number, paths: string[] = []) => ({
     io: true,
     jobSizeBytes,
@@ -303,7 +303,7 @@ describe("createOperationScheduler — I/O lane (Rust plan)", () => {
     });
     await tick();
     expect(planSeen[0]).toHaveLength(3); // first plan saw the whole drop, not just the one arrived job
-    expect(aThreads).toBe(2); // floor(6/3) — the first job starts at the batch's per-job share, not full 6
+    expect(aThreads).toBe(2); // floor(6/3) - the first job starts at the batch's per-job share, not full 6
     a.resolve("a");
     await pa;
   });
@@ -337,7 +337,7 @@ describe("createOperationScheduler — I/O lane (Rust plan)", () => {
     await tick();
     const lastPlan = planSeen[planSeen.length - 1];
     expect(lastPlan).toHaveLength(3); // still the whole noted drop, not the lone arrived job
-    expect(aThreads).toBe(2); // floor(6/3) — full-drop share; would be 6 if the note had been wiped
+    expect(aThreads).toBe(2); // floor(6/3) - full-drop share; would be 6 if the note had been wiped
     a.resolve("a");
     await pa;
   });

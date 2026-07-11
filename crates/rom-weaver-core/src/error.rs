@@ -10,7 +10,7 @@ pub type Result<T> = std::result::Result<T, RomWeaverError>;
 /// Canonical, stable classification of a [`RomWeaverError`], generated into
 /// TypeScript so the webapp's worker-error layer can key off the same set of
 /// kinds the Rust side defines. The string spelling of each variant (snake_case
-/// via serde) is part of the JS contract — see
+/// via serde) is part of the JS contract - see
 /// `packages/rom-weaver-react/src/wasm/workers/worker-error-utils.ts`.
 ///
 /// This is a coarse bucket, not a 1:1 mirror of every `RomWeaverError` variant:

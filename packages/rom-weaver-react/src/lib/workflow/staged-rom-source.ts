@@ -134,7 +134,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       });
       // A dismissed interactive prompt must abort the whole input preparation. Swallowing it (as a
       // warning) lets staging fall through to prepareSelectedSource, which re-extracts and re-prompts
-      // a worker with no user to answer — the second prompt wedges and strands its staged OPFS copy.
+      // a worker with no user to answer - the second prompt wedges and strands its staged OPFS copy.
       if (isInteractiveSelectionCancelledError(error)) throw createSelectionSkippedError(error);
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
       if (!requests.length) this.pushWarning(stage, toRomWeaverError(error));
@@ -217,7 +217,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       for (const request of requests) this.addCandidateRequest(view, request);
       if (!view.state.candidates.length) this.addDirectCandidate(view, 0, view.state.id);
       // A cohesive multi-track disc (one selectable "cue-disc" group whose tracks
-      // are parented to it) auto-resolves to the whole disc — no prompt. The
+      // are parented to it) auto-resolves to the whole disc - no prompt. The
       // prompt only returns when there is genuine ambiguity (e.g. an unrelated
       // extra ROM alongside the disc).
       const automatic = resolveAutomaticSelection(this.createSelectionRequest(view.state));
@@ -242,7 +242,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     // extract+checksum at once; the plan serializes back down whenever the combined working set would
     // exhaust the memory ceiling. allSettled preserves input order, so `stages[i]` matches `sources[i]`.
     // A bare Promise.all would surface the first rejection while silently dropping the already-resolved
-    // siblings, orphaning their OPFS scratch copies — the caller releases the pre-stage session, which
+    // siblings, orphaning their OPFS scratch copies - the caller releases the pre-stage session, which
     // never received them. So on any rejection, release every fulfilled stage's prepared assets here
     // before rethrowing.
     const settled = await Promise.allSettled(
@@ -318,7 +318,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       this.applyPreparedSourceMetadata(stage);
       stage.state.status = "ready";
     } catch (error) {
-      // A dismissed interactive prompt is a deliberate cancel, not a recoverable ambiguity — stop
+      // A dismissed interactive prompt is a deliberate cancel, not a recoverable ambiguity - stop
       // rather than re-prompting (which would wedge a worker and strand its staged copy).
       if (isInteractiveSelectionCancelledError(error)) throw createSelectionSkippedError(error);
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
@@ -482,7 +482,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     attemptedSelectionKeys.add(selectionRetryKey);
     this.setSelectedCandidate(owner, selection.id);
     // Mirror the pick onto the session view. For a synthetic session the owner is a sub-stage, so
-    // setSelectedCandidate only marks the stage — getSelectedOwner/syncSessionView resolve the choice
+    // setSelectedCandidate only marks the stage - getSelectedOwner/syncSessionView resolve the choice
     // through view.state.selectedCandidateId. Without this the view stays needsSelection and the
     // "which ROM?" dialog re-prompts in a loop (broken multi-file input selection).
     session.view.state.selectedCandidateId = selection.id;

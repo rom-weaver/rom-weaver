@@ -92,7 +92,7 @@ jobs:
             STATH="$(find "$SYSROOT" -path '*/sys/stat.h' 2>/dev/null | head -n1)"
             INCDIR="$(dirname "$(dirname "$STATH")")"
           fi
-          # Only add the sysroot include paths — do NOT override --target here.
+          # Only add the sysroot include paths - do NOT override --target here.
           # build.rs already sets --target=$HOST (needed for the complete
           # function set); forcing the wasm target #if's some archive_* funcs
           # out and breaks downstream crates with E0432.

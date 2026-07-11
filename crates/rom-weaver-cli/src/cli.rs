@@ -123,7 +123,7 @@ pub fn main_entry() -> ExitCode {
     let interactive = !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
     let options = RunCommandOptions::from_output(cli.output_options(interactive), stdout_is_tty);
 
-    // `--json` passes the event stream straight through; otherwise render for humans — richly when
+    // `--json` passes the event stream straight through; otherwise render for humans - richly when
     // stdout is a terminal, plainly when piped.
     let reporter: Arc<dyn ProgressSink> = if cli.json {
         Arc::new(JsonProgressSink)

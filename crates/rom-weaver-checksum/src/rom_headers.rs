@@ -136,10 +136,10 @@ impl KnownRomHeader {
 
     /// Whether the stripped header should return on a patched output by default: format
     /// headers (iNES/fwNES/LNX/A78) carry emulator-required metadata, while SNES/PCE
-    /// copier headers are junk left by copier devices — the modern convention (headerless
+    /// copier headers are junk left by copier devices - the modern convention (headerless
     /// `.sfc`) drops them. Only meaningful for strippable kinds; internal-header consoles
     /// return true as the safe identity. This is the kind-level default: an NSRT-signed
-    /// SNES copier header carries real dump metadata and IS retained — callers with the
+    /// SNES copier header carries real dump metadata and IS retained - callers with the
     /// stripped bytes in hand check [`header_has_nsrt_metadata`] on top of this.
     pub const fn retained_on_output(self) -> bool {
         !matches!(
@@ -251,7 +251,7 @@ impl KnownRomHeader {
 /// Whether a stripped 512-byte SNES copier header carries NSRT dump metadata
 /// (the `NSRT` signature at offset 0x1e8). NSRT headers hold real information
 /// (title, region, dump checksums) unlike zero-padded copier junk, so output
-/// policies retain them — matching the RUP (NINJA2) handler's own
+/// policies retain them - matching the RUP (NINJA2) handler's own
 /// normalization, which restores NSRT headers and drops the rest.
 pub fn header_has_nsrt_metadata(header: &[u8]) -> bool {
     header.get(NSRT_METADATA_OFFSET..NSRT_METADATA_OFFSET + NSRT_METADATA_MAGIC.len())

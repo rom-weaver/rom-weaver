@@ -1,14 +1,14 @@
 //! Classify a `.dcp` archive's entries into filesystem operations.
 //!
 //! Universal Dreamcast Patcher encodes everything by convention in the ZIP
-//! entry names — there is no manifest file:
+//! entry names - there is no manifest file:
 //!
-//! - `bootsector/IP.BIN` — a complete replacement boot sector (IP.BIN). It is
+//! - `bootsector/IP.BIN` - a complete replacement boot sector (IP.BIN). It is
 //!   applied to the disc bootstrap and excluded from the rebuilt filesystem.
-//! - `PATH.xdelta` — an xdelta3/VCDIFF delta against the same-named source file
+//! - `PATH.xdelta` - an xdelta3/VCDIFF delta against the same-named source file
 //!   already on the disc; the target path is the entry name with `.xdelta`
 //!   removed.
-//! - any other entry — a new file added to the filesystem verbatim at `PATH`.
+//! - any other entry - a new file added to the filesystem verbatim at `PATH`.
 //!
 //! This module turns the raw entry list into a typed [`DcpManifest`] so the
 //! apply pipeline can drive each operation without re-deriving the convention.

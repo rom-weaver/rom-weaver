@@ -10,7 +10,7 @@
 //!
 //! This module detects a track's physical sector format and presents it as a
 //! stream of cooked 2048-byte logical sectors. It performs no error correction
-//! and never rewrites EDC/ECC — that belongs to the (write-side) GD-ROM author,
+//! and never rewrites EDC/ECC - that belongs to the (write-side) GD-ROM author,
 //! not the reader.
 
 use std::io::{Read, Seek, SeekFrom};
@@ -186,7 +186,7 @@ impl<R: Read + Seek> TrackSectors<R> {
     pub fn read_logical_range(&mut self, start_sector: u64, len: u64) -> Result<Vec<u8>> {
         // Validate the request against the track length up front. `len` and
         // `start_sector` derive from untrusted on-disc fields (extent LBAs and
-        // sizes), so reject an overrun before reserving anything — otherwise a
+        // sizes), so reject an overrun before reserving anything - otherwise a
         // bogus ~4 GiB length would trigger a huge speculative allocation
         // before the per-sector loop ever discovers the track is short.
         if start_sector > self.logical_sectors {

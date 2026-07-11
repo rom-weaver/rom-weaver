@@ -8,7 +8,7 @@ const canRecoverWithCandidateSelection = (error: unknown, requests: CandidateSel
 };
 
 // The worker raises a generic `Validation` error when the user dismisses an interactive
-// (host-driven) selection prompt — it carries no distinct code, so it reads like any other
+// (host-driven) selection prompt - it carries no distinct code, so it reads like any other
 // validation failure. Match its message so staging can tell a deliberate cancel apart from a
 // recoverable ambiguity and stop instead of re-prompting a worker nobody will answer.
 const INTERACTIVE_SELECTION_CANCELLED_REGEX = /interactive selection was cancelled/i;

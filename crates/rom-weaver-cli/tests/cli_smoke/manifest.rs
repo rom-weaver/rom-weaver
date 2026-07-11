@@ -455,7 +455,7 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     // The manifest's rom entry points at a nonexistent URL host on purpose:
     // with --manifest the positional input supplies the ROM, so the rom
-    // source must be ignored (its checks are not — none set here).
+    // source must be ignored (its checks are not - none set here).
     fs::write(
         temp.child("rw.json").path(),
         r#"{

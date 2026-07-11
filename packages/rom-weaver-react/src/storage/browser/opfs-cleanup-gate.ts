@@ -1,17 +1,17 @@
 // Holds wasm runs and input staging until the page-load OPFS wipe has settled, so a write can never
 // land in a directory the boot-time recursive delete is still walking. All OPFS writes happen inside
-// workers that only act on a main-thread dispatch, and the wipe runs on the main thread — so gating
+// workers that only act on a main-thread dispatch, and the wipe runs on the main thread - so gating
 // the main-thread dispatch chokepoints preserves the "no write before cleanup" guarantee while the UI
 // renders ahead of the wipe.
 //
-// Defaults to settled (resolved): any context that never opens the gate — unit tests, the CLI — never
+// Defaults to settled (resolved): any context that never opens the gate - unit tests, the CLI - never
 // waits. Only the webapp boot opens it, and always closes it (even if the wipe fails).
 
 let settled = true;
 let resolveGate: (() => void) | null = null;
 let gate: Promise<void> = Promise.resolve();
 
-/** Open the gate. Call once, synchronously, before the first render — after this, dispatches wait. */
+/** Open the gate. Call once, synchronously, before the first render - after this, dispatches wait. */
 const beginOpfsCleanupGate = (): void => {
   if (!settled) return;
   settled = false;

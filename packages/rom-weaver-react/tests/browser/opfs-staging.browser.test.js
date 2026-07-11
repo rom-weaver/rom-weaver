@@ -4,7 +4,7 @@ import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser
 import { getManagedOpfsFileHandle } from "../../src/workers/protocol/opfs-path.ts";
 
 // Input staging into OPFS is retired: every browser input (a File handle, a wrapped handle, or a plain
-// Blob) is registered as a read-only, Blob-backed virtual file served by guest path — never copied into
+// Blob) is registered as a read-only, Blob-backed virtual file served by guest path - never copied into
 // OPFS. So a staged ref is `virtual: true`, exposes no real OPFS handle, and appears in
 // getActiveBrowserVirtualFiles() until its cleanup unregisters it.
 
@@ -99,7 +99,7 @@ test("browser OPFS source refs resolve plain Blob inputs to virtual work-path so
     expect(stagedBlob.storageKind).toBe("opfs");
     expect(stagedBlob.virtual).toBe(true);
     expect(await getManagedOpfsFileHandle(stagedBlob.filePath, { navigatorObject: navigator })).toBeNull();
-    // The Blob itself is registered as the virtual file's read-only source — no OPFS copy is made.
+    // The Blob itself is registered as the virtual file's read-only source - no OPFS copy is made.
     const [virtualFile] = getActiveBrowserVirtualFiles();
     expect(virtualFile?.path).toBe(stagedBlob.filePath);
     expect(virtualFile?.source?.size).toBe(requestBlob.size);

@@ -711,7 +711,7 @@ struct LibarchiveExtractTask {
 
 // Below this total uncompressed size a multi-file archive extract runs serially instead of spawning a
 // worker per file. Mirrors 7z create's `LZMA2_MT_SPLIT_THRESHOLD_BYTES` floor: standing up the
-// budget-sized worker pool for a tiny archive costs more than it saves — each worker is a thread (a
+// budget-sized worker pool for a tiny archive costs more than it saves - each worker is a thread (a
 // Worker + wasm instantiate + per-thread OPFS fd-build on wasm, ~tens of ms) that trivial decode
 // never uses.
 const LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES: u64 = 4 << 20;
@@ -1319,7 +1319,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         // archive (under the MT floor, or a single file) negotiates serial, and building the
         // budget-sized operation pool for it would spawn a worker per budget thread that the serial
         // decode never uses (the dominant cost on wasm). Skipping it keeps the operation pool lazy so
-        // a later parallel extract — e.g. a large nested container — still builds and reuses it.
+        // a later parallel extract - e.g. a large nested container - still builds and reuses it.
         // Mirrors 7z create, which skips its pool below the MT floor.
         let mut execution =
             context.plan_threads(ThreadCapability::parallel(Some(achievable_threads)));
@@ -1336,7 +1336,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         let progress_execution = execution.clone();
         // Each worker opens its own reader over the source and extracts its assigned entries. In
         // the browser the OPFS proxy worker owns every SyncAccessHandle, so a spawned wasm thread's
-        // `path_open` is marshalled to it and succeeds — the old "read the whole archive on the main
+        // `path_open` is marshalled to it and succeeds - the old "read the whole archive on the main
         // thread first" workaround for `os error 44` is no longer needed. Peak memory is one entry's
         // working set per worker rather than the whole compressed archive.
         trace!(
@@ -1348,9 +1348,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
 
         let mut output_checksums = Vec::new();
         let written_bytes = if execution.used_parallelism {
-            // `effective_threads` is the compute-worker budget. The two coordination threads — the
+            // `effective_threads` is the compute-worker budget. The two coordination threads - the
             // rayon driver below (it calls `pool.install` and parks, so it holds no pool slot) and
-            // the consuming thread that drains the channel and hashes every extracted byte — run on
+            // the consuming thread that drains the channel and hashes every extracted byte - run on
             // top of these workers, not subtracted from them, so a configured budget of N decodes
             // with N workers.
             let worker_count = execution.effective_threads.max(1);

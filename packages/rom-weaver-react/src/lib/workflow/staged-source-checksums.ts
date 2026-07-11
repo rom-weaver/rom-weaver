@@ -55,7 +55,7 @@ const getPatchFilePrecomputedChecksums = (
   return out;
 };
 
-// Disc sheets (cue/gdi) are sidecars, not ROM data — never checksum them.
+// Disc sheets (cue/gdi) are sidecars, not ROM data - never checksum them.
 const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue" && asset.kind !== "gdi";
 
 const getInputAssetChecksums = (asset: InputAsset | undefined): StandardWorkflowChecksums | undefined => {
@@ -153,7 +153,7 @@ const calculateStandardInputChecksumsForFile = async ({
 }> => {
   // Checksum the prepared input asset via `ingest`, not the standalone `checksum` command: ingest
   // classifies the (already-extracted) leaf as a bare ROM and hashes it in place with the SAME shared
-  // variant engine — fed the full thread budget — so multi-variant ROMs (e.g. GBA raw + fix-header)
+  // variant engine - fed the full thread budget - so multi-variant ROMs (e.g. GBA raw + fix-header)
   // are not under-threaded the way the per-command checksum cap used to do. `romProbe` is absent
   // because ingest never produces it (the standalone path only ever emitted a `{ trim: { detected:
   // false } }` placeholder for these inputs).

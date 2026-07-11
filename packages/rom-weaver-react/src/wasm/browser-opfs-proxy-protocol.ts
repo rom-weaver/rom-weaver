@@ -1,11 +1,11 @@
 // Shared wire-protocol definition for the browser "OPFS async proxy" SharedArrayBuffer channel.
 //
 // A single dedicated worker (the OPFS proxy) owns every OPFS FileSystemSyncAccessHandle and the
-// directory tree. Any WASM thread — the main runner OR a spawned WASI compute thread — marshals
+// directory tree. Any WASM thread - the main runner OR a spawned WASI compute thread - marshals
 // each OPFS operation (open/read/write/truncate/flush/close/unlink/rename/mkdir/readdir/stat) over
 // this channel and blocks on Atomics.wait until the proxy services it. This is the one model that
 // respects WebKit's "one SyncAccessHandle per file" rule while letting spawned threads (which cannot
-// path_open OPFS files themselves — os error 44) perform real I/O.
+// path_open OPFS files themselves - os error 44) perform real I/O.
 //
 //   consumer = any WASM thread (browser-opfs-io-adapters.ts BrowserProxyRandomAccessFile, and the
 //              fd-builder path routing). Publishes a request into a slot and blocks on Atomics.wait.
@@ -120,7 +120,7 @@ export const OPFS_PROXY_HANDLE_BY_PATH = 0;
  * browser-opfs-proxy-file.ts collapses both the per-write and per-sector cases to bandwidth-bound.
  *
  * 2 MiB is empirically the knee (Safari, 1.5 GiB RVZ extract + 632 MB CHD extract): 1 MiB regressed
- * badly (an extract that runs ~2.8s ballooned to ~36s — not in the write path, writeMs stayed ~700ms,
+ * badly (an extract that runs ~2.8s ballooned to ~36s - not in the write path, writeMs stayed ~700ms,
  * so a smaller slot perturbs decode-thread scheduling/allocation), while 4 MiB was within noise of
  * 2 MiB (~2.8s, ~2300 MiBps writes) for double the SAB. Cost is slotCount × this; slotCount ≈
  * threadPool + 4, so ~48 MiB on a ~10-thread desktop.

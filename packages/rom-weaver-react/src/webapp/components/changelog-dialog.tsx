@@ -93,8 +93,8 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
           </ul>
           {state.truncated ? <div className="changelog-note">…</div> : null}
           {/* No newer commits: a same-commit rebuild (notably dirty dev deploys, whose
-              uncommitted changes never reach git log). Fall back to the build id — the
-              one thing that differs between such builds — so the dialog isn't blank. */}
+              uncommitted changes never reach git log). Fall back to the build id - the
+              one thing that differs between such builds - so the dialog isn't blank. */}
           {state.entries.length === 0 && !state.truncated ? (
             <div className="changelog-note mono">{APP_BUILD_VERSION}</div>
           ) : null}

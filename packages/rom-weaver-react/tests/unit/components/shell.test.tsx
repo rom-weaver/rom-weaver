@@ -6,7 +6,7 @@ import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-co
 import { Masthead, Reveal, Selvage, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 
 /**
- * App-shell contract: the masthead tablist (named "Workflow" — the webapp
+ * App-shell contract: the masthead tablist (named "Workflow" - the webapp
  * browser test drives tabs by that role/name), tool buttons, the reveal
  * banner mechanics, and the selvage status strip.
  */

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// rom-weaver webapp driver — launches a headless Chromium against the running
+// rom-weaver webapp driver - launches a headless Chromium against the running
 // dev/preview server, drives the Apply workflow end-to-end (upload ROM + patch,
 // click "Apply & download", capture the produced file), and screenshots.
 //
@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
-// playwright is a dep of the React package, not of the repo root — resolve it
+// playwright is a dep of the React package, not of the repo root - resolve it
 // from there regardless of where this script lives or runs.
 const require = createRequire(path.join(REPO, "packages/rom-weaver-react/package.json"));
 const { chromium } = require("playwright");
@@ -33,7 +33,7 @@ const HEADLESS = process.env.RW_HEAD !== "1";
 const cmd = process.argv[2] || "load";
 
 // Fixtures shipped in the repo. source.bin is a 64 KiB raw "ROM"; the xdelta
-// patches it to secondary-target.bin (CRC32 221d2d6c — the parity check below).
+// patches it to secondary-target.bin (CRC32 221d2d6c - the parity check below).
 const ROM = path.join(REPO, "tests/fixtures/vcdiff/secondary-source.bin");
 const PATCH = path.join(REPO, "tests/fixtures/vcdiff/secondary-djw.xdelta");
 

@@ -16,7 +16,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.verify.dryRunDesc"
-#~ msgstr "Aplica sobre una copia temporal y re-hashea — sin tocar los bytes de origen"
+#~ msgstr "Aplica sobre una copia temporal y re-hashea - sin tocar los bytes de origen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -46,7 +46,7 @@ msgstr "{count, plural, one {# archivo} other {# archivos}}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
-msgstr "{count, plural, one {# parche está desactivado — márcalo para incluirlo} other {# parches están desactivados — márcalos para incluirlos}}"
+msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -261,12 +261,12 @@ msgstr "Elige qué {role} usar de {sourceName}."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.hint"
-msgstr "haz clic o suelta archivos en cualquier parte de la página — archivos, contenedores, hojas cue y softpatches se resuelven solos"
+msgstr "haz clic o suelta archivos en cualquier parte de la página - archivos, contenedores, hojas cue y softpatches se resuelven solos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.anywhereShort"
-msgstr "haz clic para explorar — o suelta archivos en cualquier parte de la página"
+msgstr "haz clic para explorar - o suelta archivos en cualquier parte de la página"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -411,7 +411,7 @@ msgstr "Ventana de diff"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.window"
-msgstr "Ventana de diff al crear — más grande encuentra datos movidos pero usa más memoria."
+msgstr "Ventana de diff al crear - más grande encuentra datos movidos pero usa más memoria."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -441,7 +441,7 @@ msgstr "Descargar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.reorder"
-msgstr "Arrastra para reordenar — las flechas mueven"
+msgstr "Arrastra para reordenar - las flechas mueven"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "fallido"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunFail"
-msgstr "Fallo — la salida de la copia difiere"
+msgstr "Fallo - la salida de la copia difiere"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -571,12 +571,12 @@ msgstr "archivo"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.asDumped"
-msgstr "Archivo — tal como se volcó"
+msgstr "Archivo - tal como se volcó"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.withHeader"
-msgstr "Archivo — tal como se volcó (con cabecera de 512 B)"
+msgstr "Archivo - tal como se volcó (con cabecera de 512 B)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -666,7 +666,7 @@ msgstr "Entradas"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.warn.ipsNoChecksum"
-msgstr "IPS no incluye sumas de comprobación — solo se valida con la pista del nombre de archivo."
+msgstr "IPS no incluye sumas de comprobación - solo se valida con la pista del nombre de archivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -811,7 +811,7 @@ msgstr "Opcional (desactivado)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.compressType"
-msgstr "Opcionalmente envuelve la salida en un contenedor comprimido — «none» escribe el archivo tal cual."
+msgstr "Opcionalmente envuelve la salida en un contenedor comprimido - «none» escribe el archivo tal cual."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -881,7 +881,7 @@ msgstr "Analizando parche"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunPass"
-msgstr "Correcto — el re-hash de la copia coincide"
+msgstr "Correcto - el re-hash de la copia coincide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -946,7 +946,7 @@ msgstr "Parches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.patches"
-msgstr "Los parches se aplican de arriba abajo — arrastra el asa para reordenar. Las pistas del nombre (crc32 / tamaño) se comprueban antes de ejecutar."
+msgstr "Los parches se aplican de arriba abajo - arrastra el asa para reordenar. Las pistas del nombre (crc32 / tamaño) se comprueban antes de ejecutar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1171,7 +1171,7 @@ msgstr "Seleccionando archivo"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.output"
-msgstr "Escribe el nombre sin extensión — el selector de formato la controla. Los contenedores (zip, 7z, chd, rvz) se escriben directamente."
+msgstr "Escribe el nombre sin extensión - el selector de formato la controla. Los contenedores (zip, 7z, chd, rvz) se escriben directamente."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1241,7 +1241,7 @@ msgstr "Cambiar a tema claro"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.trimRom"
-msgstr "Recorte de cola: nds, dsi, srl (relleno 0x00) y gba, 3ds (0xFF) — la cola se detecta y se elimina; las imágenes Xbox xiso (.xiso o .iso) recortan su cola sin usar; las imágenes de GameCube/Wii (iso, gcm, wbfs, rvz) recortan limpiando bloques basura al convertir a RVZ; tu archivo original no se toca y se conserva una copia sin recortar para restaurar."
+msgstr "Recorte de cola: nds, dsi, srl (relleno 0x00) y gba, 3ds (0xFF) - la cola se detecta y se elimina; las imágenes Xbox xiso (.xiso o .iso) recortan su cola sin usar; las imágenes de GameCube/Wii (iso, gcm, wbfs, rvz) recortan limpiando bloques basura al convertir a RVZ; tu archivo original no se toca y se conserva una copia sin recortar para restaurar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1266,7 +1266,7 @@ msgstr "blockcheck de destino"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.picker.hint"
-msgstr "El archivo contiene más de un candidato — elige cuáles preparar."
+msgstr "El archivo contiene más de un candidato - elige cuáles preparar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1396,7 +1396,7 @@ msgstr "Recortando ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.confirm.trimBody"
-msgstr "Recortar escribe un ROM nuevo y más pequeño — es permanente. Tu archivo original queda intacto y se conserva una copia sin recortar para restaurarlo."
+msgstr "Recortar escribe un ROM nuevo y más pequeño - es permanente. Tu archivo original queda intacto y se conserva una copia sin recortar para restaurarlo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1511,7 +1511,7 @@ msgstr "Escribiendo salida"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.createModified"
-msgstr "Tu versión modificada — el archivo que el parche debe reproducir; solo se codifican las diferencias con el original; el tamaño puede diferir del original (se admite el crecimiento)."
+msgstr "Tu versión modificada - el archivo que el parche debe reproducir; solo se codifican las diferencias con el original; el tamaño puede diferir del original (se admite el crecimiento)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

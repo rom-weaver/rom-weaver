@@ -84,7 +84,7 @@ fn into_event_omits_error_kind_for_success_and_context_wrapped_failures() {
 // Containers register through a single wrapper (`traced_container_handler`).
 // Because `ContainerHandlerOperations` has default methods, a wrapper that
 // forgets to forward one silently resolves to the trait default instead of the
-// concrete handler — no compile error, arguments vanish at runtime. These tests
+// concrete handler - no compile error, arguments vanish at runtime. These tests
 // lock that down: the stub returns a sentinel from every method, and the wrapped
 // handler must surface the sentinel, not the default. When adding a new
 // `ContainerHandlerOperations` method, add it to the stub + an assertion here.

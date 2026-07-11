@@ -90,7 +90,7 @@ pub struct IngestRomAsset {
     pub gdi_text: Option<String>,
     /// Wall-clock milliseconds the extract step that produced this leaf took. Carried only for
     /// nested leaves (the archive level that emitted them); a depth-0 / single-level leaf leaves
-    /// this `None` and the host falls back to the run-level timing — matching the `extract`
+    /// this `None` and the host falls back to the run-level timing - matching the `extract`
     /// command's per-file timing semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -112,7 +112,7 @@ pub struct IngestRomAsset {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PatchDescriptor {
-    /// Absolute path of the patch (forward-slash normalized) — the bare source or an extracted leaf.
+    /// Absolute path of the patch (forward-slash normalized) - the bare source or an extracted leaf.
     pub leaf_path: String,
     /// File name component of `leaf_path`.
     pub file_name: String,
@@ -223,7 +223,7 @@ impl CliApp {
         // leaves and disc sheets are not hashed), so a fully-extracted ROM leaf carries its checksums +
         // variants + identity in a single decode pass. `ingest_rom_leaves` reuses those; whatever the
         // inline pass skipped (sheets, or a handler with no known output length) still falls back to a
-        // single checksum read — never the two reads (decode-write then re-hash) this used to do.
+        // single checksum read - never the two reads (decode-write then re-hash) this used to do.
         let context = self
             .context(threads)
             .with_extract_checksum_algorithms(algorithms.clone())
@@ -399,15 +399,15 @@ impl CliApp {
         // CHD prompts the host (per-track vs single BIN), defaulting to per-track split when the host
         // cannot be asked (matches the prior auto-split behavior). Resolved BEFORE the patch manifest
         // streams so the only mid-ingest host prompt (split choice) settles before the host opens the
-        // patch dialog — the two single-modal prompts never overlap.
+        // patch dialog - the two single-modal prompts never overlap.
         let resolved_split_bin =
             self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
-        // A mixed archive (ROM + sidecar patches) enumerates and extracts its patches FIRST — cheap
-        // relative to the ROM's fused extract+checksum below — and streams them in a `patch-manifest`
+        // A mixed archive (ROM + sidecar patches) enumerates and extracts its patches FIRST - cheap
+        // relative to the ROM's fused extract+checksum below - and streams them in a `patch-manifest`
         // event. That lets the host surface the patch-selection dialog while the ROM is still being
         // hashed, instead of waiting for the whole ingest (incl. checksum) to return. The sidecar
         // patches are enumerated independently of the ROM keep-one `select` (a chosen ROM must not hide
-        // the bundle's patches) and never prompt — every patch leaf is returned so the host drives the
+        // the bundle's patches) and never prompt - every patch leaf is returned so the host drives the
         // patch choice. `rom_hint` for libretro `sidecar_order` matching comes from the classified
         // entries (the ROM entry's file name) since the ROM asset is not extracted yet.
         let mut patches = if has_patch {
@@ -508,7 +508,7 @@ impl CliApp {
                 patches: vec![descriptor],
             });
         }
-        // Bare ROM: checksum the source bytes in a single pass — no extraction, no copy.
+        // Bare ROM: checksum the source bytes in a single pass - no extraction, no copy.
         let canonical = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
         let file_name = canonical
             .file_name()
@@ -622,7 +622,7 @@ impl CliApp {
             // Reuse the checksums the extract already streamed for this leaf instead of re-reading it.
             // libarchive emits the full variant set (`checksum_variants`); the disc-image codecs
             // (CHD/RVZ) emit only the raw `checksums`, so synthesize the single "raw" variant row the
-            // `checksum` command produces for a disc — no header transforms apply to disc data, so that
+            // `checksum` command produces for a disc - no header transforms apply to disc data, so that
             // row is byte-identical to a re-read.
             let inline_variants = map
                 .get("checksum_variants")
@@ -648,7 +648,7 @@ impl CliApp {
                 asset.checksums = checksums;
                 asset
             } else if Self::is_disc_sheet_file_name(&asset.file_name) {
-                // A `.cue`/`.gdi` sheet is a text sidecar, not ROM data — never hashed (the rom-only
+                // A `.cue`/`.gdi` sheet is a text sidecar, not ROM data - never hashed (the rom-only
                 // extract and the webapp both skip sheets). Leaving it unhashed avoids re-reading it, so
                 // a disc extract (track reused inline + sheet skipped) does NO post-extract checksum pass.
                 asset
@@ -959,7 +959,7 @@ impl CliApp {
             // format so the host can still surface it; no embedded metadata to read, not a valid patch.
             return Ok(descriptor);
         };
-        // A recognized handler that confirms the leaf's metadata confirms the patch magic — the same
+        // A recognized handler that confirms the leaf's metadata confirms the patch magic - the same
         // fact the host re-derived by re-extracting + re-reading the header. `describe_metadata` reads
         // just the embedded requirements (skipping a full structural scan where the format allows) and
         // still rejects a structurally-invalid/truncated file: surface that (with file-name
@@ -1020,8 +1020,8 @@ impl CliApp {
             .unwrap_or_else(|| "unknown".to_string())
     }
 
-    /// Stream the sidecar patch descriptors the instant they are enumerated — before the ROM is
-    /// hashed — so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
+    /// Stream the sidecar patch descriptors the instant they are enumerated - before the ROM is
+    /// hashed - so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
     /// instead of waiting for the whole ingest to return. Purely additive and gated on streaming
     /// output (`emit_progress_events`), so the CLI report bytes are unchanged; the identical
     /// descriptors also ride the terminal `details.ingest.patches`. The leaf files referenced here are

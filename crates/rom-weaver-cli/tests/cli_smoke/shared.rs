@@ -53,9 +53,9 @@ pub(crate) fn command_stdout(args: &[&str], expected_code: i32) -> Vec<u8> {
 }
 
 /// Like [`command_stdout`] but sets environment variables on the spawned `rom-weaver`
-/// subprocess only (not this test process), so env-gated code paths — e.g. the container
+/// subprocess only (not this test process), so env-gated code paths - e.g. the container
 /// read-on-main streaming path (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`) and its serial
-/// fallback cap (`ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT`) — can be exercised without racing
+/// fallback cap (`ROM_WEAVER_CONTAINER_IN_MEMORY_LIMIT`) - can be exercised without racing
 /// other tests that read the same variables.
 pub(crate) fn command_stdout_with_env(
     args: &[&str],

@@ -1,6 +1,6 @@
 // Pure mapping from a parsed rw.json manifest to the webapp's apply-session plan: which sources to
 // acquire (URLs resolved against the manifest's own URL, or leaves already extracted from a bundled
-// archive), the per-patch enablement seed, and the one-shot output defaults. No I/O here — the
+// archive), the per-patch enablement seed, and the one-shot output defaults. No I/O here - the
 // url-session boot flow feeds this into fetch/materialize and the apply form consumes the result.
 import type {
   ManifestHeaderMode,
@@ -19,7 +19,7 @@ type ManifestPlanEntry = {
   label?: string;
   /** Optional patches start deselected; everything else starts on. */
   optional: boolean;
-  /** Only checks the patch itself declared — chain-endpoint verification (rom/output checks) is session-level. */
+  /** Only checks the patch itself declared - chain-endpoint verification (rom/output checks) is session-level. */
   inputChecks?: ParsedManifestChecks;
   outputChecks?: ParsedManifestChecks;
   header?: ManifestHeaderMode;
@@ -70,7 +70,7 @@ type ManifestChainEndpointChecks = {
  * The chain's verification endpoints: what the base ROM must be (the first
  * patch's own `inputChecks`, else the manifest's `rom.checks`) and what the
  * final result must be (the last patch's own `outputChecks`, else
- * `output.checks`). These verify the ROM and the run's output — they are NOT
+ * `output.checks`). These verify the ROM and the run's output - they are NOT
  * attributed to individual patches: a patch's card only shows checks the
  * patch itself declared.
  */

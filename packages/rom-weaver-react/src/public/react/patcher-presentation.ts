@@ -39,7 +39,7 @@ type PatcherOutputState = {
   totalTiming: string;
   downloadSummary: {
     format?: string;
-    /** Input/source size — the "from" half of the from → to readout. */
+    /** Input/source size - the "from" half of the from → to readout. */
     fromSize?: string;
     size?: string;
     ratio?: string;

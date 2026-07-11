@@ -72,7 +72,7 @@ test("everything-archive manifest extracts its members and applies to a download
     patchSource.source.kind === "extracted" ? parsed.extractedFiles.get(patchSource.source.extractedPath) : undefined;
   expect(extractedPatch?.name).toBe("change.ips");
 
-  // Full boot flow over the same archive fetched from a URL (stubbed — the fixture is virtual).
+  // Full boot flow over the same archive fetched from a URL (stubbed - the fixture is virtual).
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input?.url || String(input);

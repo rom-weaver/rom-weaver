@@ -31,7 +31,7 @@ impl CliApp {
         let label = label.into();
         // Progress is emitted per 1% (≈100 calls per op); tracing every tick floods the log with
         // near-identical lines. Trace only at coarse 10% milestones (and non-percent/indeterminate
-        // emits) — enough to spot a stall without burying the rest of the trace. The progress event
+        // emits) - enough to spot a stall without burying the rest of the trace. The progress event
         // below is still emitted on every call, so the UI is unaffected.
         if percent.is_none_or(|value| (value as u32).is_multiple_of(10)) {
             trace!(

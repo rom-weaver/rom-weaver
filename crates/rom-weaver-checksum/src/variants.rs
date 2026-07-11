@@ -15,7 +15,7 @@
 //!
 //! The one transform whose corrected bytes can sit *before* the data they are
 //! derived from (`fix-header`: Genesis sums to EOF, N64 over a 1 MiB boot range)
-//! is handled with a bounded prefix buffer — see [`FixHeader`]. When that buffer
+//! is handled with a bounded prefix buffer - see [`FixHeader`]. When that buffer
 //! would exceed [`FIX_HEADER_PREFIX_CAP`] the variant is returned *deferred*
 //! (patches only, no digest) so the caller can compute it with a single extra
 //! read; see [`overlay_checksums`].
@@ -686,7 +686,7 @@ impl StreamingVariantChecksums {
         // Build every applicable variant with a synchronous hasher first so the active count is
         // known, then split the worker budget across them and upgrade each to a parallel hasher.
         // Each variant only differs from `raw` by its transform and is fed the same bytes (one
-        // read), but the hashing is independent — giving each its own workers lets them overlap the
+        // read), but the hashing is independent - giving each its own workers lets them overlap the
         // producer instead of serializing on the decode thread.
         let Some(raw_checksum) = StreamingChecksum::new(&self.algorithms)? else {
             self.state = State::Empty;
@@ -1116,8 +1116,8 @@ fn extension_with_dot(name: &str) -> Option<String> {
 }
 
 /// Complete a deferred `fix-header` variant (if any) by applying its repair patches in one extra
-/// read of `path`, appending the finished row to `rows`. The engine defers only the digest — the
-/// patches are already known — when the repair dependency exceeds [`FIX_HEADER_PREFIX_CAP`]. Both
+/// read of `path`, appending the finished row to `rows`. The engine defers only the digest - the
+/// patches are already known - when the repair dependency exceeds [`FIX_HEADER_PREFIX_CAP`]. Both
 /// variant callers (the `checksum` command and the extract write path) finish it this same way; a
 /// `None` deferral is a no-op so callers can pipe `VariantOutput::deferred_fix_header` straight in.
 pub fn finish_deferred_fix_header(

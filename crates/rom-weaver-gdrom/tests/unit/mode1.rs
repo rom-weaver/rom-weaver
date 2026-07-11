@@ -114,7 +114,7 @@ fn zero_data_is_deterministic() {
 /// "Space Channel 5 Part 2 (Japan)" is a `MODE1/2352` data track whose first
 /// sector is absolute LBA 45000. For each physical sector we strip the user
 /// data (bytes 16..2064), re-encode it, and require the result to match the
-/// original sector exactly — sync, address, mode, EDC, and all 276 ECC bytes.
+/// original sector exactly - sync, address, mode, EDC, and all 276 ECC bytes.
 #[test]
 #[ignore = "requires local Space Channel 5 Part 2 (Japan) Track 3.bin"]
 fn matches_real_track_byte_for_byte() {

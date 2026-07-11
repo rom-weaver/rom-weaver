@@ -4,13 +4,13 @@ const logger = createLogger("runner-pool");
 
 /**
  * A borrowed runner. The holder runs one operation, then calls exactly one of `release` (return the
- * runner to the warm idle pool for reuse) or — implicitly, via `terminate` — discards it. `markStale`
+ * runner to the warm idle pool for reuse) or - implicitly, via `terminate` - discards it. `markStale`
  * flags a runner so it is disposed instead of reused when released (e.g. after an error that may have
  * left wasm state inconsistent).
  */
 type RunnerLease<TRunner> = {
   readonly runner: TRunner;
-  /** Return the runner to the pool, kept warm for reuse — unless it was marked stale or terminated. */
+  /** Return the runner to the pool, kept warm for reuse - unless it was marked stale or terminated. */
   release(): void;
   /** Flag this runner for disposal (not reuse) when released. */
   markStale(): void;

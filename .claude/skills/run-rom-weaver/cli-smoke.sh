@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rom-weaver native CLI smoke — exercises probe/list/checksum/extract/compress
+# rom-weaver native CLI smoke - exercises probe/list/checksum/extract/compress
 # and a full patch-apply round-trip against committed fixtures, asserting the
 # patched output matches the known-good target CRC32.
 #

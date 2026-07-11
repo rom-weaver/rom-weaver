@@ -238,7 +238,7 @@ export class RomWeaverWorkerClientCore {
           for (let slot = 0; slot < count; slot += 1) {
             Atomics.store(control, SELECT_REQUEST_HEADER_LENGTH + slot, valid[slot] as number);
           }
-          // An empty selection is a cancel — there is no valid "selected nothing" outcome.
+          // An empty selection is a cancel - there is no valid "selected nothing" outcome.
           const resolvedCount = count > 0 ? count : SELECT_REQUEST_CANCEL_COUNT;
           emitPendingTrace(
             pending,
@@ -267,7 +267,7 @@ export class RomWeaverWorkerClientCore {
           .catch(() => {
             emitPendingTrace(
               pending,
-              `[worker-client] selectRequest handler rejected requestId=${requestId} — cancelling`,
+              `[worker-client] selectRequest handler rejected requestId=${requestId} - cancelling`,
             );
             respond([]);
           });

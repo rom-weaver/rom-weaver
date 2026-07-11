@@ -2376,7 +2376,7 @@ fn patch_apply_positional_patch_header_binds_to_preceding_patch() {
     let expected = with_nes_header(b"ABllo old world");
 
     // `--patch a --patch b --patch-header strip`: the occurrence binds to the
-    // SECOND patch only — the first applies to the headered bytes, the header is
+    // SECOND patch only - the first applies to the headered bytes, the header is
     // stripped between the steps, and output auto re-adds the iNES header.
     let output = command_stdout(
         &[
@@ -2411,7 +2411,7 @@ fn patch_apply_positional_patch_header_binds_to_preceding_patch() {
     );
 
     // `--patch a --patch-header strip --patch b`: the occurrence binds to the
-    // first patch and CARRIES FORWARD to the second — both apply headerless.
+    // first patch and CARRIES FORWARD to the second - both apply headerless.
     let output = command_stdout(
         &[
             "patch",
@@ -2456,7 +2456,7 @@ fn patch_apply_auto_header_strips_when_patch_targets_headerless_bytes() {
     fs::write(temp.child("base.bin").path(), &base).expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
     // BPS authored against the HEADERLESS bytes embeds their crc32 as the required
-    // source checksum — the evidence default-auto strips on.
+    // source checksum - the evidence default-auto strips on.
     command_stdout(
         &[
             "patch",
@@ -2536,7 +2536,7 @@ fn patch_apply_auto_output_header_drops_snes_copier_header() {
     );
 
     // Default auto everywhere: strip proven by the BPS source checksum, and the SNES
-    // copier header is junk — the output stays headerless (.sfc convention).
+    // copier header is junk - the output stays headerless (.sfc convention).
     let output = command_stdout(
         &[
             "patch",
@@ -2614,7 +2614,7 @@ fn patch_apply_auto_output_header_retains_nsrt_snes_copier_header() {
     );
 
     // Default auto everywhere: strip proven by the BPS source checksum, but the
-    // NSRT header comes back on the output — it carries dump metadata, matching
+    // NSRT header comes back on the output - it carries dump metadata, matching
     // the RUP handler's own normalization rules.
     let output = command_stdout(
         &[
@@ -2740,7 +2740,7 @@ fn patch_apply_adjusts_smc_extension_for_headerless_output() {
     );
 
     // Auto strips (BPS source checksum proof) and auto drops the junk copier
-    // header — the requested `.smc` output lands as `.sfc` to match.
+    // header - the requested `.smc` output lands as `.sfc` to match.
     let output = command_stdout(
         &[
             "patch",
@@ -2923,7 +2923,7 @@ fn patch_apply_auto_strips_mid_chain_on_embedded_checksum() {
     let headered = with_nes_header(&base);
     fs::write(temp.child("input.nes").path(), &headered).expect("fixture");
     // Patch 1 targets the HEADERED bytes; patch 2 targets the HEADERLESS bytes of
-    // patch 1's result — auto must strip the header between the two steps.
+    // patch 1's result - auto must strip the header between the two steps.
     let modified1 = b"Xello old world".to_vec();
     let modified1_headered = with_nes_header(&modified1);
     let modified2 = b"XYllo old world".to_vec();
@@ -2979,7 +2979,7 @@ fn patch_apply_auto_restores_header_mid_chain_on_embedded_checksum() {
     let base = b"hello old world".to_vec();
     fs::write(temp.child("input.nes").path(), with_nes_header(&base)).expect("fixture");
     // Patch 1 targets the HEADERLESS bytes (auto strips up front); patch 2 targets
-    // the RE-HEADERED bytes of patch 1's result — auto must restore the captured
+    // the RE-HEADERED bytes of patch 1's result - auto must restore the captured
     // header between the two steps.
     let modified1 = b"Aello old world".to_vec();
     let modified1_headered = with_nes_header(&modified1);
@@ -3019,7 +3019,7 @@ fn patch_apply_auto_restores_header_mid_chain_on_embedded_checksum() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");
     // The chain ends headered (patch 2 ran on the restored bytes), so the output
-    // is exactly patch 2's result — no extra re-add.
+    // is exactly patch 2's result - no extra re-add.
     assert_eq!(
         fs::read(temp.child("output.nes").path()).expect("output"),
         modified2_headered

@@ -16,7 +16,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.verify.dryRunDesc"
-#~ msgstr "Auf eine Kopie anwenden und neu hashen — Quellbytes bleiben unberührt"
+#~ msgstr "Auf eine Kopie anwenden und neu hashen - Quellbytes bleiben unberührt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -46,7 +46,7 @@ msgstr "{count, plural, one {# Datei} other {# Dateien}}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
-msgstr "{count, plural, one {# Patch ist aus — ankreuzen zum Einschließen} other {# Patches sind aus — ankreuzen zum Einschließen}}"
+msgstr "{count, plural, one {# Patch ist aus - ankreuzen zum Einschließen} other {# Patches sind aus - ankreuzen zum Einschließen}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -261,12 +261,12 @@ msgstr "Wähle, welche {role} aus {sourceName} verwendet wird."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.hint"
-msgstr "klicken oder Dateien irgendwo auf der Seite ablegen — Archive, Container, Cue-Sheets und Softpatches werden automatisch aufgelöst"
+msgstr "klicken oder Dateien irgendwo auf der Seite ablegen - Archive, Container, Cue-Sheets und Softpatches werden automatisch aufgelöst"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.anywhereShort"
-msgstr "klicken zum Durchsuchen — oder Dateien irgendwo auf der Seite ablegen"
+msgstr "klicken zum Durchsuchen - oder Dateien irgendwo auf der Seite ablegen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -411,7 +411,7 @@ msgstr "Diff-Fenster"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.window"
-msgstr "Diff-Fenster beim Erstellen — größer findet verschobene Daten, braucht mehr Speicher."
+msgstr "Diff-Fenster beim Erstellen - größer findet verschobene Daten, braucht mehr Speicher."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -441,7 +441,7 @@ msgstr "Herunterladen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.reorder"
-msgstr "Zum Umsortieren ziehen — Pfeiltasten verschieben"
+msgstr "Zum Umsortieren ziehen - Pfeiltasten verschieben"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "fehlgeschlagen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunFail"
-msgstr "Fehlgeschlagen — Scratch-Ausgabe weicht ab"
+msgstr "Fehlgeschlagen - Scratch-Ausgabe weicht ab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -571,12 +571,12 @@ msgstr "Datei"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.asDumped"
-msgstr "Datei — wie gedumpt"
+msgstr "Datei - wie gedumpt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.variant.withHeader"
-msgstr "Datei — wie gedumpt (mit 512-B-Header)"
+msgstr "Datei - wie gedumpt (mit 512-B-Header)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -666,7 +666,7 @@ msgstr "Eingaben"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.warn.ipsNoChecksum"
-msgstr "IPS enthält keine eingebetteten Prüfsummen — nur durch den Dateinamen-Hinweis abgesichert."
+msgstr "IPS enthält keine eingebetteten Prüfsummen - nur durch den Dateinamen-Hinweis abgesichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -811,7 +811,7 @@ msgstr "Optional (aus)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.compressType"
-msgstr "Verpackt die Ausgabe optional in einen komprimierten Container — „none“ schreibt die Datei direkt."
+msgstr "Verpackt die Ausgabe optional in einen komprimierten Container - „none“ schreibt die Datei direkt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -881,7 +881,7 @@ msgstr "Patch wird geparst"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.verify.dryRunPass"
-msgstr "Bestanden — Scratch-Ausgabe stimmt überein"
+msgstr "Bestanden - Scratch-Ausgabe stimmt überein"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -946,7 +946,7 @@ msgstr "Patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.patches"
-msgstr "Patches werden von oben nach unten angewendet — zum Umsortieren am Griff ziehen. Dateinamen-Hinweise (crc32 / Größe) werden vor dem Lauf geprüft."
+msgstr "Patches werden von oben nach unten angewendet - zum Umsortieren am Griff ziehen. Dateinamen-Hinweise (crc32 / Größe) werden vor dem Lauf geprüft."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1171,7 +1171,7 @@ msgstr "Datei wird gewählt"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.output"
-msgstr "Dateiname ohne Endung — das Format-Select steuert sie. Container (zip, 7z, chd, rvz) werden direkt geschrieben."
+msgstr "Dateiname ohne Endung - das Format-Select steuert sie. Container (zip, 7z, chd, rvz) werden direkt geschrieben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1241,7 +1241,7 @@ msgstr "Zum hellen Design wechseln"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.trimRom"
-msgstr "Tail-Trim: nds, dsi, srl (0x00-Padding) und gba, 3ds (0xFF) — der Füllbereich am Ende wird erkannt und entfernt; Xbox-xiso-Images (.xiso oder .iso) trimmen ihren ungenutzten Schwanz; GameCube/Wii-Images (iso, gcm, wbfs, rvz) trimmen durch Entfernen von Junk-Blöcken bei der RVZ-Konvertierung; die Originaldatei bleibt unberührt, eine ungetrimmte Kopie wird zum Wiederherstellen aufbewahrt."
+msgstr "Tail-Trim: nds, dsi, srl (0x00-Padding) und gba, 3ds (0xFF) - der Füllbereich am Ende wird erkannt und entfernt; Xbox-xiso-Images (.xiso oder .iso) trimmen ihren ungenutzten Schwanz; GameCube/Wii-Images (iso, gcm, wbfs, rvz) trimmen durch Entfernen von Junk-Blöcken bei der RVZ-Konvertierung; die Originaldatei bleibt unberührt, eine ungetrimmte Kopie wird zum Wiederherstellen aufbewahrt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1266,7 +1266,7 @@ msgstr "Ziel-Blockcheck"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.picker.hint"
-msgstr "Das Archiv enthält mehrere Kandidaten — wähle die einzulegenden Dateien."
+msgstr "Das Archiv enthält mehrere Kandidaten - wähle die einzulegenden Dateien."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1396,7 +1396,7 @@ msgstr "ROM wird getrimmt"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.confirm.trimBody"
-msgstr "Trimmen schreibt ein neues, kleineres ROM — das ist dauerhaft. Deine Originaldatei bleibt unberührt und eine ungetrimmte Kopie wird aufbewahrt, sodass du sie wiederherstellen kannst."
+msgstr "Trimmen schreibt ein neues, kleineres ROM - das ist dauerhaft. Deine Originaldatei bleibt unberührt und eine ungetrimmte Kopie wird aufbewahrt, sodass du sie wiederherstellen kannst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1511,7 +1511,7 @@ msgstr "Ausgabe wird geschrieben"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.info.createModified"
-msgstr "Dein bearbeiteter Build — die Datei, die der Patch erzeugen soll; nur die Unterschiede zum Original werden kodiert; die Größe darf vom Original abweichen (Wachstum wird unterstützt)."
+msgstr "Dein bearbeiteter Build - die Datei, die der Patch erzeugen soll; nur die Unterschiede zum Original werden kodiert; die Größe darf vom Original abweichen (Wachstum wird unterstützt)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

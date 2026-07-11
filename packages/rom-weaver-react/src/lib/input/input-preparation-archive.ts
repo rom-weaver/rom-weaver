@@ -185,11 +185,11 @@ const listCompressionEntries = async (
 };
 
 /**
- * List a dropped archive's entry file names (a pure read — no byte extraction) so the drop router
+ * List a dropped archive's entry file names (a pure read - no byte extraction) so the drop router
  * can decide its bucket (ROM source vs patch bundle) from the archive's CONTENTS before staging it.
  * Routing a patch-only archive into the ROM input list would re-stage (re-extract) the already
  * staged ROM and briefly flash a ROM card before Rust's probe-manifest reclassifies it. Cheap and
- * cached — the listing is shared with the later staging descent via the `_file` key — so a real ROM
+ * cached - the listing is shared with the later staging descent via the `_file` key - so a real ROM
  * archive only pays one list here, then extracts once. Returns [] on any failure so the caller
  * falls back to the default (ROM) bucket, where Rust's reclassify still corrects a misroute.
  */
@@ -202,8 +202,8 @@ const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]
 };
 
 // Memoize entry listings per (source bytes, filter + overrides). One input load enumerates the same
-// archive several times — the drop-routing probe classifies it, then chd-split detection, disc-group
-// naming, and the limit preflight each re-list it — and every pass is a full worker round-trip that
+// archive several times - the drop-routing probe classifies it, then chd-split detection, disc-group
+// naming, and the limit preflight each re-list it - and every pass is a full worker round-trip that
 // returns identical entries (the archive is immutable). Key on the underlying File/Blob (`_file`) when
 // present so the probe's listing and the prep's descent share one result even though they wrap the
 // dropped file in different PatchFileInstances; fall back to the instance when there is no shared
@@ -397,7 +397,7 @@ const resolveArchiveInputAssetsByDescent = async (
   const compressionFormat = getCompressionFormat(archiveFile);
   // A resolved keep-one selection pins the payload; otherwise ingest auto-picks a single logical
   // payload (a loose bin+cue/gdi disc stays whole) or prompts the host. Multi-track CHD CD split-bin
-  // is decided by ingest's own host prompt — no pre-resolution here.
+  // is decided by ingest's own host prompt - no pre-resolution here.
   const select = normalizeSelectedEntryNames(selectedInputEntryName ? [selectedInputEntryName] : []);
   traceArchivePreparation(options, "input.archive.descent.start", {
     compressionFormat,
@@ -578,9 +578,9 @@ const resolveArchiveInputAssets = async (
  * step reuses them (the precomputed branch) and skips re-dispatching `ingest` itself.
  *
  * `ingest` classifies the source first; a bare ROM has no container handler, so it is checksummed in
- * place — no extraction, no copy — by the SAME shared variant engine the archive path's inline
+ * place - no extraction, no copy - by the SAME shared variant engine the archive path's inline
  * checksum drives, fed the full thread budget. So a bare ROM hashes as fast as one extracted from an
- * archive (where `romProbe` is likewise absent — `ingest` never produces it, only a `{ trim: {
+ * archive (where `romProbe` is likewise absent - `ingest` never produces it, only a `{ trim: {
  * detected: false } }` placeholder was ever emitted for these inputs).
  *
  * Best-effort: any failure, or a source `ingest` classifies as a patch / yields no ROM asset, leaves
@@ -591,7 +591,7 @@ const attachBareRomIngestMetadata = async (
   options: ApplyWorkflowOptions | undefined,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
 ): Promise<void> => {
-  // Already precomputed (e.g. an archive leaf) — nothing to do.
+  // Already precomputed (e.g. an archive leaf) - nothing to do.
   if ((file as { checksums?: unknown }).checksums) return;
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.ingest?.run) return;
@@ -623,7 +623,7 @@ const attachBareRomIngestMetadata = async (
       recommendedFormat: asset.recommendedFormat,
     });
     if (romType) (file as { romType?: typeof romType }).romType = romType;
-    // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration — unlike
+    // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike
     // an archive leaf (checksummed DURING extract, reported as 0 → the "from extract" label). Prefer the
     // Rust-reported hash wall time (`asset.checksumMs`); only if it is absent (e.g. older wasm) fall back
     // to the JS compute span (first progress → done, which excludes the one-time wasm/thread warm-up).
@@ -647,7 +647,7 @@ const attachBareRomIngestMetadata = async (
 };
 
 // Shared low-level archive primitives consumed by the sibling modules split out of this orchestrator
-// (input-archive-patch-leaves). Not part of the public input-preparation surface — internal to the
+// (input-archive-patch-leaves). Not part of the public input-preparation surface - internal to the
 // input-archive cluster.
 export type { InputPreparationOptions, InputPreparationRuntimeLike };
 export {

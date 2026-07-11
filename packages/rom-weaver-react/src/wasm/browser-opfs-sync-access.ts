@@ -17,8 +17,8 @@ type SyncAccessCapableFileHandle = {
 };
 
 // OPFS permits only one open access handle (or writable stream) per file at a time. When a previous
-// holder is still mid-close — e.g. the staging worker just finished writing a freshly staged source,
-// or a sibling operation is tearing down — createSyncAccessHandle briefly rejects with "Access
+// holder is still mid-close - e.g. the staging worker just finished writing a freshly staged source,
+// or a sibling operation is tearing down - createSyncAccessHandle briefly rejects with "Access
 // Handles cannot be created if there is another open Access Handle or Writable stream associated with
 // the same file." The handle frees as soon as the other side closes, so the failure is transient.
 // This surfaced when re-uploading the same archive to pick a second entry: the second extract opened
@@ -75,7 +75,7 @@ export async function openSyncAccessHandle({
   try {
     return await createSyncAccessHandleWithRetry(handle, { mode });
   } catch {
-    // Some WebKit/iOS builds reject the `mode` option — notably "readwrite-unsafe" — with
+    // Some WebKit/iOS builds reject the `mode` option - notably "readwrite-unsafe" - with
     // InvalidStateError, which the proxy would otherwise surface as a fatal EIO and fail the whole
     // run. The default (no-option) handle is plain read-write: always supported, and strictly safer
     // than "unsafe". Fall back to it for any requested mode before giving up.

@@ -1,8 +1,8 @@
 //! Unit coverage for `rom-weaver-chd` internals.
 //!
 //! These exercise the `pub(super)` primitives that back CHD's byte-parity
-//! guarantees — the V5 compressed-map huffman/RLE/CRC machinery and the CD
-//! sector ECC math — plus the codec-routing edge branches that cannot be
+//! guarantees - the V5 compressed-map huffman/RLE/CRC machinery and the CD
+//! sector ECC math - plus the codec-routing edge branches that cannot be
 //! reached through the crate's public `*_for_tests` helpers (those are already
 //! covered end-to-end by `rom-weaver-containers`' handler tests). Keeping these
 //! isolated means a regression in, say, canonical huffman code assignment fails

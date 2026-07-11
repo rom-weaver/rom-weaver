@@ -42,7 +42,7 @@ test("automatic output format prefers the engine rom-specific recommendation for
     ),
   ).toBe("chd");
   // A GameCube/Wii disc reports disc_format=DVD (chd-ish disc metadata), but the engine verdict
-  // recommends rvz — the verdict must win over the CHD disc-metadata heuristic.
+  // recommends rvz - the verdict must win over the CHD disc-metadata heuristic.
   expect(
     OutputCompressionManager.resolveOutputCompression(
       { fileName: "game.iso", metadata: { format: "DVD", mode: "dvd", recommendedFormat: "rvz" } },

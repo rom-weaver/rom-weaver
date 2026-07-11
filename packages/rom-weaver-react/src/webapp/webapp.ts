@@ -431,7 +431,7 @@ const bootWebappWithBackgroundCleanup = () => {
   // Render the interactive shell immediately, then wipe leftover OPFS and read the storage estimate
   // in the background. The cleanup gate (opened here, closed when the wipe settles) holds wasm runs
   // and input staging until the wipe finishes, so a write can't land in a directory the recursive
-  // delete is still walking — the same guarantee the old wipe-then-render order gave, without the
+  // delete is still walking - the same guarantee the old wipe-then-render order gave, without the
   // first paint waiting on it.
   beginOpfsCleanupGate();
   initializeWebapp();

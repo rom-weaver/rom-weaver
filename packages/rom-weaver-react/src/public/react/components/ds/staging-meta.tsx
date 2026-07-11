@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 /**
  * Shared staging-card helpers for the input cards (ROM + patch). During staging
- * the resolved card structure stays mounted — a determinate bar on the card's top
+ * the resolved card structure stays mounted - a determinate bar on the card's top
  * edge ({@link "./file-card.tsx" FileCard} `stageBar`) plus a status in the meta
  * line carry progress, while the Checks drawer reserves its rows as shimmer
- * placeholders — so nothing below the card moves when the result lands.
+ * placeholders - so nothing below the card moves when the result lands.
  */
 
 /** Minimal shape of the converted workflow progress props the staging UI reads. */
@@ -15,7 +15,7 @@ type StageProgress = { label?: ReactNode; percent?: number | null } | null | und
  * Phase-aware staging label: "<verb>…" while the input is only being read/hashed,
  * "Extracting & <verb>…" while it is also being extracted from a container. `verb` is
  * "Checksumming" for ROM inputs (extraction hashes inline, so both verbs apply) and
- * "Reading" for patches (staging a patch is extract + parse — it is never hashed; its
+ * "Reading" for patches (staging a patch is extract + parse - it is never hashed; its
  * deep dry-run validation is deferred and runs silently after staging).
  *
  * `extracting` is driven by the runtime's authoritative stage (a ROM input's
@@ -35,7 +35,7 @@ const stagePercent = (progress: StageProgress): number | null =>
 /**
  * Top-bar value during staging: a determinate width when the percent is known,
  * `"indeterminate"` (an animated sliding bar) when it isn't, and `null` once
- * finished — the bar is removed on the resolved card, leaving only the
+ * finished - the bar is removed on the resolved card, leaving only the
  * platform/format tag in the meta line.
  */
 const stageBarValue = (staging: boolean, percent: number | null): number | "indeterminate" | null =>

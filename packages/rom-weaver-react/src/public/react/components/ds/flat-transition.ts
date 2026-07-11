@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
 /**
- * Flat view-transition helper — the loom crossfade for layout changes with no
+ * Flat view-transition helper - the loom crossfade for layout changes with no
  * element continuity (tab switches, the empty bench filling up). `vt-flat`
  * suppresses per-element morph names; `vt-quiet` holds entry animations while
  * the crossfade plays, and every entry-animatable element is locked inline
@@ -35,7 +35,7 @@ const runFlatViewTransition = (update: () => void) => {
   const transition = document.startViewTransition(update);
   transition.ready.catch(() => undefined);
   const clear = () => {
-    // lock first — removing vt-quiet would otherwise start the held animations
+    // lock first - removing vt-quiet would otherwise start the held animations
     lockEntryAnimations();
     root.classList.remove("vt-flat", "vt-quiet");
   };

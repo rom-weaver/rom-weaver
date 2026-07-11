@@ -19,7 +19,7 @@ log-level = "info"
 
 [advanced]
 
-# Cross-origin isolation — required for SharedArrayBuffer (wasm threads).
+# Cross-origin isolation - required for SharedArrayBuffer (wasm threads).
 # Applied to every response so it survives a TLS-terminating reverse proxy.
 [[advanced.headers]]
 source = "**"

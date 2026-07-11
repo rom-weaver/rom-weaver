@@ -2,7 +2,7 @@
 //
 // Instead of owning a FileSystemSyncAccessHandle (BrowserOpfsRandomAccessFile), this adapter marshals
 // every read/write/size/truncate/flush to the proxy worker via an OpfsProxyClient. It is the consumer
-// seam that lets any WASM thread operate on a real OPFS file the proxy opened — no per-thread handle,
+// seam that lets any WASM thread operate on a real OPFS file the proxy opened - no per-thread handle,
 // so it sidesteps the "spawned thread cannot path_open OPFS (os error 44)" wall and WebKit's
 // one-handle-per-file rule (the proxy holds the single handle; this adapter just references it by id).
 //
@@ -10,7 +10,7 @@
 // are listed but never touched cost nothing). A single-block consumer-side read cache amortises the
 // per-read SAB round-trip for bursty small/sequential reads, and is validated against the proxy's
 // per-handle version stamp: any write/truncate (from THIS thread or another) bumps the stamp, so the
-// next read drops the stale block — cross-thread coherence without explicit invalidation messages.
+// next read drops the stale block - cross-thread coherence without explicit invalidation messages.
 
 import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import { OpfsProxyError } from "./browser-opfs-proxy-client.ts";
@@ -19,7 +19,7 @@ import type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 /** Block size for the consumer read cache; large reads above this bypass the cache and stream. Bigger
  * than the slot buffer on purpose: a miss fills the whole block in slot-sized chunks, so a 4 MiB block is
  * one cache fill spanning ~2 backend reads instead of 4 separate 1 MiB fills. This matters most on the
- * Safari Blob-handle path — WebKit pays a high fixed per-call cost on `blob.slice().arrayBuffer()`, so
+ * Safari Blob-handle path - WebKit pays a high fixed per-call cost on `blob.slice().arrayBuffer()`, so
  * fewer, larger backend reads win (4 MiB mirrors the retired SAB virtual-file proxy's Safari-tuned
  * chunk). Decode reads are scattered but locally sequential (CHD hunks within a thread's range), so the
  * extra prefetch is reused, not wasted. Per-handle JS-heap cost; the SAB slot buffer is unchanged. */

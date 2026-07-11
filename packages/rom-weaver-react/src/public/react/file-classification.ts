@@ -54,11 +54,11 @@ const classifyFileName = (fileName: string): DroppedFileClass => {
 };
 
 type DroppedFileClassification = {
-  /** ROMs and unknown files — routed to a tab's input bucket(s). */
+  /** ROMs and unknown files - routed to a tab's input bucket(s). */
   inputs: File[];
-  /** Patch files — routed to a tab's patch bucket when it has one. */
+  /** Patch files - routed to a tab's patch bucket when it has one. */
   patches: File[];
-  /** Archives/containers — surfaced separately so callers can decide whether to extract or treat as a patch container. */
+  /** Archives/containers - surfaced separately so callers can decide whether to extract or treat as a patch container. */
   archives: File[];
 };
 
@@ -77,7 +77,7 @@ const classifyDroppedFiles = (files: File[]): DroppedFileClassification => {
       result.archives.push(file);
     } else {
       if (classification === "unknown") {
-        logger.warn("dropped file matched no known extension — defaulting to input", { name: file.name });
+        logger.warn("dropped file matched no known extension - defaulting to input", { name: file.name });
       }
       result.inputs.push(file);
     }

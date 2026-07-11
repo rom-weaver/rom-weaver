@@ -24,7 +24,7 @@ impl CliApp {
         let file_len = fs::metadata(&request.source)?.len();
         let name_hint = request.source.file_name().and_then(|name| name.to_str());
         // Hash with the same parallelism as the inline extract path (shared budget policy) instead of
-        // forcing single-threaded — previously this path was pinned to one thread, which made
+        // forcing single-threaded - previously this path was pinned to one thread, which made
         // `checksum` slower than extract's inline checksum. `engine_budget` is the full op budget so
         // the engine can split it across the active variants (each capping internally at its
         // algorithm count); capping the engine budget itself at the algorithm count would zero out
@@ -47,7 +47,7 @@ impl CliApp {
             StreamingVariantChecksums::new(&algorithms, file_len, name_hint, engine_budget)?;
 
         // Identity detection is a separate stream consumer fed the same bytes as the
-        // variant engine — neither embeds the other. No extra read.
+        // variant engine - neither embeds the other. No extra read.
         let mut identity = IdentityPrefix::new();
         let mut file = File::open(&request.source)?;
         let mut buffer = vec![0_u8; CHECKSUM_VARIANT_CHUNK_SIZE];

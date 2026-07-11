@@ -14,8 +14,8 @@ describe("activity store", () => {
   it("publishes state changes to subscribers and resets the stage line", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeWorkbenchActivity(listener);
-    setWorkbenchActivity("apply", { stage: "Apply — track 1", state: "running" });
-    expect(getWorkbenchActivity()).toEqual({ stage: "Apply — track 1", state: "running" });
+    setWorkbenchActivity("apply", { stage: "Apply - track 1", state: "running" });
+    expect(getWorkbenchActivity()).toEqual({ stage: "Apply - track 1", state: "running" });
     expect(listener).toHaveBeenCalledTimes(1);
     // omitting stage clears it
     setWorkbenchActivity("apply", { state: "done" });
@@ -42,7 +42,7 @@ describe("activity store", () => {
     setWorkbenchActivity("trim", { state: "idle" });
     setWorkbenchActivity("trim", { stage: "Trim", state: "running" });
     expect(getWorkbenchActivity().state).toBe("running");
-    // Create tab mounts with busy=false and publishes idle — must NOT win.
+    // Create tab mounts with busy=false and publishes idle - must NOT win.
     setWorkbenchActivity("create", { state: "idle" });
     expect(getWorkbenchActivity().state).toBe("running");
     setWorkbenchActivity("trim", { state: "idle" });

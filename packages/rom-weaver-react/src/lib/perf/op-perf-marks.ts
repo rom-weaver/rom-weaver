@@ -2,11 +2,11 @@
 // main-thread performance timeline, so they show up both in `performance.getEntriesByType("measure")`
 // and in the DevTools Performance panel "Timings" track:
 //
-//   romweaver:warmup       — page-load warmup extraction: start → done.
-//   romweaver:before-start — a drop/file-selection begins → the FIRST progress event from wasm. This is
+//   romweaver:warmup       - page-load warmup extraction: start → done.
+//   romweaver:before-start - a drop/file-selection begins → the FIRST progress event from wasm. This is
 //                            the dead time the user waits after dropping before the operation visibly
 //                            starts working (JS staging + input prep + runner/proxy spawn + wasm boot).
-//   romweaver:after-finish — wasm reports the run finished → the result is painted in the UI. This is
+//   romweaver:after-finish - wasm reports the run finished → the result is painted in the UI. This is
 //                            the dead time the user waits for the info to appear after the work is
 //                            already done (JS result post-processing + React render + paint).
 //
@@ -101,7 +101,7 @@ export const markWasmFinished = (): void => {
 };
 
 /**
- * Called from the always-mounted status strip on the terminal "done" render — the commit that shows the
+ * Called from the always-mounted status strip on the terminal "done" render - the commit that shows the
  * result. Schedules the measure on the next animation frame so it captures the paint, then disarms until
  * the next wasm finish. Intermediate (still-running) renders of a multi-step action do not call this, so
  * the measure spans the LAST wasm finish → the paint that reveals the result.

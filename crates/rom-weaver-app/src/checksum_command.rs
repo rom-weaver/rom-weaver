@@ -314,7 +314,7 @@ impl CliApp {
 
     /// Augment a succeeded checksum report's `details` with the resolved source's
     /// console + optical medium (a bounded prefix read; no exact-title lookup).
-    /// The resolved source is decoded bytes — a bare ROM or an extracted track —
+    /// The resolved source is decoded bytes - a bare ROM or an extracted track -
     /// so prefix-based detection sees real header/system-area data.
     pub(super) fn attach_rom_identity_details(
         report: &mut OperationReport,

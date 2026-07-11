@@ -71,7 +71,7 @@ pub(crate) fn run_with_optional_pool<T>(
     parallel: impl FnOnce(&SharedThreadPool) -> Result<T>,
     serial: impl FnOnce() -> Result<T>,
 ) -> Result<(ThreadExecution, T)> {
-    // NOTE: deliberately no extra logging here — `plan_threads`/`build_pool`
+    // NOTE: deliberately no extra logging here - `plan_threads`/`build_pool`
     // already trace the negotiation, and the migrated call sites must emit a
     // byte-identical trace stream to the pre-refactor per-format code.
     let planned = context.plan_threads(capability.clone());
