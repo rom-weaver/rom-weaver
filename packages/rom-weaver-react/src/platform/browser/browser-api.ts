@@ -1,6 +1,8 @@
+import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
+import type { LogLevel } from "../../types/logging.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
@@ -23,6 +25,13 @@ type BrowserCreatePatchFormatCandidatesInput = {
   modified: BrowserSourceRef;
   workerThreads?: WorkerSettings["threads"] | null;
   settings?: Partial<CreateSettings>;
+};
+type BrowserPpfUndoInput = {
+  logLevel?: LogLevel;
+  outputName: string;
+  patch: BrowserSourceRef;
+  rom: BrowserSourceRef;
+  signal?: AbortSignal;
 };
 
 const runtimePreloadKeys = new Set<string>();
@@ -73,6 +82,42 @@ const getCreatePatchFormatCandidates = async ({
   return candidates;
 };
 
+const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfUndoInput) => {
+  assertPublicSources([rom, patch]);
+  const staged = await browserRuntime.workerIo.stageSources([
+    {
+      fallbackFileName: "patched-rom.bin",
+      pathPrefix: "ppf-undo-rom",
+      scope: "apply",
+      source: rom,
+      trace: { logLevel },
+    },
+    {
+      fallbackFileName: "undo.ppf",
+      pathBucket: "patches",
+      pathPrefix: "ppf-undo-patch",
+      scope: "apply",
+      source: patch,
+      trace: { logLevel },
+    },
+  ]);
+  const [stagedRom, stagedPatch] = staged;
+  if (!(stagedRom && stagedPatch)) throw new Error("PPF undo inputs could not be staged");
+  try {
+    const result = await invokeRomWeaverPpfUndoWorker({
+      knownInputPaths: [stagedRom.filePath, stagedPatch.filePath],
+      logLevel,
+      outputName,
+      patchFilePath: stagedPatch.filePath,
+      romFilePath: stagedRom.filePath,
+      signal,
+    });
+    return browserRuntime.workerIo.createWorkerOutput(result, outputName, "PPF undo did not return a restored ROM");
+  } finally {
+    await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
+  }
+};
+
 // The public browser workflows ARE their UI-agnostic controllers — a thin subclass adds only the
 // browser binding (asset-base config + runtime pre-warm + browserRuntime/source-validation wiring).
 // All staging/run/progress/`subscribe`/`getSnapshot` methods are inherited directly from the
@@ -113,4 +158,4 @@ class TrimWorkflow extends TrimWorkflowController<BrowserSourceRef, BrowserSaveD
   }
 }
 
-export { ApplyWorkflow, CreateWorkflow, getCreatePatchFormatCandidates, preloadBrowserRuntime, TrimWorkflow };
+export { ApplyWorkflow, CreateWorkflow, getCreatePatchFormatCandidates, preloadBrowserRuntime, TrimWorkflow, undoPpf };

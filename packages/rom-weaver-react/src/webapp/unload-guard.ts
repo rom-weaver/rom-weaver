@@ -38,6 +38,7 @@ type PendingChangeInputState = {
   webappState?: WebappState | null;
   creatorState?: CreatorState;
   trimState?: TrimState;
+  toolsActive?: RuntimeValue;
   patchStackState?: PendingPatchStackState;
   outputState?: PendingOutputState;
   romFilePresent?: RuntimeValue;
@@ -100,6 +101,7 @@ const getPendingChangeState = ({
   webappState,
   creatorState,
   trimState,
+  toolsActive,
   patcherFormEdited,
   patchStackState,
   outputState,
@@ -113,13 +115,18 @@ const getPendingChangeState = ({
     romFilePresent,
   }),
   settings: settingsDraftHasChanges(webappState),
+  tools: !!toolsActive,
   trim: trimHasPendingChanges(trimState),
 });
 
 const shouldWarnBeforeUnload = (state: PendingChangeInputState): boolean => {
   const pendingChangeState = getPendingChangeState(state);
   return (
-    pendingChangeState.patcher || pendingChangeState.creator || pendingChangeState.trim || pendingChangeState.settings
+    pendingChangeState.patcher ||
+    pendingChangeState.creator ||
+    pendingChangeState.trim ||
+    pendingChangeState.tools ||
+    pendingChangeState.settings
   );
 };
 
@@ -133,6 +140,7 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   if (pendingChangeState.settings) return UNSAVED_SETTINGS_UNLOAD_MESSAGE;
   if (pendingChangeState.creator) return "You have unsaved patch creator inputs. Reload and lose those changes?";
   if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
+  if (pendingChangeState.tools) return "You have an in-progress tools session. Reload and lose those changes?";
   if (pendingChangeState.patcher) return "You have an in-progress patching session. Reload and lose those changes?";
   return "";
 };

@@ -688,6 +688,48 @@ const invokeRomWeaverTrimWorker = async (
   };
 };
 
+const invokeRomWeaverPpfUndoWorker = async (input: {
+  knownInputPaths?: string[];
+  logLevel?: LogLevel | string;
+  outputName: string;
+  patchFilePath: string;
+  romFilePath: string;
+  signal?: AbortSignal;
+}): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+  const outputFileName = getPathBaseName(input.outputName, "restored-rom.bin");
+  const outputPath = selectRomWeaverOutputPath(input.romFilePath, outputFileName, [
+    input.romFilePath,
+    input.patchFilePath,
+  ]);
+  const command = createRomWeaverCommand("tools-ppf-undo", {
+    output: outputPath,
+    patch: input.patchFilePath,
+    rom: input.romFilePath,
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel }, "runJson tools-ppf-undo dispatch", {
+    command,
+    outputPath,
+    patchFilePath: input.patchFilePath,
+    romFilePath: input.romFilePath,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      signal: input.signal,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "PPF undo failed");
+  const emitted = getEmittedFileDetails(result);
+  return {
+    fileName: outputFileName,
+    filePath: emitted?.path || outputPath,
+    size: emitted?.sizeBytes,
+    timing: getRunResultTiming(result),
+  };
+};
+
 // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
 // ROMs), and describe patches — the consolidated `ingest` command. One round-trip replaces the
 // webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
@@ -946,6 +988,7 @@ export {
   invokeRomWeaverManifestParseWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
+  invokeRomWeaverPpfUndoWorker,
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,

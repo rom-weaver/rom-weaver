@@ -2,6 +2,7 @@ import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import Save from "lucide-react/dist/esm/icons/save.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
+import Wrench from "lucide-react/dist/esm/icons/wrench.js";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -20,6 +21,7 @@ import { APP_BUILD_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { LogDialog } from "./components/log-dialog.tsx";
 import { Masthead, Selvage, UpdateBanner } from "./components/shell.tsx";
+import { ToolsForm } from "./components/tools-form.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { getSettingsUiState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
@@ -31,6 +33,7 @@ const WORKFLOW_TABS = [
   { icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
+  { icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 const ROOT_LOGO_URL = "./logo.svg";
 
@@ -348,6 +351,10 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
                 onSourceChange={actions.onTrimSourceChange}
                 pageDrop={activePageDrop}
               />,
+            )}
+            {workflowPanel(
+              "tools",
+              <ToolsForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
             )}
             <DropVeil />
           </main>

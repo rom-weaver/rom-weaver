@@ -18,17 +18,19 @@ import {
   type CreatorSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
+  createEmptyToolsSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
   type PatcherSessionState,
   type StartupState,
+  type ToolsSessionState,
   type TrimSessionState,
   type ValidationState,
   type WorkflowView,
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WorkflowView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WorkflowView[] = ["patcher", "creator", "trim"];
+const VALID_WORKFLOW_VIEWS: readonly WorkflowView[] = ["patcher", "creator", "trim", "tools"];
 const ACTIVE_VIEW_STORAGE_KEY = "rom-weaver-active-view";
 
 const normalizeWorkflowView = (value: unknown): WorkflowView | null => {
@@ -57,8 +59,18 @@ const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, 
 // Lightweight hash router: each tab is a `#/<slug>` route so reload, back/forward,
 // and shared links land on the same tab. Hash routing needs no service-worker or
 // server navigation fallback (the fragment never reaches the network).
-const VIEW_TO_HASH_SLUG: Record<WorkflowView, string> = { creator: "create", patcher: "apply", trim: "trim" };
-const HASH_SLUG_TO_VIEW: Record<string, WorkflowView> = { apply: "patcher", create: "creator", trim: "trim" };
+const VIEW_TO_HASH_SLUG: Record<WorkflowView, string> = {
+  creator: "create",
+  patcher: "apply",
+  tools: "tools",
+  trim: "trim",
+};
+const HASH_SLUG_TO_VIEW: Record<string, WorkflowView> = {
+  apply: "patcher",
+  create: "creator",
+  tools: "tools",
+  trim: "trim",
+};
 
 const readHashSlug = (): string => {
   if (typeof window === "undefined") return "";
@@ -88,6 +100,7 @@ type WebappState = {
   creatorSession: CreatorSessionState;
   currentView: WorkflowView;
   patcherSession: PatcherSessionState;
+  toolsSession: ToolsSessionState;
   trimSession: TrimSessionState;
   settingsDialogOpen: boolean;
   settings: SettingsState;
@@ -176,6 +189,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       message: "",
       status: "loading",
     },
+    toolsSession: createEmptyToolsSessionState(),
     trimSession: createEmptyTrimSessionState(),
     validation: emptyValidation(),
   }));
@@ -404,6 +418,11 @@ const createWebappRootController = (options: ControllerOptions) => {
           status,
         },
       });
+    },
+    setToolsSessionState(active: unknown) {
+      const nextActive = !!active;
+      if (store.getState().toolsSession.active === nextActive) return;
+      setState({ toolsSession: { active: nextActive } });
     },
     setTrimOutputFormat(format: unknown) {
       updateTrimSession({ outputFormat: typeof format === "string" ? format : "" });
