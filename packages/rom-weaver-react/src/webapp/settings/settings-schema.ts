@@ -60,7 +60,7 @@ type CodecListOptions = NonNullable<Parameters<typeof normalizeCodecList>[1]>;
 const storedStringSchema = v.string();
 const storedBooleanSchema = v.boolean();
 const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
-const BOOLEAN_SETTINGS_FIELDS = ["fixChecksum"] as const satisfies readonly SettingsFieldKey[];
+const BOOLEAN_SETTINGS_FIELDS = ["betaToolsEnabled", "fixChecksum"] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "language",
@@ -381,6 +381,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const patch = isRecord(applySettings.patch) ? applySettings.patch : {};
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
+    betaToolsEnabled: commonSettings.betaToolsEnabled,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -438,6 +439,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
+
+    const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
+    if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
 
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
@@ -536,7 +540,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
-    if (fieldKey === "language" || fieldKey === "logLevel") {
+    if (fieldKey === "betaToolsEnabled" || fieldKey === "language" || fieldKey === "logLevel") {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }

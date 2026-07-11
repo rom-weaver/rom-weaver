@@ -20,9 +20,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.info.threads"
 msgstr "“auto” resolves to the browser-reported core count of {n}."
 
@@ -500,6 +497,11 @@ msgstr "Embed source crc32 in the output filename"
 #: src/presentation/localization/messages.ts
 msgid "ui.req.embeddedSizes"
 msgstr "embedded sizes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.betaToolsEnabled"
+msgstr "Enable beta tools (Trim and Tools)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1333,6 +1335,11 @@ msgstr "threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.workerThreads"
+msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.track.word"
 msgstr "Track"
 
@@ -1480,11 +1487,6 @@ msgstr "Without copier header"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "Worker execution failed."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.workerThreads"
-msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

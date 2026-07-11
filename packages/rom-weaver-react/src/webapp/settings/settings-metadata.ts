@@ -32,6 +32,7 @@ type SettingsState = {
   defaultCompression: string;
   language: string;
   logLevel: string;
+  betaToolsEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
   compressionProfile: string;
@@ -150,6 +151,7 @@ const SETTINGS_FIELD_ORDER = [
   "defaultCompression",
   "language",
   "logLevel",
+  "betaToolsEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
   "compressionProfile",
@@ -216,6 +218,15 @@ const ZIP_ZSTD_CODEC =
   COMPRESSION_DEFAULTS.zipCodec;
 
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
+  betaToolsEnabled: {
+    defaultValue: false,
+    id: "settings-beta-tools-enabled",
+    key: "betaToolsEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("betaToolsEnabled"),
+    labelDataLocalize: "Enable beta tools (Trim and Tools)",
+    layout: "large",
+  },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
     codecSuggestions: getCompressionCodecSuggestions("chdCreateCdCodecs"),

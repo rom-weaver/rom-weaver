@@ -20,9 +20,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.info.threads"
 msgstr "«auto» usa el número de núcleos que reporta el navegador: {n}."
 
@@ -500,6 +497,11 @@ msgstr "Incluir el crc32 de origen en el nombre de salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.req.embeddedSizes"
 msgstr "tamaños integrados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.betaToolsEnabled"
+msgstr "Activar herramientas beta (Recortar y Herramientas)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1333,6 +1335,11 @@ msgstr "hilos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.workerThreads"
+msgstr "Hilos de trabajo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.track.word"
 msgstr "Pista"
 
@@ -1480,11 +1487,6 @@ msgstr "Sin cabecera de copiador"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "La ejecución del worker falló."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.workerThreads"
-msgstr "Hilos de trabajo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -38,6 +38,11 @@ const normalizeWorkflowView = (value: unknown): WorkflowView | null => {
   return VALID_WORKFLOW_VIEWS.includes(normalized as WorkflowView) ? (normalized as WorkflowView) : null;
 };
 
+const isBetaWorkflowView = (view: WorkflowView): boolean => view === "trim" || view === "tools";
+
+const normalizeWorkflowViewForSettings = (view: WorkflowView, settings: SettingsState): WorkflowView =>
+  !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
+
 /** Restore the last-used workflow tab so a reload returns to the same tab. */
 const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WorkflowView => {
   try {
@@ -176,7 +181,10 @@ const mergeDraftSettings = (
 const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
   // The URL hash wins (deep links / reload), then the last persisted tab, then the default.
-  const initialView = readWorkflowViewFromHash() || loadPersistedWorkflowView(options.storage);
+  const initialView = normalizeWorkflowViewForSettings(
+    readWorkflowViewFromHash() || loadPersistedWorkflowView(options.storage),
+    settings,
+  );
   writeWorkflowViewToHash(initialView);
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
@@ -225,13 +233,20 @@ const createWebappRootController = (options: ControllerOptions) => {
       validation?: ValidationState;
     },
   ) => {
+    const currentView = store.getState().currentView;
+    const nextCurrentView = normalizeWorkflowViewForSettings(currentView, nextSettings);
     const nextState: Partial<WebappState> = {
       settings: copySettings(nextSettings),
     };
+    if (nextCurrentView !== currentView) nextState.currentView = nextCurrentView;
     if (optionsForApply?.draftSettings) nextState.draftSettings = optionsForApply.draftSettings;
     if (optionsForApply?.syncDraftSettings) nextState.draftSettings = copySettings(nextSettings);
     if (optionsForApply?.validation) nextState.validation = optionsForApply.validation;
     setState(nextState);
+    if (nextCurrentView !== currentView) {
+      persistWorkflowView(options.storage, nextCurrentView);
+      writeWorkflowViewToHash(nextCurrentView);
+    }
     emitCommittedSettings();
     options.onLocalizationChange(nextSettings.language);
   };
@@ -348,7 +363,8 @@ const createWebappRootController = (options: ControllerOptions) => {
     },
     selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean }) {
       const state = store.getState();
-      let nextView = (normalizeWorkflowView(mode) || DEFAULT_WORKFLOW_VIEW) as WorkflowView;
+      let nextView = normalizeWorkflowView(mode) || DEFAULT_WORKFLOW_VIEW;
+      nextView = normalizeWorkflowViewForSettings(nextView, state.settings);
       if (
         nextView !== state.currentView &&
         typeof options.onConfirmViewLeave === "function" &&

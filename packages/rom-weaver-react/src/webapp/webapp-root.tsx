@@ -302,7 +302,11 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             onSelectTab={(id) =>
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
             }
-            tabs={WORKFLOW_TABS}
+            tabs={
+              state.settings.betaToolsEnabled
+                ? WORKFLOW_TABS
+                : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
+            }
           />
           <UpdateBanner
             onDismiss={() => {

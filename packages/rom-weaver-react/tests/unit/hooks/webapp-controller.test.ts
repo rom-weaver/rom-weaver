@@ -38,14 +38,32 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.patcherSession.romFilePresent).toBe(false);
   });
 
-  it("commits a view change visible through getState", () => {
+  it("hides beta workflow views until enabled", () => {
     const controller = createController();
+    expect(controller.selectView("trim")).toBe("patcher");
+    expect(controller.getState().currentView).toBe("patcher");
+
+    controller.updateDraftSetting("betaToolsEnabled", true);
+    expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("trim")).toBe("trim");
     expect(controller.getState().currentView).toBe("trim");
+
+    controller.updateDraftSetting("betaToolsEnabled", false);
+    expect(controller.saveDraftSettings()).toBe(true);
+    expect(controller.getState().currentView).toBe("patcher");
+  });
+
+  it("falls back from a beta route in the initial hash", () => {
+    window.location.hash = "#/tools";
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.hash).toBe("#/apply");
   });
 
   it("routes and tracks the tools workflow", () => {
     const controller = createController();
+    controller.updateDraftSetting("betaToolsEnabled", true);
+    expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("tools")).toBe("tools");
     expect(window.location.hash).toBe("#/tools");
     controller.setToolsSessionState(true);

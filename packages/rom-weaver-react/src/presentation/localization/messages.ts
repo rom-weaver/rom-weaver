@@ -71,6 +71,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "progress.trim": msg({ id: "progress.trim", message: "Trimming ROM" }),
   "progress.verify": msg({ id: "progress.verify", message: "Verifying output" }),
   "progress.write": msg({ id: "progress.write", message: "Writing output" }),
+  "settings.betaToolsEnabled": msg({ id: "settings.betaToolsEnabled", message: "Enable beta tools (Trim and Tools)" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compression": msg({ id: "settings.compression", message: "Compression" }),
