@@ -249,6 +249,18 @@ const useManifestExport = ({
     setError("");
     setPhase("preparing");
     setProgress(null);
+    // Step-based determinate progress: each prepare/chain/hash/write stage
+    // advances one tick, so the export bar moves instead of sitting
+    // indeterminate for the whole run. The bundle branch's tick count is an
+    // estimate (its hash/compress steps are conditional) - the cap keeps the
+    // bar from reaching 100% before the export actually finishes.
+    const wantsBundleRom = bundleRom && format !== MANIFEST_ONLY_FORMAT;
+    const totalSteps = (inputs[0] ? 1 : 0) + patches.length * 2 + (wantsBundleRom ? 2 : 0) + 2;
+    let doneSteps = 0;
+    const stepProgress = (label: string) => {
+      setProgress({ label, percent: Math.min(99, (doneSteps / totalSteps) * 100) });
+      doneSteps += 1;
+    };
     const cleanups: Array<() => Promise<void> | void> = [];
     // Resolve a session source to its patch/ROM leaf so bundles carry the
     // actual file, not the archive it arrived in. Degrades to the original
@@ -284,12 +296,14 @@ const useManifestExport = ({
     };
     try {
       const rom = inputs[0];
+      if (rom) stepProgress("Preparing ROM");
       const romLeaf = rom
         ? await prepareLeafSource(rom, "rom", getReactBinarySourceFileName(rom, "rom.bin"), undefined, 0)
         : undefined;
       const patchLeaves = [];
       for (const [index, patch] of patches.entries()) {
         const row = exportRows[index];
+        stepProgress(`Preparing patch · ${index + 1}/${patches.length}`);
         const fallbackFileName = row?.fileName || getReactBinarySourceFileName(patch, `patch-${index + 1}.bin`);
         // When the leaf lives inside an archive, its own file name selects the
         // matching entry (mirrors the apply workflow's selected-entry routing).
@@ -300,7 +314,7 @@ const useManifestExport = ({
       const hashSource = async (source: unknown, fileName: string, label: string) => {
         const ingest = browserRuntime.ingest?.run;
         if (!ingest) throw new Error("Checksum generation is not available in this runtime");
-        setProgress({ label, percent: null });
+        stepProgress(label);
         const { result } = await ingest({
           checksumAlgorithms: [...CHECK_ALGORITHMS],
           fileName,
@@ -341,7 +355,7 @@ const useManifestExport = ({
           embeddedChecks(items[index], "out"),
           `Patch ${index + 1} output`,
         );
-        setProgress({ label: `Applying patch chain · ${index + 1}/${patchLeaves.length}`, percent: null });
+        stepProgress(`Applying patch chain · ${index + 1}/${patchLeaves.length}`);
         const output = await applyPatch({
           input: chainSource,
           options: {
@@ -361,7 +375,7 @@ const useManifestExport = ({
       const finalOutputHash = await hashSource(chainSource, chainFileName, "Checksum generation · final output");
       const finalOutputCheck = formatChecks(finalOutputHash.checksums);
       setPhase("exporting");
-      setProgress({ label: "Writing manifest", percent: null });
+      stepProgress("Writing manifest");
       const wantsBundle = format !== MANIFEST_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
       let packagedRom: { fileName: string; source: SourceRef } | undefined;
@@ -380,7 +394,7 @@ const useManifestExport = ({
           const targetFormat = recommendedRomFormat as "chd" | "rvz" | "z3ds";
           const createCompression = browserRuntime.compression.create;
           if (!createCompression) throw new Error("ROM compression is not available in this runtime");
-          setProgress({ label: `ROM compression · ${targetFormat.toUpperCase()}`, percent: null });
+          stepProgress(`ROM compression · ${targetFormat.toUpperCase()}`);
           const outputName = `${stripFileExtension(romLeaf.fileName)}.${targetFormat}`;
           const compressed = await createCompression({
             fileName: romLeaf.fileName,

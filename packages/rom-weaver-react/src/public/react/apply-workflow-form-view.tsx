@@ -891,12 +891,19 @@ function ApplyWorkflowFormView({
                 {manifestExport ? (
                   <button
                     className="btn ghost slim"
-                    disabled={outputState.disabled || !romInputs.length || !patches.length}
+                    disabled={manifestExport.busy || outputState.disabled || !romInputs.length || !patches.length}
                     id="rom-weaver-button-export-manifest"
                     onClick={() => void manifestExport.runExport()}
                     type="button"
                   >
-                    {localizer.message("ui.manifestExport.action")}
+                    {manifestExport.busy ? (
+                      <>
+                        <span aria-hidden="true" className="spinner" />
+                        {localizer.message("ui.manifestExport.action")}
+                      </>
+                    ) : (
+                      localizer.message("ui.manifestExport.action")
+                    )}
                   </button>
                 ) : null}
                 {manifestExport?.busy ? (
@@ -968,7 +975,12 @@ function ApplyWorkflowFormView({
                   ) : null}
                 </>
               ) : outputState.applyTiming ? (
-                <span className="t">{outputState.applyTiming}</span>
+                // Mid-run the elapsed readout carries the same "Apply" key as the
+                // finished chip, so the bare number never appears unlabeled.
+                <span className="rb mono">
+                  <span className="k">Apply</span>
+                  <span className="t">{outputState.applyTiming}</span>
+                </span>
               ) : undefined
             }
             notice={
