@@ -2,7 +2,7 @@ import Globe from "lucide-react/dist/esm/icons/globe.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
 import Settings from "lucide-react/dist/esm/icons/settings.js";
-import Sun from "lucide-react/dist/esm/icons/sun.js";
+import SunMedium from "lucide-react/dist/esm/icons/sun-medium.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
@@ -140,7 +140,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
       <Moon aria-hidden="true" className="ico-moon" />
-      <Sun aria-hidden="true" className="ico-sun" />
+      <SunMedium aria-hidden="true" className="ico-sun" />
     </button>
   );
 };

@@ -66,7 +66,7 @@
 [hidden] { display: none !important; }
 /* base scale — bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
-:root:has(.rw-app) { font-size: clamp(15px, 13px + .42vw, 17px); scrollbar-gutter: stable; }
+:root:has(.rw-app) { font-size: clamp(15px, 13px + .42vw, 17px); }
 /* metric-adjusted fallback ≈ Inter Tight: no reflow when the webfont swaps in */
 @font-face {
   font-family: "Inter Tight Fallback";
@@ -1283,15 +1283,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tracelog:empty::after { content: "—"; color: var(--ink-4); }
 
 /* ═══ selvage status strip ═══ */
-/* a direct <body> child OUTSIDE the centered app column — it spans the
-   viewport edge to edge at the very end of the page (body is a flex column;
-   .loom-app flexes to fill, so the strip lands at the bottom) */
+/* a contained status strip aligned with the centered form column */
 .rw-app .selvage {
   position: relative;
-  /* edge-to-edge band: vertical + safe-area padding only, no inline inset */
+  max-width: calc(880px - 2 * clamp(10px, 2.5vw, 28px));
+  width: calc(100% - 2 * clamp(10px, 2.5vw, 28px));
+  margin-inline: auto;
   padding: 7px 0 max(7px, env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--plate) 88%, transparent);
-  border-block-start: 1px solid var(--seam);
+  border: 1px solid var(--seam);
   font-size: .82rem; color: var(--ink-3);
 }
 .rw-app .selvage::before {
@@ -1301,8 +1301,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 /* content stays within the centered form-container boundary (matches .app) */
 .rw-app .sv-inner {
-  max-width: 880px; width: 100%; margin-inline: auto;
-  padding-inline: clamp(10px, 2.5vw, 28px);
+  width: 100%;
+  padding-inline: 8px;
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .rw-app .sv-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
@@ -1524,6 +1524,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .brand-mark { width: 38px; height: 38px; }
 }
 @media (max-width: 560px) {
+  .rw-app .selvage { max-width: none; width: calc(100% - 16px); }
   /* keep the form container (just inset from the screen); cards run to its
      inner edge, and the 0x* headers keep a gutter that lines up with card text */
   /* shrink the row controls on a phone so the badges + buttons don't crowd the
