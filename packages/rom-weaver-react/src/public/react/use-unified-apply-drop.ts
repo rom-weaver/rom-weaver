@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { loadLocalManifestSession } from "../../lib/manifest/local-manifest-session.ts";
@@ -21,8 +21,7 @@ import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-cla
 
 const logger = createLogger("unified-apply-drop");
 
-/** Retained for API compatibility - bare files and classified archives stage into their resolved
- * bucket directly, so no placeholder cards are needed. */
+/** UI-only row shown while an archive or manifest is being identified and routed. */
 type PendingDrop = {
   id: string;
   name: string;
@@ -39,8 +38,6 @@ type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
   onDrop: (files: File[], isCancelled?: () => boolean) => void;
 };
-
-const NO_PENDING_DROPS: PendingDrop[] = [];
 
 /**
  * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-manifest verdict
@@ -124,18 +121,33 @@ const useUnifiedApplyDrop = (
   onManifestSession?: (session: ManifestApplySession) => void,
   onError?: (error: Error) => void,
 ): UnifiedApplyDrop => {
+  const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
+  const nextIdRef = useRef(0);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean) => {
       if (isCancelled?.()) return;
-      void routeUnifiedDrop(files, controller, onManifestSession, isCancelled).catch((error) => {
-        logger.error("manifest drop failed", { error: String(error) });
-        onError?.(error instanceof Error ? error : new Error(String(error)));
+      const { archives } = classifyDroppedFiles(files);
+      const identifiedFiles = files.filter((file) => archives.includes(file) || isManifestFileName(file.name));
+      const pending = identifiedFiles.map((file) => {
+        nextIdRef.current += 1;
+        return { id: `pending-${nextIdRef.current}`, name: file.name };
       });
+      if (pending.length) setPendingDrops((current) => [...current, ...pending]);
+      const pendingIds = new Set(pending.map((entry) => entry.id));
+      const clearPending = () => {
+        if (pendingIds.size) setPendingDrops((current) => current.filter((entry) => !pendingIds.has(entry.id)));
+      };
+      void routeUnifiedDrop(files, controller, onManifestSession, isCancelled)
+        .catch((error) => {
+          logger.error("manifest drop failed", { error: String(error) });
+          onError?.(error instanceof Error ? error : new Error(String(error)));
+        })
+        .finally(clearPending);
     },
     [controller, onError, onManifestSession],
   );
 
-  return { onDrop, pendingDrops: NO_PENDING_DROPS };
+  return { onDrop, pendingDrops };
 };
 
 export { type PendingDrop, useUnifiedApplyDrop };

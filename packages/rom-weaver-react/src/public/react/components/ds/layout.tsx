@@ -79,6 +79,7 @@ const DropZone = ({
   accept,
   disabled,
   reading: readingLabel = "Reading folder…",
+  onDropStart,
   onFiles,
   id,
   inputId,
@@ -99,6 +100,8 @@ const DropZone = ({
   disabled?: boolean;
   /** Label shown while a dropped folder is being read. */
   reading?: ReactNode;
+  /** Fires as soon as the user supplies files, before any staging work begins. */
+  onDropStart?: () => void;
   onFiles: (files: File[]) => void;
   id?: string;
   inputId?: string;
@@ -114,6 +117,7 @@ const DropZone = ({
     if (!list || list.length === 0) return;
     const files = Array.from(list);
     stampDroppedFiles(files, perfNow());
+    onDropStart?.();
     onFiles(files);
   };
 
@@ -135,6 +139,7 @@ const DropZone = ({
         event.preventDefault();
         setDragging(false);
         if (disabled) return;
+        onDropStart?.();
         // Stamp the drop instant now; folder reads below are async, but the
         // perceived latency starts the moment the user let go of the files.
         const droppedAtMs = perfNow();

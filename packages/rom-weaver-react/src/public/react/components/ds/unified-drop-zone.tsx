@@ -34,6 +34,8 @@ type UnifiedDropZoneProps = {
   num?: string;
   title?: ReactNode;
   hintCoarse?: ReactNode;
+  /** Fires at the drop gesture, before files enter routing or staging. */
+  onDropStart?: () => void;
   onFiles: (files: File[]) => void;
   /** Extra content rendered inside the 0x01 step body, below the drop target (e.g. the
    * "identifying…" placeholders for dropped archives) so it shares the step's content width. */
@@ -44,6 +46,7 @@ const UnifiedDropZone = ({
   afterDropZone,
   info,
   num = "0x01",
+  onDropStart,
   onFiles,
   supported,
   title = "Inputs",
@@ -84,7 +87,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title}
     >
-      <DropZone {...dropZoneProps} bare formats={formats} multiple onFiles={emit} />
+      <DropZone {...dropZoneProps} bare formats={formats} multiple onDropStart={onDropStart} onFiles={emit} />
       {afterDropZone}
     </StepSection>
   );

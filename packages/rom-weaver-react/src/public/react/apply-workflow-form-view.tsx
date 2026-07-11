@@ -1,5 +1,5 @@
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { ManifestRomExpectation } from "../../lib/manifest/manifest-session-model.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -13,7 +13,7 @@ import {
 } from "./components/ds/compress-panel.tsx";
 import { FileProgress, InlineProgress, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
-import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
+import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -684,11 +684,19 @@ function ApplyWorkflowFormView({
   // drop handler stages bare files immediately and shows an "identifying"
   // placeholder per archive until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
+  // Start the hero morph at the gesture, not after a large input finishes enough
+  // staging to publish its first row. This is presentation-only; Rust ingestion
+  // continues on its existing schedule behind the transition.
+  const [dropStarted, setDropStarted] = useState(false);
+  const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
+  const formReady = pendingDrops.length === 0 && (romInputs.length > 0 || patches.length > 0 || inputsStaging);
+  useEffect(() => {
+    if (dropStarted && workflowHasContent) setDropStarted(false);
+  }, [dropStarted, workflowHasContent]);
   // The empty bench fills (or clears) inside a flat crossfade - the 0x01 hero
-  // shrinking into the add-row otherwise snaps. A pending placeholder also counts
-  // as "not empty" so the hero shrinks the instant something is dropped.
-  const workflowActuallyEmpty =
-    romInputs.length === 0 && patches.length === 0 && pendingDrops.length === 0 && !inputsStaging;
+  // shrinking into the add-row otherwise snaps. A drop-start signal makes that
+  // crossfade begin before input staging publishes its first row.
+  const workflowActuallyEmpty = !(workflowHasContent || dropStarted);
   const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
   // "Needs input" directives forward to the 0x01 unified picker.
   const openUnifiedPicker = () => document.getElementById("rom-weaver-input-file-unified")?.click();
@@ -718,7 +726,7 @@ function ApplyWorkflowFormView({
   }
 
   return (
-    <section className="panel" id="rom-weaver-container">
+    <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         afterDropZone={
@@ -755,6 +763,7 @@ function ApplyWorkflowFormView({
             : "Replace the ROM or add patches"
         }
         labelCoarse={workflowEmpty ? "Tap to add ROMs, patches, manifests, or archives" : undefined}
+        onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDrop}
         supported={APPLY_SUPPORTED_FILES}
       />

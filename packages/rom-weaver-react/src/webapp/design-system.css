@@ -346,6 +346,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    carries meaning. Step hairlines still separate the sections. */
 .rw-app .panel { overflow: clip; }
 .rw-app .workflow-body { min-width: 0; animation: panel-in .3s var(--ease); }
+/* Identification has its own indeterminate row; once routing clears, bring the
+   actual form sections in as a second, quieter beat. */
+.rw-app .form-ready > .step:not(.unified-drop-step) { animation: form-ready-in .34s var(--ease) both; }
 
 /* step = a loom stage */
 .rw-app .step { border-block-start: 1px solid var(--seam-soft); }
@@ -1560,6 +1563,7 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
 @keyframes drop-in { from { opacity: 0; translate: 0 -6px; } }
 @keyframes card-in { from { opacity: 0; translate: 0 8px; } }
 @keyframes panel-in { from { opacity: 0; translate: 0 6px; } }
+@keyframes form-ready-in { from { opacity: 0; translate: 0 8px; } }
 @keyframes chip-in { from { opacity: 0; translate: 0 5px; scale: .9; } }
 /* The instant "identifying…" drop placeholder: shown the moment an archive lands, then dropped (no
    animation) once its bucket resolves and the real staging card takes over. The swap never blocks

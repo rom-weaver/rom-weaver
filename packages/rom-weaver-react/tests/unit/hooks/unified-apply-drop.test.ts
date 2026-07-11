@@ -29,8 +29,9 @@ describe("useUnifiedApplyDrop", () => {
 
     act(() => result.current.onDrop([file("bundle.zip")]));
 
-    expect(result.current.pendingDrops).toHaveLength(0);
+    expect(result.current.pendingDrops).toHaveLength(1);
     await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
     expect(controller.provideRomInputFiles.mock.calls[0]?.[0].map((entry: File) => entry.name)).toEqual(["bundle.zip"]);
     expect(controller.providePatchInputFiles).not.toHaveBeenCalled();
   });
@@ -42,7 +43,9 @@ describe("useUnifiedApplyDrop", () => {
 
     act(() => result.current.onDrop([file("patches.zip")]));
 
+    expect(result.current.pendingDrops).toHaveLength(1);
     await waitFor(() => expect(controller.providePatchInputFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
     expect(controller.providePatchInputFiles.mock.calls[0]?.[0].map((entry: File) => entry.name)).toEqual([
       "patches.zip",
     ]);
@@ -56,7 +59,9 @@ describe("useUnifiedApplyDrop", () => {
 
     act(() => result.current.onDrop([file("bundle.zip")]));
 
+    expect(result.current.pendingDrops).toHaveLength(1);
     await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
     expect(controller.provideRomInputFiles.mock.calls[0]?.[0].map((entry: File) => entry.name)).toEqual(["bundle.zip"]);
     expect(controller.providePatchInputFiles).not.toHaveBeenCalled();
   });
