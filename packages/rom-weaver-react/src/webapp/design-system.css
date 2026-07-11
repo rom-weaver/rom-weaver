@@ -78,6 +78,12 @@
 }
 .rw-app {
   margin: 0; min-height: 100dvh;
+  /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
+     slots): solid seam + thread-tinted fill, lighting up on hover. Composed
+     from theme-switched vars, so no per-theme overrides are needed. */
+  --empty-fill: color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+  --empty-fill-hover: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
+  --empty-border-hover: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
   /* flex column so the app fills the viewport and the selvage strip (a direct
      body child) lands edge-to-edge at the very bottom */
   display: flex; flex-direction: column;
@@ -523,23 +529,23 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    while nothing is staged, shrinking to a compact add-row once files arrive */
 .rw-app .step.is-input .drop.hero {
   border: 1px solid var(--seam); border-radius: var(--r-l);
-  background: color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+  background: var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
 .rw-app .step.is-input .drop.hero:hover, .rw-app .step.is-input .drop.hero:focus-visible {
-  border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
-  background: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
+  border-color: var(--empty-border-hover);
+  background: var(--empty-fill-hover);
 }
 /* compact add-row sits just above the staged cards */
 /* the "add more files" row matches the form: a full-width panel like a shrunk
    hero, not a lone floating pill */
 .rw-app .step.is-input .drop:not(.hero) {
   padding: 13px 16px; border-radius: var(--r-m);
-  border: 1px solid var(--seam); background: color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+  border: 1px solid var(--seam); background: var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
 .rw-app .step.is-input .drop:not(.hero):hover, .rw-app .step.is-input .drop:not(.hero):focus-within {
-  border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong)); background: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
+  border-color: var(--empty-border-hover); background: var(--empty-fill-hover);
 }
 /* inside the panel the label is plain (no pill) */
 .rw-app .step.is-input .drop:not(.hero) .main.btnish {
@@ -573,13 +579,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   display: flex; align-items: center; justify-content: center; gap: 9px;
   width: 100%; min-height: 72px; padding: 16px 20px; margin: 0;
   appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
-  background: color-mix(in oklab, var(--thread) 4%, var(--plate-2)); cursor: pointer;
+  background: var(--empty-fill); cursor: pointer;
   color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
   transition: color .15s, background .15s, border-color .15s;
 }
 .rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
-  color: var(--ink-2); background: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
-  border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
+  color: var(--ink-2); background: var(--empty-fill-hover);
+  border-color: var(--empty-border-hover);
 }
 .rw-app .needs-input svg { width: 16px; height: 16px; flex: none; color: var(--thread-text); }
 .rw-app .needs-input .hexref { color: var(--thread-text); font-weight: 700; letter-spacing: .04em; }
@@ -598,6 +604,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   min-height: 34px; margin-block-start: 10px; padding-inline: 14px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   border: 1px solid var(--seam); border-radius: var(--r-m);
+  /* deliberately a step fainter than --empty-fill: decorative, not droppable */
   background: color-mix(in oklab, var(--thread) 3%, var(--plate-2));
 }
 /* card silhouette: a name line on the left, a badge stub on the right - two
