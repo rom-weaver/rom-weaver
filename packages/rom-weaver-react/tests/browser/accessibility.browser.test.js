@@ -3,7 +3,7 @@
  * computed styles in BOTH light and dark themes.
  *
  *  1. Component WCAG 2.1 A/AA scan of the checksum card (text contrast, roles,
- *     names, ARIA) — the broad "are we meeting our goals" gate.
+ *     names, ARIA) - the broad "are we meeting our goals" gate.
  *  2. A surface-separation guard for the bug this suite was added for: the
  *     *opened* checksum drawer must stay a distinct recessed well, not wash
  *     into the card. axe's contrast rules only cover text vs background (WCAG
@@ -146,7 +146,7 @@ const bgString = (selector) => getComputedStyle(host.querySelector(selector)).ba
 // Run axe over `context` and return readable violation strings (with the
 // contrast diagnostic inlined when present). `bestPractice` adds the
 // best-practice ruleset (landmark relationships, dialog names, …); `region`
-// enables the region rule (only meaningful for a full page — an isolated mount
+// enables the region rule (only meaningful for a full page - an isolated mount
 // or lone modal has no landmarks). Always assert against [] so failures show
 // exactly what broke.
 const scanViolations = async (context, { bestPractice = false, region = false } = {}) => {
@@ -163,7 +163,7 @@ const scanViolations = async (context, { bestPractice = false, region = false } 
       sample && sample.contrastRatio !== undefined
         ? ` [ratio ${sample.contrastRatio} need ${sample.expectedContrastRatio}, fg ${sample.fgColor} on ${sample.bgColor}]`
         : "";
-    return `${v.id} (${v.impact}): ${v.help}${detail} — ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`;
+    return `${v.id} (${v.impact}): ${v.help}${detail} - ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`;
   });
 };
 
@@ -178,7 +178,7 @@ describe("design-system accessibility", () => {
   test("light: opened checksum drawer stays a distinct recessed well", async () => {
     await renderSample("light");
 
-    // The opened drawer must keep the solid well fill it has when collapsed —
+    // The opened drawer must keep the solid well fill it has when collapsed -
     // the bug was the open state diluting to a near-transparent tint that read
     // as the card behind it. Opening must not change the recess colour.
     expect(bgString(".cks.is-open")).toBe(bgString(".cks:not(.is-open)"));
@@ -196,7 +196,7 @@ describe("design-system accessibility", () => {
   for (const theme of THEMES) {
     test(`opened checksum drawer is separable from its card (${theme} theme)`, async () => {
       await renderSample(theme);
-      // Compare raw computed strings — dark fills serialize as oklab(), which
+      // Compare raw computed strings - dark fills serialize as oklab(), which
       // need no parsing for a distinctness check. Either the fill differs from
       // the card, or a visible seam does the separation work.
       const open = getComputedStyle(host.querySelector(".cks.is-open"));
@@ -232,7 +232,7 @@ const renderPage = async (node, theme) => {
 // ── Expanded design-system sections + states gallery ─────────────────────────
 // Every collapsible section, rendered OPEN, plus the progress / error / fault
 // primitives, so axe sees the *contents* of each section and each status state
-// in both themes — a collapsed drawer is visibility:hidden and axe skips it.
+// in both themes - a collapsed drawer is visibility:hidden and axe skips it.
 
 const ROM_CHECKSUMS = {
   crc32: "C6FB1252",
@@ -249,7 +249,7 @@ const SectionsGallery = () =>
       { level: "error", onDismiss: noop },
       "Patch checksum mismatch: expected C6FB1252, got 00000000.",
     ),
-    createElement(Notice, { level: "warn", onDismiss: noop }, "Header looks unusual — double-check the source ROM."),
+    createElement(Notice, { level: "warn", onDismiss: noop }, "Header looks unusual - double-check the source ROM."),
     createElement(RunButton, {
       download: {
         format: "ZIP",
@@ -321,7 +321,7 @@ describe("design-system sections + states (expanded)", () => {
 });
 
 // ── Full-page scans ──────────────────────────────────────────────────────────
-// Mounts the production page shell — Masthead + <main> + Selvage — around each
+// Mounts the production page shell - Masthead + <main> + Selvage - around each
 // workflow. Apply uses the inert ApplyWorkflowFormView (controllers-as-stores,
 // no wasm) with a staged ROM card. Create/Trim are stateful forms with no inert
 // view, but render fine EMPTY (wasm only boots on a file action), so we scan
@@ -502,7 +502,7 @@ const emptyTrimPage = () =>
 // owned by presentational views (Create/TrimPatchFormView) that the controllers
 // feed prop bundles. Mounting those views directly with a staged model exercises
 // the loaded source cards (Extract + Info open, incl. the trim group) + swap row
-// + output step without booting wasm — the coverage gap empty benches can't reach.
+// + output step without booting wasm - the coverage gap empty benches can't reach.
 const stagedSourceStep = ({ id, num, title, trim }) => ({
   id,
   items: [
@@ -545,7 +545,6 @@ const stagedCreatePage = () =>
     createElement(CreatePatchFormView, {
       dropZone: { label: "Add or replace a ROM", onFiles: noop },
       modifiedStep: stagedSourceStep({ id: "patch-builder-row-modified", num: "0x03", title: "Modified" }),
-      onAddInput: noop,
       originalStep: stagedSourceStep({ id: "patch-builder-row-original", num: "0x02", title: "Original" }),
       output: stagedOutputStep({
         fileNameId: "patch-builder-output-file",
@@ -570,7 +569,7 @@ const stagedTrimPage = () =>
     "trim",
     createElement(TrimPatchFormView, {
       confirm: {
-        body: "The trimmed copy is saved as a new download — your original file is not changed.",
+        body: "The trimmed copy is saved as a new download - your original file is not changed.",
         cancelLabel: "Cancel",
         confirmLabel: "Trim ROM",
         onCancel: noop,
@@ -579,7 +578,6 @@ const stagedTrimPage = () =>
         title: "Trim this ROM?",
       },
       dropZone: { label: "Replace the ROM", onFiles: noop },
-      onAddInput: noop,
       output: stagedOutputStep({
         fileNameId: "trim-builder-output-file",
         format: "none",

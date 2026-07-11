@@ -11,9 +11,9 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENS
  * extension sets come from {@link file-classification.ts} so the picker and the
  * drop-time classifier never drift apart. Two variants mirror the CLI filters:
  *
- *   - `unifiedApply` — ROMs, patches, and archives (`--rom-filter` +
- *     `--patch-filter`), used by the Apply tab.
- *   - `unifiedRom` — ROMs and archives only (`--rom-filter`), used by the
+ *   - `unifiedApply` - ROMs, patches, manifests, and archives (`--rom-filter`
+ *     + `--patch-filter`), used by the Apply tab.
+ *   - `unifiedRom` - ROMs and archives only (`--rom-filter`), used by the
  *     Create and Trim tabs, which have no patch bucket.
  *
  * Mobile Safari ignores extension-only `accept` lists, so it falls back to a
@@ -35,6 +35,7 @@ const ROM_AND_PATCH_FILTER_ACCEPT = toAcceptList([
   ...ROM_FILE_EXTENSIONS,
   ...ARCHIVE_FILE_EXTENSIONS,
   ...PATCH_FILE_EXTENSION_VARIANTS,
+  "json",
 ]);
 
 const FILE_ONLY_MIME_TYPES = [
@@ -65,7 +66,7 @@ const getNavigatorAcceptEnvironment = (): FileInputAcceptEnvironment => {
 
 const isMobileSafari = (environment: FileInputAcceptEnvironment) => {
   // Site-specific "Safari": only the bare `Chrome` token is excluded (so iOS
-  // Chrome/Firefox/Edge — CriOS/FxiOS/EdgiOS — still count as Safari here),
+  // Chrome/Firefox/Edge - CriOS/FxiOS/EdgiOS - still count as Safari here),
   // unlike isSafariBrowser. Kept distinct on purpose; see webkit-runtime.ts.
   const isSafari = hasSafariToken(environment) && !hasChromeToken(environment);
   const isMobile = hasMobileToken(environment) || (isSafari && isAppleTouchDesktop(environment));

@@ -21,7 +21,6 @@ import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
 import {
   type CompletedCreateOutput,
-  CREATE_HERO_FORMATS,
   CREATE_SUPPORTED_FILES,
   type CreateDisplaySourceState,
   type CreateMessagePlacement,
@@ -33,7 +32,6 @@ import {
 } from "./create-patch-output-model.ts";
 import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./create-source-step-view-model.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { ARCHIVE_INPUT_HINT, ROM_INPUT_HINT } from "./input-helper-text.ts";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
@@ -305,7 +303,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       return;
     }
     // Same pair already resolved (e.g. after a Swap, the canonical key is
-    // unchanged) — keep the candidates instead of re-extracting to re-measure.
+    // unchanged) - keep the candidates instead of re-extracting to re-measure.
     if (resolvedCandidateKeyRef.current === patchFormatCandidateKey) return;
     resolvedCandidateKeyRef.current = patchFormatCandidateKey;
     setCreatePatchFormatCandidates(null);
@@ -371,7 +369,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
     // When both ROMs arrive together, treat the longer file name as the modified
-    // ROM — hacks/edits usually carry the more descriptive name — so it lands in
+    // ROM - hacks/edits usually carry the more descriptive name - so it lands in
     // the later (modified) slot. Stable sort keeps drop order for equal lengths.
     const ordered = [...files].sort((a, b) => a.name.length - b.name.length);
     const [originalFile, modifiedFile] = routeByOrder(ordered, [!!original, !!modified]);
@@ -382,14 +380,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const workflow = stagedCreateWorkflowRef.current;
     const bothStaged = !!workflow && originalState?.status === "ready" && modifiedState?.status === "ready";
     if (!bothStaged) {
-      // Sources are still staging — fall back to the re-stage swap.
+      // Sources are still staging - fall back to the re-stage swap.
       const previousOriginal = original;
       updateOriginal(modified);
       updateModified(previousOriginal);
       return;
     }
     // Both ROMs are already extracted: swap the workflow's staged sessions and
-    // the display state in place — no re-extraction. The patch is direction-
+    // the display state in place - no re-extraction. The patch is direction-
     // specific, so a finished output is invalidated, but the sources are reused.
     const previousOriginal = original;
     const previousOriginalState = originalState;
@@ -757,8 +755,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesEmpty = useFlatTransitionFlag(!(original || modified));
-  // "Needs input" directives forward to the 0x01 unified picker.
-  const openUnifiedPicker = () => document.getElementById("patch-builder-input-file-unified")?.click();
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
@@ -766,15 +762,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dialog: candidateSelectionDialog,
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
-      archiveHint: `archives (${ARCHIVE_INPUT_HINT})`,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
-      formats: CREATE_HERO_FORMATS,
       id: "patch-builder-row-unified-drop",
       inputId: "patch-builder-input-file-unified",
       label: createSourcesEmpty ? "Drop the original and modified ROMs" : "Add or replace a ROM",
       onFiles: handleUnifiedDrop,
-      romHint: `roms (${ROM_INPUT_HINT})`,
       supported: CREATE_SUPPORTED_FILES,
     },
     modifiedStep: renderSourceStep({
@@ -789,7 +782,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       sourceState: modifiedState,
       title: "Modified",
     }),
-    onAddInput: openUnifiedPicker,
     originalStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("original"),
       file: original,
@@ -863,7 +855,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         <InfoPopover title="Output options">
           <strong>Output</strong>
           <ul>
-            <li>Set the filename without an extension — the format selector controls the patch type.</li>
+            <li>Set the filename without an extension - the format selector controls the patch type.</li>
             <li>BPS records source &amp; target checksums so applies can be verified.</li>
             <li>
               The patch is packaged in an archive by default; set Options &rarr; Type to None to download the raw patch

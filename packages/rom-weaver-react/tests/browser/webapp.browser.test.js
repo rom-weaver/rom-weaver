@@ -147,7 +147,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   mountWebappRoot();
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
-  const romInput = page.getByLabelText(/Drop a ROM or patches/i);
+  const romInput = page.getByLabelText(/ROMs, patches, manifests, or archives/i);
 
   await expect.element(romInput).toBeInTheDocument();
 
@@ -170,7 +170,9 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
     .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
     .not.toContain("game.bin");
 
-  await page.getByLabelText(/Drop a ROM or patches/i).upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
+  await page
+    .getByLabelText(/ROMs, patches, manifests, or archives/i)
+    .upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
 
   await selectCandidateIfPrompted("game.bin");
 
@@ -178,7 +180,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps diagnostics out of the masthead — the Log dialog owns them", async () => {
+test("WebappRoot keeps diagnostics out of the masthead - the Log dialog owns them", async () => {
   // The header stays theme / log / settings; the console-copy and mobile dev
   // tools toggles were folded into the Log dialog surface.
   mountWebappRoot();

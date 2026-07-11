@@ -69,14 +69,23 @@ describe("NeedsInput", () => {
 describe("DropZone", () => {
   it("renders the hero variant with format pills and the hidden input", () => {
     const { container } = render(
-      <DropZone big formats={["ips", "bps"]} inputId="unit-drop-input" label="Drop a ROM or patches" onFiles={() => undefined} />,
+      <DropZone
+        big
+        formats={["sfc", "nes", "ips", "bps"]}
+        inputId="unit-drop-input"
+        label="Drop a ROM or patches"
+        onFiles={() => undefined}
+      />,
     );
     const drop = container.querySelector("label.drop.hero");
     expect(drop).toBeTruthy();
-    expect(Array.from(container.querySelectorAll(".formats .fmt")).map((pill) => pill.textContent)).toEqual([
-      "ips",
-      "bps",
+    const lanes = Array.from(container.querySelectorAll(".formats-lane"));
+    expect(lanes).toHaveLength(2);
+    expect(lanes.map((lane) => Array.from(lane.querySelectorAll(".formats-set:first-child .fmt")).map((pill) => pill.textContent))).toEqual([
+      ["sfc", "nes"],
+      ["ips", "bps"],
     ]);
+    expect(lanes.every((lane) => lane.querySelectorAll(".formats-set").length === 2)).toBe(true);
     const input = container.querySelector("input[type=file]") as HTMLInputElement;
     expect(input.id).toBe("unit-drop-input");
     expect(input.classList.contains("sr-only")).toBe(true);

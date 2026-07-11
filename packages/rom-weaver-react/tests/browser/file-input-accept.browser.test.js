@@ -18,7 +18,7 @@ test("rom-filter accept list covers ROM and archive extensions", () => {
 
 test("rom+patch-filter accept list adds patch extensions", () => {
   const expected = unique(
-    [...romExtensions, ...containerExtensions, ...patchVariants].map((extension) => `.${extension}`),
+    [...romExtensions, ...containerExtensions, ...patchVariants, "json"].map((extension) => `.${extension}`),
   );
 
   expect(getFileInputAcceptAttributes({ userAgent: "Chrome" }).unifiedApply.split(",")).toEqual(expected);

@@ -11,7 +11,7 @@ import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
  * Pure output/source presentation helpers for the create-patch form, extracted
  * from `CreatePatchForm`. These derive the completed-output download face
  * (format / size / compression-ratio label), the execution output name, the
- * displayed source-info projections, and the static hero/support lists — all
+ * displayed source-info projections, and the static hero/support lists - all
  * state-free derivations the form composes into its view model.
  */
 
@@ -21,7 +21,7 @@ const resolveCreateExecutionOutputName = (outputName: string, patchType: string)
   // Ensure the name ends with the real patch extension, not just any dotted
   // segment: a version like "Game 2.2" reads as extension ".2" to a generic
   // check, so the format extension never gets appended and Rust's checksum-name
-  // embed jams the crc into the version ("Game 2 [crc32:…].2") — an unreadable
+  // embed jams the crc into the version ("Game 2 [crc32:…].2") - an unreadable
   // output name. We know the target extension here, so key off it directly.
   const extension = (patchType || "bps").toLowerCase();
   if (normalizedOutputName.toLowerCase().endsWith(`.${extension}`)) return normalizedOutputName;
@@ -68,7 +68,7 @@ const getCompletedDownloadMeta = ({
   rawSize?: number | null;
   size?: number | null;
 }) => ({
-  // format-only face — the filename already fills the output field above
+  // format-only face - the filename already fills the output field above
   format: `Patch .${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
   ratio: getCompressionRatioLabel(compression, size, rawSize),
   size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
@@ -101,9 +101,6 @@ const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null 
     (source as (CreateDisplaySourceState & { checksumTimeMs?: number }) | null | undefined)?.checksumTimeMs,
   );
 
-/** Format pills under the 0x01 hero — mirrors the loom prototype's create list. */
-const CREATE_HERO_FORMATS = ["sfc", "gba", "iso", "bin", "zip", "7z", "chd", "rvz"] as const;
-
 /** Full registry support, listed in the 0x01 info popover. */
 const CREATE_SUPPORTED_FILES = [
   { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
@@ -116,7 +113,6 @@ const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
 
 export {
   type CompletedCreateOutput,
-  CREATE_HERO_FORMATS,
   CREATE_SUPPORTED_FILES,
   type CreateDisplaySourceState,
   type CreateMessagePlacement,

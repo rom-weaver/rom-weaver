@@ -94,27 +94,21 @@ const renderView = ({
   );
 };
 
-describe("apply workflow view — empty bench", () => {
-  it("renders the 0x01–0x04 loom steps with the unified input and directives", () => {
+describe("apply workflow view - empty bench", () => {
+  it("renders only the 0x01 hero", () => {
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
     // 0x01 hero with the stable unified-input id
     expect(container.querySelector("section.step.is-input.is-empty")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
-    // step numbering
+    // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
-    // empty sections point back to 0x01 instead of offering their own drop
-    expect(container.querySelectorAll("button.needs-input").length).toBe(2);
-    // the output card stays on the bench, disabled
-    expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-select-output-format")).toBeTruthy();
-    const run = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
-    expect(run.disabled).toBe(true);
+    expect(numbers).toEqual(["0x01"]);
+    expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 });
 
-describe("apply workflow view — staged bench", () => {
+describe("apply workflow view - staged bench", () => {
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ patches: [patchItem("change.ips")], ui });
@@ -141,7 +135,7 @@ describe("apply workflow view — staged bench", () => {
   });
 });
 
-describe("apply workflow view — patch enable toggles", () => {
+describe("apply workflow view - patch enable toggles", () => {
   it("collapses disabled patches, surfaces the off-note, and gates the run", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({

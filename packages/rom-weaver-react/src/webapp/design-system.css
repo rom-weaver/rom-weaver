@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   rom-weaver — "loom workbench" design system (light + dark)
+   rom-weaver - "loom workbench" design system (light + dark)
    A bench instrument for ROM preservation: charcoal chassis, cartridge-
    orange thread, cream hash readouts, sage verification. Borders-only
    depth; shadows are reserved for true overlays. Spacing base: 4px.
@@ -10,12 +10,12 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --thread: #d9690f;            /* cartridge-label orange — the weft */
+  --thread: #d9690f;            /* cartridge-label orange - the weft */
   --thread-ink: #1c1206;        /* text on a thread-colored surface */
   --font: "Archivo", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
   --ctl: 40px;
-  --ctrl-h: 30px;               /* row-button size (handle / remove / progress cancel) — bigger on desktop, scaled down for narrow + up for touch below */
-  --badge-fs: 0.72rem;          /* badge text — sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
+  --ctrl-h: 30px;               /* row-button size (handle / remove / progress cancel) - bigger on desktop, scaled down for narrow + up for touch below */
+  --badge-fs: 0.72rem;          /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
   --pad: 20px;                  /* section gutter */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
   --ease: cubic-bezier(.2, .85, .3, 1);
@@ -28,11 +28,11 @@
   --chassis: #0c0f13;           /* console shell */
   --plate: #161b21;             /* mounted plate */
   --plate-2: #1c222a;           /* raised plate */
-  --well: #0f1318;              /* inset well — inputs sit *into* the bench */
+  --well: #0f1318;              /* inset well - inputs sit *into* the bench */
   /* borders lifted off the panel colors so seams/rows actually read on the dark bench */
   --seam: #39414e; --seam-soft: #2c333f; --seam-strong: #4b5564;
   --ink: #edf0f5; --ink-2: #b3bbc8; --ink-3: #9aa3b1; --ink-4: #939cab;
-  --weft: #e7d3a8;              /* cream label-stock — hash readouts */
+  --weft: #e7d3a8;              /* cream label-stock - hash readouts */
   --thread-text: #ef8534;       /* accent as text, lifted for contrast */
   --verified: #69aa84;          /* sage quadrant */
   --fault: #e0606a;
@@ -50,11 +50,11 @@
   --ink: #1a1d22; --ink-2: #4b5159; --ink-3: #62686f; --ink-4: #686d76;
   --weft: #92400e;              /* cream goes rich amber on paper */
   /* deep enough that badge-sized text clears 4.5:1 on every light surface
-     (was #c2410c — 4.42:1 on the --well chips, just under) */
+     (was #c2410c - 4.42:1 on the --well chips, just under) */
   --thread-text: #b03a0a;
   --verified: #047857;
   /* deep enough that fault-card titles/codes clear 4.5:1 on the pink-tinted
-     light surfaces (was #dc2626 — 4.41:1 on the fault card) */
+     light surfaces (was #dc2626 - 4.41:1 on the fault card) */
   --fault: #b91c1c;
   --care: #c4870f;              /* golden caution (was burnt #b45309 → salmon tint) */
   --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / .35), 0 4px 14px rgb(35 30 18 / .14);
@@ -64,7 +64,7 @@
 /* ── base ── */
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-/* base scale — bumped up (text read a touch small) but still responsive so it
+/* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
 :root:has(.rw-app) { font-size: clamp(15px, 13px + .42vw, 17px); }
 /* metric-adjusted fallback ≈ Inter Tight: no reflow when the webfont swaps in */
@@ -102,7 +102,7 @@
 .rw-app .ck .ck-v { letter-spacing: 0; }
 
 /* --- input staging treatment (CLS: card holds resolved height through staging) --- */
-/* slim progress bar on the card's top edge during staging — a determinate width
+/* slim progress bar on the card's top edge during staging - a determinate width
    when the percent is known, an animated sliding segment when it isn't. Removed
    once the work finishes (the card no longer carries a bar). */
 .rw-app .card.has-stage-bar { position: relative; }
@@ -119,12 +119,12 @@
   .rw-app .card .stage-bar { transition: none; }
   .rw-app .card .stage-bar.is-indeterminate { animation: none; }
 }
-/* status in the meta line — sized/condensed to match the size + tag chips so it
+/* status in the meta line - sized/condensed to match the size + tag chips so it
    reads as part of that row, sitting to the right of the platform/format tag. */
 .rw-app .stage-status { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
 .rw-app .stage-status::before { content: "·"; margin-inline-end: 1px; color: var(--ink-4); }
 .rw-app .stage-status .pct { color: var(--thread-text); font-variant-numeric: tabular-nums; font-weight: 650; }
-/* pending checksum value — invisible text the exact char length of the eventual
+/* pending checksum value - invisible text the exact char length of the eventual
    hash (so width + break-all wrapping match it), painted as a shimmering orange
    bar; box-decoration-break makes each wrapped line carry the fill. */
 .rw-app .ck.pending { cursor: default; }
@@ -148,7 +148,7 @@
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rw-app :focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; border-radius: 4px; }
 /* a dialog body is only focused programmatically (to park initial focus off the
-   action buttons) — it must never draw a focus ring */
+   action buttons) - it must never draw a focus ring */
 .dlg-body:focus, .dlg-body:focus-visible { outline: none; }
 
 .rw-app .app {
@@ -185,14 +185,14 @@
 }
 html.vt-theme .mode-thumb { view-transition-name: none !important; }
 /* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
-   during the mode-switch transition — without this the thumb's group renders
+   during the mode-switch transition - without this the thumb's group renders
    over the root snapshot and the orange briefly covers the tab text */
 .rw-app .mode-rail .mode:nth-of-type(1) { view-transition-name: vt-tab-1; }
 .rw-app .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
 .rw-app .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
 .rw-app .mode-rail .mode:nth-of-type(4) { view-transition-name: vt-tab-4; }
 html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
-/* where CSS anchors exist, the thumb pins itself to the selected tab —
+/* where CSS anchors exist, the thumb pins itself to the selected tab -
    placement survives resize/font-swap with no JS measuring at all */
 @supports (anchor-name: --rw-tab) {
   .rw-app .mode[aria-selected="true"] { anchor-name: --rw-tab; }
@@ -275,7 +275,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
 .rw-app .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
 .rw-app .updates-text b { font-weight: 650; }
-/* the version IS the "what's new" affordance — a quiet dotted-underline link
+/* the version IS the "what's new" affordance - a quiet dotted-underline link
    that opens the changelog, instead of a second button crowding the banner */
 .rw-app .updates-ver {
   appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
@@ -289,7 +289,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: 8px 0; }
 .rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding-top: 8px; }
-/* banner dismiss (update + wake-lock) — sized to --ctrl-h so it reads as a
+/* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
 .rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
@@ -342,7 +342,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ panel + loom rail ═══ */
 /* the page IS the form on every size (the mobile flattening promoted to base):
-   no outer panel chrome — what remains is card → drawer, the one nesting that
+   no outer panel chrome - what remains is card → drawer, the one nesting that
    carries meaning. Step hairlines still separate the sections. */
 .rw-app .panel { overflow: clip; }
 .rw-app .workflow-body { min-width: 0; animation: panel-in .3s var(--ease); }
@@ -357,7 +357,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .step.is-woven .step-num { color: var(--thread-text); }
 .rw-app .step.is-fault .step-num { color: var(--fault); }
 /* section titles speak in the same voice as the card names and drawer headers
-   (sentence case, 650) — one type family across the page, size = hierarchy */
+   (sentence case, 650) - one type family across the page, size = hierarchy */
 .rw-app .step-title { margin: 0; font-size: .9rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .rw-app .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; justify-content: flex-end; }
 .rw-app .step-meta .t { color: var(--thread-text); }
@@ -388,15 +388,28 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .drop:hover .main svg { color: var(--thread-text); }
 .rw-app .drop .hint { font-size: .74rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
 .rw-app .drop .hint b { color: var(--ink-2); font-weight: 600; }
+.rw-app .drop .pointer-copy.coarse { display: none; }
 
-.rw-app .drop.hero { min-height: 0; gap: 9px; padding: 22px 24px 18px; }
-.rw-app .drop.hero .main { flex-direction: column; gap: 10px; font-size: 1.08rem; font-weight: 700; }
+.rw-app .drop.hero { min-height: 0; gap: 8px; padding: 18px 24px 15px; }
+.rw-app .drop.hero .main { flex-direction: column; gap: 10px; font-size: clamp(.82rem, 2.2vw, 1.08rem); font-weight: 700; white-space: nowrap; }
 .rw-app .drop.hero .main svg {
   width: 21px; height: 21px; box-sizing: content-box; padding: 11px; border-radius: 13px;
   color: var(--thread-text); background: color-mix(in oklab, var(--thread) 13%, transparent);
 }
-.rw-app .drop.hero .formats { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-block-start: 2px; }
-.rw-app .drop.hero .fmt { font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 8px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }
+.rw-app .drop.hero .formats {
+  display: grid; flex: none; gap: 5px; width: min(100%, 34rem); margin-block-start: 2px; overflow: hidden; pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.rw-app .drop.hero .formats-lane { min-width: 0; overflow: hidden; }
+.rw-app .drop.hero .formats-track { display: flex; gap: 5px; width: max-content; animation: formats-ticker 120s linear infinite; }
+.rw-app .drop.hero .formats-lane:nth-child(2) .formats-track { animation-direction: reverse; }
+.rw-app .drop.hero .formats-set { display: flex; gap: 5px; }
+.rw-app .drop.hero .fmt { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 12px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }
+@keyframes formats-ticker { to { transform: translateX(calc(-50% - 2.5px)); } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .drop.hero .formats-track { animation: none; margin-inline: auto; }
+  .rw-app .drop.hero .formats-set + .formats-set { display: none; }
+}
 
 /* staging reads as the compact add-pill it becomes, with a spinner in place of
    the drop glyph while files are being routed to their sections */
@@ -410,7 +423,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .rw-app .spinner { animation: none; } }
 
-/* the add action reads as a button for everyone — tap-first users see tap copy.
+/* the add action reads as a button for everyone - tap-first users see tap copy.
    Once content is staged the row shrinks out of the way: tiny pill, hint only on hover. */
 .rw-app .drop .main.btnish {
   border: 1px solid var(--seam-strong); border-radius: 99px; background: var(--plate-2);
@@ -424,20 +437,22 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .drop:hover .main.btnish svg, .rw-app .drop:focus-within .main.btnish svg { color: var(--thread-text); }
 .rw-app .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: 5px; }
 .rw-app .drop:not(.hero) .main svg { width: 13px; height: 13px; }
-/* the add-row hint is ALWAYS shown inline beneath the pill — never a hover-only
-   tooltip — so a page that already has files still explains how to add more */
+/* the add-row hint is ALWAYS shown inline beneath the pill - never a hover-only
+   tooltip - so a page that already has files still explains how to add more */
 .rw-app .drop:not(.hero) .hint { display: none; font-size: .72rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
 .rw-app .drop:not(.hero) .hint.fine { display: block; }
 .rw-app .drop .hint.coarse { display: none; }
 @media (pointer: coarse) {
   /* bumping the one variable grows the badges + buttons together (they all read
-     --ctrl-h) so a card row stays uniform on touch. 30px (not the old 36px) —
+     --ctrl-h) so a card row stays uniform on touch. 30px (not the old 36px) -
      the bigger boxes crowded the card text on phones; ≤560px trims further */
   :root { --ctrl-h: 30px; }
-  /* the :not(.hero) selector below outranks a plain .drop .hint.fine — match
+  /* the :not(.hero) selector below outranks a plain .drop .hint.fine - match
      its specificity so touch devices show ONLY the tap hint, never both lines */
   .rw-app .drop .hint.fine, .rw-app .drop:not(.hero) .hint.fine { display: none; }
   .rw-app .drop .hint.coarse { display: block; }
+  .rw-app .drop .pointer-copy.fine { display: none; }
+  .rw-app .drop .pointer-copy.coarse { display: inline; }
   .rw-app .drop .main.btnish { min-height: 40px; padding: 8px 18px; font-size: .82rem; }
   .rw-app .ck .copy, .rw-app .cue-copy { width: 28px; height: 28px; opacity: 1; }
 }
@@ -474,18 +489,18 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish svg { color: var(--thread-text); }
 /* with nothing staged the hero is a clear drop target, but capped so it doesn't
    dominate the form on tall desktop viewports */
-.rw-app .step.is-input.is-empty .drop.hero { min-height: clamp(190px, 28dvh, 280px); padding-block: 30px; }
+.rw-app .step.is-input.is-empty .drop.hero { min-height: clamp(180px, 26dvh, 240px); padding-block: 24px; }
 
 /* secondary input sections (patches, modified), when empty, don't offer their
-   own drop target — they point the user UP to the 0x01 hero. they share the
+   own drop target - they point the user UP to the 0x01 hero. they share the
    hero's framing (solid seam, tinted fill, large radius) so the empty bench
    reads as one consistent family, while still routing taps back to 0x01. */
 .rw-app .needs-input {
   display: flex; align-items: center; justify-content: center; gap: 9px;
-  width: 100%; min-height: 104px; padding: 24px 20px; margin: 0;
+  width: 100%; min-height: 72px; padding: 16px 20px; margin: 0;
   appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
   background: color-mix(in oklab, var(--thread) 4%, var(--plate-2)); cursor: pointer;
-  color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center;
+  color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
   transition: color .15s, background .15s, border-color .15s;
 }
 .rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
@@ -497,9 +512,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ file cards ═══ */
 .rw-app .cards { display: flex; flex-direction: column; gap: 13px; }
-/* patches read as discrete, reorderable units — a touch more air between them */
+/* patches read as discrete, reorderable units - a touch more air between them */
 .rw-app .patch-cards { gap: 16px; }
-/* no trailing margin — the step-body's own bottom padding closes the section,
+/* no trailing margin - the step-body's own bottom padding closes the section,
    so card lists don't stack ~28px of dead space at every section's end */
 .rw-app .card {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
@@ -508,17 +523,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .card:nth-child(2) { animation-delay: .05s; } .rw-app .card:nth-child(3) { animation-delay: .1s; } .rw-app .card:nth-child(4) { animation-delay: .15s; }
 .rw-app .workflow-body.quiet .card { animation: none; }
-/* verdict borders are a PATCH concept (verified / weakly-verified / failed) —
+/* verdict borders are a PATCH concept (verified / weakly-verified / failed) -
    ROM cards always keep the plain --seam border */
 .rw-app .card.ok { border-color: color-mix(in oklab, var(--verified) 42%, var(--seam)); }
 .rw-app .card.warn { border-color: color-mix(in oklab, var(--care) 55%, var(--seam)); }
 .rw-app .card.bad { border-color: color-mix(in oklab, var(--fault) 48%, var(--seam)); }
 
 /* the meta + action buttons ride the NAME line (the heading), not the optical
-   centre of the name+description block — so they stay in line with the title even
+   centre of the name+description block - so they stay in line with the title even
    when a description wraps below */
 /* the card header is two columns: the name over its size·type sub-line on the
-   left, and a stacked actions column on the right — the action buttons on top
+   left, and a stacked actions column on the right - the action buttons on top
    and the target right-aligned directly beneath them */
 .rw-app .card-top { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
 /* the name + sub-line sit at the card's content edge, lined up with the LEFT EDGE
@@ -528,7 +543,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .card-meta { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-inline-start: 0; }
 .rw-app .card-actions {
   flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-  /* the button boxes are taller than the name's text line — pull them up so
+  /* the button boxes are taller than the name's text line - pull them up so
      their CENTRE sits on the name line (1.3 × the .nm font size) */
   margin-block-start: calc((1.3 * clamp(.8rem, 1.1vw + .55rem, 1.06rem) - var(--ctrl-h)) / 2);
 }
@@ -542,7 +557,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .handle svg { width: 18px; height: 18px; }
 .rw-app .handle:hover:not(:disabled), .rw-app .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
-/* press feedback so the handle reads as live on touch (no hover on mobile) — mirrors
+/* press feedback so the handle reads as live on touch (no hover on mobile) - mirrors
    the remove button's tactility, same box/size via --ctrl-h */
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
@@ -554,7 +569,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: clamp(.8rem, 1.1vw + .55rem, 1.06rem);
 }
-/* in-archive folder path prefix on the name line — quieter than the file itself */
+/* in-archive folder path prefix on the name line - quieter than the file itself */
 .rw-app .nm .nm-folder { font-weight: 500; color: var(--ink-3); }
 /* the file size rides the name line, pushed to its right edge */
 /* file/track sizes render as recessed readout chips (same language as the drawer
@@ -564,7 +579,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* patch description rides under the name (some patch types provide one) */
 /* the description is a full-width row below the header, at the card content edge */
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
-/* weak-verification note under the name — explains the yellow card border */
+/* weak-verification note under the name - explains the yellow card border */
 .rw-app .patch-warn { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .76rem; color: var(--care); }
 .rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
 :root[data-theme="light"] .patch-warn { color: #7a5300; }
@@ -573,7 +588,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
 }
 .rw-app .tag.fmt { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, var(--seam-strong)); }
-/* remove reads as a sibling button to the drag handle — same box and size so
+/* remove reads as a sibling button to the drag handle - same box and size so
    the two line up, with a destructive (red) hover */
 .rw-app .rm {
   flex: none; appearance: none; padding: 0; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center;
@@ -585,7 +600,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* icon buttons: drop the UA <button> padding so glyphs center exactly */
 .rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
 .rw-app .rm svg { width: 14px; height: 14px; }
-/* the on/off switch leads the sub-heading line — the shared switch primitive scaled
+/* the on/off switch leads the sub-heading line - the shared switch primitive scaled
    down to the meta text (via the --sw-* vars), with a state word beside it. the two
    words share one grid cell so the row never shifts width when toggled */
 .rw-app .patch-enable { flex: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 5px; margin: -5px 4px -5px -3px; }
@@ -627,13 +642,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .patch-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .16s var(--ease); }
 .rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: 8px; }
 .rw-app .card { transition: gap .16s var(--ease), border-color .15s, background .15s; }
-/* a disabled patch stays open — the body keeps its Options drawer so manifest
-   authors can edit name/description/checks without re-enabling — and reads
+/* a disabled patch stays open - the body keeps its Options drawer so manifest
+   authors can edit name/description/checks without re-enabling - and reads
    "off" via the dashed frame + desaturation below */
 .rw-app .card.is-disabled { background: color-mix(in oklab, var(--plate-2) 60%, var(--chassis)); border-style: dashed; border-color: var(--seam-strong); }
 /* the header reads clearly "off" by DESATURATING (not opacity-dimming, which
    tanks text contrast / trips a11y): the name + size go muted grey and the type
-   badge loses its thread accent — all still legible. only the enable checkbox +
+   badge loses its thread accent - all still legible. only the enable checkbox +
    remove keep their crisp state so re-enabling/dropping is the obvious action. */
 .rw-app .card.is-disabled .nm { color: var(--ink-3); }
 .rw-app .card.is-disabled .patch-desc { color: var(--ink-4); margin-block-start: 6px; }
@@ -642,11 +657,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
 .rw-app .card.is-disabled .handle { color: var(--ink-4); }
 @media (prefers-reduced-motion: reduce) { .rw-app .patch-body, .rw-app .card { transition: none; } }
-/* the "N patches off" mention above the apply button — no extra bottom margin,
+/* the "N patches off" mention above the apply button - no extra bottom margin,
    the card's own grid gap separates it from the run button */
 .rw-app .patch-off-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8rem; color: var(--care); }
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
-/* light mode: the golden --care is ~2.9:1 on the pale card face — too light for
+/* light mode: the golden --care is ~2.9:1 on the pale card face - too light for
    small text. Use the same deep amber as the notice emphasis (clears 4.5:1). */
 :root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
 
@@ -669,17 +684,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tree-size { color: var(--ink-3); min-width: 62px; text-align: end; }
 .rw-app .tree-time { color: var(--thread-text); min-width: 44px; text-align: end; }
 
-/* ═══ collapsible drawers — "summary-first" ═══
+/* ═══ collapsible drawers - "summary-first" ═══
    the headline value IS the row: a quiet chevron, the label, then the section's
    key value as an inset "instrument readout" chip on the right. expanding only
    reveals the detail, so the card scans unopened. */
 /* a section is ONE rounded plate in both states: a filled, tappable plate when
-   collapsed, and the same plate opened up — a hairline splits the header from
-   the content that now sits inside it — so collapse↔expand reads as one
+   collapsed, and the same plate opened up - a hairline splits the header from
+   the content that now sits inside it - so collapse↔expand reads as one
    component growing, not two different things. the readout badge lines up with
    the header's inset on either side. */
 /* structure: <div.cks><button.cks-head aria-expanded>…</button>
-   <div.cks-body><div.cks-inner>content</div></div></div> — the body collapses
+   <div.cks-body><div.cks-inner>content</div></div></div> - the body collapses
    via grid-rows (pure CSS, same pattern as .reveal); visibility rides the
    transition so collapsed content is unreachable by tab/AT */
 .rw-app .cks {
@@ -687,13 +702,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   transition: background .14s, border-color .14s;
 }
 .rw-app .cks.is-open { background: color-mix(in oklab, var(--well) 45%, transparent); }
-/* on the dark bench the well plates sink into the card — a stronger seam +
+/* on the dark bench the well plates sink into the card - a stronger seam +
    a touch more lift separates each section header from its container. */
 :root[data-theme="dark"] .cks { border-color: var(--seam-strong); background: color-mix(in oklab, var(--plate-2) 45%, var(--well)); }
 :root[data-theme="dark"] .cks.is-open { background: color-mix(in oklab, var(--plate-2) 30%, var(--well)); }
 :root[data-theme="dark"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
 /* on paper the open plate's 45%-transparent well washed into the cream card
-   (≈4/255 per channel apart) — keep the opened drawer a solid recessed well
+   (≈4/255 per channel apart) - keep the opened drawer a solid recessed well
    with a stronger seam so it reads as a distinct panel, not a faint tint */
 :root[data-theme="light"] .cks.is-open { background: var(--well); border-color: var(--seam-strong); }
 :root[data-theme="light"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
@@ -701,7 +716,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
   width: 100%; cursor: pointer; display: flex; align-items: center; gap: 5px;
   min-height: 36px; padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
-  /* the WHOLE header toggles — a tap on the label or the right-hand readout chip
+  /* the WHOLE header toggles - a tap on the label or the right-hand readout chip
      must register as a tap, not start a text selection / iOS callout */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
@@ -715,7 +730,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the body collapses via grid-rows; visibility (discretely transitioned) keeps
    collapsed content out of the tab order and the accessibility tree */
 .rw-app .cks > .cks-body {
-  /* minmax(0,1fr) column + min-width:0 on the item — wide content (the cue
+  /* minmax(0,1fr) column + min-width:0 on the item - wide content (the cue
      sheet's <pre>) must scroll inside its own box, not push the drawer wider
      than the card on narrow screens */
   display: grid; grid-template-rows: 0fr; grid-template-columns: minmax(0, 1fr); visibility: hidden;
@@ -728,23 +743,23 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .cks.is-open > .cks-body > .cks-inner { opacity: 1; translate: 0 0; transition: opacity .22s .08s, translate .26s .08s var(--ease); }
 /* opened content sits inside the plate, inset from its border. The bottom
-   inset is a MARGIN on the last child, not padding — border-box height can't
+   inset is a MARGIN on the last child, not padding - border-box height can't
    collapse below its own padding, which left a 9px lip on closed drawers */
 /* round the body's bottom corners (it already clips) to match the drawer, so a
    full-bleed last row's hover highlight follows the rounded corner instead of
    poking a square past it */
 .rw-app .cks .cks-inner { padding-inline: 10px; border-end-start-radius: calc(var(--r-s) - 1px); border-end-end-radius: calc(var(--r-s) - 1px); }
 .rw-app .cks .cks-inner > :last-child { margin-block-end: 9px; }
-/* chevron is a quiet affordance — lights to thread when the section is open */
+/* chevron is a quiet affordance - lights to thread when the section is open */
 .rw-app .cks .chev { width: .82rem; height: .82rem; flex: none; color: var(--ink-4); opacity: .6; transition: transform .22s var(--ease), color .18s, opacity .18s; }
 .rw-app .cks > .cks-head:hover .chev { opacity: 1; }
 .rw-app .cks.is-open > .cks-head .chev { transform: rotate(90deg); color: var(--thread-text); opacity: 1; }
 /* drawer headers read in the same voice as the card name above them (sentence
-   case, 650 weight) — one type family for every header on the card, just a
+   case, 650 weight) - one type family for every header on the card, just a
    step smaller so the hierarchy holds */
 .rw-app .cks .lab { margin-inline-end: auto; font-size: .8rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
 .rw-app .cks.is-open > .cks-head .lab { color: var(--ink); }
-/* ONE readout-chip language for every drawer header — a recessed grey pill.
+/* ONE readout-chip language for every drawer header - a recessed grey pill.
    multiple data points (e.g. a track count + a hash time) are separate chips, not
    one combined string. the .readouts wrapper groups them at the right edge. */
 .rw-app .cks > .cks-head .readouts { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 66%; }
@@ -757,12 +772,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* only the last chip may shrink/ellipsize; short leading chips (count, container)
    keep their full width */
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) { flex: none; }
-/* on a collapsed plate the chip already sits on a well — recess it instead */
+/* on a collapsed plate the chip already sits on a well - recess it instead */
 .rw-app .cks:not(.is-open) > .cks-head .rb { background: var(--plate-2); border-color: transparent; }
 /* timing chips carry the orange accent so a duration reads as distinct from a
    count / type / system value (which stay cream) */
 .rw-app .cks > .cks-head .rb.time { color: var(--thread-text); }
-/* verify / verified marks ride beside the time chip as a bare icon — NOT their own
+/* verify / verified marks ride beside the time chip as a bare icon - NOT their own
    differently-coloured pill, so every header badge reads as one family */
 .rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
@@ -772,7 +787,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* checksum rows are a full-bleed block: each row fills the drawer body edge to
    edge (cancelling the .cks-inner inline inset and its block insets), rows sit
    flush with their top/bottom borders collapsed into shared hairlines, and the
-   drawer frames the sides. (The .ck.req verification rows keep their own table —
+   drawer frames the sides. (The .ck.req verification rows keep their own table -
    reset below.) */
 .rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
 .rw-app .cks > .cks-body > .cks-inner > .ckrows { margin-block: 0; }
@@ -781,7 +796,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    touch tighter so the sections still read as one stack */
 .rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
-/* section header for a checksum group — a brand accent tick + brighter, bolder
+/* section header for a checksum group - a brand accent tick + brighter, bolder
    label so each block (Unchanged / Fix header / variants) reads as its own
    labelled section, distinct from the grey row labels below it */
 .rw-app .ck-group-head {
@@ -794,7 +809,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .ck {
   /* label column sized just to the widest label (CRC32/SHA-1) so values still
-     line up in a column, but without the old wide gap — leaves room for a
+     line up in a column, but without the old wide gap - leaves room for a
      larger value. Each row is its own grid, so this width must be fixed. */
   margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
@@ -807,7 +822,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
 /* rows touch: overlap the shared edge so adjacent borders read as one hairline */
 .rw-app .ck:not(.req) + .ck:not(.req) { margin-block-start: -1px; }
-/* the whole row is a copy button — ON TOUCH, block text selection / the iOS
+/* the whole row is a copy button - ON TOUCH, block text selection / the iOS
    callout so tapping the hash fires a clean click instead of starting a
    selection. Mouse/keyboard users keep normal select-to-copy. */
 @media (pointer: coarse) {
@@ -824,12 +839,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* checksum / verification rows need a clearer edge on paper */
 :root[data-theme="light"] .ck { border-color: var(--seam-strong); }
 /* tinted row backgrounds (bad / hover / woven) drop the grey label to ~4.4:1 in
-   light mode — one shade darker keeps the label clear on every row state */
+   light mode - one shade darker keeps the label clear on every row state */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
 .rw-app .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
 .rw-app .ck:hover .copy { opacity: 1; color: var(--thread-text); }
 /* on touch the :hover state sticks until the next tap, so the expand/collapse
-   tint would linger after a tap — restore the resting backgrounds on touch */
+   tint would linger after a tap - restore the resting backgrounds on touch */
 @media (hover: none) {
   .rw-app .cks:not(.is-open) > .cks-head:hover { background: transparent; }
   .rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
@@ -840,15 +855,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck .copy svg { width: 13px; height: 13px; }
 /* patch verification rows: the same checksum-row look (label · VALUE · marks),
    all-caps value, with every value lined up to the widest label across the
-   whole drawer — a subgrid threads one shared column set through the INPUT /
+   whole drawer - a subgrid threads one shared column set through the INPUT /
    OUTPUT groups so the columns don't drift between them. */
 .rw-app .cks .trackrows:has(.ck.req) { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: center; }
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; padding-inline-start: 0; }
 /* group heads + non-row content (dry-run) span every column so only the actual
-   dt labels size column 1 — otherwise the long dry-run line inflates it */
+   dt labels size column 1 - otherwise the long dry-run line inflates it */
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
-/* verification rows stay a contiguous subgrid table — hairline dividers, not boxed */
+/* verification rows stay a contiguous subgrid table - hairline dividers, not boxed */
 .rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 10px; border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
 .rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
 .rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); font-size: .97rem; word-break: break-word; }
@@ -860,11 +875,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 600; }
 .rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
 .rw-app .dryrun-verdict.bad { color: var(--fault); }
-/* the unified patch verdict line (top of the Checks body) — same accent verdict for every patch
+/* the unified patch verdict line (top of the Checks body) - same accent verdict for every patch
    type, whether it was requirement-checked or dry-run validated */
 .rw-app .pverdict { padding: 8px 9px; }
 /* the verdict lands after the verify bar: the line fades + rises in, its icon pops, and a passing
-   check draws its own stroke — the signature "done" moment, replacing an abrupt swap. */
+   check draws its own stroke - the signature "done" moment, replacing an abrupt swap. */
 .rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
 .rw-app .pverdict.dryrun-verdict svg { animation: pverdict-mark .34s var(--ease) both; }
 @keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
@@ -874,10 +889,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   .rw-app .pverdict.dryrun-verdict svg { animation: none; }
 }
 
-/* inline help — clickable i's. a quiet line-glyph at rest (no box, so it adds no
+/* inline help - clickable i's. a quiet line-glyph at rest (no box, so it adds no
    visual weight or width next to the label) that reads instantly as an info mark
    and lights to thread on hover / when open. centered on the line, not baseline. */
-/* the "i" tracks the text it sits beside — its box is sized in em so the glyph is
+/* the "i" tracks the text it sits beside - its box is sized in em so the glyph is
    always the same height as that text (default to a small-label size; step heads
    match the uppercase title) */
 .rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
@@ -957,7 +972,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* tracks + per-file task history */
 .rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: 2px; padding-block: 4px 2px; }
 /* nested groups are static (not collapsible): a quiet sub-header sits above its
-   always-visible rows. no left indent — the uppercase head is cue enough, and the
+   always-visible rows. no left indent - the uppercase head is cue enough, and the
    indent only wasted space on the left of the expanded section */
 .rw-app .ckgrp { padding-inline-start: 0; }
 /* track-head size hugs the same right column as the rows' copy icons (rows inset
@@ -980,7 +995,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .notice.warn { color: var(--ink); background: color-mix(in oklab, var(--care) 12%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--care) 40%, var(--seam)); }
 .rw-app .notice.warn svg, .rw-app .notice.warn b { color: var(--care); }
 /* light mode: the golden --care is too light for bold body text on the cream
-   notice (2.5:1) — darken the emphasised word to a deep amber that clears 4.5:1 */
+   notice (2.5:1) - darken the emphasised word to a deep amber that clears 4.5:1 */
 :root[data-theme="light"] .notice.warn b { color: #7a5300; }
 /* notice dismiss matches the row-control size (--ctrl-h) like the card buttons */
 .rw-app .notice .x { appearance: none; border: 0; border-radius: var(--r-s); background: transparent; color: currentColor; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center; flex: none; opacity: .6; }
@@ -1020,7 +1035,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .input[aria-invalid="true"], .rw-app .select[aria-invalid="true"] { border-color: var(--fault); box-shadow: 0 0 0 1px color-mix(in oklab, var(--fault) 50%, transparent); }
 .rw-app .input:disabled, .rw-app .select:disabled { opacity: .5; cursor: not-allowed; }
 .rw-app .input::placeholder, .rw-app textarea::placeholder { color: var(--ink-3); opacity: 1; }
-/* every boolean control is a sliding switch — one shared primitive so option
+/* every boolean control is a sliding switch - one shared primitive so option
    drawers, settings, the patch enable, checksum overrides and the archive picker
    all read identically: the input IS the recessed track, ::after is the knob.
    per-context size lives in the --sw-* vars so callers only retune dimensions. */
@@ -1049,7 +1064,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
 .rw-app .fname .input:focus-visible { box-shadow: none; }
-/* output name grows with its content instead of truncating — natively via
+/* output name grows with its content instead of truncating - natively via
    field-sizing where supported; the JS measure-and-set is the fallback */
 .rw-app .fname .outname {
   height: auto; min-height: var(--ctl); resize: none; overflow: hidden;
@@ -1059,7 +1074,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .fname .sep { width: 1px; background: var(--seam); flex: none; }
 /* the name textarea grows multi-line; the format control fills the full height
    of the box beside it (override the fixed control height so align-self:stretch
-   can grow it — otherwise it pins to the top and leaves an empty notch) */
+   can grow it - otherwise it pins to the top and leaves an empty notch) */
 .rw-app .fname .select { flex: none; align-self: stretch; height: auto; width: auto; border: 0; background-color: var(--plate-2); font-weight: 650; }
 .rw-app .fname .select:focus-visible { box-shadow: none; }
 
@@ -1095,7 +1110,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .manifest-rom-expectation .mre-name { font-size: .92rem; color: var(--weft); word-break: break-all; margin-block: -2px 8px; }
 :root[data-theme="dark"] .manifest-rom-expectation .mre-name { color: var(--thread-text); }
 /* ck rows inside a boxed verification group (expected-ROM card, patch aux
-   requirement rows) sit in the box, not a bleeding drawer — keep them inset */
+   requirement rows) sit in the box, not a bleeding drawer - keep them inset */
 .rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
 .rw-app .verification-list .ck + .ck { margin-block-start: 0; }
 .rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 5px; min-width: 0; }
@@ -1113,9 +1128,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ofld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: 6px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
-/* toggles are weighted, recessed rows — same well language as the task/ck rows */
+/* toggles are weighted, recessed rows - same well language as the task/ck rows */
 .rw-app .optschecks { display: flex; flex-direction: column; gap: 6px; }
-/* label leads, switch sits on the right edge — the row uses its full width instead
+/* label leads, switch sits on the right edge - the row uses its full width instead
    of leaving dead space after a small box on the left */
 .rw-app .optschecks .popt {
   flex-direction: row-reverse; justify-content: space-between;
@@ -1187,7 +1202,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   padding: 16px 14px; min-height: 116px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate-2);
 }
 /* the label/bar/stats spread to fill the panel height + a taller bar, so the
-   progress doesn't float in empty space. the bar runs the full panel width — the
+   progress doesn't float in empty space. the bar runs the full panel width - the
    actions (cancel, plus a drag handle on a staging patch) sit in the top-right
    corner (consistent placement across stage + run) and the label reserves room so
    its percentage clears them (wider when a handle rides alongside the cancel) */
@@ -1210,21 +1225,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    the card's content width and its label/bar/stats line up with the rows above; the
    top+bottom border keeps it reading as a contained instrument row */
 .rw-app .runprog .prog-actions { inset-inline-end: 0; }
-/* the run panel lives inside the output card, which already adds 10px below it — so
+/* the run panel lives inside the output card, which already adds 10px below it - so
    trim its own height + bottom padding by that much, keeping the same content spread
    as the standalone staging panel (no extra dead space under the bar) */
 .rw-app .runprog { border-inline: 0; border-block-end: 0; border-radius: 0; padding-inline: 0; padding-block-end: 6px; min-height: 106px; }
-/* threads sit at the left of the foot row, the percentage at the right — the run's
+/* threads sit at the left of the foot row, the percentage at the right - the run's
    headline number, a touch larger + accented. while indeterminate (staging) the same
-   slot shows a — placeholder, styled identically so the layout + colour match */
+   slot shows a - placeholder, styled identically so the layout + colour match */
 .rw-app .prog-panel .sub { align-items: baseline; }
 .rw-app .prog-panel .sub .run-pct { font-size: .92rem; font-weight: 650; color: var(--thread-text); font-variant-numeric: tabular-nums; }
-/* write-throughput readout (size / total · rate) — sits between threads and percent */
+/* write-throughput readout (size / total · rate) - sits between threads and percent */
 .rw-app .prog .sub .run-rate { margin-inline: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ═══ result ═══ */
 /* the result is its own card within the output section, matching the form */
-/* the result IS the download row now — the status + per-stage timings live up in
+/* the result IS the download row now - the status + per-stage timings live up in
    the step header, so this is just the orange action button */
 .rw-app .result { margin-block-start: 2px; animation: drop-in .4s var(--ease); }
 /* the download button carries output size + delta on the left and the total
@@ -1250,7 +1265,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .step-meta .rb { gap: 5px; }
 .rw-app .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
 .rw-app .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
-/* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 —
+/* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 -
    ease the tint and step the stage name up a shade so both stay legible */
 :root[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
 :root[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
@@ -1271,7 +1286,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   overscroll-behavior: contain;
 }
 /* rows size to their longest line (not the container) so the log scroller gets
-   a real horizontal extent — long trace lines scroll instead of clipping.
+   a real horizontal extent - long trace lines scroll instead of clipping.
    each line is a hairline-separated, hoverable click-to-copy row */
 .rw-app .tracelog .ln {
   display: flex; gap: 8px; white-space: nowrap; width: max-content; min-width: 100%;
@@ -1292,7 +1307,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }
 .rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }
 .rw-app .tracelog .msg { color: var(--ink-2); }
-.rw-app .tracelog:empty::after { content: "—"; color: var(--ink-4); }
+.rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }
 
 /* ═══ selvage status strip ═══ */
 /* a contained status strip aligned with the centered form column */
@@ -1334,7 +1349,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .dlg { border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%; }
 /* open AND close animate: transitions + @starting-style drive the entry, and
    allow-discrete display/overlay transitions keep the dialog (and backdrop)
-   rendered while the exit plays — no JS choreography needed */
+   rendered while the exit plays - no JS choreography needed */
 .dlg { transition: display .26s allow-discrete, overlay .26s allow-discrete; }
 .dlg .dlg-frame { opacity: 0; transform: translateY(10px) scale(.97); transition: opacity .22s ease, transform .26s var(--ease); }
 .dlg[open] .dlg-frame { opacity: 1; transform: none; }
@@ -1360,7 +1375,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: 14px 16px; overflow: auto; overscroll-behavior: contain; }
 /* log dialog: a tall, readable trace with a level filter + copy in the header */
-/* the log is tall — fill the available dialog height so more lines are visible */
+/* the log is tall - fill the available dialog height so more lines are visible */
 .rw-app .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
 /* Actions sit on their own full-width row below the title (wrap on every viewport) and the controls
@@ -1368,14 +1383,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
 .rw-app .log-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; order: 1; flex-basis: 100%; }
 /* copy / download / level grow to share the row, but never shrink below their
-   own label — on a narrow sheet they wrap to a new line instead of overlapping */
+   own label - on a narrow sheet they wrap to a new line instead of overlapping */
 .rw-app .log-actions > * { flex: 1 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
 .rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
 .rw-app .log-actions .loglevel { display: flex; }
 .rw-app .log-actions .loglevel .select { flex: 1 1 0; width: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
 /* Current/Previous switch: a segmented control on its own full-width row so the
-   active view is unmistakable — the selected segment is filled with the accent,
+   active view is unmistakable - the selected segment is filled with the accent,
    the other stays muted. aria-pressed drives the visual state. */
 .rw-app .log-actions .logview {
   flex: 1 1 100%; display: flex; gap: 3px; margin: 0; padding: 3px; min-inline-size: 0;
@@ -1416,7 +1431,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .pick-row:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
 .rw-app .pick-row.skip { opacity: .55; cursor: not-allowed; }
 .rw-app .pick-row { align-items: flex-start; position: relative; }
-/* no visible checkbox — the highlighted row IS the selection state. The input
+/* no visible checkbox - the highlighted row IS the selection state. The input
    stays real (clipped away, not display:none) so keyboard toggling and SR
    state announcements keep working. clip-path (not opacity) so the :disabled
    opacity rule can't resurface the switch knob as a stray dot. */
@@ -1435,7 +1450,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .pick-row:has(.pick-input:checked)::before { background: var(--thread); }
 .rw-app .pick-row:has(.pick-input:checked) .pick-name { font-weight: 750; }
 .rw-app .pick-row .pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-/* the archive path WRAPS instead of truncating — on a phone the crumb is the
+/* the archive path WRAPS instead of truncating - on a phone the crumb is the
    only way to tell two same-named candidates apart */
 .rw-app .pick-row .pick-crumb { font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .rw-app .pick-row .pick-name { min-width: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
@@ -1445,7 +1460,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* settings groups */
 /* each group is a 2-col grid (label column sized to its WIDEST label) and the
-   rows are subgrids — labels and controls align in clean columns within the
+   rows are subgrids - labels and controls align in clean columns within the
    group while the label column still hugs its text */
 .rw-app .setgroup {
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
@@ -1475,12 +1490,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .validation { margin-block-start: 4px; padding: 8px 11px; border-radius: var(--r-s); font-size: .82rem; color: var(--fault); background: color-mix(in oklab, var(--fault) 9%, transparent); border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam)); }
 
 /* cross-document navigations (reload, hash entry) crossfade instead of
-   flashing white — same-origin only, no-op in browsers without support */
+   flashing white - same-origin only, no-op in browsers without support */
 @view-transition { navigation: auto; }
 /* theme change: the new theme clip-reveals as a circle expanding from the
-   toggle button. The wipe is a pure CSS keyframe — JS only sets the origin
+   toggle button. The wipe is a pure CSS keyframe - JS only sets the origin
    custom properties (--wipe-x/y/r) and starts the transition. ONLY during the
-   wipe (vt-theme) is the default root crossfade replaced — every other view
+   wipe (vt-theme) is the default root crossfade replaced - every other view
    transition keeps it, so scenario/mode changes crossfade instead of snapping. */
 :root.vt-theme::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
 :root.vt-theme::view-transition-new(root) {
@@ -1495,7 +1510,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 ::view-transition-new(root) { z-index: 1; }
 /* scenario morphs (vt-rom / vt-<pid> / vt-action) share one longer, softer
    ease, and the snapshots STRETCH to the morphing box (height/width 100%)
-   instead of sliding past it — the stretch is what makes a button→panel or
+   instead of sliding past it - the stretch is what makes a button→panel or
    reading-card→card morph read smooth rather than janky */
 ::view-transition-group(*) { animation-duration: .34s; animation-timing-function: cubic-bezier(.22, .9, .26, 1); }
 ::view-transition-old(*), ::view-transition-new(*) {
@@ -1504,9 +1519,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 /* morph names are suppressed during the THEME wipe (they'd crossfade outside
    the expanding circle) and during MODE switches (no real continuity between
-   panels — a flat crossfade reads cleaner than cards morphing across modes) */
+   panels - a flat crossfade reads cleaner than cards morphing across modes) */
 html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transition-name"] { view-transition-name: none !important; }
-/* while a scenario view transition runs, the morph IS the animation — suppress
+/* while a scenario view transition runs, the morph IS the animation - suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card, .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
 
@@ -1543,17 +1558,19 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
      name/description out of its column (this overrides the coarse 36px) */
   /* badges read daintier on a phone: smaller text + tighter padding so the
      size/type/system pills hug their text and don't crowd the name column */
-  /* row controls (handle / remove / cancel) drop to 24px — the WCAG 2.5.8
-     floor — so they stop crowding the name and progress readouts */
+  /* row controls (handle / remove / cancel) drop to 24px - the WCAG 2.5.8
+     floor - so they stop crowding the name and progress readouts */
   :root { --pad: 12px; --ctrl-h: 24px; --badge-fs: 0.7rem; }
+  :root:has(.rw-app) { scrollbar-gutter: auto; }
   .rw-app .handle svg { width: 14px; height: 14px; }
   .rw-app .rm svg, .rw-app .cancel svg { width: 12px; height: 12px; }
   .rw-app .step-meta .rb, .rw-app .ckgrp .tsz, .rw-app .cks > .cks-head .rb { padding: 1px 6px; }
-  /* mobile leans harder into Archivo's width axis — the whole UI condenses and
+  /* mobile leans harder into Archivo's width axis - the whole UI condenses and
      the hash rows tighten further so long checksums pack onto one line */
   .rw-app .app { padding-inline: 8px; font-stretch: 82%; }
+  .rw-app .masthead, .rw-app .app > .reveal { margin-inline: -2px; }
   .rw-app .mono { font-stretch: 74%; }
-  /* the progress label + sub-line condense too far on a phone — nudge them up so
+  /* the progress label + sub-line condense too far on a phone - nudge them up so
      the running/staging readouts stay legible (and keep --lab-lh in step) */
   .rw-app .prog .lab { font-size: .85rem; }
   .rw-app .prog-panel { --lab-lh: 1.275rem; }
@@ -1563,31 +1580,31 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
      cards, drop zones and notices all line up on the same vertical edge */
   .rw-app .step-head { padding-inline: 6px; }
   /* cards stay framed on all four sides (the verified/fault border must read as
-     a full outline, not just top+bottom) — inset slightly from the container and
+     a full outline, not just top+bottom) - inset slightly from the container and
      keep tight inline padding so checksum hashes still get room */
   .rw-app .card { border-radius: var(--r-s); margin-inline: 6px; padding-inline: 7px; }
-  /* staging reading-cards share the settled cards' 6px inset — they sit in the
+  /* staging reading-cards share the settled cards' 6px inset - they sit in the
      same list and must be the same width */
   .rw-app .cards > .prog-panel { margin-inline: 6px; border-radius: var(--r-s); }
-  /* …but bordered drop zones / directives must NOT run to the screen edge —
+  /* …but bordered drop zones / directives must NOT run to the screen edge -
      keep a gutter so their rounded frame reads as a contained panel */
   /* drop surfaces (empty hero AND the compact add-row) + "needs input" directives
      match the cards' 6px inset so 0x01 is the same width as every other section */
   .rw-app .step.is-input .drop, .rw-app .needs-input { margin-inline: 6px; width: calc(100% - 12px); }
-  /* the "Waiting for a ROM/patches …" directive must stay ONE line on a phone:
-     tighten the inline padding/gap and step the font down (Archivo's width axis
-     is already condensed here) so the longest message fits without wrapping */
-  .rw-app .needs-input { font-size: .66rem; padding-inline: 14px; gap: 7px; }
+  .rw-app .step.is-input.is-empty .drop.hero { min-height: 180px; gap: 6px; padding: 16px 12px; }
+  .rw-app .drop.hero .main { gap: 6px; font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
+  .rw-app .drop.hero .main svg { padding: 8px; border-radius: 11px; }
+  .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: 7px; font-size: .78rem; }
   /* the notice shares the same 6px inset as the cards/headers */
   .rw-app .notice { margin-inline: 6px; }
   .rw-app .sv-inner { padding-inline: 8px; }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
-     dismiss — the text wraps internally, Reload stays an inline slim button */
+     dismiss - the text wraps internally, Reload stays an inline slim button */
   .rw-app .updates { gap: 8px; }
   /* width-hungry dialogs go edge-to-edge on a phone: the log as a full-height
      sheet, the picker full width at its own height. */
   .rw-app .log-dlg, .rw-app .picker-dlg { max-width: 100vw; width: 100vw; }
-  /* full-screen sheets must size the <dialog> ITSELF — the UA default
+  /* full-screen sheets must size the <dialog> ITSELF - the UA default
      max-height (100% − 2em − 6px) + auto margins otherwise clip a 100dvh
      frame at the top */
   .rw-app .log-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
@@ -1601,7 +1618,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   .rw-app .mode span:not(.mode-thumb) { font-size: .72rem; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
-     on a phone — drop the group indent, trim row padding, shrink the copy
+     on a phone - drop the group indent, trim row padding, shrink the copy
      control. Values still line up via the fixed label column. */
   .rw-app .ckgrp { padding-inline-start: 0; }
   .rw-app .ck { grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto; gap: 3px 6px; padding-inline: 6px; }
@@ -1609,9 +1626,9 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .ck .ck-v { font-size: clamp(.72rem, 3.3vw, .94rem); line-height: 1.35; font-stretch: 62%; }
   .rw-app .ck .copy { width: 20px; height: 20px; }
   /* verification labels are descriptive ("target blockcheck"), not 5-char hash
-     names — let the label column size to its content so the label always fits
+     names - let the label column size to its content so the label always fits
      and the value moves right, instead of forcing the narrow hash-label width */
-  /* keep the subgrid (set on .ck.req above) — only tune size/gap on mobile */
+  /* keep the subgrid (set on .ck.req above) - only tune size/gap on mobile */
   .rw-app .ck.req { column-gap: 8px; }
   .rw-app .ck.req .ck-k { font-size: .72rem; }
   .rw-app .ck.req .ck-v { font-size: clamp(.72rem, 3.3vw, .94rem); }
@@ -1619,15 +1636,14 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
-  /* footer: one line, always — status truncates, metadata yields. hold the
+  /* footer: one line, always - status truncates, metadata yields. hold the
      type at .76rem so the status stays on one line on a phone */
-  .rw-app .selvage { font-size: .76rem; }
+  .rw-app .selvage { margin: 8px 8px 0; font-size: .76rem; }
   .rw-app .sv-inner { flex-wrap: nowrap; gap: 10px; }
   .rw-app .sv-stage { flex: 0 1 auto; }
   .rw-app .sv-link { flex: none; }
 }
 @media (max-width: 380px) {
-  .rw-app .brand-word { display: none; }
   /* the cache version is the first footer item to yield on very narrow screens */
   .rw-app .sv-inner { gap: 8px; }
   .rw-app .selvage .sv-cache { display: none; }
@@ -1643,12 +1659,12 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .card.ok, .rw-app .card.warn, .rw-app .card.bad { border-width: 2px; }
   .rw-app .dropveil { background: Canvas; }
   /* the custom switch is drawn entirely with backgrounds, which forced-colors
-     strips — redraw the track/knob in system colors so on/off stays visible */
+     strips - redraw the track/knob in system colors so on/off stays visible */
   .rw-app input[type="checkbox"] { border-color: CanvasText; }
   .rw-app input[type="checkbox"]::after { background: CanvasText; box-shadow: none; }
   .rw-app input[type="checkbox"]:checked { background: Highlight; border-color: Highlight; }
   .rw-app input[type="checkbox"]:checked::after { background: HighlightText; }
-  /* picker selection relies on a tinted border + left bar — both stripped here */
+  /* picker selection relies on a tinted border + left bar - both stripped here */
   .rw-app .pick-row:has(.pick-input:checked) { outline: 3px solid Highlight; outline-offset: -1px; }
 }
 
@@ -1659,7 +1675,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Webapp adaptations — everything below is NOT from the prototype sheet:
+   Webapp adaptations - everything below is NOT from the prototype sheet:
    the React modal framework (selection / confirm / settings reuse the
    .rw-modal structure the browser tests target), the codec combobox, and
    platform ergonomics carried over from the previous design system.
@@ -1669,7 +1685,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; }
 .rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
-  /* max-width in viewport units — the grid track grows to the card's
+  /* max-width in viewport units - the grid track grows to the card's
      max-content, so a `100%` cap alone can't stop a long unbroken file name
      pushing the card past the screen edge */
   position: relative; width: min(640px, 100%); max-width: calc(100vw - 32px); max-height: min(82dvh, 760px);
@@ -1685,9 +1701,9 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app .mh-sp { flex: 1 1 auto; }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; }
-/* settings is the longest dialog — let it use most of the viewport height */
+/* settings is the longest dialog - let it use most of the viewport height */
 .rw-modal.settings-modal .rw-modal-card { width: min(820px, 100%); max-height: min(94dvh, 1020px); }
-/* the archive/candidate picker can list long nested paths — let it use the
+/* the archive/candidate picker can list long nested paths - let it use the
    full available width (the viewport-minus-padding cap still applies) */
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
 /* a growable multi-line text field in the same recessed language as .input */
@@ -1721,7 +1737,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
 .rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
 .rw-app .selfoot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }
-/* the "matches patch" tag also carries .fmt (orange) — match .tag.fmt's
+/* the "matches patch" tag also carries .fmt (orange) - match .tag.fmt's
    specificity so the verified-green actually wins the cascade */
 .rw-app .tag.matches { color: var(--verified); }
 @media (forced-colors: active) {
@@ -1754,7 +1770,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
   .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 }
 
-/* trace lines render as buttons (keyboard-copyable) — strip the UA chrome so
+/* trace lines render as buttons (keyboard-copyable) - strip the UA chrome so
    they read as the prototype's plain rows */
 .rw-app .tracelog .ln { appearance: none; display: flex; width: max-content; min-width: 100%; border-inline: 0; border-block-start: 0; background: transparent; color: inherit; font: inherit; text-align: start; padding-inline: 0; }
 
@@ -1790,7 +1806,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .dlg .picklist li { list-style: none; }
 .dlg .picklist { margin: 0; padding: 0; }
 
-/* the app's build version is long (semver + branch + hash) — let it shrink and
+/* the app's build version is long (semver + branch + hash) - let it shrink and
    ellipsize instead of pushing the selvage wider than the viewport */
 .rw-app .selvage .sv-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rw-app .selvage .sv-threads, .rw-app .selvage .sv-cache { flex: none; }
@@ -1801,7 +1817,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
    from the inline start. Indeterminate keeps the prototype's width bounce. */
 .rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(0); transition: transform .4s var(--ease); }
 .rw-app .meter.live:not(.indet) .fill { transition: none; }
-/* cards and progress panels are self-contained — per-tick re-renders inside
+/* cards and progress panels are self-contained - per-tick re-renders inside
    one panel must not invalidate layout/paint for the rest of the bench */
 .rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
 
@@ -1821,16 +1837,6 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 @keyframes weave-slide { to { transform: translateX(18px); } }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .meter.indet .fill { animation: none; transform: none; width: 100%; opacity: .55; }
-}
-
-/* hero format pills: compact on phones so the full row fits one line instead
-   of stranding the last format on its own wrap line */
-@media (max-width: 560px) {
-  .rw-app .drop.hero .formats { gap: 4px; }
-  .rw-app .drop.hero .fmt { font-size: .6rem; padding: 2px 5px; letter-spacing: .02em; }
-}
-@media (max-width: 380px) {
-  .rw-app .drop.hero .fmt { font-size: .56rem; padding: 2px 4px; }
 }
 
 /* ── form plate ──

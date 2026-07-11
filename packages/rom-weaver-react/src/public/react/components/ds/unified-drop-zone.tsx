@@ -4,19 +4,14 @@ import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import { DropZone, InfoPopover, StepSection } from "./layout.tsx";
 
 /**
- * The 0x01 INPUTS step — the single combined drop surface shared by every
+ * The 0x01 INPUTS step - the single combined drop surface shared by every
  * workflow tab. A hero drop target while the form is empty, shrinking to the
  * compact add-row once files are staged. Always accepts multiple files,
- * traces what it receives, and composes the per-category hints into one line.
- * Routing is decided by the per-tab caller (see `unified-drop-routing.ts`).
+ * traces what it receives, and lists every supported format. Routing is decided
+ * by the per-tab caller (see `unified-drop-routing.ts`).
  */
 
 const logger = createLogger("unified-drop-zone");
-
-const joinHintParts = (parts: string[]): string | undefined => {
-  if (parts.length <= 1) return parts[0];
-  return `${parts.slice(0, -1).join(", ")}${parts.length > 2 ? "," : ""} or ${parts[parts.length - 1]}`;
-};
 
 type SupportedFileGroup = {
   label: string;
@@ -25,19 +20,15 @@ type SupportedFileGroup = {
 
 type UnifiedDropZoneProps = {
   label: ReactNode;
-  romHint?: string;
-  patchHint?: string;
-  archiveHint?: string;
+  labelCoarse?: ReactNode;
   big?: boolean;
   disabled?: boolean;
   accept?: string;
   id?: string;
   inputId?: string;
-  /** Format pills under the hero label (empty state only). */
-  formats?: readonly string[];
   /** Extra content for the step-header info popover (above the supported-file lists). */
   info?: ReactNode;
-  /** Full per-bucket extension support, listed in the info popover; the hint line just says "many more". */
+  /** Full per-bucket extension support, listed in the hero ticker and info popover. */
   supported?: readonly SupportedFileGroup[];
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
@@ -51,13 +42,9 @@ type UnifiedDropZoneProps = {
 
 const UnifiedDropZone = ({
   afterDropZone,
-  archiveHint,
-  formats,
   info,
   num = "0x01",
   onFiles,
-  patchHint,
-  romHint,
   supported,
   title = "Inputs",
   ...dropZoneProps
@@ -72,8 +59,7 @@ const UnifiedDropZone = ({
     });
     onFiles(files);
   };
-  const joinedHint = joinHintParts([romHint, patchHint, archiveHint].filter((part): part is string => !!part));
-  const hint = joinedHint && supported?.length ? `${joinedHint} — and many more` : joinedHint;
+  const formats = [...new Set(supported?.flatMap((group) => group.extensions) || [])];
   const popover =
     info || supported?.length ? (
       <InfoPopover title="Input handling">
@@ -98,7 +84,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title}
     >
-      <DropZone {...dropZoneProps} bare formats={formats} hint={hint} multiple onFiles={emit} />
+      <DropZone {...dropZoneProps} bare formats={formats} multiple onFiles={emit} />
       {afterDropZone}
     </StepSection>
   );

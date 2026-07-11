@@ -54,7 +54,7 @@ const StepSection = ({
 
 /**
  * Clickable "i" info mark with a drop-in popover. Closes on outside click and
- * Escape. Content is the caller's — typically a `.info-list` bullet list.
+ * Escape. Content is the caller's - typically a `.info-list` bullet list.
  */
 const InfoPopover = ({ title = "More info", children }: { title?: string; children: ReactNode }) => {
   const [open, setOpen] = useState(false);
@@ -100,6 +100,7 @@ const InfoPopover = ({ title = "More info", children }: { title?: string; childr
  */
 const DropZone = ({
   label,
+  labelCoarse,
   hint,
   hintCoarse,
   formats,
@@ -114,6 +115,8 @@ const DropZone = ({
   inputId,
 }: {
   label: ReactNode;
+  /** Touch-device label shown instead of `label` on coarse pointers. */
+  labelCoarse?: ReactNode;
   hint?: ReactNode;
   /** Touch-device hint (shown instead of `hint` on coarse pointers). */
   hintCoarse?: ReactNode;
@@ -135,6 +138,8 @@ const DropZone = ({
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  const formatSplit = Math.ceil((formats?.length || 0) / 2);
+  const formatRows = formats ? [formats.slice(0, formatSplit), formats.slice(formatSplit)] : [];
 
   const emit = (list: FileList | null) => {
     if (!list || list.length === 0) return;
@@ -181,15 +186,34 @@ const DropZone = ({
     >
       <span className={join("main", !big && "btnish")}>
         {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
-        <span>{reading ? readingLabel : label}</span>
+        {reading ? (
+          <span>{readingLabel}</span>
+        ) : labelCoarse ? (
+          <>
+            <span className="pointer-copy fine">{label}</span>
+            <span className="pointer-copy coarse">{labelCoarse}</span>
+          </>
+        ) : (
+          <span>{label}</span>
+        )}
       </span>
       {hint ? <span className="hint fine">{hint}</span> : null}
       {hintCoarse ? <span className="hint coarse">{hintCoarse}</span> : null}
       {big && formats?.length ? (
         <span aria-hidden="true" className="formats">
-          {formats.map((format) => (
-            <span className="fmt mono" key={format}>
-              {format}
+          {formatRows.map((row, lane) => (
+            <span className="formats-lane" key={lane}>
+              <span className="formats-track">
+                {[0, 1].map((copy) => (
+                  <span className="formats-set" key={copy}>
+                    {row.map((format) => (
+                      <span className="fmt mono" key={`${copy}-${format}`}>
+                        {format}
+                      </span>
+                    ))}
+                  </span>
+                ))}
+              </span>
             </span>
           ))}
         </span>

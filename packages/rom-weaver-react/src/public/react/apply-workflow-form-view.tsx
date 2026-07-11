@@ -22,7 +22,6 @@ import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./component
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { ARCHIVE_INPUT_HINT, PATCH_INPUT_HINT, ROM_INPUT_HINT } from "./input-helper-text.ts";
 import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   DialogController,
@@ -47,13 +46,11 @@ import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./
  * controllers that ApplyPatchForm wires up and renders the step layout.
  */
 
-/** Format pills under the 0x01 hero — mirrors the loom prototype's apply list. */
-const APPLY_HERO_FORMATS = ["ips", "bps", "ups", "xdelta", "ppf", "cue", "zip", "7z", "chd", "rvz"] as const;
-
 /** Full registry support, listed in the 0x01 info popover. */
 const APPLY_SUPPORTED_FILES = [
   { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
   { extensions: PATCH_FILE_EXTENSIONS, label: "Patches" },
+  { extensions: ["rw.json"], label: "Manifests" },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
 ] as const;
 
@@ -105,7 +102,7 @@ const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = { crc32: "CRC32", md5:
 const ManifestRomExpectationCard = ({ expectation }: { expectation: ManifestRomExpectation }) => (
   <div className="patch-check-group manifest-rom-expectation" id="rom-weaver-manifest-rom-expectation">
     <div className="ck-group-head">
-      <span>ROM not included — provide it yourself</span>
+      <span>ROM not included - provide it yourself</span>
     </div>
     {expectation.name ? <div className="mre-name mono">{expectation.name}</div> : null}
     <div className="verification-list">
@@ -229,7 +226,7 @@ const groupRomInputs = (rows: RomInputRowState[]): RomInputGroup[] => {
     discPositions.set(groupId, groups.length);
     groups.push({ kind: "disc", rows: [{ index, row }] });
   });
-  // A "disc" of a single row is not a disc — render it as a normal row.
+  // A "disc" of a single row is not a disc - render it as a normal row.
   return groups.map((group) => {
     if (group.kind === "disc" && group.rows.length === 1) {
       const only = group.rows[0];
@@ -247,7 +244,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   // The resolved card structure stays mounted through staging: a slim determinate
   // bar on the card's top edge + a status in the meta line carry progress, and the
   // Checks drawer reserves its rows as shimmer placeholders sized to the eventual
-  // hash lengths. So nothing below the card moves when the checksums land — the
+  // hash lengths. So nothing below the card moves when the checksums land - the
   // bare-panel → full-card swap (~116px → ~530px, ~2s after drop, outside the input
   // grace window) was the dominant layout shift. The bar stays full once finished;
   // only the status text drops, leaving the platform tag in its slot.
@@ -262,7 +259,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   }
   const percent = stagePercent(stagingProps);
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it sits
-  // in the "extract" phase throughout — show both verbs. A bare ROM has no extract phase
+  // in the "extract" phase throughout - show both verbs. A bare ROM has no extract phase
   // and reads plain "Checksumming…". The phase comes from the runtime stage, not the
   // label text, so the combined verb no longer drops out on stageless progress ticks.
   const stageLabel = stageStatusLabel("Checksumming", romInput.info.validationPhase === "extract");
@@ -331,7 +328,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
 
 /**
  * Normalize a disc-related filename into a display name by dropping the extension
- * and a trailing "(Track N)" suffix — e.g. "Game (Track 1).bin" → "Game",
+ * and a trailing "(Track N)" suffix - e.g. "Game (Track 1).bin" → "Game",
  * "Final Fantasy VII (Disc 1).7z" → "Final Fantasy VII (Disc 1)".
  */
 const discDisplayName = (fileName: string): string => {
@@ -550,7 +547,7 @@ function ApplyWorkflowFormView({
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
   const localizer = useUiLocalizer();
-  // Inputs/patches still resolving — surfaced only on the selvage status strip.
+  // Inputs/patches still resolving - surfaced only on the selvage status strip.
   const inputsStaging =
     romInputs.some((row) => !!row.progress) || patches.some((item) => !!item.progress) || uiState.patchInput.loading;
   // The selvage status strip mirrors the apply job: staging while files route,
@@ -598,13 +595,13 @@ function ApplyWorkflowFormView({
   const headerlessExtension = outputHeaderTransform?.headerlessExtension;
   const extensionsDiffer = !!headeredExtension && !!headerlessExtension && headeredExtension !== headerlessExtension;
   // Option labels carry the resulting extension when keeping vs dropping the
-  // header changes the ROM's conventional one (.smc vs .sfc) — the output file
+  // header changes the ROM's conventional one (.smc vs .sfc) - the output file
   // name follows the choice automatically.
   const withExtension = (label: string, extension: string | undefined) =>
     extensionsDiffer && extension ? `${label} (${extension})` : label;
   const outputHeaderInfo = {
     items: [
-      `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${outputHeaderRetained ? "" : " — this ROM's header is copier junk, so auto drops it"}.`,
+      `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${outputHeaderRetained ? "" : " - this ROM's header is copier junk, so auto drops it"}.`,
       "Keep header: the patched output carries the ROM header (re-added if it was stripped for patching).",
       "Headerless: the patched output has no ROM header (stripped from the output if the patch ran on the headered bytes).",
       ...(extensionsDiffer
@@ -631,8 +628,8 @@ function ApplyWorkflowFormView({
       >
         <option value="auto">
           {outputHeaderRetained
-            ? withExtension("Auto — keep header", headeredExtension)
-            : withExtension("Auto — headerless", headerlessExtension)}
+            ? withExtension("Auto - keep header", headeredExtension)
+            : withExtension("Auto - headerless", headerlessExtension)}
         </option>
         <option value="keep">{withExtension("Keep header", headeredExtension)}</option>
         <option value="strip">{withExtension("Headerless", headerlessExtension)}</option>
@@ -641,7 +638,7 @@ function ApplyWorkflowFormView({
   ) : null;
   const exportTypeInfo = {
     items: [
-      "The archive holds rw.json plus the patch files — everything a player needs to apply the hack in one drop.",
+      "The archive holds rw.json plus the patch files - everything a player needs to apply the hack in one drop.",
       "Patch names, descriptions, on/off defaults, and the ROM/output checks travel with it, so inputs verify automatically.",
       "The “+ ROM” variants also pack the ROM into the archive; otherwise the manifest carries only its checks and the player supplies the file.",
     ],
@@ -687,7 +684,7 @@ function ApplyWorkflowFormView({
   // drop handler stages bare files immediately and shows an "identifying"
   // placeholder per archive until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
-  // The empty bench fills (or clears) inside a flat crossfade — the 0x01 hero
+  // The empty bench fills (or clears) inside a flat crossfade - the 0x01 hero
   // shrinking into the add-row otherwise snaps. A pending placeholder also counts
   // as "not empty" so the hero shrinks the instant something is dropped.
   const workflowEmpty = useFlatTransitionFlag(
@@ -695,18 +692,18 @@ function ApplyWorkflowFormView({
   );
   // "Needs input" directives forward to the 0x01 unified picker.
   const openUnifiedPicker = () => document.getElementById("rom-weaver-input-file-unified")?.click();
-  // Each section keeps its empty fixture whenever its own list is empty — not
-  // just when the whole workflow is — so loading only a ROM (or only patches)
+  // Each section keeps its empty fixture whenever its own list is empty - not
+  // just when the whole workflow is - so loading only a ROM (or only patches)
   // still shows the other section's "add it in 0x01" prompt instead of a bare
   // header.
   const romNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>
-      Waiting for a ROM — click here or the <b className="hexref mono">0x01</b> drop zone above to add one
+      Add ROM in <b className="hexref mono">0x01</b> or click for any input
     </NeedsInput>
   );
   const patchesNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>
-      Waiting for patches — click here or the <b className="hexref mono">0x01</b> drop zone above to add some
+      Add patches in <b className="hexref mono">0x01</b> or click for any input
     </NeedsInput>
   );
 
@@ -732,7 +729,7 @@ function ApplyWorkflowFormView({
                   <FileProgress
                     id={`rom-weaver-pending-${drop.id}`}
                     indeterminate
-                    label={`${drop.name} — identifying…`}
+                    label={`${drop.name} - identifying…`}
                     value="…"
                   />
                 </div>
@@ -740,10 +737,8 @@ function ApplyWorkflowFormView({
             </div>
           ) : null
         }
-        archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
         big={workflowEmpty}
-        formats={APPLY_HERO_FORMATS}
-        hintCoarse={localizer.message(workflowEmpty ? "ui.drop.tapAnywhere" : "ui.drop.tap")}
+        hintCoarse={workflowEmpty ? undefined : localizer.message("ui.drop.tap")}
         id="rom-weaver-row-unified-drop"
         info={
           <ul className="info-list">
@@ -754,22 +749,16 @@ function ApplyWorkflowFormView({
           </ul>
         }
         inputId="rom-weaver-input-file-unified"
-        label={workflowEmpty ? "Drop a ROM or patches" : "Replace the ROM or add patches"}
+        label={
+          workflowEmpty
+            ? "Drop or click to add ROMs, patches, manifests, or archives"
+            : "Replace the ROM or add patches"
+        }
+        labelCoarse={workflowEmpty ? "Tap to add ROMs, patches, manifests, or archives" : undefined}
         onFiles={handleUnifiedDrop}
-        patchHint={`patches (${PATCH_INPUT_HINT})`}
-        romHint={`roms (${ROM_INPUT_HINT})`}
         supported={APPLY_SUPPORTED_FILES}
       />
-      {workflowEmpty ? (
-        <>
-          <StepSection num="0x02" title="ROM">
-            {romNeedsInput}
-          </StepSection>
-          <StepSection num="0x03" title="Patches">
-            {patchesNeedsInput}
-          </StepSection>
-        </>
-      ) : (
+      {workflowEmpty ? null : (
         <>
           <WorkflowRomInputStep
             emptyState={romNeedsInput}
@@ -846,156 +835,157 @@ function ApplyWorkflowFormView({
               </div>
             </div>
           ) : null}
+          <WorkflowOutputStep
+            action={
+              <>
+                {errorNotice?.visible ? (
+                  <Notice
+                    id="rom-weaver-row-error-message"
+                    level={errorNotice.level === "warning" ? "warn" : "error"}
+                    onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+                  >
+                    {errorNotice.message}
+                  </Notice>
+                ) : null}
+                {uiState.checksumOverride.visible ? (
+                  <label className="checkrow warn">
+                    <input
+                      checked={uiState.checksumOverride.checked}
+                      disabled={uiState.checksumOverride.disabled}
+                      id="rom-weaver-checkbox-checksum-override"
+                      onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+                      type="checkbox"
+                    />
+                    <span>{uiState.checksumOverride.label}</span>
+                  </label>
+                ) : null}
+                {uiState.outputChecksumWarning.visible ? (
+                  <div id="rom-weaver-row-output-checksum-warning">
+                    <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
+                    <label className="checkrow warn">
+                      <input
+                        checked={uiState.outputChecksumWarning.checked}
+                        disabled={uiState.outputChecksumWarning.disabled}
+                        id="rom-weaver-checkbox-output-checksum-override"
+                        onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
+                        type="checkbox"
+                      />
+                      <span>{uiState.outputChecksumWarning.label}</span>
+                    </label>
+                  </div>
+                ) : null}
+                <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
+                  <p aria-live="polite" className="patch-off-note">
+                    <TriangleAlert aria-hidden="true" />
+                    <span>
+                      {disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}
+                    </span>
+                  </p>
+                </div>
+                <PatcherPrimaryAction
+                  controller={controllers.output}
+                  disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!manifestVerificationError}
+                  totalTime={applyTotalTime || undefined}
+                />
+                {manifestVerificationError ? <Notice level="error">{manifestVerificationError}</Notice> : null}
+                {manifestExport ? (
+                  <button
+                    className="btn ghost slim"
+                    disabled={outputState.disabled || !romInputs.length || !patches.length}
+                    id="rom-weaver-button-export-manifest"
+                    onClick={() => void manifestExport.runExport()}
+                    type="button"
+                  >
+                    {localizer.message("ui.manifestExport.action")}
+                  </button>
+                ) : null}
+                {manifestExport?.busy ? (
+                  <InlineProgress
+                    id="rom-weaver-manifest-export-progress"
+                    indeterminate={typeof manifestExport.progress?.percent !== "number"}
+                    label={
+                      manifestExport.progress?.label ||
+                      (manifestExport.phase === "preparing" ? "Preparing source files" : "Writing manifest bundle")
+                    }
+                    percent={manifestExport.progress?.percent ?? null}
+                    value={
+                      typeof manifestExport.progress?.percent === "number"
+                        ? `${Math.round(manifestExport.progress.percent)}%`
+                        : ""
+                    }
+                  />
+                ) : null}
+                {manifestExport?.error ? <Notice level="error">{manifestExport.error}</Notice> : null}
+              </>
+            }
+            compress={buildOutputCompressionPanel({
+              disabled: outputState.disabled,
+              extraChildren: manifestOutputFields,
+              fields: outputState.compress?.fields,
+              format: compressHeaderFormat,
+              formatId: "rom-weaver-select-output-format-compress",
+              formatLabel: "Compression type",
+              formatOptions: compressionTypeOptions,
+              formatValue: outputState.compressionFormat,
+              onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
+              onFormatChange: (value) => controllers.output.setOutputCompression(value),
+              summary: outputState.compress?.summary,
+              timing: outputState.compressTiming || undefined,
+            })}
+            disabled={outputState.disabled}
+            fault={applyFailed}
+            fileName={outputState.displayFileName}
+            fileNameId="rom-weaver-input-output-file-name"
+            fileNamePlaceholder="Output filename (no extension)"
+            format={outputState.compressionFormat}
+            formatId="rom-weaver-select-output-format"
+            formatOptions={outputState.options}
+            id="rom-weaver-row-output-file-name"
+            info={
+              <InfoPopover title="Output options">
+                <strong>Output</strong>
+                <ul>
+                  <li>Set the filename without an extension - the format selector controls it.</li>
+                  <li>Container formats (zip, 7z, chd, rvz) are produced directly.</li>
+                  <li>Compression defaults come from Settings › Compression and apply to compressed output.</li>
+                </ul>
+              </InfoPopover>
+            }
+            meta={
+              applyDone ? (
+                <>
+                  {outputState.applyTiming ? (
+                    <span className="rb mono done-chip">
+                      <span className="k">Apply</span>
+                      <span className="t">{outputState.applyTiming}</span>
+                    </span>
+                  ) : null}
+                  {outputState.compressTiming ? (
+                    <span className="rb mono done-chip" style={{ animationDelay: "0.19s" }}>
+                      <span className="k">Compress</span>
+                      <span className="t">{outputState.compressTiming}</span>
+                    </span>
+                  ) : null}
+                </>
+              ) : outputState.applyTiming ? (
+                <span className="t">{outputState.applyTiming}</span>
+              ) : undefined
+            }
+            notice={
+              <SectionNotice
+                id="rom-weaver-output-notice-message"
+                onDismiss={dismissSectionNotice("outputNotice")}
+                state={uiState.outputNotice}
+              />
+            }
+            num="0x04"
+            onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
+            onFormatChange={(value) => controllers.output.setOutputCompression(value)}
+            title="Apply"
+            woven={applyDone || running}
+          />
         </>
       )}
-
-      <WorkflowOutputStep
-        action={
-          <>
-            {errorNotice?.visible ? (
-              <Notice
-                id="rom-weaver-row-error-message"
-                level={errorNotice.level === "warning" ? "warn" : "error"}
-                onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
-              >
-                {errorNotice.message}
-              </Notice>
-            ) : null}
-            {uiState.checksumOverride.visible ? (
-              <label className="checkrow warn">
-                <input
-                  checked={uiState.checksumOverride.checked}
-                  disabled={uiState.checksumOverride.disabled}
-                  id="rom-weaver-checkbox-checksum-override"
-                  onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-                  type="checkbox"
-                />
-                <span>{uiState.checksumOverride.label}</span>
-              </label>
-            ) : null}
-            {uiState.outputChecksumWarning.visible ? (
-              <div id="rom-weaver-row-output-checksum-warning">
-                <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
-                <label className="checkrow warn">
-                  <input
-                    checked={uiState.outputChecksumWarning.checked}
-                    disabled={uiState.outputChecksumWarning.disabled}
-                    id="rom-weaver-checkbox-output-checksum-override"
-                    onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
-                    type="checkbox"
-                  />
-                  <span>{uiState.outputChecksumWarning.label}</span>
-                </label>
-              </div>
-            ) : null}
-            <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
-              <p aria-live="polite" className="patch-off-note">
-                <TriangleAlert aria-hidden="true" />
-                <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
-              </p>
-            </div>
-            <PatcherPrimaryAction
-              controller={controllers.output}
-              disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!manifestVerificationError}
-              totalTime={applyTotalTime || undefined}
-            />
-            {manifestVerificationError ? <Notice level="error">{manifestVerificationError}</Notice> : null}
-            {manifestExport ? (
-              <button
-                className="btn ghost slim"
-                disabled={outputState.disabled || !romInputs.length || !patches.length}
-                id="rom-weaver-button-export-manifest"
-                onClick={() => void manifestExport.runExport()}
-                type="button"
-              >
-                {localizer.message("ui.manifestExport.action")}
-              </button>
-            ) : null}
-            {manifestExport?.busy ? (
-              <InlineProgress
-                id="rom-weaver-manifest-export-progress"
-                indeterminate={typeof manifestExport.progress?.percent !== "number"}
-                label={
-                  manifestExport.progress?.label ||
-                  (manifestExport.phase === "preparing" ? "Preparing source files" : "Writing manifest bundle")
-                }
-                percent={manifestExport.progress?.percent ?? null}
-                value={
-                  typeof manifestExport.progress?.percent === "number"
-                    ? `${Math.round(manifestExport.progress.percent)}%`
-                    : ""
-                }
-              />
-            ) : null}
-            {manifestExport?.error ? <Notice level="error">{manifestExport.error}</Notice> : null}
-          </>
-        }
-        compress={buildOutputCompressionPanel({
-          disabled: outputState.disabled,
-          extraChildren: manifestOutputFields,
-          fields: outputState.compress?.fields,
-          format: compressHeaderFormat,
-          formatId: "rom-weaver-select-output-format-compress",
-          formatLabel: "Compression type",
-          formatOptions: compressionTypeOptions,
-          formatValue: outputState.compressionFormat,
-          onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
-          onFormatChange: (value) => controllers.output.setOutputCompression(value),
-          summary: outputState.compress?.summary,
-          timing: outputState.compressTiming || undefined,
-        })}
-        disabled={outputState.disabled}
-        fault={applyFailed}
-        fileName={outputState.displayFileName}
-        fileNameId="rom-weaver-input-output-file-name"
-        fileNamePlaceholder="Output filename (no extension)"
-        format={outputState.compressionFormat}
-        formatId="rom-weaver-select-output-format"
-        formatOptions={outputState.options}
-        id="rom-weaver-row-output-file-name"
-        info={
-          <InfoPopover title="Output options">
-            <strong>Output</strong>
-            <ul>
-              <li>Set the filename without an extension — the format selector controls it.</li>
-              <li>Container formats (zip, 7z, chd, rvz) are produced directly.</li>
-              <li>Compression defaults come from Settings › Compression and apply to compressed output.</li>
-            </ul>
-          </InfoPopover>
-        }
-        meta={
-          applyDone ? (
-            <>
-              {outputState.applyTiming ? (
-                <span className="rb mono done-chip">
-                  <span className="k">Apply</span>
-                  <span className="t">{outputState.applyTiming}</span>
-                </span>
-              ) : null}
-              {outputState.compressTiming ? (
-                <span className="rb mono done-chip" style={{ animationDelay: "0.19s" }}>
-                  <span className="k">Compress</span>
-                  <span className="t">{outputState.compressTiming}</span>
-                </span>
-              ) : null}
-            </>
-          ) : outputState.applyTiming ? (
-            <span className="t">{outputState.applyTiming}</span>
-          ) : undefined
-        }
-        notice={
-          <SectionNotice
-            id="rom-weaver-output-notice-message"
-            onDismiss={dismissSectionNotice("outputNotice")}
-            state={uiState.outputNotice}
-          />
-        }
-        num="0x04"
-        onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
-        onFormatChange={(value) => controllers.output.setOutputCompression(value)}
-        title="Apply"
-        woven={applyDone || running}
-      />
 
       <SharedArchiveDialog controller={controllers.dialog} />
     </section>

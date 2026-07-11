@@ -29,7 +29,6 @@ import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { ARCHIVE_INPUT_HINT, TRIM_INPUT_HINT } from "./input-helper-text.ts";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
@@ -74,11 +73,8 @@ import {
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
-/** Format pills under the 0x01 hero — mirrors TrimInputKind (tail trims, xiso, GC/Wii scrub). */
-const TRIM_HERO_FORMATS = ["nds", "dsi", "gba", "3ds", "xiso", "iso", "gcm", "wbfs", "rvz"] as const;
-
 /** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-scrub
- * candidates), listed in the 0x01 info popover — not the full ROM registry. */
+ * candidates), listed in the 0x01 info popover - not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
   {
     extensions: ["nds", "dsi", "srl", "gba", "3ds", "xiso", "xiso.iso", "iso", "gcm", "wbfs", "rvz"],
@@ -118,7 +114,7 @@ const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, se
   return outputFormat || getSourceExtension(sourceFileName);
 };
 
-// The filename field holds the stem only — the format selector owns the
+// The filename field holds the stem only - the format selector owns the
 // extension, which resolveTrimExecutionOutputName appends at run time.
 const getDefaultTrimOutputName = (sourceFileName: string) =>
   appendTrimmedMarker(getFileNameStem(sourceFileName) || "trimmed");
@@ -767,15 +763,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       : null,
   );
 
-  // "Needs input" directive forwards to the 0x01 unified picker.
-  const openUnifiedPicker = () => document.getElementById("trim-builder-input-file-unified")?.click();
   const trimSourceEmpty = useFlatTransitionFlag(!source);
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: trimQueued });
 
   const model: TrimPatchFormViewModel = {
     confirm: {
-      body: `The trimmed copy of ${sourceFileName} is saved as a new download — your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
+      body: `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
       cancelLabel: "Cancel",
       confirmLabel: "Trim ROM",
       onCancel: () => setConfirmOpen(false),
@@ -786,18 +780,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     dialog: candidateSelectionDialog,
     dropZone: {
       accept: getFileInputAcceptAttributes().unifiedRom,
-      archiveHint: `archives (${ARCHIVE_INPUT_HINT})`,
       big: trimSourceEmpty,
       disabled: uploadDisabled,
-      formats: TRIM_HERO_FORMATS,
       id: "trim-builder-row-unified-drop",
       inputId: "trim-builder-input-file-unified",
       label: source ? "Replace the ROM" : "Drop a ROM to trim",
       onFiles: handleUnifiedDrop,
-      romHint: `roms (${TRIM_INPUT_HINT})`,
       supported: TRIM_SUPPORTED_FILES,
     },
-    onAddInput: openUnifiedPicker,
     output: {
       action: (
         <OutputRunAction
@@ -859,7 +849,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <InfoPopover title="Output options">
           <strong>Output</strong>
           <ul>
-            <li>Set the filename without an extension — the format selector controls it.</li>
+            <li>Set the filename without an extension - the format selector controls it.</li>
             <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
             <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
           </ul>

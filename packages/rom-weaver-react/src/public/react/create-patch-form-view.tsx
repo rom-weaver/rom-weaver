@@ -1,5 +1,4 @@
 import type { ComponentProps, ReactNode } from "react";
-import { NeedsInput, StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
@@ -7,7 +6,7 @@ import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.ts
 /**
  * Presentational shell for the create-patch workflow. The stateful
  * CreatePatchForm controller builds these prop bundles and hands them over; the
- * view owns nothing but layout — the page section, the unified drop zone, the
+ * view owns nothing but layout - the page section, the unified drop zone, the
  * empty vs. staged source branch, the swap row, the output step and any active
  * dialog. Keeping the markup here lets it be exercised inert (a11y / state
  * galleries) without booting the workflow, wasm or worker pool.
@@ -19,15 +18,13 @@ type CreatePatchFormViewModel = {
   dropZone: ComponentProps<typeof UnifiedDropZone>;
   /** Modified source step (0x03). */
   modifiedStep: ComponentProps<typeof WorkflowRomInputStep>;
-  /** Forwards "needs input" prompts to the unified picker. */
-  onAddInput: () => void;
   /** Original source step (0x02). */
   originalStep: ComponentProps<typeof WorkflowRomInputStep>;
   /** Output step (0x04): patch type, filename, compression, run action. */
   output: ComponentProps<typeof WorkflowOutputStep>;
-  /** No source staged yet — show the prompts instead of the cards. */
+  /** No source staged yet - show only the hero. */
   sourcesEmpty: boolean;
-  /** Swap original/modified — present only when both sources are staged. */
+  /** Swap original/modified - present only when both sources are staged. */
   swap: { disabled: boolean; onSwap: () => void } | null;
 };
 
@@ -35,7 +32,6 @@ const CreatePatchFormView = ({
   dialog,
   dropZone,
   modifiedStep,
-  onAddInput,
   originalStep,
   output,
   sourcesEmpty,
@@ -43,20 +39,7 @@ const CreatePatchFormView = ({
 }: CreatePatchFormViewModel) => (
   <section className="panel" id="patch-builder-container">
     <UnifiedDropZone {...dropZone} />
-    {sourcesEmpty ? (
-      <>
-        <StepSection num="0x02" title="Original">
-          <NeedsInput onClick={onAddInput}>
-            Add the original ROM in <b className="hexref mono">0x01</b> above
-          </NeedsInput>
-        </StepSection>
-        <StepSection num="0x03" title="Modified">
-          <NeedsInput onClick={onAddInput}>
-            Add the modified ROM in <b className="hexref mono">0x01</b> above
-          </NeedsInput>
-        </StepSection>
-      </>
-    ) : (
+    {sourcesEmpty ? null : (
       <>
         <WorkflowRomInputStep {...originalStep} />
         {swap ? (
@@ -77,9 +60,9 @@ const CreatePatchFormView = ({
           </div>
         ) : null}
         <WorkflowRomInputStep {...modifiedStep} />
+        <WorkflowOutputStep {...output} />
       </>
     )}
-    <WorkflowOutputStep {...output} />
     {dialog}
   </section>
 );

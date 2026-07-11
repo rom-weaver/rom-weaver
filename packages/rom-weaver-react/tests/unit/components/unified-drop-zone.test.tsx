@@ -14,12 +14,13 @@ describe("UnifiedDropZone", () => {
     const { container } = render(
       <UnifiedDropZone
         big
-        formats={["ips", "zip"]}
         inputId="rom-weaver-input-file-unified"
         label="Drop a ROM or patches"
         onFiles={() => undefined}
-        patchHint="patches (.ips)"
-        romHint="roms (.sfc)"
+        supported={[
+          { extensions: ["sfc", "nes"], label: "ROMs" },
+          { extensions: ["ips", "zip"], label: "Patches and archives" },
+        ]}
       />,
     );
     const step = container.querySelector("section.step.is-input.is-empty");
@@ -27,7 +28,13 @@ describe("UnifiedDropZone", () => {
     expect(step?.querySelector(".step-num")?.textContent).toBe("0x01");
     expect(step?.querySelector(".step-title")?.textContent).toBe("Inputs");
     expect(step?.querySelector(".drop.hero.bare")).toBeTruthy();
-    expect(step?.querySelector(".hint")?.textContent).toBe("roms (.sfc) or patches (.ips)");
+    expect(Array.from(step?.querySelectorAll(".formats-set:first-child .fmt") || []).map((pill) => pill.textContent)).toEqual([
+      "sfc",
+      "nes",
+      "ips",
+      "zip",
+    ]);
+    expect(step?.querySelector(".hint")).toBeNull();
     expect(step?.querySelector("input[type=file]")?.id).toBe("rom-weaver-input-file-unified");
   });
 
