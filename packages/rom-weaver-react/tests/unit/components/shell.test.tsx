@@ -25,6 +25,8 @@ const mastheadProps = {
   currentTab: "patcher",
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
+  language: "en",
+  onLanguageChange: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
 };
@@ -43,11 +45,13 @@ describe("Masthead", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // theme + log + settings tools always present
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(3);
+    // language + theme + log + settings tools always present
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
+    expect(container.querySelector(".language-tool select")).toBeTruthy();
+    expect(container.querySelector(".tool-text")?.textContent).toBe("Log");
   });
 
-  it("keeps the tool rail to theme / log / settings — diagnostics live in the Log dialog", () => {
+  it("keeps diagnostics in the Log dialog", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     expect(container.querySelector(".console-copy-toggle")).toBeNull();
     expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();

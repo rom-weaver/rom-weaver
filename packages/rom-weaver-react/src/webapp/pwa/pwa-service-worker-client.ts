@@ -1,5 +1,6 @@
 import { registerSW } from "virtual:pwa-register";
 import type { RegisterSWOptions } from "vite-plugin-pwa/types";
+import { createLogger } from "../../lib/logging.ts";
 
 import {
   createServiceWorkerCacheState,
@@ -58,7 +59,7 @@ const COI_COEP_HAS_FAILED_KEY = "rom-weaver-coi-coep-has-failed";
 const COI_RELOADED_BY_SELF_KEY = "rom-weaver-coi-reloaded-by-self";
 const COI_RELOAD_REASON_COEP_DEGRADE = "coepdegrade";
 const COI_RELOAD_REASON_NOT_CONTROLLING = "notcontrolling";
-const CLIENT_LOG_PREFIX = "[rom-weaver-sw-client]";
+const logger = createLogger("rom-weaver-sw-client");
 const SERVICE_WORKER_READY_TIMEOUT_MS = 8000;
 // Per-tab-session budget on unattended auto-apply reloads. Prompt mode had the user as the circuit
 // breaker; auto-apply needs its own so a deploy that ever serves a byte-varying worker cannot reload
@@ -68,8 +69,7 @@ const AUTO_APPLY_RELOAD_COUNT_KEY = "rom-weaver-sw-auto-apply-reloads";
 const AUTO_APPLY_RELOAD_BUDGET = 3;
 
 const logServiceWorkerClient = (message: string, details?: Record<string, unknown>) => {
-  if (details) console.info(CLIENT_LOG_PREFIX, message, details);
-  else console.info(CLIENT_LOG_PREFIX, message);
+  logger.info(message, details);
 };
 
 const formatError = (error: unknown) => {

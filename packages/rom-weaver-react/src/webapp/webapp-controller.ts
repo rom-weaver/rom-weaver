@@ -6,6 +6,7 @@ import {
   isSettingsDraftFieldNumeric,
   LOCAL_STORAGE_SETTINGS_ID,
   loadSettings,
+  SETTINGS_FIELD_METADATA,
   SETTINGS_VALID_COMPRESSION_PROFILES,
   type SettingsDraftState,
   type SettingsState,
@@ -361,6 +362,17 @@ const createWebappRootController = (options: ControllerOptions) => {
     },
     setCreatorSettingsState(settings: unknown) {
       updateCreatorSession({ outputName: getOutputName(settings) });
+    },
+    setLanguage(language: string) {
+      const state = store.getState();
+      if (state.settings.language === language) return;
+      const validLanguages = new Set((SETTINGS_FIELD_METADATA.language.options || []).map((option) => option.value));
+      if (!validLanguages.has(language)) return;
+      const nextSettings = { ...copySettings(state.settings), language };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, language },
+      });
     },
     setLogLevel(level: string) {
       const state = store.getState();

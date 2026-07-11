@@ -271,7 +271,9 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions }: WebappRo
         <div className="app">
           <Masthead
             currentTab={state.currentView}
+            language={String(state.settings.language || "en")}
             logoSrc={ROOT_LOGO_URL}
+            onLanguageChange={actions.onLanguageChange}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
             onSelectTab={(id) =>

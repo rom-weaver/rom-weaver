@@ -42,9 +42,7 @@ type FieldRenderProps = Pick<SettingsPanelProps, "draftSettings" | "uiState" | "
 };
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
-  { fields: ["language", "logLevel"], title: "General" },
-  { fields: ["fixChecksum"], title: "Fixes" },
-  { fields: ["requireInputChecksumMatch"], title: "Verification" },
+  { fields: ["logLevel", "fixChecksum", "requireInputChecksumMatch"], title: "General" },
   { fields: ["defaultCompression", "compressionProfile", "workerThreads"], title: "Compression" },
   {
     fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],

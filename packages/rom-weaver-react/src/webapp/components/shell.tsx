@@ -1,3 +1,4 @@
+import Globe from "lucide-react/dist/esm/icons/globe.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
 import Settings from "lucide-react/dist/esm/icons/settings.js";
@@ -7,6 +8,7 @@ import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { SETTINGS_FIELD_METADATA } from "../settings/settings-state.ts";
 import { useTheme } from "../theme.ts";
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
@@ -143,6 +145,30 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
+const LanguageSelector = ({
+  language,
+  label,
+  onChange,
+}: {
+  language: string;
+  label: string;
+  onChange: (language: string) => void;
+}) => {
+  const options = SETTINGS_FIELD_METADATA.language.options || [];
+  return (
+    <label className="tool language-tool" title={label}>
+      <Globe aria-hidden="true" />
+      <select aria-label={label} onChange={(event) => onChange(event.currentTarget.value)} value={language}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
+
 const Masthead = ({
   logoSrc,
   tabs,
@@ -150,6 +176,8 @@ const Masthead = ({
   onSelectTab,
   onOpenLog,
   onOpenSettings,
+  language,
+  onLanguageChange,
 }: {
   logoSrc?: string;
   tabs: WorkflowTab[];
@@ -157,6 +185,8 @@ const Masthead = ({
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
   onOpenSettings: () => void;
+  language: string;
+  onLanguageChange: (language: string) => void;
 }) => {
   const localizer = useUiLocalizer();
   const logLabel = localizer.message("ui.tools.log");
@@ -172,6 +202,11 @@ const Masthead = ({
       </span>
       <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
+        <LanguageSelector
+          label={localizer.message("settings.language")}
+          language={language}
+          onChange={onLanguageChange}
+        />
         <ThemeToggle localizer={localizer} />
         <button
           aria-haspopup="dialog"
@@ -182,6 +217,7 @@ const Masthead = ({
           type="button"
         >
           <ScrollText aria-hidden="true" />
+          <span className="tool-text">{logLabel}</span>
         </button>
         <button
           aria-haspopup="dialog"

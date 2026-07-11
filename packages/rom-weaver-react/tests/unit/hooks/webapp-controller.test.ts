@@ -44,6 +44,13 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().currentView).toBe("trim");
   });
 
+  it("commits and persists a language change", () => {
+    const controller = createController();
+    controller.setLanguage("de");
+    expect(controller.getState().settings.language).toBe("de");
+    expect(controller.getState().draftSettings.language).toBe("de");
+  });
+
   it("notifies subscribers on a state mutation and stops after unsubscribe", () => {
     const controller = createController();
     const listener = vi.fn();

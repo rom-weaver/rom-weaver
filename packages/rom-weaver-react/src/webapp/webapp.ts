@@ -332,6 +332,7 @@ const renderWebappRoot = (): undefined => {
               field as Parameters<typeof webappController.updateDraftSetting>[0],
               value,
             ),
+          onLanguageChange: (language) => webappController.setLanguage(language),
           onLogLevelChange: (level) => webappController.setLogLevel(level),
           onOpenSettings: () => webappController.openSettings(),
           onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),

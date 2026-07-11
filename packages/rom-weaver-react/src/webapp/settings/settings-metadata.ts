@@ -273,7 +273,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-default-compression",
     key: "defaultCompression",
     kind: "select",
-    label: "Container Preference",
+    label: "Type",
     options: [
       { label: ".7z or ROM specific", value: "7z/special" },
       { label: ".zip or ROM specific", value: "zip/special" },
@@ -286,7 +286,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
     suggestionDataLocalize:
       ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
-    validationLabel: "Container Preference",
+    validationLabel: "Type",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
   fixChecksum: {
@@ -347,7 +347,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "requireInputChecksumMatch",
     kind: "checkbox",
     label: getSettingsLabel("requireInputChecksumMatch"),
-    labelDataLocalize: "Require input match",
+    labelDataLocalize: "Require input checksum match",
     layout: "large",
   },
   rvzBlockSize: {
@@ -466,7 +466,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "workerThreads",
     kind: "number",
     label: getSettingsLabel("workerThreads"),
-    labelDataLocalize: "Worker threads",
+    labelDataLocalize: "Threads",
     max: 64,
     min: 0,
     placeholder: "auto",
@@ -475,7 +475,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       uiState.workerThreadsEnabled
         ? "Valid values: auto, 0-64. Use 0 to disable threaded bundles."
         : "Valid values: auto or 1.",
-    validationLabel: "Worker threads",
+    validationLabel: "Threads",
   },
   z3dsCompressionLevel: {
     defaultValue: "",

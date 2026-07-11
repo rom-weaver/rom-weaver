@@ -971,7 +971,7 @@ msgstr "Replace the ROM or add patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
-msgstr "Require input match"
+msgstr "Require input checksum match"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1371,7 +1371,7 @@ msgstr "Worker execution failed."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.workerThreads"
-msgstr "Worker threads"
+msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
