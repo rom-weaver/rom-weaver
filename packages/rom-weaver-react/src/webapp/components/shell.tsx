@@ -217,7 +217,6 @@ const Masthead = ({
           type="button"
         >
           <ScrollText aria-hidden="true" />
-          <span className="tool-text">{logLabel}</span>
         </button>
         <button
           aria-haspopup="dialog"

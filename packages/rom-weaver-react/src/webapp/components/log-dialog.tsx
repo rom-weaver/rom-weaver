@@ -257,7 +257,7 @@ const LogDialog = ({
               >
                 {LOG_LEVELS.map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {`level: ${value}`}
                   </option>
                 ))}
               </select>
