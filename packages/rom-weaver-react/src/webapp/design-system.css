@@ -1989,6 +1989,29 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
   .rw-app .meter.indet .fill { animation: none; transform: none; width: 100%; opacity: .55; }
 }
 
+/* ── wide-bench layout ──
+   Desktops get real use out of the width: the app column widens and the two
+   parallel input stages sit side by side - ROM | Patches on apply, Original |
+   Modified on create - split by a hairline seam. Steps that concern the whole
+   job (0x01 inputs, 0x04 output) keep the full width. Trim/tools keep the
+   familiar centered column. */
+@media (min-width: 1100px) {
+  .rw-app .app { max-width: 1220px; }
+  .rw-app .selvage { max-width: calc(1220px - 2 * clamp(10px, 2.5vw, 28px)); }
+  .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
+  .rw-app #rom-weaver-container, .rw-app #patch-builder-container {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .rw-app #rom-weaver-container > *, .rw-app #patch-builder-container > * { grid-column: 1 / -1; min-width: 0; }
+  .rw-app #rom-weaver-container > #rom-weaver-row-file-rom { grid-column: 1; }
+  .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack { grid-column: 2; border-inline-start: 1px solid var(--seam-soft); }
+  .rw-app #patch-builder-container > #patch-builder-row-original { grid-column: 1; grid-row: 2; }
+  .rw-app #patch-builder-container > #patch-builder-row-modified { grid-column: 2; grid-row: 2; border-inline-start: 1px solid var(--seam-soft); }
+  /* the swap hinge floats centered on the seam between the two source columns */
+  .rw-app #patch-builder-container > .swap-row { grid-row: 2; grid-column: 1 / -1; align-self: center; justify-self: center; }
+  .rw-app #patch-builder-container > .swap-row .swap-btn { translate: 0 0; }
+}
+
 /* ── form plate ──
    Each workflow form sits on a mounted plate: the loom bench's seam-bordered
    panel lifted off the chassis (borders-only depth, like cards and dialogs).
