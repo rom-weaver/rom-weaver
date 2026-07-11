@@ -116,9 +116,12 @@ test("re-uploading the same patch archive can add a second different patch", asy
   await expect.poll(() => getPatchStackRows().length, { timeout: 30000 }).toBe(1);
 
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), makePatchArchive());
+  await expect.poll(() => !!getCandidateSelectionList(), { timeout: 30000 }).toBe(true);
   await clickPatchCandidateSelectionOption("alternate.ips");
 
-  await expect.poll(() => getPatchStackRows().length, { timeout: 30000 }).toBe(2);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(expect.arrayContaining(["change.ips", "alternate.ips"]));
   const labels = getPatchStackRows()
     .map((row) => row.textContent || "")
     .join("|");

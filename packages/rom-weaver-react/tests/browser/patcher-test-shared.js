@@ -1,5 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect } from "vitest";
+import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
 const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
@@ -220,13 +222,16 @@ export const clickCandidateSelectionOption = async (label) => {
 export const selectPatchCandidates = async (labels) => {
   const firstLabel = labels[0];
   const state = await waitForState(() => {
+    const list = getCandidateSelectionList();
+    if (list) return { kind: "dialog" };
+    // A new upload can briefly leave the previous selected row visible while its replacement is
+    // still being staged. Do not mistake that stale row for the new selection.
+    if (hasStagingProgress()) return null;
     const patchFileName =
       document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")?.textContent || "";
     const selectedPatchName =
       document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "";
     if (selectedPatchName.includes(firstLabel) || patchFileName === firstLabel) return { kind: "selected" };
-    const list = getCandidateSelectionList();
-    if (list) return { kind: "dialog" };
     const errorText = getSectionNoticeText();
     if (errorText) return { errorText, kind: "error" };
     return null;
@@ -362,6 +367,13 @@ export const installPatcherTestHooks = () => {
     mountedRoot?.unmount?.();
     mountedRoot = null;
     await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+    // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
+    // A new test must release that cache explicitly or the old guest name can force an extracted
+    // output to become `name-2.ext`.
+    const retainedSources = getActiveBrowserVirtualFiles()
+      .map((entry) => entry.source)
+      .filter((source) => source !== undefined);
+    await browserRuntime.workerIo.releaseSources?.(retainedSources);
     // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
     // on extracted files, and removals silently fail while those are open. Terminating first lets
     // the clear actually empty the directory.

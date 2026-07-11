@@ -54,7 +54,9 @@ test("direct CUE plus BIN upload shows the cue sheet on the bin row", async () =
       timeout: 30000,
     })
     .toBe(1);
-  await expect.poll(() => getChecksums(getRow("direct-disc.bin")).crc32, { timeout: 30000 }).toMatch(/^[0-9a-f]{8}$/i);
+  await expect
+    .poll(() => getChecksums(getRow("direct-disc.bin")).crc32, { timeout: 30000 })
+    .toMatch(/^(?!0{8}$)[0-9a-f]{8}$/i);
 
   const binRow = getRow("direct-disc.bin");
   // The bin keeps its checksums; the cue rides alongside as a read-only section.
@@ -154,7 +156,6 @@ test("CHD rom inputs auto-extract before apply", async () => {
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
 
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(CHD_INPUT));
-
   await waitForInputStackFileName();
   await expect.poll(() => getInputStackFileName(), { timeout: 60000 }).not.toMatch(/\.chd$/i);
   await expect.poll(() => getInputStackFileName(), { timeout: 60000 }).toMatch(/game-cd\./i);

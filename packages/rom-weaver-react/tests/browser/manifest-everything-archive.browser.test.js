@@ -13,6 +13,7 @@ import {
   RAW_ROM,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
+  waitForInputStackFileName,
 } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
@@ -100,6 +101,9 @@ test("everything-archive manifest extracts its members and applies to a download
       pageDrop: { files, id: 1 },
     }),
   );
+  // Let the page-drop session enqueue its initial input/patch staging batch before polling the UI.
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await waitForInputStackFileName();
   await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
   await waitForApplyButtonEnabled();
   await clickApplyButton();

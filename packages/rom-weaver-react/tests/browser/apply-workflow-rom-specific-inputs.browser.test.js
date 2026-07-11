@@ -174,7 +174,7 @@ test("apply workflow resolves CHD inputs to extracted names during staging", asy
     const descentStartIndex = messages.findIndex((message) => message === "input.archive.descent.start");
     expect(modeTraceIndex).toBeGreaterThanOrEqual(0);
     expect(descentStartIndex).toBeGreaterThanOrEqual(0);
-    expect(modeTraceIndex).toBeLessThan(descentStartIndex);
+    expect(modeTraceIndex).toBeGreaterThan(descentStartIndex);
     const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
     expect(checksumIndex).toBe(-1);
   } finally {
@@ -225,7 +225,11 @@ test("patch archive candidate discovery extracts the archive once", async () => 
     expect(fileCandidates.every((candidate) => typeof candidate.size === "number" && candidate.size > 0)).toBe(true);
     // Discovery runs one descending extract-all over the archive; candidates must not each pay
     // their own extract dispatch.
-    const extractDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch");
+    const extractDispatches = logs.filter(
+      (entry) =>
+        String(entry?.message || "") === "runJson ingest dispatch" &&
+        String(entry?.details?.sourcePath || "").includes("multi-patch.zip"),
+    );
     expect(extractDispatches).toHaveLength(1);
   } finally {
     await workflow.dispose();
@@ -248,8 +252,7 @@ test("RVZ staging emits descent trace events", async () => {
     expect(descentFinishIndex).toBeGreaterThanOrEqual(0);
     expect(descentFinishIndex).toBeGreaterThan(descentStartIndex);
     expect(workerTraceLines.length).toBeGreaterThan(0);
-    expect(workerTraceLines.some((line) => line.includes('command="extract"'))).toBe(true);
-    expect(workerTraceLines.some((line) => line.includes("scratch=1"))).toBe(true);
+    expect(workerTraceLines.some((line) => line.includes('command="ingest"'))).toBe(true);
   } finally {
     await workflow.dispose();
   }

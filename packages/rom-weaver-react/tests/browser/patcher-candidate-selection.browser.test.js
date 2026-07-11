@@ -200,6 +200,9 @@ test("clearing a selected archive input requires selection again when re-added",
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), archiveFile);
 
   await expect.poll(() => !!getCandidateSelectionList(), { timeout: 30000 }).toBe(true);
+  const closeButton = document.querySelector(".rw-modal.select-modal .modal-head button[aria-label='Close']");
+  if (!(closeButton instanceof HTMLButtonElement)) throw new Error("Missing candidate selection close button");
+  closeButton.click();
 });
 
 test("cancelling input candidate selection removes the pending ROM input", async () => {

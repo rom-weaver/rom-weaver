@@ -177,17 +177,19 @@ test("rom-weaver compress can write /work zip outputs after releasing same-name 
   const baseName = `Pokemon - Black Version (USA, Europe) (NDSi Enhanced)-${runId}`;
   const inputPath = `${WORKER_OPFS_MOUNTPOINT}/${baseName}.nds`;
   const outputPath = `${WORKER_OPFS_MOUNTPOINT}/${baseName}.zip`;
+  const stagedInput = new File([encoder.encode("zip input fixture")], `${baseName}.zip`, {
+    type: "application/zip",
+  });
   const stagedVirtual = await browserRuntime.workerIo.stageSource({
     fallbackFileName: `${baseName}.zip`,
     pathPrefix: "archive-input",
     scope: "archive",
-    source: new File([encoder.encode("zip input fixture")], `${baseName}.zip`, {
-      type: "application/zip",
-    }),
+    source: stagedInput,
   });
 
   try {
     await stagedVirtual.cleanup();
+    await browserRuntime.workerIo.releaseSources?.([stagedInput]);
     expect(getActiveBrowserVirtualFiles().map((entry) => entry.path)).not.toContain(outputPath);
 
     const inputBytes = encoder.encode("rom-weaver zip output regression fixture\n");
