@@ -1536,6 +1536,20 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-app #rom-weaver-row-unified-drop { view-transition-name: vt-drop-apply; }
 .rw-app #patch-builder-row-unified-drop { view-transition-name: vt-drop-create; }
 html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; }
+/* the drop morph must read as a deliberate snap, not lag: quicker box travel
+   than the ambient crossfade, and the old face cuts fast so the shrinking
+   snapshot text never smears through the ride */
+::view-transition-group(vt-drop-apply), ::view-transition-group(vt-drop-create) {
+  animation-duration: .2s; animation-timing-function: cubic-bezier(.3, .8, .2, 1);
+}
+::view-transition-old(vt-drop-apply), ::view-transition-old(vt-drop-create) {
+  animation: vt-drop-out .1s ease both;
+}
+::view-transition-new(vt-drop-apply), ::view-transition-new(vt-drop-create) {
+  animation: vt-drop-in .12s ease .07s both;
+}
+@keyframes vt-drop-out { to { opacity: 0; } }
+@keyframes vt-drop-in { from { opacity: 0; } }
 /* while a scenario view transition runs, the morph IS the animation - suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card, .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
