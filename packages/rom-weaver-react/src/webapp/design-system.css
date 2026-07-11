@@ -1527,6 +1527,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    the expanding circle) and during MODE switches (no real continuity between
    panels - a flat crossfade reads cleaner than cards morphing across modes) */
 html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transition-name"] { view-transition-name: none !important; }
+/* the unified drop surface keeps continuity through the flat crossfade: the
+   empty-bench hero visibly shrinks into the compact add-row (and grows back)
+   instead of cutting. Stylesheet names, so vt-flat's inline-name suppression
+   leaves them alone; the theme wipe still flattens them. Names are unique per
+   form (apply + create stay mounted together) so no duplicate ever skips a
+   transition, and mode switches keep their intentional flat crossfade. */
+.rw-app #rom-weaver-row-unified-drop { view-transition-name: vt-drop-apply; }
+.rw-app #patch-builder-row-unified-drop { view-transition-name: vt-drop-create; }
+html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; }
 /* while a scenario view transition runs, the morph IS the animation - suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card, .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
