@@ -54,7 +54,7 @@ const StagedInputStep = ({
       </div>
     ) : (
       <NeedsInput onClick={onAddInput}>
-        Waiting for {noun} — click here or the <b className="hexref mono">0x01</b> drop zone above to add one
+        Waiting for {noun} - click here or the <b className="hexref mono">0x01</b> drop zone above to add one
       </NeedsInput>
     )}
   </StepSection>
@@ -192,13 +192,14 @@ const ToolsForm = ({
         <UnifiedDropZone
           big={workflowEmpty}
           disabled={busy}
-          formats={["rom", "ppf3"]}
           info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}
           inputId="tools-input-picker"
           label={rom || patch ? "Replace the patched ROM or PPF patch" : "Drop a patched ROM and PPF patch"}
           onFiles={stageFiles}
-          patchHint="a PPF3 patch"
-          romHint="a patched ROM"
+          supported={[
+            { extensions: ["rom"], label: "Patched ROMs" },
+            { extensions: ["ppf3"], label: "PPF3 patches" },
+          ]}
         />
         <StagedInputStep
           file={rom}
