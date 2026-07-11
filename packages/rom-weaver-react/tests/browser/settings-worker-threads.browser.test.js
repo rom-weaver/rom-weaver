@@ -51,6 +51,6 @@ test("worker thread settings placeholder keeps auto and shows the resolved count
   mountSettingsPanel();
 
   await expect
-    .element(page.getByRole("textbox", { name: "Worker threads" }))
+    .element(page.getByRole("textbox", { name: "Threads" }))
     .toHaveAttribute("placeholder", `auto (${getDefaultBrowserThreadCount()})`);
 });

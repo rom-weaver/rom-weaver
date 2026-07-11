@@ -85,5 +85,25 @@ const registerBrowserVirtualFile = ({
 const getActiveBrowserVirtualFiles = (): BrowserVirtualFile[] =>
   Array.from(activeVirtualFiles.values()).map((file) => ({ ...file }));
 
-export type { BrowserVirtualFile };
-export { getActiveBrowserVirtualFiles, registerBrowserVirtualFile };
+// Read/update the in-memory source of a registered virtual file. File/Blob inputs are served as
+// virtual files (never written to OPFS), so main-thread callers that need to inspect or rewrite a
+// staged input (e.g. pointing a cue's FILE entry at its staged track) must go through the registry
+// here - the OPFS VFS cannot see these paths. Updating mutates the existing record in place so the
+// original `registerBrowserVirtualFile` unregister closure (identity-guarded) still cleans it up.
+const getBrowserVirtualFileSource = (path: string): BrowserVirtualFileSource | undefined =>
+  activeVirtualFiles.get(path)?.source;
+
+const updateBrowserVirtualFileSource = (path: string, source: BrowserVirtualFileSource): boolean => {
+  const file = activeVirtualFiles.get(path);
+  if (!file) return false;
+  file.source = source;
+  return true;
+};
+
+export type { BrowserVirtualFile, BrowserVirtualFileSource };
+export {
+  getActiveBrowserVirtualFiles,
+  getBrowserVirtualFileSource,
+  registerBrowserVirtualFile,
+  updateBrowserVirtualFileSource,
+};

@@ -861,8 +861,19 @@ export async function writeGuestFile(rootHandle, guestPath, contents) {
   await writable.close();
 }
 
+// Deterministic per-offset byte scramble (integer finalizer mix). Well-distributed with no long
+// runs, so a mutated region built from it neither compresses nor matches any contiguous window of
+// the un-mutated ramp - which is what forces a delta patch to carry the region as literals.
+function scrambleByte(offset) {
+  let x = (offset ^ 0x9e3779b9) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return x & 0xff;
+}
+
 export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, options = {}) {
-  const { chunkSizeBytes = 1024 * 1024, phaseShift = 0, mutateFromOffset = null, mutateAdd = 0 } = options;
+  const { chunkSizeBytes = 1024 * 1024, phaseShift = 0, mutateFromOffset = null } = options;
 
   if (!Number.isInteger(byteLength) || byteLength < 0) {
     throw new TypeError("byteLength must be a non-negative integer");
@@ -875,9 +886,6 @@ export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, o
   }
   if (!(mutateFromOffset === null || (Number.isInteger(mutateFromOffset) && mutateFromOffset >= 0))) {
     throw new TypeError("mutateFromOffset must be null or a non-negative integer");
-  }
-  if (!Number.isInteger(mutateAdd)) {
-    throw new TypeError("mutateAdd must be an integer");
   }
 
   const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
@@ -892,11 +900,8 @@ export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, o
       const size = Math.min(chunk.length, byteLength - offset);
       for (let index = 0; index < size; index += 1) {
         const absoluteOffset = offset + index;
-        let value = (absoluteOffset + phaseShift) % 251;
-        if (mutateFromOffset !== null && absoluteOffset >= mutateFromOffset) {
-          value = (value + mutateAdd) % 251;
-        }
-        chunk[index] = value;
+        const inMutatedTail = mutateFromOffset !== null && absoluteOffset >= mutateFromOffset;
+        chunk[index] = inMutatedTail ? scrambleByte(absoluteOffset) : (absoluteOffset + phaseShift) % 251;
       }
       await writable.write(chunk.subarray(0, size));
       offset += size;

@@ -1692,16 +1692,27 @@ pub(super) fn elapsed_ms(start: SystemTime) -> u64 {
         .unwrap_or(0)
 }
 
-/// Moves `from` onto `to`, preferring a metadata-only `rename`. Cross-filesystem renames fail with
-/// an error (e.g. `EXDEV`), so fall back to a byte copy in that case. The source temp file is
-/// consumed on the fast path; the caller's best-effort temp cleanup tolerates its absence.
+/// Moves `from` onto `to`. Native builds prefer a metadata-only `rename`, while WASM copies the
+/// file because browser-wasi-shim can report a cross-mount rename as successful without persisting
+/// the destination to OPFS. The source temp file is consumed on either path.
 pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
-    if fs::rename(from, to).is_ok() {
-        return Ok(());
+    #[cfg(target_arch = "wasm32")]
+    {
+        // browser-wasi-shim can report a cross-mount rename as successful without persisting the
+        // destination to OPFS; copy the completed temp file so browser outputs survive teardown.
+        fs::copy(from, to)?;
+        let _ = fs::remove_file(from);
+        Ok(())
     }
-    fs::copy(from, to)?;
-    let _ = fs::remove_file(from);
-    Ok(())
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if fs::rename(from, to).is_ok() {
+            return Ok(());
+        }
+        fs::copy(from, to)?;
+        let _ = fs::remove_file(from);
+        Ok(())
+    }
 }
 
 pub(super) fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<usize> {

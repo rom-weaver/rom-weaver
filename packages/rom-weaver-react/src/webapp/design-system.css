@@ -171,8 +171,7 @@
 /* ═══ masthead ═══ */
 .rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
-.rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; transition: transform .45s var(--ease); }
-.rw-app .brand:hover .brand-mark { transform: rotate(-6deg) scale(1.06); }
+.rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
     drop-shadow(0 1px 0 rgb(255 255 255 / .45))
@@ -606,8 +605,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    recede progressively. Purely decorative. */
 .rw-app .ghost-steps { pointer-events: none; user-select: none; }
 .rw-app .ghost-step { border-block-start: 1px solid var(--seam-soft); padding: 12px var(--pad) 16px; }
-/* heads borrow the real .step-num/.step-title type - only layout is local */
+/* heads borrow the real step typography without looking like live workflow steps */
 .rw-app .ghost-step-head { display: flex; align-items: baseline; gap: 10px; }
+.rw-app .ghost-step-num { font-size: .9rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; }
+.rw-app .ghost-step-title { font-size: 1rem; font-weight: 650; }
 .rw-app .ghost-step-slot {
   min-height: 34px; margin-block-start: 10px; padding-inline: 14px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

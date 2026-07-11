@@ -39,7 +39,7 @@ const startPreview = () =>
   new Promise((resolve, reject) => {
     const child = spawn(
       "npm",
-      ["run", "preview", "--", "--host", "0.0.0.0", "--port", PORT, "--no-coop-coep"],
+      ["run", "preview", "--", "--port", PORT, "--no-coop-coep"],
       {
         cwd: process.cwd(),
         stdio: ["ignore", "pipe", "pipe"],

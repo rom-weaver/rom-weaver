@@ -3,7 +3,7 @@ import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-
 import { createLogger } from "../../lib/logging.ts";
 import { loadLocalManifestSession } from "../../lib/manifest/local-manifest-session.ts";
 import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
-import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-classification.ts";
+import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -49,10 +49,18 @@ const classifyArchiveBucket = async (archive: File): Promise<"rom" | "patch"> =>
     const names = await listDroppedArchiveEntryNames(archive);
     const hasRom = names.some(isRomFileName);
     const hasPatch = names.some(isPatchFileName);
-    const bucket = hasRom || !hasPatch ? "rom" : "patch";
+    // A container whose top-level entries are ONLY nested plain archives (no direct rom - rvz/chd/iso
+    // are rom names so a nested rom container sets hasRom - and no direct patch) is a nested patch
+    // bundle whose patches live a level down (e.g. B_bundle → B_discN.zip → patchBN.ips). Route it to
+    // the patch bucket so the patch-leaf enumeration fans the branches into one multi-select, instead
+    // of the ROM keep-one prompt that several sibling archives would otherwise trigger. Rust's is_rom
+    // reclassify still moves a genuinely-ROM misroute back.
+    const hasNestedArchive = names.some(isArchiveFileName);
+    const bucket = hasRom ? "rom" : hasPatch || hasNestedArchive ? "patch" : "rom";
     logger.trace("archive content classified", {
       bucket,
       entryCount: names.length,
+      hasNestedArchive,
       hasPatch,
       hasRom,
       name: archive.name,

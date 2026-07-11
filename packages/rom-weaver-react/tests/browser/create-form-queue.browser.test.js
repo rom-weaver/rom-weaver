@@ -248,7 +248,7 @@ test("create output edits stay enabled while queued and cancel the queued run", 
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
 
   const outputName = document.getElementById("patch-builder-output-file");
   const patchFormat = document.getElementById("patch-builder-select-patch-type");
@@ -289,7 +289,7 @@ test("create queued output cancel button clears the queued run", async () => {
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
   await queueCreate();
 
   const cancelButton = document.querySelector("button[aria-label='Cancel queued create']");
@@ -345,12 +345,12 @@ test("replacing the modified ROM keeps the prepared original ROM", async () => {
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
   workflowMockState.originalDeferred.resolve();
   workflowMockState.modifiedDeferred.resolve();
   await expect.poll(() => document.body.textContent || "").toContain("original.bin");
   await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBe(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBe(0);
 
   workflowMockState.modifiedDeferred = createDeferred();
   // With both slots filled, a ROM dropped on the unified surface overflows into
@@ -462,7 +462,7 @@ test("create queued run cancels when source preparation warns", async () => {
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
   await queueCreate();
   workflowMockState.originalStateOverrides = {
     warnings: [{ code: "SOURCE_WARNING", message: "Source warning" }],

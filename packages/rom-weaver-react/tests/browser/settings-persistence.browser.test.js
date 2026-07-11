@@ -44,7 +44,6 @@ test("settings persistence round-trips every visible settings field", () => {
     rvzBlockSize: 262144,
     rvzCodec: "zstd:7",
     rvzCompressionLevel: 7,
-    rvzScrub: true,
     sevenZipCodec: "lzma2:8",
     sevenZipLevel: 8,
     workerThreads: 2,
@@ -68,11 +67,9 @@ test("settings persistence round-trips every visible settings field", () => {
   storage.setItem(LOCAL_STORAGE_SETTINGS_ID, serializedSettings);
 
   const loadedSettings = loadSettings(storage);
-  expect(SETTINGS_PANEL_FIELD_ORDER).not.toContain("rvzScrub");
   expect(SETTINGS_PANEL_FIELD_ORDER).not.toEqual(
     expect.arrayContaining(["rvzCompressionLevel", "sevenZipLevel", "z3dsCompressionLevel", "zipLevel"]),
   );
-  expect(loadedSettings.rvzScrub).toBe(true);
   expect(loadedSettings.rvzCompressionLevel).toBe("");
   expect(loadedSettings.sevenZipLevel).toBe("");
   expect(loadedSettings.z3dsCompressionLevel).toBe("");

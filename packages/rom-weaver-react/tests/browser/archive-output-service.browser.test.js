@@ -84,7 +84,7 @@ test("createArchiveOutput builds runtime archive create requests and reports pro
         runtimeStage: "read",
         stage: "compress",
       }),
-      label: "Packing ZIP - 1 thread",
+      label: "Compressing to ZIP - 1 thread",
       percent: 40,
       stage: "output",
     }),

@@ -82,7 +82,7 @@ test("aborting a runner run terminates the active worker and recycles the next r
       args: {
         source: "/work/input.bin",
       },
-      type: "list",
+      type: "probe",
     },
     { signal: controller.signal },
   );
@@ -102,7 +102,7 @@ test("aborting a runner run terminates the active worker and recycles the next r
     args: {
       source: "/work/input.bin",
     },
-    type: "list",
+    type: "probe",
   });
 
   expect(nextRun).toMatchObject({

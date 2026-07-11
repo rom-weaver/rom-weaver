@@ -899,6 +899,11 @@ describe("rom-weaver-wasm browser runner parity", () => {
               "10",
             ],
             {
+              env: {
+                // Keep this stress case on the parallel path by overriding the host-reported
+                // memory budget for two 32 MiB level-9 LZMA2 dictionaries.
+                ROM_WEAVER_7Z_MEM_BUDGET_MB: "1024",
+              },
               onEvent(event) {
                 events.push(event);
               },
@@ -1198,7 +1203,6 @@ describe("rom-weaver-wasm browser runner parity", () => {
         });
         await writeGuestPatternFile(opfsHandle, modifiedPath, oneGiB, {
           chunkSizeBytes: 4 * 1024 * 1024,
-          mutateAdd: 29,
           mutateFromOffset: oneGiB - mutatedTailBytes,
         });
 

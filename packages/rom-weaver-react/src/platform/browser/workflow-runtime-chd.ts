@@ -17,6 +17,11 @@ import {
   createCompressionExtractResult,
 } from "../../lib/runtime/workflow-runtime-worker-helpers.ts";
 import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
+import {
+  type BrowserVirtualFileSource,
+  getBrowserVirtualFileSource,
+  updateBrowserVirtualFileSource,
+} from "../../workers/protocol/browser-virtual-files.ts";
 import { parseCueFile } from "../../workers/protocol/cue-file-utils.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
@@ -53,7 +58,31 @@ const getChdCreateFormat = (requestedMode: string): string => {
   return "chd";
 };
 
+// Read a staged input's text whether it lives on OPFS or as an in-memory virtual file. File/Blob cue
+// sources are served as virtual files (never written to OPFS), so the OPFS VFS `stat`/`read` returns
+// nothing for them - the registry is the only place their bytes exist on the main thread.
+const virtualSourceToText = async (source: BrowserVirtualFileSource): Promise<string> => {
+  if (source instanceof Uint8Array) return new TextDecoder().decode(source);
+  if (source instanceof ArrayBuffer) return new TextDecoder().decode(new Uint8Array(source));
+  return source.text();
+};
+
+const readStagedCueText = async (cuePath: string): Promise<string> => {
+  const virtualSource = getBrowserVirtualFileSource(cuePath);
+  if (virtualSource) return virtualSourceToText(virtualSource);
+  return readTextFromBrowserVfs(cuePath);
+};
+
 const rewriteCueFileBinaryReference = async (cuePath: string, targetPath: string) => {
+  const virtualSource = getBrowserVirtualFileSource(cuePath);
+  if (virtualSource) {
+    const contents = await virtualSourceToText(virtualSource);
+    const updatedContents = replaceCuePatchFileName(contents, targetPath);
+    if (updatedContents !== contents) {
+      updateBrowserVirtualFileSource(cuePath, new Blob([updatedContents], { type: "application/x-cue" }));
+    }
+    return;
+  }
   const contents = await readTextFromBrowserVfs(cuePath);
   const updatedContents = replaceCuePatchFileName(contents, targetPath);
   if (updatedContents !== contents) await writeTextToBrowserVfs(cuePath, updatedContents);
@@ -74,15 +103,17 @@ const resolveCueSidecarPath = (cuePath: string, referencedName: string): string 
 const collectCueSidecarPaths = async (cuePath: string): Promise<string[]> => {
   const normalizedCuePath = String(cuePath || "").trim();
   if (!(normalizedCuePath && /\.cue$/i.test(normalizedCuePath))) return [];
-  const contents = await readTextFromBrowserVfs(normalizedCuePath).catch(() => "");
+  const contents = await readStagedCueText(normalizedCuePath).catch(() => "");
   if (!contents) return [];
   const parsed = parseCueFile(contents);
   const sidecarPaths: string[] = [];
   for (const file of parsed.files) {
     const sidecarPath = resolveCueSidecarPath(normalizedCuePath, file.name);
     if (!sidecarPath || sidecarPath === normalizedCuePath) continue;
-    const stat = await browserVfs.stat(sidecarPath).catch(() => null);
-    if (stat) sidecarPaths.push(sidecarPath);
+    // A referenced track is available if it is on OPFS or registered as a virtual input.
+    const exists =
+      !!getBrowserVirtualFileSource(sidecarPath) || !!(await browserVfs.stat(sidecarPath).catch(() => null));
+    if (exists) sidecarPaths.push(sidecarPath);
   }
   return uniqueNonEmptyStrings(sidecarPaths);
 };

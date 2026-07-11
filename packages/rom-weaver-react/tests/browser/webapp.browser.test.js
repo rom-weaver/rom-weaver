@@ -144,7 +144,9 @@ beforeEach(() => {
 });
 
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
-  mountWebappRoot();
+  // The Trim and Tools tabs are beta-gated (see `betaToolsEnabled`), so the full-shell assertions
+  // below require the flag on - matching the pattern the sibling controller unit tests use.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
   const romInput = page.getByLabelText(/ROMs, patches, manifests, or archives/i);

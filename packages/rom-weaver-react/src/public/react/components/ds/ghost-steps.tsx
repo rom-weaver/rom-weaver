@@ -15,8 +15,8 @@ const GhostSteps = ({ steps }: { steps: readonly GhostStep[] }) => (
     {steps.map((step) => (
       <div className="ghost-step" key={step.num}>
         <div className="ghost-step-head">
-          <span className="step-num mono">{step.num}</span>
-          <span className="step-title">{step.title}</span>
+          <span className="ghost-step-num mono">{step.num}</span>
+          <span className="ghost-step-title">{step.title}</span>
         </div>
         <div className="ghost-step-slot" />
       </div>

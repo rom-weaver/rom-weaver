@@ -53,22 +53,26 @@ test("queued staging rows show waiting progress", async () => {
     mount(createElement(Harness));
 
     await expect
-      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).length)
+      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .stage-status")).length)
       .toBe(2);
     await expect
-      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .fileprog")).length)
+      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .stage-status")).length)
       .toBe(2);
 
-    const inputProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+    const inputProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .stage-status")).map(
       (row) => row.textContent || "",
     );
-    const patchProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .fileprog")).map(
+    const patchProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .stage-status")).map(
       (row) => row.textContent || "",
     );
-    expect(inputProgressRows[0]).toContain("Preparing input");
-    expect(inputProgressRows[1]).toContain("Waiting for other actions");
-    expect(patchProgressRows[0]).toContain("Preparing patch");
-    expect(patchProgressRows[1]).toContain("Waiting for other actions");
+    // Every staging row (the active one and the queued one) carries an
+    // observable staging status: inputs read "Checksumming…", patches "Reading…".
+    // The queued-vs-active distinction now surfaces on the apply run action
+    // (#rom-weaver-progress-apply, asserted below), not per row.
+    expect(inputProgressRows[0]).toContain("Checksumming");
+    expect(inputProgressRows[1]).toContain("Checksumming");
+    expect(patchProgressRows[0]).toContain("Reading");
+    expect(patchProgressRows[1]).toContain("Reading");
 
     let applyButton = document.getElementById("rom-weaver-button-apply");
     expect(applyButton).toBeInstanceOf(HTMLButtonElement);
@@ -272,21 +276,24 @@ test("adding a ROM input preserves active input progress", async () => {
 
     await expect
       .poll(() =>
-        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .stage-status")).map(
           (row) => row.textContent || "",
         ),
       )
-      .toEqual([expect.stringContaining("Preparing input")]);
+      .toEqual([expect.stringContaining("Checksumming")]);
 
     latestUiController.provideRomInputFiles([secondInput]);
 
+    // Adding a second input must not wipe the first row's in-flight staging
+    // status: the first row still shows its "Checksumming…" progress and the new
+    // (queued) row joins with its own staging status.
     await expect
       .poll(() =>
-        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .stage-status")).map(
           (row) => row.textContent || "",
         ),
       )
-      .toEqual([expect.stringContaining("Preparing input"), expect.stringContaining("Waiting for other actions")]);
+      .toEqual([expect.stringContaining("Checksumming"), expect.stringContaining("Checksumming")]);
     expect(stageInput.mock.calls.map((call) => call[0].inputs.length)).toEqual([1, 2]);
   } finally {
     resolveInitialStaging();

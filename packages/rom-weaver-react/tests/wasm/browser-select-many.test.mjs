@@ -8,7 +8,7 @@ import {
 } from "./test-helpers.mjs";
 
 // A two-entry zip (`game.bin`, `bonus.sfc`) - two distinct top-level payloads, so an interactive
-// extract with no `--select` is ambiguous and the wasm app prompts via `select_many`.
+// extract with no `--select` is ambiguous and the wasm app prompts for one ROM to keep.
 const MULTI_ROM_ZIP_URL = new URL("../fixtures/archives/multi-rom.zip", import.meta.url);
 
 async function loadMultiRomZipBytes() {
@@ -27,7 +27,7 @@ async function guestFileSizeOrNull(opfsHandle, guestPath) {
 
 // Drive a real interactive `extract` on the two-entry archive, capturing the selection request the
 // wasm app posts and answering it with `resolveSelection`. Exercises every layer of the prompt
-// channel: wasm `select_many` extern -> env import -> runner SAB -> worker client -> handler.
+// channel: wasm selection extern -> env import -> runner SAB -> worker client -> handler.
 async function extractMultiRomWithSelection(resolveSelection) {
   // `withTempFixture` does not forward its callback's return value, so collect the outcome here.
   let captured;
@@ -57,32 +57,23 @@ async function extractMultiRomWithSelection(resolveSelection) {
   return captured;
 }
 
-describe("rom-weaver-wasm interactive multi-select prompt", () => {
-  it("extracts every entry chosen in a multi-select prompt", async () => {
+describe("rom-weaver-wasm interactive payload selection", () => {
+  it("uses single-select for ambiguous ROM payloads", async () => {
     const { requests, result, gameSize, bonusSize } = await extractMultiRomWithSelection((parsed) =>
       parsed.candidates.map((_candidate, index) => index),
     );
 
     assertRunJsonSucceeded(result, { command: "extract" });
-    // The app asked for a many-select with both payloads as candidates.
+    // ROM disambiguation keeps exactly one payload.
     expect(requests).toHaveLength(1);
-    expect(requests[0].mode).toBe("many");
+    expect(requests[0].mode).toBe("single");
     expect(requests[0].candidates).toHaveLength(2);
-    // Both chosen entries made it out of the archive.
-    expect(gameSize).toBe(13);
-    expect(bonusSize).toBe(10);
-  });
-
-  it("extracts only the subset of entries selected", async () => {
-    // Pick just the first candidate (`game.bin`); `bonus.sfc` must be left behind.
-    const { result, gameSize, bonusSize } = await extractMultiRomWithSelection(() => [0]);
-
-    assertRunJsonSucceeded(result, { command: "extract" });
+    // Single-select uses the first returned index.
     expect(gameSize).toBe(13);
     expect(bonusSize).toBeNull();
   });
 
-  it("cancels the extract when the multi-select prompt resolves to no entries", async () => {
+  it("cancels the extract when selection resolves to no entries", async () => {
     // An empty selection is a cancel: the run fails and nothing is extracted.
     const { result, gameSize, bonusSize } = await extractMultiRomWithSelection(() => []);
 

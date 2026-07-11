@@ -202,7 +202,7 @@ test("trim output edits stay enabled while queued and cancel the queued run", as
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
 
   const outputName = document.getElementById("trim-builder-output-file");
   const outputFormat = document.getElementById("trim-builder-select-output-format");
@@ -239,7 +239,7 @@ test("trim queued output cancel button clears the queued run", async () => {
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
   await queueTrim();
 
   const cancelButton = document.querySelector("button[aria-label='Cancel queued trim']");
@@ -328,7 +328,7 @@ test("trim queued run cancels when source preparation warns", async () => {
     ),
   );
 
-  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
   await queueTrim();
   workflowMockState.inputStateOverrides = {
     warnings: [{ code: "SOURCE_WARNING", message: "Source warning" }],

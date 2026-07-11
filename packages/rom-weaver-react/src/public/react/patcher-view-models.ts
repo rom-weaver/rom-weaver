@@ -1,5 +1,6 @@
 import type { CompressionFormat } from "../../types/settings.ts";
 import { createInertState } from "./apply-session-controllers.ts";
+import { isCompressedInputFileName } from "./apply-session-inputs.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { buildCompressPanel } from "./compress-options.ts";
 import { getBinarySourceFileName, getBinarySourceSize, toApplyButtonProgress } from "./input-session-helpers.ts";
@@ -158,7 +159,15 @@ const buildStackViewState = ({
       checksumTiming: patchInfo?.checksumTiming || "",
       decompressionTimeMs: patchInfo?.decompressionTimeMs,
       detailText: patchInfo?.targetLabel || "",
-      fileName: patchInfo?.fileName || getBinarySourceFileName(patch, `Patch ${index + 1}`),
+      // Mirror the ROM row: while a compressed patch source is still staging (no resolved leaf info
+      // yet), hide its archive name - the descended leaf name (e.g. `levelA.ips`) replaces it once the
+      // patch enumeration resolves, so surfacing the container name first would flash the wrong label.
+      fileName:
+        patchInfo?.fileName ||
+        (() => {
+          const pendingFileName = getBinarySourceFileName(patch, `Patch ${index + 1}`);
+          return isCompressedInputFileName(pendingFileName) ? "" : pendingFileName;
+        })(),
       fileSize: patchInfo?.size ?? patchInfo?.sourceSize ?? getBinarySourceSize(patch) ?? undefined,
       format: patchInfo?.format,
       headerChoice: patchInfo?.headerChoice,

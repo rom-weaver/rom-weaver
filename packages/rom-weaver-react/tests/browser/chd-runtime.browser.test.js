@@ -512,7 +512,7 @@ test("rom-weaver runtime creates a CD CHD from a plain 2048-byte-sector input", 
     output = result?.output || null;
     expect(output?.fileName).toBe("created-cd-2048.chd");
     expect(output?.size).toBeGreaterThan(0);
-    const listed = await browserRuntime.compression.list?.({
+    const listed = await browserRuntime.compression.probe?.({
       format: "chd",
       source: output,
     });

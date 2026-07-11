@@ -195,28 +195,30 @@ test("create workflow caps zip zstd max output to one browser thread before disp
     expect(result.output.fileName).toBe("change.zip");
     await result.output.dispose();
 
-    const capLog = logs.find(
-      (entry) => String(entry?.message || "") === "runJson compress normalized browser thread cap",
-    );
-    expect(capLog?.details).toMatchObject({
-      format: "zip",
-      requestedThreadArg: 4,
-      threadArg: 1,
-      threadCap: 1,
-      zipZstdLevel: 22,
-    });
-
+    // The zip+zstd max-output path still dispatches with the zstd codec/level.
     const compressDispatch = logs.find((entry) => String(entry?.message || "") === "runJson compress dispatch");
     expect(compressDispatch?.details).toMatchObject({
       command: {
         args: {
-          threads: 1,
+          codec: ["zstd:22"],
+          format: "zip",
         },
         type: "compress",
       },
       format: "zip",
-      threadArg: 1,
     });
+
+    // The zip+zstd browser memory thread cap is now enforced authoritatively in
+    // Rust (the TS layer forwards the requested budget). The requested 4 threads
+    // are negotiated down to a single effective thread for this memory-heavy path.
+    const cappedTrace = logs.find(
+      (entry) =>
+        /thread execution negotiated/.test(String(entry?.message || "")) &&
+        /capability=SingleThreaded/.test(String(entry?.message || "")) &&
+        /requested_threads=4\b/.test(String(entry?.message || "")) &&
+        /effective_threads=1\b/.test(String(entry?.message || "")),
+    );
+    expect(cappedTrace).toBeTruthy();
   } finally {
     await workflow.dispose();
   }

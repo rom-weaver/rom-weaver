@@ -121,15 +121,17 @@ test("cancelling active apply clears apply-time extraction progress without reru
   await waitForApplyButtonEnabled();
   await clickApplyButton();
   await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+  // Apply-time input processing surfaces a live staging status on the input row.
   await expect
-    .poll(() => document.querySelector("#rom-weaver-list-input-stack .fileprog")?.textContent || "")
-    .toContain("Extracting game.bin");
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack .stage-status")?.textContent || "")
+    .toContain("Checksumming");
+  expect(document.querySelector("#rom-weaver-list-input-stack")?.textContent || "").toContain("game.bin");
 
   const cancelButton = document.querySelector("button[aria-label='Cancel apply']");
   expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
   cancelButton.click();
 
-  await expect.poll(() => document.querySelector("#rom-weaver-list-input-stack .fileprog")).toBeNull();
+  await expect.poll(() => document.querySelector("#rom-weaver-list-input-stack .stage-status")).toBeNull();
   await expect
     .poll(() => {
       const applyButton = document.getElementById("rom-weaver-button-apply");
