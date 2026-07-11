@@ -4,7 +4,6 @@
 // single boundary between the Rust manifest contract and the webapp's manifest session/export flows.
 import type {
   ManifestHeaderMode,
-  ManifestPatchStatus,
   ManifestSourceKind,
   ParsedManifest,
   ParsedManifestChecks,
@@ -56,9 +55,6 @@ const toChecksumRecord = (value: unknown): Record<string, string> | undefined =>
 const parseHeaderMode = (value: unknown): ManifestHeaderMode | undefined =>
   value === "keep" || value === "strip" || value === "auto" ? value : undefined;
 
-const parsePatchStatus = (value: unknown): ManifestPatchStatus =>
-  value === "required" || value === "optional" || value === "disabled" ? value : "default";
-
 const parseChecks = (value: unknown): ParsedManifestChecks | undefined => {
   const record = asRecord(value);
   if (!record) return undefined;
@@ -99,7 +95,8 @@ const parseManifestRom = (value: unknown): ParsedManifestRom | undefined => {
 
 const parseManifestPatchEntry = (value: unknown): ParsedManifestPatchEntry => {
   const record = (asRecord(value) || {}) as WireRecord<ManifestPatchEntry>;
-  const entry: ParsedManifestPatchEntry = { status: parsePatchStatus(record.status) };
+  const entry: ParsedManifestPatchEntry = {};
+  if (record.optional === true) entry.optional = true;
   const name = toStringValue(record.name);
   if (name !== undefined) entry.name = name;
   const description = toStringValue(record.description);
@@ -110,10 +107,10 @@ const parseManifestPatchEntry = (value: unknown): ParsedManifestPatchEntry => {
   if (url !== undefined) entry.url = url;
   const path = toStringValue(record.path);
   if (path !== undefined) entry.path = path;
-  const checks = parseChecks(record.checks);
-  if (checks) entry.checks = checks;
-  const integrity = toChecksumRecord(record.integrity);
-  if (integrity) entry.integrity = integrity;
+  const inputChecks = parseChecks(record.inputChecks);
+  if (inputChecks) entry.inputChecks = inputChecks;
+  const outputChecks = parseChecks(record.outputChecks);
+  if (outputChecks) entry.outputChecks = outputChecks;
   const header = parseHeaderMode(record.header);
   if (header !== undefined) entry.header = header;
   return entry;
@@ -127,22 +124,8 @@ const parseManifestOutput = (value: unknown): ParsedManifestOutput | undefined =
   if (name !== undefined) output.name = name;
   const header = parseHeaderMode(record.header);
   if (header !== undefined) output.header = header;
-  const compress = record.compress;
-  if (typeof compress === "boolean") {
-    output.compress = { enabled: compress };
-  } else {
-    const compressRecord = asRecord(compress);
-    if (compressRecord) {
-      output.compress = {
-        enabled: true,
-        ...(toStringValue(compressRecord.format) ? { format: toStringValue(compressRecord.format) } : {}),
-        ...(Array.isArray(compressRecord.codecs)
-          ? { codecs: compressRecord.codecs.map((codec) => String(codec || "")).filter((codec) => !!codec) }
-          : {}),
-        ...(toStringValue(compressRecord.level) ? { level: toStringValue(compressRecord.level) } : {}),
-      };
-    }
-  }
+  const checks = parseChecks(record.checks);
+  if (checks) output.checks = checks;
   return Object.keys(output).length ? output : undefined;
 };
 
@@ -155,10 +138,6 @@ const parseManifest = (value: unknown): ParsedManifest | undefined => {
     patches: Array.isArray(record.patches) ? record.patches.map(parseManifestPatchEntry) : [],
     version,
   };
-  const name = toStringValue(record.name);
-  if (name !== undefined) manifest.name = name;
-  const description = toStringValue(record.description);
-  if (description !== undefined) manifest.description = description;
   const rom = parseManifestRom(record.rom);
   if (rom) manifest.rom = rom;
   const output = parseManifestOutput(record.output);

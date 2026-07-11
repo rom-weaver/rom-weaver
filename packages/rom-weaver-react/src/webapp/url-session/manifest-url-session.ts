@@ -113,12 +113,13 @@ const loadManifestUrlSession = async (
   });
   const acquiredRomFile: File | null = romFile;
   const session: ManifestApplySession = {
-    ...(plan.description ? { description: plan.description } : {}),
+    chainEndpointChecks: plan.chainEndpointChecks,
     entries,
     key: plan.key,
     ...(plan.name ? { name: plan.name } : {}),
     outputDefaults: plan.outputDefaults,
     ...(acquiredRomFile ? { romFileName: acquiredRomFile.name } : {}),
+    ...(!acquiredRomFile && plan.romExpectation ? { romExpectation: plan.romExpectation } : {}),
     warnings: plan.warnings,
   };
   const files = [...(acquiredRomFile ? [acquiredRomFile] : []), ...acquiredPatchFiles];

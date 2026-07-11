@@ -25,9 +25,8 @@ const BUNDLE_URL = `${location.origin}/virtual/manifest/bundle.zip`;
 const buildEverythingArchive = async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   const manifest = {
-    name: "Bundled Hack",
     output: { name: "bundled-output" },
-    patches: [{ path: "change.ips", status: "required" }],
+    patches: [{ path: "change.ips" }],
     rom: { path: "game.bin" },
     version: 1,
   };
@@ -92,8 +91,8 @@ test("everything-archive manifest extracts its members and applies to a download
   }
   const { files, session } = loaded;
   expect(files.map((file) => file.name)).toEqual(["game.bin", "change.ips"]);
-  expect(session.name).toBe("Bundled Hack");
-  expect(session.entries.map((entry) => entry.status)).toEqual(["required"]);
+  expect(session.name).toBe("bundled-output");
+  expect(session.entries.map((entry) => entry.optional)).toEqual([false]);
 
   mount(
     createElement(ApplyPatchForm, {

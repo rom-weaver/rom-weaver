@@ -2,38 +2,52 @@
 // acquire (URLs resolved against the manifest's own URL, or leaves already extracted from a bundled
 // archive), the per-patch enablement seed, and the one-shot output defaults. No I/O here — the
 // url-session boot flow feeds this into fetch/materialize and the apply form consumes the result.
-import type { ManifestHeaderMode, ParsedManifestParseResult, ParsedManifestSourceRef } from "../../types/manifest.ts";
+import type {
+  ManifestHeaderMode,
+  ParsedManifest,
+  ParsedManifestChecks,
+  ParsedManifestParseResult,
+  ParsedManifestSourceRef,
+} from "../../types/manifest.ts";
 
 type ManifestAcquisition = { kind: "url"; url: string } | { kind: "extracted"; extractedPath: string };
-
-/** Plan statuses exclude `disabled` — those entries are never acquired (see below). */
-type ManifestPlanStatus = "required" | "default" | "optional";
 
 type ManifestPlanEntry = {
   acquisition: ManifestAcquisition;
   name?: string;
   description?: string;
   label?: string;
-  status: ManifestPlanStatus;
+  /** Optional patches start deselected; everything else starts on. */
+  optional: boolean;
+  /** Only checks the patch itself declared — chain-endpoint verification (rom/output checks) is session-level. */
+  inputChecks?: ParsedManifestChecks;
+  outputChecks?: ParsedManifestChecks;
   header?: ManifestHeaderMode;
 };
 
 type ManifestOutputDefaults = {
   name?: string;
-  /** "none" (manifest opted out of compression) or a compression format string. */
-  compression?: string;
   header?: ManifestHeaderMode;
+};
+
+/** What ROM the manifest expects the user to supply when it ships none itself. */
+type ManifestRomExpectation = {
+  name?: string;
+  checks?: ParsedManifestChecks;
 };
 
 type ManifestApplySessionPlan = {
   /** Identity key for run-once guards (the manifest URL; the boot flow may suffix an attempt). */
   key: string;
   name?: string;
-  description?: string;
   warnings: string[];
   romAcquisition?: ManifestAcquisition;
+  /** Set when the manifest ships no ROM: the expected ROM the user must supply. */
+  romExpectation?: ManifestRomExpectation;
   /** Manifest order = apply order; index-aligned with the acquired patch files. */
   entries: ManifestPlanEntry[];
+  /** ROM/final-output verification for the run (seeds the input/output validation checksums). */
+  chainEndpointChecks: ManifestChainEndpointChecks;
   outputDefaults: ManifestOutputDefaults;
 };
 
@@ -44,6 +58,41 @@ type ManifestApplySessionEntry = ManifestPlanEntry & { fileName: string };
 type ManifestApplySession = Omit<ManifestApplySessionPlan, "entries" | "romAcquisition"> & {
   romFileName?: string;
   entries: ManifestApplySessionEntry[];
+};
+
+/** The verification endpoints of the full patch chain. */
+type ManifestChainEndpointChecks = {
+  input?: ParsedManifestChecks;
+  output?: ParsedManifestChecks;
+};
+
+/**
+ * The chain's verification endpoints: what the base ROM must be (the first
+ * patch's own `inputChecks`, else the manifest's `rom.checks`) and what the
+ * final result must be (the last patch's own `outputChecks`, else
+ * `output.checks`). These verify the ROM and the run's output — they are NOT
+ * attributed to individual patches: a patch's card only shows checks the
+ * patch itself declared.
+ */
+const manifestChainEndpointChecks = (manifest: ParsedManifest): ManifestChainEndpointChecks => {
+  const input = manifest.patches[0]?.inputChecks || manifest.rom?.checks;
+  const output = manifest.patches.at(-1)?.outputChecks || manifest.output?.checks;
+  return { ...(input ? { input } : {}), ...(output ? { output } : {}) };
+};
+
+/** Display name for a manifest session, derived from its output/rom naming. */
+const manifestSessionDisplayName = (manifest: ParsedManifest): string | undefined =>
+  manifest.output?.name || manifest.rom?.name;
+
+/** The expected-ROM details to surface when the manifest ships no ROM source. */
+const manifestRomExpectation = (manifest: ParsedManifest): ManifestRomExpectation | undefined => {
+  const rom = manifest.rom;
+  if (!rom || rom.url || rom.path) return undefined;
+  const expectation: ManifestRomExpectation = {
+    ...(rom.name ? { name: rom.name } : {}),
+    ...(rom.checks ? { checks: rom.checks } : {}),
+  };
+  return Object.keys(expectation).length ? expectation : undefined;
 };
 
 const resolveManifestRelativeUrl = (raw: string, manifestUrl: string, label: string): string => {
@@ -68,19 +117,12 @@ const toOutputDefaults = (parsed: ParsedManifestParseResult): ManifestOutputDefa
   const defaults: ManifestOutputDefaults = {};
   if (output.name) defaults.name = output.name;
   if (output.header) defaults.header = output.header;
-  // Codecs/level are intentionally NOT mapped onto the UI defaults: the output card only models the
-  // container format choice, and the per-format codec/level overrides come from Settings.
-  if (output.compress) {
-    if (!output.compress.enabled) defaults.compression = "none";
-    else if (output.compress.format) defaults.compression = output.compress.format;
-  }
   return defaults;
 };
 
 /**
- * Build the acquisition + session plan from a `manifest parse` result. Entries with status
- * `disabled` are EXCLUDED from acquisition entirely in v1: they are author-retired patches kept in
- * the manifest for provenance, and opting back in is the CLI's `--with` flow, not the webapp's.
+ * Build the acquisition + session plan from a `manifest parse` result. Every patch is acquired and
+ * remains toggleable; `optional` only seeds its initial on/off state.
  */
 const buildManifestApplySessionPlan = (
   parsed: ParsedManifestParseResult,
@@ -88,7 +130,6 @@ const buildManifestApplySessionPlan = (
 ): ManifestApplySessionPlan => {
   const entries: ManifestPlanEntry[] = [];
   parsed.manifest.patches.forEach((patch, index) => {
-    if (patch.status === "disabled") return;
     const patchSource = parsed.patchSources[index];
     if (!patchSource) throw new Error(`Manifest patch ${index + 1} has no resolved source`);
     entries.push({
@@ -96,20 +137,30 @@ const buildManifestApplySessionPlan = (
       ...(patch.name ? { name: patch.name } : {}),
       ...(patch.description ? { description: patch.description } : {}),
       ...(patch.label ? { label: patch.label } : {}),
-      status: patch.status,
+      optional: patch.optional === true,
+      ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
+      ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
       ...(patch.header ? { header: patch.header } : {}),
     });
   });
+  const name = manifestSessionDisplayName(parsed.manifest);
+  const romExpectation = parsed.romSource ? undefined : manifestRomExpectation(parsed.manifest);
   return {
+    chainEndpointChecks: manifestChainEndpointChecks(parsed.manifest),
     entries,
     key: manifestUrl,
-    ...(parsed.manifest.name ? { name: parsed.manifest.name } : {}),
-    ...(parsed.manifest.description ? { description: parsed.manifest.description } : {}),
+    ...(name ? { name } : {}),
     outputDefaults: toOutputDefaults(parsed),
     ...(parsed.romSource ? { romAcquisition: toAcquisition(parsed.romSource, manifestUrl, "rom") } : {}),
+    ...(romExpectation ? { romExpectation } : {}),
     warnings: parsed.warnings.slice(),
   };
 };
 
-export type { ManifestApplySession, ManifestApplySessionEntry };
-export { buildManifestApplySessionPlan };
+export type { ManifestApplySession, ManifestApplySessionEntry, ManifestRomExpectation };
+export {
+  buildManifestApplySessionPlan,
+  manifestChainEndpointChecks,
+  manifestRomExpectation,
+  manifestSessionDisplayName,
+};

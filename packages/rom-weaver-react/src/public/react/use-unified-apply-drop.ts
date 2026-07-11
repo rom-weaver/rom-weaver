@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { loadLocalManifestSession } from "../../lib/manifest/local-manifest-session.ts";
+import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
 import { classifyDroppedFiles, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
@@ -30,6 +32,8 @@ type UnifiedDropController = {
   provideRomInputFiles?: (files: File[]) => void;
   providePatchInputFiles?: (files: File[]) => void;
 };
+
+const isManifestFileName = (name: string) => /^rw\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
@@ -69,9 +73,32 @@ const classifyArchiveBucket = async (archive: File): Promise<"rom" | "patch"> =>
 const routeUnifiedDrop = async (
   files: File[],
   controller: UnifiedDropController,
+  onManifestSession?: (session: ManifestApplySession) => void,
   isCancelled?: () => boolean,
 ): Promise<void> => {
   const { archives, inputs, patches } = classifyDroppedFiles(files);
+  const directManifests = files.filter((file) => isManifestFileName(file.name));
+  const archiveEntries = await Promise.all(
+    archives.map((archive) => listDroppedArchiveEntryNames(archive).catch(() => [] as string[])),
+  );
+  const manifestArchives = archives.filter((_archive, index) =>
+    archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rw.json"),
+  );
+  const manifests = [...directManifests, ...manifestArchives.filter((file) => !directManifests.includes(file))];
+  if (manifests.length > 1) throw new Error("Drop contains more than one manifest");
+  if (manifests[0]) {
+    const loaded = await loadLocalManifestSession(manifests[0], files);
+    if (isCancelled?.()) return;
+    onManifestSession?.(loaded.session);
+    const companionRoms = inputs.filter((file) => !directManifests.includes(file));
+    if (!loaded.romFile && companionRoms.length > 1) {
+      throw new Error("A checks-only manifest drop contains more than one possible ROM");
+    }
+    const romFile = loaded.romFile || companionRoms[0];
+    if (romFile) controller.provideRomInputFiles?.([romFile]);
+    controller.providePatchInputFiles?.(loaded.patchFiles);
+    return;
+  }
   const archiveBuckets = await Promise.all(archives.map(classifyArchiveBucket));
   if (isCancelled?.()) return;
   const romArchives = archives.filter((_archive, index) => archiveBuckets[index] === "rom");
@@ -90,13 +117,22 @@ const routeUnifiedDrop = async (
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
 };
 
-const useUnifiedApplyDrop = (controller: UnifiedDropController): UnifiedApplyDrop => {
+const normalizeArchivePath = (name: string) => name.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
+
+const useUnifiedApplyDrop = (
+  controller: UnifiedDropController,
+  onManifestSession?: (session: ManifestApplySession) => void,
+  onError?: (error: Error) => void,
+): UnifiedApplyDrop => {
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean) => {
       if (isCancelled?.()) return;
-      void routeUnifiedDrop(files, controller, isCancelled);
+      void routeUnifiedDrop(files, controller, onManifestSession, isCancelled).catch((error) => {
+        logger.error("manifest drop failed", { error: String(error) });
+        onError?.(error instanceof Error ? error : new Error(String(error)));
+      });
     },
-    [controller],
+    [controller, onError, onManifestSession],
   );
 
   return { onDrop, pendingDrops: NO_PENDING_DROPS };

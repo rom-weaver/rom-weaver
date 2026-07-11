@@ -4,7 +4,6 @@
 // so the runtime adapter type can reference them without an import cycle (mirrors `types/ingest.ts`).
 import type { ParsedPatchDescriptor } from "./ingest.ts";
 
-type ManifestPatchStatus = "required" | "default" | "optional" | "disabled";
 type ManifestHeaderMode = "keep" | "strip" | "auto";
 type ManifestSourceKind = "json" | "compressed-json" | "archive";
 
@@ -31,33 +30,27 @@ type ParsedManifestRom = {
 type ParsedManifestPatchEntry = {
   name?: string;
   description?: string;
-  status: ManifestPatchStatus;
+  /** An optional patch starts deselected; absent/false means applied by default. */
+  optional?: boolean;
   label?: string;
   url?: string;
   path?: string;
-  checks?: ParsedManifestChecks;
-  /** Checksums of the patch FILE itself (verifies downloaded bytes; distinct from `checks`). */
-  integrity?: Record<string, string>;
+  /** Expected pre-apply ROM state, only when it differs from `rom.checks` (mid-chain). */
+  inputChecks?: ParsedManifestChecks;
+  /** Expected post-apply state, only when it differs from the final `output.checks`. */
+  outputChecks?: ParsedManifestChecks;
   header?: ManifestHeaderMode;
-};
-
-type ParsedManifestOutputCompress = {
-  enabled: boolean;
-  format?: string;
-  codecs?: string[];
-  level?: string;
 };
 
 type ParsedManifestOutput = {
   name?: string;
   header?: ManifestHeaderMode;
-  compress?: ParsedManifestOutputCompress;
+  /** Expected checksums/size of the final output once the full patch chain is applied. */
+  checks?: ParsedManifestChecks;
 };
 
 type ParsedManifest = {
   version: number;
-  name?: string;
-  description?: string;
   rom?: ParsedManifestRom;
   /** Ordered: array order is the apply order. */
   patches: ParsedManifestPatchEntry[];
@@ -89,7 +82,6 @@ type ParsedManifestCreateResult = {
 
 export type {
   ManifestHeaderMode,
-  ManifestPatchStatus,
   ManifestSourceKind,
   ParsedManifest,
   ParsedManifestChecks,

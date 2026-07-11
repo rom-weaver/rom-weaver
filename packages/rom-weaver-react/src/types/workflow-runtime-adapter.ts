@@ -9,12 +9,7 @@ import type {
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
-import type {
-  ManifestHeaderMode,
-  ManifestPatchStatus,
-  ParsedManifestCreateResult,
-  ParsedManifestParseResult,
-} from "./manifest.ts";
+import type { ManifestHeaderMode, ParsedManifestCreateResult, ParsedManifestParseResult } from "./manifest.ts";
 import type { OutputStorageKind } from "./output.ts";
 import type { JsonObject, JsonValue } from "./runtime.ts";
 import type { SourceRef } from "./source.ts";
@@ -436,25 +431,30 @@ type WorkflowRuntimeManifest = {
     signal?: AbortSignal;
   }) => Promise<{ result: ParsedManifestParseResult; extractedFiles: Map<string, File> }>;
   // Write an rw.json manifest (and optional everything-bundle .zip) from the current session's
-  // files. Checks/integrity are computed by Rust from the staged bytes; the emitted file(s) are
+  // files. ROM checks are computed by Rust from the staged bytes; the emitted file(s) are
   // read back as plain `File`s for the browser download path and removed from staging.
   create?: (input: {
     rom?: { source: unknown; fileName?: string };
+    /** Optional packaged ROM payload; checks still come from the logical `rom`. */
+    bundleRom?: { source: unknown; fileName?: string };
     patches: Array<{
       source: unknown;
       fileName?: string;
       name?: string;
       description?: string;
       label?: string;
-      status?: ManifestPatchStatus;
+      /** Optional patches start deselected at apply time; absent/false = applied by default. */
+      optional?: boolean;
       header?: ManifestHeaderMode;
       /** Expected pre-apply ROM checksums for this entry ("algo=hex", comma-separable). */
-      checks?: string;
+      inputChecks?: string;
+      /** Expected post-apply ROM checksums ("algo=hex", comma-separable). */
+      outputChecks?: string;
     }>;
-    name?: string;
-    description?: string;
     outputName?: string;
     outputHeader?: ManifestHeaderMode;
+    /** Expected final-output checksums once the full chain is applied ("algo=hex", comma-separable). */
+    outputCheck?: string;
     /** Bundle file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = manifest only. */
     bundleFileName?: string;
     /** Leave the ROM out of the bundle and emit its manifest entry with checks only. */

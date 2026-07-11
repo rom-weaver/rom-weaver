@@ -7,7 +7,6 @@ import type { ParsedIngestResult } from "../../types/ingest.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type {
   ManifestHeaderMode,
-  ManifestPatchStatus,
   ParsedManifestCreateResult,
   ParsedManifestParseResult,
 } from "../../types/manifest.ts";
@@ -831,29 +830,29 @@ const invokeRomWeaverManifestParseWorker = async (
 };
 
 // Write an rw.json manifest (and optional everything-bundle archive) from staged session files via
-// the `manifest create` command. Checks/integrity checksums are computed from the actual files by
+// the `manifest create` command. ROM checks are computed from the actual file by
 // Rust; the per-patch metadata arrays are index-aligned with `patchPaths` (or empty).
 const invokeRomWeaverManifestCreateWorker = async (
   input: {
     bundlePath?: string;
-    compressFormat?: string;
-    description?: string;
+    bundleRomPath?: string;
     knownInputPaths?: string[];
     logLevel?: LogLevel | string;
-    name?: string;
-    noCompress?: boolean;
     noBundleRom?: boolean;
+    /** Expected final-output checksums once the full chain is applied ("algo=hex", comma-separable). */
+    outputCheck?: string;
     outputHeader?: ManifestHeaderMode;
     outputName?: string;
     outputPath: string;
-    /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
-    patchChecks?: string[];
     patchDescriptions?: string[];
     patchHeaders?: ManifestHeaderMode[];
+    /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
+    patchInputChecks?: string[];
     patchLabels?: string[];
     patchNames?: string[];
     patchPaths: string[];
-    patchStatuses?: ManifestPatchStatus[];
+    patchOptionals?: boolean[];
+    patchOutputChecks?: string[];
     romPath?: string;
     signal?: AbortSignal;
   },
@@ -866,6 +865,7 @@ const invokeRomWeaverManifestCreateWorker = async (
   if (!patchPaths.length) throw new Error("Manifest create requires at least one patch path");
   const romPath = String(input.romPath || "").trim();
   const bundlePath = String(input.bundlePath || "").trim();
+  const bundleRomPath = String(input.bundleRomPath || "").trim();
   // The Rust side requires each metadata array to match the patch count exactly (or be empty), so a
   // partially-filled array is padded with empty strings; empty values round-trip as absent metadata.
   const alignedStrings = (values: string[] | undefined): string[] | undefined => {
@@ -877,9 +877,13 @@ const invokeRomWeaverManifestCreateWorker = async (
   const patchNames = alignedStrings(input.patchNames);
   const patchDescriptions = alignedStrings(input.patchDescriptions);
   const patchLabels = alignedStrings(input.patchLabels);
-  const patchChecks = alignedStrings(input.patchChecks);
-  const patchStatuses =
-    input.patchStatuses && input.patchStatuses.length === patchPaths.length ? input.patchStatuses : undefined;
+  const patchInputChecks = alignedStrings(input.patchInputChecks);
+  const patchOutputChecks = alignedStrings(input.patchOutputChecks);
+  const outputCheck = String(input.outputCheck || "").trim();
+  const patchOptionals =
+    input.patchOptionals && input.patchOptionals.length === patchPaths.length && input.patchOptionals.some(Boolean)
+      ? input.patchOptionals
+      : undefined;
   const patchHeaders =
     input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
       ? patchPaths.map((_, index) => input.patchHeaders?.[index] || "auto")
@@ -889,18 +893,17 @@ const invokeRomWeaverManifestCreateWorker = async (
     patch: patchPaths,
     ...(romPath ? { rom: romPath } : {}),
     ...(bundlePath ? { bundle: bundlePath } : {}),
-    ...(input.name ? { name: input.name } : {}),
-    ...(input.description ? { description: input.description } : {}),
+    ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
     ...(input.outputName ? { output_name: input.outputName } : {}),
     ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
-    ...(input.noCompress ? { no_compress: true } : {}),
-    ...(input.compressFormat ? { compress_format: input.compressFormat } : {}),
+    ...(outputCheck ? { output_check: [outputCheck] } : {}),
     ...(patchNames ? { patch_name: patchNames } : {}),
     ...(patchDescriptions ? { patch_description: patchDescriptions } : {}),
     ...(patchLabels ? { patch_label: patchLabels } : {}),
-    ...(patchStatuses ? { patch_status: patchStatuses } : {}),
+    ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
     ...(patchHeaders ? { patch_header: patchHeaders } : {}),
-    ...(patchChecks ? { patch_check: patchChecks } : {}),
+    ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
+    ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson manifest-create dispatch", {

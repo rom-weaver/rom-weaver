@@ -208,11 +208,11 @@ const readBrowserVfsFileAsHeapFile = async (filePath: string, fileName: string):
 const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["manifest"] => ({
   create: async ({
     rom,
+    bundleRom,
     patches,
-    name,
-    description,
     outputName,
     outputHeader,
+    outputCheck,
     bundleFileName,
     noBundleRom,
     logLevel,
@@ -234,6 +234,18 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
         staged.push(stagedRom);
         romPath = stagedRom.filePath;
       }
+      let bundleRomPath: string | undefined;
+      if (bundleRom) {
+        const stagedBundleRom = await workerIo.stageSource({
+          fallbackFileName: bundleRom.fileName || "rom.bin",
+          pathPrefix: "manifest-bundle-rom",
+          scope: "archive",
+          source: bundleRom.source,
+          trace: { logLevel, onLog },
+        });
+        staged.push(stagedBundleRom);
+        bundleRomPath = stagedBundleRom.filePath;
+      }
       const patchPaths: string[] = [];
       for (const [index, patch] of patches.entries()) {
         const stagedPatch = await workerIo.stageSource({
@@ -254,21 +266,22 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
       const result = await invokeRomWeaverManifestCreateWorker(
         {
           ...(bundlePath ? { bundlePath } : {}),
-          ...(description ? { description } : {}),
+          ...(bundleRomPath ? { bundleRomPath } : {}),
           knownInputPaths: [...(romPath ? [romPath] : []), ...patchPaths],
           logLevel,
-          ...(name ? { name } : {}),
           ...(noBundleRom ? { noBundleRom: true } : {}),
+          ...(outputCheck ? { outputCheck } : {}),
           ...(outputHeader ? { outputHeader } : {}),
           ...(outputName ? { outputName } : {}),
           outputPath,
-          patchChecks: patches.map((patch) => patch.checks || ""),
           patchDescriptions: patches.map((patch) => patch.description || ""),
           patchHeaders: patches.map((patch) => patch.header || "auto"),
+          patchInputChecks: patches.map((patch) => patch.inputChecks || ""),
           patchLabels: patches.map((patch) => patch.label || ""),
           patchNames: patches.map((patch) => patch.name || ""),
+          patchOptionals: patches.map((patch) => patch.optional === true),
+          patchOutputChecks: patches.map((patch) => patch.outputChecks || ""),
           patchPaths,
-          patchStatuses: patches.map((patch) => patch.status || "default"),
           ...(romPath ? { romPath } : {}),
           signal,
         },
