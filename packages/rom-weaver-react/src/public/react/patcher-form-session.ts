@@ -331,6 +331,17 @@ const useLocalApplyPatchFormSession = ({
   const stagedPatchInfos = activePatches
     .map((patch) => patchInfoByKey[getPatchKey(patch)])
     .filter((info): info is StagedInputInfo => !!info);
+  // Per-patch run options, index-aligned with activePatches: a filtered run
+  // rebuilds its workflow stages, so the run replays these onto the fresh ones.
+  const activePatchOptions = activePatches.map((patch) => {
+    const info = patchInfoByKey[getPatchKey(patch)];
+    return {
+      ...(info?.headerChoice === "keep" || info?.headerChoice === "strip" ? { header: info.headerChoice } : {}),
+      ...(typeof info?.ppfUndo === "boolean" ? { ppfUndo: info.ppfUndo } : {}),
+      ...(info?.validateInputChecksum ? { validateInputChecksum: info.validateInputChecksum } : {}),
+      ...(info?.validateOutputChecksum ? { validateOutputChecksum: info.validateOutputChecksum } : {}),
+    };
+  });
   const stagedPatchCompressedBytes = sumStagedInfoSize(stagedPatchInfos, "sourceSize");
   const stagedPatchRawBytes = sumStagedInfoSize(stagedPatchInfos, "size");
   const fallbackPatchCompressedBytes =
@@ -1068,6 +1079,7 @@ const useLocalApplyPatchFormSession = ({
     },
     request: {
       activePatches,
+      activePatchOptions,
       activeSettings,
       applyQueueBlocked,
       busy,

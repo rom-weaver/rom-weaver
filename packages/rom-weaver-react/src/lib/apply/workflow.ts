@@ -133,27 +133,6 @@ const resolveWorkerApplyOutputName = (options: PatchInput["options"], asset: Inp
   return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
 };
 
-/**
- * Converts a user-pasted hex checksum into a `algorithm=hex` entry, auto-detecting the
- * algorithm by hex length (crc32/md5/sha1/sha256). Returns undefined for invalid input.
- */
-const checksumEntryFromHex = (value: string | undefined): string | undefined => {
-  if (typeof value !== "string") return undefined;
-  const hex = value.trim().toLowerCase().replace(/^0x/, "");
-  if (!/^[0-9a-f]+$/.test(hex)) return undefined;
-  const algorithm =
-    hex.length === 8
-      ? "crc32"
-      : hex.length === 32
-        ? "md5"
-        : hex.length === 40
-          ? "sha1"
-          : hex.length === 64
-            ? "sha256"
-            : undefined;
-  return algorithm ? `${algorithm}=${hex}` : undefined;
-};
-
 const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: string) => ({
   addHeader: !!options?.compatibility?.addHeader,
   appendOutputSuffix: !!options?.output?.suffix,
@@ -460,18 +439,11 @@ const runApplyWorkflow = async (
                 patchFormat: getParsedPatchFormatHint(patch),
               };
             });
-            // Aggregate per-patch user options across this target's chain: the input
-            // checksum belongs to the first patch (the chain input), the output checksum to
-            // the last patch (the final result), and undo-aware applies if any patch wants it.
+            // Aggregate per-patch user options across this target's chain. The pasted /
+            // manifest-seeded input/output checksums are deliberately NOT forwarded to the
+            // engine: in the browser they verify reactively (ROM/patch card coloring) and a
+            // mismatch never blocks or fails the run — the CLI keeps hard enforcement.
             const patchOptions = Array.isArray(input.patchOptions) ? input.patchOptions : [];
-            const firstPatchOptions = patchOptions[patchIndices[0] ?? -1];
-            const lastPatchOptions = patchOptions[patchIndices[patchIndices.length - 1] ?? -1];
-            const validateWithChecksums = [checksumEntryFromHex(firstPatchOptions?.validateInputChecksum)].filter(
-              (entry): entry is string => !!entry,
-            );
-            const validateWithOutputChecksums = [checksumEntryFromHex(lastPatchOptions?.validateOutputChecksum)].filter(
-              (entry): entry is string => !!entry,
-            );
             const ppfUndoAware = patchIndices.some((patchIndex) => patchOptions[patchIndex]?.ppfUndo === true);
             // One header mode per patch. The first patch's mode is concrete — the
             // browser resolved it against the staged checksum variants, so the engine
@@ -508,8 +480,6 @@ const runApplyWorkflow = async (
                 headerModes: headerModesForChain,
                 outputHeader: outputHeaderForChain,
                 ...(ppfUndoAware ? { ppfUndoAware: true } : {}),
-                ...(validateWithChecksums.length ? { validateWithChecksums } : {}),
-                ...(validateWithOutputChecksums.length ? { validateWithOutputChecksums } : {}),
               },
               patches: selectedPatches,
               signal: options.signal,

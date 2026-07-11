@@ -123,6 +123,13 @@ type LocalApplyPatchFormSessionOptions = Pick<
   applyPatches: (input: {
     inputs: BinarySource[];
     patches: BinarySource[];
+    /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed onto re-staged runs. */
+    patchOptions?: Array<{
+      header?: "keep" | "strip";
+      ppfUndo?: boolean;
+      validateInputChecksum?: string;
+      validateOutputChecksum?: string;
+    }>;
     options: ApplyPatchFormSettings & {
       output: NonNullable<ApplyPatchFormSettings["output"]> & {
         compression: "auto" | CompressionFormat;

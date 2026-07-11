@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emitTraceLog } from "../../lib/logging.ts";
+import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
@@ -33,7 +34,7 @@ import {
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
-import { ManifestExportDialog, useManifestExport } from "./manifest-export.tsx";
+import { useManifestExport } from "./manifest-export.tsx";
 import type { BinarySource } from "./patcher-form.ts";
 import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
@@ -174,9 +175,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // so reorders/removals keep the right patches off.
   const {
     disabledPatchIds,
-    filterEnabledPatches,
+    filterEnabledPatchRun,
     getPatchIds,
-    lockedPatchIds,
     seedPatchEnablement,
     syncPatchTracking,
     togglePatchEnabled,
@@ -185,10 +185,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // A `?manifest=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
   // Controllers are created further down, so the hook reads them through a ref.
+  const [localManifestSession, setLocalManifestSession] = useState<ManifestApplySession | null>(null);
+  const [manifestDismissed, setManifestDismissed] = useState(false);
+  useEffect(() => setManifestDismissed(false), [props.manifestSession?.key]);
+  const activeManifestSession = manifestDismissed ? null : localManifestSession || props.manifestSession || null;
   const manifestControllersRef = useRef<ManifestSessionControllers>({ output: null, patchStack: null });
-  const { handleManifestPatchesChange, manifestMetaById } = useManifestApplySession({
+  const { handleManifestPatchesChange, manifestMetaById, updateManifestMeta } = useManifestApplySession({
     controllersRef: manifestControllersRef,
-    manifestSession: props.manifestSession ?? null,
+    manifestSession: activeManifestSession,
     seedPatchEnablement,
   });
 
@@ -197,6 +201,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
+      if (!nextPatches.length) {
+        setLocalManifestSession(null);
+        setManifestDismissed(true);
+      }
       syncPatchTracking(nextPatches);
       currentPatchesRef.current = nextPatches;
       handleManifestPatchesChange(nextPatches);
@@ -432,6 +440,18 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           if (firstFailure) throw firstFailure.reason;
         }
 
+        // A clear-and-re-add rebuilt every stage with default options — replay the
+        // session's per-patch user options (header/PPF-undo/checks) so a filtered
+        // run doesn't silently drop them.
+        if (patchesChanged && !patchesAppended && snapshot.patchOptions?.length) {
+          const stagedCount = workflow.getPatches().length;
+          for (const [index, option] of snapshot.patchOptions.entries()) {
+            if (index >= stagedCount) break;
+            if (!(option && Object.keys(option).length)) continue;
+            await workflow.setPatchOption(index, option);
+          }
+        }
+
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, executionSettingsChanged, {
           baseSettingsApplied: executionSettingsChanged,
         });
@@ -613,7 +633,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const applyPatches = useCallback(
     async (rawInput: ApplyWorkflowSessionInput) => {
       // Disabled patches never reach the workflow; the bench keeps their cards.
-      const input: ApplyWorkflowSessionInput = { ...rawInput, patches: filterEnabledPatches(rawInput.patches) };
+      // Their index-aligned run options travel with the kept patches so the
+      // filtered re-stage can replay them onto its fresh stages.
+      const filteredRun = filterEnabledPatchRun(rawInput.patches, rawInput.patchOptions);
+      const input: ApplyWorkflowSessionInput = { ...rawInput, ...filteredRun };
       const runPreparedWorkflow = async ({
         input: stagedInput,
         patches,
@@ -698,7 +721,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       syncSelectionRefs,
       syncWorkflowOutputOverrides,
       prepareWorkflow,
-      filterEnabledPatches,
+      filterEnabledPatchRun,
     ],
   );
 
@@ -1020,11 +1043,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // session's files + enablement into an rw.json (or everything-bundle .zip).
   const manifestExport = useManifestExport({
     disabledPatchIds,
+    getName: () => resolvedOutputController.getState().displayFileName,
+    getOutputHeader: () => resolvedOutputController.getState().outputHeader,
     getSessionSources: () => ({ inputs: lastInputsRef.current, patches: currentPatchesRef.current }),
     getStackItems: () => resolvedStackController.getState().items,
-    ...(props.manifestSession?.description ? { initialDescription: props.manifestSession.description } : {}),
-    ...(props.manifestSession?.name ? { initialName: props.manifestSession.name } : {}),
-    lockedPatchIds,
+    initialName:
+      activeManifestSession?.name || resolvedOutputController.getState().displayFileName || "rom-weaver-manifest",
     manifestMetaById,
     ...(props.onManifestExportComplete ? { onComplete: props.onManifestExportComplete } : {}),
   });
@@ -1032,7 +1056,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
   // until their ROM-vs-patch bucket is classified.
-  const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(resolvedUiController);
+  const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
+    resolvedUiController,
+    setLocalManifestSession,
+    props.onError,
+  );
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
@@ -1076,20 +1104,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
-        manifestExport={{ onOpen: manifestExport.openDialog }}
+        manifestExport={manifestExport}
         manifestMetaById={manifestMetaById}
+        {...(activeManifestSession?.romExpectation
+          ? { manifestRomExpectation: activeManifestSession.romExpectation }
+          : {})}
+        onManifestMetaChange={updateManifestMeta}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{
           disabledIds: disabledPatchIds,
           getPatchIds,
-          lockedIds: lockedPatchIds,
           onToggle: togglePatchEnabled,
         }}
         pendingDrops={pendingDrops}
         startup={startup}
       />
-      <ManifestExportDialog {...manifestExport} />
       {candidateSelectionDialog}
     </>
   );

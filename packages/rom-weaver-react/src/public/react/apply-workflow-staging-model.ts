@@ -23,9 +23,21 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
  * derivations be unit-tested in isolation.
  */
 
+/** Per-patch user options (Options drawer state) that must survive a run
+ * re-stage: a filtered run (disabled patches stripped) rebuilds the workflow
+ * stages from scratch, so the run replays these onto the fresh stages. */
+type ApplyPatchRunOptions = {
+  header?: "keep" | "strip";
+  ppfUndo?: boolean;
+  validateInputChecksum?: string;
+  validateOutputChecksum?: string;
+};
+
 type ApplyWorkflowSessionInput = {
   inputs: BinarySource[];
   patches: BinarySource[];
+  /** Index-aligned with `patches`. */
+  patchOptions?: ApplyPatchRunOptions[];
   options: ApplyPatchFormSettings & {
     output: NonNullable<ApplyPatchFormSettings["output"]> & {
       compression: "auto" | CompressionFormat;
@@ -464,6 +476,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
 };
 
 export {
+  type ApplyPatchRunOptions,
   type ApplyWorkflowPrepareHandlers,
   type ApplyWorkflowSessionInput,
   type ApplyWorkflowSyncState,

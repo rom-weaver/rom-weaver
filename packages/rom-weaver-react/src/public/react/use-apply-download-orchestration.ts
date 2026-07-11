@@ -15,6 +15,7 @@ import type {
   LocalApplyPatchFormSessionOptions,
   StagedInputInfo,
 } from "./apply-session-types.ts";
+import type { ApplyPatchRunOptions } from "./apply-workflow-staging-model.ts";
 import { toInputProgress } from "./input-session-helpers.ts";
 import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
@@ -73,6 +74,8 @@ const deriveApplyCompletion = (
 // What to apply and whether a run/download is currently permitted — a snapshot of the session.
 interface ApplyRunRequest {
   activePatches: BinarySource[];
+  /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed by the run. */
+  activePatchOptions?: ApplyPatchRunOptions[];
   activeSettings: ApplyPatchFormSettings;
   applyQueueBlocked: boolean;
   busy: boolean;
@@ -157,6 +160,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         } = session;
         const {
           activePatches,
+          activePatchOptions,
           activeSettings,
           applyQueueBlocked,
           busy,
@@ -320,6 +324,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               },
             },
             patches: activePatches,
+            ...(activePatchOptions ? { patchOptions: activePatchOptions } : {}),
           });
           const completedAt = Date.now();
           const { applyTimeMs, compressionTimeMs, sizeSummary } = deriveApplyCompletion(
