@@ -556,6 +556,13 @@ const ApplyPatchListStep = ({
               key={item.key ?? `${index}:${item.fileName}`}
               {...rowProps}
               className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
+              description={
+                description ? (
+                  <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
+                    {description}
+                  </p>
+                ) : undefined
+              }
               handle={
                 reorderable && !staging ? (
                   <PatchDragHandle
@@ -616,11 +623,6 @@ const ApplyPatchListStep = ({
               target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
               verifyBar={verifying}
             >
-              {description ? (
-                <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
-                  {description}
-                </p>
-              ) : null}
               <div className="patch-body">
                 <div className="patch-body-inner">
                   {verdict === "bad" ? (
@@ -631,6 +633,7 @@ const ApplyPatchListStep = ({
                   ) : null}
                   {isDisabled ? null : (
                     <ExtractDrawer
+                      always={!!manifestMeta?.[index]}
                       fileName={item.fileName}
                       fileSize={item.fileSize}
                       parentCompressions={item.archivePathEntries}

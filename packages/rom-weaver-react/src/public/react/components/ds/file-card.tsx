@@ -49,6 +49,7 @@ const FileCard = ({
   className,
   style,
   name,
+  description,
   meta,
   target,
   stageBar,
@@ -69,6 +70,8 @@ const FileCard = ({
   className?: string;
   style?: CSSProperties;
   name: ReactNode;
+  /** Optional description line rendered directly under the name, above the meta sub-line. */
+  description?: ReactNode;
   /** size · format sub-line under the name (`.card-meta` content). */
   meta?: ReactNode;
   target?: ReactNode;
@@ -118,6 +121,7 @@ const FileCard = ({
         <div className="card-name">
           {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
           {name}
+          {description}
           {meta || target ? (
             <span className="card-meta">
               {target}

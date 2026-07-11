@@ -209,16 +209,24 @@ const ExtractName = ({
         {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
         {displayName?.trim() || getDisplayName(fileName)}
       </span>
-      {displayName?.trim() ? <span className="nm-file mono">{fileName}</span> : null}
     </div>
   </>
 );
 
 /** Just the Extract drawer (no name line) - for cards that render the name separately. */
-const ExtractDrawer = ({ decompressionTimeMs, fileName, fileSize, parentCompressions, timing }: ExtractPanelProps) => {
+const ExtractDrawer = ({
+  always = false,
+  decompressionTimeMs,
+  fileName,
+  fileSize,
+  parentCompressions,
+  timing,
+}: ExtractPanelProps & { always?: boolean }) => {
   const levels = buildExtractionLevels(fileName, fileSize, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
-  if (levels.length <= 1 && !resolvedTiming) return null;
+  // Manifest sessions force the drawer for every card (`always`) so extraction
+  // reads uniformly even for files that arrived pre-extracted.
+  if (!always && levels.length <= 1 && !resolvedTiming) return null;
   const first = levels[0];
   const last = levels[levels.length - 1];
   if (!last) return null;
