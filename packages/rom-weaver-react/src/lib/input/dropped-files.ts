@@ -55,22 +55,32 @@ const readDataTransferFiles = async (dataTransfer: DataTransfer | null): Promise
   // Capture entries synchronously before any await - the transfer is cleared
   // once the drop handler returns.
   const entries: FileSystemEntry[] = [];
+  // webkitGetAsEntry can return null even when the item is a real file (drags
+  // from some sources, script-constructed transfers) - fall back to the item's
+  // plain File so those drops are not silently discarded.
+  const fallbackFiles: File[] = [];
   let hasEntrySupport = false;
   for (const item of Array.from(dataTransfer.items || [])) {
     if (item.kind !== "file") continue;
     if (typeof item.webkitGetAsEntry !== "function") continue;
     hasEntrySupport = true;
     const entry = item.webkitGetAsEntry();
-    if (entry) entries.push(entry);
+    if (entry) {
+      entries.push(entry);
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file && !isHiddenName(file.name)) fallbackFiles.push(file);
   }
   if (!hasEntrySupport) {
     const files = dataTransfer.files ? Array.from(dataTransfer.files) : [];
     return files.filter((file) => !isHiddenName(file.name));
   }
   const collected = await Promise.all(entries.map(collectEntryFiles));
-  const files = collected.flat();
+  const files = [...collected.flat(), ...fallbackFiles];
   logger.trace("read dropped files", {
     count: files.length,
+    fallbackCount: fallbackFiles.length,
     hadDirectory: entries.some((entry) => entry.isDirectory),
   });
   return files;
