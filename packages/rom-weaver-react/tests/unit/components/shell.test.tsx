@@ -48,7 +48,7 @@ describe("Masthead", () => {
     // language + theme + log + settings tools always present
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
     expect(container.querySelector(".language-tool select")).toBeTruthy();
-    expect(container.querySelector(".tool-text")?.textContent).toBe("Log");
+    expect(getByRole("button", { name: "Log" })).toBeTruthy();
   });
 
   it("keeps diagnostics in the Log dialog", () => {
