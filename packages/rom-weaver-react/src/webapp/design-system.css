@@ -610,13 +610,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    the VISIBLE panel - the inactive mode's form stays mounted (and empty)
    behind [hidden], and must not vote. */
 .rw-app .workbench:has(.panel.workflow:not([hidden]) .step.is-input.is-empty) { align-content: center; }
-/* while the bench is empty the page reads as a landing, not a form: the
-   workflow card chrome retires and the hero drop surface is the only frame,
-   while the 0x01 header stays and opens the step sequence the ghost steps
-   continue below. Everything returns with the crossfade when files arrive.
-   Per-panel :has so the other (hidden, empty) mode never strips the active
-   form's chrome. */
-.rw-app .panel.workflow:has(.step.is-input.is-empty) { border: 0; background: transparent; box-shadow: none; }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
 
 /* secondary input sections (patches, modified), when empty, don't offer their
@@ -2150,19 +2143,12 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
   .rw-app #patch-builder-container > .swap-row .swap-btn { translate: 0 0; }
 }
 
-/* ── form plate ──
-   Each workflow form sits on a mounted plate: the loom bench's seam-bordered
-   panel lifted off the chassis (borders-only depth, like cards and dialogs).
-   The drop veil shares the same rounded frame; phones go edge-to-edge. */
-.rw-app .panel.workflow {
-  border: 1px solid var(--seam);
-  border-radius: var(--r-l);
-  background: var(--plate);
-  margin-block-start: 6px;
-}
-/* steps inherit the plate's rounding so hover/tint states don't poke corners */
-.rw-app .panel.workflow .step:first-child { border-start-start-radius: inherit; border-start-end-radius: inherit; }
-.rw-app .panel.workflow .step:last-child { border-end-start-radius: inherit; border-end-end-radius: inherit; padding-block-end: 4px; }
+/* the workflow form owns no plate: filled or empty, the page IS the form
+   (the side borders of the old mounted plate framed it like a box). Steps
+   keep their hairlines, cards their wells - depth lives one level down. */
+.rw-app .panel.workflow { margin-block-start: 6px; }
+.rw-app .panel.workflow .step:last-child { padding-block-end: 4px; }
+/* phones keep the edge-to-edge bleed the plate used to carry */
 @media (max-width: 560px) {
-  .rw-app .panel.workflow { margin-inline: -8px; border-inline: 0; border-radius: 0; }
+  .rw-app .panel.workflow { margin-inline: -8px; }
 }
