@@ -16,11 +16,11 @@ import {
  */
 
 describe("ProgressTrack", () => {
-  it("renders a determinate fill width", () => {
+  it("renders a determinate fill scale", () => {
     const { container } = render(<ProgressTrack percent={42} />);
     const meter = container.querySelector(".meter.track");
     expect(meter?.classList.contains("indet")).toBe(false);
-    expect((container.querySelector(".fill.bar") as HTMLElement).style.transform).toBe("scaleX(0.42)");
+    expect((container.querySelector(".fill.bar") as HTMLElement).style.getPropertyValue("--scale")).toBe("0.42");
   });
 
   it("falls back to indeterminate without a usable percent", () => {
