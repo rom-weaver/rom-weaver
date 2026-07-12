@@ -1001,16 +1001,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    staging shimmer, which inherits it) rides the same container-driven clamp,
    keyed to the longest value class - a 40-char sha-1 at the mono advance
    (.6ch) plus .03em tracking = 25.2em - so the whole column steps down
-   together instead of each hash picking its own size. Values never wrap. */
+   together instead of each hash picking its own size. The subtrahend is the
+   non-value overhead beside it (label column + copy glyph + gaps + padding
+   − row bleed), so label and hash hold ONE line together all the way down to
+   a 300px viewport. Values never wrap. */
 .rw-app .ck .ck-v {
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
-  font-size: clamp(.55rem, calc((100cqi + 2px) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
 }
 .rw-app .ckrows { container-type: inline-size; }
-/* below the width where 40ch at the unified size still fits beside the label
-   column, long-value rows (.ck-fit marks values ≥16ch) hand the hash the full
-   row width: label + copy glyph on the first line, the value under them */
-@container (max-width: 430px) {
+/* below the width where even the floor size can't hold 40ch beside the label
+   (floor .46rem × 25.2em = 11.6rem, plus the phone row overhead), long-value
+   rows (.ck-fit marks values ≥16ch) hand the hash the full row width:
+   label + copy glyph on the first line, the value under them */
+@container (max-width: calc(11.6rem + 64px)) {
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-k { grid-row: 1; grid-column: 1; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 2; }
@@ -1890,7 +1894,9 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
   .rw-app .ckgrp { padding-inline-start: 0; }
   .rw-app .ck { grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto; gap: 3px 6px; padding-inline: 6px; }
   .rw-app .ck .ck-k { font-size: .72rem; }
-  .rw-app .ck .ck-v { line-height: 1.35; }
+  /* same clamp as the base rule with the phone geometry's smaller overhead
+     (40px label + 20px copy + 2×6px gaps + 2×6px padding − 20px bleed) */
+  .rw-app .ck .ck-v { line-height: 1.35; font-size: clamp(.46rem, calc((100cqi - 64px) / 25.2), .97rem); }
   .rw-app .ck .copy { width: 20px; height: 20px; }
   /* verification labels are descriptive ("target blockcheck"), not 5-char hash
      names - let the label column size to its content so the label always fits
