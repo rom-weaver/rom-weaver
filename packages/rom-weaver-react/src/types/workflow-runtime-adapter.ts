@@ -22,9 +22,12 @@ import type {
 } from "./workflow-runtime-types.ts";
 
 type WorkflowRuntimeProgress = {
+  details?: JsonValue;
+  elapsed_ms?: number | null;
   label?: string;
   message?: string;
   percent?: number | null;
+  stage?: string;
   [key: string]: JsonValue | undefined;
 };
 

@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
@@ -38,6 +38,7 @@ const buildZip = async (entries, outputName) => {
 test("export manifest bundles the session from main-page options with a checks-only rom entry", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   let exported = null;
+  const saveAs = vi.spyOn(browserRuntime.publicOutput, "saveAs");
   mount(
     createElement(ApplyPatchForm, {
       onManifestExportComplete: (result) => {
@@ -121,7 +122,11 @@ test("export manifest bundles the session from main-page options with a checks-o
   // Patch entries carry no file hashes - the format has no integrity field.
   expect(patchEntry.integrity).toBeUndefined();
 
-  await expect.poll(() => exportButton.disabled).toBe(false);
+  const downloadButton = document.getElementById("rom-weaver-button-export-manifest");
+  expect(downloadButton?.textContent).toContain("Download");
+  downloadButton?.click();
+  await expect.poll(() => saveAs.mock.calls.length).toBe(2);
+  saveAs.mockRestore();
 });
 
 test("export bundles the extracted patch leaf, not the archive it arrived in", async () => {

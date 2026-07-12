@@ -2,7 +2,7 @@ import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { ManifestRomExpectation } from "../../lib/manifest/manifest-session-model.ts";
-import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import { ChecksumRow } from "./components/ds/checksum-list.tsx";
@@ -11,7 +11,7 @@ import {
   FieldInfoToggle,
   getOutputCompressionFormatLabel,
 } from "./components/ds/compress-panel.tsx";
-import { FileProgress, InlineProgress, Notice } from "./components/ds/feedback.tsx";
+import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
@@ -21,6 +21,7 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
+import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { createCompressionTypeOptions } from "./output-view-model.ts";
@@ -460,10 +461,11 @@ function ApplyWorkflowFormView({
   manifestExport?: {
     bundleRom: boolean;
     busy: boolean;
+    cancelExport: () => void;
+    downloadable: boolean;
     error: string;
     format: string;
-    phase: "idle" | "preparing" | "exporting";
-    progress: { label?: string; percent?: number | null } | null;
+    progress: ProgressViewModel | null;
     ready: boolean;
     runExport: () => Promise<void>;
     setBundleRom: (value: boolean) => void;
@@ -904,44 +906,33 @@ function ApplyWorkflowFormView({
                 />
                 {manifestVerificationError ? <Notice level="error">{manifestVerificationError}</Notice> : null}
                 {manifestExport ? (
-                  <button
-                    className="btn ghost slim"
-                    disabled={
-                      manifestExport.busy ||
-                      outputState.disabled ||
-                      !manifestExport.ready ||
-                      !romInputs.length ||
-                      !patches.length
-                    }
-                    id="rom-weaver-button-export-manifest"
-                    onClick={() => void manifestExport.runExport()}
-                    type="button"
-                  >
-                    {manifestExport.busy ? (
-                      <>
-                        <span aria-hidden="true" className="spinner" />
-                        {localizer.message("ui.manifestExport.action")}
-                      </>
-                    ) : (
-                      localizer.message("ui.manifestExport.action")
-                    )}
-                  </button>
-                ) : null}
-                {manifestExport?.busy ? (
-                  <InlineProgress
-                    id="rom-weaver-manifest-export-progress"
-                    indeterminate={typeof manifestExport.progress?.percent !== "number"}
-                    label={
-                      manifestExport.progress?.label ||
-                      (manifestExport.phase === "preparing" ? "Preparing source files" : "Writing manifest bundle")
-                    }
-                    percent={manifestExport.progress?.percent ?? null}
-                    value={
-                      typeof manifestExport.progress?.percent === "number"
-                        ? `${Math.round(manifestExport.progress.percent)}%`
-                        : ""
-                    }
-                  />
+                  manifestExport.busy ? (
+                    <ProgressActionButton
+                      cancelLabel="Cancel manifest export"
+                      disabled
+                      label={
+                        manifestExport.downloadable
+                          ? localizer.message("ui.result.download")
+                          : localizer.message("ui.manifestExport.action")
+                      }
+                      onCancel={manifestExport.cancelExport}
+                      onClick={() => undefined}
+                      progress={manifestExport.progress}
+                      progressId="rom-weaver-manifest-export-progress"
+                    />
+                  ) : (
+                    <button
+                      className="btn ghost slim"
+                      disabled={outputState.disabled || !manifestExport.ready || !romInputs.length || !patches.length}
+                      id="rom-weaver-button-export-manifest"
+                      onClick={() => void manifestExport.runExport()}
+                      type="button"
+                    >
+                      {manifestExport.downloadable
+                        ? localizer.message("ui.result.download")
+                        : localizer.message("ui.manifestExport.action")}
+                    </button>
+                  )
                 ) : null}
                 {manifestExport?.error ? <Notice level="error">{manifestExport.error}</Notice> : null}
               </>

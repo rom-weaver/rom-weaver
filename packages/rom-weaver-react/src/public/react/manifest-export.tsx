@@ -1,5 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
+import {
+  createProgressViewModel,
+  createProgressViewModelFromEvent,
+  type ProgressViewModel,
+} from "../../presentation/workflow-presentation.ts";
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowManifestSources } from "../../types/apply-workflow.ts";
 import type { ManifestHeaderMode, ParsedManifestCreateResult } from "../../types/manifest.ts";
@@ -45,9 +50,13 @@ type ManifestExportRow = {
 
 type ManifestExportSources = ApplyWorkflowManifestSources;
 
-type ManifestExportProgress = { label?: string; percent?: number | null };
+type ManifestExportProgress = ProgressViewModel;
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const CHECK_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
+
+const disposeManifestOutput = (output: PublicOutput | null | undefined) => {
+  if (output) void output.dispose().catch(() => undefined);
+};
 
 const parseChecks = (value: string, label: string): Record<string, string> => {
   const checks: Record<string, string> = {};
@@ -137,9 +146,10 @@ const useManifestExport = ({
   const [format, setFormat] = useState<string>(MANIFEST_BUNDLE_FORMATS[0] || MANIFEST_ONLY_FORMAT);
   const [bundleRom, setBundleRom] = useState(false);
   const [rows, setRows] = useState<ManifestExportRow[]>([]);
-  // Phase drives the fallback progress label; wasm progress events override it.
-  const [phase, setPhase] = useState<"idle" | "preparing" | "exporting">("idle");
   const [progress, setProgress] = useState<ManifestExportProgress | null>(null);
+  const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const downloadableOutputRef = useRef<PublicOutput | null>(null);
   // The sources captured when the dialog opened, so the export run stays aligned with its rows even
   // if the bench changes underneath the open dialog.
   const sourcesRef = useRef<ManifestExportSources>({ patches: [], rom: null });
@@ -182,7 +192,6 @@ const useManifestExport = ({
     setName(initialName || stripFileExtension(romName) || stripFileExtension(firstPatchName));
     setFormat(MANIFEST_BUNDLE_FORMATS[0] || MANIFEST_ONLY_FORMAT);
     setBundleRom(false);
-    setPhase("idle");
     setProgress(null);
     setError("");
     setOpen(true);
@@ -206,7 +215,33 @@ const useManifestExport = ({
     setRows((previous) => previous.map((row, rowIndex) => (rowIndex === index ? { ...row, checks } : row)));
   }, []);
 
+  const downloadExport = useCallback(async () => {
+    const output = downloadableOutputRef.current;
+    if (!output) return;
+    setBusy(true);
+    setError("");
+    setProgress(
+      createProgressViewModel({
+        hasProgress: true,
+        label: `Downloading ${output.fileName}`,
+        stage: "download",
+      }),
+    );
+    try {
+      await browserRuntime.publicOutput.saveAs(output);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : String(downloadError));
+    } finally {
+      setProgress(null);
+      setBusy(false);
+    }
+  }, []);
+
   const runExport = useCallback(async () => {
+    if (downloadableOutputRef.current) {
+      await downloadExport();
+      return;
+    }
     const create = browserRuntime.manifest?.create;
     const exportName = getName?.().trim() || name;
     const sources = getSessionSources();
@@ -253,13 +288,23 @@ const useManifestExport = ({
         ...(headerChoice === "keep" || headerChoice === "strip" ? { header: headerChoice } : {}),
       };
     });
+    const stepProgress = (label: string) =>
+      setProgress(
+        createProgressViewModel({
+          hasProgress: true,
+          label,
+          percent: 0,
+          stage: "manifest",
+        }),
+      );
     setBusy(true);
     setError("");
-    setPhase("preparing");
-    setProgress(null);
-    const stepProgress = (label: string) => setProgress({ label, percent: 0 });
+    stepProgress("Preparing manifest export");
     const outputs: PublicOutput[] = [];
     const compressedRomOutputs: PublicOutput[] = [];
+    const retainedOutputs = new Set<PublicOutput>();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
     try {
       // Per-patch entries carry ONLY checks the author specified (typed in the
       // dialog or the patch's Options) - chain intermediates are never hashed
@@ -284,7 +329,6 @@ const useManifestExport = ({
           `Patch ${index + 1} output`,
         );
       }
-      setPhase("exporting");
       stepProgress("Writing manifest");
       const wantsBundle = format !== MANIFEST_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
@@ -330,10 +374,7 @@ const useManifestExport = ({
         // entry keeps checks only and the applying user supplies the file.
         ...(bundleRom && wantsBundle ? {} : { noBundleRom: true }),
         onProgress: (event) => {
-          setProgress({
-            ...(event.label || event.message ? { label: event.label || event.message } : {}),
-            percent: typeof event.percent === "number" ? event.percent : null,
-          });
+          setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "manifest" }));
         },
         patches: patches.map((patch, index) => {
           const row = exportRows[index];
@@ -350,17 +391,34 @@ const useManifestExport = ({
           };
         }),
         rom: { fileName: rom.fileName, source: rom.source },
+        signal: abortController.signal,
       });
       outputs.push(manifestOutput, ...(bundleOutput ? [bundleOutput] : []));
-      onComplete?.(result);
       const downloadOutput = wantsBundle && bundleOutput ? bundleOutput : manifestOutput;
+      downloadableOutputRef.current = downloadOutput;
+      setDownloadableOutput(downloadOutput);
+      retainedOutputs.add(downloadOutput);
+      onComplete?.(result);
+      setProgress(
+        createProgressViewModel({
+          hasProgress: true,
+          label: `Downloading ${downloadOutput.fileName}`,
+          stage: "download",
+        }),
+      );
       await browserRuntime.publicOutput.saveAs(downloadOutput);
       setOpen(false);
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : String(runError));
+      if (!abortController.signal.aborted) {
+        setError(runError instanceof Error ? runError.message : String(runError));
+      }
     } finally {
-      await Promise.all([...outputs, ...compressedRomOutputs].map((output) => output.dispose().catch(() => undefined)));
-      setPhase("idle");
+      if (abortControllerRef.current === abortController) abortControllerRef.current = null;
+      await Promise.all(
+        [...outputs, ...compressedRomOutputs]
+          .filter((output) => !retainedOutputs.has(output))
+          .map((output) => output.dispose().catch(() => undefined)),
+      );
       setProgress(null);
       setBusy(false);
     }
@@ -376,18 +434,31 @@ const useManifestExport = ({
     name,
     onComplete,
     ready,
+    downloadExport,
   ]);
+
+  const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);
+
+  useEffect(
+    () => () => {
+      const output = downloadableOutputRef.current;
+      downloadableOutputRef.current = null;
+      disposeManifestOutput(output);
+    },
+    [],
+  );
 
   return {
     bundleRom,
     busy,
+    cancelExport,
     closeDialog,
+    downloadable: downloadableOutput !== null,
     error,
     format,
     name,
     open,
     openDialog,
-    phase,
     progress,
     ready,
     rows,

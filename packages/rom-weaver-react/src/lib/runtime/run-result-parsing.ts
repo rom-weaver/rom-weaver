@@ -29,6 +29,7 @@ type WireRecord<T> = { [K in keyof T]?: unknown };
 
 type SimpleRuntimeProgress = {
   details?: RuntimeValue;
+  elapsed_ms?: number | null;
   label?: string;
   message?: string;
   percent?: number | null;
@@ -301,6 +302,7 @@ const toSimpleProgress = (event: RomWeaverRunJsonEvent): SimpleRuntimeProgress |
   const details = withEffectiveThreads(getRomWeaverRunEventDetails(event) as RuntimeValue, event);
   return {
     details,
+    elapsed_ms: getRomWeaverRunEventElapsedMs(event),
     label: label ? label : undefined,
     message: undefined,
     percent: clampPercent(getRomWeaverRunEventPercent(event)),
