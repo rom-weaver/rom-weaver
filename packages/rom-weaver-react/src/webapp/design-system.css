@@ -90,11 +90,16 @@
 .rw-app {
   margin: 0; min-height: 100dvh;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
-     slots): solid seam + thread-tinted fill, lighting up on hover. Composed
-     from theme-switched vars, so no per-theme overrides are needed. */
+     slots): solid seam + thread-tinted fill strung with warp, lighting up on
+     hover. Composed from theme-switched vars, so no per-theme overrides are
+     needed. */
   --empty-fill: color-mix(in oklab, var(--thread) 4%, var(--plate-2));
   --empty-fill-hover: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
   --empty-border-hover: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
+  /* warp strung across a waiting surface - the meter's empty-track recipe,
+     much fainter and sparser, because these sit behind copy. An empty target
+     isn't blank: the loom is dressed and waiting for weft. */
+  --warp-lines: repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 7%, transparent) 0 1px, transparent 1px 13px);
   /* flex column so the app fills the viewport and the selvage strip (a direct
      body child) lands edge-to-edge at the very bottom */
   display: flex; flex-direction: column;
@@ -382,12 +387,18 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* a woven step's top seam takes the weft: a thread laid along the hairline,
    dipping under it briefly every 9px (the grey seam shows through the short
    gaps - that's the "under"). Thrown left to right when the step completes. */
-.rw-app .step.is-woven::before {
+.rw-app .step.is-woven::before, .rw-app .step.is-fault::before {
   content: ""; position: absolute; top: -1px; inset-inline: var(--pad); height: 1px; pointer-events: none;
   background: repeating-linear-gradient(90deg, var(--thread) 0 9px, transparent 9px 12px);
   animation: weft-throw .8s var(--ease) both;
 }
-.rw-app .step:first-child.is-woven::before { top: 0; }
+.rw-app .step:first-child.is-woven::before, .rw-app .step:first-child.is-fault::before { top: 0; }
+/* a faulted step's weft snapped mid-throw: fault-colored, ending in a frayed
+   stub short of the far edge - the seam stays bare where the pass never landed */
+.rw-app .step.is-fault::before {
+  background: repeating-linear-gradient(90deg, var(--fault) 0 9px, transparent 9px 12px);
+  mask-image: linear-gradient(90deg, #000 0 34%, transparent 34% 39%, #000 39% 42%, transparent 42%);
+}
 @keyframes weft-throw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 /* a touch more air above each section so straddling controls (the create-mode
    swap hinge) have room to breathe */
@@ -515,10 +526,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    the drop glyph while files are being routed to their sections */
 .rw-app .drop.staging { cursor: progress; color: var(--ink-3); }
 .rw-app .drop.staging .main.btnish { color: var(--ink-2); }
+/* the spinner is a bobbin: short turns of thread wound around the rim over a
+   faint track, spinning while files are routed. (Was a stock border ring.) */
 .rw-app .spinner {
   width: 13px; height: 13px; flex: none; border-radius: 50%;
-  border: 2px solid var(--seam-strong); border-top-color: var(--thread-text);
-  animation: spin .7s linear infinite;
+  background:
+    repeating-conic-gradient(var(--thread-text) 0 26deg, transparent 26deg 45deg),
+    conic-gradient(color-mix(in oklab, var(--seam-strong) 65%, transparent) 0 360deg);
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.4px));
+  animation: spin .9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .rw-app .spinner { animation: none; } }
@@ -561,23 +577,23 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    while nothing is staged, shrinking to a compact add-row once files arrive */
 .rw-app .step.is-input .drop.hero {
   border: 1px solid var(--seam); border-radius: var(--r-l);
-  background: var(--empty-fill);
+  background: var(--warp-lines) var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
 .rw-app .step.is-input .drop.hero:hover, .rw-app .step.is-input .drop.hero:focus-visible {
   border-color: var(--empty-border-hover);
-  background: var(--empty-fill-hover);
+  background: var(--warp-lines) var(--empty-fill-hover);
 }
 /* compact add-row sits just above the staged cards */
 /* the "add more files" row matches the form: a full-width panel like a shrunk
    hero, not a lone floating pill */
 .rw-app .step.is-input .drop:not(.hero) {
   padding: 13px 16px; border-radius: var(--r-m);
-  border: 1px solid var(--seam); background: var(--empty-fill);
+  border: 1px solid var(--seam); background: var(--warp-lines) var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
 .rw-app .step.is-input .drop:not(.hero):hover, .rw-app .step.is-input .drop:not(.hero):focus-within {
-  border-color: var(--empty-border-hover); background: var(--empty-fill-hover);
+  border-color: var(--empty-border-hover); background: var(--warp-lines) var(--empty-fill-hover);
 }
 /* inside the panel the label is plain (no pill) */
 .rw-app .step.is-input .drop:not(.hero) .main.btnish {
@@ -611,12 +627,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   display: flex; align-items: center; justify-content: center; gap: 9px;
   width: 100%; min-height: 72px; padding: 16px 20px; margin: 0;
   appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
-  background: var(--empty-fill); cursor: pointer;
+  background: var(--warp-lines) var(--empty-fill); cursor: pointer;
   color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
   transition: color .15s, background .15s, border-color .15s;
 }
 .rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
-  color: var(--ink-2); background: var(--empty-fill-hover);
+  color: var(--ink-2); background: var(--warp-lines) var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 .rw-app .needs-input svg { width: 16px; height: 16px; flex: none; color: var(--thread-text); }
@@ -639,7 +655,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   border: 1px solid var(--seam); border-radius: var(--r-m);
   /* deliberately a step fainter than --empty-fill: decorative, not droppable */
-  background: color-mix(in oklab, var(--thread) 3%, var(--plate-2));
+  background: var(--warp-lines) color-mix(in oklab, var(--thread) 3%, var(--plate-2));
 }
 /* card silhouette: a name line on the left, a badge stub on the right - two
    marks so the slot reads as the settled card it becomes, not a progress bar */
@@ -815,6 +831,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .verdict.ok { color: var(--verified); } .rw-app .verdict.bad { color: var(--fault); }
 .rw-app .verdict svg { width: 14px; height: 14px; }
 .rw-app .verdict.ok svg { animation: pop .35s var(--ease); }
+/* a passing verdict is sewn shut: fine sage stitches under the words */
+.rw-app .verdict.ok {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 60%, transparent);
+  text-underline-offset: 4px;
+}
 
 /* extraction tree */
 .rw-app .tree { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; }
@@ -928,6 +949,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
 .rw-app .cks > .cks-head .rb-mark.ok { color: var(--verified); }
+/* a verified drawer is sewn shut: fine sage stitches under the check mark */
+.rw-app .cks > .cks-head .rb-mark.ok { position: relative; }
+.rw-app .cks > .cks-head .rb-mark.ok::after {
+  content: ""; position: absolute; inset-inline: 1px; bottom: -3px; height: 1px;
+  background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--verified) 70%, transparent) 0 3px, transparent 3px 5px);
+}
 .rw-app .cks > .cks-head .rb-mark.bad { color: var(--fault); }
 /* verified mark in the Details header (a verified known-good game) */
 /* checksum rows are a full-bleed block: each row fills the drawer body edge to
@@ -1035,10 +1062,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck.req .reqstat svg { width: 14px; height: 14px; color: var(--verified); }
 .rw-app .ck.req.bad .reqstat svg { color: var(--fault); }
 .rw-app .ck.req.bad dd { color: var(--fault); }
+/* a met requirement's value is sewn shut - sage stitches, matching the verdicts */
+.rw-app .ck.req:not(.bad) .ck-v {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
+  text-underline-offset: 4px;
+}
 /* the actual scratch-apply verdict, not a progress bar */
 .rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 600; }
 .rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
 .rw-app .dryrun-verdict.bad { color: var(--fault); }
+/* a passing dry run is sewn shut like the other ok verdicts */
+.rw-app .dryrun-verdict:not(.bad) {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
+  text-underline-offset: 4px;
+}
 /* the unified patch verdict line (top of the Checks body) - same accent verdict for every patch
    type, whether it was requirement-checked or dry-run validated */
 .rw-app .pverdict { padding: 8px 9px; }
@@ -1365,6 +1402,18 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .running .meter .fill::before, .rw-app .meter.live .fill::before { opacity: 1; }
 .rw-app .meter.indet .fill::before { opacity: 0; }
+/* the last pick: when the cloth reaches the fell (--scale hits 1) the shuttle
+   glows once and settles instead of vanishing mid-throw. Style query resolves
+   against the .fill (the ::before's originating element carries --scale);
+   where style queries aren't supported the shuttle just rides to unmount. */
+@container style(--scale: 1) {
+  .rw-app .meter:not(.indet) .fill::before { animation: shuttle-park 1.1s var(--ease) both; }
+}
+@keyframes shuttle-park {
+  0% { opacity: 1; }
+  45% { opacity: 1; box-shadow: 0 0 12px color-mix(in srgb, var(--shuttle) 90%, transparent); }
+  100% { opacity: 0; box-shadow: 0 0 0 transparent; }
+}
 .rw-app .meter.live .fill { transition: none; }
 .rw-app .meter.indet .fill { width: 32%; animation: indet 1.8s ease-in-out infinite; }
 .rw-app .prog { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -1425,6 +1474,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the result IS the download row now - the status + per-stage timings live up in
    the step header, so this is just the orange action button */
 .rw-app .result { margin-block-start: 2px; animation: drop-in .4s var(--ease); }
+/* cloth off the loom: when the download row lands, the shuttle makes one last
+   pass across it - a single cream sweep, then stillness. (.outcard is the live
+   output card; .result kept for the older markup.) */
+.rw-app .result .download-btn, .rw-app .outcard .download-btn { position: relative; overflow: clip; }
+.rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after {
+  content: ""; position: absolute; inset-block: 0; left: 0; width: 22%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--shuttle) 45%, transparent), transparent);
+  translate: -100% 0;
+  animation: shuttle-pass .8s ease-out .3s both;
+}
+@keyframes shuttle-pass { to { translate: 560% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after { animation: none; opacity: 0; }
+}
 /* the download button carries output size + delta on the left and the total
    time at the right. It prefers one line, but a long segment (e.g. trim's
    "N MB raw · N MB compressed") wraps onto additional lines and the button
