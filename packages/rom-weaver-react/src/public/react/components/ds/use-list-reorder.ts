@@ -59,6 +59,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   const flipTopsRef = useRef<Map<HTMLElement, number>>(new Map());
   const flipOnlyRef = useRef<HTMLElement | null>(null);
   const flipPendingRef = useRef(false);
+  const dragRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
   // Snap a row to its natural slot with no transition (the base `.file` transition
@@ -173,34 +174,37 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
     logger.trace("drag begin", { count, from });
-    setDrag({ dy: 0, from, to: from });
+    const next = { dy: 0, from, to: from };
+    dragRef.current = next;
+    setDrag(next);
   };
 
   const move = (event: ReactPointerEvent<HTMLElement>) => {
-    setDrag((current) => {
-      if (!current) return current;
-      const dy = event.clientY - startYRef.current;
-      const to = targetFor(current.from, dy);
-      if (to !== current.to) logger.trace("drag target", { from: current.from, to });
-      return { ...current, dy, to };
-    });
+    const current = dragRef.current;
+    if (!current) return;
+    const dy = event.clientY - startYRef.current;
+    const to = targetFor(current.from, dy);
+    if (to !== current.to) logger.trace("drag target", { from: current.from, to });
+    const next = { ...current, dy, to };
+    dragRef.current = next;
+    setDrag(next);
   };
 
   const finish = (commit: boolean) => (event: ReactPointerEvent<HTMLElement>) => {
     const element = event.currentTarget;
     if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
-    setDrag((current) => {
-      if (!current) return null;
-      if (commit && current.to !== current.from && current.to >= 0 && current.to < count) {
-        logger.debug("reorder commit", { from: current.from, to: current.to });
-        // Only the dragged row animates into place; the rest already shifted during the drag.
-        captureFlip(rowsRef.current.get(current.from) ?? null);
-        onReorder(current.from, current.to);
-      } else if (!commit) {
-        logger.trace("drag cancelled", { from: current.from });
-      }
-      return null;
-    });
+    const current = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    if (!current) return;
+    if (commit && current.to !== current.from && current.to >= 0 && current.to < count) {
+      logger.debug("reorder commit", { from: current.from, to: current.to });
+      // Only the dragged row animates into place; the rest already shifted during the drag.
+      captureFlip(rowsRef.current.get(current.from) ?? null);
+      onReorder(current.from, current.to);
+    } else if (!commit) {
+      logger.trace("drag cancelled", { from: current.from });
+    }
   };
 
   const handleKeyDown = (index: number) => (event: ReactKeyboardEvent<HTMLElement>) => {
