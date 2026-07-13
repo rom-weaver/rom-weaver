@@ -89,6 +89,14 @@ npm run test:browser
 npm run test:browser:webkit:smoke
 ```
 
+Tiered end-to-end checks:
+
+```bash
+mise run test-e2e-fast       # warm local/PR-equivalent gate
+mise run test-e2e-nightly    # exhaustive valid interactions + WebKit
+mise run test-e2e-ios        # generated archive corpus + HTTPS LAN server
+```
+
 See [`docs/mobile-safari-verification.md`](docs/mobile-safari-verification.md) for real iOS Safari,
 Xcode Simulator Safari, and WebKit verification steps.
 

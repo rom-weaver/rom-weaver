@@ -10,6 +10,13 @@ behavior.
 
 Use these checks from cheapest to most faithful:
 
+0. Fast local E2E gate (CLI, WASM, isolated Chromium files, and the real webapp
+   entry point run concurrently after the WASM build):
+
+   ```bash
+   mise run test-e2e-fast
+   ```
+
 1. Static compatibility:
 
    ```bash
@@ -50,18 +57,35 @@ Use these checks from cheapest to most faithful:
 
 6. Real iPhone or iPad Safari for final verification.
 
+The exhaustive valid codec/level/thread interaction matrix runs nightly and can
+also be started locally with:
+
+```bash
+mise run test-e2e-nightly
+```
+
 Cloud real-device providers are the CI option when a local device farm is not
 available. BrowserStack, Sauce Labs, and LambdaTest can run real iOS Safari; use
 a secure tunnel for local or staging builds.
 
 ## Real Device Setup
 
-Start the HTTPS dev server on the LAN:
+Generate the adversarial archive corpus and start the HTTPS dev server on the
+LAN:
 
 ```bash
-cd packages/rom-weaver-react
-npm run dev -- --host 0.0.0.0
+mise run test-e2e-ios
 ```
+
+To add known failing archives without committing or uploading them:
+
+```bash
+mise run test-e2e-ios -- --local-corpus /path/to/private/archives
+```
+
+Generated files and linked/copied private cases stay under the gitignored
+`target/e2e-corpus/` directory. The server exposes only files named by its
+corpus manifest.
 
 Open the printed `https://<mac-lan-ip>:5173/` URL on the iPhone or iPad. The
 origin must be HTTPS and trusted by iOS; plain LAN HTTP is not enough for this
@@ -74,7 +98,9 @@ For the full browser-worker matrix on real iOS Safari, open:
 https://<mac-lan-ip>:5173/mobile-safari-matrix.html
 ```
 
-Tap **Run full matrix**. The page runs in the device browser, creates a
+Tap **Run fast matrix** for format coverage, **Run exhaustive matrix** for every
+valid codec/level/thread interaction, or **Run archive stress** for the generated
+large-archive ladder. The page runs in the device browser, creates a
 temporary OPFS workspace, and exercises:
 
 - container round-trips for zip, 7z, chd, and z3ds
@@ -83,9 +109,49 @@ temporary OPFS workspace, and exercises:
   rar, pbp, gcz, wbfs, wia, tgc, nfs, rvz, and xiso
 - patch create/apply coverage for the patch registry, including direct apply
   fixtures for HDiffPatch, BSP, xdelta, and VCDIFF fixture paths
+- 200 MiB and 933 MiB 7z cases, high-ratio and incompressible archives,
+  thousands of entries, and three-level nesting
 
-Use **Copy report** after the run finishes and attach that JSON to Mobile Safari
-bug reports.
+Archive downloads stream directly into OPFS, so the harness does not first
+duplicate the entire input in the JavaScript heap. Each case validates output
+counts, sizes, and SHA-256 where available, then terminates its worker and
+removes its workspace. The stress profile stops on the first failure.
+
+The matrix requests a screen wake lock while a run is active, releases it when
+the run finishes, and reacquires it after the page returns to the foreground.
+iOS may still suspend the test if the browser is manually backgrounded.
+
+## Worker Lifetime on Mobile
+
+Each command uses a shared `WebAssembly.Memory`. On real iOS hardware, creating
+successive memories in one long-lived worker retained enough address-space
+reservations that the seventh command failed before WASM started. Reusing one
+memory across fresh WASI CLI instances was also invalid because allocator and
+process state cannot be restarted safely in the old heap.
+
+The workaround is deliberately limited to Apple mobile WebKit (all iPhone and
+iPad browsers): cap shared WASM memory at the existing 1 GiB mobile ceiling and
+terminate a worker after its command. Fresh workers still reuse the compiled
+`WebAssembly.Module`, browser asset cache, and OPFS data. There is no run-count
+threshold or delay because the WebAssembly API provides no explicit memory
+disposal operation.
+
+Android keeps worker reuse enabled. The retained-reservation failure is
+documented in WebKit, not Chromium/V8, and the reused-worker exhaustive matrix
+passes under Chromium. Android still uses the general 1 GiB mobile operation
+ceiling to prevent concurrent jobs from overcommitting device memory.
+
+References:
+
+- [WebKit shared WASM worker retention](https://bugs.webkit.org/show_bug.cgi?id=281657)
+- [WebKit iOS shared-memory OOM](https://bugs.webkit.org/show_bug.cgi?id=255103)
+- [WebAssembly `Memory` API](https://webassembly.github.io/spec/js-api/#memories)
+- [V8 shared-memory worker GC coverage](https://chromium.googlesource.com/v8/v8.git/+/refs/heads/main/test/mjsunit/wasm/shared-memory-worker-simple-gc.js)
+
+Use **Copy report** or **Download report** after the run finishes and attach that
+JSON to Mobile Safari bug reports. The active archive case is persisted before
+it starts; if iOS reloads or kills the tab, reopening the page records that case
+as interrupted instead of silently restarting it.
 
 Enable inspection:
 
