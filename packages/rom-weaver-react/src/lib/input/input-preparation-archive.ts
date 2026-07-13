@@ -322,6 +322,10 @@ const resolveArchiveInputFileByDescent = async (
     preferExternalFilePath: true,
   });
   extracted.fileName = fileName;
+  const extractTimeMs = output.timing?.elapsedMs;
+  if (typeof extractTimeMs === "number" && Number.isFinite(extractTimeMs)) {
+    (extracted as PatchFileInstance & { _extractTimeMs?: number })._extractTimeMs = Math.max(0, extractTimeMs);
+  }
   traceArchivePreparation(options, "input.archive.file.descent.finish", {
     compressionFormat,
     fileName,

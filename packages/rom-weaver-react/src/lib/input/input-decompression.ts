@@ -120,6 +120,11 @@ const getKnownDecompressionTimeMs = (entries: InputParentCompression[]): number 
   return found ? total : undefined;
 };
 
+const getActiveExtractTimeMs = (file: PatchFileInstance, fallbackMs: number): number => {
+  const reported = (file as PatchFileInstance & { _extractTimeMs?: number })._extractTimeMs;
+  return typeof reported === "number" && Number.isFinite(reported) ? reported : fallbackMs;
+};
+
 const getFileExtension = (fileName: string | undefined) => {
   const normalized = stripFileNameQuery(fileName || "");
   const index = normalized.lastIndexOf(".");
@@ -282,7 +287,7 @@ const resolveCompressedInputFile = async (
     });
     const startedAt = Date.now();
     const extracted = await resolveArchiveInput(current, role, options, runtime, selectedEntryName, sourceIndex);
-    const durationMs = Date.now() - startedAt;
+    const durationMs = getActiveExtractTimeMs(extracted, Date.now() - startedAt);
     traceInputDecompression(options, "input.decompression.after", {
       compressedIdentity,
       decompressionTimeMs: durationMs,
@@ -534,4 +539,4 @@ const resolveCompressedInputAssets = async (
 };
 
 export type { PreparedInputFileResult };
-export { resolveCompressedInputAssets, resolveCompressedInputFile };
+export { getActiveExtractTimeMs, resolveCompressedInputAssets, resolveCompressedInputFile };
