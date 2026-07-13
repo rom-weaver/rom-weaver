@@ -12,6 +12,8 @@
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the workspace layout,
 crate graph, threading model, and the Rust⇄TypeScript boundary.
+See [`docs/self-hosting.md`](docs/self-hosting.md) to deploy the webapp on a
+subdomain or alongside an existing site.
 
 ## Setup
 
