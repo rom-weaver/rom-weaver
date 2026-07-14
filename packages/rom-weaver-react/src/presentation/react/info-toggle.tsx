@@ -21,6 +21,7 @@ function InfoToggle({
   ariaLabel,
   children,
   className,
+  icon,
   panelClassName,
   portalPanel,
   title,
@@ -28,6 +29,7 @@ function InfoToggle({
   ariaLabel: string;
   children: ReactNode;
   className?: string;
+  icon?: ReactNode;
   panelClassName?: string;
   portalPanel?: boolean;
   title: string;
@@ -109,7 +111,7 @@ function InfoToggle({
         title={title}
         type="button"
       >
-        <Info aria-hidden="true" />
+        {icon ?? <Info aria-hidden="true" />}
       </button>
       {renderedPanel}
     </span>

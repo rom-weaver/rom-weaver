@@ -23,7 +23,7 @@ beforeEach(() => mockedList.mockReset());
 
 describe("useUnifiedApplyDrop", () => {
   it("routes an archive whose contents are a ROM to the ROM bucket", async () => {
-    mockedList.mockResolvedValue(["game.gba"]);
+    mockedList.mockResolvedValue(["disc.cue", "game.bin"]);
     const controller = makeController();
     const { result } = renderHook(() => useUnifiedApplyDrop(controller));
 
@@ -32,6 +32,7 @@ describe("useUnifiedApplyDrop", () => {
     expect(result.current.pendingDrops).toHaveLength(1);
     expect(result.current.pendingDrops[0]).toMatchObject({ extracting: true, kind: "patch", name: "bundle.zip" });
     await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledTimes(1));
+    expect(result.current.pendingDrops[0]).toMatchObject({ kind: "rom", sheet: "CUE" });
     await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
     expect(controller.provideRomInputFiles.mock.calls[0]?.[0].map((entry: File) => entry.name)).toEqual(["bundle.zip"]);
     expect(controller.providePatchInputFiles).not.toHaveBeenCalled();

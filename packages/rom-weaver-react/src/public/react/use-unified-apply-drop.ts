@@ -30,9 +30,10 @@ type PendingDrop = {
   kind: "patch" | "rom";
   manifest?: boolean;
   name: string;
+  sheet?: "CUE" | "GDI";
 };
 
-type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "manifest">>;
+type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "manifest" | "sheet">>;
 
 type UnifiedDropController = {
   provideRomInputFiles?: (files: File[]) => void;
@@ -90,7 +91,13 @@ const routeUnifiedDrop = async (
   );
   const archiveBuckets = archives.map((archive, index) => classifyArchiveBucket(archive, archiveEntries[index] || []));
   archives.forEach((archive, index) => {
-    onPendingUpdate?.(archive, { entryCount: archiveEntries[index]?.length || 0, kind: archiveBuckets[index] });
+    const names = archiveEntries[index] || [];
+    const sheet = names.some((name) => /\.cue$/i.test(name))
+      ? "CUE"
+      : names.some((name) => /\.gdi$/i.test(name))
+        ? "GDI"
+        : undefined;
+    onPendingUpdate?.(archive, { entryCount: names.length, kind: archiveBuckets[index], sheet });
   });
   // Yield one task so React can paint the newly learned shape before routing
   // replaces the placeholder. This does not wait on a timer interval.

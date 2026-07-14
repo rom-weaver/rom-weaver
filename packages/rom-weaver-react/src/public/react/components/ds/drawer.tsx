@@ -33,6 +33,7 @@ const DrawerMark = ({
 );
 
 const Drawer = ({
+  action,
   label,
   labelIcon,
   readouts,
@@ -43,6 +44,8 @@ const Drawer = ({
   bodyClassName = "ckrows",
   children,
 }: {
+  /** Independent trailing control, rendered beside rather than inside the drawer toggle. */
+  action?: ReactNode;
   label: ReactNode;
   /** Optional icon inside the label (e.g. the options "tune" glyph). */
   labelIcon?: ReactNode;
@@ -74,6 +77,7 @@ const Drawer = ({
         </span>
         {readouts ? <span className="readouts">{readouts}</span> : null}
       </button>
+      {action ? <span className="drawer-action">{action}</span> : null}
       <div className="cks-body" id={bodyId}>
         <div className="cks-inner">
           <div className={bodyClassName}>{children}</div>

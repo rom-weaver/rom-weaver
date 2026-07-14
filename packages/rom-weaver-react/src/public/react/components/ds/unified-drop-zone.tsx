@@ -90,41 +90,38 @@ const UnifiedDropZone = ({
         ) : null}
       </InfoPopover>
     ) : undefined;
+  const heroLead = big ? (
+    <div className="hero-lead">
+      <span className="lead-title">
+        <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
+        <span className="lead-line">
+          {localizer.message(lead.line2)} <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>.
+        </span>
+      </span>
+      <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
+    </div>
+  ) : undefined;
   return (
-    <>
-      {/* the empty page opens with the product thesis, above the 0x01 step */}
-      {big ? (
-        <div className="hero-lead">
-          <span className="lead-title">
-            <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
-            <span className="lead-line">
-              {localizer.message(lead.line2)} <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>
-              .
-            </span>
-          </span>
-          <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
-        </div>
-      ) : null}
-      <StepSection
-        className={big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"}
-        info={popover}
-        num={num}
-        title={title}
-      >
-        <DropZone
-          {...dropZoneProps}
-          bare
-          formats={formats}
-          hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
-          label={big ? heroLabel : addLabel}
-          labelCoarse={big ? heroLabelCoarse : undefined}
-          multiple
-          onDropStart={onDropStart}
-          onFiles={emit}
-        />
-        {afterDropZone}
-      </StepSection>
-    </>
+    <StepSection
+      className={big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"}
+      info={popover}
+      num={num}
+      title={title}
+    >
+      <DropZone
+        {...dropZoneProps}
+        bare
+        formats={formats}
+        hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
+        label={big ? heroLabel : addLabel}
+        labelCoarse={big ? heroLabelCoarse : undefined}
+        lead={heroLead}
+        multiple
+        onDropStart={onDropStart}
+        onFiles={emit}
+      />
+      {afterDropZone}
+    </StepSection>
   );
 };
 

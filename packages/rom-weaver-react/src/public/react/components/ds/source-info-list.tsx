@@ -98,12 +98,12 @@ const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: Checksu
         return (
           <div className="ck-group" key={variant.id}>
             <div className="ck-group-head">{variant.label}</div>
-            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
             {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
               const value = variant.checksums?.[algorithm] || "";
               if (!value) return null;
               return <ChecksumRow key={algorithm} label={algorithmLabel} value={value} />;
             })}
+            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
           </div>
         );
       })}
@@ -158,10 +158,10 @@ const SourceInfoList = ({
   const baseGroupLabel = "Unchanged";
   const baseRows = (
     <>
-      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
       <ChecksumRow label="CRC32" value={checksums?.crc32 || ""} />
       <ChecksumRow label="MD5" value={checksums?.md5 || ""} />
       <ChecksumRow label="SHA-1" value={checksums?.sha1 || ""} />
+      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
     </>
   );
   return (
@@ -227,10 +227,10 @@ const DiscTracksPanel = ({
               {track.timing ? <span className="t"> {track.timing}</span> : null}
             </div>
             {track.progress ? <FileProgress {...track.progress} /> : null}
-            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
             {track.checksums?.crc32 ? <ChecksumRow label="CRC32" value={track.checksums.crc32} /> : null}
             {track.checksums?.md5 ? <ChecksumRow label="MD5" value={track.checksums.md5} /> : null}
             {track.checksums?.sha1 ? <ChecksumRow label="SHA-1" value={track.checksums.sha1} /> : null}
+            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
           </div>
         );
       })}

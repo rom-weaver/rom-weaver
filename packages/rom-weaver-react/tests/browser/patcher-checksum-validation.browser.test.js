@@ -226,15 +226,16 @@ test("source-check patch formats report runtime patch validation success", async
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(patchPath));
 
     // BPS/UPS declare embedded requirements, so the card renders a Checks drawer
-    // carrying the pass mark (requirement-less patches carry it on Options instead).
+    // carrying the clickable dry-apply success control (requirement-less patches
+    // carry it on Options instead).
     const validation = await waitForState(() => {
       const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
       if (!(element instanceof HTMLElement)) return null;
-      return element.querySelector(".cks-match:not(.bad)") ? element : null;
+      return element.querySelector(".dry-apply-info .info-btn") ? element : null;
     }, 60000);
     expect(validation).toBeInstanceOf(HTMLElement);
     expect(validation.textContent).toContain("Checks");
-    expect(validation.querySelector(".optsblock .cks-match")).toBeNull();
+    expect(validation.querySelector(".optsblock .dry-apply-info")).toBeNull();
   }
 });
 

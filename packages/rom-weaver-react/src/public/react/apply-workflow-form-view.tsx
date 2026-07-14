@@ -122,12 +122,21 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
         <span />
       </Drawer>
     ) : null}
-    <Drawer
-      bodyClassName={drop.kind === "patch" ? "optsbody" : "ckrows"}
-      label={drop.kind === "patch" ? "Options" : "Checks"}
-    >
-      <span />
-    </Drawer>
+    {drop.kind === "patch" ? (
+      <Drawer bodyClassName="optsbody" label="Options">
+        <span />
+      </Drawer>
+    ) : null}
+    {drop.kind === "rom" && drop.sheet ? (
+      <Drawer className="cue rw-cue-section" label={drop.sheet}>
+        <span />
+      </Drawer>
+    ) : null}
+    {drop.kind === "rom" ? (
+      <Drawer bodyClassName="ckrows" label="Checks">
+        <span />
+      </Drawer>
+    ) : null}
   </FileCard>
 );
 
@@ -363,16 +372,17 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
     {
       id: "raw",
       rows: [
-        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
         { label: "CRC32", length: 8 },
         { label: "MD5", length: 32 },
         { label: "SHA-1", length: 40 },
+        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
       ],
     },
   ];
   return {
     card: {
       extract: {
+        always: staging && romInput.info.validationPhase === "extract",
         fileName: romInput.info.fileName,
         fileSize: romBytes,
         legacyFileClassName: "rom-weaver-input-stack-file",

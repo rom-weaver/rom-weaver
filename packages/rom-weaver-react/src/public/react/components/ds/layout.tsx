@@ -68,6 +68,7 @@ const InfoPopover = ({ title = "More info", children }: { title?: string; childr
  * the compact variant is the add-more row.
  */
 const DropZone = ({
+  lead,
   label,
   labelCoarse,
   hint,
@@ -84,6 +85,8 @@ const DropZone = ({
   id,
   inputId,
 }: {
+  /** Intro content rendered inside the hero drop surface. */
+  lead?: ReactNode;
   label: ReactNode;
   /** Touch-device label shown instead of `label` on coarse pointers. */
   labelCoarse?: ReactNode;
@@ -162,6 +165,7 @@ const DropZone = ({
         });
       }}
     >
+      {lead}
       <span className={join("main", !big && "btnish")}>
         {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
         {reading ? (

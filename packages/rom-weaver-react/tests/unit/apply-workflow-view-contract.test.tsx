@@ -119,10 +119,53 @@ describe("apply workflow view - empty bench", () => {
     expect(card?.textContent).toContain("Identifying");
     expect(card?.textContent).toContain("Extract");
     expect(card?.textContent).toContain("Options");
+    expect(card?.textContent).not.toContain("Checks");
+  });
+
+  it("previews the disc sheet drawer when archive listing finds one", () => {
+    const { container } = renderView({
+      pendingDrops: [{ extracting: true, id: "pending-1", kind: "rom", name: "disc.zip", sheet: "CUE" }],
+      ui: createEmptyPatcherUiState(),
+    });
+    const labels = Array.from(container.querySelectorAll(".rw-pending .cks-head .lab")).map((el) => el.textContent);
+    expect(labels).toEqual(["Extract", "CUE", "Checks"]);
   });
 });
 
 describe("apply workflow view - staged bench", () => {
+  it("keeps likely drawers visible while ROMs and patches are still staging", () => {
+    const rom = romRow("game.zip");
+    rom.info.validationPhase = "extract";
+    rom.progress = { label: "Extracting game.zip", percent: 20 } as RomInputRowState["progress"];
+    const patch = patchItem("change.zip");
+    patch.progress = { label: "Extracting change.zip", percent: 20 } as PatchStackItemState["progress"];
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ patches: [patch], ui });
+
+    const romLabels = Array.from(
+      container.querySelectorAll("#rom-weaver-list-input-stack .cks-head .lab"),
+    ).map((el) => el.textContent);
+    expect(romLabels).toEqual(["Extract", "Checks"]);
+
+    const patchLabels = Array.from(
+      container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
+    ).map((el) => el.textContent);
+    expect(patchLabels).toEqual(["Extract", "Options"]);
+  });
+
+  it("keeps Checks on a staging patch once real requirements are known", () => {
+    const patch = patchItem("change.bps");
+    patch.format = "BPS";
+    patch.progress = { label: "Reading change.bps", percent: 80 } as PatchStackItemState["progress"];
+    patch.validationValues = ["in crc32=C6FB1252", "out crc32=12345678"];
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ patches: [patch], ui });
+    const patchLabels = Array.from(
+      container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
+    ).map((el) => el.textContent);
+    expect(patchLabels).toEqual(["Options", "Checks"]);
+  });
+
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ patches: [patchItem("change.ips")], ui });

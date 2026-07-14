@@ -42,7 +42,7 @@ const ChecksumRow = ({
       type="button"
     >
       <span className="ck-k">{label}</span>
-      <span className={join("ck-v", fit && "ck-fit")}>{value}</span>
+      <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
       <span aria-hidden="true" className={join("copy", copied && "copied")}>
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </span>
@@ -70,6 +70,7 @@ const PendingChecksumRow = ({ label, length }: { label: ReactNode; length: numbe
 
 /** Collapsible container for checksum rows with a summary label, timing, and optional verdict. */
 const ChecksumList = ({
+  action,
   label,
   timing,
   match,
@@ -79,8 +80,10 @@ const ChecksumList = ({
   open,
   onToggle,
   lead,
+  bodyClassName,
   children,
 }: {
+  action?: ReactNode;
   label: ReactNode;
   timing?: ReactNode;
   match?: { ok: boolean; label: ReactNode };
@@ -92,9 +95,12 @@ const ChecksumList = ({
   open?: boolean;
   onToggle?: (open: boolean) => void;
   lead?: ReactNode;
+  bodyClassName?: string;
   children: ReactNode;
 }) => (
   <Drawer
+    action={action}
+    bodyClassName={bodyClassName}
     defaultOpen={defaultOpen}
     label={label}
     onToggle={onToggle}

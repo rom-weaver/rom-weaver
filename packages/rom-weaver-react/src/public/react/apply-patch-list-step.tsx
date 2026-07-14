@@ -3,6 +3,7 @@ import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useState } from "react";
+import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
@@ -58,6 +59,7 @@ const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: No
 const getPatchVerificationRows = (item: PatchStackItemState) => {
   const inputRows: Array<{ label: string; value: string }> = [];
   const outputRows: Array<{ label: string; value: string }> = [];
+  const xdeltaSizeOnly = item.validationValues.some((entry) => /^in min size=/i.test(entry));
   for (const entry of item.validationValues) {
     const separatorIndex = entry.indexOf("=");
     if (separatorIndex === -1) {
@@ -70,14 +72,32 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
     const rawLabel = entry.slice(0, separatorIndex).trim().toLowerCase();
     const value = entry.slice(separatorIndex + 1).trim();
     if (!value) continue;
+    if (xdeltaSizeOnly && (rawLabel === "in min size" || rawLabel === "out size")) continue;
     if (PATCH_INPUT_VERIFICATION_LABELS[rawLabel]) {
       inputRows.push({ label: PATCH_INPUT_VERIFICATION_LABELS[rawLabel], value });
       continue;
     }
     outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
   }
-  return { inputRows, outputRows };
+  const bytesLast = (rows: typeof inputRows) =>
+    rows.slice().sort((left, right) => Number(left.label === "BYTES") - Number(right.label === "BYTES"));
+  return { inputRows: bytesLast(inputRows), outputRows: bytesLast(outputRows) };
 };
+
+const DryApplySuccess = () => (
+  <InfoToggle
+    ariaLabel="Dry apply passed"
+    className="dry-apply-info"
+    icon={<Check aria-hidden="true" />}
+    panelClassName="dry-apply-pop"
+    portalPanel
+    title="Dry apply passed"
+  >
+    <strong>Dry apply passed</strong>
+    <p>rom-weaver successfully applied this patch to a temporary copy of the current input.</p>
+    <p>The real output has not been created yet.</p>
+  </InfoToggle>
+);
 
 /** Read-only Checks drawer for a patch that declares real requirements: the
  * INPUT / OUTPUT rows it will verify, with the dry-run verdict + timing riding
@@ -91,11 +111,17 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   const bad = item.validationState === "invalid";
   const ok = item.validationState === "valid";
   const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
+  const compact =
+    inputRows.length > 0 &&
+    outputRows.length > 0 &&
+    [...inputRows, ...outputRows].every((row) => String(row.value).length < 16);
   return (
     <ChecksumList
+      action={ok ? <DryApplySuccess /> : undefined}
+      bodyClassName={compact ? "ckrows patch-check-columns" : undefined}
       defaultOpen
       label="Checks"
-      match={match}
+      match={ok ? undefined : match}
       timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
       verifying={verifying}
     >
@@ -219,6 +245,7 @@ const PatchOptions = ({
   const timing = showVerdict && !disabled ? CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks") : undefined;
   return (
     <Drawer
+      action={ok ? <DryApplySuccess /> : undefined}
       bodyClassName="optsbody"
       className="optsblock"
       label="Options"
@@ -230,13 +257,9 @@ const PatchOptions = ({
           ) : (
             <>
               {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
-              {ok || bad ? (
-                <DrawerMark
-                  className={ok ? "cks-match" : "cks-match bad"}
-                  ok={ok}
-                  title={ok ? "Verified" : "Verification failed"}
-                >
-                  {ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+              {bad ? (
+                <DrawerMark className="cks-match bad" ok={false} title="Verification failed">
+                  <X aria-hidden="true" />
                 </DrawerMark>
               ) : null}
             </>
@@ -633,7 +656,7 @@ const ApplyPatchListStep = ({
                   ) : null}
                   {isDisabled ? null : (
                     <ExtractDrawer
-                      always={!!manifestMeta?.[index]}
+                      always={!!manifestMeta?.[index] || (staging && patchExtracting)}
                       fileName={item.fileName}
                       fileSize={item.fileSize}
                       parentCompressions={item.archivePathEntries}
