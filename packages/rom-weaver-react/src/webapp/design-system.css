@@ -63,7 +63,10 @@
   /* deep enough that badge-sized text clears 4.5:1 on every light surface
      (was #c2410c - 4.42:1 on the --well chips, just under) */
   --thread-text: #b03a0a;
-  --verified: #047857;
+  /* deep enough that verified-green text clears 4.5:1 on the green-tinted light
+     surfaces - the built-in checksum inputs in the patch Options drawer (was
+     #047857 - 4.29:1 on the .popt-input[readonly] tint) */
+  --verified: #04684e;
   /* deep enough that fault-card titles/codes clear 4.5:1 on the pink-tinted
      light surfaces (was #dc2626 - 4.41:1 on the fault card) */
   --fault: #b91c1c;
@@ -899,7 +902,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .drawer-action .info { font-size: 1rem; }
 .rw-app .drawer-action .info-btn {
-  width: 22px; height: 22px; color: var(--verified); border-radius: 4px;
+  /* 24px floor keeps the tap target at WCAG 2.2 SC 2.5.8 minimum (the glyph
+     stays 1em, centred) */
+  width: 24px; height: 24px; color: var(--verified); border-radius: 4px;
   transition: color .15s, transform .12s;
 }
 .rw-app .drawer-action .info-btn::before {
@@ -1041,8 +1046,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    container, so the negative end-margin would only shift, not extend, the row).
    The drawer border frames the sides. Verification rows keep their inset. */
 .rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
-/* rows touch: overlap the shared edge so adjacent borders read as one hairline */
-.rw-app .ck:not(.req) + .ck:not(.req) { margin-block-start: -1px; }
+/* rows touch and read as one hairline: instead of overlapping by -1px (which
+   made each 24px-tall copy target partially obscure its neighbour and trip WCAG
+   2.2 SC 2.5.8 Target Size), drop the duplicate top border so only the row
+   above's bottom border draws the seam - no overlap, same single hairline. */
+.rw-app .ck:not(.req) + .ck:not(.req) { border-block-start-color: transparent; }
 /* the whole row is a copy button - ON TOUCH, block text selection / the iOS
    callout so tapping the hash fires a clean click instead of starting a
    selection. Mouse/keyboard users keep normal select-to-copy. */
