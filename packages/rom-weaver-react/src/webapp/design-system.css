@@ -1621,7 +1621,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   margin-inline: auto;
   padding: 7px 0 max(7px, env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--plate) 88%, transparent);
-  border: 1px solid var(--seam);
+  border: 1px solid var(--seam); border-block-end: 0;
   border-radius: var(--r-l) var(--r-l) 0 0;
   font-size: .82rem; color: var(--ink-3);
 }
