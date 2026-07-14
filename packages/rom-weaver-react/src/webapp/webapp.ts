@@ -8,7 +8,7 @@ import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { beginOpfsCleanupGate, markOpfsCleanupSettled } from "../storage/browser/opfs-cleanup-gate.ts";
 import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
-import { APP_BUILD_VERSION } from "./build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { HOST_INGEST_ROOT_ENTRY } from "./host-ingest.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
@@ -24,7 +24,7 @@ import {
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readWorkflowViewFromHash } from "./webapp-controller.ts";
-import { selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
+import { resolveWorkerThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
@@ -347,7 +347,6 @@ const renderWebappRoot = (): undefined => {
               field as Parameters<typeof webappController.updateDraftSetting>[0],
               value,
             ),
-          onLanguageChange: (language) => webappController.setLanguage(language),
           onLogLevelChange: (level) => webappController.setLogLevel(level),
           onOpenSettings: () => webappController.openSettings(),
           onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
@@ -415,7 +414,16 @@ const initializeWebapp = () => {
   if (webappRootInitialized) return;
   webappRootInitialized = true;
 
-  logger.info("Initializing webapp", { config: appConfig, version: APP_BUILD_VERSION });
+  logger.info("Initializing webapp", {
+    branch: GIT_BRANCH,
+    buildVersion: APP_BUILD_VERSION,
+    commit: COMMIT_HASH,
+    config: appConfig,
+    dirty: !!DIRTY_HASH,
+    dirtyHash: DIRTY_HASH || undefined,
+    version: APP_VERSION,
+    workerThreads: resolveWorkerThreads(webappController.getState().settings.workerThreads),
+  });
 
   serviceWorkerClient.refreshCacheVersion();
   webappController.setStartupState("loading");

@@ -185,6 +185,7 @@
 /* ═══ masthead ═══ */
 .rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.rw-app .brand-copy { display: contents; }
 .rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
@@ -232,7 +233,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .mode svg { width: 1rem; height: 1rem; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
 .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
-
 .rw-app .tools-subnav { padding: 10px var(--pad); border-block-end: 1px solid var(--seam-soft); background: var(--plate-2); }
 .rw-app .tools-subnav-rail { display: flex; gap: 6px; }
 .rw-app .tools-subnav-tab {
@@ -243,6 +243,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: 7px; }
+.rw-app .masthead-version,
+.rw-app .masthead-tools .masthead-mobile-tool { display: none; }
 .rw-app .tool {
   appearance: none; cursor: pointer; width: 36px; height: 36px; display: grid; place-items: center;
   border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--well); color: var(--ink-2);
@@ -251,6 +253,18 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tool:hover { color: var(--ink); border-color: var(--seam-strong); transform: translateY(-1px); }
 .rw-app .tool:active { transform: translateY(0); }
 .rw-app .tool svg { width: 17px; height: 17px; }
+.rw-app .build-version-info { min-width: 0; font-size: inherit; }
+.rw-app .build-version-info .info-btn {
+  width: auto; height: auto; min-width: 0; font: inherit; color: inherit;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.rw-app .build-version-info .info-btn:hover { color: var(--thread-text); }
+.rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-app .build-version-pop { width: min(360px, calc(100vw - 24px)); }
+.rw-app .build-version-details { display: grid; gap: 7px; margin: 0; }
+.rw-app .build-version-details > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
+.rw-app .build-version-details dt { color: var(--ink-3); }
+.rw-app .build-version-details dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 /* visible tool labels only where the masthead has room to spare - below that
    the buttons stay icon-only squares and the title/aria-label carries the name */
 .rw-app .tool-text { display: none; font-size: .72rem; font-weight: 650; letter-spacing: .04em; }
@@ -258,11 +272,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   .rw-app .tool:has(.tool-text) { width: auto; padding-inline: 11px; gap: 6px; grid-auto-flow: column; }
   .rw-app .tool-text { display: inline; }
 }
-.rw-app .language-tool { position: relative; overflow: hidden; }
-.rw-app .language-tool select {
-  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
-}
-.rw-app .language-tool:focus-within { color: var(--ink); border-color: var(--seam-strong); outline: 2px solid var(--thread); outline-offset: 2px; }
 /* sun/moon cross-morph */
 .rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }
 :root[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
@@ -312,6 +321,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
 .rw-app .updates-ver:hover { color: var(--thread-text); }
+.rw-app .updates-ver-mobile { display: none; }
 .rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .rw-app .changelog-item { display: flex; flex-direction: column; gap: 2px; }
 .rw-app .changelog-subject { font-size: .9rem; }
@@ -406,6 +416,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* a touch more air above each section so straddling controls (the create-mode
    swap hinge) have room to breathe */
 .rw-app .step-head { display: flex; align-items: baseline; gap: 10px; padding: var(--step-pt) var(--pad) 2px; position: relative; }
+.rw-app .step-head-action { display: none; }
 .rw-app .step-num { font-size: .9rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
 .rw-app .step.is-woven .step-num { color: var(--thread-text); }
 .rw-app .step.is-fault .step-num { color: var(--fault); }
@@ -655,6 +666,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    right) so it reads as the card it becomes. The steps recede progressively.
    Purely decorative. */
 .rw-app .ghost-steps { pointer-events: none; user-select: none; }
+.rw-app .ghost-next { display: none; }
 .rw-app .ghost-step { border-block-start: 1px solid var(--seam-soft); }
 /* head + body borrow the real .step-head / .step-body rhythm so the ghost
    rows line up with the live steps they precede */
@@ -1164,9 +1176,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    always the same height as that text (default to a small-label size; step heads
    match the uppercase title) */
 .rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
-/* sit the "i" right against the heading it documents (tighten the step-head's
-   uniform gap) while staying vertically centered with the title */
-.rw-app .step-head .info { margin-inline-start: -8px; font-size: .76rem; }
+/* headings, settings labels, and output labels all leave the same 8px before
+   the toggle; the control's invisible hit target does not affect that rhythm */
+.rw-app .step-head .info { margin-inline-start: 0; font-size: .76rem; }
 .rw-app .info-btn {
   position: relative; appearance: none; cursor: pointer; width: 1em; height: 1em; padding: 0;
   border: 0; background: none; color: var(--ink-4);
@@ -1395,7 +1407,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
 @media (max-width: 820px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
 .rw-app .ofld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.rw-app .ofld-l { display: inline-flex; align-items: center; gap: 6px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.rw-app .ofld-l { display: inline-flex; align-items: center; gap: 8px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
 /* toggles are weighted, recessed rows - same well language as the task/ck rows */
 .rw-app .optschecks { display: flex; flex-direction: column; gap: 6px; }
@@ -1858,21 +1870,45 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
    transition, and mode switches keep their intentional flat crossfade. */
 .rw-app #rom-weaver-row-unified-drop { view-transition-name: vt-drop-apply; }
 .rw-app #patch-builder-row-unified-drop { view-transition-name: vt-drop-create; }
-html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; }
+.rw-app #trim-builder-row-unified-drop { view-transition-name: vt-drop-trim; }
+.rw-app .drop:has(#tools-input-picker) { view-transition-name: vt-drop-tools; }
+.rw-app .unified-drop-step:has(#rom-weaver-row-unified-drop) > .step-head { view-transition-name: vt-input-head-apply; }
+.rw-app .unified-drop-step:has(#patch-builder-row-unified-drop) > .step-head { view-transition-name: vt-input-head-create; }
+.rw-app .unified-drop-step:has(#trim-builder-row-unified-drop) > .step-head { view-transition-name: vt-input-head-trim; }
+.rw-app .unified-drop-step:has(#tools-input-picker) > .step-head { view-transition-name: vt-input-head-tools; }
+html.vt-theme .unified-drop-step .drop,
+html.vt-theme .unified-drop-step .step-head { view-transition-name: none !important; }
 /* the drop morph must read as a deliberate snap, not lag: quicker box travel
    than the ambient crossfade, and the old face cuts fast so the shrinking
    snapshot text never smears through the ride */
-::view-transition-group(vt-drop-apply), ::view-transition-group(vt-drop-create) {
+::view-transition-group(vt-drop-apply), ::view-transition-group(vt-drop-create),
+::view-transition-group(vt-drop-trim), ::view-transition-group(vt-drop-tools) {
   animation-duration: .2s; animation-timing-function: cubic-bezier(.3, .8, .2, 1);
 }
-::view-transition-old(vt-drop-apply), ::view-transition-old(vt-drop-create) {
+::view-transition-old(vt-drop-apply), ::view-transition-old(vt-drop-create),
+::view-transition-old(vt-drop-trim), ::view-transition-old(vt-drop-tools) {
   animation: vt-drop-out .1s ease both;
 }
-::view-transition-new(vt-drop-apply), ::view-transition-new(vt-drop-create) {
+::view-transition-new(vt-drop-apply), ::view-transition-new(vt-drop-create),
+::view-transition-new(vt-drop-trim), ::view-transition-new(vt-drop-tools) {
   animation: vt-drop-in .12s ease .07s both;
+}
+::view-transition-group(vt-input-head-apply), ::view-transition-group(vt-input-head-create),
+::view-transition-group(vt-input-head-trim), ::view-transition-group(vt-input-head-tools) {
+  animation-duration: .2s; animation-timing-function: cubic-bezier(.3, .8, .2, 1);
+}
+::view-transition-old(vt-input-head-apply), ::view-transition-old(vt-input-head-create),
+::view-transition-old(vt-input-head-trim), ::view-transition-old(vt-input-head-tools) {
+  animation: vt-input-head-out .2s linear both;
+}
+::view-transition-new(vt-input-head-apply), ::view-transition-new(vt-input-head-create),
+::view-transition-new(vt-input-head-trim), ::view-transition-new(vt-input-head-tools) {
+  animation: vt-input-head-in .06s ease .14s both;
 }
 @keyframes vt-drop-out { to { opacity: 0; } }
 @keyframes vt-drop-in { from { opacity: 0; } }
+@keyframes vt-input-head-out { 0%, 72% { opacity: 1; } to { opacity: 0; } }
+@keyframes vt-input-head-in { from { opacity: 0; } }
 /* while a scenario view transition runs, the morph IS the animation - suppress
    the entry keyframes so cards/panels don't replay card-in underneath it */
 .vt-quiet .card:not(.pending-card), .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
@@ -2089,6 +2125,12 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
 @media (prefers-reduced-motion: reduce) {
   .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .rw-app .meter.indet .fill { margin-inline-start: 0; width: 100%; opacity: .55; }
+  ::view-transition-group(vt-drop-apply), ::view-transition-group(vt-drop-create),
+  ::view-transition-group(vt-drop-trim), ::view-transition-group(vt-drop-tools),
+  ::view-transition-group(vt-input-head-apply), ::view-transition-group(vt-input-head-create),
+  ::view-transition-group(vt-input-head-trim), ::view-transition-group(vt-input-head-tools) {
+    animation-duration: .01ms !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2118,6 +2160,13 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
 .rw-app .mh-sp { flex: 1 1 auto; }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
+.rw-modal.changelog-modal .changelog-version {
+  padding-block: 2px 9px;
+  overflow-wrap: anywhere;
+  font-size: .8rem;
+  text-align: start;
+}
 /* settings is the longest dialog - let it use most of the viewport height */
 .rw-modal.settings-modal .rw-modal-card { width: min(820px, 100%); max-height: min(94dvh, 1020px); }
 /* the archive/candidate picker can list long nested paths - let it use the
@@ -2350,7 +2399,389 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
    keep their hairlines, cards their wells - depth lives one level down. */
 .rw-app .panel.workflow { margin-block-start: 6px; }
 .rw-app .panel.workflow .step:last-child { padding-block-end: 4px; }
+/* Section rails belong to the workflow rather than to a breakpoint. Keep the
+   numbered stages and compact add-files row visually consistent on desktop
+   and mobile; only the surrounding navigation shell changes for phones. */
+.rw-app .panel.workflow .step,
+.rw-app .panel.workflow .ghost-step {
+  border: 0;
+  background: transparent;
+}
+
+.rw-app .panel.workflow .step > .step-head,
+.rw-app .panel.workflow .ghost-step > .ghost-step-head {
+  min-height: 38px;
+  padding: 0 9px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-inline-start: 3px solid var(--thread);
+  border-block-end: 1px solid var(--seam-strong);
+  border-radius: 0;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--thread) 6%, transparent), transparent 58%);
+}
+
+.rw-app .panel.workflow .unified-drop-step .drop:not(.hero) {
+  min-height: 64px;
+  padding-block: 12px;
+}
 /* phones keep the edge-to-edge bleed the plate used to carry */
 @media (max-width: 560px) {
   .rw-app .panel.workflow { margin-block-start: 2px; margin-inline: -8px; }
+}
+
+/* ═══ mobile-forward prototype ═══
+   On a phone the workflow rail becomes a persistent thumb-reachable shuttle
+   dock, while the utility controls trade cryptic icon-only squares for a
+   labeled control shelf. The workflow components themselves stay untouched,
+   so Apply/Create/Trim/Tools keep the same state and behavior as desktop. */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  :root:has(.rw-app) {
+    scroll-padding-block-end: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .rw-app {
+    --ctl: 48px;
+    --mobile-input-head-h: 38px;
+    --mobile-shuttle-h: 70px;
+    padding-block-end: calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom));
+  }
+
+  .rw-app .masthead {
+    display: grid;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, 201px);
+    grid-template-areas: "brand tools";
+    align-items: center;
+    gap: 8px;
+    padding-block: 5px 6px;
+  }
+
+  .rw-app .brand {
+    grid-area: brand;
+    justify-self: start;
+    gap: 7px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .rw-app .brand-mark { width: 34px; height: 34px; }
+  .rw-app .brand-word { font-size: .96rem; }
+
+  .rw-app .brand-copy {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .rw-app .masthead-version {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    color: var(--ink-3);
+    font-size: .56rem;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .rw-app .masthead-threads { flex: none; }
+
+  .rw-app .masthead-tools {
+    grid-area: tools;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    justify-content: end;
+    min-width: 0;
+    width: 100%;
+    gap: 3px;
+    margin: 0;
+  }
+
+  .rw-app .tool,
+  .rw-app .tool:has(.tool-text) {
+    position: relative;
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    padding: 3px 2px;
+    display: grid;
+    grid-template: 14px minmax(0, 1fr) / minmax(0, 1fr);
+    place-items: center;
+    gap: 2px;
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .tool:hover { transform: none; }
+  .rw-app .tool:active { background: var(--plate-2); }
+  .rw-app .tool svg,
+  .rw-app .tool .ico-sun,
+  .rw-app .tool .ico-moon {
+    grid-area: 1 / 1;
+    width: 13px;
+    height: 13px;
+  }
+
+  .rw-app .tool-text {
+    display: block;
+    grid-area: 2 / 1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .52rem;
+    line-height: 1.1;
+    letter-spacing: .02em;
+  }
+
+  .rw-app .masthead-tools .tool-text { display: none; }
+  .rw-app .masthead-tools .tool,
+  .rw-app .masthead-tools .tool:has(.tool-text) { grid-template: minmax(0, 1fr) / minmax(0, 1fr); padding: 0; }
+
+  .rw-app .masthead-tools .masthead-mobile-tool { display: grid; }
+  .rw-app .masthead-donate { color: var(--thread-text); }
+
+  .rw-app .updates {
+    gap: 6px;
+    min-height: 44px;
+    padding: 6px 8px;
+  }
+
+  .rw-app .updates-pulse { width: 6px; height: 6px; }
+  .rw-app .updates-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    font-size: .78rem;
+  }
+
+  .rw-app .updates-ver { margin-inline-start: 0; font-size: .7rem; }
+  .rw-app .updates-ver-full { display: none; }
+  .rw-app .updates-ver-mobile { display: inline; }
+  .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
+  .rw-app .updates .banner-x { width: 28px; height: 32px; }
+
+  .rw-app .app > .reveal:has(> .update-ready) {
+    position: fixed;
+    z-index: 46;
+    inset-inline: 10px;
+    bottom: calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom) + 8px);
+    margin: 0;
+  }
+
+  .rw-app .update-ready {
+    width: min(100%, 420px);
+    min-height: 38px;
+    margin-inline: auto;
+    background: var(--plate);
+    box-shadow: 0 10px 28px -14px rgb(0 0 0 / .8);
+  }
+
+  .rw-app .modes {
+    position: fixed;
+    z-index: 45;
+    inset: auto 0 0;
+    order: initial;
+    width: 100%;
+    margin: 0;
+    padding: 7px max(10px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--chassis) 82%, transparent);
+    border-block-start: 1px solid var(--seam-strong);
+    box-shadow: 0 -12px 28px -22px rgb(0 0 0 / .8);
+    backdrop-filter: blur(14px);
+  }
+
+  .rw-app .mode-rail {
+    display: flex;
+    width: min(100%, 520px);
+    min-height: 48px;
+    margin-inline: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .rw-app .mode-thumb {
+    inset-block: 0;
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .mode {
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 4px;
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    line-height: 1;
+  }
+
+  .rw-app .mode svg { width: 19px; height: 19px; }
+  .rw-app .mode span:not(.mode-thumb) { font-size: .66rem; letter-spacing: .04em; }
+
+  .rw-app .info-btn::after {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  .rw-app .sv-link {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Every workflow stage, including the empty input hero, stays in one
+     in-flow mobile rail. File and patch cards keep their own framing. */
+  .rw-app .panel.workflow .step,
+  .rw-app .panel.workflow .ghost-step {
+    width: calc(100% - 20px);
+    margin: 8px 10px;
+    padding-block-end: 0;
+    overflow: visible;
+  }
+
+  .rw-app .panel.workflow .step > .step-body,
+  .rw-app .panel.workflow .ghost-step > .ghost-step-body {
+    padding: 7px 0 0;
+  }
+
+  .rw-app .panel.workflow .step .card,
+  .rw-app .panel.workflow .step .drop,
+  .rw-app .panel.workflow .step .needs-input,
+  .rw-app .panel.workflow .ghost-step .ghost-step-slot {
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .rw-app .step.is-input.is-empty .drop.hero {
+    min-height: clamp(
+      240px,
+      calc(
+        100svh - var(--mobile-shuttle-h) - var(--mobile-input-head-h) - 116px - env(safe-area-inset-bottom)
+      ),
+      680px
+    );
+  }
+
+  .rw-app .panel.workflow .ghost-steps { margin: 8px 10px 0; }
+  .rw-app .panel.workflow .ghost-next {
+    display: block;
+    margin: 0;
+    padding: 9px 12px;
+    border-block-start: 1px solid var(--seam-strong);
+    color: var(--ink-3);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .rw-app .panel.workflow .ghost-step { display: none; }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action {
+    position: absolute;
+    z-index: 1;
+    inset: 50% 0 auto;
+    display: block;
+    width: 100%;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action:focus-visible {
+    outline: 2px solid var(--thread-text);
+    outline-offset: -3px;
+  }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action:disabled { cursor: default; }
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-num,
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-title,
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-meta {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .rw-app .unified-drop-step > .step-head > .info {
+    position: relative;
+    z-index: 2;
+  }
+
+  .rw-app .step-head .info-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Settings is a task surface on phones, not a small desktop card. */
+  .rw-modal.settings-modal {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .rw-modal.settings-modal .rw-modal-card {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .rw-modal.settings-modal .modal-head {
+    padding-block-start: max(13px, env(safe-area-inset-top));
+  }
+
+  .rw-modal.settings-modal .modal-body {
+    padding-block-end: max(20px, env(safe-area-inset-bottom));
+  }
+
+  .rw-modal.changelog-modal { padding: 10px; }
+  .rw-modal.changelog-modal .rw-modal-card {
+    width: 100%;
+    max-width: min(520px, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+  }
+
+  .rw-modal.changelog-modal .modal-head { padding: 10px 12px; }
+  .rw-modal.changelog-modal .modal-body { padding: 11px 12px 12px; }
+  .rw-modal.changelog-modal .changelog { gap: 8px; }
+  .rw-modal.changelog-modal .changelog-subject { font-size: .95rem; }
+  .rw-modal.changelog-modal .changelog-version { padding-block: 0 7px; font-size: .76rem; }
+  .rw-modal.changelog-modal .changelog-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-block-start: 4px;
+  }
+
+  .rw-modal.changelog-modal .changelog-actions .btn {
+    width: 100%;
+    height: 44px;
+    padding-inline: 10px;
+  }
+
+  .rw-app > .selvage { display: none; }
+}
+
+@media (max-width: 360px) {
+  .rw-app .brand { gap: 5px; }
+  .rw-app .brand-mark { width: 30px; height: 30px; }
+  .rw-app .brand-word { font-size: .9rem; }
+  .rw-app .masthead-version { font-size: .5rem; }
 }

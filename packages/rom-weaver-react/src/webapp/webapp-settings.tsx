@@ -43,7 +43,7 @@ type FieldRenderProps = Pick<SettingsPanelProps, "draftSettings" | "uiState" | "
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   {
-    fields: ["logLevel", "bundlePackage", "betaToolsEnabled", "fixChecksum", "requireInputChecksumMatch"],
+    fields: ["language", "logLevel", "bundlePackage", "betaToolsEnabled", "fixChecksum", "requireInputChecksumMatch"],
     title: "General",
   },
   { fields: ["defaultCompression", "compressionProfile", "workerThreads"], title: "Compression" },

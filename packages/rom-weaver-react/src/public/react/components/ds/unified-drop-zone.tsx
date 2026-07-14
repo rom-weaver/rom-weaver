@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import type { MessageId } from "../../../../presentation/localization/catalog.ts";
@@ -63,6 +63,7 @@ const UnifiedDropZone = ({
   ...dropZoneProps
 }: UnifiedDropZoneProps) => {
   const localizer = useUiLocalizer();
+  const inputRef = useRef<HTMLInputElement>(null);
   const big = Boolean(dropZoneProps.big);
   const emit = (files: File[]) => {
     // Open the perceived-latency window: a drop/selection just began, measured against the first wasm
@@ -104,6 +105,11 @@ const UnifiedDropZone = ({
   return (
     <StepSection
       className={big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"}
+      headerAction={{
+        disabled: dropZoneProps.disabled,
+        label: "Add files",
+        onClick: () => inputRef.current?.click(),
+      }}
       info={popover}
       num={num}
       title={title}
@@ -113,6 +119,7 @@ const UnifiedDropZone = ({
         bare
         formats={formats}
         hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
+        inputRef={inputRef}
         label={big ? heroLabel : addLabel}
         labelCoarse={big ? heroLabelCoarse : undefined}
         lead={heroLead}

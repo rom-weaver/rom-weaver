@@ -69,7 +69,13 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
   }, [open, attempt]);
 
   return (
-    <Modal onClose={onClose} open={open} title={localizer.message("ui.update.whatsNew")}>
+    <Modal
+      onClose={onClose}
+      open={open}
+      showCloseButton={false}
+      title={localizer.message("ui.update.whatsNew")}
+      variant="changelog-modal"
+    >
       {state.status === "loading" ? <div className="changelog-note">…</div> : null}
       {state.status === "error" ? (
         <div className="changelog-note">
@@ -96,11 +102,10 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
               uncommitted changes never reach git log). Fall back to the build id - the
               one thing that differs between such builds - so the dialog isn't blank. */}
           {state.entries.length === 0 && !state.truncated ? (
-            <div className="changelog-note mono">{APP_BUILD_VERSION}</div>
+            <div className="changelog-note changelog-version mono">{APP_BUILD_VERSION}</div>
           ) : null}
         </>
       ) : null}
-      <div className="changelog-note">{localizer.message("ui.update.note")}</div>
       <div className="changelog-actions">
         <button className="btn ghost" onClick={onClose} type="button">
           {localizer.message("ui.update.later")}

@@ -1,5 +1,5 @@
 import Upload from "lucide-react/dist/esm/icons/upload.js";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, type Ref, useId, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -28,6 +28,7 @@ const StepSection = ({
   className,
   woven,
   fault,
+  headerAction,
 }: {
   num: string;
   title: ReactNode;
@@ -36,6 +37,8 @@ const StepSection = ({
   children: ReactNode;
   id?: string;
   className?: string;
+  /** Optional mobile-sized action covering the section heading. */
+  headerAction?: { disabled?: boolean; label: string; onClick: () => void };
   /** Accent the step number (a finished stage). */
   woven?: boolean;
   /** Mark the step as the failing stage. */
@@ -47,6 +50,15 @@ const StepSection = ({
       <h2 className="step-title">{title}</h2>
       {info}
       {meta ? <span className="step-meta mono">{meta}</span> : null}
+      {headerAction ? (
+        <button
+          aria-label={headerAction.label}
+          className="step-head-action"
+          disabled={headerAction.disabled}
+          onClick={headerAction.onClick}
+          type="button"
+        />
+      ) : null}
     </div>
     <div className="step-body">{children}</div>
   </section>
@@ -84,6 +96,7 @@ const DropZone = ({
   onFiles,
   id,
   inputId,
+  inputRef,
 }: {
   /** Intro content rendered inside the hero drop surface. */
   lead?: ReactNode;
@@ -108,6 +121,7 @@ const DropZone = ({
   onFiles: (files: File[]) => void;
   id?: string;
   inputId?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }) => {
   const generatedInputId = useId();
   const resolvedInputId = inputId || generatedInputId;
@@ -211,6 +225,7 @@ const DropZone = ({
           emit(event.currentTarget.files);
           event.currentTarget.value = "";
         }}
+        ref={inputRef}
         type="file"
       />
     </label>

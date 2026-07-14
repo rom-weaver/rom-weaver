@@ -185,6 +185,10 @@ describe("apply workflow view - staged bench", () => {
     expect(patchCard?.classList.contains("ok")).toBe(true);
     expect(patchCard?.querySelector(".card-meta .meta-fmt")?.textContent).toBe("ips");
     expect(patchCard?.querySelector(".card-meta .fsize")?.textContent).toBeTruthy();
+    const patchPosition = patchCard?.querySelector("button.phandle") as HTMLButtonElement;
+    expect(patchPosition.textContent).toContain("1");
+    expect(patchPosition.disabled).toBe(true);
+    expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
     // the patches step header counts staged files
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged

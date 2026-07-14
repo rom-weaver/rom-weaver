@@ -5,6 +5,7 @@ import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
+import { APP_BUILD_VERSION } from "../build-version.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 
 /**
@@ -69,6 +70,42 @@ const serializeDetails = (details: LogStoreEntry["details"]): string => {
 const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(entry.details));
 const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
 
+const issueReportFileName = (previous: boolean) =>
+  previous ? "rom-weaver-previous-session-diagnostic.txt" : "rom-weaver-diagnostic.txt";
+
+const buildIssueReport = (entries: readonly LogStoreEntry[], previous: boolean, threads?: number) =>
+  [
+    `rom-weaver: ${APP_BUILD_VERSION}`,
+    `Log session: ${previous ? "previous" : "current"}`,
+    `Threads: ${threads || "unknown"}`,
+    `Page: ${typeof location === "object" ? location.href : "unknown"}`,
+    `User agent: ${typeof navigator === "object" ? navigator.userAgent : "unknown"}`,
+    "",
+    ...entries.map(formatCopyLine),
+  ].join("\n");
+
+const buildIssueUrl = (repoHref: string, fileName: string) => {
+  const issueUrl = new URL("issues/new", repoHref);
+  issueUrl.searchParams.set("title", "Bug: ");
+  issueUrl.searchParams.set(
+    "body",
+    [
+      "## What happened",
+      "",
+      "<!-- Tell us what you expected and what happened instead. -->",
+      "",
+      "## Steps to reproduce",
+      "",
+      "1. ",
+      "",
+      "## Diagnostic log",
+      "",
+      `A diagnostic file named \`${fileName}\` was downloaded with this form. Review it, then drag it here to attach it.`,
+    ].join("\n"),
+  );
+  return issueUrl.toString();
+};
+
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
 // store: otherwise useSyncExternalStore re-renders the whole list every
@@ -123,11 +160,15 @@ const LogDialog = ({
   onClose,
   level,
   onLevelChange,
+  issueHref,
+  threads,
 }: {
   open: boolean;
   onClose: () => void;
   level?: string;
   onLevelChange: (level: string) => void;
+  issueHref: string;
+  threads?: number;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -150,6 +191,7 @@ const LogDialog = ({
     getEmptyEntries,
   );
   const entries = showingPrevious ? previousEntries : liveEntries;
+  const reportFileName = issueReportFileName(showingPrevious);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -216,6 +258,19 @@ const LogDialog = ({
                 </button>
               </fieldset>
             ) : null}
+            <a
+              className="btn slim primary log-report"
+              href={buildIssueUrl(issueHref, reportFileName)}
+              onClick={() => {
+                void triggerBrowserDownload(buildIssueReport(entries, showingPrevious, threads), reportFileName, {
+                  interactive: true,
+                }).catch((error) => logger.warn("Diagnostic log download failed", { message: String(error) }));
+              }}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Report issue + log
+            </a>
             <button
               className={`btn slim ghost${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
               onClick={() => {

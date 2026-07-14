@@ -1,9 +1,6 @@
 /**
- * Faint, non-interactive preview of the workflow steps that appear once files
- * are staged. Rendered only while the bench is empty so the 0x01 hero reads as
- * step one of a visible sequence instead of a lone panel in the void. Purely
- * decorative: aria-hidden, no focus targets, swapped for the real steps by the
- * same crossfade that shrinks the hero.
+ * Preview of the workflow steps that appear once files are staged. Desktop
+ * shows the decorative card silhouettes; mobile condenses them to one line.
  */
 type GhostStep = {
   num: string;
@@ -11,9 +8,10 @@ type GhostStep = {
 };
 
 const GhostSteps = ({ steps }: { steps: readonly GhostStep[] }) => (
-  <div aria-hidden="true" className="ghost-steps">
+  <div className="ghost-steps">
+    <p className="ghost-next">Next: {steps.map((step) => step.title).join(" → ")}</p>
     {steps.map((step) => (
-      <div className="ghost-step" key={step.num}>
+      <div aria-hidden="true" className="ghost-step" key={step.num}>
         <div className="ghost-step-head">
           <span className="ghost-step-num mono">{step.num}</span>
           <span className="ghost-step-title">{step.title}</span>

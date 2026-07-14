@@ -22,14 +22,18 @@ const TABS = [
 ];
 
 const mastheadProps = {
+  branch: "prototype/mobile-forward-ui",
+  commit: "71f6a6c6",
+  donateHref: "https://example.com/donate",
   currentTab: "patcher",
   onOpenLog: () => undefined,
+  onReportIssue: () => undefined,
   onReset: () => undefined,
   onOpenSettings: () => undefined,
-  language: "en",
-  onLanguageChange: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
+  threads: 8,
+  version: "1.2.3",
 };
 
 describe("Masthead", () => {
@@ -47,15 +51,20 @@ describe("Masthead", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // reset is the leftmost tool; settings remains the rightmost
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
-    expect(container.querySelector(".language-tool select")).toBeTruthy();
+    // reset is the leftmost utility; settings remains the rightmost
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    expect(container.querySelector(".language-tool")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    expect(getByRole("button", { name: "Report issue" })).toBeTruthy();
     const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-tools > .tool")).toBe(reset);
-    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(
-      getByRole("button", { name: "Settings" }),
-    );
+    const settings = getByRole("button", { name: "Settings" });
+    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
+    expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3· 8 threads");
+    fireEvent.click(getByRole("button", { name: "Build information for v1.2.3" }));
+    expect(document.body.querySelector(".build-version-pop")?.textContent).toContain("prototype/mobile-forward-ui");
+    expect(document.body.querySelector(".build-version-pop")?.textContent).toContain("71f6a6c6");
+    expect(getByRole("link", { name: "Donate" }).getAttribute("href")).toBe("https://example.com/donate");
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
@@ -80,9 +89,9 @@ describe("Reveal", () => {
 });
 
 describe("UpdateBanner", () => {
-  it("offers reload and dismiss for a pending update", () => {
-    const onReload = vi.fn();
+  it("offers reload from the compact notice and opens release notes", () => {
     const onDismiss = vi.fn();
+    const onReload = vi.fn();
     const onShowChangelog = vi.fn();
     const { container } = render(
       withSettings(
@@ -95,7 +104,8 @@ describe("UpdateBanner", () => {
         />,
       ),
     );
-    expect(container.querySelector(".updates .updates-ver")?.textContent).toBe("v1 → v2");
+    expect(container.querySelector(".updates .updates-ver-full")?.textContent).toBe("v1 → v2");
+    expect(container.querySelector(".updates .updates-ver-mobile")?.textContent).toBe("What’s new");
     fireEvent.click(container.querySelector(".updates .updates-ver") as HTMLButtonElement);
     expect(onShowChangelog).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);

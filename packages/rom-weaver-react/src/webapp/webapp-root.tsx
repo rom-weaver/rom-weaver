@@ -17,7 +17,7 @@ import type { PageFileDrop } from "../public/react/index.tsx";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
-import { APP_BUILD_VERSION } from "./build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, GIT_BRANCH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { LogDialog } from "./components/log-dialog.tsx";
 import { Masthead, Selvage, UpdateBanner } from "./components/shell.tsx";
@@ -37,6 +37,8 @@ const WORKFLOW_TABS = [
   { icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 const ROOT_LOGO_URL = "./logo.svg";
+const DONATE_URL = "https://www.paypal.me/marcrobledo/5";
+const GITHUB_URL = "https://github.com/marcrobledo/rom-weaver/";
 
 const logger = createLogger("webapp-root");
 
@@ -155,11 +157,13 @@ const ActivitySelvage = ({
   });
   return (
     <Selvage
+      branch={GIT_BRANCH}
+      commit={COMMIT_HASH}
       confirmExternalNavigation={confirmExternalNavigation}
-      donateHref="https://www.paypal.me/marcrobledo/5"
-      githubHref="https://github.com/marcrobledo/rom-weaver/"
+      donateHref={DONATE_URL}
+      githubHref={GITHUB_URL}
       threads={threads}
-      version={APP_BUILD_VERSION}
+      version={APP_VERSION}
     />
   );
 };
@@ -307,21 +311,27 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
+            branch={GIT_BRANCH}
+            commit={COMMIT_HASH}
+            confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={state.currentView}
-            language={String(state.settings.language || "en")}
+            donateHref={DONATE_URL}
             logoSrc={ROOT_LOGO_URL}
-            onLanguageChange={actions.onLanguageChange}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
+            onReportIssue={() => setLogOpen(true)}
             onReset={actions.onReset}
             onSelectTab={(id) =>
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
             }
+            settingsOpen={state.settingsDialogOpen}
             tabs={
               state.settings.betaToolsEnabled
                 ? WORKFLOW_TABS
                 : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
             }
+            threads={resolveWorkerThreads(workerThreads)}
+            version={APP_VERSION}
           />
           <UpdateBanner
             onDismiss={() => {
@@ -383,10 +393,12 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
           threads={resolveWorkerThreads(workerThreads)}
         />
         <LogDialog
+          issueHref={GITHUB_URL}
           level={state.settings.logLevel}
           onClose={() => setLogOpen(false)}
           onLevelChange={actions.onLogLevelChange}
           open={logOpen}
+          threads={resolveWorkerThreads(workerThreads)}
         />
         <Modal
           headerActions={
@@ -430,4 +442,4 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   );
 }
 
-export { selectViewWithTransition, WebappRoot };
+export { resolveWorkerThreads, selectViewWithTransition, WebappRoot };

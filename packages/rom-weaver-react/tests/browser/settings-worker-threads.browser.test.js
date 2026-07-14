@@ -54,3 +54,9 @@ test("worker thread settings placeholder keeps auto and shows the resolved count
     .element(page.getByRole("textbox", { name: "Threads" }))
     .toHaveAttribute("placeholder", `auto (${getDefaultBrowserThreadCount()})`);
 });
+
+test("language selection lives in Settings", async () => {
+  mountSettingsPanel();
+
+  await expect.element(page.getByRole("combobox", { name: "Language" })).toHaveValue("en");
+});

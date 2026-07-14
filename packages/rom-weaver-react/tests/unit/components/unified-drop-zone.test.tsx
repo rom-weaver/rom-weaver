@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { UnifiedDropZone } from "../../../src/public/react/components/ds/unified-drop-zone.tsx";
 
 /**
@@ -46,5 +46,15 @@ describe("UnifiedDropZone", () => {
     expect(step?.classList.contains("is-empty")).toBe(false);
     expect(step?.querySelector(".drop.hero")).toBeNull();
     expect(step?.querySelector(".drop .main.btnish")).toBeTruthy();
+  });
+
+  it("opens the existing file input from the Inputs heading action", () => {
+    const { container } = render(
+      <UnifiedDropZone inputId="rom-weaver-input-file-unified" label="Add more" onFiles={() => undefined} />,
+    );
+    const input = container.querySelector("input[type=file]") as HTMLInputElement;
+    const click = vi.spyOn(input, "click");
+    fireEvent.click(container.querySelector(".step-head-action") as HTMLButtonElement);
+    expect(click).toHaveBeenCalledTimes(1);
   });
 });

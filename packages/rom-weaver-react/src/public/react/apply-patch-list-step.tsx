@@ -450,17 +450,21 @@ const PatchDragHandle = ({
 
   return (
     <button
-      aria-label={`Patch ${position} of ${total}. Drag to reorder, click to edit its position, or press the up and down arrow keys.`}
+      aria-label={
+        disabled
+          ? `Patch ${position} of ${total}. Reordering unavailable.`
+          : `Patch ${position} of ${total}. Drag to reorder, click to edit its position, or press the up and down arrow keys.`
+      }
       className="handle phandle"
-      disabled={disabled}
       {...handleProps}
+      disabled={disabled}
       onClick={(event) => {
         handleProps.onClick?.(event);
         if (event.defaultPrevented) return;
         setDraft(String(position));
         setEditing(true);
       }}
-      title="Drag to reorder · click to edit position · ↑ / ↓ keys"
+      title={disabled ? "Patch position" : "Drag to reorder · click to edit position · ↑ / ↓ keys"}
       type="button"
     >
       <span aria-hidden="true" className="phandle-number mono">
@@ -670,16 +674,14 @@ const ApplyPatchListStep = ({
                 ) : undefined
               }
               handle={
-                reorderable ? (
-                  <PatchDragHandle
-                    disabled={!canReorder}
-                    handleProps={reorderList.handleProps(index)}
-                    index={index}
-                    onReorder={patchStack.reorder}
-                    position={reorderList.displayIndex(index) + 1}
-                    total={total}
-                  />
-                ) : undefined
+                <PatchDragHandle
+                  disabled={!canReorder}
+                  handleProps={reorderList.handleProps(index)}
+                  index={index}
+                  onReorder={patchStack.reorder}
+                  position={reorderList.displayIndex(index) + 1}
+                  total={total}
+                />
               }
               meta={
                 <>

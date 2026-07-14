@@ -1,7 +1,7 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { join } from "./cx.ts";
 
@@ -42,10 +42,20 @@ const ModalShell = ({
   card?: string;
   children: ReactNode;
 }) => {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(open && !!onBackdrop, () => onBackdrop?.());
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
+    return () => {
+      cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, [open]);
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div aria-modal="true" className={join("rw-modal", variant)} role="dialog">
+    <div aria-modal="true" className={join("rw-modal", variant)} ref={dialogRef} role="dialog" tabIndex={-1}>
       <button aria-label="Close" className="rw-modal-backdrop" onClick={onBackdrop} tabIndex={-1} type="button" />
       <div className={join("rw-modal-card", card)}>{children}</div>
     </div>,
@@ -60,6 +70,7 @@ const Modal = ({
   title,
   subtitle,
   headerActions,
+  showCloseButton = true,
   variant,
   children,
 }: {
@@ -68,6 +79,7 @@ const Modal = ({
   title?: ReactNode;
   subtitle?: ReactNode;
   headerActions?: ReactNode;
+  showCloseButton?: boolean;
   variant?: string;
   children: ReactNode;
 }) => (
@@ -80,9 +92,11 @@ const Modal = ({
         </div>
         {headerActions ? <span className="mh-sp" /> : null}
         {headerActions}
-        <button aria-label="Close" className="dlg-x" onClick={onClose} type="button">
-          <X aria-hidden="true" />
-        </button>
+        {showCloseButton ? (
+          <button aria-label="Close" className="dlg-x" onClick={onClose} type="button">
+            <X aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     ) : null}
     <div className="modal-body">{children}</div>

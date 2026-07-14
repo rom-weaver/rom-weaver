@@ -1,4 +1,5 @@
-import Globe from "lucide-react/dist/esm/icons/globe.js";
+import Github from "lucide-react/dist/esm/icons/github.js";
+import Heart from "lucide-react/dist/esm/icons/heart.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
@@ -8,8 +9,8 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
+import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { SETTINGS_FIELD_METADATA } from "../settings/settings-state.ts";
 import { useTheme } from "../theme.ts";
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
@@ -149,65 +150,99 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
-const LanguageSelector = ({
-  language,
-  label,
-  onChange,
-}: {
-  language: string;
-  label: string;
-  onChange: (language: string) => void;
-}) => {
-  const options = SETTINGS_FIELD_METADATA.language.options || [];
-  return (
-    <label className="tool language-tool" title={label}>
-      <Globe aria-hidden="true" />
-      <span aria-hidden="true" className="tool-text">
-        {label}
-      </span>
-      <select aria-label={label} onChange={(event) => onChange(event.currentTarget.value)} value={language}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-};
+const BuildVersionInfo = ({ branch, commit, version }: { branch?: string; commit?: string; version: string }) => (
+  <InfoToggle
+    ariaLabel={`Build information for v${version}`}
+    className="build-version-info"
+    icon={<span className="build-version-label">v{version}</span>}
+    panelClassName="build-version-pop"
+    portalPanel
+    title="Build information"
+  >
+    <dl className="build-version-details mono">
+      <div>
+        <dt>Version</dt>
+        <dd>v{version}</dd>
+      </div>
+      {branch ? (
+        <div>
+          <dt>Branch</dt>
+          <dd>{branch}</dd>
+        </div>
+      ) : null}
+      {commit ? (
+        <div>
+          <dt>Commit</dt>
+          <dd>{commit}</dd>
+        </div>
+      ) : null}
+    </dl>
+  </InfoToggle>
+);
 
 const Masthead = ({
   logoSrc,
+  branch,
+  commit,
   tabs,
   currentTab,
   onSelectTab,
   onOpenLog,
+  onReportIssue,
   onOpenSettings,
   onReset,
-  language,
-  onLanguageChange,
+  confirmExternalNavigation,
+  donateHref,
+  settingsOpen,
+  threads,
+  version,
 }: {
   logoSrc?: string;
+  branch?: string;
+  commit?: string;
   tabs: WorkflowTab[];
   currentTab: string;
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
+  onReportIssue: () => void;
   onOpenSettings: () => void;
   onReset: () => void;
-  language: string;
-  onLanguageChange: (language: string) => void;
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  settingsOpen?: boolean;
+  threads?: number;
+  version?: string;
 }) => {
   const localizer = useUiLocalizer();
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
+  const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
+    if (!confirmExternalNavigation) return;
+    event.preventDefault();
+    void confirmExternalNavigation(href).then((accepted) => {
+      if (accepted) window.open(href, "_blank", "noopener,noreferrer");
+    });
+  };
   return (
     <header className="masthead">
       <span className="brand">
         {logoSrc ? <img alt="" className="brand-mark" height={44} src={logoSrc} width={44} /> : null}
-        <h1 className="brand-word">
-          rom<span className="brand-hy">–</span>
-          <b>weaver</b>
-        </h1>
+        <span className="brand-copy">
+          <h1 className="brand-word">
+            rom<span className="brand-hy">–</span>
+            <b>weaver</b>
+          </h1>
+          {version ? (
+            <span className="masthead-version mono">
+              <BuildVersionInfo branch={branch} commit={commit} version={version} />
+              {threads ? (
+                <span className="masthead-threads">
+                  · {threads} {localizer.message("ui.env.threads")}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </span>
       </span>
       <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
@@ -223,11 +258,6 @@ const Masthead = ({
             {localizer.message("ui.settings.reset")}
           </span>
         </button>
-        <LanguageSelector
-          label={localizer.message("settings.language")}
-          language={language}
-          onChange={onLanguageChange}
-        />
         <ThemeToggle localizer={localizer} />
         <button
           aria-haspopup="dialog"
@@ -243,6 +273,36 @@ const Masthead = ({
           </span>
         </button>
         <button
+          aria-haspopup="dialog"
+          aria-label="Report issue"
+          className="tool masthead-mobile-tool"
+          onClick={onReportIssue}
+          title="Report issue"
+          type="button"
+        >
+          <Github aria-hidden="true" />
+          <span aria-hidden="true" className="tool-text">
+            Issue
+          </span>
+        </button>
+        {donateHref ? (
+          <a
+            aria-label={localizer.message("ui.footer.donate")}
+            className="tool masthead-mobile-tool masthead-donate"
+            href={donateHref}
+            onClick={(event) => guardExternalClick(event, donateHref)}
+            rel="noreferrer"
+            target="_blank"
+            title={localizer.message("ui.footer.donate")}
+          >
+            <Heart aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              {localizer.message("ui.footer.donate")}
+            </span>
+          </a>
+        ) : null}
+        <button
+          aria-expanded={settingsOpen}
           aria-haspopup="dialog"
           aria-label={settingsLabel}
           className="tool"
@@ -290,12 +350,18 @@ const UpdateBanner = ({
   const localizer = useUiLocalizer();
   return (
     <Reveal open={open}>
-      <div className="updates" role="status">
+      <div className="updates update-ready" role="status">
         <span aria-hidden="true" className="updates-pulse" />
         <span className="updates-text">
           <b>{localizer.message("ui.update.ready")}</b>{" "}
-          <button className="updates-ver mono" onClick={onShowChangelog} type="button">
-            {title}
+          <button
+            aria-label={`${localizer.message("ui.update.whatsNew")}: ${title}`}
+            className="updates-ver mono"
+            onClick={onShowChangelog}
+            type="button"
+          >
+            <span className="updates-ver-full">{title}</span>
+            <span className="updates-ver-mobile">{localizer.message("ui.update.whatsNew")}</span>
           </button>
         </span>
         <button className="btn slim primary" onClick={onReload} type="button">
@@ -336,12 +402,16 @@ const WakeLockBanner = ({
 
 /** Edge-to-edge status strip at the very bottom of the page. */
 const Selvage = ({
+  branch,
+  commit,
   version,
   threads,
   githubHref,
   donateHref,
   confirmExternalNavigation,
 }: {
+  branch?: string;
+  commit?: string;
   version?: string;
   threads?: number;
   githubHref?: string;
@@ -360,7 +430,11 @@ const Selvage = ({
   return (
     <footer className="selvage">
       <div className="sv-inner">
-        {version ? <span className="sv-meta mono">v{version}</span> : null}
+        {version ? (
+          <span className="sv-meta mono">
+            <BuildVersionInfo branch={branch} commit={commit} version={version} />
+          </span>
+        ) : null}
         {threads ? (
           <span className="sv-meta mono sv-threads">
             {threads} {localizer.message("ui.env.threads")}
