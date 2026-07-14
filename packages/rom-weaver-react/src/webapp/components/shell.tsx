@@ -35,7 +35,27 @@ const ModeRail = ({
 }) => {
   const railRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLSpanElement | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
   const measuredOnceRef = useRef(false);
+
+  /* Publish the dock's real rendered height (rail + padding + safe-area) as
+     --rw-dock-h on the root. The mobile layout offsets the fixed update banner
+     and the content/scroll insets from it - a hardcoded height under-reserves
+     when larger text sizes grow the rail, leaving the banner overlapping the
+     dock's tabs. */
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav || typeof ResizeObserver === "undefined") return undefined;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--rw-dock-h", `${nav.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(nav);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--rw-dock-h");
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (supportsAnchoredThumb()) return undefined;
@@ -74,7 +94,7 @@ const ModeRail = ({
   };
 
   return (
-    <nav aria-label="Workflow mode" className="modes">
+    <nav aria-label="Workflow mode" className="modes" ref={navRef}>
       <div
         aria-label="Workflow"
         aria-orientation="horizontal"

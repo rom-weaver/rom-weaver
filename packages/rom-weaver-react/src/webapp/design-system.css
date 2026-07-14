@@ -2438,14 +2438,17 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    so Apply/Create/Trim/Tools keep the same state and behavior as desktop. */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   :root:has(.rw-app) {
-    scroll-padding-block-end: calc(78px + env(safe-area-inset-bottom));
+    scroll-padding-block-end: calc(var(--rw-dock-h, calc(70px + env(safe-area-inset-bottom))) + 8px);
   }
 
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
     --mobile-shuttle-h: 70px;
-    padding-block-end: calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom));
+    /* dock total height: the JS-measured --rw-dock-h when available (tracks
+       larger text sizes), else the design-time estimate */
+    --dock-total: var(--rw-dock-h, calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom)));
+    padding-block-end: var(--dock-total);
   }
 
   .rw-app .masthead {
@@ -2575,7 +2578,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     position: fixed;
     z-index: 46;
     inset-inline: 10px;
-    bottom: calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom) + 8px);
+    bottom: calc(var(--dock-total) + 8px);
     margin: 0;
   }
 
@@ -2690,9 +2693,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .step.is-input.is-empty .drop.hero {
     min-height: clamp(
       240px,
-      calc(
-        100svh - var(--mobile-shuttle-h) - var(--mobile-input-head-h) - 116px - env(safe-area-inset-bottom)
-      ),
+      calc(100svh - var(--dock-total) - var(--mobile-input-head-h) - 116px),
       680px
     );
   }
