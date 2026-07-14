@@ -21,7 +21,7 @@ describe("rom-weaver command boundary helpers", () => {
       "compress",
       "trim",
       "patch",
-      "manifest",
+      "bundle",
       "tools",
       "plan-extract-batch",
     ]);

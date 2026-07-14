@@ -15,7 +15,7 @@ use serde_json::json;
 use super::selection_resolution::SelectionResolutionOptions;
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, N64ByteOrder,
-    N64ByteOrderTransform, ParsedSelectionInput, RomWeaverManifest,
+    N64ByteOrderTransform, ParsedSelectionInput, RomWeaverBundle,
 };
 
 static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
@@ -1176,8 +1176,8 @@ fn validate_patch_apply_expected_checksums_uses_hints_for_match_and_mismatch() {
     let _ = std::fs::remove_file(path);
 }
 
-fn manifest_for_selection() -> RomWeaverManifest {
-    crate::manifest_parse::parse_manifest_bytes(
+fn bundle_for_selection() -> RomWeaverBundle {
+    crate::bundle_parse::parse_bundle_bytes(
         br#"{ "version": 1, "patches": [
             { "path": "main.ips",     "name": "Main hack" },
             { "path": "balance.ips",  "name": "Rebalance" },
@@ -1185,7 +1185,7 @@ fn manifest_for_selection() -> RomWeaverManifest {
             { "path": "debug.ips",    "name": "Debug menu", "optional": true }
         ] }"#,
     )
-    .expect("selection manifest parses")
+    .expect("selection bundle parses")
 }
 
 fn noninteractive_app() -> CliApp {
@@ -1198,20 +1198,20 @@ fn noninteractive_app() -> CliApp {
 }
 
 #[test]
-fn manifest_selection_defaults_to_required_and_default() {
+fn bundle_selection_defaults_to_required_and_default() {
     let app = noninteractive_app();
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &[], &[])
+        .select_bundle_patches(&bundle_for_selection(), &[], &[])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0, 1]);
 }
 
 #[test]
-fn manifest_selection_with_includes_optional_and_disabled() {
+fn bundle_selection_with_includes_optional_and_disabled() {
     let app = noninteractive_app();
     let selected = app
-        .select_manifest_patches(
-            &manifest_for_selection(),
+        .select_bundle_patches(
+            &bundle_for_selection(),
             &["extra*".to_string(), "debug.ips".to_string()],
             &[],
         )
@@ -1220,29 +1220,29 @@ fn manifest_selection_with_includes_optional_and_disabled() {
 }
 
 #[test]
-fn manifest_selection_without_excludes_default() {
+fn bundle_selection_without_excludes_default() {
     let app = noninteractive_app();
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &[], &["Rebalance".to_string()])
+        .select_bundle_patches(&bundle_for_selection(), &[], &["Rebalance".to_string()])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0]);
 }
 
 #[test]
-fn manifest_selection_without_can_disable_any_patch() {
+fn bundle_selection_without_can_disable_any_patch() {
     let app = noninteractive_app();
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &[], &["main*".to_string()])
+        .select_bundle_patches(&bundle_for_selection(), &[], &["main*".to_string()])
         .expect("every patch is toggleable");
     assert_eq!(selected, vec![1]);
 }
 
 #[test]
-fn manifest_selection_interactive_prompt_picks_subset() {
+fn bundle_selection_interactive_prompt_picks_subset() {
     // Every entry is offered. Picking position 1 selects only `balance`.
     let app = test_app_with_prompt(vec![1]);
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &[], &[])
+        .select_bundle_patches(&bundle_for_selection(), &[], &[])
         .expect("selection succeeds");
     assert_eq!(
         selected,
@@ -1252,23 +1252,23 @@ fn manifest_selection_interactive_prompt_picks_subset() {
 }
 
 #[test]
-fn manifest_selection_interactive_cancel_keeps_defaults() {
+fn bundle_selection_interactive_cancel_keeps_defaults() {
     // Cancel (or an empty pick - the protocol folds both into Cancelled) must
     // fall back to the boolean defaults rather than aborting the run.
     let app = test_app_with_prompt(vec![]);
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &[], &[])
+        .select_bundle_patches(&bundle_for_selection(), &[], &[])
         .expect("cancel does not abort");
     assert_eq!(selected, vec![0, 1]);
 }
 
 #[test]
-fn manifest_selection_flags_suppress_prompt() {
+fn bundle_selection_flags_suppress_prompt() {
     // An interactive session with --with flags must not prompt; the scripted
     // prompter would pick position 0 (balance) if consulted.
     let app = test_app_with_prompt(vec![0]);
     let selected = app
-        .select_manifest_patches(&manifest_for_selection(), &["extra*".to_string()], &[])
+        .select_bundle_patches(&bundle_for_selection(), &["extra*".to_string()], &[])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0, 1, 2]);
 }

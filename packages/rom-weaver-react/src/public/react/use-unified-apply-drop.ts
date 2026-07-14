@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from "react";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
-import { loadLocalManifestSession } from "../../lib/manifest/local-manifest-session.ts";
-import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
 import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
@@ -10,10 +10,10 @@ import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName
  *
  * Bare ROMs/patches route by extension. An archive is classified by its CONTENTS - a cheap entry
  * listing (no byte extraction), the same authoritative signal Rust uses (`is_rom = has_rom ||
- * !has_patch` over the entries; see `emit_probe_manifest`). A real ROM archive joins the ROM
+ * !has_patch` over the entries; see `emit_probe_bundle`). A real ROM archive joins the ROM
  * bucket; a patch-only bundle goes straight to the patch bucket. Crucially, a patch-only archive
  * never enters the ROM input list: routing it there would re-stage (re-extract) any already staged
- * ROM and flash a ROM card before Rust's later probe-manifest reclassified it. That probe-manifest
+ * ROM and flash a ROM card before Rust's later probe-bundle reclassified it. That probe-bundle
  * reclassify (`reclassifyArchiveToPatch` in the session) remains as a safety net for the rare
  * misroute (e.g. a listing failure defaults to the ROM bucket). Both the in-tab dropzone and the
  * page-wide drop forwarder funnel through one `onDrop`.
@@ -22,25 +22,26 @@ import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName
 const logger = createLogger("unified-apply-drop");
 const MIN_PENDING_DISPLAY_MS = 180;
 
-/** UI-only row shown while an archive or manifest is being identified and routed. */
+/** UI-only row shown while an archive or bundle is being identified and routed. */
 type PendingDrop = {
   entryCount?: number;
   extracting: boolean;
   id: string;
   kind: "patch" | "rom";
-  manifest?: boolean;
+  bundle?: boolean;
   name: string;
   sheet?: "CUE" | "GDI";
 };
 
-type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "manifest" | "sheet">>;
+type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "bundle" | "sheet">>;
 
 type UnifiedDropController = {
   provideRomInputFiles?: (files: File[]) => void;
   providePatchInputFiles?: (files: File[]) => void;
 };
 
-const isManifestFileName = (name: string) => /^rw\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
+const isBundleFileName = (name: string) =>
+  /^rom-weaver-bundle\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
@@ -48,7 +49,7 @@ type UnifiedApplyDrop = {
 };
 
 /**
- * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-manifest verdict
+ * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-bundle verdict
  * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
  * direction, since Rust's reclassify still moves a misrouted patch bundle afterwards.
  */
@@ -77,17 +78,17 @@ const classifyArchiveBucket = (archive: File, names: string[]): "rom" | "patch" 
 const routeUnifiedDrop = async (
   files: File[],
   controller: UnifiedDropController,
-  onManifestSession?: (session: ManifestApplySession) => void,
+  onBundleSession?: (session: BundleApplySession) => void,
   isCancelled?: () => boolean,
   onPendingUpdate?: (file: File, update: PendingDropUpdate) => void,
 ): Promise<void> => {
   const { archives, inputs, patches } = classifyDroppedFiles(files);
-  const directManifests = files.filter((file) => isManifestFileName(file.name));
+  const directBundles = files.filter((file) => isBundleFileName(file.name));
   const archiveEntries = await Promise.all(
     archives.map((archive) => listDroppedArchiveEntryNames(archive).catch(() => [] as string[])),
   );
-  const manifestArchives = archives.filter((_archive, index) =>
-    archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rw.json"),
+  const bundleArchives = archives.filter((_archive, index) =>
+    archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rom-weaver-bundle.json"),
   );
   const archiveBuckets = archives.map((archive, index) => classifyArchiveBucket(archive, archiveEntries[index] || []));
   archives.forEach((archive, index) => {
@@ -102,16 +103,16 @@ const routeUnifiedDrop = async (
   // Yield one task so React can paint the newly learned shape before routing
   // replaces the placeholder. This does not wait on a timer interval.
   if (archives.length && onPendingUpdate) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  const manifests = [...directManifests, ...manifestArchives.filter((file) => !directManifests.includes(file))];
-  if (manifests.length > 1) throw new Error("Drop contains more than one manifest");
-  if (manifests[0]) {
-    onPendingUpdate?.(manifests[0], { manifest: true });
-    const loaded = await loadLocalManifestSession(manifests[0], files);
+  const bundles = [...directBundles, ...bundleArchives.filter((file) => !directBundles.includes(file))];
+  if (bundles.length > 1) throw new Error("Drop contains more than one bundle");
+  if (bundles[0]) {
+    onPendingUpdate?.(bundles[0], { bundle: true });
+    const loaded = await loadLocalBundleSession(bundles[0], files);
     if (isCancelled?.()) return;
-    onManifestSession?.(loaded.session);
-    const companionRoms = inputs.filter((file) => !directManifests.includes(file));
+    onBundleSession?.(loaded.session);
+    const companionRoms = inputs.filter((file) => !directBundles.includes(file));
     if (!loaded.romFile && companionRoms.length > 1) {
-      throw new Error("A checks-only manifest drop contains more than one possible ROM");
+      throw new Error("A checks-only bundle drop contains more than one possible ROM");
     }
     const romFile = loaded.romFile || companionRoms[0];
     if (romFile) controller.provideRomInputFiles?.([romFile]);
@@ -139,7 +140,7 @@ const normalizeArchivePath = (name: string) => name.replaceAll("\\", "/").replac
 
 const useUnifiedApplyDrop = (
   controller: UnifiedDropController,
-  onManifestSession?: (session: ManifestApplySession) => void,
+  onBundleSession?: (session: BundleApplySession) => void,
   onError?: (error: Error) => void,
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
@@ -148,7 +149,7 @@ const useUnifiedApplyDrop = (
     (files: File[], isCancelled?: () => boolean) => {
       if (isCancelled?.()) return;
       const { archives } = classifyDroppedFiles(files);
-      const identifiedFiles = files.filter((file) => archives.includes(file) || isManifestFileName(file.name));
+      const identifiedFiles = files.filter((file) => archives.includes(file) || isBundleFileName(file.name));
       const pending: PendingDrop[] = identifiedFiles.map((file) => {
         nextIdRef.current += 1;
         return {
@@ -174,14 +175,14 @@ const useUnifiedApplyDrop = (
         if (remaining > 0) setTimeout(clear, remaining);
         else clear();
       };
-      void routeUnifiedDrop(files, controller, onManifestSession, isCancelled, updatePending)
+      void routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending)
         .catch((error) => {
-          logger.error("manifest drop failed", { error: String(error) });
+          logger.error("bundle drop failed", { error: String(error) });
           onError?.(error instanceof Error ? error : new Error(String(error)));
         })
         .finally(clearPending);
     },
-    [controller, onError, onManifestSession],
+    [controller, onError, onBundleSession],
   );
 
   return { onDrop, pendingDrops };

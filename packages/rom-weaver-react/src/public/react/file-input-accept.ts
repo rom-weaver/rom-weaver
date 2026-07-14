@@ -11,7 +11,7 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENS
  * extension sets come from {@link file-classification.ts} so the picker and the
  * drop-time classifier never drift apart. Two variants mirror the CLI filters:
  *
- *   - `unifiedApply` - ROMs, patches, manifests, and archives (`--rom-filter`
+ *   - `unifiedApply` - ROMs, patches, bundles, and archives (`--rom-filter`
  *     + `--patch-filter`), used by the Apply tab.
  *   - `unifiedRom` - ROMs and archives only (`--rom-filter`), used by the
  *     Create and Trim tabs, which have no patch bucket.

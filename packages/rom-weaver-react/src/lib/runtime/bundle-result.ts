@@ -1,28 +1,28 @@
-// Parse the `details.manifest` / `details.manifest_create` payloads of terminal `manifest` events
+// Parse the `details.bundle` / `details.bundle_create` payloads of terminal `bundle` events
 // into webapp-facing results, following the `ingest-result.ts` conventions: snake_case wire fields
 // coerce into camelCase `number`-based shapes and `null`/absent optionals are dropped. This is the
-// single boundary between the Rust manifest contract and the webapp's manifest session/export flows.
+// single boundary between the Rust bundle contract and the webapp's bundle session/export flows.
 import type {
-  ManifestHeaderMode,
-  ManifestSourceKind,
-  ParsedManifest,
-  ParsedManifestChecks,
-  ParsedManifestCreateResult,
-  ParsedManifestOutput,
-  ParsedManifestParseResult,
-  ParsedManifestPatchEntry,
-  ParsedManifestPatchSource,
-  ParsedManifestRom,
-  ParsedManifestSourceRef,
-} from "../../types/manifest.ts";
+  BundleHeaderMode,
+  BundleSourceKind,
+  ParsedBundle,
+  ParsedBundleChecks,
+  ParsedBundleCreateResult,
+  ParsedBundleOutput,
+  ParsedBundleParseResult,
+  ParsedBundlePatchEntry,
+  ParsedBundlePatchSource,
+  ParsedBundleRom,
+  ParsedBundleSourceRef,
+} from "../../types/bundle.ts";
 import type {
-  ManifestCreateResult,
-  ManifestOutput,
-  ManifestParseResult,
-  ManifestPatchEntry,
-  ManifestPatchSource,
-  ManifestRom,
-  RomWeaverManifest,
+  BundleCreateResult,
+  BundleOutput,
+  BundleParseResult,
+  BundlePatchEntry,
+  BundlePatchSource,
+  BundleRom,
+  RomWeaverBundle,
 } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { parsePatchDescriptor } from "./ingest-result.ts";
 import type { WireRecord } from "./run-result-parsing.ts";
@@ -52,13 +52,13 @@ const toChecksumRecord = (value: unknown): Record<string, string> | undefined =>
   return Object.keys(checksums).length ? checksums : undefined;
 };
 
-const parseHeaderMode = (value: unknown): ManifestHeaderMode | undefined =>
+const parseHeaderMode = (value: unknown): BundleHeaderMode | undefined =>
   value === "keep" || value === "strip" || value === "auto" ? value : undefined;
 
-const parseChecks = (value: unknown): ParsedManifestChecks | undefined => {
+const parseChecks = (value: unknown): ParsedBundleChecks | undefined => {
   const record = asRecord(value);
   if (!record) return undefined;
-  const checks: ParsedManifestChecks = {};
+  const checks: ParsedBundleChecks = {};
   const checksums = toChecksumRecord(record.checksums);
   if (checksums) checks.checksums = checksums;
   const size = toNumberValue(record.size);
@@ -66,7 +66,7 @@ const parseChecks = (value: unknown): ParsedManifestChecks | undefined => {
   return Object.keys(checks).length ? checks : undefined;
 };
 
-const parseSourceRef = (value: unknown): ParsedManifestSourceRef | undefined => {
+const parseSourceRef = (value: unknown): ParsedBundleSourceRef | undefined => {
   const record = asRecord(value);
   if (!record) return undefined;
   const url = toStringValue(record.url);
@@ -78,10 +78,10 @@ const parseSourceRef = (value: unknown): ParsedManifestSourceRef | undefined => 
   return undefined;
 };
 
-const parseManifestRom = (value: unknown): ParsedManifestRom | undefined => {
-  const record = asRecord(value) as WireRecord<ManifestRom> | undefined;
+const parseBundleRom = (value: unknown): ParsedBundleRom | undefined => {
+  const record = asRecord(value) as WireRecord<BundleRom> | undefined;
   if (!record) return undefined;
-  const rom: ParsedManifestRom = {};
+  const rom: ParsedBundleRom = {};
   const name = toStringValue(record.name);
   if (name !== undefined) rom.name = name;
   const url = toStringValue(record.url);
@@ -93,9 +93,9 @@ const parseManifestRom = (value: unknown): ParsedManifestRom | undefined => {
   return rom;
 };
 
-const parseManifestPatchEntry = (value: unknown): ParsedManifestPatchEntry => {
-  const record = (asRecord(value) || {}) as WireRecord<ManifestPatchEntry>;
-  const entry: ParsedManifestPatchEntry = {};
+const parseBundlePatchEntry = (value: unknown): ParsedBundlePatchEntry => {
+  const record = (asRecord(value) || {}) as WireRecord<BundlePatchEntry>;
+  const entry: ParsedBundlePatchEntry = {};
   if (record.optional === true) entry.optional = true;
   const name = toStringValue(record.name);
   if (name !== undefined) entry.name = name;
@@ -116,10 +116,10 @@ const parseManifestPatchEntry = (value: unknown): ParsedManifestPatchEntry => {
   return entry;
 };
 
-const parseManifestOutput = (value: unknown): ParsedManifestOutput | undefined => {
-  const record = asRecord(value) as WireRecord<ManifestOutput> | undefined;
+const parseBundleOutput = (value: unknown): ParsedBundleOutput | undefined => {
+  const record = asRecord(value) as WireRecord<BundleOutput> | undefined;
   if (!record) return undefined;
-  const output: ParsedManifestOutput = {};
+  const output: ParsedBundleOutput = {};
   const name = toStringValue(record.name);
   if (name !== undefined) output.name = name;
   const header = parseHeaderMode(record.header);
@@ -129,24 +129,24 @@ const parseManifestOutput = (value: unknown): ParsedManifestOutput | undefined =
   return Object.keys(output).length ? output : undefined;
 };
 
-const parseManifest = (value: unknown): ParsedManifest | undefined => {
-  const record = asRecord(value) as WireRecord<RomWeaverManifest> | undefined;
+const parseBundle = (value: unknown): ParsedBundle | undefined => {
+  const record = asRecord(value) as WireRecord<RomWeaverBundle> | undefined;
   if (!record) return undefined;
   const version = toNumberValue(record.version);
   if (version === undefined) return undefined;
-  const manifest: ParsedManifest = {
-    patches: Array.isArray(record.patches) ? record.patches.map(parseManifestPatchEntry) : [],
+  const bundle: ParsedBundle = {
+    patches: Array.isArray(record.patches) ? record.patches.map(parseBundlePatchEntry) : [],
     version,
   };
-  const rom = parseManifestRom(record.rom);
-  if (rom) manifest.rom = rom;
-  const output = parseManifestOutput(record.output);
-  if (output) manifest.output = output;
-  return manifest;
+  const rom = parseBundleRom(record.rom);
+  if (rom) bundle.rom = rom;
+  const output = parseBundleOutput(record.output);
+  if (output) bundle.output = output;
+  return bundle;
 };
 
-const parsePatchSource = (value: unknown): ParsedManifestPatchSource | undefined => {
-  const record = asRecord(value) as WireRecord<ManifestPatchSource> | undefined;
+const parsePatchSource = (value: unknown): ParsedBundlePatchSource | undefined => {
+  const record = asRecord(value) as WireRecord<BundlePatchSource> | undefined;
   if (!record) return undefined;
   const source = parseSourceRef(record.source);
   if (!source) return undefined;
@@ -158,25 +158,25 @@ const toWarnings = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((warning) => String(warning || "")).filter((warning) => !!warning) : [];
 
 /**
- * Parse the `manifest` object from a terminal event's `details`. Returns `undefined` when the
+ * Parse the `bundle` object from a terminal event's `details`. Returns `undefined` when the
  * payload is missing or malformed (so callers can fail loudly rather than route on a half-formed
  * result).
  */
-const parseManifestParseResult = (details: unknown): ParsedManifestParseResult | undefined => {
-  const record = asRecord(asRecord(details)?.manifest) as WireRecord<ManifestParseResult> | undefined;
+const parseBundleParseResult = (details: unknown): ParsedBundleParseResult | undefined => {
+  const record = asRecord(asRecord(details)?.bundle) as WireRecord<BundleParseResult> | undefined;
   if (!record) return undefined;
-  const manifest = parseManifest(record.manifest);
-  if (!manifest) return undefined;
+  const bundle = parseBundle(record.bundle);
+  if (!bundle) return undefined;
   const sourceKindRaw = record.source_kind;
-  const sourceKind: ManifestSourceKind =
+  const sourceKind: BundleSourceKind =
     sourceKindRaw === "compressed-json" || sourceKindRaw === "archive" ? sourceKindRaw : "json";
   const patchSources = Array.isArray(record.patch_sources)
     ? record.patch_sources
         .map(parsePatchSource)
-        .filter((source): source is ParsedManifestPatchSource => source !== undefined)
+        .filter((source): source is ParsedBundlePatchSource => source !== undefined)
     : [];
-  const result: ParsedManifestParseResult = {
-    manifest,
+  const result: ParsedBundleParseResult = {
+    bundle,
     patchSources,
     sourceKind,
     warnings: toWarnings(record.warnings),
@@ -188,21 +188,21 @@ const parseManifestParseResult = (details: unknown): ParsedManifestParseResult |
   return result;
 };
 
-/** Parse the `manifest_create` object from a terminal event's `details`. */
-const parseManifestCreateResult = (details: unknown): ParsedManifestCreateResult | undefined => {
-  const record = asRecord(asRecord(details)?.manifest_create) as WireRecord<ManifestCreateResult> | undefined;
+/** Parse the `bundle_create` object from a terminal event's `details`. */
+const parseBundleCreateResult = (details: unknown): ParsedBundleCreateResult | undefined => {
+  const record = asRecord(asRecord(details)?.bundle_create) as WireRecord<BundleCreateResult> | undefined;
   if (!record) return undefined;
-  const manifestPath = toStringValue(record.manifest_path);
-  const manifest = parseManifest(record.manifest);
-  if (!(manifestPath && manifest)) return undefined;
-  const result: ParsedManifestCreateResult = {
-    manifest,
-    manifestPath,
+  const bundlePath = toStringValue(record.bundle_path);
+  const bundle = parseBundle(record.bundle);
+  if (!(bundlePath && bundle)) return undefined;
+  const result: ParsedBundleCreateResult = {
+    bundle,
+    bundlePath,
     warnings: toWarnings(record.warnings),
   };
-  const bundlePath = toStringValue(record.bundle_path);
-  if (bundlePath !== undefined) result.bundlePath = bundlePath;
+  const archivePath = toStringValue(record.archive_path);
+  if (archivePath !== undefined) result.archivePath = archivePath;
   return result;
 };
 
-export { parseManifestCreateResult, parseManifestParseResult };
+export { parseBundleCreateResult, parseBundleParseResult };

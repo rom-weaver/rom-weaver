@@ -1,65 +1,65 @@
-// The `?manifest=` boot flow's I/O half: fetch the rw.json (plain, compressed, or archive), parse it
+// The `?bundle=` boot flow's I/O half: fetch the rom-weaver-bundle.json (plain, compressed, or archive), parse it
 // through the wasm runtime, build the session plan, then acquire every non-disabled source - URL
 // entries via the shared remote fetch layer, bundled entries from the parse call's materialized
-// Files. Returns the ordered drop-pipeline Files (ROM first, patches in manifest order) plus the
+// Files. Returns the ordered drop-pipeline Files (ROM first, patches in bundle order) plus the
 // decorated session the apply form consumes. Kept out of the React hook so tests drive the same code.
 
+import type { BundleApplySession, BundleApplySessionEntry } from "../../lib/bundle/bundle-session-model.ts";
+import { buildBundleApplySessionPlan } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
-import type { ManifestApplySession, ManifestApplySessionEntry } from "../../lib/manifest/manifest-session-model.ts";
-import { buildManifestApplySessionPlan } from "../../lib/manifest/manifest-session-model.ts";
 import type { RemoteFetchEntry } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles } from "../../lib/remote/remote-file-fetch.ts";
 import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
 
-const logger = createLogger("manifest-url-session");
+const logger = createLogger("bundle-url-session");
 
-type ManifestUrlSessionProgress = { loadedBytes: number; totalBytes: number | null };
+type BundleUrlSessionProgress = { loadedBytes: number; totalBytes: number | null };
 
-type LoadManifestUrlSessionHooks = {
-  /** Fires once the manifest itself is parsed, before its sources download. */
-  onManifestName?: (name: string) => void;
+type LoadBundleUrlSessionHooks = {
+  /** Fires once the bundle itself is parsed, before its sources download. */
+  onBundleName?: (name: string) => void;
   /** Per-download progress; `id` is stable per fetched source within one load. */
-  onProgress?: (id: string, progress: ManifestUrlSessionProgress) => void;
+  onProgress?: (id: string, progress: BundleUrlSessionProgress) => void;
   signal?: AbortSignal;
 };
 
-type LoadedManifestUrlSession = {
-  /** Drop-pipeline delivery order: ROM first (when present), then patches in manifest order. */
+type LoadedBundleUrlSession = {
+  /** Drop-pipeline delivery order: ROM first (when present), then patches in bundle order. */
   files: File[];
-  session: ManifestApplySession;
+  session: BundleApplySession;
 };
 
-const loadManifestUrlSession = async (
-  manifestUrl: string,
-  hooks: LoadManifestUrlSessionHooks = {},
-): Promise<LoadedManifestUrlSession> => {
-  const { onManifestName, onProgress, signal } = hooks;
-  logger.info(`loading manifest session: ${manifestUrl}`);
-  const [manifestFetch] = await fetchRemoteFiles(
+const loadBundleUrlSession = async (
+  bundleUrl: string,
+  hooks: LoadBundleUrlSessionHooks = {},
+): Promise<LoadedBundleUrlSession> => {
+  const { onBundleName, onProgress, signal } = hooks;
+  logger.info(`loading bundle session: ${bundleUrl}`);
+  const [bundleFetch] = await fetchRemoteFiles(
     [
       {
-        fallbackFileName: "rw.json",
-        onProgress: (progress) => onProgress?.("manifest", progress),
-        url: manifestUrl,
+        fallbackFileName: "rom-weaver-bundle.json",
+        onProgress: (progress) => onProgress?.("bundle", progress),
+        url: bundleUrl,
       },
     ],
     signal,
   );
-  if (!manifestFetch) throw new Error(`Manifest download returned no file: ${manifestUrl}`);
-  const parse = browserRuntime.manifest?.parse;
-  if (!parse) throw new Error("Manifest parsing is not available in this runtime");
+  if (!bundleFetch) throw new Error(`Bundle download returned no file: ${bundleUrl}`);
+  const parse = browserRuntime.bundle?.parse;
+  if (!parse) throw new Error("Bundle parsing is not available in this runtime");
   const { result, extractedFiles } = await parse({
-    fileName: manifestFetch.file.name,
+    fileName: bundleFetch.file.name,
     signal,
-    source: manifestFetch.file,
+    source: bundleFetch.file,
   });
-  const plan = buildManifestApplySessionPlan(result, manifestFetch.finalUrl || manifestUrl);
-  onManifestName?.(plan.name || "");
-  for (const warning of plan.warnings) logger.warn(`manifest warning: ${warning}`);
+  const plan = buildBundleApplySessionPlan(result, bundleFetch.finalUrl || bundleUrl);
+  onBundleName?.(plan.name || "");
+  for (const warning of plan.warnings) logger.warn(`bundle warning: ${warning}`);
 
   const materializeExtracted = (extractedPath: string, label: string): File => {
     const file = extractedFiles.get(extractedPath);
-    if (!file) throw new Error(`Manifest ${label} was not extracted: ${extractedPath}`);
+    if (!file) throw new Error(`Bundle ${label} was not extracted: ${extractedPath}`);
     return file;
   };
   // One concurrent fetch pass over every URL source (ROM + patches); extracted sources are already
@@ -105,14 +105,14 @@ const loadManifestUrlSession = async (
   }
 
   const acquiredPatchFiles: File[] = [];
-  const entries: ManifestApplySessionEntry[] = plan.entries.map((entry, index) => {
+  const entries: BundleApplySessionEntry[] = plan.entries.map((entry, index) => {
     const file = patchFiles[index];
-    if (!file) throw new Error(`Manifest patch ${index + 1} was not acquired`);
+    if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);
     acquiredPatchFiles.push(file);
     return { ...entry, fileName: file.name };
   });
   const acquiredRomFile: File | null = romFile;
-  const session: ManifestApplySession = {
+  const session: BundleApplySession = {
     chainEndpointChecks: plan.chainEndpointChecks,
     entries,
     key: plan.key,
@@ -123,8 +123,8 @@ const loadManifestUrlSession = async (
     warnings: plan.warnings,
   };
   const files = [...(acquiredRomFile ? [acquiredRomFile] : []), ...acquiredPatchFiles];
-  logger.info(`manifest session loaded (${files.length} file(s), ${entries.length} patch(es))`);
+  logger.info(`bundle session loaded (${files.length} file(s), ${entries.length} patch(es))`);
   return { files, session };
 };
 
-export { loadManifestUrlSession };
+export { loadBundleUrlSession };

@@ -263,9 +263,9 @@ byte-correct, validated against the file-based xdelta handler), not necessarily
 byte-identical to UDP's own disc image. Matching UDP's image byte-for-byte would
 require reproducing DiscUtils' exact ISO9660 layout and is deferred.
 
-## rw.json manifests
+## rom-weaver-bundle.json bundles
 
-An `rw.json` manifest is a distributable patching-workflow definition: ordered
+An `rom-weaver-bundle.json` bundle is a distributable patching-workflow definition: ordered
 `patches` (each with editable `name`/`description`, an `optional` flag
 (absent/false = applied by default), a free-form maturity `label`, and a
 per-patch `header` mode), an optional `rom` entry, and
@@ -273,42 +273,42 @@ overridable `output` defaults (`name`/`header`). ROM state checks live on the
 chain's endpoints: `rom.checks` describes the input ROM and `output.checks`
 the result of applying the full chain. A patch only carries its own
 `inputChecks`/`outputChecks` when they differ from those endpoints (mid-chain
-steps) - `manifest create` drops endpoint-equal per-patch checks
+steps) - `bundle create` drops endpoint-equal per-patch checks
 automatically, so patches rely on the rom/output checks unless they differ.
 Output compression always remains the applying user's choice. Every patch
-entry's source is either a download `url` or a `path` relative to the manifest
-(an archive member when the manifest ships inside an "everything archive" that
+entry's source is either a download `url` or a `path` relative to the bundle
+(an archive member when the bundle ships inside an "everything archive" that
 also bundles the ROM and patches). The `rom` entry may instead be *sourceless*
 (checks/name only): the applying user supplies the ROM themselves and the
 checks validate it - the default shape for distributable patch bundles; the
 apply error for a sourceless bundle input and the webapp's ROM step both
 surface the expected name/checksums/size so the user knows which ROM to
 supply. Schema and the single shared parser live in
-`rom-weaver-app/src/manifest_schema.rs` / `manifest_parse.rs`; validation
-failures use stable `manifest.*` `ValidationCode`s. Manifest-ness is
-filename-based: exactly `rw.json`, `rw.json.<gz|bz2|xz|zst>`, or a root-level
-`rw.json` archive member. Never name one `manifest.json` - the webapp service
+`rom-weaver-app/src/bundle_schema.rs` / `bundle_parse.rs`; validation
+failures use stable `bundle.*` `ValidationCode`s. Bundle detection is
+filename-based: exactly `rom-weaver-bundle.json`, `rom-weaver-bundle.json.<gz|bz2|xz|zst>`, or a root-level
+`rom-weaver-bundle.json` archive member. Never name one `manifest.json` - the webapp service
 worker runtime-caches that name.
 
-- **Commands.** `manifest parse` loads any accepted packaging, resolves
+- **Commands.** `bundle parse` loads any accepted packaging, resolves
   entries (extracting referenced archive members into `--extract-dir`,
   attaching ingest-grade patch descriptors), and returns a typed
-  `ManifestParseResult` under `details.manifest`. `manifest create` builds a
-  validated manifest from local files (ROM checks computed from the
+  `BundleParseResult` under `details.bundle`. `bundle create` builds a
+  validated bundle from local files (ROM checks computed from the
   real bytes, per-patch metadata flags - including
   `--patch-input-check`/`--patch-output-check` chain-state requirements -
   bound to the preceding `--patch` by argv index; `--output-check` pins the
-  final `output.checks`), emits plain/`.gz`/`.zst`, and `--bundle`s manifest + sources into
+  final `output.checks`), emits plain/`.gz`/`.zst`, and `--bundle`s the bundle + sources into
   a creatable archive (the extension picks the format, e.g. `.zip`/`.7z`).
   `--no-bundle-rom` keeps the local ROM out of the bundle and emits its
-  entry checks-only. Create re-parses before writing, so it can never emit
+entry checks-only. Create re-parses before writing, so it can never emit
   what parse rejects, and reports hash progress as running events (the
   webapp progress meter).
-- **Manifest-driven apply.** `patch apply` routes through
-  `manifest_apply.rs` when it sees `--manifest <path-or-url>`, an
-  `rw.json[.codec]` input, or an archive with a root `rw.json` and no
-  explicit `--patch`. The resolver merges the manifest into a plain command;
-  precedence is decided by field shape (explicit CLI value > manifest >
+- **Bundle-driven apply.** `patch apply` routes through
+  `bundle_apply.rs` when it sees `--bundle <path-or-url>`, an
+  `rom-weaver-bundle.json[.codec]` input, or an archive with a root `rom-weaver-bundle.json` and no
+  explicit `--patch`. The resolver merges the bundle into a plain command;
+  precedence is decided by field shape (explicit CLI value > bundle >
   built-in default). Non-optional patches seed the selection
   (`--with`/`--without` override; an interactive session prompts over every
   entry and Cancel keeps the defaults). Input validation merges `rom.checks`
@@ -318,20 +318,20 @@ worker runtime-caches that name.
   disagree with its predecessor's `outputChecks` logs a warning (skipped
   chain step) rather than failing. Native builds download `url` entries via
   `ureq` (target-gated out of wasm); relative entry URLs resolve against the
-  manifest's own URL.
-- **Browser flow.** The webapp's URL API (`?manifest=<url>` or
+  bundle's own URL.
+- **Browser flow.** The webapp's URL API (`?bundle=<url>` or
   `?rom=<url>&patch=<url>…`, parsed once at boot in
   `src/webapp/url-session/`) fetches sources with JS `fetch` (hosts must
-  allow CORS), runs `manifest parse` in wasm, and delivers the resolved
-  files through the standard page-drop pipeline. Manifest metadata seeds the
+  allow CORS), runs `bundle parse` in wasm, and delivers the resolved
+  files through the standard page-drop pipeline. Bundle metadata seeds the
   patch enablement switches (`optional: true` = off, everything else = on;
   every patch remains toggleable) and output defaults; each entry's effective
   chain checks are reconstructed from the rom/output endpoints
-  (`resolveManifestEntryChecks`). The session display name derives from the
-  output/rom naming (manifests carry no name field). Patch name, description,
+  (the effective chain checks reconstructed from the endpoints). The session display name derives from the
+  output/rom naming (bundles carry no name field). Patch name, description,
   and six input/output checksum fields live in each patch's Options drawer.
   Default output name, bundle format, original-ROM inclusion, export
-  progress, and the direct Export action live in Output. Local drops may include `rw.json`
+  progress, and the direct Export action live in Output. Local drops may include `rom-weaver-bundle.json`
   plus its relative-path companions.
   Patch sources are resolved to their extracted leaves first
   (`prepareInputFile`), so bundles carry the actual patch files rather than

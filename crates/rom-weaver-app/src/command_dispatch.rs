@@ -33,9 +33,9 @@ impl CliApp {
                 PatchCommands::Validate(args) => self.run_patch_validate(args),
                 PatchCommands::Create(args) => self.run_patch_create(*args),
             },
-            Commands::Manifest(command) => match command {
-                ManifestCommands::Create(args) => self.run_manifest_create(*args),
-                ManifestCommands::Parse(args) => self.run_manifest_parse(args),
+            Commands::Bundle(command) => match command {
+                BundleCommands::Create(args) => self.run_bundle_create(*args),
+                BundleCommands::Parse(args) => self.run_bundle_parse(args),
             },
             Commands::Tools(command) => self.run_tools(command),
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
@@ -53,8 +53,8 @@ impl CliApp {
             Commands::Patch(PatchCommands::Apply(_)) => "patch-apply",
             Commands::Patch(PatchCommands::Validate(_)) => "patch-validate",
             Commands::Patch(PatchCommands::Create(_)) => "patch-create",
-            Commands::Manifest(ManifestCommands::Create(_)) => "manifest-create",
-            Commands::Manifest(ManifestCommands::Parse(_)) => "manifest-parse",
+            Commands::Bundle(BundleCommands::Create(_)) => "bundle-create",
+            Commands::Bundle(BundleCommands::Parse(_)) => "bundle-parse",
             Commands::Tools(ToolsCommands::PpfUndo(_)) => "tools-ppf-undo",
             Commands::PlanExtractBatch(_) => "plan-extract-batch",
         }

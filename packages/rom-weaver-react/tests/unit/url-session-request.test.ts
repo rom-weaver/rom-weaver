@@ -9,23 +9,23 @@ describe("readUrlSessionRequest", () => {
     expect(readUrlSessionRequest("?theme=dark", BASE).request).toBeNull();
   });
 
-  test("parses a manifest request and resolves relative urls", () => {
-    const { request, warnings } = readUrlSessionRequest("?manifest=packs/rw.json", BASE);
+  test("parses a bundle request and resolves relative urls", () => {
+    const { request, warnings } = readUrlSessionRequest("?bundle=packs/rom-weaver-bundle.json", BASE);
     expect(request).toEqual({
-      kind: "manifest",
-      manifestUrl: "https://weaver.example/app/packs/rw.json",
+      bundleUrl: "https://weaver.example/app/packs/rom-weaver-bundle.json",
+      kind: "bundle",
     });
     expect(warnings).toEqual([]);
   });
 
-  test("manifest wins over rom/patch shortcuts with a warning", () => {
+  test("bundle wins over rom/patch shortcuts with a warning", () => {
     const { request, warnings } = readUrlSessionRequest(
-      "?manifest=https://host.example/rw.json&rom=https://host.example/game.bin&patch=a.ips",
+      "?bundle=https://host.example/rom-weaver-bundle.json&rom=https://host.example/game.bin&patch=a.ips",
       BASE,
     );
     expect(request).toEqual({
-      kind: "manifest",
-      manifestUrl: "https://host.example/rw.json",
+      bundleUrl: "https://host.example/rom-weaver-bundle.json",
+      kind: "bundle",
     });
     expect(warnings).toHaveLength(1);
   });

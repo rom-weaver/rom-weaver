@@ -1,7 +1,7 @@
 use super::*;
 
-use super::manifest_apply::ManifestApplyResolution;
-use super::manifest_parse::manifest_validation;
+use super::bundle_apply::BundleApplyResolution;
+use super::bundle_parse::bundle_validation;
 use super::patch_commands::{
     DiscoveredPatchApplySidecars, PatchApplyProgressSink, PatchApplyProgressTracker,
     patch_progress_segment_start,
@@ -17,7 +17,7 @@ impl CliApp {
             patch_filter = args.patch_filter,
             patch_count = args.patches.len(),
             output = ?args.output,
-            manifest = ?args.manifest,
+            bundle = ?args.bundle,
             with_patches = args.with_patches.len(),
             without_patches = args.without_patches.len(),
             no_extract = args.no_extract,
@@ -40,16 +40,16 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-apply command"
         );
-        // Manifest-driven runs merge the rw.json into a plain command first.
-        // The context built here owns the temp namespace any manifest-extracted
+        // Bundle-driven runs merge the rom-weaver-bundle.json into a plain command first.
+        // The context built here owns the temp namespace any bundle-extracted
         // archive members live in, so it must outlive the whole apply - it is
         // dropped (and its files cleaned) only after the run completes.
         let mut args = args;
-        let manifest_context = self.context(args.threads);
-        let manifest_resolution = match self.resolve_manifest_apply(&mut args, &manifest_context) {
+        let bundle_context = self.context(args.threads);
+        let bundle_resolution = match self.resolve_bundle_apply(&mut args, &bundle_context) {
             Ok(resolution) => resolution,
             Err(error) => {
-                let thread_execution = manifest_context.single_thread_execution();
+                let thread_execution = bundle_context.single_thread_execution();
                 return self.finish(
                     "patch-apply",
                     OperationReport::failed(
@@ -62,19 +62,19 @@ impl CliApp {
                 );
             }
         };
-        self.run_patch_apply_resolved(args, manifest_resolution)
+        self.run_patch_apply_resolved(args, bundle_resolution)
     }
 
-    /// The body of `patch apply` after manifest resolution: `args` is a plain,
+    /// The body of `patch apply` after bundle resolution: `args` is a plain,
     /// fully-merged command.
     fn run_patch_apply_resolved(
         &self,
         args: PatchApplyCommand,
-        manifest_resolution: Option<ManifestApplyResolution>,
+        bundle_resolution: Option<BundleApplyResolution>,
     ) -> AppRunOutcome {
         // Everything downstream (staging, finalize, compression naming) needs a
-        // concrete output path. A manifest-driven run fills this from
-        // output.name before we get here, so only the flag-less, manifest-less
+        // concrete output path. A bundle-driven run fills this from
+        // output.name before we get here, so only the flag-less, bundle-less
         // case can still be empty.
         if args.output.is_none() {
             let thread_execution = self.context(args.threads).single_thread_execution();
@@ -84,9 +84,9 @@ impl CliApp {
                     OperationFamily::Patch,
                     None,
                     "validate",
-                    manifest_validation(
-                        "manifest.output.missing",
-                        "patch apply requires --output or a manifest output.name",
+                    bundle_validation(
+                        "bundle.output.missing",
+                        "patch apply requires --output or a bundle output.name",
                     )
                     .to_string(),
                     thread_execution,
@@ -114,7 +114,7 @@ impl CliApp {
             no_ignore,
             mut patches,
             output,
-            manifest: _,
+            bundle: _,
             with_patches: _,
             without_patches: _,
             no_compress,
@@ -314,11 +314,11 @@ impl CliApp {
         }
 
         let mut expected_input_size: Option<u64> = None;
-        // Manifest checks merge after the CLI flags (already parsed into
+        // Bundle checks merge after the CLI flags (already parsed into
         // `expected_input_checksums`) and before the file-name requirements,
-        // so precedence is CLI > manifest > file name and any conflict names
-        // the manifest source that introduced it.
-        if !ignore_checksum_validation && let Some(resolution) = &manifest_resolution {
+        // so precedence is CLI > bundle > file name and any conflict names
+        // the bundle source that introduced it.
+        if !ignore_checksum_validation && let Some(resolution) = &bundle_resolution {
             for (source_label, requirements) in &resolution.checks {
                 if let Some(report) = self.merge_expected_input_requirements(
                     "patch-apply",
@@ -331,15 +331,15 @@ impl CliApp {
                     return self.finish("patch-apply", report);
                 }
             }
-            // Manifest output checks merge after the CLI output flags with
+            // Bundle output checks merge after the CLI output flags with
             // the same conflict rule as input requirements. Disc inputs
             // reassemble into multiple files, so there is no single output to
-            // checksum - skip rather than fail an otherwise valid manifest.
+            // checksum - skip rather than fail an otherwise valid bundle.
             match (&resolution.output_checks, disc_context.is_some()) {
                 (Some((source_label, _)), true) => {
                     trace!(
                         source = %source_label,
-                        "manifest output checks skipped: disc apply emits no single checksummable output"
+                        "bundle output checks skipped: disc apply emits no single checksummable output"
                     );
                 }
                 (Some((source_label, requirements)), false) => {

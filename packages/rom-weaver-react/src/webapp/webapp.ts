@@ -174,7 +174,7 @@ const getConfiguredRuntimeSettings = (): RuntimeSettings =>
 
 const getConfiguredInitialMode = () => (typeof appConfig.initialMode === "string" ? appConfig.initialMode : "");
 
-// `?manifest=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
+// `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
 // this boot-time read consumes them.
 const urlSessionParse =

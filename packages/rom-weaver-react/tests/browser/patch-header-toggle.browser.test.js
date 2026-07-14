@@ -25,10 +25,10 @@ const buildInesRom = () => {
   return new File([bytes], "game.nes", { type: "application/octet-stream" });
 };
 
-test("strip-header toggle settles inside a manifest bundle session", async () => {
+test("strip-header toggle settles inside an everything archive bundle session", async () => {
   const patchFile = await loadFixtureFile(RAW_PATCH);
   const romFile = buildInesRom();
-  const manifest = {
+  const bundleJson = {
     output: { name: "hack.nes" },
     patches: [{ name: "Core", path: "change.ips" }],
     rom: {
@@ -37,15 +37,18 @@ test("strip-header toggle settles inside a manifest bundle session", async () =>
     },
     version: 1,
   };
-  const bundle = await buildZip(
+  const bundleArchive = await buildZip(
     [
-      { file: new File([JSON.stringify(manifest)], "rw.json", { type: "application/json" }), fileName: "rw.json" },
+      {
+        file: new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" }),
+        fileName: "rom-weaver-bundle.json",
+      },
       { file: romFile, fileName: "game.nes" },
       { file: patchFile, fileName: "change.ips" },
     ],
     "with-rom.zip",
   );
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundle], id: 2 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 2 } }));
   await waitForApplyButtonEnabled();
 
   document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();

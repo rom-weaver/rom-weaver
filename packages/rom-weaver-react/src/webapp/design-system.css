@@ -814,7 +814,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .patch-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .16s var(--ease); }
 .rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: 8px; }
 .rw-app .card { transition: gap .16s var(--ease), border-color .15s, background .15s; }
-/* a disabled patch stays open - the body keeps its Options drawer so manifest
+/* a disabled patch stays open - the body keeps its Options drawer so bundle
    authors can edit name/description/checks without re-enabling - and reads
    "off" via the dashed frame + desaturation below */
 .rw-app .card.is-disabled { background: color-mix(in oklab, var(--plate-2) 60%, var(--chassis)); border-style: dashed; border-color: var(--seam-strong); }
@@ -1158,7 +1158,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
 .rw-app .info-pop {
   position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
-  width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
   padding: 10px 12px;
   border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
   box-shadow: var(--overlay-shadow);
@@ -1346,16 +1346,16 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .verification-list { display: flex; flex-direction: column; gap: 6px; }
 /* "provide this ROM" card in the ROM step: same boxed checks language as the
    patch verification groups, plus the expected file name under the head */
-.rw-app .manifest-rom-expectation { margin-block-end: 10px; container-type: inline-size; }
+.rw-app .bundle-rom-expectation { margin-block-end: 10px; container-type: inline-size; }
 /* a 40-hex SHA-1 must hold ONE line at any card width (down to phone sizes):
    scale the value with the card via cqw and pin it against wrapping. The
    divisor ≈ hash length × char advance; the subtrahend covers label/copy/gaps. */
-.rw-app .manifest-rom-expectation .verification-list .ck .ck-v {
+.rw-app .bundle-rom-expectation .verification-list .ck .ck-v {
   font-size: clamp(.55rem, calc((100cqw - 118px) / 24), .97rem);
   white-space: nowrap; word-break: normal;
 }
-.rw-app .manifest-rom-expectation .mre-name { font-size: .92rem; color: var(--weft); word-break: break-all; margin-block: -2px 8px; }
-:root[data-theme="dark"] .manifest-rom-expectation .mre-name { color: var(--thread-text); }
+.rw-app .bundle-rom-expectation .mre-name { font-size: .92rem; color: var(--weft); word-break: break-all; margin-block: -2px 8px; }
+:root[data-theme="dark"] .bundle-rom-expectation .mre-name { color: var(--thread-text); }
 /* ck rows inside a boxed verification group (expected-ROM card, patch aux
    requirement rows) sit in the box, not a bleeding drawer - keep them inset */
 .rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
@@ -1410,15 +1410,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .btn.danger { background: transparent; border-color: color-mix(in oklab, var(--fault) 55%, var(--seam-strong)); color: var(--fault); }
 .rw-app .btn.danger:hover { background: color-mix(in oklab, var(--fault) 10%, transparent); }
 .rw-app .btn.slim { height: 30px; padding-inline: 12px; font-size: .76rem; }
-/* the manifest button is the bundle's shipping tag: label-stock paper held on
+/* the bundle button is the bundle's shipping tag: label-stock paper held on
    by a dashed thread stitch - quieter than the solid weft-orange run button
    above it, but cut from the same cloth */
-.rw-app .btn.manifest-dl {
+.rw-app .btn.bundle-dl {
   border: 1px dashed color-mix(in oklab, var(--thread) 50%, transparent);
   background: color-mix(in oklab, var(--weft) 7%, transparent);
   color: var(--thread-text);
 }
-.rw-app .btn.manifest-dl:hover {
+.rw-app .btn.bundle-dl:hover {
   border-color: color-mix(in oklab, var(--thread) 75%, transparent);
   background: color-mix(in oklab, var(--weft) 13%, transparent);
 }

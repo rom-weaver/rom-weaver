@@ -16,7 +16,7 @@ type ApplyWorkflowParentCompression = {
   decompressionTimeMs?: number;
 };
 
-type ApplyWorkflowManifestSource = {
+type ApplyWorkflowBundleSource = {
   /** The already-prepared leaf used by apply (usually an OPFS/VFS path). */
   source: SourceRef;
   /** The original dropped source, retained for optional ROM bundling. */
@@ -25,14 +25,14 @@ type ApplyWorkflowManifestSource = {
   size?: number;
 };
 
-type ApplyWorkflowManifestRomSource = ApplyWorkflowManifestSource & {
+type ApplyWorkflowBundleRomSource = ApplyWorkflowBundleSource & {
   checksums?: ApplyWorkflowChecksums;
   recommendedFormat?: string;
 };
 
-type ApplyWorkflowManifestSources = {
-  rom: ApplyWorkflowManifestRomSource | null;
-  patches: ApplyWorkflowManifestSource[];
+type ApplyWorkflowBundleSources = {
+  rom: ApplyWorkflowBundleRomSource | null;
+  patches: ApplyWorkflowBundleSource[];
 };
 
 type ApplyWorkflowResolvedInput = {
@@ -144,9 +144,9 @@ type ApplyWorkflowPatchState = {
 };
 
 export type {
+  ApplyWorkflowBundleSources,
   ApplyWorkflowChecksums,
   ApplyWorkflowInputState,
-  ApplyWorkflowManifestSources,
   ApplyWorkflowParentCompression,
   ApplyWorkflowPatchState,
   ApplyWorkflowResolvedInput,

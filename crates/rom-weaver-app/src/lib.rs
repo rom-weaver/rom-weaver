@@ -86,7 +86,7 @@ pub enum Commands {
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     Patch(PatchCommands),
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
-    Manifest(ManifestCommands),
+    Bundle(BundleCommands),
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     Tools(ToolsCommands),
     #[cfg_attr(
@@ -135,23 +135,23 @@ pub enum PatchCommands {
     feature = "typescript-types",
     ts(rename_all = "kebab-case", tag = "type", content = "args")
 )]
-pub enum ManifestCommands {
+pub enum BundleCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Build, validate, and write an rw.json manifest from local ROM/patch files",
-            long_about = "Build, validate, and write an rw.json manifest from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-name/-description/-label/-default/-source-url/-header) bind to the most recent preceding --patch. --output accepts rw.json, rw.json.gz, or rw.json.zst; --bundle additionally packs the manifest plus the local sources into one archive whose path entries reference the archived names."
+            about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files",
+            long_about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-name/-description/-label/-default/-source-url/-header) bind to the most recent preceding --patch. --output accepts rom-weaver-bundle.json, rom-weaver-bundle.json.gz, or rom-weaver-bundle.json.zst; --bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names."
         )
     )]
-    Create(Box<ManifestCreateCommand>),
+    Create(Box<BundleCreateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Parse and validate an rw.json manifest (plain, stream-codec compressed, or inside an archive) and resolve its ROM/patch entries",
-            long_about = "Parse and validate an rw.json manifest and resolve its ROM/patch entries.\n\nAccepted sources: a plain rw.json, a stream-codec-compressed rw.json.gz/.bz2/.xz/.zst, or an archive carrying rw.json at its root (an \"everything archive\" that also bundles the ROM and patches).\n\nManifest `path` entries refer to archive members (or files next to the manifest). With --extract-dir, members referenced by the manifest are extracted there and returned as resolved paths, and extracted patch entries include a full patch descriptor. URL entries are returned verbatim; relative URLs resolve against the manifest's own location on the caller's side."
+            about = "Parse and validate a rom-weaver-bundle.json bundle (plain, stream-codec compressed, or inside an archive) and resolve its ROM/patch entries",
+            long_about = "Parse and validate a rom-weaver-bundle.json bundle and resolve its ROM/patch entries.\n\nAccepted sources: a plain rom-weaver-bundle.json, a stream-codec-compressed rom-weaver-bundle.json.gz/.bz2/.xz/.zst, or an archive carrying rom-weaver-bundle.json at its root (an \"everything archive\" that also bundles the ROM and patches).\n\nBundle `path` entries refer to archive members (or files next to the bundle). With --extract-dir, members referenced by the bundle are extracted there and returned as resolved paths, and extracted patch entries include a full patch descriptor. URL entries are returned verbatim; relative URLs resolve against the bundle's own location on the caller's side."
         )
     )]
-    Parse(ManifestParseCommand),
+    Parse(BundleParseCommand),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1019,33 +1019,30 @@ pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_po
 mod patch_filename_checksum;
 use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
 
-mod manifest_schema;
-pub use manifest_schema::{
-    MANIFEST_VERSION, ManifestChecks, ManifestOutput, ManifestPatchEntry, ManifestRom,
-    RomWeaverManifest,
+mod bundle_schema;
+pub use bundle_schema::{
+    BUNDLE_VERSION, BundleChecks, BundleOutput, BundlePatchEntry, BundleRom, RomWeaverBundle,
 };
 
-mod manifest_parse;
+mod bundle_parse;
 
-mod manifest_load;
+mod bundle_load;
 
-mod manifest_apply;
+mod bundle_apply;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod manifest_download;
+mod bundle_download;
 
-mod manifest_command;
-pub use manifest_command::{
-    ManifestParseResult, ManifestPatchSource, ManifestSourceKind, ManifestSourceRef,
-};
+mod bundle_command;
+pub use bundle_command::{BundleParseResult, BundlePatchSource, BundleSourceKind, BundleSourceRef};
 
-mod manifest_create;
-pub use manifest_create::ManifestCreateResult;
+mod bundle_create;
+pub use bundle_create::BundleCreateResult;
 
 mod command_args;
 pub use command_args::{
-    ChecksumCommand, CompressCommand, ExtractCommand, IngestCommand, ManifestCreateCommand,
-    ManifestCreatePatchSpec, ManifestParseCommand, PatchApplyCommand, PatchCreateCommand,
+    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
+    CompressCommand, ExtractCommand, IngestCommand, PatchApplyCommand, PatchCreateCommand,
     PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
 };
 

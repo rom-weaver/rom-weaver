@@ -18,7 +18,7 @@ type SevenZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["se
 
 type StringNumber = number | string;
 
-type ManifestPackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
+type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
 type WorkerSettings = {
   threads?: StringNumber | "auto";
@@ -38,7 +38,7 @@ type CommonSettings = {
   defaultCompression?: DefaultCompression;
   input?: InputSettings;
   logging?: LoggingSettings;
-  manifestPackage?: ManifestPackage;
+  bundlePackage?: BundlePackage;
   storage?: StorageSettings;
   workers?: WorkerSettings;
 };
@@ -83,7 +83,7 @@ type OutputSettings = {
   /** ROM copier-header handling on the patched output: auto (re-add emulator-required
    * headers, drop junk copier headers), keep, or strip (headerless output). */
   header?: "auto" | "keep" | "strip";
-  manifestPackage?: ManifestPackage;
+  bundlePackage?: BundlePackage;
   outputName?: string;
   suffix?: boolean;
 };

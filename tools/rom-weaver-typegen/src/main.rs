@@ -1,16 +1,15 @@
 use std::{env, fs, path::Path};
 
 use rom_weaver_app::{
-    ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand,
-    ExtractStepDetails, ExtractedFileEntry, IngestCommand, IngestKind, IngestResult,
-    IngestRomAsset, ManifestChecks, ManifestCommands, ManifestCreateCommand, ManifestCreateResult,
-    ManifestOutput, ManifestParseCommand, ManifestParseResult, ManifestPatchEntry,
-    ManifestPatchSource, ManifestRom, ManifestSourceKind, ManifestSourceRef, N64ByteOrder,
-    PatchApplyCommand, PatchApplyHeaderMode, PatchApplyOutputHeaderMode, PatchCommands,
-    PatchCreateCommand, PatchDescriptor, PatchValidateCommand, PlanExtractBatchCommand,
-    PpfUndoCommand, ProbeCommand, RomWeaverManifest, RomWeaverRunOutputOptions,
-    RomWeaverRunRequest, ToolsCommands, TrimCommand, compression_metadata,
-    patch_create_format_policy_metadata,
+    BundleChecks, BundleCommands, BundleCreateCommand, BundleCreateResult, BundleOutput,
+    BundleParseCommand, BundleParseResult, BundlePatchEntry, BundlePatchSource, BundleRom,
+    BundleSourceKind, BundleSourceRef, ChecksumCommand, Commands, CompressCommand,
+    CompressionLevelProfile, ExtractCommand, ExtractStepDetails, ExtractedFileEntry, IngestCommand,
+    IngestKind, IngestResult, IngestRomAsset, N64ByteOrder, PatchApplyCommand,
+    PatchApplyHeaderMode, PatchApplyOutputHeaderMode, PatchCommands, PatchCreateCommand,
+    PatchDescriptor, PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand,
+    RomWeaverBundle, RomWeaverRunOutputOptions, RomWeaverRunRequest, ToolsCommands, TrimCommand,
+    compression_metadata, patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
@@ -192,19 +191,19 @@ fn render_types() -> String {
         export_decl::<PatchCommands>(&config),
         export_decl::<PpfUndoCommand>(&config),
         export_decl::<ToolsCommands>(&config),
-        export_decl::<ManifestChecks>(&config),
-        export_decl::<ManifestRom>(&config),
-        export_decl::<ManifestPatchEntry>(&config),
-        export_decl::<ManifestOutput>(&config),
-        export_decl::<RomWeaverManifest>(&config),
-        export_decl::<ManifestSourceKind>(&config),
-        export_decl::<ManifestSourceRef>(&config),
-        export_decl::<ManifestPatchSource>(&config),
-        export_decl::<ManifestParseResult>(&config),
-        export_decl::<ManifestParseCommand>(&config),
-        export_decl::<ManifestCreateCommand>(&config),
-        export_decl::<ManifestCreateResult>(&config),
-        export_decl::<ManifestCommands>(&config),
+        export_decl::<BundleChecks>(&config),
+        export_decl::<BundleRom>(&config),
+        export_decl::<BundlePatchEntry>(&config),
+        export_decl::<BundleOutput>(&config),
+        export_decl::<RomWeaverBundle>(&config),
+        export_decl::<BundleSourceKind>(&config),
+        export_decl::<BundleSourceRef>(&config),
+        export_decl::<BundlePatchSource>(&config),
+        export_decl::<BundleParseResult>(&config),
+        export_decl::<BundleParseCommand>(&config),
+        export_decl::<BundleCreateCommand>(&config),
+        export_decl::<BundleCreateResult>(&config),
+        export_decl::<BundleCommands>(&config),
         export_decl::<PlanExtractBatchCommand>(&config),
         export_decl::<Commands>(&config),
         export_decl::<RomWeaverRunOutputOptions>(&config),
@@ -257,7 +256,7 @@ fn render_command_types() -> String {
     let config = ts_rs::Config::default();
     let command_types = tagged_enum_type_literals::<Commands>(&config);
     let patch_command_types = tagged_enum_type_literals::<PatchCommands>(&config);
-    let manifest_command_types = tagged_enum_type_literals::<ManifestCommands>(&config);
+    let bundle_command_types = tagged_enum_type_literals::<BundleCommands>(&config);
     format!(
         "{COMMAND_TYPES_HEADER}{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
@@ -269,12 +268,12 @@ fn render_command_types() -> String {
             Value::Array(string_values(patch_command_types))
         ),
         render_ts_const(
-            "KNOWN_MANIFEST_COMMAND_TYPES",
-            Value::Array(string_values(manifest_command_types))
+            "KNOWN_BUNDLE_COMMAND_TYPES",
+            Value::Array(string_values(bundle_command_types))
         ),
         r#"export type KnownRomWeaverCommandType = typeof KNOWN_COMMAND_TYPES[number];
 export type KnownRomWeaverPatchCommandType = typeof KNOWN_PATCH_COMMAND_TYPES[number];
-export type KnownRomWeaverManifestCommandType = typeof KNOWN_MANIFEST_COMMAND_TYPES[number];
+export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
 
 export function isKnownRomWeaverCommandType(value: unknown): value is KnownRomWeaverCommandType {
   return typeof value === 'string' && (KNOWN_COMMAND_TYPES as readonly string[]).includes(value);
@@ -284,8 +283,8 @@ export function isKnownRomWeaverPatchCommandType(value: unknown): value is Known
   return typeof value === 'string' && (KNOWN_PATCH_COMMAND_TYPES as readonly string[]).includes(value);
 }
 
-export function isKnownRomWeaverManifestCommandType(value: unknown): value is KnownRomWeaverManifestCommandType {
-  return typeof value === 'string' && (KNOWN_MANIFEST_COMMAND_TYPES as readonly string[]).includes(value);
+export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
+  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
 }
 
 export function assertKnownRomWeaverCommandType(
@@ -310,15 +309,15 @@ export function assertKnownRomWeaverPatchCommandType(
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_PATCH_COMMAND_TYPES)})`);
 }
 
-export function assertKnownRomWeaverManifestCommandType(
+export function assertKnownRomWeaverBundleCommandType(
   value: unknown,
-  label = 'rom-weaver manifest command',
+  label = 'rom-weaver bundle command',
   field = '`type` field',
-): KnownRomWeaverManifestCommandType {
+): KnownRomWeaverBundleCommandType {
   const type = typeof value === 'string' ? value.trim() : '';
   if (!type) throw new TypeError(`${label} requires a string ${field}`);
-  if (isKnownRomWeaverManifestCommandType(type)) return type;
-  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_MANIFEST_COMMAND_TYPES)})`);
+  if (isKnownRomWeaverBundleCommandType(type)) return type;
+  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_BUNDLE_COMMAND_TYPES)})`);
 }
 
 function formatKnownTypes(types: readonly string[]): string {

@@ -227,6 +227,7 @@ const getNormalizedWorkflowSettings = (
     },
     output: {
       ...output,
+      bundlePackage: readFirstDefined(output.bundlePackage, source.bundlePackage),
       compression: readFirstDefined(output.compression, "auto"),
       container: {
         chdCreateCdCodecs: chdCreateCdCodecs as OutputContainerSettings["chdCreateCdCodecs"],
@@ -243,7 +244,6 @@ const getNormalizedWorkflowSettings = (
         zipCodec: compressionLevels.zipCodec as OutputContainerSettings["zipCodec"],
         zipLevel: compressionLevels.zipLevel as OutputContainerSettings["zipLevel"],
       },
-      manifestPackage: readFirstDefined(output.manifestPackage, source.manifestPackage),
     },
     validation: {
       ...validation,

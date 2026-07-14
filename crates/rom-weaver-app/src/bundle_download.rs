@@ -1,4 +1,4 @@
-//! Native-only downloads for rw.json manifest `url` entries. The wasm build
+//! Native-only downloads for rom-weaver-bundle.json bundle `url` entries. The wasm build
 //! never compiles this module - the browser prefetches URLs with JS `fetch`
 //! and hands the CLI core plain paths.
 
@@ -18,11 +18,11 @@ const DOWNLOAD_READ_CHUNK: usize = 64 * 1024;
 const DOWNLOAD_PROGRESS_STRIDE: u64 = 4 * 1024 * 1024;
 
 impl CliApp {
-    /// Download one manifest-referenced URL into the run's temp namespace.
+    /// Download one bundle-referenced URL into the run's temp namespace.
     /// The URL's tail file name is preserved (compound extensions like
     /// `.tar.gz` drive container probing, and `[crc32:..]` tokens drive
     /// file-name requirement parsing downstream).
-    pub(super) fn download_manifest_url(
+    pub(super) fn download_bundle_url(
         &self,
         url: &str,
         entry_label: &str,
@@ -30,22 +30,22 @@ impl CliApp {
     ) -> Result<PathBuf> {
         if !(url.starts_with("http://") || url.starts_with("https://")) {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("manifest.url.unsupported")
-                    .with_message("manifest url entries must use http or https")
+                ValidationCodeError::new("bundle.url.unsupported")
+                    .with_message("bundle url entries must use http or https")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("url", url.to_owned()),
             ));
         }
         let file_name =
-            url_tail_file_name(url).unwrap_or_else(|| "manifest-download.bin".to_string());
-        let dir = context.temp_paths().next_path("manifest-download", None);
+            url_tail_file_name(url).unwrap_or_else(|| "bundle-download.bin".to_string());
+        let dir = context.temp_paths().next_path("bundle-download", None);
         fs::create_dir_all(&dir)?;
         let target = dir.join(&file_name);
         trace!(
             url,
             entry = entry_label,
             target = %target.display(),
-            "downloading manifest url entry"
+            "downloading bundle url entry"
         );
 
         let config = ureq::Agent::config_builder()
@@ -55,7 +55,7 @@ impl CliApp {
         let agent = ureq::Agent::new_with_config(config);
         // Non-2xx statuses surface as Err from call() (ureq's default).
         let mut response = agent.get(url).call().map_err(|error| {
-            RomWeaverError::Validation(format!("manifest download failed for `{url}`: {error}"))
+            RomWeaverError::Validation(format!("bundle download failed for `{url}`: {error}"))
         })?;
         let total_bytes = response.body().content_length();
         let mut reader = response
@@ -70,7 +70,7 @@ impl CliApp {
         let mut last_emitted: u64 = 0;
         loop {
             let read = reader.read(&mut buffer).map_err(|error| {
-                RomWeaverError::Validation(format!("manifest download failed for `{url}`: {error}"))
+                RomWeaverError::Validation(format!("bundle download failed for `{url}`: {error}"))
             })?;
             if read == 0 {
                 break;
@@ -101,15 +101,15 @@ impl CliApp {
             }
         }
         file.flush()?;
-        trace!(url, bytes = downloaded, "manifest url entry downloaded");
+        trace!(url, bytes = downloaded, "bundle url entry downloaded");
         Ok(target)
     }
 }
 
-/// Base of a URL for resolving relative manifest entry references: everything
+/// Base of a URL for resolving relative bundle entry references: everything
 /// up to (not including) the last path segment. Falls back to the URL itself
 /// when there is no path beyond the authority.
-pub(super) fn manifest_url_base(url: &str) -> String {
+pub(super) fn bundle_url_base(url: &str) -> String {
     let trimmed = url.split(['?', '#']).next().unwrap_or(url);
     let path_start = trimmed
         .find("://")
@@ -121,11 +121,11 @@ pub(super) fn manifest_url_base(url: &str) -> String {
     }
 }
 
-/// Resolve a manifest entry URL: absolute http(s) URLs pass through; a plain
-/// relative reference joins onto the manifest's own URL base.
-pub(super) fn resolve_manifest_entry_url(
+/// Resolve a bundle entry URL: absolute http(s) URLs pass through; a plain
+/// relative reference joins onto the bundle's own URL base.
+pub(super) fn resolve_bundle_entry_url(
     url: &str,
-    manifest_base_url: Option<&str>,
+    bundle_base_url: Option<&str>,
     entry_label: &str,
 ) -> Result<String> {
     if url.starts_with("http://") || url.starts_with("https://") {
@@ -133,19 +133,19 @@ pub(super) fn resolve_manifest_entry_url(
     }
     if url.starts_with('/') || url.starts_with('\\') {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("manifest.url.unsupported")
+            ValidationCodeError::new("bundle.url.unsupported")
                 .with_message(
-                    "relative manifest urls must not start with a slash; use a full http(s) url or a plain relative reference",
+                    "relative bundle urls must not start with a slash; use a full http(s) url or a plain relative reference",
                 )
                 .with_field("entry", entry_label.to_owned())
                 .with_field("url", url.to_owned()),
         ));
     }
-    let Some(base) = manifest_base_url else {
+    let Some(base) = bundle_base_url else {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("manifest.url.unsupported")
+            ValidationCodeError::new("bundle.url.unsupported")
                 .with_message(
-                    "relative manifest urls only resolve when the manifest itself was fetched from a url",
+                    "relative bundle urls only resolve when the bundle itself was fetched from a url",
                 )
                 .with_field("entry", entry_label.to_owned())
                 .with_field("url", url.to_owned()),
@@ -181,22 +181,22 @@ mod tests {
     #[test]
     fn url_base_strips_last_segment_only() {
         assert_eq!(
-            manifest_url_base("https://example.test/packs/rw.json"),
+            bundle_url_base("https://example.test/packs/rom-weaver-bundle.json"),
             "https://example.test/packs"
         );
         assert_eq!(
-            manifest_url_base("https://example.test/rw.json?token=1"),
+            bundle_url_base("https://example.test/rom-weaver-bundle.json?token=1"),
             "https://example.test"
         );
         assert_eq!(
-            manifest_url_base("https://example.test"),
+            bundle_url_base("https://example.test"),
             "https://example.test"
         );
     }
 
     #[test]
-    fn relative_urls_join_onto_manifest_base() {
-        let resolved = resolve_manifest_entry_url(
+    fn relative_urls_join_onto_bundle_base() {
+        let resolved = resolve_bundle_entry_url(
             "patches/main.ips",
             Some("https://example.test/packs"),
             "patches[0]",
@@ -207,9 +207,9 @@ mod tests {
 
     #[test]
     fn relative_urls_without_base_or_with_leading_slash_fail() {
-        assert!(resolve_manifest_entry_url("main.ips", None, "patches[0]").is_err());
+        assert!(resolve_bundle_entry_url("main.ips", None, "patches[0]").is_err());
         assert!(
-            resolve_manifest_entry_url("/main.ips", Some("https://example.test"), "patches[0]")
+            resolve_bundle_entry_url("/main.ips", Some("https://example.test"), "patches[0]")
                 .is_err()
         );
     }

@@ -1,38 +1,38 @@
-//! `manifest create`: build, validate, and emit an rw.json manifest from
+//! `bundle create`: build, validate, and emit a rom-weaver-bundle.json bundle from
 //! local sources (native + wasm; the webapp export drives this command).
 
 use flate2::{Compression as GzCompression, write::GzEncoder};
 
-use super::manifest_parse::{manifest_file_name_codec, parse_manifest_bytes};
+use super::bundle_parse::{bundle_file_name_codec, parse_bundle_bytes};
 use super::*;
 
-const MANIFEST_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
+const BUNDLE_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
 
-const MANIFEST_CREATE_OP: OperationLabel<'static> = OperationLabel {
-    command: "manifest-create",
+const BUNDLE_CREATE_OP: OperationLabel<'static> = OperationLabel {
+    command: "bundle-create",
     family: OperationFamily::Command,
     format: None,
 };
 
 /// Emit a hash-progress event at most once per this many processed bytes.
-const MANIFEST_CREATE_PROGRESS_INTERVAL: u64 = 8 * 1024 * 1024;
+const BUNDLE_CREATE_PROGRESS_INTERVAL: u64 = 8 * 1024 * 1024;
 
-/// The result of one `manifest create`, returned under
-/// `details.manifest_create`.
+/// The result of one `bundle create`, returned under
+/// `details.bundle_create`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ManifestCreateResult {
-    pub manifest_path: String,
+pub struct BundleCreateResult {
+    pub bundle_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub bundle_path: Option<String>,
-    /// The canonical manifest as written (checksums computed and normalized).
-    pub manifest: RomWeaverManifest,
+    pub archive_path: Option<String>,
+    /// The canonical bundle as written (checksums computed and normalized).
+    pub bundle: RomWeaverBundle,
     pub warnings: Vec<String>,
 }
 
 impl CliApp {
-    pub(super) fn run_manifest_create(&self, args: ManifestCreateCommand) -> AppRunOutcome {
+    pub(super) fn run_bundle_create(&self, args: BundleCreateCommand) -> AppRunOutcome {
         trace!(
             rom = ?args.rom,
             rom_url = ?args.rom_url,
@@ -41,73 +41,73 @@ impl CliApp {
             bundle = ?args.bundle,
             checksum_algorithms = args.checksum.len(),
             threads = %args.threads,
-            "starting manifest create command"
+            "starting bundle create command"
         );
         let context = self.context(args.threads);
         let thread_execution = context.single_thread_execution();
-        let report = match self.manifest_create_inner(&args, &context) {
+        let report = match self.bundle_create_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(
-                    "wrote manifest `{}` ({} patch entr{}{})",
-                    result.manifest_path,
-                    result.manifest.patches.len(),
-                    if result.manifest.patches.len() == 1 {
+                    "wrote bundle `{}` ({} patch entr{}{})",
+                    result.bundle_path,
+                    result.bundle.patches.len(),
+                    if result.bundle.patches.len() == 1 {
                         "y"
                     } else {
                         "ies"
                     },
                     result
-                        .bundle_path
+                        .archive_path
                         .as_deref()
                         .map(|bundle| format!("; bundled into `{bundle}`"))
                         .unwrap_or_default(),
                 );
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
-                    Some("manifest-create".to_string()),
-                    "manifest-create",
+                    Some("bundle-create".to_string()),
+                    "bundle-create",
                     label,
                     Some(100.0),
                     thread_execution.clone(),
                 );
                 match serde_json::to_value(&result) {
                     Ok(value) => {
-                        report.details = Some(json!({ "manifest_create": value }));
+                        report.details = Some(json!({ "bundle_create": value }));
                         report
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,
-                        Some("manifest-create".to_string()),
-                        "manifest-create",
-                        format!("failed to serialize manifest create result: {error}"),
+                        Some("bundle-create".to_string()),
+                        "bundle-create",
+                        format!("failed to serialize bundle create result: {error}"),
                         thread_execution,
                     ),
                 }
             }
             Err(error) => OperationReport::failed(
                 OperationFamily::Command,
-                Some("manifest-create".to_string()),
-                "manifest-create",
+                Some("bundle-create".to_string()),
+                "bundle-create",
                 error.to_string(),
                 thread_execution,
             ),
         };
-        self.finish("manifest-create", report)
+        self.finish("bundle-create", report)
     }
 
-    fn manifest_create_inner(
+    fn bundle_create_inner(
         &self,
-        args: &ManifestCreateCommand,
+        args: &BundleCreateCommand,
         context: &OperationContext,
-    ) -> Result<ManifestCreateResult> {
-        let specs = manifest_create_patch_specs(args)?;
+    ) -> Result<BundleCreateResult> {
+        let specs = bundle_create_patch_specs(args)?;
         if specs.is_empty() {
             return Err(RomWeaverError::Validation(
-                "manifest create requires at least one --patch".to_string(),
+                "bundle create requires at least one --patch".to_string(),
             ));
         }
         let algorithms: Vec<String> = if args.checksum.is_empty() {
-            MANIFEST_CREATE_DEFAULT_ALGORITHMS
+            BUNDLE_CREATE_DEFAULT_ALGORITHMS
                 .iter()
                 .map(|algorithm| (*algorithm).to_string())
                 .collect()
@@ -137,11 +137,11 @@ impl CliApp {
         if args.no_bundle_rom && args.rom.is_none() {
             warnings.push("--no-bundle-rom ignored: no local --rom given".to_string());
         }
-        let cached_rom_checks = manifest_entry_checks(&args.rom_checksums, "--rom-checksums")?
+        let cached_rom_checks = bundle_entry_checks(&args.rom_checksums, "--rom-checksums")?
             .filter(|checks| !checks.checksums.is_empty());
         // Overall hash-progress denominator: only the rom is hashed when the
         // caller did not provide the staged checks; patch files carry no
-        // checksums in the manifest.
+        // checksums in the bundle.
         let total_hash_bytes: u64 = args
             .rom
             .as_deref()
@@ -168,7 +168,7 @@ impl CliApp {
                 let checksums = if let Some(cached) = cached_rom_checks.as_ref() {
                     cached.checksums.clone()
                 } else {
-                    self.manifest_checksum_with_progress(
+                    self.bundle_checksum_with_progress(
                         path,
                         &algorithms,
                         context,
@@ -193,17 +193,17 @@ impl CliApp {
                 let sourceless_name = (url_override.is_none() && !distribute_path)
                     .then(|| required_base_name(path, "rom"))
                     .transpose()?;
-                Some(ManifestRom {
+                Some(BundleRom {
                     name: args.rom_name.clone().or(sourceless_name),
                     url: url_override.clone(),
                     path: distribute_path.then_some(base_name),
-                    checks: Some(ManifestChecks {
+                    checks: Some(BundleChecks {
                         checksums,
                         size: Some(size),
                     }),
                 })
             }
-            (None, Some(url)) => Some(ManifestRom {
+            (None, Some(url)) => Some(BundleRom {
                 name: args.rom_name.clone(),
                 url: Some(url.clone()),
                 path: None,
@@ -211,7 +211,7 @@ impl CliApp {
             }),
         };
 
-        let output_checks = manifest_entry_checks(&args.output_check, "--output-check")?;
+        let output_checks = bundle_entry_checks(&args.output_check, "--output-check")?;
 
         let mut patches = Vec::with_capacity(specs.len());
         for spec in &specs {
@@ -222,20 +222,18 @@ impl CliApp {
                 )));
             }
             let base_name = required_base_name(&spec.path, "patch")?;
-            // Patches rely on the manifest's endpoint checks unless they
+            // Patches rely on the bundle's endpoint checks unless they
             // differ: an inputChecks equal to rom.checks (the chain start) or
             // an outputChecks equal to output.checks (the chain end) is
             // implied and stays out of the entry.
             let entry_input_checks =
-                manifest_entry_checks(&spec.input_checks, "--patch-input-check")?.filter(
-                    |checks| {
-                        !checks_implied_by(checks, rom.as_ref().and_then(|rom| rom.checks.as_ref()))
-                    },
-                );
+                bundle_entry_checks(&spec.input_checks, "--patch-input-check")?.filter(|checks| {
+                    !checks_implied_by(checks, rom.as_ref().and_then(|rom| rom.checks.as_ref()))
+                });
             let entry_output_checks =
-                manifest_entry_checks(&spec.output_checks, "--patch-output-check")?
+                bundle_entry_checks(&spec.output_checks, "--patch-output-check")?
                     .filter(|checks| !checks_implied_by(checks, output_checks.as_ref()));
-            patches.push(ManifestPatchEntry {
+            patches.push(BundlePatchEntry {
                 name: spec.name.clone(),
                 description: spec.description.clone(),
                 optional: spec.optional.unwrap_or(false),
@@ -248,7 +246,7 @@ impl CliApp {
             });
         }
 
-        // Path entries reference files by base name (next to the manifest, or
+        // Path entries reference files by base name (next to the bundle, or
         // as flat bundle members) - duplicates would alias each other.
         let mut seen_names = BTreeSet::new();
         let path_names = rom
@@ -258,48 +256,48 @@ impl CliApp {
         for name in path_names {
             if !seen_names.insert(name.clone()) {
                 return Err(RomWeaverError::Validation(format!(
-                    "duplicate source file name `{name}`; manifest path entries reference files by name, so rename one of the inputs"
+                    "duplicate source file name `{name}`; bundle path entries reference files by name, so rename one of the inputs"
                 )));
             }
         }
 
         let output =
             (args.output_name.is_some() || args.output_header.is_some() || output_checks.is_some())
-                .then(|| ManifestOutput {
+                .then(|| BundleOutput {
                     name: args.output_name.clone(),
                     header: args.output_header,
                     checks: output_checks,
                 });
 
-        let manifest = RomWeaverManifest {
-            version: MANIFEST_VERSION,
+        let bundle = RomWeaverBundle {
+            version: BUNDLE_VERSION,
             rom,
             patches,
             output,
         };
-        let mut bytes = serde_json::to_vec_pretty(&manifest).map_err(|error| {
-            RomWeaverError::Validation(format!("failed to serialize manifest: {error}"))
+        let mut bytes = serde_json::to_vec_pretty(&bundle).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to serialize bundle: {error}"))
         })?;
         bytes.push(b'\n');
         // Round-trip validation: create can never emit what parse rejects.
-        parse_manifest_bytes(&bytes)?;
+        parse_bundle_bytes(&bytes)?;
 
         let output_base_name = args
             .output
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or_default();
-        if manifest_file_name_codec(output_base_name).is_none() {
+        if bundle_file_name_codec(output_base_name).is_none() {
             warnings.push(format!(
-                "manifest written as `{output_base_name}`: apply auto-detection only recognizes rw.json / rw.json.<codec> names"
+                "bundle written as `{output_base_name}`: apply auto-detection only recognizes rom-weaver-bundle.json / rom-weaver-bundle.json.<codec> names"
             ));
         }
-        write_manifest_bytes(&args.output, &bytes)?;
-        trace!(output = %args.output.display(), bytes = bytes.len(), "manifest written");
+        write_bundle_bytes(&args.output, &bytes)?;
+        trace!(output = %args.output.display(), bytes = bytes.len(), "bundle written");
 
         let bundle_path = match &args.bundle {
             Some(bundle) => Some(
-                self.create_manifest_bundle(
+                self.create_bundle_bundle(
                     bundle,
                     &bytes,
                     args.bundle_rom
@@ -313,11 +311,11 @@ impl CliApp {
             None => None,
         };
 
-        Ok(ManifestCreateResult {
-            manifest_path: Self::normalize_emitted_path_string(&args.output.to_string_lossy()),
-            bundle_path: bundle_path
+        Ok(BundleCreateResult {
+            bundle_path: Self::normalize_emitted_path_string(&args.output.to_string_lossy()),
+            archive_path: bundle_path
                 .map(|path| Self::normalize_emitted_path_string(&path.to_string_lossy())),
-            manifest,
+            bundle,
             warnings,
         })
     }
@@ -325,7 +323,7 @@ impl CliApp {
     /// Checksum one create source, emitting overall hash progress across the
     /// whole file set (`hashed_bytes` accumulates; `total_bytes` is the fixed
     /// denominator). Without progress events the plain fast path is used.
-    fn manifest_checksum_with_progress(
+    fn bundle_checksum_with_progress(
         &self,
         path: &Path,
         algorithms: &[String],
@@ -352,7 +350,7 @@ impl CliApp {
             ((done as f64 / total_bytes as f64) * 100.0).min(100.0) as f32
         };
         self.emit_running(
-            MANIFEST_CREATE_OP,
+            BUNDLE_CREATE_OP,
             "checksum",
             label.clone(),
             Some(overall_percent(*hashed_bytes)),
@@ -362,12 +360,12 @@ impl CliApp {
         let mut last_emitted = 0u64;
         let mut file = File::open(path)?;
         let mut on_progress = |progress: ChecksumProgress| {
-            if progress.processed_bytes < last_emitted + MANIFEST_CREATE_PROGRESS_INTERVAL {
+            if progress.processed_bytes < last_emitted + BUNDLE_CREATE_PROGRESS_INTERVAL {
                 return;
             }
             last_emitted = progress.processed_bytes;
             self.emit_running(
-                MANIFEST_CREATE_OP,
+                BUNDLE_CREATE_OP,
                 "checksum",
                 label.clone(),
                 Some(overall_percent(
@@ -382,21 +380,21 @@ impl CliApp {
         Ok(computed.values)
     }
 
-    /// Stage `rw.json` + the local sources flat into a temp dir and pack them
+    /// Stage `rom-weaver-bundle.json` + the local sources flat into a temp dir and pack them
     /// with the requested creatable container format.
-    fn create_manifest_bundle(
+    fn create_bundle_bundle(
         &self,
         bundle: &Path,
-        manifest_bytes: &[u8],
+        bundle_bytes: &[u8],
         rom: Option<&Path>,
-        specs: &[ManifestCreatePatchSpec],
+        specs: &[BundleCreatePatchSpec],
         context: &OperationContext,
     ) -> Result<PathBuf> {
-        let staging = context.temp_paths().next_path("manifest-bundle", None);
+        let staging = context.temp_paths().next_path("bundle-bundle", None);
         fs::create_dir_all(&staging)?;
-        let manifest_path = staging.join("rw.json");
-        fs::write(&manifest_path, manifest_bytes)?;
-        let mut inputs = vec![manifest_path];
+        let bundle_path = staging.join("rom-weaver-bundle.json");
+        fs::write(&bundle_path, bundle_bytes)?;
+        let mut inputs = vec![bundle_path];
         if let Some(rom) = rom {
             let target = staging.join(required_base_name(rom, "rom")?);
             fs::copy(rom, &target)?;
@@ -423,7 +421,7 @@ impl CliApp {
         // Archive creation reports no incremental progress here, so surface
         // the stage as indeterminate rather than sitting on the last percent.
         self.emit_running(
-            MANIFEST_CREATE_OP,
+            BUNDLE_CREATE_OP,
             "bundle",
             format!(
                 "bundling {} file(s) into `{}`",
@@ -437,7 +435,7 @@ impl CliApp {
             bundle = %bundle.display(),
             format = handler.descriptor().name,
             inputs = inputs.len(),
-            "creating manifest bundle archive"
+            "creating bundle bundle archive"
         );
         let request = ContainerCreateRequest {
             inputs,
@@ -454,9 +452,7 @@ impl CliApp {
 
 /// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
 /// index-aligned with `patch` (same length) or omitted entirely.
-fn manifest_create_patch_specs(
-    args: &ManifestCreateCommand,
-) -> Result<Vec<ManifestCreatePatchSpec>> {
+fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCreatePatchSpec>> {
     if !args.patch_specs.is_empty() {
         return Ok(args.patch_specs.clone());
     }
@@ -473,7 +469,7 @@ fn manifest_create_patch_specs(
         .patch
         .iter()
         .enumerate()
-        .map(|(index, path)| ManifestCreatePatchSpec {
+        .map(|(index, path)| BundleCreatePatchSpec {
             path: path.clone(),
             name: names[index].clone(),
             description: descriptions[index].clone(),
@@ -495,7 +491,7 @@ fn manifest_create_patch_specs(
 
 /// Parse check-flag tokens (`algo=hex`, comma-separable) into an emitted
 /// checks value.
-fn manifest_entry_checks(values: &[String], flag: &str) -> Result<Option<ManifestChecks>> {
+fn bundle_entry_checks(values: &[String], flag: &str) -> Result<Option<BundleChecks>> {
     let tokens: Vec<String> = values
         .iter()
         .flat_map(|value| value.split(','))
@@ -507,7 +503,7 @@ fn manifest_entry_checks(values: &[String], flag: &str) -> Result<Option<Manifes
         return Ok(None);
     }
     let checksums = CliApp::parse_patch_apply_checksum_values(&tokens, flag)?;
-    Ok(Some(ManifestChecks {
+    Ok(Some(BundleChecks {
         checksums,
         size: None,
     }))
@@ -515,8 +511,8 @@ fn manifest_entry_checks(values: &[String], flag: &str) -> Result<Option<Manifes
 
 /// Whether `checks` adds nothing over `baseline`: every checksum it pins has
 /// the same value in the baseline (and its size, when set, matches). Such an
-/// entry is implied and gets omitted from the manifest.
-fn checks_implied_by(checks: &ManifestChecks, baseline: Option<&ManifestChecks>) -> bool {
+/// entry is implied and gets omitted from the bundle.
+fn checks_implied_by(checks: &BundleChecks, baseline: Option<&BundleChecks>) -> bool {
     let Some(baseline) = baseline else {
         return false;
     };
@@ -561,10 +557,10 @@ fn required_base_name(path: &Path, what: &str) -> Result<String> {
         })
 }
 
-/// Write manifest bytes honoring the output name's codec extension: plain
+/// Write bundle bytes honoring the output name's codec extension: plain
 /// JSON, `.gz`, or `.zst` (parse additionally reads `.bz2`/`.xz`, but create
 /// keeps to the two codecs with in-tree encoders).
-fn write_manifest_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
+fn write_bundle_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = output
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -575,8 +571,8 @@ fn write_manifest_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or_default();
-    let codec = manifest_file_name_codec(base_name).flatten().or_else(|| {
-        // A non-rw.json name still honors a trailing codec extension.
+    let codec = bundle_file_name_codec(base_name).flatten().or_else(|| {
+        // A non-rom-weaver-bundle.json name still honors a trailing codec extension.
         base_name.rsplit_once('.').map(|(_, extension)| extension)
     });
     match codec {
@@ -590,7 +586,7 @@ fn write_manifest_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
         Some(extension) if extension.eq_ignore_ascii_case("zst") => {
             let file = File::create(output)?;
             zstd::stream::copy_encode(bytes, file, 19).map_err(|error| {
-                RomWeaverError::Validation(format!("zstd manifest encoding failed: {error}"))
+                RomWeaverError::Validation(format!("zstd bundle encoding failed: {error}"))
             })?;
             Ok(())
         }
@@ -598,7 +594,7 @@ fn write_manifest_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
             if extension.eq_ignore_ascii_case("bz2") || extension.eq_ignore_ascii_case("xz") =>
         {
             Err(RomWeaverError::Validation(format!(
-                "manifest create emits .gz or .zst compressed manifests; `.{extension}` is read-only"
+                "bundle create emits .gz or .zst compressed bundles; `.{extension}` is read-only"
             )))
         }
         _ => {

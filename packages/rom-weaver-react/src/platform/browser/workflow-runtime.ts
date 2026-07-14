@@ -2,11 +2,11 @@ import { getPathBaseName } from "../../lib/path-utils.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import { assertBrowserBinarySource } from "../../lib/runtime/source-normalization.ts";
 import {
+  invokeRomWeaverBundleCreateWorker,
+  invokeRomWeaverBundleParseWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIngestWorker,
-  invokeRomWeaverManifestCreateWorker,
-  invokeRomWeaverManifestParseWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverTrimWorker,
@@ -182,11 +182,11 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
   },
 });
 
-// Manifest parsing hands extracted members to the normal drop pipeline, so those
-// small leaves still need a browser File. Manifest creation never uses this path.
+// Bundle parsing hands extracted members to the normal drop pipeline, so those
+// small leaves still need a browser File. Bundle creation never uses this path.
 const readBrowserVfsFileAsHeapFile = async (filePath: string, fileName: string): Promise<File> => {
   const stat = await browserVfs.stat(filePath);
-  if (!stat) throw new Error(`Manifest file is not available: ${filePath}`);
+  if (!stat) throw new Error(`Bundle file is not available: ${filePath}`);
   const bytes = new Uint8Array(stat.size);
   let readBytes = 0;
   while (readBytes < stat.size) {
@@ -199,16 +199,16 @@ const readBrowserVfsFileAsHeapFile = async (filePath: string, fileName: string):
     readBytes += chunk;
   }
   if (readBytes !== stat.size) {
-    throw new Error(`Manifest file read was truncated: ${filePath} (${readBytes}/${stat.size} bytes)`);
+    throw new Error(`Bundle file read was truncated: ${filePath} (${readBytes}/${stat.size} bytes)`);
   }
   return new File([bytes], fileName, { type: "application/octet-stream" });
 };
 
-// Parse an rw.json manifest source (plain/compressed/archive). Bundled ROM/patch leaves land under
+// Parse a rom-weaver-bundle.json source (plain/compressed/archive). Bundled ROM/patch leaves land under
 // the worker OPFS mount; they are materialized as plain heap `File`s (keyed by extracted path) and
 // their OPFS copies removed, so the caller can hand them to the standard drop pipeline with nothing
 // left dangling in staging.
-const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["manifest"] => ({
+const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["bundle"] => ({
   create: async ({
     rom,
     bundleRom,
@@ -231,7 +231,7 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
       if (rom) {
         const stagedRom = await workerIo.stageSource({
           fallbackFileName: rom.fileName || "rom.bin",
-          pathPrefix: "manifest-rom",
+          pathPrefix: "bundle-rom",
           scope: "archive",
           source: rom.source,
           trace: { logLevel, onLog },
@@ -243,7 +243,7 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
       if (bundleRom) {
         const stagedBundleRom = await workerIo.stageSource({
           fallbackFileName: bundleRom.fileName || "rom.bin",
-          pathPrefix: "manifest-bundle-rom",
+          pathPrefix: "bundle-bundle-rom",
           scope: "archive",
           source: bundleRom.source,
           trace: { logLevel, onLog },
@@ -255,7 +255,7 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
       for (const [index, patch] of patches.entries()) {
         const stagedPatch = await workerIo.stageSource({
           fallbackFileName: patch.fileName || `patch-${index + 1}.bin`,
-          pathPrefix: `manifest-patch-${index + 1}`,
+          pathPrefix: `bundle-patch-${index + 1}`,
           scope: "archive",
           source: patch.source,
           trace: { logLevel, onLog },
@@ -263,12 +263,12 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
         staged.push(stagedPatch);
         patchPaths.push(stagedPatch.filePath);
       }
-      const outputPath = `${WORKER_OPFS_MOUNTPOINT}/rw.json`;
+      const outputPath = `${WORKER_OPFS_MOUNTPOINT}/rom-weaver-bundle.json`;
       // The bundle name comes from the caller (its extension picks the archive
       // format); only its base name is honored so it stays inside the mount.
-      const bundleBaseName = bundleFileName ? getPathBaseName(bundleFileName, "rw-bundle.zip") : undefined;
+      const bundleBaseName = bundleFileName ? getPathBaseName(bundleFileName, "rom-weaver-bundle.zip") : undefined;
       const bundlePath = bundleBaseName ? `${WORKER_OPFS_MOUNTPOINT}/${bundleBaseName}` : undefined;
-      const result = await invokeRomWeaverManifestCreateWorker(
+      const result = await invokeRomWeaverBundleCreateWorker(
         {
           ...(bundlePath ? { bundlePath } : {}),
           ...(bundleRomPath ? { bundleRomPath } : {}),
@@ -295,35 +295,35 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
         onProgress,
         onLog,
       );
-      const manifestOutput = await createRuntimeOutputFromVfs(
+      const bundleOutput = await createRuntimeOutputFromVfs(
         browserVfs,
-        result.manifestPath,
-        getPathBaseName(result.manifestPath, "rw.json"),
-        { cleanup: () => browserVfs.remove(result.manifestPath).catch(() => undefined) },
+        result.bundlePath,
+        getPathBaseName(result.bundlePath, "rom-weaver-bundle.json"),
+        { cleanup: () => browserVfs.remove(result.bundlePath).catch(() => undefined) },
       );
-      const bundleOutput = result.bundlePath
+      const archiveOutput = result.archivePath
         ? await createRuntimeOutputFromVfs(
             browserVfs,
-            result.bundlePath,
-            getPathBaseName(result.bundlePath, "rw-bundle.zip"),
-            { cleanup: () => browserVfs.remove(result.bundlePath as string).catch(() => undefined) },
+            result.archivePath,
+            getPathBaseName(result.archivePath, "rom-weaver-bundle.zip"),
+            { cleanup: () => browserVfs.remove(result.archivePath as string).catch(() => undefined) },
           )
         : undefined;
-      return { ...(bundleOutput ? { bundleOutput } : {}), manifestOutput, result };
+      return { ...(archiveOutput ? { archiveOutput } : {}), bundleOutput, result };
     } finally {
       await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
     }
   },
   parse: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
     const staged = await workerIo.stageSource({
-      fallbackFileName: fileName || "rw.json",
-      pathPrefix: "manifest-input",
+      fallbackFileName: fileName || "rom-weaver-bundle.json",
+      pathPrefix: "bundle-input",
       scope: "archive",
       source,
       trace: { logLevel, onLog },
     });
     try {
-      const result = await invokeRomWeaverManifestParseWorker(
+      const result = await invokeRomWeaverBundleParseWorker(
         {
           extractDirPath: WORKER_OPFS_MOUNTPOINT,
           knownInputPaths: [staged.filePath],
@@ -344,7 +344,7 @@ const createBrowserManifestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntim
         for (const extractedPath of extractedPaths) {
           extractedFiles.set(
             extractedPath,
-            await readBrowserVfsFileAsHeapFile(extractedPath, getPathBaseName(extractedPath, "manifest-entry.bin")),
+            await readBrowserVfsFileAsHeapFile(extractedPath, getPathBaseName(extractedPath, "bundle-entry.bin")),
           );
         }
       } finally {
@@ -399,9 +399,9 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     binary: {
       assertSource: assertBrowserBinarySource,
     },
+    bundle: createBrowserBundleRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),
     ingest: createBrowserIngestRuntime(workerIo),
-    manifest: createBrowserManifestRuntime(workerIo),
     name: "browser",
     noteIoBatch: noteRomWeaverIoBatch,
     output: {

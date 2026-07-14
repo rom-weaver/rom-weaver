@@ -65,7 +65,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "language",
   "logLevel",
-  "manifestPackage",
+  "bundlePackage",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -383,6 +383,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -390,7 +391,6 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
-    manifestPackage: isRecord(applySettings.output) ? applySettings.output.manifestPackage : undefined,
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
     rvzBlockSize: compression.rvzBlockSize,
     rvzCodec: compression.rvzCodec,
@@ -442,9 +442,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
-    const manifestPackage = readStoredField(storedStringSchema, loadedSettings.manifestPackage);
-    if (manifestPackage !== undefined)
-      settings.manifestPackage = normalizeChoiceField("manifestPackage", manifestPackage, settings.manifestPackage);
+    const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
+    if (bundlePackage !== undefined)
+      settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -564,10 +564,10 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "manifestPackage") {
+    if (fieldKey === "bundlePackage") {
       storedSettings.apply = {
         ...storedSettings.apply,
-        output: { ...storedSettings.apply?.output, manifestPackage: value },
+        output: { ...storedSettings.apply?.output, bundlePackage: value },
       };
       return;
     }
@@ -643,6 +643,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
   const compressionLevels = resolveCompressionLevels(settings);
   return Object.assign(
     {
+      bundlePackage: settings.bundlePackage,
       chdCreateCdCodecs: settings.chdCreateCdCodecs,
       chdCreateDvdCodecs: settings.chdCreateDvdCodecs,
       compressionProfile: settings.compressionProfile,
@@ -650,7 +651,6 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       fixChecksum: settings.fixChecksum,
       language: settings.language,
       logLevel: settings.logLevel,
-      manifestPackage: settings.manifestPackage,
       requireInputChecksumMatch: settings.requireInputChecksumMatch !== false,
       rvzBlockSize: settings.rvzBlockSize,
       rvzCodec: compressionLevels.rvzCodec,

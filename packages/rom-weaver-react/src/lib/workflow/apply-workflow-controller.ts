@@ -1,7 +1,7 @@
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
+  ApplyWorkflowBundleSources,
   ApplyWorkflowInputState,
-  ApplyWorkflowManifestSources,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
 import type { ApplyResult } from "../../types/public.ts";
@@ -157,9 +157,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   /**
    * Export the exact leaves that staging prepared for apply. Keeping this on the controller avoids
-   * a second archive extraction/ingest pass when the user exports a manifest immediately afterward.
+   * a second archive extraction/ingest pass when the user exports a bundle immediately afterward.
    */
-  getManifestExportSources(): ApplyWorkflowManifestSources {
+  getBundleExportSources(): ApplyWorkflowBundleSources {
     const session = this.inputSession;
     const selectedOwner = this.getSelectedInputOwner();
     const inputStage = selectedOwner || session?.view;
@@ -540,7 +540,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         }
         continue;
       }
-      // Fallback (the early streamed dialog never ran - e.g. the manifest event was missed): surface
+      // Fallback (the early streamed dialog never ran - e.g. the sidecar event was missed): surface
       // the multi-select now by re-staging the archive as a patch source.
       this.trace("patch.implicit.sidecar-surface", { count: sidecarPatches.length, fileName: stage.state.fileName });
       await this.surfaceArchivePatchSelection(this.cloneArchiveAsPatchSource(stage.source));

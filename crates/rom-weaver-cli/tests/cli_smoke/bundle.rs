@@ -17,11 +17,11 @@ fn write_min_ips(temp: &TempDir, name: &str) -> PathBuf {
 }
 
 #[test]
-fn manifest_parse_plain_json_resolves_refs_verbatim() {
+fn bundle_parse_plain_json_resolves_refs_verbatim() {
     let temp = setup_temp_dir();
-    let manifest = temp.child("rw.json");
+    let bundle = temp.child("rom-weaver-bundle.json");
     fs::write(
-        manifest.path(),
+        bundle.path(),
         r#"{
             "version": 1,
             "rom": { "url": "https://example.test/roms/game.sfc" },
@@ -32,40 +32,40 @@ fn manifest_parse_plain_json_resolves_refs_verbatim() {
             "output": { "name": "out.sfc" }
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest.path().to_str().expect("path"),
+            bundle.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["status"], "succeeded");
-    let result = &terminal["details"]["manifest"];
+    let result = &terminal["details"]["bundle"];
     assert_eq!(result["source_kind"], "json");
-    assert_eq!(result["manifest"]["version"], 1);
+    assert_eq!(result["bundle"]["version"], 1);
     assert!(
-        result["manifest"].get("name").is_none(),
-        "manifests carry no display name"
+        result["bundle"].get("name").is_none(),
+        "bundles carry no display name"
     );
     assert!(
-        result["manifest"]["patches"][0].get("optional").is_none(),
+        result["bundle"]["patches"][0].get("optional").is_none(),
         "non-optional patches omit the flag"
     );
-    assert_eq!(result["manifest"]["patches"][1]["optional"], true);
-    assert_eq!(result["manifest"]["patches"][0]["label"], "stable");
-    assert!(result["manifest"]["output"].get("compress").is_none());
+    assert_eq!(result["bundle"]["patches"][1]["optional"], true);
+    assert_eq!(result["bundle"]["patches"][0]["label"], "stable");
+    assert!(result["bundle"]["output"].get("compress").is_none());
     assert_eq!(
         result["rom_source"]["url"], "https://example.test/roms/game.sfc",
         "url refs pass through verbatim"
     );
     assert_eq!(
         result["patch_sources"][0]["source"]["path"], "main.ips",
-        "path refs stay manifest-relative for a plain manifest"
+        "path refs stay bundle-relative for a plain bundle"
     );
     assert_eq!(
         result["patch_sources"][1]["source"]["url"], "patches/extra.bps",
@@ -79,63 +79,63 @@ fn manifest_parse_plain_json_resolves_refs_verbatim() {
 }
 
 #[test]
-fn manifest_parse_reads_gzipped_manifest() {
+fn bundle_parse_reads_gzipped_bundle() {
     let temp = setup_temp_dir();
-    let manifest = temp.child("rw.json.gz");
+    let bundle = temp.child("rom-weaver-bundle.json.gz");
     let json = r#"{ "version": 1, "patches": [ { "path": "main.ips" } ] }"#;
-    let file = File::create(manifest.path()).expect("create rw.json.gz");
+    let file = File::create(bundle.path()).expect("create rom-weaver-bundle.json.gz");
     let mut encoder = GzEncoder::new(file, DeflateCompression::default());
-    encoder.write_all(json.as_bytes()).expect("gzip manifest");
-    encoder.finish().expect("finish gzip manifest");
+    encoder.write_all(json.as_bytes()).expect("gzip bundle");
+    encoder.finish().expect("finish gzip bundle");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest.path().to_str().expect("path"),
+            bundle.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["status"], "succeeded");
-    let result = &terminal["details"]["manifest"];
+    let result = &terminal["details"]["bundle"];
     assert_eq!(result["source_kind"], "compressed-json");
-    assert_eq!(result["manifest"]["patches"][0]["path"], "main.ips");
+    assert_eq!(result["bundle"]["patches"][0]["path"], "main.ips");
 }
 
 #[test]
-fn manifest_parse_archive_extracts_referenced_members() {
+fn bundle_parse_archive_extracts_referenced_members() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), b"0123456789abcdef").expect("rom fixture");
     let patch_path = write_min_ips(&temp, "main.ips");
-    let manifest = temp.child("rw.json");
+    let bundle_json = temp.child("rom-weaver-bundle.json");
     fs::write(
-        manifest.path(),
+        bundle_json.path(),
         r#"{
             "version": 1,
             "rom": { "path": "roms/game.bin" },
             "patches": [ { "path": "patches/main.ips", "description": "main hack" } ]
         }"#,
     )
-    .expect("manifest fixture");
-    let bundle = temp.child("bundle.tar.gz");
+    .expect("bundle fixture");
+    let archive = temp.child("bundle.tar.gz");
     write_tar_gz_fixture(
         &[
-            (manifest.path(), "rw.json"),
+            (bundle_json.path(), "rom-weaver-bundle.json"),
             (rom.path(), "roms/game.bin"),
             (&patch_path, "patches/main.ips"),
         ],
-        bundle.path(),
+        archive.path(),
     );
-    let extract_dir = temp.child("manifest-out");
+    let extract_dir = temp.child("bundle-out");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            bundle.path().to_str().expect("path"),
+            archive.path().to_str().expect("path"),
             "--extract-dir",
             extract_dir.path().to_str().expect("path"),
             "--json",
@@ -144,9 +144,9 @@ fn manifest_parse_archive_extracts_referenced_members() {
     );
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["status"], "succeeded");
-    let result = &terminal["details"]["manifest"];
+    let result = &terminal["details"]["bundle"];
     assert_eq!(result["source_kind"], "archive");
-    assert_eq!(result["archive_member"], "rw.json");
+    assert_eq!(result["archive_member"], "rom-weaver-bundle.json");
 
     let rom_path = result["rom_source"]["extracted_path"]
         .as_str()
@@ -174,7 +174,7 @@ fn manifest_parse_archive_extracts_referenced_members() {
 }
 
 #[test]
-fn manifest_parse_archive_without_manifest_fails() {
+fn bundle_parse_archive_without_bundle_fails() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), b"0123456789abcdef").expect("rom fixture");
@@ -183,7 +183,7 @@ fn manifest_parse_archive_without_manifest_fails() {
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
             bundle.path().to_str().expect("path"),
             "--json",
@@ -194,16 +194,16 @@ fn manifest_parse_archive_without_manifest_fails() {
     assert_eq!(terminal["status"], "failed");
     let label = terminal["label"].as_str().expect("failure label");
     assert!(
-        label.contains("manifest.missing"),
-        "expected manifest.missing code in label: {label}"
+        label.contains("bundle.missing"),
+        "expected bundle.missing code in label: {label}"
     );
 }
 
-const MANIFEST_ROM_BYTES: &[u8] = b"0123456789abcdef";
+const BUNDLE_ROM_BYTES: &[u8] = b"0123456789abcdef";
 
-fn write_manifest_rom(temp: &TempDir, name: &str) -> PathBuf {
+fn write_bundle_rom(temp: &TempDir, name: &str) -> PathBuf {
     let rom = temp.child(name);
-    fs::write(rom.path(), MANIFEST_ROM_BYTES).expect("rom fixture");
+    fs::write(rom.path(), BUNDLE_ROM_BYTES).expect("rom fixture");
     rom.path().to_path_buf()
 }
 
@@ -224,7 +224,7 @@ fn write_offset_ips(temp: &TempDir, name: &str, offset: u32, value: u8) -> PathB
 }
 
 fn patched_rom_bytes(edits: &[(usize, u8)]) -> Vec<u8> {
-    let mut bytes = MANIFEST_ROM_BYTES.to_vec();
+    let mut bytes = BUNDLE_ROM_BYTES.to_vec();
     for (offset, value) in edits {
         bytes[*offset] = *value;
     }
@@ -232,12 +232,12 @@ fn patched_rom_bytes(edits: &[(usize, u8)]) -> Vec<u8> {
 }
 
 #[test]
-fn manifest_apply_plain_manifest_input_uses_output_name() {
+fn bundle_apply_plain_bundle_input_uses_output_name() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
@@ -245,7 +245,7 @@ fn manifest_apply_plain_manifest_input_uses_output_name() {
             "output": { "name": "out.bin" }
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
 
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     command.current_dir(temp.path());
@@ -253,7 +253,7 @@ fn manifest_apply_plain_manifest_input_uses_output_name() {
         "patch",
         "apply",
         "--input",
-        "rw.json",
+        "rom-weaver-bundle.json",
         "--no-compress",
         "--json",
     ]);
@@ -261,32 +261,32 @@ fn manifest_apply_plain_manifest_input_uses_output_name() {
     let terminal = parse_json_lines(&stdout).last().expect("terminal").clone();
     assert_eq!(terminal["status"], "succeeded");
     assert_eq!(
-        fs::read(temp.child("out.bin").path()).expect("manifest-named output exists"),
+        fs::read(temp.child("out.bin").path()).expect("bundle-named output exists"),
         patched_rom_bytes(&[(0, 0xAA)])
     );
 }
 
 #[test]
-fn manifest_apply_gzipped_manifest_with_cli_output() {
+fn bundle_apply_gzipped_bundle_with_cli_output() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest = temp.child("rw.json.gz");
+    let bundle = temp.child("rom-weaver-bundle.json.gz");
     let json = r#"{ "version": 1,
                     "rom": { "path": "game.bin" },
                     "patches": [ { "path": "main.ips" } ],
                     "output": {} }"#;
-    let file = File::create(manifest.path()).expect("create rw.json.gz");
+    let file = File::create(bundle.path()).expect("create rom-weaver-bundle.json.gz");
     let mut encoder = GzEncoder::new(file, DeflateCompression::default());
-    encoder.write_all(json.as_bytes()).expect("gzip manifest");
-    encoder.finish().expect("finish gzip manifest");
+    encoder.write_all(json.as_bytes()).expect("gzip bundle");
+    encoder.finish().expect("finish gzip bundle");
     let output = temp.child("patched.bin");
 
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            manifest.path().to_str().expect("path"),
+            bundle.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -301,26 +301,26 @@ fn manifest_apply_gzipped_manifest_with_cli_output() {
     );
 }
 
-fn write_everything_archive(temp: &TempDir, manifest_json: &str) -> PathBuf {
-    let rom = write_manifest_rom(temp, "game.bin");
+fn write_everything_archive(temp: &TempDir, bundle_json: &str) -> PathBuf {
+    let rom = write_bundle_rom(temp, "game.bin");
     let main = write_offset_ips(temp, "main.ips", 0, 0xAA);
     let extra = write_offset_ips(temp, "extra.ips", 1, 0xBB);
-    let manifest = temp.child("rw.json");
-    fs::write(manifest.path(), manifest_json).expect("manifest fixture");
-    let bundle = temp.child("bundle.tar.gz");
+    let bundle_file = temp.child("rom-weaver-bundle.json");
+    fs::write(bundle_file.path(), bundle_json).expect("bundle fixture");
+    let archive = temp.child("bundle.tar.gz");
     write_tar_gz_fixture(
         &[
-            (manifest.path(), "rw.json"),
+            (bundle_file.path(), "rom-weaver-bundle.json"),
             (&rom, "roms/game.bin"),
             (&main, "patches/main.ips"),
             (&extra, "patches/extra.ips"),
         ],
-        bundle.path(),
+        archive.path(),
     );
-    bundle.path().to_path_buf()
+    archive.path().to_path_buf()
 }
 
-const EVERYTHING_MANIFEST: &str = r#"{
+const EVERYTHING_BUNDLE: &str = r#"{
     "version": 1,
     "rom": { "path": "roms/game.bin" },
     "patches": [
@@ -331,9 +331,9 @@ const EVERYTHING_MANIFEST: &str = r#"{
 }"#;
 
 #[test]
-fn manifest_apply_everything_archive_skips_optional() {
+fn bundle_apply_everything_archive_skips_optional() {
     let temp = setup_temp_dir();
-    let bundle = write_everything_archive(&temp, EVERYTHING_MANIFEST);
+    let bundle = write_everything_archive(&temp, EVERYTHING_BUNDLE);
     let output = temp.child("patched.bin");
 
     let events = run_json_events(
@@ -357,9 +357,9 @@ fn manifest_apply_everything_archive_skips_optional() {
 }
 
 #[test]
-fn manifest_apply_with_flag_includes_optional() {
+fn bundle_apply_with_flag_includes_optional() {
     let temp = setup_temp_dir();
-    let bundle = write_everything_archive(&temp, EVERYTHING_MANIFEST);
+    let bundle = write_everything_archive(&temp, EVERYTHING_BUNDLE);
     let output = temp.child("patched.bin");
 
     let events = run_json_events(
@@ -384,9 +384,9 @@ fn manifest_apply_with_flag_includes_optional() {
 }
 
 #[test]
-fn manifest_apply_without_can_disable_default_patch() {
+fn bundle_apply_without_can_disable_default_patch() {
     let temp = setup_temp_dir();
-    let bundle = write_everything_archive(&temp, EVERYTHING_MANIFEST);
+    let bundle = write_everything_archive(&temp, EVERYTHING_BUNDLE);
 
     let events = run_json_events(
         &[
@@ -413,12 +413,12 @@ fn manifest_apply_without_can_disable_default_patch() {
 }
 
 #[test]
-fn manifest_apply_rom_checks_mismatch_fails() {
+fn bundle_apply_rom_checks_mismatch_fails() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin", "checks": { "checksums": { "crc32": "00000000" } } },
@@ -426,13 +426,16 @@ fn manifest_apply_rom_checks_mismatch_fails() {
             "output": {}
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
 
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
             "--json",
@@ -449,15 +452,15 @@ fn manifest_apply_rom_checks_mismatch_fails() {
 }
 
 #[test]
-fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
+fn bundle_apply_explicit_bundle_flag_keeps_input_rom() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    // The manifest's rom entry points at a nonexistent URL host on purpose:
-    // with --manifest the positional input supplies the ROM, so the rom
+    // The bundle's rom entry points at a nonexistent URL host on purpose:
+    // with --bundle the positional input supplies the ROM, so the rom
     // source must be ignored (its checks are not - none set here).
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "url": "https://example.test/never-fetched.bin" },
@@ -465,7 +468,7 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
             "output": {}
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
     let output = temp.child("patched.bin");
 
     let events = run_json_events(
@@ -473,8 +476,11 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
             "patch-apply",
             "--input",
             rom.to_str().expect("path"),
-            "--manifest",
-            temp.child("rw.json").path().to_str().expect("path"),
+            "--bundle",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -490,20 +496,20 @@ fn manifest_apply_explicit_manifest_flag_keeps_input_rom() {
 }
 
 #[test]
-fn manifest_apply_cli_output_overrides_manifest_name() {
+fn bundle_apply_cli_output_overrides_bundle_name() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
             "patches": [ { "path": "main.ips" } ],
-            "output": { "name": "manifest-named.bin" }
+            "output": { "name": "bundle-named.bin" }
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
     let output = temp.child("cli-named.bin");
 
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
@@ -512,7 +518,7 @@ fn manifest_apply_cli_output_overrides_manifest_name() {
         "patch",
         "apply",
         "--input",
-        "rw.json",
+        "rom-weaver-bundle.json",
         "--output",
         "cli-named.bin",
         "--no-compress",
@@ -521,18 +527,18 @@ fn manifest_apply_cli_output_overrides_manifest_name() {
     command.assert().code(0);
     assert!(output.path().is_file(), "explicit --output path must win");
     assert!(
-        !temp.child("manifest-named.bin").path().exists(),
-        "manifest output.name must not be written when --output is given"
+        !temp.child("bundle-named.bin").path().exists(),
+        "bundle output.name must not be written when --output is given"
     );
 }
 
 #[test]
-fn manifest_apply_missing_output_fails_with_code() {
+fn bundle_apply_missing_output_fails_with_code() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
@@ -540,13 +546,16 @@ fn manifest_apply_missing_output_fails_with_code() {
             "output": {}
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
 
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--json",
         ],
         1,
@@ -557,19 +566,19 @@ fn manifest_apply_missing_output_fails_with_code() {
         terminal["label"]
             .as_str()
             .expect("label")
-            .contains("manifest.output.missing"),
+            .contains("bundle.output.missing"),
         "unexpected label: {}",
         terminal["label"]
     );
 }
 
 #[test]
-fn manifest_parse_rejects_output_compression() {
+fn bundle_parse_rejects_output_compression() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
@@ -577,13 +586,16 @@ fn manifest_parse_rejects_output_compression() {
             "output": { "name": "out.zip", "compress": { "format": "zip", "level": "min" } }
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--json",
         ],
         1,
@@ -649,9 +661,9 @@ fn crc32_hex(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn manifest_apply_url_patch_downloads_and_applies() {
+fn bundle_apply_url_patch_downloads_and_applies() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     let patch_bytes = build_ips_patch(
         vec![TestIpsRecord::Literal {
             offset: 0,
@@ -661,7 +673,7 @@ fn manifest_apply_url_patch_downloads_and_applies() {
     );
     let base_url = serve_files(vec![("/main.ips", patch_bytes)], 1);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         format!(
             r#"{{
                 "version": 1,
@@ -671,14 +683,17 @@ fn manifest_apply_url_patch_downloads_and_applies() {
             }}"#
         ),
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
     let output = temp.child("patched.bin");
 
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -694,9 +709,9 @@ fn manifest_apply_url_patch_downloads_and_applies() {
 }
 
 #[test]
-fn manifest_apply_url_manifest_resolves_relative_entries() {
+fn bundle_apply_url_bundle_resolves_relative_entries() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let patch_bytes = build_ips_patch(
         vec![TestIpsRecord::Literal {
             offset: 0,
@@ -704,7 +719,7 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
         }],
         None,
     );
-    let manifest_json = br#"{
+    let bundle_json = br#"{
         "version": 1,
         "patches": [ { "url": "patches/main.ips" } ],
         "output": {}
@@ -712,7 +727,7 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
     .to_vec();
     let base_url = serve_files(
         vec![
-            ("/rw.json", manifest_json),
+            ("/rom-weaver-bundle.json", bundle_json),
             ("/patches/main.ips", patch_bytes),
         ],
         2,
@@ -724,8 +739,8 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
             "patch-apply",
             "--input",
             rom.to_str().expect("path"),
-            "--manifest",
-            &format!("{base_url}/packs/rw.json"),
+            "--bundle",
+            &format!("{base_url}/packs/rom-weaver-bundle.json"),
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -741,16 +756,16 @@ fn manifest_apply_url_manifest_resolves_relative_entries() {
 }
 
 #[test]
-fn manifest_create_computes_checks_and_aligns_metadata() {
+fn bundle_create_computes_checks_and_aligns_metadata() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
     let extra = write_offset_ips(&temp, "extra.ips", 1, 0xBB);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--rom",
             rom.to_str().expect("path"),
@@ -771,41 +786,41 @@ fn manifest_create_computes_checks_and_aligns_metadata() {
             "--output-name",
             "patched.bin",
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let terminal = events.last().expect("terminal");
     assert_eq!(terminal["status"], "succeeded");
-    let created = &terminal["details"]["manifest_create"];
+    let created = &terminal["details"]["bundle_create"];
     assert!(
-        created["manifest_path"]
+        created["bundle_path"]
             .as_str()
-            .expect("manifest path")
-            .ends_with("rw.json")
+            .expect("bundle path")
+            .ends_with("rom-weaver-bundle.json")
     );
 
-    // Round-trip through manifest parse and verify computed values.
+    // Round-trip through bundle parse and verify computed values.
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let parsed = &events.last().expect("terminal")["details"]["manifest"]["manifest"];
-    assert!(parsed.get("name").is_none(), "manifests carry no name");
+    let parsed = &events.last().expect("terminal")["details"]["bundle"]["bundle"];
+    assert!(parsed.get("name").is_none(), "bundles carry no name");
     assert_eq!(parsed["rom"]["path"], "game.bin");
     assert_eq!(
         parsed["rom"]["checks"]["checksums"]["crc32"],
-        crc32_hex(MANIFEST_ROM_BYTES).as_str()
+        crc32_hex(BUNDLE_ROM_BYTES).as_str()
     );
     assert_eq!(
         parsed["rom"]["checks"]["size"],
-        MANIFEST_ROM_BYTES.len() as u64
+        BUNDLE_ROM_BYTES.len() as u64
     );
     let first = &parsed["patches"][0];
     assert_eq!(first["name"], "Main hack");
@@ -828,18 +843,18 @@ fn manifest_create_computes_checks_and_aligns_metadata() {
 }
 
 #[test]
-fn manifest_create_uses_cached_rom_checks_and_size() {
+fn bundle_create_uses_cached_rom_checks_and_size() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let patch = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
     let cached_crc = "deadbeef";
     let cached_md5 = "00112233445566778899aabbccddeeff";
     let cached_sha1 = "00112233445566778899aabbccddeeff00112233";
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--rom",
             rom.to_str().expect("path"),
@@ -850,7 +865,7 @@ fn manifest_create_uses_cached_rom_checks_and_size() {
             "--patch",
             patch.to_str().expect("path"),
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
@@ -858,15 +873,15 @@ fn manifest_create_uses_cached_rom_checks_and_size() {
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let rom_checks =
-        &events.last().expect("terminal")["details"]["manifest"]["manifest"]["rom"]["checks"];
+        &events.last().expect("terminal")["details"]["bundle"]["bundle"]["rom"]["checks"];
     assert_eq!(rom_checks["checksums"]["crc32"], cached_crc);
     assert_eq!(rom_checks["checksums"]["md5"], cached_md5);
     assert_eq!(rom_checks["checksums"]["sha1"], cached_sha1);
@@ -874,55 +889,55 @@ fn manifest_create_uses_cached_rom_checks_and_size() {
 }
 
 #[test]
-fn manifest_create_gzip_output_parses_back() {
+fn bundle_create_gzip_output_parses_back() {
     let temp = setup_temp_dir();
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json.gz");
+    let bundle_out = temp.child("rom-weaver-bundle.json.gz");
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--patch",
             main.to_str().expect("path"),
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let result = &events.last().expect("terminal")["details"]["manifest"];
+    let result = &events.last().expect("terminal")["details"]["bundle"];
     assert_eq!(result["source_kind"], "compressed-json");
-    assert_eq!(result["manifest"]["patches"][0]["path"], "main.ips");
+    assert_eq!(result["bundle"]["patches"][0]["path"], "main.ips");
 }
 
 #[test]
-fn manifest_create_bundle_roundtrips_through_apply() {
+fn bundle_create_bundle_roundtrips_through_apply() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
     let bundle = temp.child("bundle.zip");
 
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--rom",
             rom.to_str().expect("path"),
             "--patch",
             main.to_str().expect("path"),
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--bundle",
             bundle.path().to_str().expect("path"),
             "--json",
@@ -932,7 +947,7 @@ fn manifest_create_bundle_roundtrips_through_apply() {
     let terminal = events.last().expect("terminal");
     assert_eq!(terminal["status"], "succeeded");
     assert!(
-        terminal["details"]["manifest_create"]["bundle_path"]
+        terminal["details"]["bundle_create"]["archive_path"]
             .as_str()
             .expect("bundle path")
             .ends_with("bundle.zip")
@@ -959,36 +974,36 @@ fn manifest_create_bundle_roundtrips_through_apply() {
 }
 
 #[test]
-fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
+fn bundle_create_patch_check_emits_checks_and_apply_enforces() {
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--patch",
             main.to_str().expect("path"),
             "--patch-input-check",
             "crc32=00000000",
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let entry = &events.last().expect("terminal")["details"]["manifest"]["manifest"]["patches"][0];
+    let entry = &events.last().expect("terminal")["details"]["bundle"]["bundle"]["patches"][0];
     assert_eq!(entry["inputChecks"]["checksums"]["crc32"], "00000000");
 
     // The deliberately wrong expected checksum must fail the apply.
@@ -997,8 +1012,8 @@ fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
             "patch-apply",
             "--input",
             temp.child("game.bin").path().to_str().expect("path"),
-            "--manifest",
-            manifest_out.path().to_str().expect("path"),
+            "--bundle",
+            bundle_out.path().to_str().expect("path"),
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
             "--json",
@@ -1015,16 +1030,16 @@ fn manifest_create_patch_check_emits_checks_and_apply_enforces() {
 }
 
 #[test]
-fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
+fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
     let bundle = temp.child("bundle.zip");
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--rom",
             rom.to_str().expect("path"),
@@ -1032,7 +1047,7 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
             "--patch",
             main.to_str().expect("path"),
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--bundle",
             bundle.path().to_str().expect("path"),
             "--json",
@@ -1041,22 +1056,22 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
     );
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let result = &events.last().expect("terminal")["details"]["manifest"];
-    let rom_entry = &result["manifest"]["rom"];
+    let result = &events.last().expect("terminal")["details"]["bundle"];
+    let rom_entry = &result["bundle"]["rom"];
     assert!(
         rom_entry["path"].is_null() && rom_entry["url"].is_null(),
         "no-bundle-rom entry must be sourceless: {rom_entry}"
     );
     assert_eq!(
         rom_entry["checks"]["checksums"]["crc32"],
-        crc32_hex(MANIFEST_ROM_BYTES).as_str()
+        crc32_hex(BUNDLE_ROM_BYTES).as_str()
     );
     assert!(result["rom_source"].is_null(), "no rom source to resolve");
 
@@ -1067,7 +1082,7 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
             "patch-apply",
             "--input",
             rom.to_str().expect("path"),
-            "--manifest",
+            "--bundle",
             bundle.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
@@ -1103,7 +1118,7 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
     );
     // The user must be told WHICH ROM to supply: the entry's checks surface
     // as expected_* fields in the failure.
-    let expected_crc = crc32_hex(MANIFEST_ROM_BYTES);
+    let expected_crc = crc32_hex(BUNDLE_ROM_BYTES);
     assert!(
         label.contains("expected_checksums") && label.contains(&expected_crc),
         "expected rom expectation details in label: {label}"
@@ -1115,19 +1130,19 @@ fn manifest_create_no_bundle_rom_emits_checks_only_entry() {
 }
 
 #[test]
-fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
+fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
     let temp = setup_temp_dir();
-    let rom = write_manifest_rom(&temp, "game.bin");
+    let rom = write_bundle_rom(&temp, "game.bin");
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
     let extra = write_offset_ips(&temp, "extra.ips", 1, 0xBB);
-    let manifest_out = temp.child("rw.json");
-    let rom_crc = crc32_hex(MANIFEST_ROM_BYTES);
+    let bundle_out = temp.child("rom-weaver-bundle.json");
+    let rom_crc = crc32_hex(BUNDLE_ROM_BYTES);
     let mid_crc = crc32_hex(&patched_rom_bytes(&[(0, 0xAA)]));
     let final_crc = crc32_hex(&patched_rom_bytes(&[(0, 0xAA), (1, 0xBB)]));
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--rom",
             rom.to_str().expect("path"),
@@ -1146,21 +1161,21 @@ fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
             "--output-check",
             &format!("crc32={final_crc}"),
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let parsed = &events.last().expect("terminal")["details"]["manifest"]["manifest"];
+    let parsed = &events.last().expect("terminal")["details"]["bundle"]["bundle"];
     // Endpoint checks live on rom/output; only mid-chain states stay on the
     // patches (first input == rom.checks, last output == output.checks).
     assert_eq!(parsed["output"]["checks"]["checksums"]["crc32"], final_crc);
@@ -1184,7 +1199,10 @@ fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -1199,20 +1217,23 @@ fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
     );
 
     // A partial selection validates against ITS last patch's outputChecks...
-    let partial_manifest = fs::read_to_string(manifest_out.path())
-        .expect("manifest readable")
+    let partial_bundle = fs::read_to_string(bundle_out.path())
+        .expect("bundle readable")
         .replace(
             &format!("\"crc32\": \"{mid_crc}\""),
             "\"crc32\": \"00000000\"",
         );
     // ...so corrupting the first patch's recorded outputChecks fails a
     // main-only apply with the recorded (wrong) expectation.
-    fs::write(temp.child("rw.json").path(), partial_manifest).expect("manifest rewrite");
+    fs::write(temp.child("rom-weaver-bundle.json").path(), partial_bundle).expect("bundle rewrite");
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--without",
             "extra*",
             "--output",
@@ -1232,16 +1253,16 @@ fn manifest_create_dedups_endpoint_checks_and_apply_validates_output() {
 }
 
 #[test]
-fn manifest_apply_partial_chain_skips_full_chain_output_checks() {
+fn bundle_apply_partial_chain_skips_full_chain_output_checks() {
     // output.checks records the FULL chain's result. A partial selection that
     // happens to end on the final entry (earlier patches skipped) produces a
     // different, legitimate output and must not be gated by it.
     let temp = setup_temp_dir();
-    write_manifest_rom(&temp, "game.bin");
+    write_bundle_rom(&temp, "game.bin");
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
     write_offset_ips(&temp, "extra.ips", 1, 0xBB);
     fs::write(
-        temp.child("rw.json").path(),
+        temp.child("rom-weaver-bundle.json").path(),
         r#"{
             "version": 1,
             "rom": { "path": "game.bin" },
@@ -1252,14 +1273,17 @@ fn manifest_apply_partial_chain_skips_full_chain_output_checks() {
             "output": { "checks": { "checksums": { "crc32": "00000000" } } }
         }"#,
     )
-    .expect("manifest fixture");
+    .expect("bundle fixture");
     let output = temp.child("partial.bin");
 
     let events = run_json_events(
         &[
             "patch-apply",
             "--input",
-            temp.child("rw.json").path().to_str().expect("path"),
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--with",
             "extra",
             "--without",
@@ -1279,35 +1303,35 @@ fn manifest_apply_partial_chain_skips_full_chain_output_checks() {
 }
 
 #[test]
-fn manifest_create_source_url_emits_url_entry() {
+fn bundle_create_source_url_emits_url_entry() {
     let temp = setup_temp_dir();
     let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let manifest_out = temp.child("rw.json");
+    let bundle_out = temp.child("rom-weaver-bundle.json");
 
     run_json_events(
         &[
-            "manifest",
+            "bundle",
             "create",
             "--patch",
             main.to_str().expect("path"),
             "--patch-source-url",
             "https://example.test/patches/main.ips",
             "--output",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
     let events = run_json_events(
         &[
-            "manifest",
+            "bundle",
             "parse",
-            manifest_out.path().to_str().expect("path"),
+            bundle_out.path().to_str().expect("path"),
             "--json",
         ],
         0,
     );
-    let entry = &events.last().expect("terminal")["details"]["manifest"]["manifest"]["patches"][0];
+    let entry = &events.last().expect("terminal")["details"]["bundle"]["bundle"]["patches"][0];
     assert_eq!(entry["url"], "https://example.test/patches/main.ips");
     assert!(entry["path"].is_null());
 }

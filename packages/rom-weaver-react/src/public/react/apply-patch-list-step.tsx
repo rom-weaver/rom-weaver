@@ -17,7 +17,7 @@ import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
-import type { ManifestPatchMeta } from "./use-manifest-apply-session.ts";
+import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -195,7 +195,7 @@ const PatchOptions = ({
 }: {
   /** The patch is toggled out of the run: verification state is not part of the
    * plan, so the header verdict/timing readouts stay off - the drawer remains
-   * editable for manifest authors. */
+   * editable for bundle authors. */
   disabled?: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
@@ -205,8 +205,8 @@ const PatchOptions = ({
   isChainInput?: boolean;
   isChainOutput?: boolean;
   item: PatchStackItemState;
-  meta?: ManifestPatchMeta;
-  onMetaChange?: (updates: Partial<ManifestPatchMeta>) => void;
+  meta?: BundlePatchMeta;
+  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
   patchStack: PatcherStackController;
   /** Carry the dry-run verdict/timing on this header - off when the card renders
    * a Checks drawer, which owns the verdict instead. */
@@ -453,8 +453,8 @@ const ApplyPatchListStep = ({
   emptyState,
   fault,
   internalDescription,
-  manifestMeta,
-  onManifestMetaChange,
+  bundleMeta,
+  onBundleMetaChange,
   onTogglePatch,
   patchInput,
   patchNotice,
@@ -467,11 +467,11 @@ const ApplyPatchListStep = ({
   /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
   emptyState?: ReactNode;
   fault?: boolean;
-  /** Embedded description fallback for the first patch; manifest metadata wins. */
+  /** Embedded description fallback for the first patch; bundle metadata wins. */
   internalDescription?: string;
-  /** Per-index editable manifest metadata. */
-  manifestMeta?: readonly (ManifestPatchMeta | undefined)[];
-  onManifestMetaChange?: (index: number, updates: Partial<ManifestPatchMeta>) => void;
+  /** Per-index editable bundle metadata. */
+  bundleMeta?: readonly (BundlePatchMeta | undefined)[];
+  onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   patchInput: PatcherUiState["patchInput"];
   patchNotice: NoticeState;
@@ -539,7 +539,7 @@ const ApplyPatchListStep = ({
         ref={reorderList.containerRef}
       >
         {patches.map((item, index) => {
-          const description = manifestMeta?.[index]?.description || (index === 0 ? internalDescription : "");
+          const description = bundleMeta?.[index]?.description || (index === 0 ? internalDescription : "");
           // Mirrors the ROM card: the resolved card structure (collapsed Extract +
           // Options drawers) stays mounted through staging - a determinate bar on the
           // top edge + a "Reading…" status in the meta line carry progress - so the
@@ -559,7 +559,7 @@ const ApplyPatchListStep = ({
           const disabledClass = isDisabled ? "is-disabled" : undefined;
           // A disabled patch is out of the run: its (stale) verification verdict
           // stays off the card, and the body keeps only the Options drawer so
-          // manifest authors can still edit name/description/checks.
+          // bundle authors can still edit name/description/checks.
           let verdict: "bad" | "ok" | undefined;
           if (item.validationState === "invalid") verdict = "bad";
           else if (item.validationState === "valid") verdict = "ok";
@@ -607,8 +607,8 @@ const ApplyPatchListStep = ({
                   ) : null}
                   {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
                   {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
-                  {manifestMeta?.[index]?.label ? (
-                    <span className="meta-fmt mono">{manifestMeta[index]?.label}</span>
+                  {bundleMeta?.[index]?.label ? (
+                    <span className="meta-fmt mono">{bundleMeta[index]?.label}</span>
                   ) : null}
                   {staging ? (
                     <StageStatus
@@ -621,7 +621,7 @@ const ApplyPatchListStep = ({
               }
               name={
                 <ExtractName
-                  displayName={manifestMeta?.[index]?.name}
+                  displayName={bundleMeta?.[index]?.name}
                   fileName={item.fileName}
                   fileSize={item.fileSize}
                   // The first archive-path entry is the source archive itself (shown
@@ -656,7 +656,7 @@ const ApplyPatchListStep = ({
                   ) : null}
                   {isDisabled ? null : (
                     <ExtractDrawer
-                      always={!!manifestMeta?.[index] || (staging && patchExtracting)}
+                      always={!!bundleMeta?.[index] || (staging && patchExtracting)}
                       fileName={item.fileName}
                       fileSize={item.fileSize}
                       parentCompressions={item.archivePathEntries}
@@ -669,8 +669,8 @@ const ApplyPatchListStep = ({
                     isChainInput={index === chainInputIndex}
                     isChainOutput={index === chainOutputIndex}
                     item={item}
-                    meta={manifestMeta?.[index]}
-                    onMetaChange={onManifestMetaChange ? (updates) => onManifestMetaChange(index, updates) : undefined}
+                    meta={bundleMeta?.[index]}
+                    onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
                     patchStack={patchStack}
                     showVerdict={!hasChecksDrawer}
                   />

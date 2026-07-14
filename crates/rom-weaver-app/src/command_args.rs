@@ -586,7 +586,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Output path for the patched result. Optional when an rw.json manifest supplies output.name"
+            help = "Output path for the patched result. Optional when a rom-weaver-bundle.json bundle supplies output.name"
         )
     )]
     #[serde(default)]
@@ -595,19 +595,19 @@ pub struct PatchApplyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "manifest",
-            help = "Apply using an rw.json manifest (a path, or an http(s) URL on native builds). Also auto-detected when the input is rw.json[.gz|.bz2|.xz|.zst], or an archive carrying a root rw.json without explicit --patch flags"
+            long = "bundle",
+            help = "Apply using a rom-weaver-bundle.json bundle (a path, or an http(s) URL on native builds). Also auto-detected when the input is rom-weaver-bundle.json[.gz|.bz2|.xz|.zst], or an archive carrying a root rom-weaver-bundle.json without explicit --patch flags"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub manifest: Option<PathBuf>,
+    pub bundle: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "with",
             value_name = "GLOB",
-            help = "Include manifest patches matching GLOB (by name or file name) even when default is false; repeatable"
+            help = "Include bundle patches matching GLOB (by name or file name) even when default is false; repeatable"
         )
     )]
     #[serde(default)]
@@ -618,7 +618,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "without",
             value_name = "GLOB",
-            help = "Exclude manifest patches matching GLOB (by name or file name), overriding their default; repeatable"
+            help = "Exclude bundle patches matching GLOB (by name or file name), overriding their default; repeatable"
         )
     )]
     #[serde(default)]
@@ -1160,13 +1160,13 @@ pub struct PlanExtractBatchCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ManifestParseCommand {
+pub struct BundleParseCommand {
     pub source: PathBuf,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "extract-dir",
-            help = "Extract manifest-referenced archive members into this directory (path entries stay unresolved without it when the source is an archive)"
+            help = "Extract bundle-referenced archive members into this directory (path entries stay unresolved without it when the source is an archive)"
         )
     )]
     #[serde(default)]
@@ -1178,11 +1178,11 @@ pub struct ManifestParseCommand {
     pub threads: ThreadBudget,
 }
 
-/// One normalized `manifest create` patch entry, bound from the per-patch
+/// One normalized `bundle create` patch entry, bound from the per-patch
 /// metadata flags (native argv alignment) or from index-aligned vectors on
 /// the wasm JSON path.
 #[derive(Clone, Debug, Default)]
-pub struct ManifestCreatePatchSpec {
+pub struct BundleCreatePatchSpec {
     pub path: PathBuf,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -1195,7 +1195,7 @@ pub struct ManifestCreatePatchSpec {
     /// emitted as the entry's `inputChecks` when they differ from the rom's.
     pub input_checks: Vec<String>,
     /// Expected post-apply ROM checksums for this entry, emitted as the
-    /// entry's `outputChecks` when they differ from the manifest's final
+    /// entry's `outputChecks` when they differ from the bundle's final
     /// `output.checks`.
     pub output_checks: Vec<String>,
 }
@@ -1203,19 +1203,19 @@ pub struct ManifestCreatePatchSpec {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ManifestCreateCommand {
+pub struct BundleCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Local ROM file; its checksums/size become the manifest's rom checks"
+            help = "Local ROM file; its checksums/size become the bundle's rom checks"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom: Option<PathBuf>,
     /// Cached ROM checksum values from a prior staging pass. The webapp uses
-    /// this to avoid hashing the same prepared leaf during manifest export.
+    /// this to avoid hashing the same prepared leaf during bundle export.
     #[cfg_attr(not(target_arch = "wasm32"), arg(long = "rom-checksums", hide = true))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -1325,7 +1325,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "output-name",
-            help = "Default output file name the manifest suggests"
+            help = "Default output file name the bundle suggests"
         )
     )]
     #[serde(default)]
@@ -1339,7 +1339,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Where to write the manifest: rw.json, or rw.json.gz / rw.json.zst for a compressed one"
+            help = "Where to write the bundle: rom-weaver-bundle.json, or rom-weaver-bundle.json.gz / rom-weaver-bundle.json.zst for a compressed one"
         )
     )]
     pub output: PathBuf,
@@ -1347,7 +1347,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Also bundle the manifest plus the local rom/patch files into this archive (creatable formats only, for example .zip); manifest path entries then reference the archived names"
+            help = "Also bundle the bundle plus the local rom/patch files into this archive (creatable formats only, for example .zip); bundle path entries then reference the archived names"
         )
     )]
     #[serde(default)]
@@ -1362,7 +1362,7 @@ pub struct ManifestCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "no-bundle-rom",
-            help = "Don't distribute the local --rom: leave it out of --bundle and emit its manifest entry with checks only (the applying user supplies the ROM)"
+            help = "Don't distribute the local --rom: leave it out of --bundle and emit its bundle entry with checks only (the applying user supplies the ROM)"
         )
     )]
     #[serde(default)]
@@ -1387,16 +1387,16 @@ pub struct ManifestCreateCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
-    pub patch_specs: Vec<ManifestCreatePatchSpec>,
+    pub patch_specs: Vec<BundleCreatePatchSpec>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl ManifestCreateCommand {
+impl BundleCreateCommand {
     /// Bind each per-patch metadata occurrence to the most recent preceding
     /// `--patch` (clap's parsed `Vec`s lose the interleave order, so this
     /// re-derives it from the raw argv indices). The last occurrence bound to
     /// a patch wins; an occurrence before any `--patch` binds to the first.
-    pub fn align_manifest_patch_metadata(&mut self, matches: &clap::ArgMatches) {
+    pub fn align_bundle_patch_metadata(&mut self, matches: &clap::ArgMatches) {
         let patch_indices: Vec<usize> = matches
             .indices_of("patch")
             .map(Iterator::collect)
@@ -1404,12 +1404,12 @@ impl ManifestCreateCommand {
         if patch_indices.is_empty() {
             return;
         }
-        let mut specs: Vec<ManifestCreatePatchSpec> = self
+        let mut specs: Vec<BundleCreatePatchSpec> = self
             .patch
             .iter()
-            .map(|path| ManifestCreatePatchSpec {
+            .map(|path| BundleCreatePatchSpec {
                 path: path.clone(),
-                ..ManifestCreatePatchSpec::default()
+                ..BundleCreatePatchSpec::default()
             })
             .collect();
         let patch_position = |value_index: usize| -> usize {
@@ -1417,23 +1417,22 @@ impl ManifestCreateCommand {
                 .partition_point(|patch_index| *patch_index < value_index)
                 .saturating_sub(1)
         };
-        let bind =
-            |specs: &mut Vec<ManifestCreatePatchSpec>,
-             id: &str,
-             count: usize,
-             assign: &mut dyn FnMut(&mut ManifestCreatePatchSpec, usize)| {
-                let indices: Vec<usize> = matches
-                    .indices_of(id)
-                    .map(Iterator::collect)
-                    .unwrap_or_default();
-                if indices.len() != count {
-                    return;
-                }
-                for (occurrence, value_index) in indices.into_iter().enumerate() {
-                    let position = patch_position(value_index);
-                    assign(&mut specs[position], occurrence);
-                }
-            };
+        let bind = |specs: &mut Vec<BundleCreatePatchSpec>,
+                    id: &str,
+                    count: usize,
+                    assign: &mut dyn FnMut(&mut BundleCreatePatchSpec, usize)| {
+            let indices: Vec<usize> = matches
+                .indices_of(id)
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            if indices.len() != count {
+                return;
+            }
+            for (occurrence, value_index) in indices.into_iter().enumerate() {
+                let position = patch_position(value_index);
+                assign(&mut specs[position], occurrence);
+            }
+        };
         let names = self.patch_name.clone();
         bind(&mut specs, "patch_name", names.len(), &mut |spec, index| {
             spec.name = Some(names[index].clone());

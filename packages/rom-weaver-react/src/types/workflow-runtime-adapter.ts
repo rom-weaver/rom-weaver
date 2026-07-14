@@ -1,9 +1,9 @@
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
 import type { PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, ThreadBudget } from "../wasm/index.ts";
+import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
-import type { ManifestHeaderMode, ParsedManifestCreateResult, ParsedManifestParseResult } from "./manifest.ts";
 import type { OutputStorageKind } from "./output.ts";
 import type { JsonObject, JsonValue } from "./runtime.ts";
 import type { SourceRef } from "./source.ts";
@@ -413,8 +413,8 @@ type WorkflowRuntimeIngest = {
   }) => Promise<{ result: ParsedIngestResult; outputs: PublicOutput[]; patchOutputs: PublicOutput[] }>;
 };
 
-type WorkflowRuntimeManifest = {
-  // Parse a dropped/fetched rw.json (plain, compressed, or an archive carrying one). Bundled
+type WorkflowRuntimeBundle = {
+  // Parse a dropped/fetched rom-weaver-bundle.json (plain, compressed, or an archive carrying one). Bundled
   // ROM/patch members are extracted, materialized as plain `File`s keyed by their reported
   // `extracted` path, and cleaned out of the runtime's staging area before returning - the caller
   // routes the Files through the standard drop pipeline.
@@ -425,8 +425,8 @@ type WorkflowRuntimeManifest = {
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
     signal?: AbortSignal;
-  }) => Promise<{ result: ParsedManifestParseResult; extractedFiles: Map<string, File> }>;
-  // Write an rw.json manifest (and optional everything-bundle .zip) from the current session's
+  }) => Promise<{ result: ParsedBundleParseResult; extractedFiles: Map<string, File> }>;
+  // Write a rom-weaver-bundle.json bundle (and optional everything-bundle .zip) from the current session's
   // files. Cached ROM checks avoid a second hash; outputs stay as VFS-backed runtime outputs.
   create?: (input: {
     rom?: { source: unknown; fileName?: string };
@@ -440,32 +440,32 @@ type WorkflowRuntimeManifest = {
       label?: string;
       /** Optional patches start deselected at apply time; absent/false = applied by default. */
       optional?: boolean;
-      header?: ManifestHeaderMode;
+      header?: BundleHeaderMode;
       /** Expected pre-apply ROM checksums for this entry ("algo=hex", comma-separable). */
       inputChecks?: string;
       /** Expected post-apply ROM checksums ("algo=hex", comma-separable). */
       outputChecks?: string;
     }>;
     outputName?: string;
-    outputHeader?: ManifestHeaderMode;
+    outputHeader?: BundleHeaderMode;
     /** Cached checksums from apply staging; Rust hashes only when this is absent. */
     romChecksums?: string;
     /** Cached prepared ROM byte size. */
     romSize?: number;
     /** Expected final-output checksums once the full chain is applied ("algo=hex", comma-separable). */
     outputCheck?: string;
-    /** Bundle file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = manifest only. */
+    /** Bundle file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = bundle only. */
     bundleFileName?: string;
-    /** Leave the ROM out of the bundle and emit its manifest entry with checks only. */
+    /** Leave the ROM out of the bundle and emit its bundle entry with checks only. */
     noBundleRom?: boolean;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
     signal?: AbortSignal;
   }) => Promise<{
-    result: ParsedManifestCreateResult;
-    manifestOutput: PublicOutput;
-    bundleOutput?: PublicOutput;
+    result: ParsedBundleCreateResult;
+    bundleOutput: PublicOutput;
+    archiveOutput?: PublicOutput;
   }>;
 };
 
@@ -534,7 +534,7 @@ type WorkflowRuntime = {
   compression: WorkflowRuntimeCompression;
   binary: WorkflowRuntimeBinary;
   ingest?: WorkflowRuntimeIngest;
-  manifest?: WorkflowRuntimeManifest;
+  bundle?: WorkflowRuntimeBundle;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
    * one unit even though each file is staged independently. Optional - runtimes without a batch planner
    * omit it and ops are admitted as they arrive. */

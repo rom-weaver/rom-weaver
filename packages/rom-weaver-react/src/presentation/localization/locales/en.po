@@ -70,8 +70,8 @@ msgstr "{count} warning(s)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.format.bundle"
-msgstr "{format} bundle (manifest + patches)"
+msgid "ui.bundleExport.format.bundle"
+msgstr "{format} archive (bundle + patches)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,7 +225,22 @@ msgstr "Block the run when input or output hashes don’t match the patch requir
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.bundleRom"
+msgid "ui.bundleExport.error"
+msgstr "Bundle export failed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.name"
+msgstr "Bundle name"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.format.bundleOnly"
+msgstr "Bundle only (rom-weaver-bundle.json)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.bundleRom"
 msgstr "Bundle ROM into the archive"
 
 #. js-lingui-explicit-id
@@ -400,7 +415,7 @@ msgstr "Decompressing input"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.default"
+msgid "ui.bundleExport.status.default"
 msgstr "Default (on)"
 
 #. js-lingui-explicit-id
@@ -420,7 +435,7 @@ msgstr "Default zstd. Optional level: zstd:-7 through zstd:22."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.description"
+msgid "ui.bundleExport.description"
 msgstr "Description"
 
 #. js-lingui-explicit-id
@@ -450,7 +465,7 @@ msgstr "Diff window for create - larger spans find moved data but use more memor
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.disabled"
+msgid "ui.bundleExport.status.disabled"
 msgstr "Disabled"
 
 #. js-lingui-explicit-id
@@ -475,8 +490,8 @@ msgstr "Download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.action"
-msgstr "Download manifest"
+msgid "ui.bundleExport.action"
+msgstr "Download bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,18 +575,18 @@ msgstr "Expected output checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.export"
+msgid "ui.bundleExport.export"
 msgstr "Export"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.title"
-msgstr "Export manifest"
+msgid "ui.bundleExport.title"
+msgstr "Export bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.exporting"
-msgstr "Exporting manifest…"
+msgid "ui.bundleExport.exporting"
+msgstr "Exporting bundle…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -645,7 +660,7 @@ msgstr "Format"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.fromArchive"
+msgid "ui.bundleExport.fromArchive"
 msgstr "from {name}"
 
 #. js-lingui-explicit-id
@@ -760,21 +775,6 @@ msgstr "Low"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.error"
-msgstr "Manifest export failed"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.name"
-msgstr "Manifest name"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.format.manifestOnly"
-msgstr "Manifest only (rw.json)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.scale.max"
 msgstr "Max"
 
@@ -840,7 +840,7 @@ msgstr "On"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.optional"
+msgid "ui.bundleExport.status.optional"
 msgstr "Optional (off)"
 
 #. js-lingui-explicit-id
@@ -880,7 +880,7 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.output"
+msgid "ui.bundleExport.output"
 msgstr "Output"
 
 #. js-lingui-explicit-id
@@ -930,7 +930,7 @@ msgstr "Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.statusLabel"
+msgid "ui.bundleExport.statusLabel"
 msgstr "Patch {n} status"
 
 #. js-lingui-explicit-id
@@ -975,7 +975,7 @@ msgstr "patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.patches"
+msgid "ui.bundleExport.patches"
 msgstr "Patches"
 
 #. js-lingui-explicit-id
@@ -990,7 +990,7 @@ msgstr "Patches apply top to bottom - drag the handle to reorder. Filename hints
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.preparing"
+msgid "ui.bundleExport.preparing"
 msgstr "Preparing patch files…"
 
 #. js-lingui-explicit-id
@@ -1115,13 +1115,13 @@ msgstr "Require input checksum match"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.required"
+msgid "ui.bundleExport.status.required"
 msgstr "Required"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestSession.requiredLock"
-msgstr "Required by the manifest"
+msgid "ui.bundleSession.requiredLock"
+msgstr "Required by the bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1155,7 +1155,7 @@ msgstr "ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.patchChecks"
+msgid "ui.bundleExport.patchChecks"
 msgstr "ROM checks (pre-apply)"
 
 #. js-lingui-explicit-id

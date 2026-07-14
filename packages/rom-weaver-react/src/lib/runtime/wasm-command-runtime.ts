@@ -3,13 +3,9 @@ import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
+import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "../../types/bundle.ts";
 import type { ParsedIngestResult } from "../../types/ingest.ts";
 import type { LogLevel } from "../../types/logging.ts";
-import type {
-  ManifestHeaderMode,
-  ParsedManifestCreateResult,
-  ParsedManifestParseResult,
-} from "../../types/manifest.ts";
 import type {
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateCandidatesWorkerInput,
@@ -36,6 +32,7 @@ import {
   withRomWeaverFailureKind,
 } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
+import { parseBundleCreateResult, parseBundleParseResult } from "./bundle-result.ts";
 import {
   isChdCompressionFormat,
   normalizeChdCodecArgs,
@@ -44,7 +41,6 @@ import {
 } from "./compression-codec-args.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { parseIngestResult } from "./ingest-result.ts";
-import { parseManifestCreateResult, parseManifestParseResult } from "./manifest-result.ts";
 import {
   getPatchApplyOutputFileName,
   getPatchValidationRequirements,
@@ -822,10 +818,10 @@ const invokeRomWeaverIngestWorker = async (
   return { ...parsed, timing: getRunResultTiming(result) };
 };
 
-// Parse an rw.json manifest (plain, compressed, or bundled in an archive) via the `manifest parse`
+// Parse a rom-weaver-bundle.json bundle (plain, compressed, or bundled in an archive) via the `bundle parse`
 // command. Bundled ROM/patch members are extracted into `extractDirPath`; the parsed result's
 // `extracted` source refs point at those leaves.
-const invokeRomWeaverManifestParseWorker = async (
+const invokeRomWeaverBundleParseWorker = async (
   input: {
     extractDirPath?: string;
     knownInputPaths?: string[];
@@ -835,15 +831,15 @@ const invokeRomWeaverManifestParseWorker = async (
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<ParsedManifestParseResult> => {
+): Promise<ParsedBundleParseResult> => {
   const sourcePath = String(input.sourcePath || "").trim();
-  if (!sourcePath) throw new Error("Manifest parse source path is required");
+  if (!sourcePath) throw new Error("Bundle parse source path is required");
   const extractDirPath = String(input.extractDirPath || "").trim();
-  const command = createRomWeaverCommand("manifest-parse", {
+  const command = createRomWeaverCommand("bundle-parse", {
     source: sourcePath,
     ...(extractDirPath ? { extract_dir: extractDirPath } : {}),
   });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson manifest-parse dispatch", {
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-parse dispatch", {
     command,
     extractDirPath,
     sourcePath,
@@ -861,21 +857,21 @@ const invokeRomWeaverManifestParseWorker = async (
       signal: input.signal,
     }),
   );
-  ensureRomWeaverSuccess(result, "Manifest parse failed");
+  ensureRomWeaverSuccess(result, "Bundle parse failed");
   const terminal = getLastEvent(result);
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
-  const parsed = parseManifestParseResult(details);
+  const parsed = parseBundleParseResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Manifest parse result was missing or malformed"), result);
+    throw withRomWeaverFailureKind(new Error("Bundle parse result was missing or malformed"), result);
   }
   return parsed;
 };
 
-// Write an rw.json manifest (and optional everything-bundle archive) from staged session files via
-// the `manifest create` command. Cached ROM checks are forwarded when available;
+// Write a rom-weaver-bundle.json bundle (and optional everything-bundle archive) from staged session files via
+// the `bundle create` command. Cached ROM checks are forwarded when available;
 // Rust hashes only as a compatibility fallback. Per-patch metadata arrays are
 // index-aligned with `patchPaths` (or empty).
-const invokeRomWeaverManifestCreateWorker = async (
+const invokeRomWeaverBundleCreateWorker = async (
   input: {
     bundlePath?: string;
     bundleRomPath?: string;
@@ -884,13 +880,13 @@ const invokeRomWeaverManifestCreateWorker = async (
     noBundleRom?: boolean;
     /** Expected final-output checksums once the full chain is applied ("algo=hex", comma-separable). */
     outputCheck?: string;
-    outputHeader?: ManifestHeaderMode;
+    outputHeader?: BundleHeaderMode;
     romChecksums?: string;
     romSize?: number;
     outputName?: string;
     outputPath: string;
     patchDescriptions?: string[];
-    patchHeaders?: ManifestHeaderMode[];
+    patchHeaders?: BundleHeaderMode[];
     /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
     patchInputChecks?: string[];
     patchLabels?: string[];
@@ -903,11 +899,11 @@ const invokeRomWeaverManifestCreateWorker = async (
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<ParsedManifestCreateResult> => {
+): Promise<ParsedBundleCreateResult> => {
   const outputPath = String(input.outputPath || "").trim();
-  if (!outputPath) throw new Error("Manifest create output path is required");
+  if (!outputPath) throw new Error("Bundle create output path is required");
   const patchPaths = (input.patchPaths || []).map((path) => String(path || "").trim()).filter((path) => !!path);
-  if (!patchPaths.length) throw new Error("Manifest create requires at least one patch path");
+  if (!patchPaths.length) throw new Error("Bundle create requires at least one patch path");
   const romPath = String(input.romPath || "").trim();
   const bundlePath = String(input.bundlePath || "").trim();
   const bundleRomPath = String(input.bundleRomPath || "").trim();
@@ -933,7 +929,7 @@ const invokeRomWeaverManifestCreateWorker = async (
     input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
       ? patchPaths.map((_, index) => input.patchHeaders?.[index] || "auto")
       : undefined;
-  const command = createRomWeaverCommand("manifest-create", {
+  const command = createRomWeaverCommand("bundle-create", {
     output: outputPath,
     patch: patchPaths,
     ...(romPath ? { rom: romPath } : {}),
@@ -953,7 +949,7 @@ const invokeRomWeaverManifestCreateWorker = async (
     ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
-  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson manifest-create dispatch", {
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {
     bundlePath,
     command,
     outputPath,
@@ -974,23 +970,23 @@ const invokeRomWeaverManifestCreateWorker = async (
       signal: input.signal,
     }),
   );
-  ensureRomWeaverSuccess(result, "Manifest create failed");
+  ensureRomWeaverSuccess(result, "Bundle create failed");
   const terminal = getLastEvent(result);
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
-  const parsed = parseManifestCreateResult(details);
+  const parsed = parseBundleCreateResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Manifest create result was missing or malformed"), result);
+    throw withRomWeaverFailureKind(new Error("Bundle create result was missing or malformed"), result);
   }
   return parsed;
 };
 
 export {
+  invokeRomWeaverBundleCreateWorker,
+  invokeRomWeaverBundleParseWorker,
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIngestWorker,
-  invokeRomWeaverManifestCreateWorker,
-  invokeRomWeaverManifestParseWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverPpfUndoWorker,

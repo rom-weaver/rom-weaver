@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { expect, test } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { loadManifestUrlSession } from "../../src/webapp/url-session/manifest-url-session.ts";
+import { loadBundleUrlSession } from "../../src/webapp/url-session/bundle-url-session.ts";
 import {
   clickApplyButton,
   getPatchStackFileNames,
@@ -18,25 +18,25 @@ import {
 
 installPatcherTestHooks();
 
-const BUNDLE_URL = `${location.origin}/virtual/manifest/bundle.zip`;
+const BUNDLE_URL = `${location.origin}/virtual/bundle/bundle.zip`;
 
-// The everything-archive: a zip carrying the rw.json plus its ROM and patch as members (referenced
-// via manifest-relative `path` entries), assembled in the browser through the real compression
+// The everything-archive: a zip carrying the rom-weaver-bundle.json plus its ROM and patch as members (referenced
+// via bundle-relative `path` entries), assembled in the browser through the real compression
 // runtime so the test exercises exactly what a distributor would publish.
 const buildEverythingArchive = async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
-  const manifest = {
+  const bundle = {
     output: { name: "bundled-output" },
     patches: [{ path: "change.ips" }],
     rom: { path: "game.bin" },
     version: 1,
   };
-  const manifestFile = new File([JSON.stringify(manifest)], "rw.json", { type: "application/json" });
+  const bundleFile = new File([JSON.stringify(bundle)], "rom-weaver-bundle.json", { type: "application/json" });
   const create = browserRuntime.compression.create;
   if (!create) throw new Error("Runtime compression create capability is unavailable");
   const result = await create({
     entries: [
-      { file: manifestFile, fileName: "rw.json" },
+      { file: bundleFile, fileName: "rom-weaver-bundle.json" },
       { file: romFile, fileName: "game.bin" },
       { file: patchFile, fileName: "change.ips" },
     ],
@@ -53,13 +53,13 @@ const buildEverythingArchive = async () => {
   }
 };
 
-test("everything-archive manifest extracts its members and applies to a download", async () => {
+test("everything-archive bundle extracts its members and applies to a download", async () => {
   const bundleFile = await buildEverythingArchive();
 
   // Direct runtime parse over the archive: members must be materialized under extracted paths and
   // the bundled patch must carry its ingest-grade descriptor (no second describe round-trip).
-  const parse = browserRuntime.manifest?.parse;
-  if (!parse) throw new Error("Runtime manifest parse capability is unavailable");
+  const parse = browserRuntime.bundle?.parse;
+  if (!parse) throw new Error("Runtime bundle parse capability is unavailable");
   const parsed = await parse({ fileName: bundleFile.name, source: bundleFile });
   expect(parsed.result.sourceKind).toBe("archive");
   expect(parsed.result.romSource?.kind).toBe("extracted");
@@ -86,7 +86,7 @@ test("everything-archive manifest extracts its members and applies to a download
   };
   let loaded;
   try {
-    loaded = await loadManifestUrlSession(BUNDLE_URL);
+    loaded = await loadBundleUrlSession(BUNDLE_URL);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -97,7 +97,7 @@ test("everything-archive manifest extracts its members and applies to a download
 
   mount(
     createElement(ApplyPatchForm, {
-      manifestSession: session,
+      bundleSession: session,
       pageDrop: { files, id: 1 },
     }),
   );

@@ -149,7 +149,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
-  const romInput = page.getByLabelText(/ROMs, patches, manifests, or archives/i);
+  const romInput = page.getByLabelText(/ROMs, patches, bundles, or archives/i);
 
   await expect.element(romInput).toBeInTheDocument();
 
@@ -173,7 +173,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
     .not.toContain("game.bin");
 
   await page
-    .getByLabelText(/ROMs, patches, manifests, or archives/i)
+    .getByLabelText(/ROMs, patches, bundles, or archives/i)
     .upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
 
   await selectCandidateIfPrompted("game.bin");

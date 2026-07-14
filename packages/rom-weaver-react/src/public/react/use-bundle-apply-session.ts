@@ -1,23 +1,23 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
-import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
-import type { ParsedManifestChecks } from "../../types/manifest.ts";
+import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
-const logger = createLogger("manifest-apply-session");
+const logger = createLogger("bundle-apply-session");
 
-/** Per-patch manifest metadata kept for the cards (label/description) and export round-trips. */
-type ManifestPatchMeta = {
+/** Per-patch bundle metadata kept for the cards (label/description) and export round-trips. */
+type BundlePatchMeta = {
   name?: string;
   label?: string;
   description?: string;
-  inputChecks?: ParsedManifestChecks;
-  outputChecks?: ParsedManifestChecks;
+  inputChecks?: ParsedBundleChecks;
+  outputChecks?: ParsedBundleChecks;
 };
 
-type ManifestSessionControllers = {
+type BundleSessionControllers = {
   output: PatcherOutputController | null;
   patchStack: PatcherStackController | null;
 };
@@ -31,20 +31,20 @@ const stripOutputNameExtension = (name: string): string => {
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
- * Applies a `?manifest=` session to the apply form exactly once: when the patch list first matches
- * the manifest's delivered files (ordered file names), it seeds enablement (optional → off,
- * everything else → on), applies per-patch header modes and the manifest's output defaults
+ * Applies a `?bundle=` session to the apply form exactly once: when the patch list first matches
+ * the bundle's delivered files (ordered file names), it seeds enablement (optional → off,
+ * everything else → on), applies per-patch header modes and the bundle's output defaults
  * through the same controller methods user edits use (so later user edits naturally win), and keeps
  * the per-patch label/description metadata for the patch cards, keyed by stable source id.
  */
-const useManifestApplySession = ({
-  manifestSession,
+const useBundleApplySession = ({
+  bundleSession,
   controllersRef,
   seedPatchEnablement,
 }: {
-  manifestSession: ManifestApplySession | null;
+  bundleSession: BundleApplySession | null;
   /** Latest-controller ref - the local controllers are recreated per render, so reads go through here. */
-  controllersRef: MutableRefObject<ManifestSessionControllers>;
+  controllersRef: MutableRefObject<BundleSessionControllers>;
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
 }) => {
   const appliedKeyRef = useRef<string | null>(null);
@@ -53,18 +53,18 @@ const useManifestApplySession = ({
   // can fire with a stale null session. The session-arrival effect below
   // replays the match against this mirror.
   const lastPatchesRef = useRef<BinarySource[]>([]);
-  const [manifestMetaById, setManifestMetaById] = useState<ReadonlyMap<string, ManifestPatchMeta>>(new Map());
+  const [bundleMetaById, setBundleMetaById] = useState<ReadonlyMap<string, BundlePatchMeta>>(new Map());
 
-  const handleManifestPatchesChange = useCallback(
+  const handleBundlePatchesChange = useCallback(
     (patches: BinarySource[]) => {
       lastPatchesRef.current = patches;
-      const session = manifestSession;
+      const session = bundleSession;
       if (!session?.entries.length || appliedKeyRef.current === session.key) return;
       const names = patches.map((patch, index) => getReactBinarySourceFileName(patch, `Patch ${index + 1}`));
       const expected = session.entries.map((entry) => entry.fileName);
       if (names.length !== expected.length || expected.some((name, index) => names[index] !== name)) return;
       appliedKeyRef.current = session.key;
-      logger.debug("manifest session matched patch list; seeding enablement + defaults", {
+      logger.debug("bundle session matched patch list; seeding enablement + defaults", {
         key: session.key,
         patchCount: patches.length,
       });
@@ -77,7 +77,7 @@ const useManifestApplySession = ({
           }))
           .filter((entry) => !!entry.id),
       );
-      const meta = new Map<string, ManifestPatchMeta>();
+      const meta = new Map<string, BundlePatchMeta>();
       session.entries.forEach((entry, index) => {
         const id = ids[index];
         if (!id) return;
@@ -89,7 +89,7 @@ const useManifestApplySession = ({
           ...(entry.outputChecks ? { outputChecks: entry.outputChecks } : {}),
         });
       });
-      setManifestMetaById(meta);
+      setBundleMetaById(meta);
       // The controller work runs task-chained straight from the match, so everything lands while the
       // patches are still staging - well before the apply button arms. Deferring longer would race a
       // fast apply click: any settings commit cancels a queued apply (by design for real user edits).
@@ -108,7 +108,7 @@ const useManifestApplySession = ({
         }
         // Per-patch header modes ride the normal option path (the same call the Options drawer's
         // strip-header checkbox makes); `auto` entries stay with the engine's per-step decision.
-        // Validation checksums seed only the chain ENDPOINTS - the manifest's ROM/final-output
+        // Validation checksums seed only the chain ENDPOINTS - the bundle's ROM/final-output
         // expectations, session-level rather than per-patch: they verify the ROM (card coloring +
         // apply-time input validation) without being attributed to the patches' own check fields,
         // and mid-chain states describe intermediates the webapp cannot verify before applying.
@@ -135,28 +135,28 @@ const useManifestApplySession = ({
         if (defaults.header) controllersRef.current.output?.setOutputHeader?.(defaults.header);
       })();
     },
-    [controllersRef, manifestSession, seedPatchEnablement],
+    [controllersRef, bundleSession, seedPatchEnablement],
   );
 
   // Replay the match when the session lands AFTER its patches did (local
   // bundle drops): the patch list is already final, so no further list-change
   // callback would ever fire.
   useEffect(() => {
-    if (!manifestSession || appliedKeyRef.current === manifestSession.key) return;
+    if (!bundleSession || appliedKeyRef.current === bundleSession.key) return;
     if (!lastPatchesRef.current.length) return;
-    handleManifestPatchesChange(lastPatchesRef.current);
-  }, [handleManifestPatchesChange, manifestSession]);
+    handleBundlePatchesChange(lastPatchesRef.current);
+  }, [handleBundlePatchesChange, bundleSession]);
 
-  const updateManifestMeta = useCallback((id: string, updates: Partial<ManifestPatchMeta>) => {
-    setManifestMetaById((previous) => {
+  const updateBundleMeta = useCallback((id: string, updates: Partial<BundlePatchMeta>) => {
+    setBundleMetaById((previous) => {
       const next = new Map(previous);
       next.set(id, { ...next.get(id), ...updates });
       return next;
     });
   }, []);
 
-  return { handleManifestPatchesChange, manifestMetaById, updateManifestMeta };
+  return { bundleMetaById, handleBundlePatchesChange, updateBundleMeta };
 };
 
-export type { ManifestPatchMeta, ManifestSessionControllers };
-export { useManifestApplySession };
+export type { BundlePatchMeta, BundleSessionControllers };
+export { useBundleApplySession };

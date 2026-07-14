@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
-import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
 import type { RemoteFetchEntry, RemoteFetchErrorKind } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles, RemoteFetchError } from "../../lib/remote/remote-file-fetch.ts";
-import { loadManifestUrlSession } from "./manifest-url-session.ts";
+import { loadBundleUrlSession } from "./bundle-url-session.ts";
 import type { UrlSessionRequest } from "./url-session-request.ts";
 
 const logger = createLogger("url-session");
@@ -12,17 +12,17 @@ type UrlSessionBootState = {
   phase: "idle" | "fetching" | "done" | "error";
   loadedBytes: number;
   totalBytes: number | null;
-  /** The manifest's display name once parsed (manifest sessions only). */
-  manifestName: string;
+  /** The bundle's display name once parsed (bundle sessions only). */
+  bundleName: string;
   errorKind: RemoteFetchErrorKind | null;
   errorDetail: string;
 };
 
 const IDLE_STATE: UrlSessionBootState = {
+  bundleName: "",
   errorDetail: "",
   errorKind: null,
   loadedBytes: 0,
-  manifestName: "",
   phase: "idle",
   totalBytes: null,
 };
@@ -30,21 +30,21 @@ const IDLE_STATE: UrlSessionBootState = {
 /**
  * Boot-time URL-session loader: fetches the request's sources once per attempt
  * and delivers them as `File`s into the apply tab's drop pipeline. The direct
- * `rom=`/`patch=` shape fetches verbatim; the `manifest=` shape parses the
- * rw.json through the wasm runtime first, acquires its sources, and surfaces
- * the decorated session via `onManifestSession` for the apply form to consume.
+ * `rom=`/`patch=` shape fetches verbatim; the `bundle=` shape parses the
+ * rom-weaver-bundle.json through the wasm runtime first, acquires its sources, and surfaces
+ * the decorated session via `onBundleSession` for the apply form to consume.
  */
 function useUrlSessionBoot(
   request: UrlSessionRequest | null,
   deliverFiles: (files: File[]) => void,
-  onManifestSession?: (session: ManifestApplySession) => void,
+  onBundleSession?: (session: BundleApplySession) => void,
 ): { state: UrlSessionBootState; retry: () => void } {
   const [state, setState] = useState<UrlSessionBootState>(IDLE_STATE);
   const [attempt, setAttempt] = useState(0);
   const deliverRef = useRef(deliverFiles);
   deliverRef.current = deliverFiles;
-  const manifestSessionRef = useRef(onManifestSession);
-  manifestSessionRef.current = onManifestSession;
+  const bundleSessionRef = useRef(onBundleSession);
+  bundleSessionRef.current = onBundleSession;
 
   useEffect(() => {
     if (!request) return undefined;
@@ -86,9 +86,9 @@ function useUrlSessionBoot(
         deliverRef.current(files.map((entry) => entry.file));
       });
     } else {
-      run = loadManifestUrlSession(request.manifestUrl, {
-        onManifestName: (name) => {
-          if (!cancelled) setState((previous) => ({ ...previous, manifestName: name }));
+      run = loadBundleUrlSession(request.bundleUrl, {
+        onBundleName: (name) => {
+          if (!cancelled) setState((previous) => ({ ...previous, bundleName: name }));
         },
         onProgress: (id, progress) => {
           loadedByEntry.set(id, progress.loadedBytes);
@@ -99,7 +99,7 @@ function useUrlSessionBoot(
       }).then(({ files, session }) => {
         if (cancelled) return;
         // A retry after failure must re-seed the form, so the session identity carries the attempt.
-        manifestSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
+        bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
         deliverRef.current(files);
       });
     }

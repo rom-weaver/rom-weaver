@@ -51,7 +51,7 @@ type WebappRootProps = {
   };
   pageUpdate: PageUpdateState;
   confirmationDialog: ConfirmationDialogState;
-  /** Boot-time `?manifest=` / `?rom=&patch=` session request, when present. */
+  /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
     onSelectView: (view: WorkflowView) => void;

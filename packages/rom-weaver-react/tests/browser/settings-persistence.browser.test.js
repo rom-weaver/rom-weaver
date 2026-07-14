@@ -33,6 +33,7 @@ test("development webapp defaults enable trace logging", () => {
 test("settings persistence round-trips every visible settings field", () => {
   const settings = {
     ...getDefaultSettings(),
+    bundlePackage: "7z:rom",
     chdCreateCdCodecs: "cdzs:5,cdlz:6,cdfl:7",
     chdCreateDvdCodecs: "zstd:12,lzma:7,zlib:6,huff,flac:5",
     compressionProfile: "medium",
@@ -40,7 +41,6 @@ test("settings persistence round-trips every visible settings field", () => {
     fixChecksum: true,
     language: "fr",
     logLevel: "debug",
-    manifestPackage: "7z:rom",
     requireInputChecksumMatch: false,
     rvzBlockSize: 262144,
     rvzCodec: "zstd:7",
@@ -58,7 +58,7 @@ test("settings persistence round-trips every visible settings field", () => {
 
   const storedSettings = JSON.parse(serializedSettings);
   expect(storedSettings.common.defaultCompression).toBe("7z only");
-  expect(storedSettings.apply.output.manifestPackage).toBe("7z:rom");
+  expect(storedSettings.apply.output.bundlePackage).toBe("7z:rom");
   expect(storedSettings.apply.compression.rvzCodec).toBe("zstd:7");
   expect(storedSettings.apply.compression.rvzCompressionLevel).toBeUndefined();
   expect(storedSettings.apply.compression.sevenZipLevel).toBeUndefined();

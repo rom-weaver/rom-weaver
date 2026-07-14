@@ -6,26 +6,26 @@ import {
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
-import type { ApplyWorkflowManifestSources } from "../../types/apply-workflow.ts";
-import type { ManifestHeaderMode, ParsedManifestCreateResult } from "../../types/manifest.ts";
+import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
+import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
-import type { ManifestPatchMeta } from "./use-manifest-apply-session.ts";
+import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
 /**
- * The apply form's manifest export flow reuses the leaves and metadata already
+ * The apply form's bundle export flow reuses the leaves and metadata already
  * prepared by the live session. That keeps export out of the ingest/extract/
  * apply pipeline and keeps large outputs path-backed until download.
  */
 
-/** "Manifest only" sentinel in the output-format select. */
-const MANIFEST_ONLY_FORMAT = "manifest";
+/** "Bundle only" sentinel in the output-format select. */
+const BUNDLE_ONLY_FORMAT = "bundle";
 
-type ManifestExportRow = {
+type BundleExportRow = {
   /** Leaf patch file name (what gets exported/bundled). */
   fileName: string;
   /** Source archive the leaf lives in, when it arrived inside one. */
@@ -39,16 +39,16 @@ type ManifestExportRow = {
   checks: string;
   outputChecks: string;
   label?: string;
-  header?: ManifestHeaderMode;
+  header?: BundleHeaderMode;
 };
 
-type ManifestExportSources = ApplyWorkflowManifestSources;
+type BundleExportSources = ApplyWorkflowBundleSources;
 
-type ManifestExportProgress = ProgressViewModel;
+type BundleExportProgress = ProgressViewModel;
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const CHECK_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
 
-const disposeManifestOutput = (output: PublicOutput | null | undefined) => {
+const disposeBundleOutput = (output: PublicOutput | null | undefined) => {
   if (output) void output.dispose().catch(() => undefined);
 };
 
@@ -91,23 +91,23 @@ const embeddedChecks = (item: PatchStackItemState | undefined, side: "in" | "out
   return checks;
 };
 
-type UseManifestExportOptions = {
+type UseBundleExportOptions = {
   /** Live session sources, read at dialog-open time. */
-  getSessionSources: () => ManifestExportSources;
+  getSessionSources: () => BundleExportSources;
   /** Live per-patch stack items (index-aligned with patches) for leaf names + header round-trips. */
   getStackItems: () => PatchStackItemState[];
   getName?: () => string;
   /** The output card's ROM header choice - a non-auto pick (only offered when the
-   * staged ROM has a strippable header) exports as the manifest's `output.header`. */
+   * staged ROM has a strippable header) exports as the bundle's `output.header`. */
   getOutputHeader?: () => "auto" | "keep" | "strip" | undefined;
   disabledPatchIds: ReadonlySet<string>;
   /** Originating per-patch metadata (name/label/description round-trips). */
-  manifestMetaById: ReadonlyMap<string, ManifestPatchMeta>;
+  bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
   initialName?: string;
   initialBundleRom?: boolean;
   initialFormat?: string;
   ready: boolean;
-  onComplete?: (result: ParsedManifestCreateResult) => void;
+  onComplete?: (result: ParsedBundleCreateResult) => void;
 };
 
 const stripFileExtension = (fileName: string): string => {
@@ -116,7 +116,7 @@ const stripFileExtension = (fileName: string): string => {
   return dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
 };
 
-/** Turn a manifest name into a safe bundle file base name. */
+/** Turn a bundle name into a safe bundle file base name. */
 const slugFileName = (value: string): string =>
   value
     .trim()
@@ -124,33 +124,33 @@ const slugFileName = (value: string): string =>
     .trim()
     .replace(/\s+/g, "-");
 
-const useManifestExport = ({
+const useBundleExport = ({
   getSessionSources,
   getStackItems,
   getName,
   getOutputHeader,
   disabledPatchIds,
-  manifestMetaById,
+  bundleMetaById,
   initialName,
   initialBundleRom = false,
   initialFormat = "",
   ready,
   onComplete,
-}: UseManifestExportOptions) => {
+}: UseBundleExportOptions) => {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [name, setName] = useState(initialName || "");
   const [format, setFormat] = useState(initialFormat);
   const [bundleRom, setBundleRom] = useState(initialBundleRom);
-  const [rows, setRows] = useState<ManifestExportRow[]>([]);
-  const [progress, setProgress] = useState<ManifestExportProgress | null>(null);
+  const [rows, setRows] = useState<BundleExportRow[]>([]);
+  const [progress, setProgress] = useState<BundleExportProgress | null>(null);
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const downloadableOutputRef = useRef<PublicOutput | null>(null);
   // The sources captured when the dialog opened, so the export run stays aligned with its rows even
   // if the bench changes underneath the open dialog.
-  const sourcesRef = useRef<ManifestExportSources>({ patches: [], rom: null });
+  const sourcesRef = useRef<BundleExportSources>({ patches: [], rom: null });
 
   const openDialog = useCallback(() => {
     const sources = getSessionSources();
@@ -160,12 +160,12 @@ const useManifestExport = ({
     setRows(
       sources.patches.map((patch, index) => {
         const id = ids[index] || "";
-        const meta = id ? manifestMetaById.get(id) : undefined;
+        const meta = id ? bundleMetaById.get(id) : undefined;
         const item = items[index];
         const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
         const archiveFileName = item?.archiveFileName?.trim();
         const headerChoice = item?.headerChoice;
-        // Toggled-off patches export as `optional`; a manifest session's locked
+        // Toggled-off patches export as `optional`; a bundle session's locked
         // `required` entries stay required; everything else is `default`.
         const defaultEnabled = !disabledPatchIds.has(id);
         return {
@@ -183,7 +183,7 @@ const useManifestExport = ({
         };
       }),
     );
-    // Auto-name: the originating manifest session's name, else the ROM file
+    // Auto-name: the originating bundle session's name, else the ROM file
     // name (else the first patch's) without its extension.
     const romName = sources.rom?.fileName || "";
     const firstPatchName = items[0]?.fileName || sources.patches[0]?.fileName || "";
@@ -200,7 +200,7 @@ const useManifestExport = ({
     initialBundleRom,
     initialFormat,
     initialName,
-    manifestMetaById,
+    bundleMetaById,
   ]);
 
   useEffect(() => {
@@ -253,28 +253,28 @@ const useManifestExport = ({
       await downloadExport();
       return;
     }
-    const create = browserRuntime.manifest?.create;
+    const create = browserRuntime.bundle?.create;
     const exportName = getName?.().trim() || name;
     const sources = getSessionSources();
     sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
     const { rom, patches } = sources;
     if (!create) {
-      setError("Manifest export is not available in this runtime");
+      setError("Bundle export is not available in this runtime");
       return;
     }
     if (!rom) {
-      setError("A staged ROM is required to export a manifest");
+      setError("A staged ROM is required to export a bundle");
       return;
     }
     if (!patches.length) {
-      setError("At least one staged patch is required to export a manifest");
+      setError("At least one staged patch is required to export a bundle");
       return;
     }
     const items = getStackItems();
     const ids = getBinarySourceListStableIds(patches.map((patch) => patch.originalSource as BinarySource));
-    const exportRows: ManifestExportRow[] = patches.map((patch, index) => {
+    const exportRows: BundleExportRow[] = patches.map((patch, index) => {
       const id = ids[index] || "";
-      const meta = id ? manifestMetaById.get(id) : undefined;
+      const meta = id ? bundleMetaById.get(id) : undefined;
       const item = items[index];
       const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
       const archiveFileName = item?.archiveFileName?.trim();
@@ -305,12 +305,12 @@ const useManifestExport = ({
           hasProgress: true,
           label,
           percent: 0,
-          stage: "manifest",
+          stage: "bundle",
         }),
       );
     setBusy(true);
     setError("");
-    stepProgress("Preparing manifest export");
+    stepProgress("Preparing bundle export");
     const outputs: PublicOutput[] = [];
     const compressedRomOutputs: PublicOutput[] = [];
     const retainedOutputs = new Set<PublicOutput>();
@@ -340,8 +340,8 @@ const useManifestExport = ({
           `Patch ${index + 1} output`,
         );
       }
-      stepProgress("Writing manifest");
-      const wantsBundle = format !== MANIFEST_ONLY_FORMAT;
+      stepProgress("Writing bundle");
+      const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
       let packagedRom: { fileName: string; source: SourceRef } | undefined;
       if (bundleRom && wantsBundle) {
@@ -374,18 +374,18 @@ const useManifestExport = ({
         }
       }
       const outputHeader = getOutputHeader?.();
-      const { result, manifestOutput, bundleOutput } = await create({
+      const { result, bundleOutput, archiveOutput } = await create({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
         ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
         ...(rom.checksums ? { romChecksums: formatChecks(rom.checksums) } : {}),
         ...(typeof rom.size === "number" ? { romSize: rom.size } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
-        // The ROM is never distributed unless explicitly bundled: its manifest
+        // The ROM is never distributed unless explicitly bundled: its bundle
         // entry keeps checks only and the applying user supplies the file.
         ...(bundleRom && wantsBundle ? {} : { noBundleRom: true }),
         onProgress: (event) => {
-          setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "manifest" }));
+          setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "bundle" }));
         },
         patches: patches.map((patch, index) => {
           const row = exportRows[index];
@@ -404,8 +404,8 @@ const useManifestExport = ({
         rom: { fileName: rom.fileName, source: rom.source },
         signal: abortController.signal,
       });
-      outputs.push(manifestOutput, ...(bundleOutput ? [bundleOutput] : []));
-      const downloadOutput = wantsBundle && bundleOutput ? bundleOutput : manifestOutput;
+      outputs.push(bundleOutput, ...(archiveOutput ? [archiveOutput] : []));
+      const downloadOutput = wantsBundle && archiveOutput ? archiveOutput : bundleOutput;
       downloadableOutputRef.current = downloadOutput;
       setDownloadableOutput(downloadOutput);
       retainedOutputs.add(downloadOutput);
@@ -441,7 +441,7 @@ const useManifestExport = ({
     getStackItems,
     getName,
     getOutputHeader,
-    manifestMetaById,
+    bundleMetaById,
     name,
     onComplete,
     ready,
@@ -454,7 +454,7 @@ const useManifestExport = ({
     () => () => {
       const output = downloadableOutputRef.current;
       downloadableOutputRef.current = null;
-      disposeManifestOutput(output);
+      disposeBundleOutput(output);
     },
     [],
   );
@@ -483,4 +483,4 @@ const useManifestExport = ({
   };
 };
 
-export { useManifestExport };
+export { useBundleExport };

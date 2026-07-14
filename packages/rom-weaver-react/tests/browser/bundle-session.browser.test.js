@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { expect, test } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { loadManifestUrlSession } from "../../src/webapp/url-session/manifest-url-session.ts";
+import { loadBundleUrlSession } from "../../src/webapp/url-session/bundle-url-session.ts";
 import {
   clickApplyButton,
   getOutputFileNameValue,
@@ -20,12 +20,12 @@ import {
 installPatcherTestHooks();
 
 const ALTERNATE_PATCH = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
-const MANIFEST_URL = `${location.origin}/virtual/manifest/rw.json`;
+const BUNDLE_URL = `${location.origin}/virtual/bundle/rom-weaver-bundle.json`;
 
-// The manifest's sources are real same-origin fixture URLs (only the rw.json itself is virtual, so
+// The bundle's sources are real same-origin fixture URLs (only the rom-weaver-bundle.json itself is virtual, so
 // fetch is stubbed for that one URL and passed through for everything else).
-const MANIFEST_JSON = {
-  output: { name: "manifest-output" },
+const BUNDLE_JSON = {
+  output: { name: "bundle-output" },
   patches: [
     {
       description: "Required core patch",
@@ -39,13 +39,13 @@ const MANIFEST_JSON = {
   version: 1,
 };
 
-const withManifestFetchStub = async (manifest, run) => {
+const withBundleFetchStub = async (bundle, run) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input?.url || String(input);
-    if (url === MANIFEST_URL) {
+    if (url === BUNDLE_URL) {
       return Promise.resolve(
-        new Response(JSON.stringify(manifest), { headers: { "content-type": "application/json" }, status: 200 }),
+        new Response(JSON.stringify(bundle), { headers: { "content-type": "application/json" }, status: 200 }),
       );
     }
     return originalFetch(input, init);
@@ -84,7 +84,7 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
     type: "application/octet-stream",
   });
-  const manifest = {
+  const bundleJson = {
     output: { name: "bundled-output" },
     patches: [
       { name: "Core", path: "change.ips" },
@@ -96,10 +96,10 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
     },
     version: 1,
   };
-  const manifestFile = new File([JSON.stringify(manifest)], "rw.json", { type: "application/json" });
-  const bundle = await buildZip(
+  const bundleFile = new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" });
+  const bundleArchive = await buildZip(
     [
-      { file: manifestFile, fileName: "rw.json" },
+      { file: bundleFile, fileName: "rom-weaver-bundle.json" },
       { file: patchFile, fileName: "change.ips" },
       { file: alternateFile, fileName: "alternate.ips" },
     ],
@@ -107,7 +107,7 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   );
 
   // A user drop: the checks-only bundle plus their own ROM in one gesture.
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundle, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
 
   await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
   await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
@@ -115,25 +115,25 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
 });
 
-test("manifest url session seeds enablement + output defaults and applies to a download", async () => {
-  // The REAL boot flow: fetch → wasm manifest parse → plan → source acquisition (same code the
+test("bundle url session seeds enablement + output defaults and applies to a download", async () => {
+  // The REAL boot flow: fetch → wasm bundle parse → plan → source acquisition (same code the
   // use-url-session-boot hook runs).
-  const { files, session } = await withManifestFetchStub(MANIFEST_JSON, () => loadManifestUrlSession(MANIFEST_URL));
+  const { files, session } = await withBundleFetchStub(BUNDLE_JSON, () => loadBundleUrlSession(BUNDLE_URL));
   expect(files.map((file) => file.name)).toEqual(["game.bin", "change.ips", "alternate.ips"]);
-  // The display name derives from the output naming now that manifests carry no name field.
-  expect(session.name).toBe("manifest-output");
+  // The display name derives from the output naming now that bundles carry no name field.
+  expect(session.name).toBe("bundle-output");
   expect(session.entries.map((entry) => entry.optional)).toEqual([false, true]);
-  expect(session.outputDefaults).toEqual({ name: "manifest-output" });
+  expect(session.outputDefaults).toEqual({ name: "bundle-output" });
 
   // Deliver exactly like WebappRoot does: one pageDrop plus the decorated session prop.
   mount(
     createElement(ApplyPatchForm, {
-      manifestSession: session,
+      bundleSession: session,
       pageDrop: { files, id: 1 },
     }),
   );
 
-  // Patches land in manifest order.
+  // Patches land in bundle order.
   await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
   await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
   // Default-on patch stays toggleable.
@@ -146,17 +146,17 @@ test("manifest url session seeds enablement + output defaults and applies to a d
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(true);
   getPatchToggles()[1]?.click();
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(false);
-  // Manifest metadata reaches the patch cards and editable Options fields.
+  // Bundle metadata reaches the patch cards and editable Options fields.
   const patchStackText = () => document.getElementById("rom-weaver-list-patch-stack")?.textContent || "";
   expect(patchStackText()).toContain("stable");
   document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
   const descriptionInput = await waitForState(() => document.getElementById("rom-weaver-patch-description-0"));
   expect(descriptionInput?.value).toBe("Required core patch");
   expect(descriptionInput?.tagName).toBe("TEXTAREA");
-  expect(document.querySelector(".manifest-banner")).toBeNull();
+  expect(document.querySelector(".bundle-banner")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-card-description-0")?.textContent).toBe("Required core patch");
   // Output defaults applied once through the output controller.
-  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("manifest-output");
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("bundle-output");
 
   await waitForApplyButtonEnabled();
   await clickApplyButton();

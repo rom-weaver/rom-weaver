@@ -1,37 +1,37 @@
-use super::manifest_load::LoadedManifestSource;
-use super::manifest_parse::parse_manifest_bytes;
+use super::bundle_load::LoadedBundleSource;
+use super::bundle_parse::parse_bundle_bytes;
 use super::*;
 
-/// How the manifest source was packaged.
+/// How the bundle source was packaged.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "typescript-types", ts(rename_all = "kebab-case"))]
-pub enum ManifestSourceKind {
+pub enum BundleSourceKind {
     Json,
     CompressedJson,
     Archive,
 }
 
-/// Where a manifest entry's bytes come from, as resolved by `manifest parse`:
+/// Where a bundle entry's bytes come from, as resolved by `bundle parse`:
 /// a download URL (returned verbatim - the caller resolves relative URLs
-/// against the manifest's own location), an archive member already extracted
+/// against the bundle's own location), an archive member already extracted
 /// to disk, or a still-relative path the caller resolves itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(untagged)]
-pub enum ManifestSourceRef {
+pub enum BundleSourceRef {
     Url { url: String },
     ExtractedPath { extracted_path: String },
     Path { path: String },
 }
 
-/// Resolution for one patch entry, index-aligned with `manifest.patches`.
+/// Resolution for one patch entry, index-aligned with `bundle.patches`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ManifestPatchSource {
-    pub source: ManifestSourceRef,
-    /// Ingest-grade descriptor for entries extracted from the manifest
+pub struct BundlePatchSource {
+    pub source: BundleSourceRef,
+    /// Ingest-grade descriptor for entries extracted from the bundle
     /// archive (spares the host a second describe round-trip). `None` for
     /// URL / unresolved-path entries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,50 +39,50 @@ pub struct ManifestPatchSource {
     pub descriptor: Option<PatchDescriptor>,
 }
 
-/// The consolidated result of one `manifest parse` command, returned under
-/// `details.manifest`. Same envelope pattern as `details.ingest`.
+/// The consolidated result of one `bundle parse` command, returned under
+/// `details.bundle`. Same envelope pattern as `details.ingest`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ManifestParseResult {
-    /// The validated manifest, checksum values normalized.
-    pub manifest: RomWeaverManifest,
-    pub source_kind: ManifestSourceKind,
-    /// Entry name of the manifest member when the source was an archive.
+pub struct BundleParseResult {
+    /// The validated bundle, checksum values normalized.
+    pub bundle: RomWeaverBundle,
+    pub source_kind: BundleSourceKind,
+    /// Entry name of the bundle member when the source was an archive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub archive_member: Option<String>,
-    /// Resolved ROM source; `None` when the manifest defines no ROM.
+    /// Resolved ROM source; `None` when the bundle defines no ROM.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub rom_source: Option<ManifestSourceRef>,
-    /// Index-aligned with `manifest.patches`.
-    pub patch_sources: Vec<ManifestPatchSource>,
-    /// Non-fatal issues (ignored members, extra manifests, …).
+    pub rom_source: Option<BundleSourceRef>,
+    /// Index-aligned with `bundle.patches`.
+    pub patch_sources: Vec<BundlePatchSource>,
+    /// Non-fatal issues (ignored members, extra bundles, …).
     pub warnings: Vec<String>,
 }
 
 impl CliApp {
-    pub(super) fn run_manifest_parse(&self, args: ManifestParseCommand) -> AppRunOutcome {
+    pub(super) fn run_bundle_parse(&self, args: BundleParseCommand) -> AppRunOutcome {
         trace!(
             source = %args.source.display(),
             extract_dir = ?args.extract_dir,
             threads = %args.threads,
-            "starting manifest parse command"
+            "starting bundle parse command"
         );
-        let ManifestParseCommand {
+        let BundleParseCommand {
             source,
             extract_dir,
             threads,
         } = args;
         let context = self.context(threads);
         let thread_execution = context.single_thread_execution();
-        let report = match self.manifest_parse_inner(&source, extract_dir.as_deref(), &context) {
+        let report = match self.bundle_parse_inner(&source, extract_dir.as_deref(), &context) {
             Ok(result) => {
                 let label = format!(
-                    "parsed manifest `{}` ({} patch entr{})",
+                    "parsed bundle `{}` ({} patch entr{})",
                     source.display(),
-                    result.manifest.patches.len(),
-                    if result.manifest.patches.len() == 1 {
+                    result.bundle.patches.len(),
+                    if result.bundle.patches.len() == 1 {
                         "y"
                     } else {
                         "ies"
@@ -90,56 +90,56 @@ impl CliApp {
                 );
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
-                    Some("manifest-parse".to_string()),
-                    "manifest-parse",
+                    Some("bundle-parse".to_string()),
+                    "bundle-parse",
                     label,
                     Some(100.0),
                     thread_execution.clone(),
                 );
                 match serde_json::to_value(&result) {
                     Ok(value) => {
-                        report.details = Some(json!({ "manifest": value }));
+                        report.details = Some(json!({ "bundle": value }));
                         report
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,
-                        Some("manifest-parse".to_string()),
-                        "manifest-parse",
-                        format!("failed to serialize manifest parse result: {error}"),
+                        Some("bundle-parse".to_string()),
+                        "bundle-parse",
+                        format!("failed to serialize bundle parse result: {error}"),
                         thread_execution,
                     ),
                 }
             }
             Err(error) => OperationReport::failed(
                 OperationFamily::Command,
-                Some("manifest-parse".to_string()),
-                "manifest-parse",
+                Some("bundle-parse".to_string()),
+                "bundle-parse",
                 error.to_string(),
                 thread_execution,
             ),
         };
-        self.finish("manifest-parse", report)
+        self.finish("bundle-parse", report)
     }
 
-    fn manifest_parse_inner(
+    fn bundle_parse_inner(
         &self,
         source: &Path,
         extract_dir: Option<&Path>,
         context: &OperationContext,
-    ) -> Result<ManifestParseResult> {
+    ) -> Result<BundleParseResult> {
         if !source.exists() {
             return Err(RomWeaverError::Validation(format!(
                 "input path does not exist: `{}`",
                 source.display()
             )));
         }
-        let loaded = self.load_manifest_source(source)?;
-        let manifest = parse_manifest_bytes(&loaded.bytes)?;
+        let loaded = self.load_bundle_source(source)?;
+        let bundle = parse_bundle_bytes(&loaded.bytes)?;
         // A sourceless (checks-only) rom entry resolves to no source at all:
         // the applying user supplies the ROM.
-        let rom_source = match &manifest.rom {
+        let rom_source = match &bundle.rom {
             Some(rom) if rom.url.is_some() || rom.path.is_some() => {
-                Some(self.resolve_manifest_entry_source(
+                Some(self.resolve_bundle_entry_source(
                     rom.url.as_deref(),
                     rom.path.as_deref(),
                     source,
@@ -150,10 +150,10 @@ impl CliApp {
             }
             _ => None,
         };
-        let mut patch_sources = Vec::with_capacity(manifest.patches.len());
-        for (index, patch) in manifest.patches.iter().enumerate() {
+        let mut patch_sources = Vec::with_capacity(bundle.patches.len());
+        for (index, patch) in bundle.patches.iter().enumerate() {
             let entry_label = format!("patches[{index}]");
-            let source_ref = self.resolve_manifest_entry_source(
+            let source_ref = self.resolve_bundle_entry_source(
                 patch.url.as_deref(),
                 patch.path.as_deref(),
                 source,
@@ -162,18 +162,18 @@ impl CliApp {
                 &entry_label,
             )?;
             let descriptor = match &source_ref {
-                ManifestSourceRef::ExtractedPath { extracted_path } => {
+                BundleSourceRef::ExtractedPath { extracted_path } => {
                     Some(self.build_patch_descriptor(Path::new(extracted_path), None, context)?)
                 }
                 _ => None,
             };
-            patch_sources.push(ManifestPatchSource {
+            patch_sources.push(BundlePatchSource {
                 source: source_ref,
                 descriptor,
             });
         }
-        Ok(ManifestParseResult {
-            manifest,
+        Ok(BundleParseResult {
+            bundle,
             source_kind: loaded.kind,
             archive_member: loaded.archive_member,
             rom_source,
@@ -182,51 +182,50 @@ impl CliApp {
         })
     }
 
-    /// Resolve one manifest entry source. URL entries pass through verbatim.
-    /// `path` entries resolve against the manifest's packaging: extracted from
+    /// Resolve one bundle entry source. URL entries pass through verbatim.
+    /// `path` entries resolve against the bundle's packaging: extracted from
     /// the archive when the source is one and `extract_dir` was supplied,
     /// passed through as a relative path otherwise (the caller resolves it
-    /// against the manifest's own location).
-    fn resolve_manifest_entry_source(
+    /// against the bundle's own location).
+    fn resolve_bundle_entry_source(
         &self,
         url: Option<&str>,
         path: Option<&str>,
         source: &Path,
-        loaded: &LoadedManifestSource,
+        loaded: &LoadedBundleSource,
         extract_dir: Option<&Path>,
         entry_label: &str,
-    ) -> Result<ManifestSourceRef> {
+    ) -> Result<BundleSourceRef> {
         if let Some(url) = url.map(str::trim).filter(|value| !value.is_empty()) {
-            return Ok(ManifestSourceRef::Url {
+            return Ok(BundleSourceRef::Url {
                 url: url.to_owned(),
             });
         }
         // Parse validation guarantees exactly one of url/path is set.
         let path = path.map(str::trim).unwrap_or_default();
-        if loaded.kind != ManifestSourceKind::Archive {
-            return Ok(ManifestSourceRef::Path {
+        if loaded.kind != BundleSourceKind::Archive {
+            return Ok(BundleSourceRef::Path {
                 path: path.to_owned(),
             });
         }
-        let Some(entry) = Self::find_manifest_archive_entry(&loaded.archive_entries, path) else {
+        let Some(entry) = Self::find_bundle_archive_entry(&loaded.archive_entries, path) else {
             return Err(RomWeaverError::ValidationCode(
-                rom_weaver_core::ValidationCodeError::new("manifest.path.unresolved")
-                    .with_message("manifest path entry matches no archive member")
+                rom_weaver_core::ValidationCodeError::new("bundle.path.unresolved")
+                    .with_message("bundle path entry matches no archive member")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("path", path.to_owned()),
             ));
         };
         let Some(extract_dir) = extract_dir else {
-            return Ok(ManifestSourceRef::Path {
+            return Ok(BundleSourceRef::Path {
                 path: path.to_owned(),
             });
         };
         let format_name = loaded
             .archive_format
             .expect("archive kind always carries a format name");
-        let target =
-            Self::extract_manifest_archive_member(source, format_name, entry, extract_dir)?;
-        Ok(ManifestSourceRef::ExtractedPath {
+        let target = Self::extract_bundle_archive_member(source, format_name, entry, extract_dir)?;
+        Ok(BundleSourceRef::ExtractedPath {
             extracted_path: Self::normalize_emitted_path_string(&target.to_string_lossy()),
         })
     }

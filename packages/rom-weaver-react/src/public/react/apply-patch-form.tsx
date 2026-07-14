@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import type {
+  ApplyWorkflowBundleSources,
   ApplyWorkflowInputState,
-  ApplyWorkflowManifestSources,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
@@ -35,16 +35,16 @@ import {
   toPatchStageInfo,
   toStagedInputInfos,
 } from "./apply-workflow-staging-model.ts";
+import { useBundleExport } from "./bundle-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
-import { useManifestExport } from "./manifest-export.tsx";
 import type { BinarySource } from "./patcher-form.ts";
 import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
-import { type ManifestSessionControllers, useManifestApplySession } from "./use-manifest-apply-session.ts";
+import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
 import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
 import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressEvent } from "./workflow-adapters.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
@@ -107,7 +107,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const forcePatchWorkflowRefreshRef = useRef(false);
   const workflowRef = useRef<ApplyWorkflow | null>(null);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
-  const manifestSourcesRef = useRef<ApplyWorkflowManifestSources | null>(null);
+  const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
     executionSettingsKey: "",
     inputs: [],
@@ -122,8 +122,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     settings: props.settings,
   };
   const traceSettings = props.settings || props.defaultSettings || providerSettings;
-  const [defaultManifestFormat = "", defaultManifestContents = ""] = String(
-    traceSettings.output?.manifestPackage || traceSettings.manifestPackage || "",
+  const [defaultBundleFormat = "", defaultBundleContents = ""] = String(
+    traceSettings.output?.bundlePackage || traceSettings.bundlePackage || "",
   ).split(":");
   const emitApplyFormInputTrace = useCallback(
     (message: string, details?: Record<string, unknown>) => {
@@ -144,7 +144,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (!sameBinarySourceLists(lastInputsRef.current, inputs)) {
       if (lastInputsRef.current.length > 0 && inputs.length === 0) forceInputWorkflowRefreshRef.current = true;
       lastInputsRef.current = inputs.slice();
-      manifestSourcesRef.current = null;
+      bundleSourcesRef.current = null;
     }
   }, []);
 
@@ -160,7 +160,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const isAppend = previousOrder !== "" && patchOrder.startsWith(`${previousOrder}|`);
       if (!isAppend) forcePatchWorkflowRefreshRef.current = true;
       lastPatchOrderRef.current = patchOrder;
-      manifestSourcesRef.current = null;
+      bundleSourcesRef.current = null;
     }
   }, []);
 
@@ -197,36 +197,36 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     togglePatchEnabled,
   } = useApplyPatchEnablement();
 
-  // A `?manifest=` boot session: once the delivered patch files land, it seeds
+  // A `?bundle=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
   // Controllers are created further down, so the hook reads them through a ref.
-  const [localManifestSession, setLocalManifestSession] = useState<ManifestApplySession | null>(null);
-  const [manifestDismissed, setManifestDismissed] = useState(false);
-  useEffect(() => setManifestDismissed(false), [props.manifestSession?.key]);
-  const activeManifestSession = manifestDismissed ? null : localManifestSession || props.manifestSession || null;
-  const manifestControllersRef = useRef<ManifestSessionControllers>({ output: null, patchStack: null });
-  const { handleManifestPatchesChange, manifestMetaById, updateManifestMeta } = useManifestApplySession({
-    controllersRef: manifestControllersRef,
-    manifestSession: activeManifestSession,
+  const [localBundleSession, setLocalBundleSession] = useState<BundleApplySession | null>(null);
+  const [bundleDismissed, setBundleDismissed] = useState(false);
+  useEffect(() => setBundleDismissed(false), [props.bundleSession?.key]);
+  const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
+  const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
+  const { handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
+    bundleSession: activeBundleSession,
+    controllersRef: bundleControllersRef,
     seedPatchEnablement,
   });
 
-  // Latest patch list mirror for flows outside the staging pipeline (manifest export).
+  // Latest patch list mirror for flows outside the staging pipeline (bundle export).
   const currentPatchesRef = useRef<BinarySource[]>([]);
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
       if (!nextPatches.length) {
-        setLocalManifestSession(null);
-        setManifestDismissed(true);
+        setLocalBundleSession(null);
+        setBundleDismissed(true);
       }
       syncPatchTracking(nextPatches);
       currentPatchesRef.current = nextPatches;
-      handleManifestPatchesChange(nextPatches);
+      handleBundlePatchesChange(nextPatches);
       syncPatchSelectionRefs(nextPatches);
       props.onPatchesChange?.(nextPatches);
     },
-    [handleManifestPatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
+    [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
   const queueMutation = useCallback(<TValue,>(callback: () => Promise<TValue>) => {
@@ -242,7 +242,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     const workflow = workflowRef.current;
     workflowRef.current = null;
     preparedWorkflowRef.current = null;
-    manifestSourcesRef.current = null;
+    bundleSourcesRef.current = null;
     forceInputWorkflowRefreshRef.current = false;
     workflowSyncRef.current = { executionSettingsKey: "", inputs: [], patches: [], preparationSettingsKey: "" };
     workflowOutputOverridesKeyRef.current = "";
@@ -487,7 +487,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
         const input = workflow.getInput();
         const patches = workflow.getPatches();
-        manifestSourcesRef.current = workflow.getManifestExportSources();
+        bundleSourcesRef.current = workflow.getBundleExportSources();
         const checksums = input?.checksums || null;
         // Post-stage, the controller's output state is the authoritative resolved name + format
         // (it owns the auto-naming, including the disc-name special-casing, and the manual overrides
@@ -809,7 +809,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          manifestSourcesRef.current = workflow.getManifestExportSources();
+          bundleSourcesRef.current = workflow.getBundleExportSources();
           const infos = toStagedInputInfos(stagedInput, input.inputs);
           if (!input.patches.length) {
             const implicitPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
@@ -866,7 +866,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, patches, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          manifestSourcesRef.current = workflow.getManifestExportSources();
+          bundleSourcesRef.current = workflow.getBundleExportSources();
           const inputLabelById = new Map(
             toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
           );
@@ -1063,23 +1063,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resolvedUiController = controllers?.ui || localUiController;
   const resolvedStackController = controllers?.patchStack || localStackController;
   const resolvedOutputController = controllers?.output || localOutputController;
-  manifestControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
+  bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
-  // "Export manifest…" (output card secondary action): snapshots the current
-  // session's files + enablement into an rw.json (or everything-bundle .zip).
-  const stagedManifestSources = (preparedWorkflowRef.current || workflowRef.current)?.getManifestExportSources();
-  const manifestExportReady =
-    (!!stagedManifestSources?.rom && stagedManifestSources.patches.length > 0) ||
-    (!!manifestSourcesRef.current?.rom && manifestSourcesRef.current.patches.length > 0);
-  const manifestExport = useManifestExport({
+  // "Export bundle…" (output card secondary action): snapshots the current
+  // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
+  const stagedBundleSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
+  const bundleExportReady =
+    (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
+    (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
+  const bundleExport = useBundleExport({
+    bundleMetaById,
     disabledPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
-    getSessionSources: (): ApplyWorkflowManifestSources => {
-      const workflowSources = (preparedWorkflowRef.current || workflowRef.current)?.getManifestExportSources();
+    getSessionSources: (): ApplyWorkflowBundleSources => {
+      const workflowSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
       if (workflowSources?.rom || workflowSources?.patches.length) return workflowSources;
-      if (manifestSourcesRef.current?.rom || manifestSourcesRef.current?.patches.length)
-        return manifestSourcesRef.current;
+      if (bundleSourcesRef.current?.rom || bundleSourcesRef.current?.patches.length) return bundleSourcesRef.current;
       return {
         patches: currentPatchesRef.current.map((source, index) => ({
           fileName: getReactBinarySourceFileName(source, `patch-${index + 1}.bin`),
@@ -1096,13 +1096,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       };
     },
     getStackItems: () => resolvedStackController.getState().items,
-    initialBundleRom: defaultManifestContents === "rom",
-    initialFormat: defaultManifestFormat,
+    initialBundleRom: defaultBundleContents === "rom",
+    initialFormat: defaultBundleFormat,
     initialName:
-      activeManifestSession?.name || resolvedOutputController.getState().displayFileName || "rom-weaver-manifest",
-    manifestMetaById,
-    ready: manifestExportReady,
-    ...(props.onManifestExportComplete ? { onComplete: props.onManifestExportComplete } : {}),
+      activeBundleSession?.name || resolvedOutputController.getState().displayFileName || "rom-weaver-bundle",
+    ready: bundleExportReady,
+    ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
@@ -1110,7 +1109,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // until their ROM-vs-patch bucket is classified.
   const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
     resolvedUiController,
-    setLocalManifestSession,
+    setLocalBundleSession,
     props.onError,
   );
 
@@ -1156,6 +1155,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        bundleExport={bundleExport}
+        bundleMetaById={bundleMetaById}
         controllers={{
           dialog: controllers?.dialog || inertDialogController,
           notice: controllers?.notice || localNoticeController,
@@ -1163,12 +1164,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
-        manifestExport={manifestExport}
-        manifestMetaById={manifestMetaById}
-        {...(activeManifestSession?.romExpectation
-          ? { manifestRomExpectation: activeManifestSession.romExpectation }
-          : {})}
-        onManifestMetaChange={updateManifestMeta}
+        {...(activeBundleSession?.romExpectation ? { bundleRomExpectation: activeBundleSession.romExpectation } : {})}
+        onBundleMetaChange={updateBundleMeta}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{

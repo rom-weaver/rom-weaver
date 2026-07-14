@@ -1,5 +1,5 @@
-import type { ManifestApplySession } from "../../lib/manifest/manifest-session-model.ts";
-import type { ParsedManifestCreateResult } from "../../types/manifest.ts";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import type { ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
@@ -95,15 +95,15 @@ type ApplyPatchFormProps = {
   compressionOptions?: string[];
   startup?: StartupState;
   controllers?: ApplyPatchFormControllers;
-  /** A `?manifest=` boot session: seeds enablement/output defaults once its files land. */
-  manifestSession?: ManifestApplySession | null;
+  /** A `?bundle=` boot session: seeds enablement/output defaults once its files land. */
+  bundleSession?: BundleApplySession | null;
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
   onProgress?: (event: ProgressEvent) => void;
   onApplyComplete?: (result: ApplyWorkflowResult) => void;
-  /** Fires after an "Export manifest…" run with the parsed create result (before the download). */
-  onManifestExportComplete?: (result: ParsedManifestCreateResult) => void;
+  /** Fires after an "Export bundle…" run with the parsed create result (before the download). */
+  onBundleExportComplete?: (result: ParsedBundleCreateResult) => void;
   onError?: (error: Error) => void;
 };
 

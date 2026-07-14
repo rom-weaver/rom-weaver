@@ -70,8 +70,8 @@ msgstr "{count} aviso(s)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.format.bundle"
-msgstr "Paquete {format} (manifiesto + parches)"
+msgid "ui.bundleExport.format.bundle"
+msgstr "Archivo {format} (bundle + parches)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,7 +225,22 @@ msgstr "Bloquea la ejecución si las sumas de entrada o salida no coinciden con 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.bundleRom"
+msgid "ui.bundleExport.error"
+msgstr "La exportación del bundle falló"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.name"
+msgstr "Nombre del bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.format.bundleOnly"
+msgstr "Solo bundle (rom-weaver-bundle.json)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.bundleRom"
 msgstr "Incluir la ROM en el archivo"
 
 #. js-lingui-explicit-id
@@ -400,7 +415,7 @@ msgstr "Descomprimiendo entrada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.default"
+msgid "ui.bundleExport.status.default"
 msgstr "Predeterminado (activado)"
 
 #. js-lingui-explicit-id
@@ -420,7 +435,7 @@ msgstr "Por defecto zstd. Nivel opcional: zstd:-7 a zstd:22."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.description"
+msgid "ui.bundleExport.description"
 msgstr "Descripción"
 
 #. js-lingui-explicit-id
@@ -450,7 +465,7 @@ msgstr "Ventana de diff al crear - más grande encuentra datos movidos pero usa 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.disabled"
+msgid "ui.bundleExport.status.disabled"
 msgstr "Desactivado"
 
 #. js-lingui-explicit-id
@@ -475,8 +490,8 @@ msgstr "Descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.action"
-msgstr "Descargar manifiesto"
+msgid "ui.bundleExport.action"
+msgstr "Descargar bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,18 +575,18 @@ msgstr "Suma de salida esperada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.export"
+msgid "ui.bundleExport.export"
 msgstr "Exportar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.title"
-msgstr "Exportar manifiesto"
+msgid "ui.bundleExport.title"
+msgstr "Exportar bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.exporting"
-msgstr "Exportando manifiesto…"
+msgid "ui.bundleExport.exporting"
+msgstr "Exportando bundle…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -645,7 +660,7 @@ msgstr "Formato"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.fromArchive"
+msgid "ui.bundleExport.fromArchive"
 msgstr "de {name}"
 
 #. js-lingui-explicit-id
@@ -760,21 +775,6 @@ msgstr "Bajo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.error"
-msgstr "La exportación del manifiesto falló"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.name"
-msgstr "Nombre del manifiesto"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.format.manifestOnly"
-msgstr "Solo manifiesto (rw.json)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.scale.max"
 msgstr "Máx"
 
@@ -840,7 +840,7 @@ msgstr "Sí"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.optional"
+msgid "ui.bundleExport.status.optional"
 msgstr "Opcional (desactivado)"
 
 #. js-lingui-explicit-id
@@ -880,7 +880,7 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.output"
+msgid "ui.bundleExport.output"
 msgstr "Salida"
 
 #. js-lingui-explicit-id
@@ -930,7 +930,7 @@ msgstr "Parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.statusLabel"
+msgid "ui.bundleExport.statusLabel"
 msgstr "Estado del parche {n}"
 
 #. js-lingui-explicit-id
@@ -975,7 +975,7 @@ msgstr "parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.patches"
+msgid "ui.bundleExport.patches"
 msgstr "Parches"
 
 #. js-lingui-explicit-id
@@ -990,7 +990,7 @@ msgstr "Los parches se aplican de arriba abajo - arrastra el asa para reordenar.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.preparing"
+msgid "ui.bundleExport.preparing"
 msgstr "Preparando archivos de parche…"
 
 #. js-lingui-explicit-id
@@ -1115,13 +1115,13 @@ msgstr "Exigir coincidencia de entrada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.status.required"
+msgid "ui.bundleExport.status.required"
 msgstr "Obligatorio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestSession.requiredLock"
-msgstr "Requerido por el manifiesto"
+msgid "ui.bundleSession.requiredLock"
+msgstr "Requerido por el bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1155,7 +1155,7 @@ msgstr "ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.manifestExport.patchChecks"
+msgid "ui.bundleExport.patchChecks"
 msgstr "Sumas de la ROM (previas al parche)"
 
 #. js-lingui-explicit-id

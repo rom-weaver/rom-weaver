@@ -95,7 +95,7 @@ and whether `cache-service-worker.js` controls the page.
 
 A host on the same origin can place inputs under the OPFS
 `rom-weaver-imports/` directory and send their mounted paths through the same
-pipeline as files dropped onto the Apply page. Include a manifest in the list
+pipeline as files dropped onto the Apply page. Include a bundle in the list
 when using one; it does not need a separate option.
 
 Applications importing the package can call `ingest`:
@@ -104,7 +104,7 @@ Applications importing the package can call `ingest`:
 import { ingest } from "rom-weaver-react";
 
 ingest([
-  "/work/rom-weaver-imports/rw.json",
+  "/work/rom-weaver-imports/rom-weaver-bundle.json",
   "/work/rom-weaver-imports/game.bin",
   "/work/rom-weaver-imports/change.ips",
 ]);
@@ -117,7 +117,7 @@ module script has loaded:
 document.dispatchEvent(
   new CustomEvent("rom-weaver:ingest", {
     detail: [
-      "/work/rom-weaver-imports/rw.json",
+      "/work/rom-weaver-imports/rom-weaver-bundle.json",
       "/work/rom-weaver-imports/game.bin",
       "/work/rom-weaver-imports/change.ips",
     ],

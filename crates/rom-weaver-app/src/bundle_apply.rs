@@ -1,76 +1,76 @@
-//! rw.json-driven `patch apply`: detection, selection, and merging of manifest
+//! rom-weaver-bundle.json-driven `patch apply`: detection, selection, and merging of bundle
 //! defaults into a plain [`PatchApplyCommand`]. Precedence is decided by field
 //! shape - an explicit CLI value (`Some`/non-empty) always wins over the
-//! manifest, which wins over built-in defaults.
+//! bundle, which wins over built-in defaults.
 
 use rom_weaver_core::ValidationCodeError;
 
-use super::manifest_load::{LoadedManifestSource, is_stream_codec_format_name};
-use super::manifest_parse::{manifest_file_name_codec, parse_manifest_bytes};
+use super::bundle_load::{LoadedBundleSource, is_stream_codec_format_name};
+use super::bundle_parse::{bundle_file_name_codec, parse_bundle_bytes};
 use super::patch_filename_checksum::FilenameRequirements;
 use super::*;
 
-/// What a manifest contributed beyond the merged command fields: expected
+/// What a bundle contributed beyond the merged command fields: expected
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
 /// the expected checksums of the final output for this selection.
-pub(super) struct ManifestApplyResolution {
+pub(super) struct BundleApplyResolution {
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<(String, FilenameRequirements)>,
     /// `(source label, requirements)` for the final output: the last selected
-    /// patch's `outputChecks`, or the manifest's `output.checks` when the
+    /// patch's `outputChecks`, or the bundle's `output.checks` when the
     /// selection ends the full chain.
     pub output_checks: Option<(String, FilenameRequirements)>,
 }
 
-enum ManifestApplySource {
-    /// `--manifest <path>`; the positional input stays the ROM.
+enum BundleApplySource {
+    /// `--bundle <path>`; the positional input stays the ROM.
     Explicit(PathBuf),
-    /// The positional input IS the manifest (`rw.json[.codec]`).
-    InputIsManifest,
-    /// The positional input is an archive carrying a root `rw.json`.
-    InputArchive(Box<LoadedManifestSource>),
+    /// The positional input IS the bundle (`rom-weaver-bundle.json[.codec]`).
+    InputIsBundle,
+    /// The positional input is an archive carrying a root `rom-weaver-bundle.json`.
+    InputArchive(Box<LoadedBundleSource>),
 }
 
 impl CliApp {
-    /// Route a `patch apply` through its manifest when one is present. Mutates
+    /// Route a `patch apply` through its bundle when one is present. Mutates
     /// `args` into a fully-resolved plain command (input/patches/output merged)
-    /// and returns the leftover manifest contribution.
+    /// and returns the leftover bundle contribution.
     /// Extracted archive members land in `context`'s temp namespace - the
     /// caller must keep that context alive until the apply completes.
-    pub(super) fn resolve_manifest_apply(
+    pub(super) fn resolve_bundle_apply(
         &self,
         args: &mut PatchApplyCommand,
         context: &OperationContext,
-    ) -> Result<Option<ManifestApplyResolution>> {
-        let Some(source) = self.detect_manifest_apply_source(args)? else {
+    ) -> Result<Option<BundleApplyResolution>> {
+        let Some(source) = self.detect_bundle_apply_source(args)? else {
             return Ok(None);
         };
         let source_mode = match &source {
-            ManifestApplySource::Explicit(_) => ManifestApplySourceKind::Explicit,
-            ManifestApplySource::InputIsManifest => ManifestApplySourceKind::InputIsManifest,
-            ManifestApplySource::InputArchive(_) => ManifestApplySourceKind::InputArchive,
+            BundleApplySource::Explicit(_) => BundleApplySourceKind::Explicit,
+            BundleApplySource::InputIsBundle => BundleApplySourceKind::InputIsBundle,
+            BundleApplySource::InputArchive(_) => BundleApplySourceKind::InputArchive,
         };
 
-        // The base-url slot is only ever populated natively (URL manifests are
+        // The base-url slot is only ever populated natively (URL bundles are
         // rejected on wasm), so the annotation keeps the wasm build inferable.
-        let (loaded, archive_source, manifest_dir, manifest_base_url): (_, _, _, Option<String>) =
+        let (loaded, archive_source, bundle_dir, bundle_base_url): (_, _, _, Option<String>) =
             match source {
-                ManifestApplySource::Explicit(path) => {
-                    if let Some(url) = manifest_ref_as_url(&path) {
-                        // Natively the manifest itself may be a URL; its base then
+                BundleApplySource::Explicit(path) => {
+                    if let Some(url) = bundle_ref_as_url(&path) {
+                        // Natively the bundle itself may be a URL; its base then
                         // anchors relative url entries. The browser prefetches
-                        // instead, so wasm rejects URL manifests outright.
+                        // instead, so wasm rejects URL bundles outright.
                         #[cfg(target_arch = "wasm32")]
                         {
-                            return Err(manifest_url_unsupported("--manifest", url));
+                            return Err(bundle_url_unsupported("--bundle", url));
                         }
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            let base = super::manifest_download::manifest_url_base(url);
-                            let local = self.download_manifest_url(url, "--manifest", context)?;
+                            let base = super::bundle_download::bundle_url_base(url);
+                            let local = self.download_bundle_url(url, "--bundle", context)?;
                             let dir = parent_dir(&local);
                             (
-                                Box::new(self.load_manifest_source(&local)?),
+                                Box::new(self.load_bundle_source(&local)?),
                                 local,
                                 dir,
                                 Some(base),
@@ -79,15 +79,15 @@ impl CliApp {
                     } else {
                         if !path.exists() {
                             return Err(RomWeaverError::Validation(format!(
-                                "manifest path does not exist: `{}`",
+                                "bundle path does not exist: `{}`",
                                 path.display()
                             )));
                         }
                         let dir = parent_dir(&path);
-                        (Box::new(self.load_manifest_source(&path)?), path, dir, None)
+                        (Box::new(self.load_bundle_source(&path)?), path, dir, None)
                     }
                 }
-                ManifestApplySource::InputIsManifest => {
+                BundleApplySource::InputIsBundle => {
                     if !args.input.exists() {
                         return Err(RomWeaverError::Validation(format!(
                             "input path does not exist: `{}`",
@@ -96,27 +96,27 @@ impl CliApp {
                     }
                     let dir = parent_dir(&args.input);
                     (
-                        Box::new(self.load_manifest_source(&args.input)?),
+                        Box::new(self.load_bundle_source(&args.input)?),
                         args.input.clone(),
                         dir,
                         None,
                     )
                 }
-                ManifestApplySource::InputArchive(loaded) => {
+                BundleApplySource::InputArchive(loaded) => {
                     (loaded, args.input.clone(), parent_dir(&args.input), None)
                 }
             };
-        let manifest = parse_manifest_bytes(&loaded.bytes)?;
+        let bundle = parse_bundle_bytes(&loaded.bytes)?;
         for warning in &loaded.warnings {
-            warn!(manifest = %archive_source.display(), "{warning}");
+            warn!(bundle = %archive_source.display(), "{warning}");
         }
         trace!(
-            manifest = %archive_source.display(),
+            bundle = %archive_source.display(),
             kind = ?loaded.kind,
-            patches = manifest.patches.len(),
-            has_rom = manifest.rom.is_some(),
+            patches = bundle.patches.len(),
+            has_rom = bundle.rom.is_some(),
             explicit_patches = args.patches.len(),
-            "resolving manifest-driven patch apply"
+            "resolving bundle-driven patch apply"
         );
 
         // Lazily-created root for archive-member extraction, inside the
@@ -124,10 +124,10 @@ impl CliApp {
         let mut extract_root: Option<PathBuf> = None;
         let mut checks: Vec<(String, FilenameRequirements)> = Vec::new();
 
-        if let Some(rom) = &manifest.rom {
+        if let Some(rom) = &bundle.rom {
             if let Some(rom_checks) = &rom.checks {
                 checks.push((
-                    "manifest rom.checks".to_string(),
+                    "bundle rom.checks".to_string(),
                     FilenameRequirements {
                         checksums: rom_checks.checksums.clone(),
                         size: rom_checks.size,
@@ -135,22 +135,20 @@ impl CliApp {
                 ));
             }
             match source_mode {
-                // With --manifest the positional input is the ROM; the
-                // manifest's own rom source is informational only.
-                ManifestApplySourceKind::Explicit => {
-                    trace!(
-                        "manifest rom source ignored: the apply input supplies the ROM directly"
-                    );
+                // With --bundle the positional input is the ROM; the
+                // bundle's own rom source is informational only.
+                BundleApplySourceKind::Explicit => {
+                    trace!("bundle rom source ignored: the apply input supplies the ROM directly");
                 }
                 _ => {
                     if rom.url.is_some() || rom.path.is_some() {
-                        let resolved = self.resolve_manifest_apply_entry(
+                        let resolved = self.resolve_bundle_apply_entry(
                             rom.url.as_deref(),
                             rom.path.as_deref(),
                             &loaded,
                             &archive_source,
-                            &manifest_dir,
-                            manifest_base_url.as_deref(),
+                            &bundle_dir,
+                            bundle_base_url.as_deref(),
                             &mut extract_root,
                             context,
                             "rom",
@@ -160,12 +158,12 @@ impl CliApp {
                         }
                     } else {
                         // A checks-only rom entry means the user supplies the
-                        // ROM; the input we have IS the manifest (or its
+                        // ROM; the input we have IS the bundle (or its
                         // archive), so there is nothing to patch. Surface the
                         // expected ROM so the user knows what to supply.
-                        let mut coded = ValidationCodeError::new("manifest.rom.missing")
+                        let mut coded = ValidationCodeError::new("bundle.rom.missing")
                             .with_message(
-                                "manifest rom entry provides no source; pass the ROM as the apply input and the manifest via --manifest",
+                                "bundle rom entry provides no source; pass the ROM as the apply input and the bundle via --bundle",
                             );
                         if let Some(name) = rom
                             .name
@@ -179,7 +177,7 @@ impl CliApp {
                             if !rom_checks.checksums.is_empty() {
                                 coded.push_field(
                                     "expected_checksums",
-                                    format_manifest_checksums(&rom_checks.checksums),
+                                    format_bundle_checksums(&rom_checks.checksums),
                                 );
                             }
                             if let Some(size) = rom_checks.size {
@@ -190,39 +188,39 @@ impl CliApp {
                     }
                 }
             }
-        } else if matches!(source_mode, ManifestApplySourceKind::InputIsManifest) {
+        } else if matches!(source_mode, BundleApplySourceKind::InputIsBundle) {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("manifest.rom.missing")
+                ValidationCodeError::new("bundle.rom.missing")
                     .with_message(
-                        "manifest defines no rom entry; pass the ROM as the apply input and the manifest via --manifest",
+                        "bundle defines no rom entry; pass the ROM as the apply input and the bundle via --bundle",
                     ),
             ));
         }
 
-        // Explicit --patch flags replace the manifest patch list wholesale;
-        // the manifest still contributes rom checks and output defaults.
+        // Explicit --patch flags replace the bundle patch list wholesale;
+        // the bundle still contributes rom checks and output defaults.
         let mut output_checks: Option<(String, FilenameRequirements)> = None;
         if args.patches.is_empty() {
             let selected =
-                self.select_manifest_patches(&manifest, &args.with_patches, &args.without_patches)?;
+                self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
             if selected.is_empty() {
                 return Err(RomWeaverError::Validation(
-                    "no manifest patches selected (all are optional or disabled); pass --with <glob> to include some"
+                    "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
                         .to_string(),
                 ));
             }
             let mut header_modes = Vec::with_capacity(selected.len());
             for (position, index) in selected.iter().enumerate() {
-                let entry = &manifest.patches[*index];
+                let entry = &bundle.patches[*index];
                 let entry_label = format!("patches[{index}]");
                 let resolved = self
-                    .resolve_manifest_apply_entry(
+                    .resolve_bundle_apply_entry(
                         entry.url.as_deref(),
                         entry.path.as_deref(),
                         &loaded,
                         &archive_source,
-                        &manifest_dir,
-                        manifest_base_url.as_deref(),
+                        &bundle_dir,
+                        bundle_base_url.as_deref(),
                         &mut extract_root,
                         context,
                         &entry_label,
@@ -236,7 +234,7 @@ impl CliApp {
                     && let Some(entry_checks) = &entry.input_checks
                 {
                     checks.push((
-                        format!("manifest {entry_label}.inputChecks"),
+                        format!("bundle {entry_label}.inputChecks"),
                         FilenameRequirements {
                             checksums: entry_checks.checksums.clone(),
                             size: entry_checks.size,
@@ -249,13 +247,13 @@ impl CliApp {
                 if position > 0
                     && let Some(previous_output) = selected
                         .get(position - 1)
-                        .and_then(|previous| manifest.patches[*previous].output_checks.as_ref())
+                        .and_then(|previous| bundle.patches[*previous].output_checks.as_ref())
                     && let Some(entry_input) = &entry.input_checks
-                    && !manifest_checks_agree(previous_output, entry_input)
+                    && !bundle_checks_agree(previous_output, entry_input)
                 {
                     warn!(
                         entry = %entry_label,
-                        "manifest chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
+                        "bundle chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
                     );
                 }
                 header_modes.push(entry.header.unwrap_or_default());
@@ -263,28 +261,28 @@ impl CliApp {
                     patch = %resolved.display(),
                     optional = entry.optional,
                     header = ?entry.header,
-                    "selected manifest patch"
+                    "selected bundle patch"
                 );
                 args.patches.push(resolved);
             }
             // The last applied patch pins the expected output; a patch without
             // its own outputChecks ends the full chain, whose result is the
-            // manifest's output.checks.
+            // bundle's output.checks.
             if let Some(last) = selected.last() {
-                let last_entry = &manifest.patches[*last];
+                let last_entry = &bundle.patches[*last];
                 let (label, entry_checks) = match &last_entry.output_checks {
                     Some(entry_checks) => (
-                        format!("manifest patches[{last}].outputChecks"),
+                        format!("bundle patches[{last}].outputChecks"),
                         Some(entry_checks),
                     ),
                     // output.checks describes the FULL chain: it only gates
-                    // when every manifest patch is selected - a partial
+                    // when every bundle patch is selected - a partial
                     // selection that happens to end on the final entry (some
                     // optionals skipped) produces a different, legitimate
                     // result.
-                    None if selected.len() == manifest.patches.len() => (
-                        "manifest output.checks".to_string(),
-                        manifest
+                    None if selected.len() == bundle.patches.len() => (
+                        "bundle output.checks".to_string(),
+                        bundle
                             .output
                             .as_ref()
                             .and_then(|output| output.checks.as_ref()),
@@ -303,7 +301,7 @@ impl CliApp {
                     ));
                 }
             }
-            // Only pin per-patch header modes when the manifest sets any;
+            // Only pin per-patch header modes when the bundle sets any;
             // otherwise the all-auto default (empty list) applies. Explicit
             // --patch-header flags win untouched.
             if args.patch_header.is_empty()
@@ -316,11 +314,11 @@ impl CliApp {
         } else {
             trace!(
                 explicit_patches = args.patches.len(),
-                "explicit --patch flags replace the manifest patch list"
+                "explicit --patch flags replace the bundle patch list"
             );
         }
 
-        if let Some(output) = &manifest.output {
+        if let Some(output) = &bundle.output {
             if args.output.is_none()
                 && let Some(name) = &output.name
             {
@@ -331,35 +329,35 @@ impl CliApp {
             }
         }
 
-        Ok(Some(ManifestApplyResolution {
+        Ok(Some(BundleApplyResolution {
             checks,
             output_checks,
         }))
     }
 
-    fn detect_manifest_apply_source(
+    fn detect_bundle_apply_source(
         &self,
         args: &PatchApplyCommand,
-    ) -> Result<Option<ManifestApplySource>> {
-        if let Some(manifest) = &args.manifest {
-            return Ok(Some(ManifestApplySource::Explicit(manifest.clone())));
+    ) -> Result<Option<BundleApplySource>> {
+        if let Some(bundle) = &args.bundle {
+            return Ok(Some(BundleApplySource::Explicit(bundle.clone())));
         }
         let input_name = args
             .input
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or_default();
-        if let Some(codec) = manifest_file_name_codec(input_name) {
+        if let Some(codec) = bundle_file_name_codec(input_name) {
             let recognized = match codec {
                 None => true,
                 Some(extension) => is_stream_codec_format_name(extension),
             };
             if recognized {
-                return Ok(Some(ManifestApplySource::InputIsManifest));
+                return Ok(Some(BundleApplySource::InputIsBundle));
             }
         }
         // Archive auto-detection is guarded on "no explicit --patch": a user
-        // patching an archive that happens to carry rw.json keeps today's
+        // patching an archive that happens to carry rom-weaver-bundle.json keeps today's
         // behavior by naming their patches.
         if !args.patches.is_empty() || !args.input.exists() {
             return Ok(None);
@@ -370,15 +368,15 @@ impl CliApp {
         if is_stream_codec_format_name(handler.descriptor().name) {
             return Ok(None);
         }
-        match self.load_manifest_source(&args.input) {
-            Ok(loaded) if loaded.kind == ManifestSourceKind::Archive => {
-                Ok(Some(ManifestApplySource::InputArchive(Box::new(loaded))))
+        match self.load_bundle_source(&args.input) {
+            Ok(loaded) if loaded.kind == BundleSourceKind::Archive => {
+                Ok(Some(BundleApplySource::InputArchive(Box::new(loaded))))
             }
             Ok(_) => Ok(None),
-            Err(RomWeaverError::ValidationCode(coded)) if coded.code() == "manifest.missing" => {
+            Err(RomWeaverError::ValidationCode(coded)) if coded.code() == "bundle.missing" => {
                 Ok(None)
             }
-            // A malformed bundled manifest (compressed member, size cap) is a
+            // A malformed bundled bundle (compressed member, size cap) is a
             // real error the user meant us to read.
             Err(error @ RomWeaverError::ValidationCode(_)) => Err(error),
             // Listing failures fall through to the normal apply path, which
@@ -387,25 +385,25 @@ impl CliApp {
                 trace!(
                     input = %args.input.display(),
                     %error,
-                    "manifest auto-detection skipped: archive listing failed"
+                    "bundle auto-detection skipped: archive listing failed"
                 );
                 Ok(None)
             }
         }
     }
 
-    /// Resolve one manifest entry to a local file. Returns `Ok(None)` only for
+    /// Resolve one bundle entry to a local file. Returns `Ok(None)` only for
     /// an entry with neither url nor path (the caller decides whether that is
     /// legal). URL entries are not downloadable here yet.
     #[allow(clippy::too_many_arguments)]
-    fn resolve_manifest_apply_entry(
+    fn resolve_bundle_apply_entry(
         &self,
         url: Option<&str>,
         path: Option<&str>,
-        loaded: &LoadedManifestSource,
+        loaded: &LoadedBundleSource,
         archive_source: &Path,
-        manifest_dir: &Path,
-        manifest_base_url: Option<&str>,
+        bundle_dir: &Path,
+        bundle_base_url: Option<&str>,
         extract_root: &mut Option<PathBuf>,
         context: &OperationContext,
         entry_label: &str,
@@ -413,17 +411,17 @@ impl CliApp {
         if let Some(url) = url.map(str::trim).filter(|value| !value.is_empty()) {
             #[cfg(target_arch = "wasm32")]
             {
-                let _ = manifest_base_url;
-                return Err(manifest_url_unsupported(entry_label, url));
+                let _ = bundle_base_url;
+                return Err(bundle_url_unsupported(entry_label, url));
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let absolute = super::manifest_download::resolve_manifest_entry_url(
+                let absolute = super::bundle_download::resolve_bundle_entry_url(
                     url,
-                    manifest_base_url,
+                    bundle_base_url,
                     entry_label,
                 )?;
-                return Ok(Some(self.download_manifest_url(
+                return Ok(Some(self.download_bundle_url(
                     &absolute,
                     entry_label,
                     context,
@@ -433,15 +431,14 @@ impl CliApp {
         let Some(path) = path.map(str::trim).filter(|value| !value.is_empty()) else {
             return Ok(None);
         };
-        if loaded.kind == ManifestSourceKind::Archive {
+        if loaded.kind == BundleSourceKind::Archive {
             let format_name = loaded
                 .archive_format
                 .expect("archive kind always carries a format name");
-            let Some(entry) = Self::find_manifest_archive_entry(&loaded.archive_entries, path)
-            else {
+            let Some(entry) = Self::find_bundle_archive_entry(&loaded.archive_entries, path) else {
                 return Err(RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("manifest.path.unresolved")
-                        .with_message("manifest path entry matches no archive member")
+                    ValidationCodeError::new("bundle.path.unresolved")
+                        .with_message("bundle path entry matches no archive member")
                         .with_field("entry", entry_label.to_owned())
                         .with_field("path", path.to_owned()),
                 ));
@@ -449,21 +446,21 @@ impl CliApp {
             let root = match extract_root {
                 Some(root) => root.clone(),
                 None => {
-                    let root = context.temp_paths().next_path("patch-apply-manifest", None);
+                    let root = context.temp_paths().next_path("patch-apply-bundle", None);
                     fs::create_dir_all(&root)?;
                     *extract_root = Some(root.clone());
                     root
                 }
             };
             let target =
-                Self::extract_manifest_archive_member(archive_source, format_name, entry, &root)?;
+                Self::extract_bundle_archive_member(archive_source, format_name, entry, &root)?;
             return Ok(Some(target));
         }
-        let resolved = manifest_dir.join(path);
+        let resolved = bundle_dir.join(path);
         if !resolved.is_file() {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("manifest.path.unresolved")
-                    .with_message("manifest path entry matches no file next to the manifest")
+                ValidationCodeError::new("bundle.path.unresolved")
+                    .with_message("bundle path entry matches no file next to the bundle")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("path", path.to_owned()),
             ));
@@ -471,12 +468,12 @@ impl CliApp {
         Ok(Some(resolved))
     }
 
-    /// Decide which manifest patches apply this run, ordered by manifest
+    /// Decide which bundle patches apply this run, ordered by bundle
     /// index. Non-optional entries seed the selection; `--with`/`--without`
     /// override it; an interactive session may toggle every entry.
-    pub(super) fn select_manifest_patches(
+    pub(super) fn select_bundle_patches(
         &self,
-        manifest: &RomWeaverManifest,
+        bundle: &RomWeaverBundle,
         with_patterns: &[String],
         without_patterns: &[String],
     ) -> Result<Vec<usize>> {
@@ -485,9 +482,9 @@ impl CliApp {
         let mut without_matcher =
             (!without_patterns.is_empty()).then(|| SelectionMatcher::new(without_patterns));
         let mut selected = Vec::new();
-        for (index, entry) in manifest.patches.iter().enumerate() {
-            let excluded = matches_manifest_entry(&mut without_matcher, entry);
-            let included = matches_manifest_entry(&mut with_matcher, entry);
+        for (index, entry) in bundle.patches.iter().enumerate() {
+            let excluded = matches_bundle_entry(&mut without_matcher, entry);
+            let included = matches_bundle_entry(&mut with_matcher, entry);
             let apply = !excluded && (!entry.optional || included);
             if apply {
                 selected.push(index);
@@ -499,22 +496,22 @@ impl CliApp {
             && without_patterns.is_empty()
             && self.interactive_selection_enabled
         {
-            let prompt_indices: Vec<usize> = (0..manifest.patches.len()).collect();
+            let prompt_indices: Vec<usize> = (0..bundle.patches.len()).collect();
             if !prompt_indices.is_empty() {
                 let candidates: Vec<PromptCandidate> = prompt_indices
                     .iter()
                     .map(|index| {
-                        let entry = &manifest.patches[*index];
+                        let entry = &bundle.patches[*index];
                         PromptCandidate {
-                            value: manifest_entry_display_name(entry).to_owned(),
-                            label: manifest_entry_prompt_label(entry),
+                            value: bundle_entry_display_name(entry).to_owned(),
+                            label: bundle_entry_prompt_label(entry),
                             size: None,
                         }
                     })
                     .collect();
                 match self
                     .prompter
-                    .select_many("Select manifest patches to apply", &candidates)
+                    .select_many("Select bundle patches to apply", &candidates)
                 {
                     SelectionList::Selected(picked) => {
                         let picked: BTreeSet<usize> = picked
@@ -528,7 +525,7 @@ impl CliApp {
                     // Deselecting everything is legitimate,
                     // so cancelling must not abort the run.
                     SelectionList::Cancelled => {
-                        trace!("manifest patch prompt cancelled; applying default patches");
+                        trace!("bundle patch prompt cancelled; applying default patches");
                     }
                 }
             }
@@ -537,18 +534,18 @@ impl CliApp {
     }
 }
 
-/// Which resolution mode the manifest came from (mirrors
-/// [`ManifestApplySource`] after the source value has been consumed).
+/// Which resolution mode the bundle came from (mirrors
+/// [`BundleApplySource`] after the source value has been consumed).
 #[derive(Clone, Copy)]
-enum ManifestApplySourceKind {
+enum BundleApplySourceKind {
     Explicit,
-    InputIsManifest,
+    InputIsBundle,
     InputArchive,
 }
 
 /// Render an `algorithm -> hex` map as a `algo=hex, algo=hex` display string
 /// (error-field payloads shown to the user).
-fn format_manifest_checksums(checksums: &BTreeMap<String, String>) -> String {
+fn format_bundle_checksums(checksums: &BTreeMap<String, String>) -> String {
     checksums
         .iter()
         .map(|(algorithm, hex)| format!("{algorithm}={hex}"))
@@ -558,7 +555,7 @@ fn format_manifest_checksums(checksums: &BTreeMap<String, String>) -> String {
 
 /// Whether two declared chain states agree on every checksum algorithm (and
 /// size) they BOTH pin. Disjoint declarations cannot disagree.
-fn manifest_checks_agree(left: &ManifestChecks, right: &ManifestChecks) -> bool {
+fn bundle_checks_agree(left: &BundleChecks, right: &BundleChecks) -> bool {
     let checksums_agree = left.checksums.iter().all(|(algorithm, hex)| {
         right
             .checksums
@@ -579,22 +576,22 @@ fn parent_dir(path: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn manifest_ref_as_url(path: &Path) -> Option<&str> {
+fn bundle_ref_as_url(path: &Path) -> Option<&str> {
     let value = path.to_str()?;
     (value.starts_with("http://") || value.starts_with("https://")).then_some(value)
 }
 
 #[cfg(target_arch = "wasm32")]
-fn manifest_url_unsupported(entry_label: &str, url: &str) -> RomWeaverError {
+fn bundle_url_unsupported(entry_label: &str, url: &str) -> RomWeaverError {
     RomWeaverError::ValidationCode(
-        ValidationCodeError::new("manifest.url.unsupported")
-            .with_message("manifest url sources cannot be downloaded here; fetch the file and use a path entry instead")
+        ValidationCodeError::new("bundle.url.unsupported")
+            .with_message("bundle url sources cannot be downloaded here; fetch the file and use a path entry instead")
             .with_field("entry", entry_label.to_owned())
             .with_field("url", url.to_owned()),
     )
 }
 
-fn manifest_entry_display_name(entry: &ManifestPatchEntry) -> &str {
+fn bundle_entry_display_name(entry: &BundlePatchEntry) -> &str {
     if let Some(name) = entry
         .name
         .as_deref()
@@ -603,10 +600,10 @@ fn manifest_entry_display_name(entry: &ManifestPatchEntry) -> &str {
     {
         return name;
     }
-    manifest_entry_file_name(entry).unwrap_or("(unnamed patch)")
+    bundle_entry_file_name(entry).unwrap_or("(unnamed patch)")
 }
 
-fn manifest_entry_file_name(entry: &ManifestPatchEntry) -> Option<&str> {
+fn bundle_entry_file_name(entry: &BundlePatchEntry) -> Option<&str> {
     let source = entry
         .path
         .as_deref()
@@ -619,8 +616,8 @@ fn manifest_entry_file_name(entry: &ManifestPatchEntry) -> Option<&str> {
         .filter(|name| !name.is_empty())
 }
 
-fn manifest_entry_prompt_label(entry: &ManifestPatchEntry) -> String {
-    let mut label = manifest_entry_display_name(entry).to_string();
+fn bundle_entry_prompt_label(entry: &BundlePatchEntry) -> String {
+    let mut label = bundle_entry_display_name(entry).to_string();
     if entry.optional {
         label.push_str(" [optional]");
     }
@@ -643,10 +640,7 @@ fn manifest_entry_prompt_label(entry: &ManifestPatchEntry) -> String {
     label
 }
 
-fn matches_manifest_entry(
-    matcher: &mut Option<SelectionMatcher>,
-    entry: &ManifestPatchEntry,
-) -> bool {
+fn matches_bundle_entry(matcher: &mut Option<SelectionMatcher>, entry: &BundlePatchEntry) -> bool {
     let Some(matcher) = matcher.as_mut() else {
         return false;
     };
@@ -659,5 +653,5 @@ fn matches_manifest_entry(
     {
         return true;
     }
-    manifest_entry_file_name(entry).is_some_and(|name| matcher.matches(name))
+    bundle_entry_file_name(entry).is_some_and(|name| matcher.matches(name))
 }

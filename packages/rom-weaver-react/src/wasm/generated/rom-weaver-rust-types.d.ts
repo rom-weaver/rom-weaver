@@ -281,7 +281,7 @@ export type CompressCommand = { input: Array<string>, format?: string, output: s
 
 export type TrimCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, manifest?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: N64ByteOrder, ignore_checksum_validation?: boolean, validate_with_output_checksums?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, };
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: N64ByteOrder, ignore_checksum_validation?: boolean, validate_with_output_checksums?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, n64_byte_order?: N64ByteOrder, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
 
@@ -293,14 +293,14 @@ export type PpfUndoCommand = { rom: string, patch: string, output: string, };
 
 export type ToolsCommands = { "type": "ppf-undo", "args": PpfUndoCommand };
 
-export type ManifestChecks = { checksums?: { [key in string]: string },
+export type BundleChecks = { checksums?: { [key in string]: string },
 /**
  * Exact byte size. Emitted as a JSON `number` on the wasm wire, so
  * override the default ts-rs `bigint` mapping.
  */
 size?: number | null, };
 
-export type ManifestRom = {
+export type BundleRom = {
 /**
  * Display / output-naming file name (defaults to the source's base name).
  */
@@ -310,15 +310,15 @@ name?: string,
  */
 url?: string,
 /**
- * Manifest-relative path (archive member for bundled manifests).
+ * Bundle-relative path (archive member for bundled bundles).
  */
 path?: string,
 /**
  * Expected checksums/size of the ROM itself (also verifies downloads).
  */
-checks?: ManifestChecks, };
+checks?: BundleChecks, };
 
-export type ManifestPatchEntry = { name?: string, description?: string,
+export type BundlePatchEntry = { name?: string, description?: string,
 /**
  * An optional patch starts deselected; omitted/false means the patch is
  * applied by default. Every patch remains toggleable.
@@ -333,7 +333,7 @@ label?: string,
  */
 url?: string,
 /**
- * Manifest-relative path (archive member for bundled manifests).
+ * Bundle-relative path (archive member for bundled bundles).
  */
 path?: string,
 /**
@@ -341,75 +341,75 @@ path?: string,
  * when it differs from `rom.checks` (a mid-chain step). Absent means the
  * patch relies on the rom's own checks.
  */
-inputChecks?: ManifestChecks,
+inputChecks?: BundleChecks,
 /**
  * Expected checksums/size immediately after this patch is applied, ONLY
- * when it differs from the manifest's final `output.checks`.
+ * when it differs from the bundle's final `output.checks`.
  */
-outputChecks?: ManifestChecks,
+outputChecks?: BundleChecks,
 /**
  * Per-patch header mode override (`auto` when omitted).
  */
 header?: PatchApplyHeaderMode, };
 
-export type ManifestOutput = {
+export type BundleOutput = {
 /**
  * Default output file name.
  */
 name?: string, header?: PatchApplyOutputHeaderMode,
 /**
  * Expected checksums/size of the final output once the full patch chain
- * (every patch, in manifest order) has been applied. A partial selection
+ * (every patch, in bundle order) has been applied. A partial selection
  * validates against its last patch's `outputChecks` instead.
  */
-checks?: ManifestChecks, };
+checks?: BundleChecks, };
 
-export type RomWeaverManifest = { version: number, rom?: ManifestRom,
+export type RomWeaverBundle = { version: number, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
-patches: Array<ManifestPatchEntry>, output?: ManifestOutput, };
+patches: Array<BundlePatchEntry>, output?: BundleOutput, };
 
-export type ManifestSourceKind = "json" | "compressed-json" | "archive";
+export type BundleSourceKind = "json" | "compressed-json" | "archive";
 
-export type ManifestSourceRef = { url: string, } | { extracted_path: string, } | { path: string, };
+export type BundleSourceRef = { url: string, } | { extracted_path: string, } | { path: string, };
 
-export type ManifestPatchSource = { source: ManifestSourceRef,
+export type BundlePatchSource = { source: BundleSourceRef,
 /**
- * Ingest-grade descriptor for entries extracted from the manifest
+ * Ingest-grade descriptor for entries extracted from the bundle
  * archive (spares the host a second describe round-trip). `None` for
  * URL / unresolved-path entries.
  */
 descriptor?: PatchDescriptor | null, };
 
-export type ManifestParseResult = {
+export type BundleParseResult = {
 /**
- * The validated manifest, checksum values normalized.
+ * The validated bundle, checksum values normalized.
  */
-manifest: RomWeaverManifest, source_kind: ManifestSourceKind,
+bundle: RomWeaverBundle, source_kind: BundleSourceKind,
 /**
- * Entry name of the manifest member when the source was an archive.
+ * Entry name of the bundle member when the source was an archive.
  */
 archive_member?: string | null,
 /**
- * Resolved ROM source; `None` when the manifest defines no ROM.
+ * Resolved ROM source; `None` when the bundle defines no ROM.
  */
-rom_source?: ManifestSourceRef | null,
+rom_source?: BundleSourceRef | null,
 /**
- * Index-aligned with `manifest.patches`.
+ * Index-aligned with `bundle.patches`.
  */
-patch_sources: Array<ManifestPatchSource>,
+patch_sources: Array<BundlePatchSource>,
 /**
- * Non-fatal issues (ignored members, extra manifests, …).
+ * Non-fatal issues (ignored members, extra bundles, …).
  */
 warnings: Array<string>, };
 
-export type ManifestParseCommand = { source: string, extract_dir?: string, threads?: ThreadBudget, };
+export type BundleParseCommand = { source: string, extract_dir?: string, threads?: ThreadBudget, };
 
-export type ManifestCreateCommand = { rom?: string,
+export type BundleCreateCommand = { rom?: string,
 /**
  * Cached ROM checksum values from a prior staging pass. The webapp uses
- * this to avoid hashing the same prepared leaf during manifest export.
+ * this to avoid hashing the same prepared leaf during bundle export.
  */
 rom_checksums?: Array<string>,
 /**
@@ -421,17 +421,17 @@ rom_size?: number | null, rom_url?: string, rom_name?: string, patch?: Array<str
  */
 bundle_rom?: string, no_bundle_rom?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
-export type ManifestCreateResult = { manifest_path: string, bundle_path?: string | null,
+export type BundleCreateResult = { bundle_path: string, archive_path?: string | null,
 /**
- * The canonical manifest as written (checksums computed and normalized).
+ * The canonical bundle as written (checksums computed and normalized).
  */
-manifest: RomWeaverManifest, warnings: Array<string>, };
+bundle: RomWeaverBundle, warnings: Array<string>, };
 
-export type ManifestCommands = { "type": "create", "args": ManifestCreateCommand } | { "type": "parse", "args": ManifestParseCommand };
+export type BundleCommands = { "type": "create", "args": BundleCreateCommand } | { "type": "parse", "args": BundleParseCommand };
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "manifest", "args": ManifestCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
 

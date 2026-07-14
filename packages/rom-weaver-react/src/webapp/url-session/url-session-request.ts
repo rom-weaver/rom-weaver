@@ -1,13 +1,13 @@
 /**
- * The webapp's URL API: `?manifest=<url>` points at an rw.json (plain,
+ * The webapp's URL API: `?bundle=<url>` points at a rom-weaver-bundle.json (plain,
  * compressed, or an archive carrying one), while `?rom=<url>` plus repeatable
- * `?patch=<url>` params describe a session directly. `manifest` wins when both
+ * `?patch=<url>` params describe a session directly. `bundle` wins when both
  * are present. Parsed once at boot; the params stay in the address bar so the
  * session URL remains shareable.
  */
 
 type UrlSessionRequest =
-  | { kind: "manifest"; manifestUrl: string }
+  | { kind: "bundle"; bundleUrl: string }
   | { kind: "direct"; romUrl: string | null; patchUrls: string[] };
 
 type UrlSessionParseResult = {
@@ -43,16 +43,16 @@ function readUrlSessionRequest(search: string, baseHref: string): UrlSessionPars
   } catch {
     return { request: null, warnings };
   }
-  const manifestRaw = params.get("manifest");
+  const bundleRaw = params.get("bundle");
   const romRaw = params.get("rom");
   const patchRaws = params.getAll("patch");
 
-  if (manifestRaw !== null) {
+  if (bundleRaw !== null) {
     if (romRaw !== null || patchRaws.length > 0) {
-      warnings.push("manifest= takes precedence; rom=/patch= params are ignored");
+      warnings.push("bundle= takes precedence; rom=/patch= params are ignored");
     }
-    const manifestUrl = resolveSessionUrl(manifestRaw, baseHref, "manifest", warnings);
-    return { request: manifestUrl ? { kind: "manifest", manifestUrl } : null, warnings };
+    const bundleUrl = resolveSessionUrl(bundleRaw, baseHref, "bundle", warnings);
+    return { request: bundleUrl ? { bundleUrl, kind: "bundle" } : null, warnings };
   }
 
   if (romRaw === null && patchRaws.length === 0) {

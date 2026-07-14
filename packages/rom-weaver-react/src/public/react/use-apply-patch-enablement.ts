@@ -9,7 +9,7 @@ import type { BinarySource } from "./patcher-form.ts";
  * off. Extracted from `ApplyPatchForm` as a cohesive state+refs+callback group:
  *
  * - `disabledPatchIds` / `togglePatchEnabled` drive the per-patch switch.
- * - `seedPatchEnablement` carries a manifest session's default on/off state.
+ * - `seedPatchEnablement` carries a bundle session's default on/off state.
  * - `syncPatchTracking` mirrors the current patch list into a ref (so the
  *   toggle can resolve an index → stable id) and drops stale toggles whenever
  *   the list changes, so a removed patch's id can't disable a later re-add.
@@ -47,7 +47,7 @@ const useApplyPatchEnablement = () => {
     });
   }, []);
 
-  /** Seed a manifest session's default enablement in one pass. */
+  /** Seed a bundle session's default enablement in one pass. */
   const seedPatchEnablement = useCallback((entries: Array<{ id: string; enabled: boolean }>) => {
     setDisabledPatchIds((previous) => {
       const next = new Set(previous);

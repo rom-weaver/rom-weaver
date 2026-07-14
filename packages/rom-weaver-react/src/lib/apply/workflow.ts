@@ -440,7 +440,7 @@ const runApplyWorkflow = async (
               };
             });
             // Per-patch user options for this target's chain drive the header modes below.
-            // The pasted / manifest-seeded input/output checksums are deliberately NOT
+            // The pasted / bundle-seeded input/output checksums are deliberately NOT
             // forwarded to the engine: in the browser they verify reactively (ROM/patch
             // card coloring) and a mismatch never blocks or fails the run - the CLI keeps
             // hard enforcement.

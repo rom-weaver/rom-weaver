@@ -2,7 +2,7 @@ import Download from "lucide-react/dist/esm/icons/download.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import type { ManifestRomExpectation } from "../../lib/manifest/manifest-session-model.ts";
+import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
@@ -42,7 +42,7 @@ import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { ManifestPatchMeta } from "./use-manifest-apply-session.ts";
+import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
@@ -99,7 +99,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
     meta={
       <StageStatus
         id={`rom-weaver-progress-identify-${drop.id}`}
-        label={drop.manifest ? "Reading manifest" : drop.entryCount === undefined ? "Identifying" : "Identified"}
+        label={drop.bundle ? "Reading bundle" : drop.entryCount === undefined ? "Identifying" : "Identified"}
         percent={null}
       />
     }
@@ -150,7 +150,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
 const APPLY_SUPPORTED_FILES = [
   { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
   { extensions: PATCH_FILE_EXTENSIONS, label: "Patches" },
-  { extensions: ["rw.json"], label: "Manifests" },
+  { extensions: ["rom-weaver-bundle.json"], label: "Bundles" },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
 ] as const;
 
@@ -195,12 +195,12 @@ const formatRomTypeTag = (romType: { platform?: string; discFormat?: string } | 
 const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = { crc32: "CRC32", md5: "MD5", sha1: "SHA-1" };
 
 /**
- * "Provide this ROM" card for a manifest that ships patches only: the expected
+ * "Provide this ROM" card for a bundle that ships patches only: the expected
  * file name plus copyable checksum/size rows in the standard checks language,
  * shown in the ROM step until an input lands.
  */
-const ManifestRomExpectationCard = ({ expectation }: { expectation: ManifestRomExpectation }) => (
-  <div className="patch-check-group manifest-rom-expectation" id="rom-weaver-manifest-rom-expectation">
+const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpectation }) => (
+  <div className="patch-check-group bundle-rom-expectation" id="rom-weaver-bundle-rom-expectation">
     <div className="ck-group-head">
       <span>ROM not included - provide it yourself</span>
     </div>
@@ -540,10 +540,10 @@ const APPLY_ACTIVITY_KEY = "react-apply-view";
 
 function ApplyWorkflowFormView({
   controllers,
-  manifestExport,
-  manifestMetaById,
-  manifestRomExpectation,
-  onManifestMetaChange,
+  bundleExport,
+  bundleMetaById,
+  bundleRomExpectation,
+  onBundleMetaChange,
   onUnifiedDrop,
   patchEnablement,
   pendingDrops = [],
@@ -556,8 +556,8 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
     dialog?: DialogController;
   };
-  /** Manifest export controls live directly in the Output options drawer. */
-  manifestExport?: {
+  /** Bundle export controls live directly in the Output options drawer. */
+  bundleExport?: {
     bundleRom: boolean;
     busy: boolean;
     cancelExport: () => void;
@@ -570,11 +570,11 @@ function ApplyWorkflowFormView({
     setBundleRom: (value: boolean) => void;
     setFormat: (value: string) => void;
   };
-  /** Per-patch manifest metadata (label/description chips), keyed by stable source id. */
-  manifestMetaById?: ReadonlyMap<string, ManifestPatchMeta>;
-  /** Shown while the manifest session waits for the user to supply the expected ROM. */
-  manifestRomExpectation?: ManifestRomExpectation;
-  onManifestMetaChange?: (id: string, updates: Partial<ManifestPatchMeta>) => void;
+  /** Per-patch bundle metadata (label/description chips), keyed by stable source id. */
+  bundleMetaById?: ReadonlyMap<string, BundlePatchMeta>;
+  /** Shown while the bundle session waits for the user to supply the expected ROM. */
+  bundleRomExpectation?: BundleRomExpectation;
+  onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
@@ -612,13 +612,13 @@ function ApplyWorkflowFormView({
     return !!patchEnablement && id !== undefined && patchEnablement.disabledIds.has(id);
   });
   // Card metadata is resolved by stable id so reorders keep the right annotations.
-  const manifestMeta = patches.map((_, index) => {
+  const bundleMeta = patches.map((_, index) => {
     const id = patchIds[index];
-    return manifestMetaById && id !== undefined ? manifestMetaById.get(id) : undefined;
+    return bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
   });
-  const manifestVerificationError = (() => {
+  const bundleVerificationError = (() => {
     const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
-    for (const [index, meta] of manifestMeta.entries()) {
+    for (const [index, meta] of bundleMeta.entries()) {
       for (const [side, checks] of [
         ["input", meta?.inputChecks?.checksums],
         ["output", meta?.outputChecks?.checksums],
@@ -741,45 +741,45 @@ function ApplyWorkflowFormView({
   ) : null;
   const exportTypeInfo = {
     items: [
-      "Choose a manifest package here when you want to distribute this ROM hack for other players to apply.",
-      "The archive holds rw.json plus the patch files - everything a player needs to apply the hack in one drop.",
-      "Patch names, descriptions, on/off defaults, and the ROM/output checks travel with it, so inputs verify automatically.",
-      "The “+ ROM” variants also pack the ROM into the archive; otherwise the manifest carries only its checks and the player supplies the file.",
+      "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
+      "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
+      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
+      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
     summary:
-      "Exports this session as a distributable rw.json manifest bundle for sharing a ROM hack with all of its patch and ROM information.",
-    title: "Manifest",
+      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
+    title: "Bundle",
   };
-  const manifestOutputFields = manifestExport ? (
+  const bundleOutputFields = bundleExport ? (
     <>
       {outputHeaderField}
       <OutputField
         className="export-type-field"
-        label="Manifest"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Manifest" />}
+        label="Bundle"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
       >
         <select
           className="select"
-          disabled={manifestExport.busy}
-          id="rom-weaver-manifest-export-format"
+          disabled={bundleExport.busy}
+          id="rom-weaver-bundle-export-format"
           onChange={(event) => {
             const [format, contents] = event.currentTarget.value.split(":");
-            manifestExport.setFormat(format || "");
-            manifestExport.setBundleRom(contents === "rom");
+            bundleExport.setFormat(format || "");
+            bundleExport.setBundleRom(contents === "rom");
           }}
           value={
-            manifestExport.format
-              ? manifestExport.format === "manifest"
-                ? "manifest"
-                : `${manifestExport.format}:${manifestExport.bundleRom ? "rom" : "patches"}`
+            bundleExport.format
+              ? bundleExport.format === "bundle"
+                ? "bundle"
+                : `${bundleExport.format}:${bundleExport.bundleRom ? "rom" : "patches"}`
               : ""
           }
         >
-          <option value="">Hide manifest creation</option>
-          <option value="zip:patches">Manifest + patches (.zip)</option>
-          <option value="zip:rom">Manifest + ROM + patches (.zip)</option>
-          <option value="7z:patches">Manifest + patches (.7z)</option>
-          <option value="7z:rom">Manifest + ROM + patches (.7z)</option>
+          <option value="">Hide bundle creation</option>
+          <option value="zip:patches">Bundle + patches (.zip)</option>
+          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
+          <option value="7z:patches">Bundle + patches (.7z)</option>
+          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
         </select>
       </OutputField>
     </>
@@ -850,14 +850,23 @@ function ApplyWorkflowFormView({
           ) : null
         }
         big={workflowEmpty}
-        heroLabel="Drop or click to add ROMs, patches, manifests, or archives"
-        heroLabelCoarse="Tap to add ROMs, patches, manifests, or archives"
+        heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
+        heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
         id="rom-weaver-row-unified-drop"
         info={
           <ul className="info-list">
             <li>Archives are decompressed and the ROM is located automatically.</li>
             <li>chd, rvz, and z3ds containers are unpacked before patching.</li>
             <li>Nested archives resolve recursively.</li>
+            <li>
+              A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
+              <code>rom-weaver-bundle.json</code> file is the required index, containing the schema version, optional
+              ROM description/checks, ordered patch entries, and optional output defaults/checks.
+            </li>
+            <li>
+              A bundle can be a standalone JSON file or an archive containing the index and patch files. It may include
+              the ROM too; otherwise, provide the matching ROM separately.
+            </li>
             <li>RetroArch softpatch naming is supported.</li>
           </ul>
         }
@@ -888,6 +897,20 @@ function ApplyWorkflowFormView({
                   <li>chd, rvz/wia/gcz, and z3ds files are decompressed before patching.</li>
                   <li>Nested archives (7z in rar, chd in 7z, …) are handled recursively.</li>
                   <li>
+                    A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
+                    <code>rom-weaver-bundle.json</code> file is the required index. The JSON contains the schema
+                    version, optional ROM description/checks, ordered patch entries, and optional output
+                    defaults/checks.
+                  </li>
+                  <li>
+                    Patch entries can be required or optional, carry names/descriptions and default selections, point to
+                    URLs or bundle-relative files, and record header rules and expected ROM-state checks.
+                  </li>
+                  <li>
+                    A bundle can be a standalone JSON file or an archive containing that file and its patch files. It
+                    may include the ROM too; otherwise, provide the matching ROM separately.
+                  </li>
+                  <li>
                     <a href="https://docs.libretro.com/guides/softpatching/" rel="noreferrer" target="_blank">
                       RetroArch softpatch format
                     </a>{" "}
@@ -904,8 +927,8 @@ function ApplyWorkflowFormView({
             listId="rom-weaver-list-input-stack"
             notice={
               <>
-                {manifestRomExpectation && romInputs.length === 0 ? (
-                  <ManifestRomExpectationCard expectation={manifestRomExpectation} />
+                {bundleRomExpectation && romInputs.length === 0 ? (
+                  <BundleRomExpectationCard expectation={bundleRomExpectation} />
                 ) : null}
                 <SectionNotice
                   id="rom-weaver-input-notice-message"
@@ -925,14 +948,14 @@ function ApplyWorkflowFormView({
           />
 
           <ApplyPatchListStep
+            bundleMeta={bundleMeta}
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
             internalDescription={uiState.patchDetails.description}
-            manifestMeta={manifestMeta}
-            onManifestMetaChange={(index, updates) => {
+            onBundleMetaChange={(index, updates) => {
               const id = patchIds[index];
-              if (id) onManifestMetaChange?.(id, updates);
+              if (id) onBundleMetaChange?.(id, updates);
             }}
             onTogglePatch={patchEnablement?.onToggle}
             patches={patches}
@@ -1000,40 +1023,40 @@ function ApplyWorkflowFormView({
                 </div>
                 <PatcherPrimaryAction
                   controller={controllers.output}
-                  disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!manifestVerificationError}
+                  disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
                   totalTime={applyTotalTime || undefined}
                 />
-                {manifestVerificationError ? <Notice level="error">{manifestVerificationError}</Notice> : null}
-                {manifestExport?.format ? (
-                  manifestExport.busy ? (
+                {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
+                {bundleExport?.format ? (
+                  bundleExport.busy ? (
                     <ProgressActionButton
-                      cancelLabel="Cancel manifest export"
+                      cancelLabel="Cancel bundle export"
                       disabled
-                      label={localizer.message("ui.manifestExport.action")}
-                      onCancel={manifestExport.cancelExport}
+                      label={localizer.message("ui.bundleExport.action")}
+                      onCancel={bundleExport.cancelExport}
                       onClick={() => undefined}
-                      progress={manifestExport.progress}
-                      progressId="rom-weaver-manifest-export-progress"
+                      progress={bundleExport.progress}
+                      progressId="rom-weaver-bundle-export-progress"
                     />
                   ) : (
                     <button
-                      className="btn ghost slim manifest-dl"
-                      disabled={outputState.disabled || !manifestExport.ready || !romInputs.length || !patches.length}
-                      id="rom-weaver-button-export-manifest"
-                      onClick={() => void manifestExport.runExport()}
+                      className="btn ghost slim bundle-dl"
+                      disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+                      id="rom-weaver-button-export-bundle"
+                      onClick={() => void bundleExport.runExport()}
                       type="button"
                     >
                       <Download aria-hidden="true" />
-                      {localizer.message("ui.manifestExport.action")}
+                      {localizer.message("ui.bundleExport.action")}
                     </button>
                   )
                 ) : null}
-                {manifestExport?.error ? <Notice level="error">{manifestExport.error}</Notice> : null}
+                {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
               </>
             }
             compress={buildOutputCompressionPanel({
               disabled: outputState.disabled,
-              extraChildren: manifestOutputFields,
+              extraChildren: bundleOutputFields,
               fields: outputState.compress?.fields,
               format: compressHeaderFormat,
               formatId: "rom-weaver-select-output-format-compress",

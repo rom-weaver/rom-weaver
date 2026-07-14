@@ -9,7 +9,7 @@ export const KNOWN_COMMAND_TYPES = [
   "compress",
   "trim",
   "patch",
-  "manifest",
+  "bundle",
   "tools",
   "plan-extract-batch"
 ] as const;
@@ -20,14 +20,14 @@ export const KNOWN_PATCH_COMMAND_TYPES = [
   "create"
 ] as const;
 
-export const KNOWN_MANIFEST_COMMAND_TYPES = [
+export const KNOWN_BUNDLE_COMMAND_TYPES = [
   "create",
   "parse"
 ] as const;
 
 export type KnownRomWeaverCommandType = typeof KNOWN_COMMAND_TYPES[number];
 export type KnownRomWeaverPatchCommandType = typeof KNOWN_PATCH_COMMAND_TYPES[number];
-export type KnownRomWeaverManifestCommandType = typeof KNOWN_MANIFEST_COMMAND_TYPES[number];
+export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
 
 export function isKnownRomWeaverCommandType(value: unknown): value is KnownRomWeaverCommandType {
   return typeof value === 'string' && (KNOWN_COMMAND_TYPES as readonly string[]).includes(value);
@@ -37,8 +37,8 @@ export function isKnownRomWeaverPatchCommandType(value: unknown): value is Known
   return typeof value === 'string' && (KNOWN_PATCH_COMMAND_TYPES as readonly string[]).includes(value);
 }
 
-export function isKnownRomWeaverManifestCommandType(value: unknown): value is KnownRomWeaverManifestCommandType {
-  return typeof value === 'string' && (KNOWN_MANIFEST_COMMAND_TYPES as readonly string[]).includes(value);
+export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
+  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
 }
 
 export function assertKnownRomWeaverCommandType(
@@ -63,15 +63,15 @@ export function assertKnownRomWeaverPatchCommandType(
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_PATCH_COMMAND_TYPES)})`);
 }
 
-export function assertKnownRomWeaverManifestCommandType(
+export function assertKnownRomWeaverBundleCommandType(
   value: unknown,
-  label = 'rom-weaver manifest command',
+  label = 'rom-weaver bundle command',
   field = '`type` field',
-): KnownRomWeaverManifestCommandType {
+): KnownRomWeaverBundleCommandType {
   const type = typeof value === 'string' ? value.trim() : '';
   if (!type) throw new TypeError(`${label} requires a string ${field}`);
-  if (isKnownRomWeaverManifestCommandType(type)) return type;
-  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_MANIFEST_COMMAND_TYPES)})`);
+  if (isKnownRomWeaverBundleCommandType(type)) return type;
+  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_BUNDLE_COMMAND_TYPES)})`);
 }
 
 function formatKnownTypes(types: readonly string[]): string {

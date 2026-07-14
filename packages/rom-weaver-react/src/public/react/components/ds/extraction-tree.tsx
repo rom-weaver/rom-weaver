@@ -224,7 +224,7 @@ const ExtractDrawer = ({
 }: ExtractPanelProps & { always?: boolean }) => {
   const levels = buildExtractionLevels(fileName, fileSize, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
-  // Manifest sessions and in-flight extraction placeholders force the drawer so
+  // Bundle sessions and in-flight extraction placeholders force the drawer so
   // the card keeps the same structure when extraction metadata lands.
   if (!always && levels.length <= 1 && !resolvedTiming) return null;
   const first = levels[0];

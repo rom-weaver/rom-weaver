@@ -7,7 +7,7 @@ function formatMebibytes(bytes: number): string {
 }
 
 /**
- * Status banner for URL-driven sessions (`?manifest=` / `?rom=&patch=`):
+ * Status banner for URL-driven sessions (`?bundle=` / `?rom=&patch=`):
  * download progress while sources stream in, and a retryable error when a
  * host refuses (CORS) or a download fails.
  */
@@ -37,7 +37,7 @@ const UrlSessionBanner = ({ state, onRetry }: { state: UrlSessionBootState; onRe
             <span className="updates-text">
               <b>{localizer.message("ui.urlSession.loading")}</b>{" "}
               <span className="mono">
-                {state.manifestName ? `${state.manifestName} - ` : ""}
+                {state.bundleName ? `${state.bundleName} - ` : ""}
                 {progressText}
               </span>
             </span>

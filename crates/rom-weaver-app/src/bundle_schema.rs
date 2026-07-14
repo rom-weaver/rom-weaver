@@ -1,13 +1,13 @@
 use super::*;
 
-/// Version of the `rw.json` manifest schema this build reads and writes.
-pub const MANIFEST_VERSION: u32 = 1;
+/// Version of the `rom-weaver-bundle.json` bundle schema this build reads and writes.
+pub const BUNDLE_VERSION: u32 = 1;
 
-/// A distributable patching workflow definition (`rw.json`): ordered patches
+/// A distributable patching workflow definition (`rom-weaver-bundle.json`): ordered patches
 /// with an optional/required selection seed and expected input/output ROM
 /// checks, optionally the ROM itself, and default output settings. Every
-/// entry's source is either a download URL or a path relative to the manifest
-/// (an archive member when the manifest ships inside an archive). The rom
+/// entry's source is either a download URL or a path relative to the bundle
+/// (an archive member when the bundle ships inside an archive). The rom
 /// entry's `checks` describe the chain's input; `output.checks` describe the
 /// final output; a patch only carries its own `inputChecks`/`outputChecks`
 /// when they differ from those endpoints (mid-chain steps). Defaults defined
@@ -15,23 +15,23 @@ pub const MANIFEST_VERSION: u32 = 1;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
-pub struct RomWeaverManifest {
+pub struct RomWeaverBundle {
     pub version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub rom: Option<ManifestRom>,
+    pub rom: Option<BundleRom>,
     /// Ordered: array order is the apply order.
-    pub patches: Vec<ManifestPatchEntry>,
+    pub patches: Vec<BundlePatchEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub output: Option<ManifestOutput>,
+    pub output: Option<BundleOutput>,
 }
 
-/// The input ROM a manifest's patch chain applies to.
+/// The input ROM a bundle's patch chain applies to.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestRom {
+pub struct BundleRom {
     /// Display / output-naming file name (defaults to the source's base name).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -40,21 +40,21 @@ pub struct ManifestRom {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub url: Option<String>,
-    /// Manifest-relative path (archive member for bundled manifests).
+    /// Bundle-relative path (archive member for bundled bundles).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub path: Option<String>,
     /// Expected checksums/size of the ROM itself (also verifies downloads).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub checks: Option<ManifestChecks>,
+    pub checks: Option<BundleChecks>,
 }
 
-/// One step of the manifest's ordered patch chain.
+/// One step of the bundle's ordered patch chain.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestPatchEntry {
+pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub name: Option<String>,
@@ -74,7 +74,7 @@ pub struct ManifestPatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub url: Option<String>,
-    /// Manifest-relative path (archive member for bundled manifests).
+    /// Bundle-relative path (archive member for bundled bundles).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub path: Option<String>,
@@ -87,16 +87,16 @@ pub struct ManifestPatchEntry {
         skip_serializing_if = "Option::is_none"
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub input_checks: Option<ManifestChecks>,
+    pub input_checks: Option<BundleChecks>,
     /// Expected checksums/size immediately after this patch is applied, ONLY
-    /// when it differs from the manifest's final `output.checks`.
+    /// when it differs from the bundle's final `output.checks`.
     #[serde(
         default,
         rename = "outputChecks",
         skip_serializing_if = "Option::is_none"
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub output_checks: Option<ManifestChecks>,
+    pub output_checks: Option<BundleChecks>,
     /// Per-patch header mode override (`auto` when omitted).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -108,7 +108,7 @@ pub struct ManifestPatchEntry {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestChecks {
+pub struct BundleChecks {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksums: BTreeMap<String, String>,
@@ -123,7 +123,7 @@ pub struct ManifestChecks {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestOutput {
+pub struct BundleOutput {
     /// Default output file name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -132,9 +132,9 @@ pub struct ManifestOutput {
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub header: Option<PatchApplyOutputHeaderMode>,
     /// Expected checksums/size of the final output once the full patch chain
-    /// (every patch, in manifest order) has been applied. A partial selection
+    /// (every patch, in bundle order) has been applied. A partial selection
     /// validates against its last patch's `outputChecks` instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub checks: Option<ManifestChecks>,
+    pub checks: Option<BundleChecks>,
 }
