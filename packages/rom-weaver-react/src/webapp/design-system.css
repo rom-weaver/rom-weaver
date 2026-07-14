@@ -646,33 +646,35 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ ghost steps ═══
    faint preview of the stages the bench grows once files land - the empty
-   page shows the whole journey (0x02…), not just the door. Each slot shares
-   the empty-section family (solid seam, thread-tinted fill, rounded frame)
-   with a skeleton name line so it reads as the card it becomes; the steps
-   recede progressively. Purely decorative. */
+   page shows the whole journey (0x02…), not just the door. Each ghost step
+   mirrors a real step: the same head padding/typography and a slot shaped
+   like the settled file card (name over a size sub-line, action button on the
+   right) so it reads as the card it becomes. The steps recede progressively.
+   Purely decorative. */
 .rw-app .ghost-steps { pointer-events: none; user-select: none; }
-.rw-app .ghost-step { border-block-start: 1px solid var(--seam-soft); padding: 12px var(--pad) 16px; }
-/* heads borrow the real step typography without looking like live workflow steps */
-.rw-app .ghost-step-head { display: flex; align-items: baseline; gap: 10px; }
+.rw-app .ghost-step { border-block-start: 1px solid var(--seam-soft); }
+/* head + body borrow the real .step-head / .step-body rhythm so the ghost
+   rows line up with the live steps they precede */
+.rw-app .ghost-step-head { display: flex; align-items: baseline; gap: 10px; padding: var(--step-pt) var(--pad) 2px; }
 .rw-app .ghost-step-num { font-size: .9rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; }
-.rw-app .ghost-step-title { font-size: 1rem; font-weight: 650; }
+.rw-app .ghost-step-title { font-size: .9rem; font-weight: 650; color: var(--ink); }
+.rw-app .ghost-step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
+/* the slot is a .card silhouette - same padding/border/radius, one step
+   fainter in fill so it reads as decorative rather than droppable */
 .rw-app .ghost-step-slot {
-  min-height: 34px; margin-block-start: 10px; padding-inline: 14px;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  border: 1px solid var(--seam); border-radius: var(--r-m);
-  /* deliberately a step fainter than --empty-fill: decorative, not droppable */
-  background: var(--warp-lines) color-mix(in oklab, var(--thread) 3%, var(--plate-2));
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 9px;
+  padding: 10px 12px; border: 1px solid var(--seam); border-radius: var(--r-m);
+  background: var(--warp-lines) color-mix(in oklab, var(--thread) 2%, var(--plate-2));
 }
-/* card silhouette: a name line on the left, a badge stub on the right - two
-   marks so the slot reads as the settled card it becomes, not a progress bar */
-.rw-app .ghost-step-slot::before {
-  content: ""; width: clamp(72px, 22%, 138px); height: 8px; flex: none;
-  border-radius: 99px; background: var(--seam);
-}
-.rw-app .ghost-step-slot::after {
-  content: ""; width: 42px; height: 12px; flex: none;
-  border: 1px solid var(--seam); border-radius: 5px;
-  background: var(--well);
+/* left: a name bar over a shorter, fainter size sub-line (the .nm / .fsize pair) */
+.rw-app .ghost-slot-lines { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1 1 auto; }
+.rw-app .ghost-line { display: block; border-radius: 99px; background: var(--seam); }
+.rw-app .ghost-line.name { width: clamp(96px, 46%, 220px); height: 10px; }
+.rw-app .ghost-line.sub { width: clamp(56px, 26%, 120px); height: 7px; opacity: .7; }
+/* right: an action-button stub sized like the row buttons (handle / remove) */
+.rw-app .ghost-slot-btn {
+  flex: none; width: var(--ctrl-h); height: var(--ctrl-h);
+  border: 1px solid var(--seam); border-radius: 6px; background: var(--well);
 }
 .rw-app .ghost-step:nth-child(1) { opacity: .6; }
 .rw-app .ghost-step:nth-child(2) { opacity: .42; }
@@ -1977,12 +1979,13 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
     padding-inline: 12px;
   }
   .rw-app .drop.hero .main { gap: 6px; font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
-  /* phones scroll - trim the ghost preview so it hints without eating height;
-     inline padding drops to 0 (like .step-body) so the 6px head/slot insets
-     line the ghosts up with the hero panel and the real cards */
-  .rw-app .ghost-step { padding: 10px 0 14px; }
+  /* phones scroll - the ghost body drops its inline padding (like .step-body)
+     so the 6px head inset and the card-matched slot margin line the ghosts up
+     with the hero panel and the real cards */
+  .rw-app .ghost-step-body { padding-inline: 0; }
   .rw-app .ghost-step-head { padding-inline: 6px; }
-  .rw-app .ghost-step-slot { min-height: 36px; margin-inline: 6px; }
+  .rw-app .ghost-step-slot { margin-inline: 6px; padding: 7px; border-radius: var(--r-s); }
+  .rw-app .ghost-slot-lines { gap: 6px; }
   .rw-app .drop.hero .main svg { padding: 8px; border-radius: 11px; }
   .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: 7px; font-size: .78rem; }
   .rw-app .cards { gap: 9px; }
@@ -2293,7 +2296,6 @@ html.vt-theme .unified-drop-step .drop { view-transition-name: none !important; 
 @media (min-width: 1100px) {
   .rw-app .app { max-width: 1220px; }
   .rw-app .selvage { max-width: calc(1220px - 2 * clamp(10px, 2.5vw, 28px)); }
-  .rw-app .ghost-steps { display: none; }
   .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
   .rw-app #rom-weaver-container, .rw-app #patch-builder-container {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

@@ -18,7 +18,15 @@ const GhostSteps = ({ steps }: { steps: readonly GhostStep[] }) => (
           <span className="ghost-step-num mono">{step.num}</span>
           <span className="ghost-step-title">{step.title}</span>
         </div>
-        <div className="ghost-step-slot" />
+        <div className="ghost-step-body">
+          <div className="ghost-step-slot">
+            <div className="ghost-slot-lines">
+              <span className="ghost-line name" />
+              <span className="ghost-line sub" />
+            </div>
+            <span className="ghost-slot-btn" />
+          </div>
+        </div>
       </div>
     ))}
   </div>
