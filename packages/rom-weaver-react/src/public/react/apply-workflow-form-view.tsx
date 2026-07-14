@@ -150,7 +150,6 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
 const APPLY_SUPPORTED_FILES = [
   { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
   { extensions: PATCH_FILE_EXTENSIONS, label: "Patches" },
-  { extensions: ["rom-weaver-bundle.json"], label: "Bundles" },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
 ] as const;
 
@@ -855,17 +854,11 @@ function ApplyWorkflowFormView({
         id="rom-weaver-row-unified-drop"
         info={
           <ul className="info-list">
-            <li>Archives are decompressed and the ROM is located automatically.</li>
-            <li>chd, rvz, and z3ds containers are unpacked before patching.</li>
-            <li>Nested archives resolve recursively.</li>
+            <li>Nested archives are decompressed; ROMs and patches are located automatically.</li>
+            <li>chd, rvz, and z3ds will be decompressed to raw formats before patching.</li>
             <li>
-              A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
-              <code>rom-weaver-bundle.json</code> file is the required index, containing the schema version, optional
-              ROM description/checks, ordered patch entries, and optional output defaults/checks.
-            </li>
-            <li>
-              A bundle can be a standalone JSON file or an archive containing the index and patch files. It may include
-              the ROM too; otherwise, provide the matching ROM separately.
+              A rom-weaver bundle is a portable patch recipe: a rom-weaver-bundle.json index, archived with its patches
+              and optionally a ROM.
             </li>
             <li>RetroArch softpatch naming is supported.</li>
           </ul>
