@@ -32,6 +32,7 @@ type SettingsState = {
   defaultCompression: string;
   language: string;
   logLevel: string;
+  manifestPackage: string;
   betaToolsEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
@@ -154,6 +155,7 @@ const SETTINGS_FIELD_ORDER = [
   "betaToolsEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
+  "manifestPackage",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -351,6 +353,23 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
     validationLabel: "Log level",
     validValues: [...LOG_LEVELS],
+  },
+  manifestPackage: {
+    defaultValue: "",
+    id: "settings-manifest-package",
+    key: "manifestPackage",
+    kind: "select",
+    label: "Manifest",
+    options: [
+      { label: "Hide manifest creation", value: "" },
+      { label: "Manifest + patches (.zip)", value: "zip:patches" },
+      { label: "Manifest + ROM + patches (.zip)", value: "zip:rom" },
+      { label: "Manifest + patches (.7z)", value: "7z:patches" },
+      { label: "Manifest + ROM + patches (.7z)", value: "7z:rom" },
+    ],
+    suggestion: "Choose a package to show manifest download by default when applying a ROM hack.",
+    validationLabel: "Manifest",
+    validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
   },
   requireInputChecksumMatch: {
     defaultValue: true,

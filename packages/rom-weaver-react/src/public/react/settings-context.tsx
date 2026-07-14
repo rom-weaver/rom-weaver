@@ -243,6 +243,7 @@ const getNormalizedWorkflowSettings = (
         zipCodec: compressionLevels.zipCodec as OutputContainerSettings["zipCodec"],
         zipLevel: compressionLevels.zipLevel as OutputContainerSettings["zipLevel"],
       },
+      manifestPackage: readFirstDefined(output.manifestPackage, source.manifestPackage),
     },
     validation: {
       ...validation,

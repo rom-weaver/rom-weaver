@@ -10,7 +10,6 @@ import type { ApplyWorkflowManifestSources } from "../../types/apply-workflow.ts
 import type { ManifestHeaderMode, ParsedManifestCreateResult } from "../../types/manifest.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -22,11 +21,6 @@ import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
  * prepared by the live session. That keeps export out of the ingest/extract/
  * apply pipeline and keeps large outputs path-backed until download.
  */
-
-/** General-purpose multi-file archives the bundle output can be packed as. */
-const MANIFEST_BUNDLE_FORMATS = ["zip", "7z"].filter((format) =>
-  (ROM_WEAVER_CREATE_CONTAINER_FORMATS as readonly string[]).includes(format),
-);
 
 /** "Manifest only" sentinel in the output-format select. */
 const MANIFEST_ONLY_FORMAT = "manifest";
@@ -110,6 +104,8 @@ type UseManifestExportOptions = {
   /** Originating per-patch metadata (name/label/description round-trips). */
   manifestMetaById: ReadonlyMap<string, ManifestPatchMeta>;
   initialName?: string;
+  initialBundleRom?: boolean;
+  initialFormat?: string;
   ready: boolean;
   onComplete?: (result: ParsedManifestCreateResult) => void;
 };
@@ -136,6 +132,8 @@ const useManifestExport = ({
   disabledPatchIds,
   manifestMetaById,
   initialName,
+  initialBundleRom = false,
+  initialFormat = "",
   ready,
   onComplete,
 }: UseManifestExportOptions) => {
@@ -143,8 +141,8 @@ const useManifestExport = ({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [name, setName] = useState(initialName || "");
-  const [format, setFormat] = useState<string>(MANIFEST_BUNDLE_FORMATS[0] || MANIFEST_ONLY_FORMAT);
-  const [bundleRom, setBundleRom] = useState(false);
+  const [format, setFormat] = useState(initialFormat);
+  const [bundleRom, setBundleRom] = useState(initialBundleRom);
   const [rows, setRows] = useState<ManifestExportRow[]>([]);
   const [progress, setProgress] = useState<ManifestExportProgress | null>(null);
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
@@ -190,12 +188,25 @@ const useManifestExport = ({
     const romName = sources.rom?.fileName || "";
     const firstPatchName = items[0]?.fileName || sources.patches[0]?.fileName || "";
     setName(initialName || stripFileExtension(romName) || stripFileExtension(firstPatchName));
-    setFormat(MANIFEST_BUNDLE_FORMATS[0] || MANIFEST_ONLY_FORMAT);
-    setBundleRom(false);
+    setFormat(initialFormat);
+    setBundleRom(initialBundleRom);
     setProgress(null);
     setError("");
     setOpen(true);
-  }, [disabledPatchIds, getSessionSources, getStackItems, initialName, manifestMetaById]);
+  }, [
+    disabledPatchIds,
+    getSessionSources,
+    getStackItems,
+    initialBundleRom,
+    initialFormat,
+    initialName,
+    manifestMetaById,
+  ]);
+
+  useEffect(() => {
+    setFormat(initialFormat);
+    setBundleRom(initialBundleRom);
+  }, [initialBundleRom, initialFormat]);
 
   const closeDialog = useCallback(() => {
     if (!busy) setOpen(false);

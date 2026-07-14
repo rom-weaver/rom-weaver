@@ -50,6 +50,7 @@ describe("getDefaultSettings", () => {
     expect(settings.zipCodec).toBe("deflate");
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
+    expect(settings.manifestPackage).toBe("");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
     expect(settings.workerThreads).toBe("auto");
@@ -75,6 +76,12 @@ describe("validateSettingsDraft", () => {
     const result = validateSettingsDraft(validDraft({ language: "FR" }));
     expect(result.settings.language).toBe("fr");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("language"));
+  });
+
+  it("accepts a manifest package default", () => {
+    const result = validateSettingsDraft(validDraft({ manifestPackage: "ZIP:ROM" }));
+    expect(result.settings.manifestPackage).toBe("zip:rom");
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("manifestPackage"));
   });
 
   it("flags an out-of-range choice value and falls back to the first valid value", () => {

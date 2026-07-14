@@ -49,7 +49,22 @@ test("export manifest bundles the session from main-page options with a checks-o
   );
   await waitForApplyButtonEnabled();
 
-  // The output-card secondary action arms once a ROM and a patch are staged.
+  // Manifest creation stays opt-in even after a ROM and patch are staged.
+  expect(document.getElementById("rom-weaver-button-export-manifest")).toBeNull();
+  const formatSelect = document.getElementById("rom-weaver-manifest-export-format");
+  expect(formatSelect).not.toBeNull();
+  expect(formatSelect.value).toBe("");
+  expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
+    "Hide manifest creation",
+    "Manifest + patches (.zip)",
+    "Manifest + ROM + patches (.zip)",
+    "Manifest + patches (.7z)",
+    "Manifest + ROM + patches (.7z)",
+  ]);
+  setFormControlValue(formatSelect, "zip:patches");
+  formatSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+  // Selecting a manifest package reveals and arms the secondary action.
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-manifest");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
@@ -77,16 +92,8 @@ test("export manifest bundles the session from main-page options with a checks-o
   checksInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.value).toBe("deadbeef");
 
-  // Default output is a .zip bundle with the ROM left out.
-  const formatSelect = document.getElementById("rom-weaver-manifest-export-format");
-  expect(formatSelect).not.toBeNull();
+  // The selected output is a .zip bundle with the ROM left out.
   expect(formatSelect.value).toBe("zip:patches");
-  expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
-    "Manifest + patches (.zip)",
-    "Manifest + ROM + patches (.zip)",
-    "Manifest + patches (.7z)",
-    "Manifest + ROM + patches (.7z)",
-  ]);
   expect(document.getElementById("rom-weaver-manifest-export-bundle-rom")).toBeNull();
 
   exportButton.click();
@@ -135,6 +142,7 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   let exported = null;
   mount(
     createElement(ApplyPatchForm, {
+      defaultSettings: { manifestPackage: "zip:rom" },
       onManifestExportComplete: (result) => {
         exported = result;
       },
@@ -143,13 +151,12 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   );
   await waitForApplyButtonEnabled();
 
+  const formatSelect = document.getElementById("rom-weaver-manifest-export-format");
+  expect(formatSelect?.value).toBe("zip:rom");
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-manifest");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
   });
-  const formatSelect = document.getElementById("rom-weaver-manifest-export-format");
-  setFormControlValue(formatSelect, "zip:rom");
-  formatSelect.dispatchEvent(new Event("change", { bubbles: true }));
   exportButton.click();
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();

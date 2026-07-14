@@ -65,6 +65,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "language",
   "logLevel",
+  "manifestPackage",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -389,6 +390,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
+    manifestPackage: isRecord(applySettings.output) ? applySettings.output.manifestPackage : undefined,
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
     rvzBlockSize: compression.rvzBlockSize,
     rvzCodec: compression.rvzCodec,
@@ -439,6 +441,10 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
+
+    const manifestPackage = readStoredField(storedStringSchema, loadedSettings.manifestPackage);
+    if (manifestPackage !== undefined)
+      settings.manifestPackage = normalizeChoiceField("manifestPackage", manifestPackage, settings.manifestPackage);
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -558,6 +564,13 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
+    if (fieldKey === "manifestPackage") {
+      storedSettings.apply = {
+        ...storedSettings.apply,
+        output: { ...storedSettings.apply?.output, manifestPackage: value },
+      };
+      return;
+    }
     const compressionKey = fieldKey === "compressionProfile" ? "profile" : fieldKey;
     storedSettings.apply = {
       ...storedSettings.apply,
@@ -585,6 +598,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
   const hasStoredSettings =
     Object.keys(storedSettings.common || {}).length > 0 ||
     Object.keys(storedSettings.apply?.compression || {}).length > 0 ||
+    Object.keys(storedSettings.apply?.output || {}).length > 0 ||
     Object.keys(storedSettings.apply?.patch || {}).length > 0 ||
     Object.keys(storedSettings.apply?.validation || {}).length > 0 ||
     Object.keys(storedSettings.create?.compression || {}).length > 0 ||
@@ -636,6 +650,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       fixChecksum: settings.fixChecksum,
       language: settings.language,
       logLevel: settings.logLevel,
+      manifestPackage: settings.manifestPackage,
       requireInputChecksumMatch: settings.requireInputChecksumMatch !== false,
       rvzBlockSize: settings.rvzBlockSize,
       rvzCodec: compressionLevels.rvzCodec,

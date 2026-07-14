@@ -122,6 +122,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     settings: props.settings,
   };
   const traceSettings = props.settings || props.defaultSettings || providerSettings;
+  const [defaultManifestFormat = "", defaultManifestContents = ""] = String(
+    traceSettings.output?.manifestPackage || traceSettings.manifestPackage || "",
+  ).split(":");
   const emitApplyFormInputTrace = useCallback(
     (message: string, details?: Record<string, unknown>) => {
       emitTraceLog(
@@ -1093,6 +1096,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       };
     },
     getStackItems: () => resolvedStackController.getState().items,
+    initialBundleRom: defaultManifestContents === "rom",
+    initialFormat: defaultManifestFormat,
     initialName:
       activeManifestSession?.name || resolvedOutputController.getState().displayFileName || "rom-weaver-manifest",
     manifestMetaById,

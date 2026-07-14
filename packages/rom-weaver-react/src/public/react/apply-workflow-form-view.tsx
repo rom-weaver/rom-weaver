@@ -741,21 +741,22 @@ function ApplyWorkflowFormView({
   ) : null;
   const exportTypeInfo = {
     items: [
+      "Choose a manifest package here when you want to distribute this ROM hack for other players to apply.",
       "The archive holds rw.json plus the patch files - everything a player needs to apply the hack in one drop.",
       "Patch names, descriptions, on/off defaults, and the ROM/output checks travel with it, so inputs verify automatically.",
       "The “+ ROM” variants also pack the ROM into the archive; otherwise the manifest carries only its checks and the player supplies the file.",
     ],
     summary:
       "Exports this session as a distributable rw.json manifest bundle for sharing a ROM hack with all of its patch and ROM information.",
-    title: "Export type",
+    title: "Manifest",
   };
   const manifestOutputFields = manifestExport ? (
     <>
       {outputHeaderField}
       <OutputField
         className="export-type-field"
-        label="Export type"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Export type" />}
+        label="Manifest"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Manifest" />}
       >
         <select
           className="select"
@@ -763,15 +764,18 @@ function ApplyWorkflowFormView({
           id="rom-weaver-manifest-export-format"
           onChange={(event) => {
             const [format, contents] = event.currentTarget.value.split(":");
-            manifestExport.setFormat(format || "manifest");
+            manifestExport.setFormat(format || "");
             manifestExport.setBundleRom(contents === "rom");
           }}
           value={
-            manifestExport.format === "manifest"
-              ? "manifest"
-              : `${manifestExport.format}:${manifestExport.bundleRom ? "rom" : "patches"}`
+            manifestExport.format
+              ? manifestExport.format === "manifest"
+                ? "manifest"
+                : `${manifestExport.format}:${manifestExport.bundleRom ? "rom" : "patches"}`
+              : ""
           }
         >
+          <option value="">Hide manifest creation</option>
           <option value="zip:patches">Manifest + patches (.zip)</option>
           <option value="zip:rom">Manifest + ROM + patches (.zip)</option>
           <option value="7z:patches">Manifest + patches (.7z)</option>
@@ -1000,7 +1004,7 @@ function ApplyWorkflowFormView({
                   totalTime={applyTotalTime || undefined}
                 />
                 {manifestVerificationError ? <Notice level="error">{manifestVerificationError}</Notice> : null}
-                {manifestExport ? (
+                {manifestExport?.format ? (
                   manifestExport.busy ? (
                     <ProgressActionButton
                       cancelLabel="Cancel manifest export"
