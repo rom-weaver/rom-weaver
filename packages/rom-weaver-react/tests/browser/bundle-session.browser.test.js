@@ -115,6 +115,43 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
 });
 
+test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
+  // A pre-rename bundle: its index is `rw.json`, not `rom-weaver-bundle.json`.
+  // Detection must fall back to content-probing so it still auto-selects. A
+  // decoy `metadata.json` that is not a bundle sits alongside to prove the
+  // probe is gated on a successful parse, not on the `.json` extension.
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
+    type: "application/octet-stream",
+  });
+  const legacyIndex = {
+    output: { name: "bundled-output" },
+    patches: [
+      { name: "Core", path: "change.ips" },
+      { name: "Alternate", optional: true, path: "alternate.ips" },
+    ],
+    rom: { checks: { checksums: { crc32: "d7ae93df" } }, name: "game.bin" },
+    version: 1,
+  };
+  const decoy = new File([JSON.stringify({ title: "not a bundle" })], "metadata.json", { type: "application/json" });
+  const indexFile = new File([JSON.stringify(legacyIndex)], "rw.json", { type: "application/json" });
+  const bundleArchive = await buildZip(
+    [
+      { file: decoy, fileName: "metadata.json" },
+      { file: indexFile, fileName: "rw.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: alternateFile, fileName: "alternate.ips" },
+    ],
+    "legacy-rw.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
+  await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
+});
+
 test("bundle url session seeds enablement + output defaults and applies to a download", async () => {
   // The REAL boot flow: fetch → wasm bundle parse → plan → source acquisition (same code the
   // use-url-session-boot hook runs).

@@ -40,8 +40,22 @@ type UnifiedDropController = {
   providePatchInputFiles?: (files: File[]) => void;
 };
 
+// The canonical name is the trusted fast-path: it marks a bundle by name
+// alone, and its parse errors surface. `rom-weaver-bundle.json[.codec]`.
 const isBundleFileName = (name: string) =>
   /^rom-weaver-bundle\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
+
+// Any other uncompressed `*.json` is a content-probe CANDIDATE: it is only
+// treated as a bundle if its bytes parse+validate (mirrors the Rust loader), so
+// a stray `config.json` costs one parse attempt and is then ignored.
+const isJsonCandidateName = (name: string) => /\.json$/i.test(name.split(/[\\/]/).pop() || "");
+
+// A root-level (non-nested) `*.json` archive member - the only place a bundled
+// index can live, canonical or not.
+const isRootJsonArchiveEntry = (name: string) => {
+  const path = normalizeArchivePath(name);
+  return !path.includes("/") && /\.json$/i.test(path);
+};
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
@@ -103,20 +117,53 @@ const routeUnifiedDrop = async (
   // Yield one task so React can paint the newly learned shape before routing
   // replaces the placeholder. This does not wait on a timer interval.
   if (archives.length && onPendingUpdate) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  const bundles = [...directBundles, ...bundleArchives.filter((file) => !directBundles.includes(file))];
-  if (bundles.length > 1) throw new Error("Drop contains more than one bundle");
-  if (bundles[0]) {
-    onPendingUpdate?.(bundles[0], { bundle: true });
-    const loaded = await loadLocalBundleSession(bundles[0], files);
-    if (isCancelled?.()) return;
+  // Deliver a loaded bundle into the form: seed the session, then hand its ROM
+  // (bundled, or a companion dropped alongside a checks-only bundle) and its
+  // patches to the input pipeline.
+  const applyLoadedBundle = (
+    loaded: NonNullable<Awaited<ReturnType<typeof loadLocalBundleSession>>>,
+    bundleFile: File,
+  ) => {
     onBundleSession?.(loaded.session);
-    const companionRoms = inputs.filter((file) => !directBundles.includes(file));
+    const companionRoms = inputs.filter((file) => file !== bundleFile);
     if (!loaded.romFile && companionRoms.length > 1) {
       throw new Error("A checks-only bundle drop contains more than one possible ROM");
     }
     const romFile = loaded.romFile || companionRoms[0];
     if (romFile) controller.provideRomInputFiles?.([romFile]);
     controller.providePatchInputFiles?.(loaded.patchFiles);
+  };
+
+  // 1) Canonical `rom-weaver-bundle.json` (by name, direct or an archive root):
+  // authoritative, so its parse errors surface.
+  const canonicalBundles = [...directBundles, ...bundleArchives.filter((file) => !directBundles.includes(file))];
+  if (canonicalBundles.length > 1) throw new Error("Drop contains more than one bundle");
+  if (canonicalBundles[0]) {
+    onPendingUpdate?.(canonicalBundles[0], { bundle: true });
+    const loaded = await loadLocalBundleSession(canonicalBundles[0], files);
+    if (isCancelled?.()) return;
+    applyLoadedBundle(loaded, canonicalBundles[0]);
+    return;
+  }
+
+  // 2) No canonical name: content-probe other `*.json` candidates - a bare
+  // `rw.json`, or an archive whose index is not the canonical name. The first
+  // whose bytes parse+validate as a bundle wins; anything that fails to parse
+  // falls through to normal routing (so a stray `config.json` is harmless).
+  const probeCandidates = [
+    ...files.filter((file) => isJsonCandidateName(file.name) && !directBundles.includes(file)),
+    ...archives.filter(
+      (archive, index) =>
+        !bundleArchives.includes(archive) && (archiveEntries[index] || []).some(isRootJsonArchiveEntry),
+    ),
+  ];
+  for (const candidate of probeCandidates) {
+    const loaded = await loadLocalBundleSession(candidate, files, { probe: true });
+    if (isCancelled?.()) return;
+    if (!loaded) continue;
+    logger.debug("content-probed a bundle from a non-canonical json candidate", { name: candidate.name });
+    onPendingUpdate?.(candidate, { bundle: true });
+    applyLoadedBundle(loaded, candidate);
     return;
   }
   if (isCancelled?.()) return;
