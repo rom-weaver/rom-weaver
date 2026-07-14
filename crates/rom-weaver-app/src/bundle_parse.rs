@@ -28,6 +28,23 @@ pub(crate) fn bundle_file_name_codec(file_name: &str) -> Option<Option<&str>> {
     None
 }
 
+/// True when a file base name is a plausible bundle index to content-probe:
+/// any uncompressed `*.json`. Detection is name-agnostic beyond this cheap
+/// narrowing - the real gate is a successful parse+validate of the bytes, so a
+/// stray `config.json` costs one parse attempt and is then skipped. The
+/// canonical `rom-weaver-bundle.json` is handled separately as a trusted
+/// fast-path (see `bundle_file_name_codec`); this only widens the fallback net.
+pub(crate) fn is_bundle_json_candidate(base_name: &str) -> bool {
+    let bytes = base_name.as_bytes();
+    bytes.len() > 5 && base_name[base_name.len() - 5..].eq_ignore_ascii_case(".json")
+}
+
+/// Whether raw bytes parse and validate as a bundle. Used to content-probe
+/// non-canonically-named JSON candidates before treating them as bundles.
+pub(crate) fn bundle_bytes_are_valid(bytes: &[u8]) -> bool {
+    parse_bundle_bytes(bytes).is_ok()
+}
+
 pub(crate) fn bundle_validation(code: &'static str, message: &'static str) -> RomWeaverError {
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
 }
@@ -444,5 +461,31 @@ mod tests {
         assert_eq!(bundle_file_name_codec("rw.json"), None);
         assert_eq!(bundle_file_name_codec("rom-weaver-bundle.jsonx"), None);
         assert_eq!(bundle_file_name_codec("bundle.json"), None);
+    }
+
+    #[test]
+    fn recognizes_json_probe_candidates() {
+        assert!(is_bundle_json_candidate("rw.json"));
+        assert!(is_bundle_json_candidate("bundle.json"));
+        assert!(is_bundle_json_candidate("ANYTHING.JSON"));
+        assert!(is_bundle_json_candidate("rom-weaver-bundle.json"));
+        assert!(!is_bundle_json_candidate(".json"));
+        assert!(!is_bundle_json_candidate("notes.txt"));
+        assert!(!is_bundle_json_candidate("rw.json.gz"));
+        assert!(!is_bundle_json_candidate("patch.ips"));
+    }
+
+    #[test]
+    fn probes_bundle_bytes_validity() {
+        assert!(bundle_bytes_are_valid(
+            br#"{ "version": 1, "patches": [ { "path": "x.ips" } ] }"#
+        ));
+        // A well-formed JSON object that is not a bundle must be rejected.
+        assert!(!bundle_bytes_are_valid(br#"{ "hello": "world" }"#));
+        // Wrong schema version is not a bundle we accept.
+        assert!(!bundle_bytes_are_valid(
+            br#"{ "version": 999, "patches": [] }"#
+        ));
+        assert!(!bundle_bytes_are_valid(b"not json at all"));
     }
 }

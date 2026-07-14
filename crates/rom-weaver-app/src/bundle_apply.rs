@@ -6,7 +6,9 @@
 use rom_weaver_core::ValidationCodeError;
 
 use super::bundle_load::{LoadedBundleSource, is_stream_codec_format_name};
-use super::bundle_parse::{bundle_file_name_codec, parse_bundle_bytes};
+use super::bundle_parse::{
+    bundle_bytes_are_valid, bundle_file_name_codec, is_bundle_json_candidate, parse_bundle_bytes,
+};
 use super::patch_filename_checksum::FilenameRequirements;
 use super::*;
 
@@ -356,13 +358,22 @@ impl CliApp {
                 return Ok(Some(BundleApplySource::InputIsBundle));
             }
         }
-        // Archive auto-detection is guarded on "no explicit --patch": a user
-        // patching an archive that happens to carry rom-weaver-bundle.json keeps today's
-        // behavior by naming their patches.
+        // Archive / non-canonical-JSON auto-detection is guarded on "no
+        // explicit --patch": a user patching an archive that happens to carry a
+        // bundle (or naming a `.json` input) keeps today's behavior by naming
+        // their patches.
         if !args.patches.is_empty() || !args.input.exists() {
             return Ok(None);
         }
         let Some(handler) = self.containers.probe(&args.input) else {
+            // A plain, non-canonically-named `*.json` may still be a bundle:
+            // content-probe it (a stray JSON simply fails to validate).
+            if is_bundle_json_candidate(input_name)
+                && let Ok(loaded) = self.load_bundle_source(&args.input)
+                && bundle_bytes_are_valid(&loaded.bytes)
+            {
+                return Ok(Some(BundleApplySource::InputIsBundle));
+            }
             return Ok(None);
         };
         if is_stream_codec_format_name(handler.descriptor().name) {

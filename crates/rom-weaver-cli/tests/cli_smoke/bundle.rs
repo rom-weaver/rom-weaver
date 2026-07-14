@@ -174,6 +174,66 @@ fn bundle_parse_archive_extracts_referenced_members() {
 }
 
 #[test]
+fn bundle_parse_archive_content_probes_noncanonical_member() {
+    // A pre-rename archive whose index is named `rw.json`, not the canonical
+    // `rom-weaver-bundle.json`, must still be found by content probing. A decoy
+    // `config.json` that is not a bundle sits alongside to prove the probe is
+    // gated on a successful parse, not on the `.json` extension.
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), b"0123456789abcdef").expect("rom fixture");
+    let patch_path = write_min_ips(&temp, "main.ips");
+    let decoy = temp.child("config.json");
+    fs::write(decoy.path(), r#"{ "unrelated": true }"#).expect("decoy fixture");
+    let bundle_json = temp.child("rw.json");
+    fs::write(
+        bundle_json.path(),
+        r#"{
+            "version": 1,
+            "rom": { "path": "roms/game.bin" },
+            "patches": [ { "path": "patches/main.ips" } ]
+        }"#,
+    )
+    .expect("bundle fixture");
+    let archive = temp.child("legacy-bundle.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (decoy.path(), "config.json"),
+            (bundle_json.path(), "rw.json"),
+            (rom.path(), "roms/game.bin"),
+            (&patch_path, "patches/main.ips"),
+        ],
+        archive.path(),
+    );
+    let extract_dir = temp.child("legacy-out");
+
+    let events = run_json_events(
+        &[
+            "bundle",
+            "parse",
+            archive.path().to_str().expect("path"),
+            "--extract-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "succeeded");
+    let result = &terminal["details"]["bundle"];
+    assert_eq!(result["source_kind"], "archive");
+    assert_eq!(result["archive_member"], "rw.json");
+    let rom_path = result["rom_source"]["extracted_path"]
+        .as_str()
+        .expect("rom extracted path");
+    assert!(
+        rom_path.ends_with("roms/game.bin"),
+        "unexpected rom path: {rom_path}"
+    );
+    assert_eq!(result["patch_sources"][0]["descriptor"]["format"], "IPS");
+}
+
+#[test]
 fn bundle_parse_archive_without_bundle_fails() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
