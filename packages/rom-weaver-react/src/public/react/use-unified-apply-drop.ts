@@ -33,7 +33,7 @@ type PendingDrop = {
   sheet?: "CUE" | "GDI";
 };
 
-type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "bundle" | "sheet">>;
+type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "bundle" | "name" | "sheet">>;
 
 type UnifiedDropController = {
   provideRomInputFiles?: (files: File[]) => void;
@@ -107,12 +107,24 @@ const routeUnifiedDrop = async (
   const archiveBuckets = archives.map((archive, index) => classifyArchiveBucket(archive, archiveEntries[index] || []));
   archives.forEach((archive, index) => {
     const names = archiveEntries[index] || [];
+    const patchNames = names.filter(isPatchFileName);
+    const patchName =
+      archiveBuckets[index] === "patch" && patchNames.length === 1
+        ? normalizeArchivePath(patchNames[0] || "")
+            .split("/")
+            .pop()
+        : undefined;
     const sheet = names.some((name) => /\.cue$/i.test(name))
       ? "CUE"
       : names.some((name) => /\.gdi$/i.test(name))
         ? "GDI"
         : undefined;
-    onPendingUpdate?.(archive, { entryCount: names.length, kind: archiveBuckets[index], sheet });
+    onPendingUpdate?.(archive, {
+      entryCount: names.length,
+      kind: archiveBuckets[index],
+      ...(patchName ? { name: patchName } : {}),
+      sheet,
+    });
   });
   // Yield one task so React can paint the newly learned shape before routing
   // replaces the placeholder. This does not wait on a timer interval.

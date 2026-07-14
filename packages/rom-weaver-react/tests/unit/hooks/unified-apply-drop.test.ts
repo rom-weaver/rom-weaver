@@ -47,6 +47,7 @@ describe("useUnifiedApplyDrop", () => {
 
     expect(result.current.pendingDrops).toHaveLength(1);
     await waitFor(() => expect(controller.providePatchInputFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pendingDrops[0]?.name).toBe("hack.ips"));
     await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
     expect(controller.providePatchInputFiles.mock.calls[0]?.[0].map((entry: File) => entry.name)).toEqual([
       "patches.zip",
