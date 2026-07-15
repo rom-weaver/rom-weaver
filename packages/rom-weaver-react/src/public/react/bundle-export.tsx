@@ -450,6 +450,31 @@ const useBundleExport = ({
 
   const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);
 
+  // Changing what the bundle packs (format or ROM inclusion) invalidates an
+  // already-created export - the action drops back to "create" instead of
+  // offering a download that no longer matches the selection.
+  const clearDownloadable = useCallback(() => {
+    const output = downloadableOutputRef.current;
+    if (!output) return;
+    downloadableOutputRef.current = null;
+    setDownloadableOutput(null);
+    disposeBundleOutput(output);
+  }, []);
+  const selectFormat = useCallback(
+    (value: string) => {
+      clearDownloadable();
+      setFormat(value);
+    },
+    [clearDownloadable],
+  );
+  const selectBundleRom = useCallback(
+    (value: boolean) => {
+      clearDownloadable();
+      setBundleRom(value);
+    },
+    [clearDownloadable],
+  );
+
   useEffect(
     () => () => {
       const output = downloadableOutputRef.current;
@@ -474,8 +499,8 @@ const useBundleExport = ({
     ready,
     rows,
     runExport,
-    setBundleRom,
-    setFormat,
+    setBundleRom: selectBundleRom,
+    setFormat: selectFormat,
     setName,
     setRowChecks,
     setRowDefault,

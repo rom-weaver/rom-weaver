@@ -15,6 +15,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.bundleExport.action"
+#~ msgstr "Descargar bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
 
@@ -100,6 +105,16 @@ msgstr "Copiar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.create"
+msgstr "Crear bundle {format}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.createRom"
+msgstr "Crear bundle {format} con ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
 
@@ -125,8 +140,13 @@ msgstr "Descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.action"
-msgstr "Descargar bundle"
+msgid "ui.bundleExport.download"
+msgstr "Descargar bundle {format}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.downloadRom"
+msgstr "Descargar bundle {format} con ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

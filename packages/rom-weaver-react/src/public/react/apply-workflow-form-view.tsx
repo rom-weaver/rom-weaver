@@ -1,4 +1,5 @@
 import Download from "lucide-react/dist/esm/icons/download.js";
+import Package from "lucide-react/dist/esm/icons/package.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
@@ -749,6 +750,19 @@ function ApplyWorkflowFormView({
       "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
     title: "Bundle",
   };
+  // The bundle action names what it does: "Create <format> [ROM] Bundle" until
+  // an export exists, then "Download <format> [ROM] Bundle". "ROM" appears only
+  // when the dropdown packs the ROM in.
+  const bundleActionLabel = (() => {
+    if (!bundleExport?.format) return "";
+    const formatName = bundleExport.format === "7z" ? "7z" : bundleExport.format.toUpperCase();
+    if (bundleExport.downloadable) {
+      const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
+      return localizer.message(downloadKey, { format: formatName });
+    }
+    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
+    return localizer.message(createKey, { format: formatName });
+  })();
   const bundleOutputFields = bundleExport ? (
     <>
       {outputHeaderField}
@@ -1025,7 +1039,7 @@ function ApplyWorkflowFormView({
                     <ProgressActionButton
                       cancelLabel="Cancel bundle export"
                       disabled
-                      label={localizer.message("ui.bundleExport.action")}
+                      label={bundleActionLabel}
                       onCancel={bundleExport.cancelExport}
                       onClick={() => undefined}
                       progress={bundleExport.progress}
@@ -1039,8 +1053,8 @@ function ApplyWorkflowFormView({
                       onClick={() => void bundleExport.runExport()}
                       type="button"
                     >
-                      <Download aria-hidden="true" />
-                      {localizer.message("ui.bundleExport.action")}
+                      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+                      {bundleActionLabel}
                     </button>
                   )
                 ) : null}
