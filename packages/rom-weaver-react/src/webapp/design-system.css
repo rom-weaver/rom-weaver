@@ -2432,13 +2432,13 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   background: linear-gradient(90deg, color-mix(in oklab, var(--thread) 6%, transparent), transparent 58%);
 }
 
-/* on desktop the header band lines up with the cards below it instead of
-   running full-bleed past them (phones inset the whole step instead) */
+/* on desktop the step content sheds the --pad inset so headers, cards, and
+   drop zones share the masthead/banner/selvage edges (phones inset the whole
+   step instead) */
 @media (min-width: 721px) {
-  .rw-app .panel.workflow .step > .step-head,
-  .rw-app .panel.workflow .ghost-step > .ghost-step-head {
-    margin-inline: var(--pad);
-    padding-inline: 8px;
+  .rw-app .panel.workflow .step > .step-body,
+  .rw-app .panel.workflow .ghost-step > .ghost-step-body {
+    padding-inline: 0;
   }
 }
 
