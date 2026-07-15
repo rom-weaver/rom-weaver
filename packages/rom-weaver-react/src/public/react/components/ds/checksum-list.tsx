@@ -19,6 +19,11 @@ import { useClipboardCopy } from "./use-clipboard-copy.ts";
    line at the table's unified value size instead of wrapping. */
 const FIT_VALUE_MIN_CHARS = 16;
 
+/* The two short rows (crc32 + byte count) carry the ck-half marker so wide
+   drawers can pair them onto one grid row; every other label keeps the full
+   row. Derived from the label so real and pending rows agree. */
+const isHalfRowLabel = (label: ReactNode): boolean => label === "CRC32" || label === "BYTES";
+
 /** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`. */
 const ChecksumRow = ({
   label,
@@ -38,7 +43,7 @@ const ChecksumRow = ({
   return (
     <button
       aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
-      className={join("ck mono", bad && "bad")}
+      className={join("ck mono", bad && "bad", isHalfRowLabel(label) && "ck-half")}
       onClick={copy}
       type="button"
     >
@@ -58,7 +63,7 @@ const ChecksumRow = ({
  * shift when the hash lands). Non-interactive.
  */
 const PendingChecksumRow = ({ label, length }: { label: ReactNode; length: number }) => (
-  <div className="ck mono pending">
+  <div className={join("ck mono pending", isHalfRowLabel(label) && "ck-half")}>
     <span className="ck-k">{label}</span>
     <span className={join("ck-v", length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>
       <span className="pend">{"0".repeat(Math.max(1, length))}</span>

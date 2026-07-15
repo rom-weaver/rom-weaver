@@ -1062,15 +1062,24 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    touch tighter so the sections still read as one stack */
 .rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
-/* section header for a checksum group - a brand accent tick + brighter, bolder
-   label so each block (Unchanged / Fix header / variants) reads as its own
-   labelled section, distinct from the grey row labels below it */
+/* section header for a checksum group: the 0x0N cloth scrap shrunk to caption
+   size - thread paint through the weave tile, selvage flush left, fraying
+   right - so each block (Unchanged / Fix header / Input / Output) visibly
+   joins the header family and anchors its column. The scrap's left edge sits
+   on the rows' box edge; its 9px text inset matches the row labels'. */
 .rw-app .ck-group-head {
-  display: flex; align-items: center;
+  display: flex; align-items: center; width: fit-content;
+  position: relative; isolation: isolate;
   font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ink); padding: 2px 0; margin-block-end: 6px;
+  color: var(--ink); padding: 3px 16px 3px 9px; margin-block-end: 6px;
 }
-.rw-app .cks .ckrows .ck-group-head { margin-inline-start: -1px; }
+.rw-app .ck-group-head::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(90deg, var(--thread) 45%, transparent 96%);
+  opacity: .2;
+  mask-image: var(--weave-mask); mask-size: 7px 7px;
+}
 .rw-app .ck {
   /* label column sized just to the widest label (CRC32/SHA-1) so values still
      line up in a column, but without the old wide gap - leaves room for a
@@ -1097,7 +1106,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .ck:hover { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
-.rw-app .ck .ck-k { font-size: .76rem; color: var(--ink-3); margin: 0; }
+/* row labels drop to the CLI's lowercase algo names (crc32, md5, sha-1) so
+   they read as a different voice from the uppercase scrap-backed group heads */
+.rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
 /* ONE unified value size per row list: every value in a checks table (and the
    staging shimmer, which inherits it) rides the same container-driven clamp,
    keyed to the longest value class - a 40-char sha-1 at the mono advance
@@ -1111,6 +1122,66 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
 }
 .rw-app .ckrows { container-type: inline-size; }
+/* the drawer inner is a NAMED size container so the rules below can key off
+   the drawer's width (an element cannot respond to its own container query,
+   and .ckrows is already the hash-clamp container) */
+.rw-app .cks > .cks-body > .cks-inner { container: cks-inner / inline-size; }
+/* checks pairing grid: whenever the drawer body holds labelled groups or the
+   short paired rows, the row list becomes a two-track grid that carries the
+   rows' old -10px full bleed itself (rows inside sit flush). Full rows and
+   groups span both tracks; the two short rows - CRC32 and BYTES, marked
+   .ck-half - pair onto one grid row with a seam between them, at EVERY width
+   (phones included), inside groups and bare row lists alike.
+   (.patch-check-columns keeps its own tighter grid; .req verification tables
+   are untouched.) */
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) {
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; align-items: start;
+  margin-inline: -10px;
+}
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) .ck:not(.req) { margin-inline: 0; width: 100%; }
+/* intra-group pairing applies to every group flavor, including the compact
+   patch Input/Output columns: rows inside a group sit flush (the enclosing
+   grid or column carries any bleed) */
+.rw-app .ckrows .ck-group { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
+.rw-app .ckrows .ck-group > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows .ck-group .ck:not(.req) { margin-inline: 0; width: 100%; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > .ck.ck-half:not(.req),
+.rw-app .ckrows:not(.patch-check-columns) .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
+/* the paired row: restore the trailing cell's top hairline (the stacked-row
+   border collapse assumed one column) and seam the two cells apart */
+.rw-app .ckrows:not(.patch-check-columns) .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
+  border-inline-start: 1px solid var(--seam-soft);
+  border-block-start-color: var(--seam-soft);
+}
+
+/* wide drawer (≥760px): two-plus labelled groups (Unchanged / Fix header /
+   Input / Output / tracks) additionally split the drawer into side-by-side
+   columns with a center seam; each group becomes its own size container so
+   the hash clamp steps per column */
+@container cks-inner (min-width: 760px) {
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group) {
+    position: relative;
+    gap: 9px 25px;
+    padding-block-start: 6px;
+  }
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group)::before {
+    content: ""; position: absolute; inset-block: 12px 2px; inset-inline-start: calc(50% - .5px);
+    width: 1px; background: var(--seam-soft);
+  }
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group) > .ck-group {
+    grid-column: auto / span 1;
+    margin-block-start: 0; container-type: inline-size;
+  }
+
+  /* the compact patch Input/Output columns are only wide enough for the
+     CRC32|BYTES pair when the drawer itself is wide */
+  .rw-app .ckrows.patch-check-columns .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
+  .rw-app .ckrows.patch-check-columns .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
+    border-inline-start: 1px solid var(--seam-soft);
+    border-block-start-color: var(--seam-soft);
+  }
+}
 /* below the width where even the floor size can't hold 40ch beside the label
    (floor .46rem × 25.2em = 11.6rem, plus the phone row overhead), long-value
    rows (.ck-fit marks values ≥16ch) hand the hash the full row width:
@@ -2106,8 +2177,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
      its space on phones. Every value and copy action remains visible. */
   .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
   .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
-  .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 0; }
-  .rw-app .cks .ckrows .ck-group-head { margin-inline-start: -4px; }
+  .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
   .rw-app .ck { min-height: 24px; padding-block: 1px; }
   /* verification labels are descriptive ("target blockcheck"), not 5-char hash
      names - let the label column size to its content so the label always fits

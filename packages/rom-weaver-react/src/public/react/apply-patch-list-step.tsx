@@ -79,9 +79,17 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
     }
     outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
   }
-  const bytesLast = (rows: typeof inputRows) =>
-    rows.slice().sort((left, right) => Number(left.label === "BYTES") - Number(right.label === "BYTES"));
-  return { inputRows: bytesLast(inputRows), outputRows: bytesLast(outputRows) };
+  // BYTES pairs with CRC32 on one grid row, so it rides directly after it;
+  // with no CRC32 requirement the size row keeps its end-of-list spot.
+  const bytesAfterCrc32 = (rows: typeof inputRows) => {
+    const bytes = rows.filter((row) => row.label === "BYTES");
+    if (!bytes.length) return rows;
+    const rest = rows.filter((row) => row.label !== "BYTES");
+    const crcIndex = rest.findIndex((row) => row.label === "CRC32");
+    if (crcIndex === -1) return [...rest, ...bytes];
+    return [...rest.slice(0, crcIndex + 1), ...bytes, ...rest.slice(crcIndex + 1)];
+  };
+  return { inputRows: bytesAfterCrc32(inputRows), outputRows: bytesAfterCrc32(outputRows) };
 };
 
 const DryApplySuccess = () => (

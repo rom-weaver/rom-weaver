@@ -382,9 +382,9 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       id: "raw",
       rows: [
         { label: "CRC32", length: 8 },
+        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
         { label: "MD5", length: 32 },
         { label: "SHA-1", length: 40 },
-        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
       ],
     },
   ];

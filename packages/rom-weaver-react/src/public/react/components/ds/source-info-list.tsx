@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
@@ -101,9 +101,19 @@ const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: Checksu
             {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
               const value = variant.checksums?.[algorithm] || "";
               if (!value) return null;
-              return <ChecksumRow key={algorithm} label={algorithmLabel} value={value} />;
+              return (
+                <Fragment key={algorithm}>
+                  <ChecksumRow label={algorithmLabel} value={value} />
+                  {/* BYTES pairs with CRC32 on one wide-drawer grid row */}
+                  {algorithm === "crc32" && byteValue ? (
+                    <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
+                  ) : null}
+                </Fragment>
+              );
             })}
-            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
+            {!variant.checksums?.crc32 && byteValue ? (
+              <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
+            ) : null}
           </div>
         );
       })}
@@ -156,12 +166,14 @@ const SourceInfoList = ({
   // as if it belonged to the first variant.
   const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
   const baseGroupLabel = "Unchanged";
+  // BYTES rides directly after CRC32 - the two short rows pair onto one grid
+  // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
     <>
       <ChecksumRow label="CRC32" value={checksums?.crc32 || ""} />
+      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
       <ChecksumRow label="MD5" value={checksums?.md5 || ""} />
       <ChecksumRow label="SHA-1" value={checksums?.sha1 || ""} />
-      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
     </>
   );
   return (
@@ -228,9 +240,9 @@ const DiscTracksPanel = ({
             </div>
             {track.progress ? <FileProgress {...track.progress} /> : null}
             {track.checksums?.crc32 ? <ChecksumRow label="CRC32" value={track.checksums.crc32} /> : null}
+            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
             {track.checksums?.md5 ? <ChecksumRow label="MD5" value={track.checksums.md5} /> : null}
             {track.checksums?.sha1 ? <ChecksumRow label="SHA-1" value={track.checksums.sha1} /> : null}
-            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
           </div>
         );
       })}
