@@ -103,8 +103,7 @@
      much fainter and sparser, because these sit behind copy. An empty target
      isn't blank: the loom is dressed and waiting for weft. */
   --warp-lines: repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 7%, transparent) 0 1px, transparent 1px 13px);
-  /* flex column so the app fills the viewport and the selvage strip (a direct
-     body child) lands edge-to-edge at the very bottom */
+  /* flex column so the workbench fills the viewport height */
   display: flex; flex-direction: column;
   background:
     radial-gradient(1100px 320px at 50% -140px, color-mix(in oklab, var(--thread) 5%, transparent), transparent 70%)
@@ -185,7 +184,7 @@
 /* ═══ masthead ═══ */
 .rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
-.rw-app .brand-copy { display: contents; }
+.rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
 .rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
@@ -243,8 +242,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: 7px; }
-.rw-app .masthead-version,
-.rw-app .masthead-tools .masthead-mobile-tool { display: none; }
+.rw-app .masthead-version { display: flex; align-items: center; gap: 4px; max-width: 100%; color: var(--ink-3); font-size: .62rem; line-height: 1.2; white-space: nowrap; }
+.rw-app .masthead-threads { flex: none; }
+.rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
+.rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
 .rw-app .tool {
   appearance: none; cursor: pointer; width: 36px; height: 36px; display: grid; place-items: center;
   border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--well); color: var(--ink-2);
@@ -1766,43 +1767,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tracelog .msg { color: var(--ink-2); }
 .rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }
 
-/* ═══ selvage status strip ═══ */
-/* a contained status strip aligned with the centered form column */
-.rw-app .selvage {
-  position: relative;
-  max-width: calc(880px - 2 * clamp(10px, 2.5vw, 28px));
-  width: calc(100% - 2 * clamp(10px, 2.5vw, 28px));
-  margin-inline: auto;
-  padding: 7px 0 max(7px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--plate) 88%, transparent);
-  border: 1px solid var(--seam); border-block-end: 0;
-  border-radius: var(--r-l) var(--r-l) 0 0;
-  font-size: .82rem; color: var(--ink-3);
-}
-.rw-app .selvage::before {
-  /* thread accent along the top edge, fading at the selvage ends */
-  content: ""; position: absolute; inset-inline: 0; top: -1px; height: 1px;
-  background: linear-gradient(to right, transparent, color-mix(in oklab, var(--thread) 60%, transparent) 18% 82%, transparent);
-}
-/* content stays within the centered form-container boundary (matches .app) */
-.rw-app .sv-inner {
-  width: 100%;
-  padding-inline: 8px;
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-}
-.rw-app .sv-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
-.rw-app .sv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-4); transition: background .3s; }
-.rw-app .sv-state.running .sv-dot { background: var(--thread); animation: pulse 1.4s ease-in-out infinite; }
-.rw-app .sv-state.ready .sv-dot { background: var(--verified); }
-.rw-app .sv-state.done .sv-dot { background: var(--verified); }
-.rw-app .sv-state.failed .sv-dot { background: var(--fault); }
-.rw-app .sv-stage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
-.rw-app .sv-spacer { flex: 1; }
-.rw-app .sv-meta { white-space: nowrap; }
-.rw-app .sv-link { font-weight: 600; }
-.rw-app .sv-link.donate { color: var(--thread-text); }
-.rw-app .sv-link.donate:hover { color: var(--thread); }
-
 /* ═══ dialogs ═══ */
 .dlg { border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%; }
 /* open AND close animate: transitions + @starting-style drive the entry, and
@@ -2079,9 +2043,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .hero-lead .lead-line { display: inline; }
   .rw-app .hero-lead .lead-sub { padding: 1px 7px; font-size: .65rem; }
   .rw-app .drop.hero > .hero-lead { margin-block-end: 8px; padding: 0 8px 10px; }
-  /* edge-to-edge footer: the rounded top corners only make sense while the
-     strip floats inside the page gutter */
-  .rw-app .selvage { max-width: none; width: 100%; border-radius: 0; }
   /* keep the form container (just inset from the screen); cards run to its
      inner edge, and the 0x* headers keep a gutter that lines up with card text */
   /* row controls, badges and section gutters now ride the fluid :root tokens -
@@ -2162,7 +2123,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .bundle-rom-expectation { margin-block-start: 9px; }
   /* the notice shares the same 6px inset as the cards/headers */
   .rw-app .notice { margin-inline: 6px; }
-  .rw-app .sv-inner { padding-inline: 8px; }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
      dismiss - the text wraps internally, Reload stays an inline slim button */
   .rw-app .updates { gap: 8px; }
@@ -2208,17 +2168,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
-  /* footer: one line, always - status truncates, metadata yields. hold the
-     type at .76rem so the status stays on one line on a phone */
-  .rw-app .selvage { margin: 8px 0 0; font-size: .76rem; }
-  .rw-app .sv-inner { flex-wrap: nowrap; gap: 10px; }
-  .rw-app .sv-stage { flex: 0 1 auto; }
-  .rw-app .sv-link { flex: none; }
-}
-@media (max-width: 380px) {
-  /* the cache version is the first footer item to yield on very narrow screens */
-  .rw-app .sv-inner { gap: 8px; }
-  .rw-app .selvage .sv-cache { display: none; }
 }
 @media (max-width: 860px) and (max-height: 520px) {
   .rw-app .step.is-input.is-empty .drop.hero { min-height: 140px; padding-block: 16px; }
@@ -2230,7 +2179,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .meter .fill { background: Highlight; }
   .rw-app .mode[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
   .rw-app .mode-thumb { background: Highlight; }
-  .rw-app .sv-dot, .rw-app .updates-pulse { border: 1px solid CanvasText; }
+  .rw-app .updates-pulse { border: 1px solid CanvasText; }
   .rw-app .card.ok, .rw-app .card.warn, .rw-app .card.bad { border-width: 2px; }
   .rw-app .dropveil { background: Canvas; }
   /* the custom switch is drawn entirely with backgrounds, which forced-colors
@@ -2394,11 +2343,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 .dlg .picklist li { list-style: none; }
 .dlg .picklist { margin: 0; padding: 0; }
 
-/* the app's build version is long (semver + branch + hash) - let it shrink and
-   ellipsize instead of pushing the selvage wider than the viewport */
-.rw-app .selvage .sv-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rw-app .selvage .sv-threads, .rw-app .selvage .sv-cache { flex: none; }
-
 /* ── progress performance ──
    React drives the fill with --scale → transform: scaleX (per-frame width
    changes force layout; a scale is composited). The fill spans the full track
@@ -2474,7 +2418,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    familiar centered column. */
 @media (min-width: 1100px) {
   .rw-app .app { max-width: 1220px; }
-  .rw-app .selvage { max-width: calc(1220px - 2 * clamp(10px, 2.5vw, 28px)); }
   .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
   .rw-app #rom-weaver-container, .rw-app #patch-builder-container {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2625,18 +2568,8 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     min-width: 0;
   }
 
-  .rw-app .masthead-version {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    max-width: 100%;
-    color: var(--ink-3);
-    font-size: .56rem;
-    line-height: 1.2;
-    white-space: nowrap;
-  }
-
-  .rw-app .masthead-threads { flex: none; }
+  /* phones share the base masthead-version layout; only the type tightens */
+  .rw-app .masthead-version { font-size: .56rem; }
 
   .rw-app .masthead-tools {
     grid-area: tools;
@@ -2696,9 +2629,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .masthead-tools .tool-text { display: none; }
   .rw-app .masthead-tools .tool,
   .rw-app .masthead-tools .tool:has(.tool-text) { grid-template: minmax(0, 1fr) / minmax(0, 1fr); padding: 0; }
-
-  .rw-app .masthead-tools .masthead-mobile-tool { display: grid; }
-  .rw-app .masthead-donate { color: var(--thread-text); }
 
   .rw-app .updates {
     gap: 6px;
@@ -2796,15 +2726,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     width: 44px;
     height: 44px;
     transform: translate(-50%, -50%);
-  }
-
-  .rw-app .sv-link {
-    min-width: 44px;
-    min-height: 44px;
-    padding-inline: 5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
   }
 
   /* Every workflow stage, including the empty input hero, stays in one
@@ -2980,8 +2901,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     height: 44px;
     padding-inline: 10px;
   }
-
-  .rw-app > .selvage { display: none; }
 }
 
 @media (max-width: 360px) {

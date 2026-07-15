@@ -49,7 +49,7 @@ import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/p
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
-import { Masthead, Selvage, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
+import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
 import {
   getDefaultSettings,
   getSettingsUiState,
@@ -359,7 +359,7 @@ describe("design-system sections + states (expanded)", () => {
 });
 
 // ── Full-page scans ──────────────────────────────────────────────────────────
-// Mounts the production page shell - Masthead + <main> + Selvage - around each
+// Mounts the production page shell - Masthead + <main> - around each
 // workflow. Apply uses the inert ApplyWorkflowFormView (controllers-as-stores,
 // no wasm) with a staged ROM card. Create/Trim are stateful forms with no inert
 // view, but render fine EMPTY (wasm only boots on a file action), so we scan
@@ -436,12 +436,16 @@ const Shell = (currentTab, panelView, formNode) =>
         { className: "app" },
         createElement(Masthead, {
           currentTab,
+          donateHref: "https://example.invalid/donate",
+          githubHref: "https://example.invalid/repo",
           logoSrc: "./logo.svg",
           onOpenLog: noop,
           onOpenSettings: noop,
           onReset: noop,
           onSelectTab: noop,
           tabs: PAGE_TABS,
+          threads: 8,
+          version: "0.1.0",
         }),
         createElement(
           "main",
@@ -458,12 +462,6 @@ const Shell = (currentTab, panelView, formNode) =>
           ),
         ),
       ),
-      createElement(Selvage, {
-        donateHref: "https://example.invalid/donate",
-        githubHref: "https://example.invalid/repo",
-        threads: 8,
-        version: "0.1.0",
-      }),
     ),
   );
 

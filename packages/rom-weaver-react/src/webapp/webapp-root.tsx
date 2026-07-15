@@ -20,7 +20,7 @@ import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, GIT_BRANCH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { LogDialog } from "./components/log-dialog.tsx";
-import { Masthead, Selvage, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ToolsForm } from "./components/tools-form.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
@@ -139,13 +139,7 @@ const ActivityWakeLockNotice = () => {
   return <ProcessingWakeLockNotice active={activity.state === "running"} />;
 };
 
-const ActivitySelvage = ({
-  threads,
-  confirmExternalNavigation,
-}: {
-  threads?: number;
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-}) => {
+const ActivityFinishMarker = () => {
   const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
   // The bench settles out of a run (running/staging → ready/done) on the commit batched with the result
   // render. Close the perceived-latency tail (romweaver:after-finish) on the paint that reveals the result;
@@ -155,17 +149,7 @@ const ActivitySelvage = ({
   useEffect(() => {
     if (settled) markResultPaintedAfterFinish();
   });
-  return (
-    <Selvage
-      branch={GIT_BRANCH}
-      commit={COMMIT_HASH}
-      confirmExternalNavigation={confirmExternalNavigation}
-      donateHref={DONATE_URL}
-      githubHref={GITHUB_URL}
-      threads={threads}
-      version={APP_VERSION}
-    />
-  );
+  return null;
 };
 
 function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession }: WebappRootProps) {
@@ -316,10 +300,10 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={state.currentView}
             donateHref={DONATE_URL}
+            githubHref={GITHUB_URL}
             logoSrc={ROOT_LOGO_URL}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
-            onReportIssue={() => setLogOpen(true)}
             onReset={actions.onReset}
             onSelectTab={(id) =>
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
@@ -388,10 +372,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             <DropVeil />
           </main>
         </div>
-        <ActivitySelvage
-          confirmExternalNavigation={actions.onConfirmExternalNavigation}
-          threads={resolveWorkerThreads(workerThreads)}
-        />
+        <ActivityFinishMarker />
         <LogDialog
           issueHref={GITHUB_URL}
           level={state.settings.logLevel}

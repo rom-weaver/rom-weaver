@@ -3,12 +3,12 @@ import { fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, Selvage, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist (named "Workflow" - the webapp
- * browser test drives tabs by that role/name), tool buttons, the reveal
- * banner mechanics, and the selvage status strip.
+ * browser test drives tabs by that role/name), tool buttons, and the reveal /
+ * update banner mechanics.
  */
 
 const withSettings = (children: ReactNode) => (
@@ -25,9 +25,9 @@ const mastheadProps = {
   branch: "prototype/mobile-forward-ui",
   commit: "71f6a6c6",
   donateHref: "https://example.com/donate",
+  githubHref: "https://example.com/repo",
   currentTab: "patcher",
   onOpenLog: () => undefined,
-  onReportIssue: () => undefined,
   onReset: () => undefined,
   onOpenSettings: () => undefined,
   onSelectTab: () => undefined,
@@ -55,7 +55,7 @@ describe("Masthead", () => {
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".language-tool")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
-    expect(getByRole("button", { name: "Report issue" })).toBeTruthy();
+    expect(getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
     const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-tools > .tool")).toBe(reset);
     const settings = getByRole("button", { name: "Settings" });
@@ -112,28 +112,5 @@ describe("UpdateBanner", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
     expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("Selvage", () => {
-  it("renders version, threads, and links", () => {
-    const { container } = render(
-      withSettings(
-        <Selvage
-          donateHref="https://example.com/donate"
-          githubHref="https://example.com/repo"
-          threads={8}
-          version="1.2.3"
-        />,
-      ),
-    );
-    expect(container.querySelector(".sv-meta")?.textContent).toBe("v1.2.3");
-    expect(container.querySelector(".sv-threads")?.textContent).toContain("8");
-    expect(container.querySelector(".sv-link.donate")).toBeTruthy();
-  });
-
-  it("omits threads when none are provided", () => {
-    const { container } = render(withSettings(<Selvage version="1.2.3" />));
-    expect(container.querySelector(".sv-threads")).toBeNull();
   });
 });

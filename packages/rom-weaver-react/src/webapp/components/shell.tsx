@@ -208,10 +208,10 @@ const Masthead = ({
   currentTab,
   onSelectTab,
   onOpenLog,
-  onReportIssue,
   onOpenSettings,
   onReset,
   confirmExternalNavigation,
+  githubHref,
   donateHref,
   settingsOpen,
   threads,
@@ -224,10 +224,10 @@ const Masthead = ({
   currentTab: string;
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
-  onReportIssue: () => void;
   onOpenSettings: () => void;
   onReset: () => void;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  githubHref?: string;
   donateHref?: string;
   settingsOpen?: boolean;
   threads?: number;
@@ -292,23 +292,26 @@ const Masthead = ({
             {logLabel}
           </span>
         </button>
-        <button
-          aria-haspopup="dialog"
-          aria-label="Report issue"
-          className="tool masthead-mobile-tool"
-          onClick={onReportIssue}
-          title="Report issue"
-          type="button"
-        >
-          <Github aria-hidden="true" />
-          <span aria-hidden="true" className="tool-text">
-            Issue
-          </span>
-        </button>
+        {githubHref ? (
+          <a
+            aria-label="GitHub"
+            className="tool"
+            href={githubHref}
+            onClick={(event) => guardExternalClick(event, githubHref)}
+            rel="noreferrer"
+            target="_blank"
+            title="GitHub"
+          >
+            <Github aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              GitHub
+            </span>
+          </a>
+        ) : null}
         {donateHref ? (
           <a
             aria-label={localizer.message("ui.footer.donate")}
-            className="tool masthead-mobile-tool masthead-donate"
+            className="tool masthead-donate"
             href={donateHref}
             onClick={(event) => guardExternalClick(event, donateHref)}
             rel="noreferrer"
@@ -420,72 +423,4 @@ const WakeLockBanner = ({
   );
 };
 
-/** Edge-to-edge status strip at the very bottom of the page. */
-const Selvage = ({
-  branch,
-  commit,
-  version,
-  threads,
-  githubHref,
-  donateHref,
-  confirmExternalNavigation,
-}: {
-  branch?: string;
-  commit?: string;
-  version?: string;
-  threads?: number;
-  githubHref?: string;
-  donateHref?: string;
-  /** Resolves false to block the navigation (e.g. staged work would be lost). */
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-}) => {
-  const localizer = useUiLocalizer();
-  const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
-    if (!confirmExternalNavigation) return;
-    event.preventDefault();
-    void confirmExternalNavigation(href).then((accepted) => {
-      if (accepted) window.open(href, "_blank", "noopener,noreferrer");
-    });
-  };
-  return (
-    <footer className="selvage">
-      <div className="sv-inner">
-        {version ? (
-          <span className="sv-meta mono">
-            <BuildVersionInfo branch={branch} commit={commit} version={version} />
-          </span>
-        ) : null}
-        {threads ? (
-          <span className="sv-meta mono sv-threads">
-            {threads} {localizer.message("ui.env.threads")}
-          </span>
-        ) : null}
-        <span className="sv-spacer" />
-        {githubHref ? (
-          <a
-            className="sv-link"
-            href={githubHref}
-            onClick={(event) => guardExternalClick(event, githubHref)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            GitHub
-          </a>
-        ) : null}
-        {donateHref ? (
-          <a
-            className="sv-link donate"
-            href={donateHref}
-            onClick={(event) => guardExternalClick(event, donateHref)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            ♥ <span>{localizer.message("ui.footer.donate")}</span>
-          </a>
-        ) : null}
-      </div>
-    </footer>
-  );
-};
-
-export { Masthead, Reveal, Selvage, UpdateBanner, WakeLockBanner };
+export { Masthead, Reveal, UpdateBanner, WakeLockBanner };

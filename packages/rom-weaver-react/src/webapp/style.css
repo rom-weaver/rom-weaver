@@ -36,8 +36,8 @@ body{
 	min-height:100%;
 }
 
-/* the app root pins the selvage to the viewport bottom (design-system.css
-   sets the flex column; the id selector here must not override its 100dvh) */
+/* the app root fills the viewport (design-system.css sets the flex column;
+   the id selector here must not override its 100dvh) */
 #column{
 	min-height:100dvh;
 }
