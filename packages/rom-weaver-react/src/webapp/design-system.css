@@ -2727,17 +2727,50 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   }
 
   .rw-app .panel.workflow .ghost-steps { margin: 8px 10px 0; }
+  /* the upcoming-steps line borrows the step-head voice: mono thread-accent
+     hex numbers beside ink titles, so it previews the real 0x0N headings */
   .rw-app .panel.workflow .ghost-next {
-    display: block;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    column-gap: 7px;
+    row-gap: 2px;
     margin: 0;
     padding: 9px 12px;
     border-block-start: 1px solid var(--seam-strong);
+  }
+
+  .rw-app .ghost-next .ghost-next-label {
     color: var(--ink-3);
     font-size: .72rem;
     font-weight: 600;
     letter-spacing: .02em;
-    text-align: center;
+  }
+
+  .rw-app .ghost-next .ghost-next-step {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
     white-space: nowrap;
+  }
+
+  .rw-app .ghost-next .ghost-next-num {
+    font-size: .74rem;
+    font-weight: 650;
+    letter-spacing: .06em;
+    color: var(--thread-text);
+  }
+
+  .rw-app .ghost-next .ghost-next-title {
+    font-size: .76rem;
+    font-weight: 650;
+    color: var(--ink);
+  }
+
+  .rw-app .ghost-next .ghost-next-arrow {
+    color: var(--ink-3);
+    font-size: .72rem;
   }
 
   .rw-app .panel.workflow .ghost-step { display: none; }

@@ -9,7 +9,20 @@ type GhostStep = {
 
 const GhostSteps = ({ steps }: { steps: readonly GhostStep[] }) => (
   <div className="ghost-steps">
-    <p className="ghost-next">Next: {steps.map((step) => step.title).join(" → ")}</p>
+    <p className="ghost-next">
+      <span className="ghost-next-label">Next:</span>
+      {steps.map((step, index) => (
+        <span className="ghost-next-step" key={step.num}>
+          {index > 0 ? (
+            <span aria-hidden="true" className="ghost-next-arrow">
+              →
+            </span>
+          ) : null}
+          <span className="ghost-next-num mono">{step.num}</span>
+          <span className="ghost-next-title">{step.title}</span>
+        </span>
+      ))}
+    </p>
     {steps.map((step) => (
       <div aria-hidden="true" className="ghost-step" key={step.num}>
         <div className="ghost-step-head">
