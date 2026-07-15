@@ -65,7 +65,9 @@ import {
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
-const appendBrowserStorageContext = async (message: string) => {
+const appendBrowserStorageContext = async (message: string, operationLabel: string) => {
+  const contextualized = await withBrowserOutputStorageFailureContext(new Error(message), { operationLabel });
+  if (!(contextualized instanceof Error) || contextualized.name !== "OutputStorageError") return message;
   const state = await getBrowserStorageEstimateState();
   return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
 };
@@ -372,6 +374,7 @@ const invokeRomWeaverPatchValidateWorker = async (
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = await appendBrowserStorageContext(
       getRomWeaverFailureMessage(result, "Patch validation failed"),
+      "validate patch output",
     );
     throw withRomWeaverFailureKind(new Error(failureMessage), result);
   }
@@ -493,7 +496,10 @@ const invokeRomWeaverPatchApplyWorker = async (
     }),
   );
   if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = await appendBrowserStorageContext(getRomWeaverFailureMessage(result, "Patch apply failed"));
+    const failureMessage = await appendBrowserStorageContext(
+      getRomWeaverFailureMessage(result, "Patch apply failed"),
+      "apply patch output",
+    );
     const traceContext = isTraceEnabled(input.logLevel)
       ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
           hasXdeltaPatch,
