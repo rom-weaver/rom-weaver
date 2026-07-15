@@ -1,5 +1,6 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
+import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
@@ -248,6 +249,7 @@ const PatchOptions = ({
       bodyClassName="optsbody"
       className="optsblock"
       label="Options"
+      labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
       readouts={
         <>
           {item.format ? <DrawerReadout>{item.format}</DrawerReadout> : null}

@@ -1,5 +1,6 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
+import ListChecks from "lucide-react/dist/esm/icons/list-checks.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { Fragment, type ReactNode } from "react";
 import { join } from "./cx.ts";
@@ -103,6 +104,7 @@ const ChecksumList = ({
     bodyClassName={bodyClassName}
     defaultOpen={defaultOpen}
     label={label}
+    labelIcon={<ListChecks aria-hidden="true" />}
     onToggle={onToggle}
     open={open}
     readouts={

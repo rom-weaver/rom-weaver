@@ -1,5 +1,9 @@
+import Archive from "lucide-react/dist/esm/icons/archive.js";
+import Disc3 from "lucide-react/dist/esm/icons/disc-3.js";
 import Download from "lucide-react/dist/esm/icons/download.js";
+import ListChecks from "lucide-react/dist/esm/icons/list-checks.js";
 import Package from "lucide-react/dist/esm/icons/package.js";
+import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
@@ -112,6 +116,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
         bodyClassName="taskbody"
         className="extract-d"
         label="Extract"
+        labelIcon={<Archive aria-hidden="true" />}
         readouts={
           drop.entryCount === undefined ? undefined : (
             <DrawerReadout>
@@ -124,17 +129,21 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
       </Drawer>
     ) : null}
     {drop.kind === "patch" ? (
-      <Drawer bodyClassName="optsbody" label="Options">
+      <Drawer
+        bodyClassName="optsbody"
+        label="Options"
+        labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
+      >
         <span />
       </Drawer>
     ) : null}
     {drop.kind === "rom" && drop.sheet ? (
-      <Drawer className="cue rw-cue-section" label={drop.sheet}>
+      <Drawer className="cue rw-cue-section" label={drop.sheet} labelIcon={<Disc3 aria-hidden="true" />}>
         <span />
       </Drawer>
     ) : null}
     {drop.kind === "rom" ? (
-      <Drawer bodyClassName="ckrows" label="Checks">
+      <Drawer bodyClassName="ckrows" label="Checks" labelIcon={<ListChecks aria-hidden="true" />}>
         <span />
       </Drawer>
     ) : null}

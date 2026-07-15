@@ -1,3 +1,4 @@
+import Archive from "lucide-react/dist/esm/icons/archive.js";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
@@ -131,6 +132,7 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
         bodyClassName="taskbody"
         className="extract-d"
         label="Extract"
+        labelIcon={<Archive aria-hidden="true" />}
         readouts={
           <>
             {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
@@ -241,6 +243,7 @@ const ExtractDrawer = ({
       bodyClassName="taskbody"
       className="extract-d"
       label="Extract"
+      labelIcon={<Archive aria-hidden="true" />}
       readouts={
         <>
           {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}

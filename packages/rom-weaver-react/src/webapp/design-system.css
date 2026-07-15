@@ -1365,8 +1365,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* options: a collapsible drawer (default open) marked by the tune icon, so it
    reads in the same language as the rest of the card sections */
-.rw-app .optsblock .opts-lab { display: inline-flex; align-items: center; gap: 6px; }
-.rw-app .optsblock .opts-lab .tune { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
+/* any drawer label icon rides the tune glyph's metrics */
+.rw-app .cks .opts-lab { display: inline-flex; align-items: center; gap: 6px; }
+.rw-app .cks .opts-lab svg { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
 .rw-app .optsbody { display: flex; flex-direction: column; gap: 9px; padding-block: 9px 2px; }
 /* controls recess into the card face like every other input */
 .rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 9px 12px; }
@@ -1994,7 +1995,9 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .card { gap: 5px; border-radius: var(--r-s); margin-inline: 6px; padding: 7px; }
   .rw-app .card-name { gap: 2px; }
   .rw-app .card-actions, .rw-app .patch-body-inner { gap: 5px; }
-  .rw-app .cks > .cks-head { min-height: 30px; padding-block: 1px; }
+  /* drawer heads keep one uniform height on phones - matching the output
+     card's Options drawer - instead of shrinking below a comfortable tap */
+  .rw-app .cks > .cks-head { min-height: 36px; padding-block: 1px; }
   .rw-app .drawer-action { top: 15px; }
   .rw-app .cks > .cks-head .readouts { gap: 4px; }
   .rw-app .cks .cks-inner > :last-child { margin-block-end: 6px; }

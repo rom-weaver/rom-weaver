@@ -1,5 +1,6 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
+import Disc3 from "lucide-react/dist/esm/icons/disc-3.js";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
@@ -71,6 +72,7 @@ const DiscSheetsPanel = ({
       className="cue rw-cue-section"
       defaultOpen={defaultOpen}
       label={label}
+      labelIcon={<Disc3 aria-hidden="true" />}
       readouts={<DrawerReadout muted>{sublabel}</DrawerReadout>}
     >
       {sheets.map((sheet) => (
