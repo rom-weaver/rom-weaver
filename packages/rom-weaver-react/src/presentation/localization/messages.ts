@@ -91,8 +91,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.local",
     message: "All local, in your browser — files never leave your machine.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Weave patch chains into your ROMs," }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and share the result as a bundle —" }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Weave patches into your ROM and download the result," }),
+  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "compressed for storage or bundled for sharing —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",

@@ -51,7 +51,7 @@ msgstr "y genera un parche para compartir —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "y comparte el resultado como un bundle —"
+msgstr "comprimido para guardar o en un bundle para compartir —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -466,7 +466,7 @@ msgstr "usando los datos de deshacer del propio parche —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Teje cadenas de parches en tus ROMs,"
+msgstr "Teje parches en tu ROM y descarga el resultado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
