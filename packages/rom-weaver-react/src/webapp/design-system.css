@@ -2644,30 +2644,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     background: color-mix(in oklab, var(--thread) 6%, transparent);
   }
 
-  /* the output step pins to the viewport bottom (above the dock) while its
-     natural position is below the fold, so the run/download action is always
-     in reach on a long form; it settles back in place at the end of scroll */
-  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) {
-    position: sticky;
-    /* stacks above the dock plus the update banner when one is showing */
-    bottom: calc(var(--dock-total) + var(--rw-banner-h, 0px) + 8px);
-    z-index: 40;
-    padding-inline: 4px;
-    border: 1px solid var(--seam-strong);
-    border-radius: var(--r-l);
-    background: var(--plate);
-    box-shadow: 0 14px 32px -18px rgb(0 0 0 / .65);
-  }
-
-  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) > .step-head {
-    border-start-start-radius: inherit;
-    border-start-end-radius: inherit;
-  }
-
-  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) > .step-body {
-    padding-block-end: 7px;
-  }
-
   /* the tools sub-picker becomes a full-width segmented control */
   .rw-app .tools-subnav { padding: 8px 10px; }
   .rw-app .tools-subnav-rail { width: 100%; }
