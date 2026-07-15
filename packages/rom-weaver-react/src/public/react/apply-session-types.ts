@@ -148,6 +148,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;
   resolvedOutputNameKey?: string;
+  disabledPatchIds?: ReadonlySet<string>;
   stageInput?: (
     input: ApplyWorkflowStageSnapshot,
     handlers: {

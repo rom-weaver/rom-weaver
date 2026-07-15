@@ -1047,6 +1047,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       ...propsWithSettings,
       applyPatches,
       applyReady,
+      disabledPatchIds,
       downloadOutput,
       onApplyComplete: () => undefined,
       onInputsChange: handleLocalInputsChange,

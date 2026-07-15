@@ -105,6 +105,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputCompression,
   resolvedOutputName,
   resolvedOutputNameKey,
+  disabledPatchIds,
   stageInput,
   stagePatches,
   validatePatches,
@@ -193,6 +194,11 @@ const useLocalApplyPatchFormSession = ({
   });
   const effectiveInputs = inputs === undefined ? internalInputs : inputs;
   const activePatches = patches === undefined ? internalPatches : patches;
+  const outputPatches = useMemo(() => {
+    if (!disabledPatchIds?.size) return activePatches;
+    const ids = getBinarySourceListStableIds(activePatches);
+    return activePatches.filter((_, index) => !disabledPatchIds.has(ids[index] || ""));
+  }, [activePatches, disabledPatchIds]);
   const activeSettings = settings === undefined ? internalSettings : settings;
   const emitSessionTrace = useCallback(
     (message: string, details?: Record<string, unknown>) =>
@@ -244,9 +250,9 @@ const useLocalApplyPatchFormSession = ({
     () =>
       JSON.stringify({
         inputs: getBinarySourceListStableIds(effectiveInputs),
-        patches: getBinarySourceListStableIds(activePatches),
+        patches: getBinarySourceListStableIds(outputPatches),
       }),
-    [activePatches, effectiveInputs],
+    [effectiveInputs, outputPatches],
   );
   const hasPendingDownload = !!pendingDownloadFileName;
   const setPendingDownloadReadyFileName = useCallback(
@@ -279,7 +285,7 @@ const useLocalApplyPatchFormSession = ({
   }, [clearPendingDownload]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
   const { getKey: getPatchKey } = useStableSourceKeys(activePatches, "patch");
-  const generatedOutputName = getGeneratedOutputName(effectiveInputs[0], activePatches, activeSettings.output || {});
+  const generatedOutputName = getGeneratedOutputName(effectiveInputs[0], outputPatches, activeSettings.output || {});
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
   const currentResolvedOutputName =
     resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)

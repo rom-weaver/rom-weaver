@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { LocalApplyPatchFormSessionOptions } from "../../../src/public/react/apply-session-types.ts";
+import { getBinarySourceListStableIds } from "../../../src/public/react/input-session-helpers.ts";
 import type { BinarySource } from "../../../src/public/react/patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "../../../src/public/react/patcher-form-session.ts";
 import type { ApplyWorkflowResult } from "../../../src/types/workflow-runtime-types.ts";
@@ -53,6 +54,31 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     expect(output.applyButton.label).toBe("Apply & download");
     expect(output.applyButton.disabled).toBe(false);
     expect(output.pendingDownloadFileName).toBeNull();
+  });
+
+  it("updates the automatic output name when a patch is disabled", () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    const disabledPatchIds = new Set([getBinarySourceListStableIds(patches)[1]]);
+    const { result } = renderSession({ disabledPatchIds, patches });
+    expect(result.current.localOutputController.getState().displayFileName).toBe("rom - a");
+    expect(result.current.localStackController.getState().items).toHaveLength(2);
+  });
+
+  it("keeps a user-edited output name when a patch is disabled", () => {
+    const inputs = [source("rom.bin")];
+    const patches = [source("a.ips"), source("b.ips")];
+    const { result, rerender } = renderSession({ inputs, patches });
+    act(() => result.current.localOutputController.setDisplayFileName("custom"));
+    rerender({
+      applyPatches: vi.fn(async () => applyResult()),
+      applyReady: true,
+      disabledPatchIds: new Set([getBinarySourceListStableIds(patches)[1]]),
+      downloadOutput: vi.fn(),
+      inputs,
+      patches,
+      settings: { output: { outputName: "custom" } },
+    } as LocalApplyPatchFormSessionOptions);
+    expect(result.current.localOutputController.getState().displayFileName).toBe("custom");
   });
 
   it("routes a compression change through onSettingsChange", () => {
