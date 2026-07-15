@@ -368,9 +368,29 @@ const UpdateBanner = ({
   onShowChangelog: () => void;
 }) => {
   const localizer = useUiLocalizer();
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  /* Publish the banner's rendered height (plus its gap) as --rw-banner-h so
+     the mobile pinned output step stacks above the fixed banner instead of
+     underneath it. Cleared when the banner closes. */
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const banner = bannerRef.current;
+    if (!(open && banner) || typeof ResizeObserver === "undefined") {
+      root.style.removeProperty("--rw-banner-h");
+      return undefined;
+    }
+    const publish = () => root.style.setProperty("--rw-banner-h", `${banner.offsetHeight + 8}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(banner);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--rw-banner-h");
+    };
+  }, [open]);
   return (
     <Reveal open={open}>
-      <div className="updates update-ready" role="status">
+      <div className="updates update-ready" ref={bannerRef} role="status">
         <span aria-hidden="true" className="updates-pulse" />
         <span className="updates-text">
           <b>{localizer.message("ui.update.ready")}</b>{" "}

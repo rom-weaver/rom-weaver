@@ -1341,16 +1341,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app input[type="range"] { accent-color: var(--thread); width: 100%; }
 
 .rw-app .outbar { display: flex; gap: 9px; flex-wrap: wrap; }
-.rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
+.rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; min-height: var(--ctl); border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
 .rw-app .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
 .rw-app .fname .input:focus-visible { box-shadow: none; }
 /* output name grows with its content instead of truncating - natively via
    field-sizing where supported; the JS measure-and-set is the fallback */
 .rw-app .fname .outname {
-  height: auto; min-height: var(--ctl); resize: none; overflow: hidden;
+  height: auto; min-height: 0; resize: none; overflow: hidden;
   field-sizing: content;
-  padding-block: 9px; line-height: 1.35; white-space: pre-wrap; word-break: break-word; align-self: stretch;
+  padding-block: 9px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  /* the textarea is content-sized and centered in the row (textarea text is
+     always top-anchored, so stretching it leaves a single line riding high
+     against the vertically centered format select) */
+  align-self: center;
 }
 .rw-app .fname .sep { width: 1px; background: var(--seam); flex: none; }
 /* the name textarea grows multi-line; the format control fills the full height
@@ -2468,7 +2472,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     width: 100%;
   }
 
-  .rw-app .brand-mark { width: 34px; height: 34px; }
+  .rw-app .brand-mark { width: 40px; height: 40px; }
   .rw-app .brand-word { font-size: .96rem; }
 
   .rw-app .brand-copy {
@@ -2645,10 +2649,23 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
      in reach on a long form; it settles back in place at the end of scroll */
   .rw-app .panel.workflow .step:has(> .step-body .card.outcard) {
     position: sticky;
-    bottom: calc(var(--dock-total) + 6px);
+    /* stacks above the dock plus the update banner when one is showing */
+    bottom: calc(var(--dock-total) + var(--rw-banner-h, 0px) + 8px);
     z-index: 40;
-    background: var(--chassis);
-    box-shadow: 0 12px 26px -16px rgb(0 0 0 / .55);
+    padding-inline: 4px;
+    border: 1px solid var(--seam-strong);
+    border-radius: var(--r-l);
+    background: var(--plate);
+    box-shadow: 0 14px 32px -18px rgb(0 0 0 / .65);
+  }
+
+  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) > .step-head {
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
+  }
+
+  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) > .step-body {
+    padding-block-end: 7px;
   }
 
   /* the tools sub-picker becomes a full-width segmented control */
