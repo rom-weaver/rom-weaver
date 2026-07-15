@@ -26,8 +26,9 @@
   --ctrl-h: clamp(24px, 12px + 2.15vw, 30px); /* row-button size (handle / remove / progress cancel) - 24px floor is the WCAG 2.5.8 target minimum */
   --badge-fs: clamp(0.7rem, 0.684rem + 0.1vw, 0.72rem); /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
   --pad: clamp(12px, 2.5vw - 2px, 20px); /* section gutter */
-  --step-pt: clamp(10px, 2vw - 1px, 16px);   /* step-head top padding */
-  --step-pb: clamp(14px, 3.2vw - 4px, 24px); /* step-body bottom padding */
+  --gutter: clamp(10px, 2.5vw, 28px); /* the app column's single horizontal inset - the only inline gutter the workflow rail gets */
+  --step-pt: clamp(7px, 2.8vw - 8.7px, 16px);   /* step-head top padding */
+  --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
   --ease: cubic-bezier(.2, .85, .3, 1);
   /* the one dropdown chevron, shared by selects, combo inputs and the inline target select */
@@ -92,6 +93,11 @@
 }
 .rw-app {
   margin: 0; min-height: 100dvh;
+  /* the empty 0x01 hero fills the first screen at every width: 100svh minus
+     the chrome around it (masthead + banner slack + step head + the ghost-next
+     line + margins) and minus the phone dock (0 outside the dock layout) */
+  --dock-total: 0px;
+  --hero-chrome: 210px;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are
@@ -177,7 +183,7 @@
 
 .rw-app .app {
   max-width: 880px; width: 100%; margin-inline: auto; flex: 1 0 auto;
-  padding: 0 clamp(10px, 2.5vw, 28px);
+  padding: 0 var(--gutter);
   display: flex; flex-direction: column;
 }
 
@@ -185,7 +191,9 @@
 .rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
-.rw-app .brand-mark { width: 44px; height: 44px; border-radius: 8px; }
+/* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
+   values) → 44px cap on desktop; no discrete jumps */
+.rw-app .brand-mark { width: clamp(30px, 2.7vw + 20.6px, 44px); aspect-ratio: 1; height: auto; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
     drop-shadow(0 1px 0 rgb(255 255 255 / .45))
@@ -193,7 +201,7 @@
     drop-shadow(1px 0 0 rgb(255 255 255 / .45))
     drop-shadow(-1px 0 0 rgb(255 255 255 / .45));
 }
-.rw-app .brand-word { margin: 0; font-size: 1.12rem; font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.rw-app .brand-word { margin: 0; font-size: clamp(.9rem, .78rem + .55vw, 1.12rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
@@ -241,18 +249,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
-.rw-app .masthead-tools { display: inline-flex; gap: 7px; }
-.rw-app .masthead-version { display: flex; align-items: center; gap: 4px; max-width: 100%; color: var(--ink-3); font-size: .62rem; line-height: 1.2; white-space: nowrap; }
+.rw-app .masthead-tools { display: inline-flex; gap: 2px; }
+.rw-app .masthead-version { display: flex; align-items: center; gap: 4px; max-width: 100%; color: var(--ink-3); font-size: clamp(.5rem, .44rem + .27vw, .62rem); line-height: 1.2; white-space: nowrap; }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
 .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
+/* ghost tools at every width: the buttons drop their box chrome at rest -
+   border/fill only appear on hover - so six controls stop reading as a
+   second nav beside the mode rail */
 .rw-app .tool {
   appearance: none; cursor: pointer; width: 36px; height: 36px; display: grid; place-items: center;
-  border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--well); color: var(--ink-2);
-  transition: color .18s, border-color .18s, transform .18s var(--ease);
+  border: 1px solid transparent; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
+  transition: color .18s, border-color .18s, background .18s;
 }
-.rw-app .tool:hover { color: var(--ink); border-color: var(--seam-strong); transform: translateY(-1px); }
-.rw-app .tool:active { transform: translateY(0); }
+.rw-app .tool:hover { color: var(--ink); background: var(--well); border-color: var(--seam); }
+.rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
 .rw-app .build-version-info { min-width: 0; font-size: inherit; }
 .rw-app .build-version-info .info-btn {
@@ -269,19 +280,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the tools are icon-only everywhere; the title/aria-label carries the name
    (the spans stay in the DOM so the localized names remain available) */
 .rw-app .tool-text { display: none; }
-/* hairline between the app tools and the external links (GitHub/Donate) -
-   only drawn where the ghost treatment runs; the phone dock grid hides it */
-.rw-app .tools-sep { display: none; flex: none; width: 1px; height: 20px; margin-inline: 5px; align-self: center; background: var(--seam); }
-/* ghost tools: outside the phone dock the masthead buttons drop their box
-   chrome at rest - border/fill only appear on hover - so six controls stop
-   reading as a second nav beside the mode rail. The media query is the exact
-   complement of the phone-dock block, which keeps its bordered squares. */
-@media (min-width: 861px), (min-width: 721px) and (min-height: 521px) {
-  .rw-app .masthead-tools { gap: 2px; }
-  .rw-app .masthead-tools .tool { border-color: transparent; background: transparent; }
-  .rw-app .masthead-tools .tool:hover { background: var(--well); border-color: var(--seam); transform: none; }
-  .rw-app .masthead-tools .tools-sep { display: block; }
-}
+/* hairline between the app tools and the external links (GitHub/Donate) */
+.rw-app .tools-sep { display: block; flex: none; width: 1px; height: 20px; margin-inline: 5px; align-self: center; background: var(--seam); }
 /* sun/moon cross-morph */
 .rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }
 :root[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
@@ -331,7 +331,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
 .rw-app .updates-ver:hover { color: var(--thread-text); }
-.rw-app .updates-ver-mobile { display: none; }
 .rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .rw-app .changelog-item { display: flex; flex-direction: column; gap: 2px; }
 .rw-app .changelog-subject { font-size: .9rem; }
@@ -434,13 +433,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the 0x0N sits on a scrap of actual cloth: thread paint pushed through the
    plain-weave tile, no box around it - the scrap's selvage edge sits flush
    left and its weft frays out to the right. Completing the step saturates
-   the weave; a fault re-dyes the scrap. Ghost steps wear the same scrap and
-   recede with their step's opacity fade. */
-.rw-app .step-num, .rw-app .ghost-step-num {
+   the weave; a fault re-dyes the scrap. */
+.rw-app .step-num {
   position: relative; isolation: isolate;
   padding: 2px 18px 2px 9px;
 }
-.rw-app .step-num::before, .rw-app .ghost-step-num::before {
+.rw-app .step-num::before {
   content: ""; position: absolute; inset: 0; z-index: -1;
   border-radius: 3px 0 0 3px;
   background: linear-gradient(90deg, var(--thread) 52%, transparent 96%);
@@ -670,7 +668,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* with nothing staged the hero is THE page: a big, obvious drop target that
    claims a healthy share of the viewport, capped so the thesis + ghost steps
    below still fit above the fold */
-.rw-app .step.is-input.is-empty .drop.hero { min-height: clamp(200px, 26dvh, 320px); padding-block: 26px; }
+.rw-app .step.is-input.is-empty .drop.hero {
+  min-height: clamp(140px, calc(100svh - var(--dock-total) - var(--hero-chrome)), 680px);
+  padding-block: 26px;
+}
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
 
 /* secondary input sections (patches, modified), when empty, don't offer their
@@ -693,45 +694,50 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .needs-input .hexref { color: var(--thread-text); font-weight: 700; letter-spacing: .04em; }
 
 /* ═══ ghost steps ═══
-   faint preview of the stages the bench grows once files land - the empty
-   page shows the whole journey (0x02…), not just the door. Each ghost step
-   mirrors a real step: the same head padding/typography and a slot shaped
-   like the settled file card (name over a size sub-line, action button on the
-   right) so it reads as the card it becomes. The steps recede progressively.
-   Purely decorative. */
-/* air between the live drop hero above and the first ghost silhouette */
-.rw-app .ghost-steps { margin-block-start: 18px; pointer-events: none; user-select: none; }
-.rw-app .ghost-next { display: none; }
-.rw-app .ghost-step { border-block-start: 1px solid var(--seam-soft); }
-/* head + body borrow the real .step-head / .step-body rhythm so the ghost
-   rows line up with the live steps they precede */
-.rw-app .ghost-step-head { display: flex; align-items: baseline; gap: 10px; padding: var(--step-pt) var(--pad) 2px; }
-.rw-app .ghost-step-num { font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; color: var(--thread-text); letter-spacing: .06em; }
-.rw-app .ghost-step-title { font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; color: var(--ink); }
-.rw-app .ghost-step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
-/* the slot is a .card silhouette - same padding/border/radius, one step
-   fainter in fill so it reads as decorative rather than droppable */
-.rw-app .ghost-step-slot {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 9px;
-  padding: 10px 12px; border: 1px solid var(--seam); border-radius: var(--r-m);
-  background: var(--warp-lines) color-mix(in oklab, var(--thread) 2%, var(--plate-2));
+   preview of the stages the bench grows once files land - the empty page
+   shows the whole journey as one "Next:" line: mono thread-accent hex numbers
+   beside ink titles, previewing the real 0x0N headings. Input steps join with
+   "+", the arrow marks the final step they flow into. Purely decorative;
+   shared by every viewport. */
+/* air between the live drop hero above and the upcoming-steps line */
+.rw-app .ghost-steps { margin-block-start: 8px; pointer-events: none; user-select: none; }
+.rw-app .panel.workflow .ghost-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 7px;
+  row-gap: 2px;
+  margin: 0;
+  padding: 9px 12px;
 }
-/* left: a name bar over a shorter, fainter size sub-line (the .nm / .fsize pair) */
-.rw-app .ghost-slot-lines { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1 1 auto; }
-.rw-app .ghost-line { display: block; border-radius: 99px; background: var(--seam); }
-.rw-app .ghost-line.name { width: clamp(96px, 46%, 220px); height: 10px; }
-.rw-app .ghost-line.sub { width: clamp(56px, 26%, 120px); height: 7px; opacity: .7; }
-/* right: an action-button stub sized like the row buttons (handle / remove) */
-.rw-app .ghost-slot-btn {
-  flex: none; width: var(--ctrl-h); height: var(--ctrl-h);
-  border: 1px solid var(--seam); border-radius: 6px; background: var(--well);
+.rw-app .ghost-next .ghost-next-label {
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .02em;
 }
-/* nth-of-type, not nth-child: the (desktop-hidden) .ghost-next <p> is the
-   container's first child, which shifted the fade off by one and left the
-   last ghost at full strength - reading as a real step on the empty page */
-.rw-app .ghost-step:nth-of-type(1) { opacity: .6; }
-.rw-app .ghost-step:nth-of-type(2) { opacity: .42; }
-.rw-app .ghost-step:nth-of-type(3) { opacity: .28; }
+.rw-app .ghost-next .ghost-next-step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.rw-app .ghost-next .ghost-next-num {
+  font-size: .74rem;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--thread-text);
+}
+.rw-app .ghost-next .ghost-next-title {
+  font-size: .76rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.rw-app .ghost-next .ghost-next-arrow {
+  color: var(--ink-3);
+  font-size: .72rem;
+}
 
 /* ═══ file cards ═══ */
 .rw-app .cards { display: flex; flex-direction: column; gap: 13px; }
@@ -1535,7 +1541,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .built-in { display: block; margin: 2px 0 0; color: var(--verified); font-size: .5rem; letter-spacing: .03em; white-space: nowrap; text-transform: uppercase; }
 .rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
-@media (max-width: 820px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
+/* keyed to the drawer's own width (the cks-inner container), not the
+   viewport, so the pair also stacks when the drawer is narrow inside the
+   wide-bench 2-up patch grid */
+@container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
 .rw-app .ofld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: 8px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
@@ -2024,23 +2033,25 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 @keyframes trace-in { from { opacity: 0; translate: -4px 0; } }
 @keyframes indet { 0% { margin-inline-start: -32%; } 100% { margin-inline-start: 100%; } }
 
-/* ═══ responsive ═══ */
+/* ═══ responsive ═══
+   Two viewport seams only: ≤860px wraps the mode rail to its own masthead
+   row; ≤720px (or short landscape) is the phone layout below. Everything
+   else rides fluid tokens or container queries. */
 @media (max-width: 860px) {
   .rw-app .masthead { gap: 10px; }
   .rw-app .masthead-tools { margin-inline-start: auto; }
   .rw-app .modes { order: 3; flex-basis: 100%; margin-inline: 0; }
   .rw-app .mode-rail { display: flex; width: 100%; }
   .rw-app .mode { flex: 1; justify-content: center; }
-  .rw-app .brand-mark { width: 38px; height: 38px; }
 }
-@media (max-width: 560px) {
-  /* Prototype: trade empty-state ceremony for a shorter, single-purpose first
-     screen. On phones the drop action is enough of an introduction. */
-  .rw-app { --step-pt: 7px; --step-pb: 10px; }
+/* phone treatment rides the same seam as the dock layout below - one mobile
+   breakpoint. Vertical rhythm and control sizes ease down continuously via
+   the fluid :root tokens; only the structural swaps live here. */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  /* trade empty-state ceremony for a shorter, single-purpose first screen.
+     On phones the drop action is enough of an introduction. */
   .rw-app .masthead { row-gap: 5px; padding-block: 5px 3px; }
   .rw-app .brand { gap: 7px; }
-  .rw-app .brand-mark { width: 34px; height: 34px; }
-  .rw-app .mode { padding-block: 5px; }
   .rw-app .hero-lead {
     display: flex; gap: 6px; margin: 5px 6px 8px; padding: 10px 12px;
     border: 1px solid var(--seam); border-radius: var(--r-m);
@@ -2052,32 +2063,22 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .hero-lead .lead-line { display: inline; }
   .rw-app .hero-lead .lead-sub { padding: 1px 7px; font-size: .65rem; }
   .rw-app .drop.hero > .hero-lead { margin-block-end: 8px; padding: 0 8px 10px; }
-  /* keep the form container (just inset from the screen); cards run to its
-     inner edge, and the 0x* headers keep a gutter that lines up with card text */
-  /* row controls, badges and section gutters now ride the fluid :root tokens -
-     they've already eased down to their phone sizes by this width */
   :root:has(.rw-app) { scrollbar-gutter: auto; }
   .rw-app .step-meta .rb, .rw-app .ckgrp .tsz, .rw-app .cks > .cks-head .rb { padding: 1px 6px; }
   /* mobile leans harder into Archivo's width axis - the whole UI condenses and
      the hash rows tighten further so long checksums pack onto one line */
-  .rw-app .app { padding-inline: 8px; font-stretch: 82%; }
-  .rw-app .masthead, .rw-app .app > .reveal { margin-inline: -2px; }
+  .rw-app .app { font-stretch: 82%; }
   .rw-app .mono { font-stretch: 74%; }
   /* the progress label + sub-line condense too far on a phone - nudge them up so
      the running/staging readouts stay legible (and keep --lab-lh in step) */
   .rw-app .prog .lab { font-size: .85rem; }
   .rw-app .prog-panel { --lab-lh: 1.275rem; }
   .rw-app .prog .sub { font-size: .76rem; }
-  .rw-app .step-body { padding-inline: 0; }
-  /* every section's content shares ONE left/right inset (6px) so the 0x* headers,
-     cards, drop zones and notices all line up on the same vertical edge.
-     (the vertical rhythm eases down via the fluid --step-pt/--step-pb tokens) */
-  .rw-app .step-head { padding-inline: 6px; }
   .rw-app .step.is-input .drop:not(.hero) { padding-block: 4px; }
   /* cards stay framed on all four sides (the verified/fault border must read as
-     a full outline, not just top+bottom) - inset slightly from the container and
-     keep tight inline padding so checksum hashes still get room */
-  .rw-app .card { gap: 5px; border-radius: var(--r-s); margin-inline: 6px; padding: 7px; }
+     a full outline, not just top+bottom) - tight inline padding so checksum
+     hashes still get room */
+  .rw-app .card { gap: 5px; border-radius: var(--r-s); padding: 7px; }
   .rw-app .card-name { gap: 2px; }
   .rw-app .card-actions, .rw-app .patch-body-inner { gap: 5px; }
   /* drawer heads keep one uniform height on phones - matching the output
@@ -2102,26 +2103,9 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .runprog .prog { gap: 3px; }
   .rw-app .runprog .meter { height: 8px; transform: none; }
   .rw-app .runprog .prog-actions { top: 6px; }
-  /* staging reading-cards share the settled cards' 6px inset - they sit in the
-     same list and must be the same width */
-  .rw-app .cards > .prog-panel { margin-inline: 6px; border-radius: var(--r-s); }
-  /* …but bordered drop zones / directives must NOT run to the screen edge -
-     keep a gutter so their rounded frame reads as a contained panel */
-  /* drop surfaces (empty hero AND the compact add-row) + "needs input" directives
-     match the cards' 6px inset so 0x01 is the same width as every other section */
-  .rw-app .step.is-input .drop, .rw-app .needs-input { margin-inline: 6px; width: calc(100% - 12px); }
-  .rw-app .step.is-input.is-empty .drop.hero {
-    min-height: clamp(190px, 28svh, 280px); gap: 5px; padding-block: 30px;
-    padding-inline: 12px;
-  }
+  .rw-app .cards > .prog-panel { border-radius: var(--r-s); }
+  .rw-app .step.is-input.is-empty .drop.hero { gap: 5px; padding-inline: 12px; }
   .rw-app .drop.hero .main { gap: 6px; font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
-  /* phones scroll - the ghost body drops its inline padding (like .step-body)
-     so the 6px head inset and the card-matched slot margin line the ghosts up
-     with the hero panel and the real cards */
-  .rw-app .ghost-step-body { padding-inline: 0; }
-  .rw-app .ghost-step-head { padding-inline: 6px; }
-  .rw-app .ghost-step-slot { margin-inline: 6px; padding: 7px; border-radius: var(--r-s); }
-  .rw-app .ghost-slot-lines { gap: 6px; }
   .rw-app .drop.hero .main svg { padding: 8px; border-radius: 11px; }
   .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: 7px; font-size: .78rem; }
   .rw-app .cards { gap: 9px; }
@@ -2130,8 +2114,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .cards:not(:empty) + .drop,
   .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 9px; }
   .rw-app .bundle-rom-expectation { margin-block-start: 9px; }
-  /* the notice shares the same 6px inset as the cards/headers */
-  .rw-app .notice { margin-inline: 6px; }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
      dismiss - the text wraps internally, Reload stays an inline slim button */
   .rw-app .updates { gap: 8px; }
@@ -2147,10 +2129,8 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   /* log header: title + close on the first line, the filter/level/copy strip
      wraps to a full-width second line instead of squeezing beside the title */
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
-  .rw-app .log-dlg .dlg-title { flex: 1 1 auto; }
   .rw-app .log-actions { order: 1; flex-basis: 100%; margin-inline-start: 0; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
-  .rw-app .mode span:not(.mode-thumb) { font-size: .72rem; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
      on a phone - drop the group indent, trim row padding, shrink the copy
      control. Values still line up via the fixed label column. */
@@ -2173,13 +2153,8 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   /* keep the subgrid (set on .ck.req above) - only tune size/gap on mobile */
   .rw-app .ck.req { column-gap: 8px; }
   .rw-app .ck.req .ck-k { font-size: .72rem; }
-  /* stack label over control on a phone (out-specifies the subgrid rule) */
-  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
-}
-@media (max-width: 860px) and (max-height: 520px) {
-  .rw-app .step.is-input.is-empty .drop.hero { min-height: 140px; padding-block: 16px; }
 }
 
 /* ═══ forced colors (Windows High Contrast) ═══ */
@@ -2248,18 +2223,31 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   text-align: start;
 }
 /* settings is the longest dialog - let it use most of the viewport height */
-.rw-modal.settings-modal .rw-modal-card { width: min(820px, 100%); max-height: min(94dvh, 1020px); }
+/* the card is its own layout container so the 2-column/stacked forms track
+   the modal's width, not the viewport. The width MUST stay in viewport units:
+   with inline-size containment a `100%` inside the centered auto grid track
+   is cyclic and can collapse the card. */
+.rw-modal.settings-modal .rw-modal-card {
+  width: min(820px, calc(100vw - 32px));
+  max-height: min(94dvh, 1020px);
+  container: settings-card / inline-size;
+}
 /* the archive/candidate picker can list long nested paths - let it use the
    full available width (the viewport-minus-padding cap still applies) */
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
 /* a growable multi-line text field in the same recessed language as .input */
 .rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
 .rw-app .ofld .input.tarea { height: auto; }
-@media (min-width: 720px) {
+@container settings-card (min-width: 688px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: 11px; }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }
   .rw-modal.settings-modal .modal-body .setcols .setgroup { margin-block-end: 11px; }
   .rw-modal.settings-modal .modal-body .validation { column-span: all; }
+}
+/* stack label over control when the card runs narrow (out-specifies the
+   subgrid rule above) */
+@container settings-card (max-width: 560px) {
+  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 .rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: 4px; }
 .rw-app .setrow .sctl .select, .rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
@@ -2395,28 +2383,28 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .meter:not(.indet) .fill::after { animation: none; }
 }
 
-/* Keep patch controls in the same left / content / right order at every width. */
-@media (max-width: 1099px) {
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
-    align-items: start; column-gap: 9px; row-gap: 5px;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
-    grid-column: 2; grid-row: 1; align-self: center;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .patch-desc { grid-column: 1 / -1; grid-row: 2; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .card-meta { grid-column: 1 / -1; grid-row: 2; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name:has(> .patch-desc) > .card-meta { grid-row: 3; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions,
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: contents; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
-    grid-column: 1; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
-    display: flex; align-items: center; justify-content: center; padding: 2px;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .rm {
-    grid-column: 3; grid-row: 1; align-self: start;
-  }
+/* Keep patch controls in the same left / content / right order at every width
+   - the compact card-top grid is universal, so a card renders identically in
+   the single-column stack and the wide-bench 2-up grid. */
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
+  align-items: start; column-gap: 9px; row-gap: 5px;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
+  grid-column: 2; grid-row: 1; align-self: center;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .patch-desc { grid-column: 1 / -1; grid-row: 2; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .card-meta { grid-column: 1 / -1; grid-row: 2; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name:has(> .patch-desc) > .card-meta { grid-row: 3; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions,
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: contents; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
+  grid-column: 1; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
+  display: flex; align-items: center; justify-content: center; padding: 2px;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .rm {
+  grid-column: 3; grid-row: 1; align-self: start;
 }
 
 /* ── wide-bench layout ──
@@ -2438,30 +2426,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start;
   }
   .rw-app #rom-weaver-list-patch-stack > .card.patch:only-child { grid-column: 1 / -1; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
-    align-items: start; column-gap: 9px; row-gap: 5px;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
-    grid-column: 2; grid-row: 1; align-self: center;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .patch-desc { grid-column: 1 / -1; grid-row: 2; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .card-meta { grid-column: 1 / -1; grid-row: 2; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name:has(> .patch-desc) > .card-meta { grid-row: 3; }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions {
-    display: contents;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns {
-    display: contents;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
-    grid-column: 1; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
-    display: flex; align-items: center; justify-content: center; padding: 2px;
-  }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch .rm {
-    grid-column: 3; grid-row: 1; align-self: start;
-  }
   .rw-app #patch-builder-container > #patch-builder-row-original { grid-column: 1; grid-row: 2; }
   .rw-app #patch-builder-container > #patch-builder-row-modified { grid-column: 2; grid-row: 2; border-inline-start: 1px solid var(--seam-soft); }
   /* the swap hinge floats centered on the seam between the two source columns */
@@ -2479,8 +2443,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 /* Section rails belong to the workflow rather than to a breakpoint. Keep the
    numbered stages and compact add-files row visually consistent on desktop
    and mobile; only the surrounding navigation shell changes for phones. */
-.rw-app .panel.workflow .step,
-.rw-app .panel.workflow .ghost-step {
+.rw-app .panel.workflow .step {
   border: 0;
   background: transparent;
 }
@@ -2490,51 +2453,35 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    header (every step past the first) runs a grey weave line - the weft dash
    pattern in seam color, the loom's warp waiting for thread. Completing or
    faulting the stage re-dyes that same line via the .is-woven/.is-fault weft.
-   The scrap's left edge tracks the card edges: the body gutter (--pad) on
-   phones, flush 0 on desktop. */
+   The scrap's left edge sits flush with the card edges at every width: the
+   step chrome carries no inline padding of its own - the app container's
+   fluid --gutter is the single horizontal inset. */
 .rw-app .panel.workflow .step ~ .step:not(.is-woven):not(.is-fault)::before,
-.rw-app .panel.workflow .step ~ .ghost-steps::before,
-.rw-app .panel.workflow .ghost-step ~ .ghost-step::before {
+.rw-app .panel.workflow .step ~ .ghost-steps::before {
   content: ""; position: absolute; top: 0; inset-inline: 0; height: 1px; pointer-events: none;
   background: repeating-linear-gradient(90deg, var(--seam-strong) 0 9px, transparent 9px 12px);
 }
 .rw-app .panel.workflow .ghost-steps { position: relative; }
-.rw-app .panel.workflow .step > .step-head,
-.rw-app .panel.workflow .ghost-step > .ghost-step-head {
+.rw-app .panel.workflow .step > .step-head {
   min-height: 38px;
-  padding: 0 var(--pad);
+  padding: 0;
   align-items: center;
   gap: 8px;
   border: 0;
   border-radius: 0;
 }
-
-/* on desktop the step content sheds the --pad inset so headers, cards, and
-   drop zones share the masthead/banner/selvage edges (phones inset the whole
-   step instead) */
-@media (min-width: 721px) {
-  .rw-app .panel.workflow .step > .step-body,
-  .rw-app .panel.workflow .ghost-step > .ghost-step-body,
-  .rw-app .panel.workflow .step > .step-head,
-  .rw-app .panel.workflow .ghost-step > .ghost-step-head {
-    padding-inline: 0;
-  }
-}
+.rw-app .panel.workflow .step > .step-body { padding-inline: 0; }
 
 .rw-app .panel.workflow .unified-drop-step .drop:not(.hero) {
   min-height: 64px;
   padding-block: 12px;
 }
-/* phones keep the edge-to-edge bleed the plate used to carry */
-@media (max-width: 560px) {
-  .rw-app .panel.workflow { margin-block-start: 2px; margin-inline: -8px; }
-}
 
-/* ═══ mobile-forward prototype ═══
+/* ═══ phone dock layout ═══
    On a phone the workflow rail becomes a persistent thumb-reachable shuttle
-   dock, while the utility controls trade cryptic icon-only squares for a
-   labeled control shelf. The workflow components themselves stay untouched,
-   so Apply/Create/Trim/Tools keep the same state and behavior as desktop. */
+   dock and the masthead re-grids. The workflow components themselves stay
+   untouched, so Apply/Create/Trim/Tools keep the same state and behavior as
+   desktop. */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   :root:has(.rw-app) {
     scroll-padding-block-end: calc(var(--rw-dock-h, calc(56px + env(safe-area-inset-bottom))) + 8px);
@@ -2547,6 +2494,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     /* dock total height: the JS-measured --rw-dock-h when available (tracks
        larger text sizes), else the design-time estimate */
     --dock-total: var(--rw-dock-h, calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom)));
+    --hero-chrome: calc(var(--mobile-input-head-h) + 116px);
     padding-block-end: var(--dock-total);
   }
 
@@ -2567,9 +2515,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     width: 100%;
   }
 
-  .rw-app .brand-mark { width: 40px; height: 40px; }
-  .rw-app .brand-word { font-size: .96rem; }
-
   .rw-app .brand-copy {
     display: flex;
     flex-direction: column;
@@ -2577,13 +2522,12 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     min-width: 0;
   }
 
-  /* phones share the base masthead-version layout; only the type tightens */
-  .rw-app .masthead-version { font-size: .56rem; }
-
+  /* six equal button tracks plus a slim auto track for the hairline sep
+     between app tools and the external links */
   .rw-app .masthead-tools {
     grid-area: tools;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto repeat(2, minmax(0, 1fr));
     justify-content: end;
     min-width: 0;
     width: 100%;
@@ -2591,22 +2535,15 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     margin: 0;
   }
 
-  .rw-app .tool,
-  .rw-app .tool:has(.tool-text) {
+  .rw-app .tool {
     position: relative;
     width: 100%;
     height: 40px;
     min-width: 0;
-    padding: 3px 2px;
-    display: grid;
-    grid-template: 14px minmax(0, 1fr) / minmax(0, 1fr);
-    place-items: center;
-    gap: 2px;
+    padding: 0;
     border-radius: var(--r-m);
   }
 
-  .rw-app .tool:hover { transform: none; }
-  .rw-app .tool:active { background: var(--plate-2); }
   .rw-app .tool svg,
   .rw-app .tool .ico-sun,
   .rw-app .tool .ico-moon {
@@ -2622,22 +2559,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     position: absolute;
     inset: -2px 0;
   }
-
-  .rw-app .tool-text {
-    display: block;
-    grid-area: 2 / 1;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: .52rem;
-    line-height: 1.1;
-    letter-spacing: .02em;
-  }
-
-  .rw-app .masthead-tools .tool-text { display: none; }
-  .rw-app .masthead-tools .tool,
-  .rw-app .masthead-tools .tool:has(.tool-text) { grid-template: minmax(0, 1fr) / minmax(0, 1fr); padding: 0; }
 
   .rw-app .updates {
     gap: 6px;
@@ -2655,8 +2576,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   }
 
   .rw-app .updates-ver { margin-inline-start: 0; font-size: .7rem; }
-  .rw-app .updates-ver-full { display: none; }
-  .rw-app .updates-ver-mobile { display: inline; }
   .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
   .rw-app .updates .banner-x { width: 28px; height: 32px; }
 
@@ -2739,90 +2658,23 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 
   /* Every workflow stage, including the empty input hero, stays in one
      in-flow mobile rail. File and patch cards keep their own framing. */
-  .rw-app .panel.workflow .step,
-  .rw-app .panel.workflow .ghost-step {
-    width: calc(100% - 20px);
-    margin: 8px 10px;
+  .rw-app .panel.workflow .step {
+    width: 100%;
+    margin: 8px 0;
     padding-block-end: 0;
     overflow: visible;
   }
 
-  .rw-app .panel.workflow .step > .step-body,
-  .rw-app .panel.workflow .ghost-step > .ghost-step-body {
+  .rw-app .panel.workflow .step > .step-body {
     padding: 7px 0 0;
-  }
-
-  /* the head sheds its inline gutter with the body, so the 0x0N scrap's left
-     edge lines up with the cards below it on phones too */
-  .rw-app .panel.workflow .step > .step-head,
-  .rw-app .panel.workflow .ghost-step > .ghost-step-head {
-    padding-inline: 0;
   }
 
   .rw-app .panel.workflow .step .card,
   .rw-app .panel.workflow .step .drop,
-  .rw-app .panel.workflow .step .needs-input,
-  .rw-app .panel.workflow .ghost-step .ghost-step-slot {
+  .rw-app .panel.workflow .step .needs-input {
     width: 100%;
     margin-inline: 0;
   }
-
-  .rw-app .step.is-input.is-empty .drop.hero {
-    min-height: clamp(
-      240px,
-      calc(100svh - var(--dock-total) - var(--mobile-input-head-h) - 116px),
-      680px
-    );
-  }
-
-  .rw-app .panel.workflow .ghost-steps { margin: 8px 10px 0; }
-  /* the upcoming-steps line borrows the step-head voice: mono thread-accent
-     hex numbers beside ink titles, so it previews the real 0x0N headings */
-  .rw-app .panel.workflow .ghost-next {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: center;
-    column-gap: 7px;
-    row-gap: 2px;
-    margin: 0;
-    padding: 9px 12px;
-    border-block-start: 1px solid var(--seam-strong);
-  }
-
-  .rw-app .ghost-next .ghost-next-label {
-    color: var(--ink-3);
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: .02em;
-  }
-
-  .rw-app .ghost-next .ghost-next-step {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
-    white-space: nowrap;
-  }
-
-  .rw-app .ghost-next .ghost-next-num {
-    font-size: .74rem;
-    font-weight: 650;
-    letter-spacing: .06em;
-    color: var(--thread-text);
-  }
-
-  .rw-app .ghost-next .ghost-next-title {
-    font-size: .76rem;
-    font-weight: 650;
-    color: var(--ink);
-  }
-
-  .rw-app .ghost-next .ghost-next-arrow {
-    color: var(--ink-3);
-    font-size: .72rem;
-  }
-
-  .rw-app .panel.workflow .ghost-step { display: none; }
 
   .rw-app .unified-drop-step > .step-head > .step-head-action {
     position: absolute;
@@ -2910,11 +2762,4 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     height: 44px;
     padding-inline: 10px;
   }
-}
-
-@media (max-width: 360px) {
-  .rw-app .brand { gap: 5px; }
-  .rw-app .brand-mark { width: 30px; height: 30px; }
-  .rw-app .brand-word { font-size: .9rem; }
-  .rw-app .masthead-version { font-size: .5rem; }
 }

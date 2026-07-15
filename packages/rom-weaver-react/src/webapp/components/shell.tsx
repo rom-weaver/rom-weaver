@@ -384,8 +384,7 @@ const UpdateBanner = ({
             onClick={onShowChangelog}
             type="button"
           >
-            <span className="updates-ver-full">{title}</span>
-            <span className="updates-ver-mobile">{localizer.message("ui.update.whatsNew")}</span>
+            {localizer.message("ui.update.whatsNew")}
           </button>
         </span>
         <button className="btn slim primary" onClick={onReload} type="button">

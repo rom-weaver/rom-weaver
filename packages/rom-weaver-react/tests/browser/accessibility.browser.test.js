@@ -63,11 +63,12 @@ const axe = axeModule.default ?? axeModule;
 const THEMES = ["light", "dark"];
 
 // One viewport landing inside each layout regime the design system actually
-// defines (breakpoints in design-system.css: 380/560/720/820/860/1100px), plus
-// a short-height landscape-phone case for `(max-width: 860px) and
-// (max-height: 520px)`. Every axe scan runs at each, so responsive layouts -
-// masthead tool labels, the ≥1100px two-column split, the ≤820px verification
-// stack, coarse-pointer targets - are all exercised, not just the default width.
+// defines (viewport seams in design-system.css: 720/860/1100px; everything
+// else rides fluid tokens or container queries), plus a short-height
+// landscape-phone case for `(max-width: 860px) and (max-height: 520px)`.
+// Every axe scan runs at each, so responsive layouts - the phone dock, the
+// masthead-wrap seam, the ≥1100px two-column split, coarse-pointer targets -
+// are all exercised, not just the default width.
 const VIEWPORTS = [
   { height: 740, name: "360w smallest phone", width: 360 },
   { height: 860, name: "400w phone", width: 400 },

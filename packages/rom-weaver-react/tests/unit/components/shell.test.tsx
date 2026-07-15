@@ -107,9 +107,10 @@ describe("UpdateBanner", () => {
         />,
       ),
     );
-    expect(container.querySelector(".updates .updates-ver-full")?.textContent).toBe("v1 → v2");
-    expect(container.querySelector(".updates .updates-ver-mobile")?.textContent).toBe("What’s new");
-    fireEvent.click(container.querySelector(".updates .updates-ver") as HTMLButtonElement);
+    const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
+    expect(changelogButton.textContent).toBe("What’s new");
+    expect(changelogButton.getAttribute("aria-label")).toContain("v1 → v2");
+    fireEvent.click(changelogButton);
     expect(onShowChangelog).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
     expect(onReload).toHaveBeenCalledTimes(1);
