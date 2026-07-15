@@ -30,6 +30,17 @@
   --step-pt: clamp(7px, 2.8vw - 8.7px, 16px);   /* step-head top padding */
   --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
+  /* spacing scale: one responsive ramp for gap + padding, so rhythm comes from
+     ~6 tokens instead of ~25 scattered px values. Static below 4px (hairline
+     seams shouldn't grow); fluid above, each clamp hitting its phone floor at
+     ≤560px and its desktop ceiling by ~840-880px - same convention as --pad /
+     --step-*, so one token replaces a desktop value AND its phone override. */
+  --sp-2xs: 2px;                                /* micro seams (2/3px) - static */
+  --sp-xs:  4px;                                /* tight gaps (4/5px) - static */
+  --sp-s:   clamp(6px, 2.5px + .625vw,  8px);   /* small-gap cluster (6/7/8px) */
+  --sp-m:   clamp(8px, 1px + 1.25vw, 12px);     /* medium gap/pad (9/10/11/12px) */
+  --sp-l:   clamp(11px, 2.25px + 1.5625vw, 16px); /* card-list / block gaps (13/14/16) */
+  --sp-xl:  clamp(16px, 2px + 2.5vw, 24px);     /* section-scale (18/20/24px) */
   --ease: cubic-bezier(.2, .85, .3, 1);
   /* the one dropdown chevron, shared by selects, combo inputs and the inline target select */
   --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>");
@@ -151,7 +162,7 @@
 }
 /* status in the meta line - sized/condensed to match the size + tag chips so it
    reads as part of that row, sitting to the right of the platform/format tag. */
-.rw-app .stage-status { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
+.rw-app .stage-status { display: inline-flex; align-items: baseline; gap: var(--sp-s); font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
 .rw-app .stage-status::before { content: "·"; margin-inline-end: 1px; color: var(--ink-4); }
 .rw-app .stage-status .pct { color: var(--thread-text); font-variant-numeric: tabular-nums; font-weight: 650; }
 /* pending checksum value - invisible text the exact char length of the eventual
@@ -188,8 +199,8 @@
 }
 
 /* ═══ masthead ═══ */
-.rw-app .masthead { display: flex; align-items: center; gap: 14px; padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
-.rw-app .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.rw-app .masthead { display: flex; align-items: center; gap: var(--sp-l); padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
+.rw-app .brand { display: inline-flex; align-items: center; gap: var(--sp-m); flex: none; }
 .rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
    values) → 44px cap on desktop; no discrete jumps */
@@ -206,7 +217,7 @@
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
 .rw-app .modes { margin-inline: auto; }
-.rw-app .mode-rail { position: relative; display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--well); }
+.rw-app .mode-rail { position: relative; display: inline-flex; gap: var(--sp-2xs); padding: 3px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--well); }
 .rw-app .mode-thumb {
   position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--r-s);
   background: var(--thread);
@@ -232,8 +243,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .mode {
   position: relative; z-index: 1; appearance: none; border: 0; background: transparent; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 14px; border-radius: var(--r-s);
+  display: inline-flex; align-items: center; gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-l); border-radius: var(--r-s);
   font-size: .8rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); transition: color .25s var(--ease);
 }
@@ -241,16 +252,16 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
 .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
 .rw-app .tools-subnav { padding: 10px var(--pad); border-block-end: 1px solid var(--seam-soft); background: var(--plate-2); }
-.rw-app .tools-subnav-rail { display: flex; gap: 6px; }
+.rw-app .tools-subnav-rail { display: flex; gap: var(--sp-s); }
 .rw-app .tools-subnav-tab {
-  appearance: none; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 6px 13px;
+  appearance: none; display: inline-flex; align-items: center; gap: var(--sp-s); min-height: 34px; padding: 6px 13px;
   border: 1px solid var(--thread); border-radius: var(--r-s); background: color-mix(in oklab, var(--thread) 14%, var(--well));
   color: var(--thread-text); cursor: pointer; font-size: .78rem; font-weight: 650;
 }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
-.rw-app .masthead-tools { display: inline-flex; gap: 2px; }
-.rw-app .masthead-version { display: flex; align-items: center; gap: 4px; max-width: 100%; color: var(--ink-3); font-size: clamp(.5rem, .44rem + .27vw, .62rem); line-height: 1.2; white-space: nowrap; }
+.rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
+.rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.5rem, .44rem + .27vw, .62rem); line-height: 1.2; white-space: nowrap; }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
 .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
@@ -273,8 +284,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .build-version-info .info-btn:hover { color: var(--thread-text); }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .build-version-pop { width: min(360px, calc(100vw - 24px)); }
-.rw-app .build-version-details { display: grid; gap: 7px; margin: 0; }
-.rw-app .build-version-details > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
+.rw-app .build-version-details { display: grid; gap: var(--sp-s); margin: 0; }
+.rw-app .build-version-details > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: var(--sp-m); }
 .rw-app .build-version-details dt { color: var(--ink-3); }
 .rw-app .build-version-details dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 /* the tools are icon-only everywhere; the title/aria-label carries the name
@@ -316,8 +327,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   .rw-app .reveal.is-open { grid-template-rows: 0fr; margin-block: 0; opacity: 0; translate: 0 -6px; }
 }
 .rw-app .updates {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
+  display: flex; align-items: center; gap: var(--sp-m);
+  padding: var(--sp-s) var(--sp-m); border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
   border-radius: var(--r-m); background: color-mix(in oklab, var(--thread) 8%, var(--plate));
 }
 .rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
@@ -331,12 +342,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
 .rw-app .updates-ver:hover { color: var(--thread-text); }
-.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.rw-app .changelog-item { display: flex; flex-direction: column; gap: 2px; }
+.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
+.rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
 .rw-app .changelog-subject { font-size: .9rem; }
 .rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
-.rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: 8px 0; }
-.rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding-top: 8px; }
+.rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
+.rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
@@ -344,8 +355,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .banner-x svg { width: 14px; height: 14px; }
 
 .rw-app .wakelock {
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 12px; border: 1px dashed color-mix(in oklab, var(--care) 45%, var(--seam));
+  display: flex; align-items: center; gap: var(--sp-m);
+  padding: var(--sp-s) var(--sp-m); border: 1px dashed color-mix(in oklab, var(--care) 45%, var(--seam));
   border-radius: var(--r-m); background: color-mix(in oklab, var(--care) 7%, var(--plate));
   font-size: .82rem; color: var(--ink-2);
 }
@@ -376,7 +387,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app.rw-page-dragging .dropveil { opacity: 1; visibility: visible; }
 .rw-app .dropveil-text {
-  position: relative; display: inline-flex; align-items: center; gap: 10px;
+  position: relative; display: inline-flex; align-items: center; gap: var(--sp-m);
   font-size: 1.05rem; font-weight: 700; color: var(--ink);
   padding: 12px 24px; border-radius: 99px;
   background: var(--plate); border: 1px solid color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
@@ -425,7 +436,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @keyframes weft-throw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 /* a touch more air above each section so straddling controls (the create-mode
    swap hinge) have room to breathe */
-.rw-app .step-head { display: flex; align-items: baseline; gap: 10px; padding: var(--step-pt) var(--pad) 2px; position: relative; }
+.rw-app .step-head { display: flex; align-items: baseline; gap: var(--sp-m); padding: var(--step-pt) var(--pad) 2px; position: relative; }
 .rw-app .step-head-action { display: none; }
 /* header type rides the same fluid scale as the card names (.nm) so the 0x0N
    headings match their content's size on desktop; .9rem floor keeps phones as-is */
@@ -453,10 +464,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* section titles speak in the same voice as the card names and drawer headers
    (sentence case, 650) - one type family across the page, size = hierarchy */
 .rw-app .step-title { margin: 0; font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink); }
-.rw-app .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; justify-content: flex-end; }
+.rw-app .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: var(--sp-2xs) var(--sp-s); align-items: baseline; justify-content: flex-end; }
 .rw-app .step-meta .t { color: var(--thread-text); }
 /* step-header meta rendered as readout chips (matches the drawer-header badges) */
-.rw-app .step-meta:has(.rb) { align-items: center; gap: 6px; }
+.rw-app .step-meta:has(.rb) { align-items: center; gap: var(--sp-s); }
 .rw-app .step-meta .rb {
   display: inline-flex; align-items: center; white-space: nowrap;
   padding: 2px 8px; border-radius: 6px; background: var(--well); border: 1px solid var(--seam-soft);
@@ -471,21 +482,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ dropzone ═══ */
 .rw-app .drop {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2xs);
   width: 100%; min-height: 40px; padding: 8px 16px;
   border: 0; border-radius: var(--r-m);
   background: none; color: var(--ink-2); font-size: .88rem; cursor: pointer;
 }
 .rw-app .drop:hover { color: var(--ink); }
-.rw-app .drop .main { display: inline-flex; align-items: center; gap: 9px; font-weight: 650; color: var(--ink); }
+.rw-app .drop .main { display: inline-flex; align-items: center; gap: var(--sp-m); font-weight: 650; color: var(--ink); }
 .rw-app .drop .main svg { width: 16px; height: 16px; color: var(--ink-3); }
 .rw-app .drop:hover .main svg { color: var(--thread-text); }
 .rw-app .drop .hint { font-size: .74rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
 .rw-app .drop .hint b { color: var(--ink-2); font-weight: 600; }
 .rw-app .drop .pointer-copy.coarse { display: none; }
 
-.rw-app .drop.hero { min-height: 0; gap: 8px; padding: 18px 24px 15px; }
-.rw-app .drop.hero .main { flex-direction: column; gap: 10px; font-size: clamp(.82rem, 3.4vw, 1.08rem); font-weight: 700; white-space: nowrap; }
+.rw-app .drop.hero { min-height: 0; gap: var(--sp-s); padding: 18px 24px 15px; }
+.rw-app .drop.hero .main { flex-direction: column; gap: var(--sp-m); font-size: clamp(.82rem, 3.4vw, 1.08rem); font-weight: 700; white-space: nowrap; }
 /* the hero opens with the product thesis - the page's one headline - and the
    drop instruction steps down to a supporting line beneath it */
 /* the empty page opens with the product thesis - the one headline - above the
@@ -494,7 +505,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    as one of the app's mono readout chips, complete with a status dot */
 .rw-app .hero-lead {
   position: relative; overflow: clip;
-  display: flex; flex-direction: column; gap: 13px; align-items: center;
+  display: flex; flex-direction: column; gap: var(--sp-l); align-items: center;
   margin: 4px var(--pad) 20px; padding: 28px 24px; text-align: center;
   border: 1px solid var(--seam); border-radius: var(--r-l);
   background:
@@ -544,7 +555,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .hero-lead .lead-line { display: block; }
 .rw-app .hero-lead .lead-accent { color: var(--thread-text); }
 .rw-app .hero-lead .lead-sub {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; align-items: center; gap: var(--sp-s);
   padding: 3px 11px; border: 1px solid var(--seam-soft); border-radius: 99px; background: var(--well);
   font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-2);
 }
@@ -558,19 +569,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   color: var(--thread-text); background: color-mix(in oklab, var(--thread) 13%, transparent);
 }
 .rw-app .drop.hero .formats {
-  display: grid; flex: none; gap: 5px; width: min(100%, 34rem); margin-block-start: 2px; overflow: hidden; pointer-events: none;
+  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 34rem); margin-block-start: 2px; overflow: hidden; pointer-events: none;
   /* wide fade lanes so pills dissolve instead of clipping mid-pill at the edges */
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
 }
 .rw-app .drop.hero .formats-lane { min-width: 0; overflow: hidden; }
 .rw-app .drop.hero .formats-track {
-  display: flex; gap: 5px; width: max-content;
+  display: flex; gap: var(--sp-xs); width: max-content;
   animation: formats-ticker 120s linear infinite;
   backface-visibility: hidden; will-change: transform;
 }
 .rw-app .drop.hero .formats-lane:nth-child(2) .formats-track { animation-direction: reverse; }
-.rw-app .drop.hero .formats-set { display: flex; gap: 5px; }
+.rw-app .drop.hero .formats-set { display: flex; gap: var(--sp-xs); }
 .rw-app .drop.hero .fmt { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 12px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }
 @keyframes formats-ticker {
   from { transform: translate3d(0, 0, 0); }
@@ -607,7 +618,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    Once content is staged the row shrinks out of the way: tiny pill, hint only on hover. */
 .rw-app .drop .main.btnish {
   border: 1px solid var(--seam-strong); border-radius: 99px; background: var(--plate-2);
-  padding: 4px 13px; min-height: 28px; font-size: .76rem; font-weight: 600; gap: 7px;
+  padding: 4px 13px; min-height: 28px; font-size: .76rem; font-weight: 600; gap: var(--sp-s);
   color: var(--ink-2);
 }
 /* the add pill lights to the brand thread on hover/focus */
@@ -615,7 +626,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); color: var(--thread-text);
 }
 .rw-app .drop:hover .main.btnish svg, .rw-app .drop:focus-within .main.btnish svg { color: var(--thread-text); }
-.rw-app .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: 5px; }
+.rw-app .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: var(--sp-xs); }
 .rw-app .drop:not(.hero) .main svg { width: 13px; height: 13px; }
 /* the add-row hint is ALWAYS shown inline beneath the pill - never a hover-only
    tooltip - so a page that already has files still explains how to add more */
@@ -652,7 +663,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the "add more files" row matches the form: a full-width panel like a shrunk
    hero, not a lone floating pill */
 .rw-app .step.is-input .drop:not(.hero) {
-  padding: 13px 16px; border-radius: var(--r-m);
+  padding: var(--sp-l); border-radius: var(--r-m);
   border: 1px solid var(--seam); background: var(--warp-lines) var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
@@ -679,8 +690,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    hero's framing (solid seam, tinted fill, large radius) so the empty bench
    reads as one consistent family, while still routing taps back to 0x01. */
 .rw-app .needs-input {
-  display: flex; align-items: center; justify-content: center; gap: 9px;
-  width: 100%; min-height: 72px; padding: 16px 20px; margin: 0;
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-m);
+  width: 100%; min-height: 72px; padding: var(--sp-l) var(--sp-xl); margin: 0;
   appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
   background: var(--warp-lines) var(--empty-fill); cursor: pointer;
   color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
@@ -708,10 +719,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: center;
-  column-gap: 7px;
-  row-gap: 2px;
+  column-gap: var(--sp-s);
+  row-gap: var(--sp-2xs);
   margin: 0;
-  padding: 9px 12px;
+  padding: var(--sp-m);
 }
 .rw-app .ghost-next .ghost-next-label {
   color: var(--ink-3);
@@ -722,7 +733,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ghost-next .ghost-next-step {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: var(--sp-xs);
   white-space: nowrap;
 }
 .rw-app .ghost-next .ghost-next-num {
@@ -742,14 +753,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 
 /* ═══ file cards ═══ */
-.rw-app .cards { display: flex; flex-direction: column; gap: 13px; }
+.rw-app .cards { display: flex; flex-direction: column; gap: var(--sp-l); }
 /* patches read as discrete, reorderable units - a touch more air between them */
-.rw-app .patch-cards { gap: 16px; }
+.rw-app .patch-cards { gap: var(--sp-l); }
 /* no trailing margin - the step-body's own bottom padding closes the section,
    so card lists don't stack ~28px of dead space at every section's end */
 .rw-app .card {
-  position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
-  padding: 10px 12px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-s);
+  padding: var(--sp-m); border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
   animation: card-in .35s var(--ease) backwards;
 }
 .rw-app .card:nth-child(2) { animation-delay: .05s; } .rw-app .card:nth-child(3) { animation-delay: .1s; } .rw-app .card:nth-child(4) { animation-delay: .15s; }
@@ -766,19 +777,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the card header is two columns: the name over its size·type sub-line on the
    left, and a stacked actions column on the right - the action buttons on top
    and the target right-aligned directly beneath them */
-.rw-app .card-top { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.rw-app .card-top { display: flex; align-items: flex-start; gap: var(--sp-m); min-width: 0; }
 /* the name + sub-line sit at the card's content edge, lined up with the LEFT EDGE
    of the collapsible section boxes below (not their chevron-indented labels) */
-.rw-app .card-name { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.rw-app .card-name { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-xs); min-width: 0; }
 /* size·type ride one flush sub-line (plain text, left edge under the name) */
-.rw-app .card-meta { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-inline-start: 0; }
+.rw-app .card-meta { display: inline-flex; align-items: center; gap: var(--sp-s); flex: none; margin-inline-start: 0; }
 .rw-app .card-actions {
-  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-s);
   /* the button boxes are taller than the name's text line - pull them up so
      their CENTRE sits on the name line (1.3 × the .nm font size) */
   margin-block-start: calc((1.3 * clamp(.8rem, 1.1vw + .55rem, 1.06rem) - var(--ctrl-h)) / 2);
 }
-.rw-app .card-btns { display: flex; align-items: center; gap: 6px; }
+.rw-app .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
 /* reordering happens from the handle only */
 .rw-app .handle {
   flex: none; appearance: none; display: grid; place-items: center; width: var(--ctrl-h); height: var(--ctrl-h); padding: 0;
@@ -786,7 +797,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   color: var(--ink-3); cursor: grab; touch-action: none;
   transition: color .15s, border-color .15s;
 }
-.rw-app .phandle { width: auto; min-width: var(--ctrl-h); padding-inline: 5px; grid-auto-flow: column; gap: 4px; user-select: none; }
+.rw-app .phandle { width: auto; min-width: var(--ctrl-h); padding-inline: 5px; grid-auto-flow: column; gap: var(--sp-xs); user-select: none; }
 .rw-app .phandle-number {
   font-size: .8rem; font-weight: 800; line-height: 1; color: var(--ink-2);
   text-decoration: underline dotted; text-decoration-color: var(--ink-4); text-underline-offset: 3px;
@@ -805,7 +816,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
 .rw-app .card-name { flex: 1 1 auto; min-width: 0; }
-.rw-app .nmline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; min-width: 0; }
+.rw-app .nmline { display: flex; align-items: center; gap: var(--sp-s); flex-wrap: wrap; width: 100%; min-width: 0; }
 .rw-app .nm-file { flex-basis: 100%; color: var(--ink-4); font-size: .7rem; overflow-wrap: anywhere; }
 .rw-app .nm {
   font-weight: 650; line-height: 1.3; min-width: 0; max-width: 100%;
@@ -824,7 +835,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the description is a full-width row below the header, at the card content edge */
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
 /* weak-verification note under the name - explains the yellow card border */
-.rw-app .patch-warn { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .76rem; color: var(--care); }
+.rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
 .rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
 :root[data-theme="light"] .patch-warn { color: #7a5300; }
 .rw-app .tag {
@@ -848,7 +859,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    down to the meta text (via the --sw-* vars), with a state word beside it. the two
    words share one grid cell so the row never shifts width when toggled */
 .rw-app .patch-enable {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  flex: none; display: inline-flex; align-items: center; gap: var(--sp-s); cursor: pointer;
   padding: 5px; margin-block: -5px; margin-inline: -5px 4px;
 }
 .rw-app .patch-enable input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 14px; --sw-pad: 1px; --sw-travel: 12px; }
@@ -858,7 +869,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .patch-enable input:checked ~ .switch-state .off, .rw-app .patch-enable input:not(:checked) ~ .switch-state .on { visibility: hidden; }
 /* the target leads the sub-line as plain inline text (no pill): the icon + its
    track dropdown sit together, the icon's left edge lining up with the name above */
-.rw-app .target-grp { display: inline-flex; align-items: center; gap: 4px; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); white-space: nowrap; }
+.rw-app .target-grp { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); white-space: nowrap; }
 .rw-app .target-grp > svg { width: .92rem; height: .92rem; color: var(--thread-text); flex: none; }
 .rw-app .target-grp.bad { color: var(--fault); }
 .rw-app .target-grp.bad > svg { color: var(--fault); }
@@ -887,7 +898,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   display: inline-flex; align-items: center;
 }
 .rw-app .patch-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .16s var(--ease); }
-.rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: 8px; }
+.rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .card { transition: gap .16s var(--ease), border-color .15s, background .15s; }
 /* a disabled patch stays open - the body keeps its Options drawer so bundle
    authors can edit name/description/checks without re-enabling - and reads
@@ -906,13 +917,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @media (prefers-reduced-motion: reduce) { .rw-app .patch-body, .rw-app .card { transition: none; } }
 /* the "N patches off" mention above the apply button - no extra bottom margin,
    the card's own grid gap separates it from the run button */
-.rw-app .patch-off-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8rem; color: var(--care); }
+.rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
 /* light mode: the golden --care is ~2.9:1 on the pale card face - too light for
    small text. Use the same deep amber as the notice emphasis (clears 4.5:1). */
 :root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
 
-.rw-app .verdict { display: inline-flex; align-items: center; gap: 5px; font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .rw-app .verdict.ok { color: var(--verified); } .rw-app .verdict.bad { color: var(--fault); }
 .rw-app .verdict svg { width: 14px; height: 14px; }
 .rw-app .verdict.ok svg { animation: pop .35s var(--ease); }
@@ -923,8 +934,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 
 /* extraction tree */
-.rw-app .tree { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; }
-.rw-app .tree-row { position: relative; display: flex; align-items: baseline; gap: 8px; min-height: 25px; padding: 3px 9px; border-radius: var(--r-s); background: var(--well); font-size: .78rem; }
+.rw-app .tree { display: flex; flex-direction: column; gap: var(--sp-2xs); padding: 4px 0 2px; }
+.rw-app .tree-row { position: relative; display: flex; align-items: baseline; gap: var(--sp-s); min-height: 25px; padding: 3px 9px; border-radius: var(--r-s); background: var(--well); font-size: .78rem; }
 .rw-app .tree-row.d1 { margin-inline-start: 9px; }
 .rw-app .tree-row.d2 { margin-inline-start: 18px; }
 .rw-app .tree-row.d3 { margin-inline-start: 27px; }
@@ -932,7 +943,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tree-elbow { position: absolute; inset-inline-start: -7px; top: -8px; bottom: 50%; width: 5px; border-inline-start: 2px solid var(--seam-strong); border-block-end: 2px solid var(--seam-strong); border-end-start-radius: 5px; }
 .rw-app .tree-row.d0 .tree-name { color: var(--ink-3); }
 .rw-app .tree-name { flex: 1 1 auto; min-width: 0; color: var(--ink); font-weight: 550; overflow-wrap: anywhere; }
-.rw-app .tree-meta { flex: none; display: inline-flex; gap: 12px; align-items: baseline; }
+.rw-app .tree-meta { flex: none; display: inline-flex; gap: var(--sp-m); align-items: baseline; }
 .rw-app .tree-size { color: var(--ink-3); min-width: 62px; text-align: end; }
 .rw-app .tree-time { color: var(--thread-text); min-width: 44px; text-align: end; }
 
@@ -992,7 +1003,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 :root[data-theme="light"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
 .rw-app .cks > .cks-head {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
-  width: 100%; cursor: pointer; display: flex; align-items: center; gap: 5px;
+  width: 100%; cursor: pointer; display: flex; align-items: center; gap: var(--sp-xs);
   min-height: 36px; padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
   /* the WHOLE header toggles - a tap on the label or the right-hand readout chip
      must register as a tap, not start a text selection / iOS callout */
@@ -1040,7 +1051,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* ONE readout-chip language for every drawer header - a recessed grey pill.
    multiple data points (e.g. a track count + a hash time) are separate chips, not
    one combined string. the .readouts wrapper groups them at the right edge. */
-.rw-app .cks > .cks-head .readouts { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 66%; }
+.rw-app .cks > .cks-head .readouts { display: inline-flex; align-items: center; gap: var(--sp-s); min-width: 0; max-width: 66%; }
 .rw-app .cks > .cks-head .rb {
   flex: 0 1 auto; min-width: 0; max-width: 100%;
   font-size: var(--badge-fs); color: var(--weft); font-stretch: 86%; letter-spacing: .01em;
@@ -1074,7 +1085,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    drawer frames the sides. (The .ck.req verification rows keep their own table -
    reset below.) */
 .rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
-.rw-app .ckrows.patch-check-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); column-gap: 8px; }
+.rw-app .ckrows.patch-check-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); column-gap: var(--sp-s); }
 .rw-app .cks .ckrows.patch-check-columns > .ck-group { margin-block-start: 6px; }
 .rw-app .cks > .cks-body > .cks-inner > .ckrows { margin-block: 0; }
 .rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
@@ -1104,7 +1115,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   /* label column sized just to the widest label (CRC32/SHA-1) so values still
      line up in a column, but without the old wide gap - leaves room for a
      larger value. Each row is its own grid, so this width must be fixed. */
-  margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
+  margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-xs) var(--sp-s);
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
   border-block: 1px solid var(--seam-soft); border-inline: 0; transition: background .15s, border-color .15s;
 }
@@ -1182,7 +1193,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @container cks-inner (min-width: 760px) {
   .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group) {
     position: relative;
-    gap: 9px 25px;
+    gap: var(--sp-m) var(--sp-xl);
     padding-block-start: 6px;
   }
   .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group)::before {
@@ -1251,7 +1262,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
 .rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
 /* verification rows stay a contiguous subgrid table - hairline dividers, not boxed */
-.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 10px; border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
+.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: var(--sp-m); border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
 .rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
 .rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); }
 .rw-app .ck.req .reqstat { display: inline-flex; align-items: center; }
@@ -1264,7 +1275,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-underline-offset: 4px;
 }
 /* the actual scratch-apply verdict, not a progress bar */
-.rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 600; }
+.rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .82rem; font-weight: 600; }
 .rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
 .rw-app .dryrun-verdict.bad { color: var(--fault); }
 /* a passing dry run is sewn shut like the other ok verdicts */
@@ -1274,18 +1285,18 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 /* the unified patch verdict line (top of the Checks body) - same accent verdict for every patch
    type, whether it was requirement-checked or dry-run validated */
-.rw-app .pverdict { padding: 8px 9px; }
+.rw-app .pverdict { padding: var(--sp-s) var(--sp-m); }
 /* failed dry-run: an inset well dyed with the fault - verdict line in fault
    red, the detail and next-step hint stepping down to ink so the message
    reads as structure instead of one red smear */
 .rw-app .pfault {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 9px 12px; border-radius: var(--r-s);
+  display: flex; flex-direction: column; gap: var(--sp-2xs);
+  padding: var(--sp-m); border-radius: var(--r-s);
   border: 1px solid color-mix(in oklab, var(--fault) 36%, var(--seam-soft));
   background: color-mix(in oklab, var(--fault) 7%, var(--well));
   animation: pverdict-in .3s var(--ease) both;
 }
-.rw-app .pfault-title { display: flex; gap: 7px; align-items: center; color: var(--fault); font-weight: 700; font-size: .86rem; }
+.rw-app .pfault-title { display: flex; gap: var(--sp-s); align-items: center; color: var(--fault); font-weight: 700; font-size: .86rem; }
 .rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
 .rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
 .rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
@@ -1326,7 +1337,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .info-pop {
   position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
   width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
-  padding: 10px 12px;
+  padding: var(--sp-m);
   border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
   box-shadow: var(--overlay-shadow);
   font-size: .78rem; font-weight: 500; line-height: 1.5; color: var(--ink-2);
@@ -1335,14 +1346,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .step-meta .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
 /* bulleted help points, like the real app's info popovers */
-.rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-xs); }
 .rw-app .info-list li { position: relative; padding-inline-start: 14px; }
 .rw-app .info-list li::before {
   content: ""; position: absolute; inset-inline-start: 3px; top: .55em;
   width: 4px; height: 4px; border-radius: 50%; background: var(--thread-text);
 }
 /* full per-bucket extension support inside the 0x01 info popover */
-.rw-app .info-support { display: flex; flex-direction: column; gap: 7px; }
+.rw-app .info-support { display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .info-list + .info-support { margin-block-start: 9px; padding-block-start: 9px; border-block-start: 1px solid var(--seam); }
 .rw-app .info-support p { margin: 0; }
 .rw-app .info-support b { display: block; color: var(--ink); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
@@ -1356,7 +1367,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the box is inset from the drawer by MARGIN (not the drawer's content padding) so
    its title bar can span edge-to-edge inside the border */
 .rw-app .cks .cks-inner > .cue-sub { margin-block-start: 6px; }
-.rw-app .cue-sub-head { display: flex; align-items: center; gap: 8px; min-height: 27px; padding: 2px 7px 2px 11px; background: var(--well); border-block-end: 1px solid var(--seam); }
+.rw-app .cue-sub-head { display: flex; align-items: center; gap: var(--sp-s); min-height: 27px; padding: 2px 7px 2px 11px; background: var(--well); border-block-end: 1px solid var(--seam); }
 .rw-app .cue-sub-lab { font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .cue-sub-head .cue-copy { margin-inline-start: auto; }
 .rw-app .cue-copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-3); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; transition: transform .12s, color .15s; }
@@ -1364,7 +1375,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .cue-copy:active { transform: scale(.85); }
 .rw-app .cue-copy.copied { color: var(--verified); animation: pop .32s var(--ease); }
 .rw-app .cue-copy svg { width: 13px; height: 13px; }
-.rw-app .cue-text { margin: 0; padding: 9px 11px; max-height: 220px; overflow: auto; background: none; font-size: .74rem; line-height: 1.6; color: var(--ink-2); white-space: pre; user-select: text; -webkit-user-select: text; }
+.rw-app .cue-text { margin: 0; padding: var(--sp-m); max-height: 220px; overflow: auto; background: none; font-size: .74rem; line-height: 1.6; color: var(--ink-2); white-space: pre; user-select: text; -webkit-user-select: text; }
 
 /* drag-to-reorder */
 /* the dragged patch is gently highlighted: a thread-orange border + faint tint +
@@ -1384,7 +1395,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* inline requirement checks at the verification point */
 
 /* tracks + per-file task history */
-.rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: 2px; padding-block: 4px 2px; }
+.rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: var(--sp-2xs); padding-block: 4px 2px; }
 /* nested groups are static (not collapsible): a quiet sub-header sits above its
    always-visible rows. no left indent - the uppercase head is cue enough, and the
    indent only wasted space on the left of the expanded section */
@@ -1393,15 +1404,15 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    their copy button ~10px inside the box; match that so the right edge is one line) */
 /* taller, center-aligned sub-heading row so the size badge sits with breathing
    room above/below instead of filling the line edge-to-edge */
-.rw-app .popt { display: flex; align-items: center; gap: 7px; font-size: .78rem; color: var(--ink-2); }
+.rw-app .popt { display: flex; align-items: center; gap: var(--sp-s); font-size: .78rem; color: var(--ink-2); }
 
 /* ═══ notices & fault card ═══ */
 .rw-app .notice {
   /* spans the full form width so it lines up with the cards below it.
      icon + dismiss stay vertically centered against the body, even when the
      body wraps to multiple lines */
-  display: flex; gap: 10px; align-items: center; margin-block: 4px 12px;
-  padding: 9px 12px; border-radius: var(--r-m); font-size: .85rem; line-height: 1.45;
+  display: flex; gap: var(--sp-m); align-items: center; margin-block: 4px 12px;
+  padding: var(--sp-m); border-radius: var(--r-m); font-size: .85rem; line-height: 1.45;
   animation: drop-in .3s var(--ease);
 }
 .rw-app .notice svg { width: 16px; height: 16px; flex: none; }
@@ -1424,7 +1435,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   overflow: clip; animation: fault-in .4s var(--ease);
 }
 
-.rw-app .checkrow { display: flex; align-items: center; gap: 8px; margin-block: 2px 10px; font-size: .82rem; color: var(--ink-2); }
+.rw-app .checkrow { display: flex; align-items: center; gap: var(--sp-s); margin-block: 2px 10px; font-size: .82rem; color: var(--ink-2); }
 .rw-app .checkrow.warn { color: var(--care); }
 
 /* ═══ fields ═══ */
@@ -1473,7 +1484,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 .rw-app input[type="range"] { accent-color: var(--thread); width: 100%; }
 
-.rw-app .outbar { display: flex; gap: 9px; flex-wrap: wrap; }
+.rw-app .outbar { display: flex; gap: var(--sp-m); flex-wrap: wrap; }
 .rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; min-height: var(--ctl); border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
 .rw-app .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
@@ -1499,11 +1510,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* options: a collapsible drawer (default open) marked by the tune icon, so it
    reads in the same language as the rest of the card sections */
 /* any drawer label icon rides the tune glyph's metrics */
-.rw-app .cks .opts-lab { display: inline-flex; align-items: center; gap: 6px; }
+.rw-app .cks .opts-lab { display: inline-flex; align-items: center; gap: var(--sp-s); }
 .rw-app .cks .opts-lab svg { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
-.rw-app .optsbody { display: flex; flex-direction: column; gap: 9px; padding-block: 9px 2px; }
+.rw-app .optsbody { display: flex; flex-direction: column; gap: var(--sp-m); padding-block: 9px 2px; }
 /* controls recess into the card face like every other input */
-.rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 9px 12px; }
+.rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--sp-m); }
 .rw-app .patch-name-field { grid-column: 1 / -1; }
 .rw-app .patch-description-field { grid-column: 1 / -1; }
 /* export-type flows in the options grid like every other field (no full-width
@@ -1512,10 +1523,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .export-type-field { min-width: 0; }
 .rw-app .export-type-field .select { text-overflow: ellipsis; }
 .rw-app .patch-description-field textarea.input { height: auto; min-height: 36px; padding-block: 8px; line-height: 1.4; resize: vertical; overflow: hidden; }
-.rw-app .verification-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 12px; margin-block-start: 3px; }
-.rw-app .patch-check-group { min-width: 0; padding: 9px 10px 10px; border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: color-mix(in oklab, var(--well) 72%, transparent); }
+.rw-app .verification-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--sp-m); margin-block-start: 3px; }
+.rw-app .patch-check-group { min-width: 0; padding: var(--sp-m); border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: color-mix(in oklab, var(--well) 72%, transparent); }
 .rw-app .patch-check-group .ck-group-head { margin-block-end: 7px; }
-.rw-app .verification-list { display: flex; flex-direction: column; gap: 6px; }
+.rw-app .verification-list { display: flex; flex-direction: column; gap: var(--sp-s); }
 /* "provide this ROM" card in the ROM step: the standard file-card anatomy,
    but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
    (the same "off" language as a disabled patch) with the file name ghosted */
@@ -1531,7 +1542,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    requirement rows) sit in the box, not a bleeding drawer - keep them inset */
 .rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
 .rw-app .verification-list .ck + .ck { margin-block-start: 0; }
-.rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 5px; min-width: 0; }
+.rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--sp-xs); min-width: 0; }
 /* field labels speak the same lowercase language as the checks rows (.ck-k);
    the Built-in chip keeps its own uppercase */
 .rw-app .verification-row .ofld-l { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.05; text-transform: lowercase; }
@@ -1548,16 +1559,16 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    viewport, so the pair also stacks when the drawer is narrow inside the
    wide-bench 2-up patch grid */
 @container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
-.rw-app .ofld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.rw-app .ofld-l { display: inline-flex; align-items: center; gap: 8px; font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
+.rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
 /* toggles are weighted, recessed rows - same well language as the task/ck rows */
-.rw-app .optschecks { display: flex; flex-direction: column; gap: 6px; }
+.rw-app .optschecks { display: flex; flex-direction: column; gap: var(--sp-s); }
 /* label leads, switch sits on the right edge - the row uses its full width instead
    of leaving dead space after a small box on the left */
 .rw-app .optschecks .popt {
   flex-direction: row-reverse; justify-content: space-between;
-  gap: 9px; padding: 7px 11px; border-radius: var(--r-s);
+  gap: var(--sp-m); padding: var(--sp-s) var(--sp-m); border-radius: var(--r-s);
   border: 1px solid var(--seam-soft); background: var(--well);
   font-size: .8rem; color: var(--ink); cursor: pointer;
   transition: border-color .15s, background .15s;
@@ -1571,7 +1582,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ buttons ═══ */
 .rw-app .btn {
-  appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-s);
   height: var(--ctl); padding-inline: 18px; border-radius: var(--r-s);
   border: 1px solid var(--seam-strong); background: var(--plate-2); color: var(--ink);
   font-size: .85rem; font-weight: 650; letter-spacing: .02em;
@@ -1649,10 +1660,10 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .meter.live .fill { transition: none; }
 .rw-app .meter.indet .fill { width: 32%; animation: indet 1.8s ease-in-out infinite; }
-.rw-app .prog { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.rw-app .prog .lab { display: flex; justify-content: space-between; gap: 10px; font-size: .8rem; color: var(--ink-2); }
+.rw-app .prog { display: flex; flex-direction: column; gap: var(--sp-s); min-width: 0; }
+.rw-app .prog .lab { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .8rem; color: var(--ink-2); }
 .rw-app .prog .lab .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-app .prog .sub { display: flex; justify-content: space-between; gap: 10px; font-size: .7rem; color: var(--ink-4); }
+.rw-app .prog .sub { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .7rem; color: var(--ink-4); }
 .rw-app .cancel {
   appearance: none; flex: none; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer;
   border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--plate-2); color: var(--ink-3);
@@ -1671,14 +1682,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    actions (cancel, plus a drag handle on a staging patch) sit in the top-right
    corner (consistent placement across stage + run) and the label reserves room so
    its percentage clears them (wider when a handle rides alongside the cancel) */
-.rw-app .prog-panel .prog { flex: 1 1 auto; justify-content: space-between; gap: 12px; }
+.rw-app .prog-panel .prog { flex: 1 1 auto; justify-content: space-between; gap: var(--sp-m); }
 /* nudge the bar down a touch so it sits visually mid-way between the label row and
    the threads/percent row (transform = no effect on the panel's height) */
 .rw-app .prog-panel .meter { height: 14px; transform: translateY(3px); }
 /* the corner buttons centre on the label's text line: panel top padding (16px)
    plus half the difference between the label line-height and the button box */
 .rw-app .prog-panel { --lab-lh: 1.2rem; }
-.rw-app .prog-panel .prog-actions { position: absolute; top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2); inset-inline-end: 10px; display: flex; align-items: center; gap: 6px; }
+.rw-app .prog-panel .prog-actions { position: absolute; top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2); inset-inline-end: 10px; display: flex; align-items: center; gap: var(--sp-s); }
 /* the label reserve DERIVES from the button size so touch-sized (36px) or
    phone-sized (24px) controls never render over the label text */
 .rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }
@@ -1725,7 +1736,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    time at the right. It prefers one line, but a long segment (e.g. trim's
    "N MB raw · N MB compressed") wraps onto additional lines and the button
    grows in height rather than the text running off its edge */
-.rw-app .download-btn { gap: 6px 10px; font-size: .9rem; flex-wrap: wrap; min-width: 0; }
+.rw-app .download-btn { gap: var(--sp-s) var(--sp-m); font-size: .9rem; flex-wrap: wrap; min-width: 0; }
 .rw-app .download-btn > svg { flex: none; }
 .rw-app .download-btn .dl-kind, .rw-app .download-btn .dl-size { flex: 0 1 auto; overflow-wrap: anywhere; }
 .rw-app .download-btn .dl-delta { min-width: 0; overflow-wrap: anywhere; }
@@ -1741,7 +1752,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .download-btn .dl-total b { font-weight: 750; }
 /* step-header complete-state badges: the green verified mark + per-stage chips
    stagger in as the result lands (delays are set inline per chip) */
-.rw-app .step-meta .rb { gap: 5px; }
+.rw-app .step-meta .rb { gap: var(--sp-xs); }
 .rw-app .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
 .rw-app .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
 /* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 -
@@ -1754,21 +1765,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* ═══ create: swap hinge ═══ */
 .rw-app .swap-row { display: flex; justify-content: center; height: 0; position: relative; z-index: 1; }
-.rw-app .swap-btn { translate: 0 -50%; height: 30px; gap: 6px; padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
+.rw-app .swap-btn { translate: 0 -50%; height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
 .rw-app .swap-btn svg { transition: transform .4s var(--ease); }
 .rw-app .swap-btn:hover svg { transform: rotate(180deg); }
 
 /* ═══ trace log ═══ */
 .rw-app .tracelog {
   max-height: 220px; overflow: auto; font-size: .7rem; line-height: 1.65; color: var(--ink-2);
-  background: var(--well); border-radius: var(--r-s); padding: 8px 10px;
+  background: var(--well); border-radius: var(--r-s); padding: var(--sp-s) var(--sp-m);
   overscroll-behavior: contain;
 }
 /* rows size to their longest line (not the container) so the log scroller gets
    a real horizontal extent - long trace lines scroll instead of clipping.
    each line is a hairline-separated, hoverable click-to-copy row */
 .rw-app .tracelog .ln {
-  display: flex; gap: 8px; white-space: nowrap; width: max-content; min-width: 100%;
+  display: flex; gap: var(--sp-s); white-space: nowrap; width: max-content; min-width: 100%;
   padding-block: 2px; border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
   cursor: pointer; transition: background .12s;
   animation: trace-in .25s var(--ease);
@@ -1810,21 +1821,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border: 1px solid var(--seam-strong); border-radius: var(--r-l); background: var(--plate);
   box-shadow: var(--overlay-shadow); overflow: clip;
 }
-.dlg-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-block-end: 1px solid var(--seam-soft); flex: none; }
+.dlg-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .dlg-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; }
-.dlg-actions { display: inline-flex; gap: 8px; align-items: center; }
+.dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
 .dlg-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
 .dlg-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 .dlg-x svg { width: 15px; height: 15px; }
-.dlg-body { padding: 14px 16px; overflow: auto; overscroll-behavior: contain; }
+.dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
 /* log dialog: a tall, readable trace with a level filter + copy in the header */
 /* the log is tall - fill the available dialog height so more lines are visible */
 .rw-app .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
 /* Actions sit on their own full-width row below the title (wrap on every viewport) and the controls
    share the width evenly; the level select is last, so it lands at the far right. */
-.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
-.rw-app .log-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; order: 1; flex-basis: 100%; }
+.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
+.rw-app .log-actions { display: flex; flex-wrap: wrap; gap: var(--sp-s); align-items: center; order: 1; flex-basis: 100%; }
 /* copy / download / level grow to share the row, but never shrink below their
    own label - on a narrow sheet they wrap to a new line instead of overlapping */
 .rw-app .log-actions > * { flex: 1 1 auto; min-inline-size: max-content; }
@@ -1836,7 +1847,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    active view is unmistakable - the selected segment is filled with the accent,
    the other stays muted. aria-pressed drives the visual state. */
 .rw-app .log-actions .logview {
-  flex: 1 1 100%; display: flex; gap: 3px; margin: 0; padding: 3px; min-inline-size: 0;
+  flex: 1 1 100%; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
   border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well);
 }
 .rw-app .log-actions .logview .seg-btn {
@@ -1854,19 +1865,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
 }
 .rw-app .log-actions .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
-.rw-app .log-filter-bar { padding: 8px 16px; border-block-end: 1px solid var(--seam-soft); flex: none; }
+.rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .rw-app .log-filter-bar .log-filter { height: 30px; width: 100%; font-size: .76rem; padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
-  border: 0; border-radius: 0; background: var(--well); padding: 12px 14px; font-size: .74rem;
+  border: 0; border-radius: 0; background: var(--well); padding: var(--sp-m) var(--sp-l); font-size: .74rem;
 }
 .rw-app .tracelog-empty { color: var(--ink-4); font-size: .78rem; padding: 4px 2px; }
 
 /* archive candidate picker */
-.rw-app .picklist { display: flex; flex-direction: column; gap: 6px; margin-block-start: 12px; }
+.rw-app .picklist { display: flex; flex-direction: column; gap: var(--sp-s); margin-block-start: 12px; }
 .rw-app .pick-row {
-  display: flex; align-items: center; gap: 10px; padding: 9px 11px; cursor: pointer;
+  display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-m); cursor: pointer;
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
   transition: border-color .15s, background .15s;
 }
@@ -1892,13 +1903,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .pick-row:has(.pick-input:checked)::before { background: var(--thread); }
 .rw-app .pick-row:has(.pick-input:checked) .pick-name { font-weight: 750; }
-.rw-app .pick-row .pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rw-app .pick-row .pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2xs); }
 /* the archive path WRAPS instead of truncating - on a phone the crumb is the
    only way to tell two same-named candidates apart */
 .rw-app .pick-row .pick-crumb { font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .rw-app .pick-row .pick-name { min-width: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
 .rw-app .pick-row .pick-archive { min-width: 0; font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
-.rw-app .pick-row .pick-meta { display: inline-flex; align-items: center; gap: 8px; margin-block-start: 3px; }
+.rw-app .pick-row .pick-meta { display: inline-flex; align-items: center; gap: var(--sp-s); margin-block-start: 3px; }
 .rw-app .pick-row .pick-size { flex: none; font-size: .76rem; color: var(--ink-3); }
 
 /* settings groups */
@@ -1907,30 +1918,30 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    group while the label column still hugs its text */
 .rw-app .setgroup {
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
-  padding: 11px 13px 13px; margin-block-end: 11px;
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px; align-content: start;
+  padding: var(--sp-m) var(--sp-l) var(--sp-l); margin-block-end: 11px;
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: var(--sp-m); align-content: start;
   break-inside: avoid;
 }
 .rw-app .setgroup > * { grid-column: 1 / -1; min-width: 0; }
 .rw-app .setgroup .gtitle { font-size: .84rem; font-weight: 650; letter-spacing: 0; color: var(--thread-text); margin-block-end: 9px; }
-.rw-app .setrow { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; gap: 10px; padding-block: 4px; }
+.rw-app .setrow { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; gap: var(--sp-m); padding-block: 4px; }
 /* every settings label (plain rows AND the range head) keeps the same air
    between its text and the info "i" */
-.rw-app .slabel { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--ink-2); }
+.rw-app .slabel { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .8rem; color: var(--ink-2); }
 .rw-app .gtitle .info { margin-inline-start: 8px; }
 .rw-app .setrow .select, .rw-app .setrow .input { height: 34px; font-size: .85rem; }
-.rw-app .setchecks { display: flex; flex-direction: column; gap: 8px; padding-block-start: 4px; }
+.rw-app .setchecks { display: flex; flex-direction: column; gap: var(--sp-s); padding-block-start: 4px; }
 .rw-app .setchecks .popt { font-size: .82rem; }
 /* min(300px, 100%) so a sub-320px viewport doesn't force a 300px track and
    overflow the dialog (the Codecs / RVZ groups clipped at 300px wide) */
-.rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 11px; }
+.rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--sp-m); }
 .rw-app .setcols .setgroup { margin: 0; }
 .rw-app .srange { padding-block: 6px 2px; }
-.rw-app .srange-label { display: inline-flex; align-items: center; gap: 8px; }
-.rw-app .srange-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-block-end: 4px; }
+.rw-app .srange-label { display: inline-flex; align-items: center; gap: var(--sp-s); }
+.rw-app .srange-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-m); margin-block-end: 4px; }
 .rw-app .srange-head .v { font-size: .76rem; font-weight: 650; color: var(--thread-text); }
 .rw-app .srange-scale { display: flex; justify-content: space-between; font-size: .62rem; color: var(--ink-4); margin-block-start: 2px; }
-.rw-app .validation { margin-block-start: 4px; padding: 8px 11px; border-radius: var(--r-s); font-size: .82rem; color: var(--fault); background: color-mix(in oklab, var(--fault) 9%, transparent); border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam)); }
+.rw-app .validation { margin-block-start: 4px; padding: var(--sp-s) var(--sp-m); border-radius: var(--r-s); font-size: .82rem; color: var(--fault); background: color-mix(in oklab, var(--fault) 9%, transparent); border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam)); }
 
 /* cross-document navigations (reload, hash entry) crossfade instead of
    flashing white - same-origin only, no-op in browsers without support */
@@ -2041,7 +2052,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    row; ≤720px (or short landscape) is the phone layout below. Everything
    else rides fluid tokens or container queries. */
 @media (max-width: 860px) {
-  .rw-app .masthead { gap: 10px; }
+  .rw-app .masthead { gap: var(--sp-m); }
   .rw-app .masthead-tools { margin-inline-start: auto; }
   .rw-app .modes { order: 3; flex-basis: 100%; margin-inline: 0; }
   .rw-app .mode-rail { display: flex; width: 100%; }
@@ -2053,10 +2064,10 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   /* trade empty-state ceremony for a shorter, single-purpose first screen.
      On phones the drop action is enough of an introduction. */
-  .rw-app .masthead { row-gap: 5px; padding-block: 5px 3px; }
-  .rw-app .brand { gap: 7px; }
+  .rw-app .masthead { row-gap: var(--sp-xs); padding-block: 5px 3px; }
+  .rw-app .brand { gap: var(--sp-s); }
   .rw-app .hero-lead {
-    display: flex; gap: 6px; margin: 5px 6px 8px; padding: 10px 12px;
+    display: flex; gap: var(--sp-s); margin: 5px 6px 8px; padding: var(--sp-m);
     border: 1px solid var(--seam); border-radius: var(--r-m);
     background: color-mix(in oklab, var(--thread) 4%, var(--plate));
   }
@@ -2081,17 +2092,17 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   /* cards stay framed on all four sides (the verified/fault border must read as
      a full outline, not just top+bottom) - tight inline padding so checksum
      hashes still get room */
-  .rw-app .card { gap: 5px; border-radius: var(--r-s); padding: 7px; }
-  .rw-app .card-name { gap: 2px; }
-  .rw-app .card-actions, .rw-app .patch-body-inner { gap: 5px; }
+  .rw-app .card { gap: var(--sp-xs); border-radius: var(--r-s); padding: 7px; }
+  .rw-app .card-name { gap: var(--sp-2xs); }
+  .rw-app .card-actions, .rw-app .patch-body-inner { gap: var(--sp-xs); }
   /* drawer heads keep one uniform height on phones - matching the output
      card's Options drawer - instead of shrinking below a comfortable tap */
   .rw-app .cks > .cks-head { min-height: 36px; padding-block: 1px; }
   .rw-app .drawer-action { top: 15px; }
-  .rw-app .cks > .cks-head .readouts { gap: 4px; }
+  .rw-app .cks > .cks-head .readouts { gap: var(--sp-xs); }
   .rw-app .cks .cks-inner > :last-child { margin-block-end: 6px; }
-  .rw-app .optsbody { gap: 6px; padding-block: 6px 0; }
-  .rw-app .optsgrid { gap: 6px 9px; }
+  .rw-app .optsbody { gap: var(--sp-s); padding-block: 6px 0; }
+  .rw-app .optsgrid { gap: var(--sp-s) var(--sp-m); }
   .rw-app .fname .outname, .rw-app .fname .select {
     font-size: .82rem; line-height: 1.35; padding-block: 9px;
   }
@@ -2103,23 +2114,23 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     .rw-app .fname .outname { padding-block: 11px 7px; }
   }
   .rw-app .runprog { min-height: 60px; padding-block: 6px 4px; }
-  .rw-app .runprog .prog { gap: 3px; }
+  .rw-app .runprog .prog { gap: var(--sp-2xs); }
   .rw-app .runprog .meter { height: 8px; transform: none; }
   .rw-app .runprog .prog-actions { top: 6px; }
   .rw-app .cards > .prog-panel { border-radius: var(--r-s); }
-  .rw-app .step.is-input.is-empty .drop.hero { gap: 5px; padding-inline: 12px; }
-  .rw-app .drop.hero .main { gap: 6px; font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
+  .rw-app .step.is-input.is-empty .drop.hero { gap: var(--sp-xs); padding-inline: 12px; }
+  .rw-app .drop.hero .main { gap: var(--sp-s); font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
   .rw-app .drop.hero .main svg { padding: 8px; border-radius: 11px; }
-  .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: 7px; font-size: .78rem; }
-  .rw-app .cards { gap: 9px; }
-  .rw-app .patch-cards { gap: 11px; }
+  .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: var(--sp-s); font-size: .78rem; }
+  .rw-app .cards { gap: var(--sp-m); }
+  .rw-app .patch-cards { gap: var(--sp-m); }
   .rw-app .workflow-step-after-items:not(:empty),
   .rw-app .cards:not(:empty) + .drop,
   .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 9px; }
   .rw-app .bundle-rom-expectation { margin-block-start: 9px; }
   /* update banner stays ONE row on a phone: dot · text+version-link · Reload ·
      dismiss - the text wraps internally, Reload stays an inline slim button */
-  .rw-app .updates { gap: 8px; }
+  .rw-app .updates { gap: var(--sp-s); }
   /* width-hungry dialogs go edge-to-edge on a phone: the log as a full-height
      sheet, the picker full width at its own height. */
   .rw-app .log-dlg, .rw-app .picker-dlg { max-width: 100vw; width: 100vw; }
@@ -2131,14 +2142,14 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .picker-dlg .dlg-frame { border-radius: 0; border-inline: 0; }
   /* log header: title + close on the first line, the filter/level/copy strip
      wraps to a full-width second line instead of squeezing beside the title */
-  .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: 9px; }
+  .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
   .rw-app .log-actions { order: 1; flex-basis: 100%; margin-inline-start: 0; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
      on a phone - drop the group indent, trim row padding, shrink the copy
      control. Values still line up via the fixed label column. */
   .rw-app .ckgrp { padding-inline-start: 0; }
-  .rw-app .ck { grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto; gap: 3px 6px; padding-inline: 6px; }
+  .rw-app .ck { grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto; gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; }
   .rw-app .ck .ck-k { font-size: .72rem; }
   /* same clamp as the base rule with the phone geometry's smaller overhead
      (40px label + 20px copy + 2×6px gaps + 2×6px padding − 20px bleed) */
@@ -2154,7 +2165,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
      names - let the label column size to its content so the label always fits
      and the value moves right, instead of forcing the narrow hash-label width */
   /* keep the subgrid (set on .ck.req above) - only tune size/gap on mobile */
-  .rw-app .ck.req { column-gap: 8px; }
+  .rw-app .ck.req { column-gap: var(--sp-s); }
   .rw-app .ck.req .ck-k { font-size: .72rem; }
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
@@ -2199,7 +2210,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── modal framework: loom dialog visuals on the React-managed modal ── */
-.rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; }
+.rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--sp-l); }
 .rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
   /* max-width in viewport units - the grid track grows to the card's
@@ -2212,12 +2223,12 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   transition: transform .26s var(--ease), opacity .22s ease;
 }
 @starting-style { .rw-modal-card { transform: translateY(10px) scale(.97); opacity: 0; } }
-.rw-modal .modal-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-block-end: 1px solid var(--seam-soft); flex: none; }
+.rw-modal .modal-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .rw-modal .modal-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; min-width: 0; overflow-wrap: anywhere; }
 .rw-modal .modal-sub { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
 .rw-app .mh-sp { flex: 1 1 auto; }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
-.rw-modal .modal-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
 .rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
 .rw-modal.changelog-modal .changelog-version {
   padding-block: 2px 9px;
@@ -2242,7 +2253,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 .rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
 .rw-app .ofld .input.tarea { height: auto; }
 @container settings-card (min-width: 688px) {
-  .rw-modal.settings-modal .modal-body { columns: 2; column-gap: 11px; }
+  .rw-modal.settings-modal .modal-body { columns: 2; column-gap: var(--sp-m); }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }
   .rw-modal.settings-modal .modal-body .setcols .setgroup { margin-block-end: 11px; }
   .rw-modal.settings-modal .modal-body .validation { column-span: all; }
@@ -2250,9 +2261,9 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 /* stack label over control when the card runs narrow (out-specifies the
    subgrid rule above) */
 @container settings-card (max-width: 560px) {
-  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: var(--sp-xs); }
 }
-.rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: 4px; }
+.rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-xs); }
 .rw-app .setrow .sctl .select, .rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
 .rw-app .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .setrow .slabel small { flex-basis: 100%; font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
@@ -2264,16 +2275,16 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    keeps the .seltree/.selnode structure the browser tests drive, drawn in
    the loom picker language: the row IS the selection state (left bar +
    weight), with the real checkbox rendered as the shared switch. */
-.rw-app .seltree { display: flex; flex-direction: column; gap: 6px; }
+.rw-app .seltree { display: flex; flex-direction: column; gap: var(--sp-s); }
 /* rows reuse the .pick-row picker language; selnode only resets the button so
    button rows render identically to label rows */
 .rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; min-width: 0; }
 .rw-app .pick-row.off:hover { border-color: var(--seam); }
 .rw-app .pick-row .pick-note { min-width: 0; font-size: .74rem; color: var(--ink-4); overflow-wrap: anywhere; }
-.rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 9px; }
+.rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); margin-bottom: 9px; }
 .rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
 .rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
-.rw-app .selfoot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }
+.rw-app .selfoot { display: flex; justify-content: flex-end; gap: var(--sp-m); margin-top: 12px; }
 /* the "matches patch" tag also carries .fmt (orange) - match .tag.fmt's
    specificity so the verified-green actually wins the cascade */
 .rw-app .tag.matches { color: var(--verified); }
@@ -2317,11 +2328,11 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 .rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
 
 /* confirmation dialog body (React modal card) */
-.rw-modal .confirm-card { width: min(440px, 100%); padding: 16px; }
-.rw-modal .confirm-card .c-title { display: flex; align-items: center; gap: 9px; font-size: .95rem; font-weight: 700; color: var(--ink); }
+.rw-modal .confirm-card { width: min(440px, 100%); padding: var(--sp-l); }
+.rw-modal .confirm-card .c-title { display: flex; align-items: center; gap: var(--sp-m); font-size: .95rem; font-weight: 700; color: var(--ink); }
 .rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
 .rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
-.rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); }
 
 /* checksum rows render as real buttons (whole row = the copy control) */
 .rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
@@ -2391,7 +2402,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    the single-column stack and the wide-bench 2-up grid. */
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
-  align-items: start; column-gap: 9px; row-gap: 5px;
+  align-items: start; column-gap: var(--sp-m); row-gap: var(--sp-xs);
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
@@ -2471,7 +2482,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
      zero this back out (their tighter rail margins carry the rhythm) */
   padding: var(--step-pt) 0 2px;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-s);
   border: 0;
   border-radius: 0;
 }
@@ -2508,14 +2519,14 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     grid-template-columns: minmax(112px, 1fr) minmax(0, 240px);
     grid-template-areas: "brand tools";
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-s);
     padding-block: 5px 6px;
   }
 
   .rw-app .brand {
     grid-area: brand;
     justify-self: start;
-    gap: 7px;
+    gap: var(--sp-s);
     min-width: 0;
     width: 100%;
   }
@@ -2536,7 +2547,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     justify-content: end;
     min-width: 0;
     width: 100%;
-    gap: 4px;
+    gap: var(--sp-xs);
     margin: 0;
   }
 
@@ -2566,16 +2577,16 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   }
 
   .rw-app .updates {
-    gap: 6px;
+    gap: var(--sp-s);
     min-height: 44px;
-    padding: 6px 8px;
+    padding: var(--sp-s);
   }
 
   .rw-app .updates-pulse { width: 6px; height: 6px; }
   .rw-app .updates-text {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-s);
     white-space: nowrap;
     font-size: .78rem;
   }
@@ -2630,7 +2641,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     flex: 1 1 0;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
+    gap: var(--sp-2xs);
     line-height: 1;
   }
 
@@ -2644,7 +2655,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   }
 
   /* the tools sub-picker becomes a full-width segmented control */
-  .rw-app .tools-subnav { padding: 8px 10px; }
+  .rw-app .tools-subnav { padding: var(--sp-s) var(--sp-m); }
   .rw-app .tools-subnav-rail { width: 100%; }
   .rw-app .tools-subnav-tab {
     flex: 1 1 0;
@@ -2749,22 +2760,22 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     padding-block-end: max(20px, env(safe-area-inset-bottom));
   }
 
-  .rw-modal.changelog-modal { padding: 10px; }
+  .rw-modal.changelog-modal { padding: var(--sp-m); }
   .rw-modal.changelog-modal .rw-modal-card {
     width: 100%;
     max-width: min(520px, calc(100vw - 20px));
     max-height: calc(100dvh - 20px);
   }
 
-  .rw-modal.changelog-modal .modal-head { padding: 10px 12px; }
-  .rw-modal.changelog-modal .modal-body { padding: 11px 12px 12px; }
-  .rw-modal.changelog-modal .changelog { gap: 8px; }
+  .rw-modal.changelog-modal .modal-head { padding: var(--sp-m); }
+  .rw-modal.changelog-modal .modal-body { padding: var(--sp-m); }
+  .rw-modal.changelog-modal .changelog { gap: var(--sp-s); }
   .rw-modal.changelog-modal .changelog-subject { font-size: .95rem; }
   .rw-modal.changelog-modal .changelog-version { padding-block: 0 7px; font-size: .76rem; }
   .rw-modal.changelog-modal .changelog-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--sp-s);
     padding-block-start: 4px;
   }
 
