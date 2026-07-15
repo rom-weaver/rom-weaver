@@ -396,6 +396,8 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
   await waitForApplyButtonEnabled();
 
+  // The editable check fields live behind bundle-edit mode.
+  document.getElementById("rom-weaver-button-bundle-edit")?.click();
   document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
   const crcInput = await waitForState(() => document.getElementById("rom-weaver-patch-input-crc32-0"), 30000);
   expect(crcInput).toBeInstanceOf(HTMLInputElement);

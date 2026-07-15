@@ -401,6 +401,15 @@ export const installPatcherTestHooks = () => {
     await clearOpfsInputDirectory();
     await warmupRomWeaverRunner();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    // Bundle-edit mode persists in the URL hash (#bundle-edit); a fresh mount
+    // must not inherit the previous test's editor state.
+    if (globalThis.location.hash) {
+      globalThis.history.replaceState(
+        globalThis.history.state,
+        "",
+        globalThis.location.pathname + globalThis.location.search,
+      );
+    }
     document.body.innerHTML = '<div id="app"></div>';
   });
 

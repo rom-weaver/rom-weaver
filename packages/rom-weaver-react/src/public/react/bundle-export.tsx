@@ -92,7 +92,7 @@ const embeddedChecks = (item: PatchStackItemState | undefined, side: "in" | "out
 };
 
 type UseBundleExportOptions = {
-  /** Live session sources, read at dialog-open time. */
+  /** Live session sources, read at export time. */
   getSessionSources: () => BundleExportSources;
   /** Live per-patch stack items (index-aligned with patches) for leaf names + header round-trips. */
   getStackItems: () => PatchStackItemState[];
@@ -100,10 +100,12 @@ type UseBundleExportOptions = {
   /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the bundle's `output.header`. */
   getOutputHeader?: () => "auto" | "keep" | "strip" | undefined;
+  /** Bundle-edit overrides for the exported rom.checks/rom.size; null falls
+   * back to the staged ROM's computed hashes. */
+  getRomChecksOverrides?: () => { checksums: Record<string, string>; size?: number } | null;
   disabledPatchIds: ReadonlySet<string>;
   /** Originating per-patch metadata (name/label/description round-trips). */
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
-  initialName?: string;
   initialBundleRom?: boolean;
   initialFormat?: string;
   ready: boolean;
@@ -129,102 +131,30 @@ const useBundleExport = ({
   getStackItems,
   getName,
   getOutputHeader,
+  getRomChecksOverrides,
   disabledPatchIds,
   bundleMetaById,
-  initialName,
   initialBundleRom = false,
   initialFormat = "",
   ready,
   onComplete,
 }: UseBundleExportOptions) => {
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [name, setName] = useState(initialName || "");
   const [format, setFormat] = useState(initialFormat);
   const [bundleRom, setBundleRom] = useState(initialBundleRom);
-  const [rows, setRows] = useState<BundleExportRow[]>([]);
   const [progress, setProgress] = useState<BundleExportProgress | null>(null);
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const downloadableOutputRef = useRef<PublicOutput | null>(null);
-  // The sources captured when the dialog opened, so the export run stays aligned with its rows even
-  // if the bench changes underneath the open dialog.
+  // The sources captured when the export ran, so the run stays aligned even if
+  // the bench changes underneath it.
   const sourcesRef = useRef<BundleExportSources>({ patches: [], rom: null });
-
-  const openDialog = useCallback(() => {
-    const sources = getSessionSources();
-    const items = getStackItems();
-    const ids = getBinarySourceListStableIds(sources.patches.map((patch) => patch.originalSource as BinarySource));
-    sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
-    setRows(
-      sources.patches.map((patch, index) => {
-        const id = ids[index] || "";
-        const meta = id ? bundleMetaById.get(id) : undefined;
-        const item = items[index];
-        const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
-        const archiveFileName = item?.archiveFileName?.trim();
-        const headerChoice = item?.headerChoice;
-        // Toggled-off patches export as `optional`; a bundle session's locked
-        // `required` entries stay required; everything else is `default`.
-        const defaultEnabled = !disabledPatchIds.has(id);
-        return {
-          fileName,
-          ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
-          ...(item?.fileSize ? { fileSize: item.fileSize } : {}),
-          ...(item?.format ? { format: item.format } : {}),
-          default: defaultEnabled,
-          ...(meta?.name ? { name: meta.name } : {}),
-          checks: "",
-          description: meta?.description || "",
-          outputChecks: "",
-          ...(meta?.label ? { label: meta.label } : {}),
-          ...(headerChoice === "keep" || headerChoice === "strip" ? { header: headerChoice } : {}),
-        };
-      }),
-    );
-    // Auto-name: the originating bundle session's name, else the ROM file
-    // name (else the first patch's) without its extension.
-    const romName = sources.rom?.fileName || "";
-    const firstPatchName = items[0]?.fileName || sources.patches[0]?.fileName || "";
-    setName(initialName || stripFileExtension(romName) || stripFileExtension(firstPatchName));
-    setFormat(initialFormat);
-    setBundleRom(initialBundleRom);
-    setProgress(null);
-    setError("");
-    setOpen(true);
-  }, [
-    disabledPatchIds,
-    getSessionSources,
-    getStackItems,
-    initialBundleRom,
-    initialFormat,
-    initialName,
-    bundleMetaById,
-  ]);
 
   useEffect(() => {
     setFormat(initialFormat);
     setBundleRom(initialBundleRom);
   }, [initialBundleRom, initialFormat]);
-
-  const closeDialog = useCallback(() => {
-    if (!busy) setOpen(false);
-  }, [busy]);
-
-  const setRowDefault = useCallback((index: number, defaultEnabled: boolean) => {
-    setRows((previous) =>
-      previous.map((row, rowIndex) => (rowIndex === index ? { ...row, default: defaultEnabled } : row)),
-    );
-  }, []);
-
-  const setRowDescription = useCallback((index: number, description: string) => {
-    setRows((previous) => previous.map((row, rowIndex) => (rowIndex === index ? { ...row, description } : row)));
-  }, []);
-
-  const setRowChecks = useCallback((index: number, checks: string) => {
-    setRows((previous) => previous.map((row, rowIndex) => (rowIndex === index ? { ...row, checks } : row)));
-  }, []);
 
   const downloadExport = useCallback(async () => {
     const output = downloadableOutputRef.current;
@@ -254,7 +184,7 @@ const useBundleExport = ({
       return;
     }
     const create = browserRuntime.bundle?.create;
-    const exportName = getName?.().trim() || name;
+    const exportName = getName?.().trim() || "";
     const sources = getSessionSources();
     sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
     const { rom, patches } = sources;
@@ -374,12 +304,20 @@ const useBundleExport = ({
         }
       }
       const outputHeader = getOutputHeader?.();
+      // Bundle-edit overrides win over the staged ROM's computed values - the
+      // author is pinning what the bundle should expect, per field.
+      const romChecksOverrides = getRomChecksOverrides?.() || null;
+      const romChecksums = {
+        ...(rom.checksums || {}),
+        ...(romChecksOverrides?.checksums || {}),
+      };
+      const romSize = romChecksOverrides?.size ?? rom.size;
       const { result, bundleOutput, archiveOutput } = await create({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
         ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
-        ...(rom.checksums ? { romChecksums: formatChecks(rom.checksums) } : {}),
-        ...(typeof rom.size === "number" ? { romSize: rom.size } : {}),
+        ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
+        ...(typeof romSize === "number" ? { romSize } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
         // The ROM is never distributed unless explicitly bundled: its bundle
         // entry keeps checks only and the applying user supplies the file.
@@ -418,7 +356,6 @@ const useBundleExport = ({
         }),
       );
       await browserRuntime.publicOutput.saveAs(downloadOutput);
-      setOpen(false);
     } catch (runError) {
       if (!abortController.signal.aborted) {
         setError(runError instanceof Error ? runError.message : String(runError));
@@ -441,8 +378,8 @@ const useBundleExport = ({
     getStackItems,
     getName,
     getOutputHeader,
+    getRomChecksOverrides,
     bundleMetaById,
-    name,
     onComplete,
     ready,
     downloadExport,
@@ -488,23 +425,14 @@ const useBundleExport = ({
     bundleRom,
     busy,
     cancelExport,
-    closeDialog,
     downloadable: downloadableOutput !== null,
     error,
     format,
-    name,
-    open,
-    openDialog,
     progress,
     ready,
-    rows,
     runExport,
     setBundleRom: selectBundleRom,
     setFormat: selectFormat,
-    setName,
-    setRowChecks,
-    setRowDefault,
-    setRowDescription,
   };
 };
 

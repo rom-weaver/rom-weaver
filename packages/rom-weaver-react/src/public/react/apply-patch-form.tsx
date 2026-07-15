@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
@@ -42,6 +42,7 @@ import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-ses
 import type { BinarySource } from "./patcher-form.ts";
 import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
+import type { RomBundleChecksDraft } from "./rom-bundle-checks-editor.tsx";
 import { useApplySettings, useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
@@ -79,6 +80,21 @@ const buildEagerPatchStageInfo = (
     (patch.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
     "None selected";
   return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
+};
+
+/** The URL hash that deep-links into bundle-edit mode (`…#bundle-edit`). */
+const BUNDLE_EDIT_HASH = "bundle-edit";
+
+const readBundleEditHash = (): boolean =>
+  typeof window !== "undefined" && window.location.hash.replace(/^#/, "") === BUNDLE_EDIT_HASH;
+
+const writeBundleEditHash = (active: boolean) => {
+  if (typeof window === "undefined") return;
+  if (readBundleEditHash() === active) return;
+  const url = new URL(window.location.href);
+  url.hash = active ? BUNDLE_EDIT_HASH : "";
+  // replaceState: toggling the editor is a mode, not a navigation - no history entries.
+  window.history.replaceState(window.history.state, "", url);
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
@@ -213,6 +229,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   // Latest patch list mirror for flows outside the staging pipeline (bundle export).
   const currentPatchesRef = useRef<BinarySource[]>([]);
+  // Ordered patch file names as state (the refs above don't re-render): drives
+  // the bundle chain-intact check for output verification + its notice.
+  const [currentPatchNames, setCurrentPatchNames] = useState<readonly string[]>([]);
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
@@ -222,12 +241,98 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       }
       syncPatchTracking(nextPatches);
       currentPatchesRef.current = nextPatches;
+      setCurrentPatchNames(
+        nextPatches.map((patch, index) => getReactBinarySourceFileName(patch, `Patch ${index + 1}`)),
+      );
       handleBundlePatchesChange(nextPatches);
       syncPatchSelectionRefs(nextPatches);
       props.onPatchesChange?.(nextPatches);
     },
     [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
+
+  // Bundle-edit mode: the authoring layer (patch name/description/check fields,
+  // ROM bundle checks, export controls) stays hidden until the user explicitly
+  // enters the editor. The mode deep-links via the #bundle-edit URL hash.
+  const [bundleEditMode, setBundleEditMode] = useState(readBundleEditHash);
+  const setBundleEditModeAndHash = useCallback((active: boolean) => {
+    setBundleEditMode(active);
+    writeBundleEditHash(active);
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHashChange = () => setBundleEditMode(readBundleEditHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+  // The bundle-checks grid on the ROM card (bundle-edit mode): overrides the
+  // exported rom.checks/rom.size when set; empty fields fall back to the staged
+  // ROM's computed hashes.
+  const [romBundleChecks, setRomBundleChecks] = useState<RomBundleChecksDraft>({});
+  const updateRomBundleChecks = useCallback((updates: RomBundleChecksDraft) => {
+    setRomBundleChecks((previous) => ({ ...previous, ...updates }));
+  }, []);
+
+  // How the current bench relates to the loaded bundle's authored chain:
+  // - "full": every bundle patch enabled, in bundle order, nothing foreign -
+  //   the only state the bundle's expected output describes.
+  // - "partial": same chain, but at least one patch toggled off.
+  // - "diverged": the patch list itself differs (append/remove/reorder/foreign).
+  const bundleChainStatus = useMemo((): "full" | "partial" | "diverged" | null => {
+    const session = activeBundleSession;
+    if (!(session?.entries.length && bundleMetaById.size && currentPatchNames.length)) return null;
+    const expected = session.entries.map((entry) => entry.fileName);
+    const namesMatch =
+      currentPatchNames.length === expected.length &&
+      expected.every((name, index) => currentPatchNames[index] === name);
+    if (!namesMatch) return "diverged";
+    return disabledPatchIds.size ? "partial" : "full";
+  }, [activeBundleSession, bundleMetaById, currentPatchNames, disabledPatchIds]);
+
+  // Reactive owner of the bundle's expected-output check: engaged only while the
+  // full authored chain is enabled (the bundle's output.checks describe exactly
+  // that result), stood down otherwise. Runs through the same per-patch option
+  // path as user edits; the carrier index is found by value so reorders and
+  // clears stay aligned.
+  const bundleOutputChecks = activeBundleSession?.chainEndpointChecks.output?.checksums;
+  const bundleOutputChecksum = bundleOutputChecks?.sha1 || bundleOutputChecks?.md5 || bundleOutputChecks?.crc32 || "";
+  useEffect(() => {
+    if (!bundleOutputChecksum || bundleChainStatus === null) return;
+    const desired = bundleChainStatus === "full" ? bundleOutputChecksum : "";
+    const targetIndex = (activeBundleSession?.entries.length ?? 0) - 1;
+    let cancelled = false;
+    void (async () => {
+      // Wait for the stack to settle (same readiness rule as the session seeding)
+      // so the option lands on staged items instead of racing their staging.
+      for (let attempt = 0; attempt < 100 && !cancelled; attempt += 1) {
+        const items = bundleControllersRef.current.patchStack?.getState().items || [];
+        if (items.length && items.every((item) => !(item.progress || item.optionsDisabled))) break;
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      }
+      if (cancelled) return;
+      const stack = bundleControllersRef.current.patchStack;
+      const items = stack?.getState().items || [];
+      const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === bundleOutputChecksum);
+      if (desired) {
+        if (carrierIndex === targetIndex) return;
+        if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+        if (targetIndex >= 0 && targetIndex < items.length)
+          await stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum });
+        return;
+      }
+      if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBundleSession, bundleChainStatus, bundleOutputChecksum]);
+
+  // The stand-down notice: the bundle records an expected output, but the
+  // current selection/chain is not the one it describes.
+  const bundleOutputStandDown =
+    bundleOutputChecksum && (bundleChainStatus === "partial" || bundleChainStatus === "diverged")
+      ? bundleChainStatus
+      : null;
 
   const queueMutation = useCallback(<TValue,>(callback: () => Promise<TValue>) => {
     const run = mutationQueueRef.current.catch(() => undefined).then(callback);
@@ -1077,6 +1182,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     disabledPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
+    getRomChecksOverrides: () => {
+      const checksums: Record<string, string> = {};
+      for (const algorithm of ["crc32", "md5", "sha1"] as const) {
+        const value = romBundleChecks[algorithm]?.trim();
+        if (value) checksums[algorithm] = value;
+      }
+      const size = romBundleChecks.bytes?.trim();
+      if (!(Object.keys(checksums).length || size)) return null;
+      return { checksums, ...(size ? { size: Number(size) } : {}) };
+    },
     getSessionSources: (): ApplyWorkflowBundleSources => {
       const workflowSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
       if (workflowSources?.rom || workflowSources?.patches.length) return workflowSources;
@@ -1099,11 +1214,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     getStackItems: () => resolvedStackController.getState().items,
     initialBundleRom: defaultBundleContents === "rom",
     initialFormat: defaultBundleFormat,
-    initialName:
-      activeBundleSession?.name || resolvedOutputController.getState().displayFileName || "rom-weaver-bundle",
     ready: bundleExportReady,
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
+
+  const enterBundleEditMode = useCallback(() => setBundleEditModeAndHash(true), [setBundleEditModeAndHash]);
+  const exitBundleEditMode = useCallback(() => setBundleEditModeAndHash(false), [setBundleEditModeAndHash]);
+  // Being in the editor is the "I'm making a bundle" signal: arm a default
+  // package format so the export action is live without a second decision.
+  // An effect (not the enter callback) so the #bundle-edit hash entry arms too.
+  const {
+    format: bundleExportFormat,
+    setBundleRom: setBundleExportRom,
+    setFormat: setBundleExportFormat,
+  } = bundleExport;
+  useEffect(() => {
+    if (!bundleEditMode || bundleExportFormat) return;
+    setBundleExportFormat("zip");
+    setBundleExportRom(false);
+  }, [bundleEditMode, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
@@ -1152,6 +1281,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        bundleEdit={{
+          active: bundleEditMode,
+          enter: enterBundleEditMode,
+          exit: exitBundleEditMode,
+          hasOptionalEntries:
+            !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
+          outputStandDown: bundleOutputStandDown,
+          sessionActive: !!activeBundleSession,
+          ...(activeBundleSession?.name ? { sessionName: activeBundleSession.name } : {}),
+        }}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}
         controllers={{
@@ -1161,8 +1300,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
+        {...(activeBundleSession?.chainEndpointChecks.input
+          ? { bundleExpectedRomChecks: activeBundleSession.chainEndpointChecks.input }
+          : {})}
         {...(activeBundleSession?.romExpectation ? { bundleRomExpectation: activeBundleSession.romExpectation } : {})}
         onBundleMetaChange={updateBundleMeta}
+        onRomBundleChecksChange={updateRomBundleChecks}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{
@@ -1171,6 +1314,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           onToggle: togglePatchEnabled,
         }}
         pendingDrops={pendingDrops}
+        romBundleChecks={romBundleChecks}
         startup={startup}
       />
       {candidateSelectionDialog}

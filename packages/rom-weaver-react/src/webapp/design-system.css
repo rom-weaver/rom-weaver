@@ -1532,6 +1532,37 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* "provide this ROM" card in the ROM step: the standard file-card anatomy,
    but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
    (the same "off" language as a disabled patch) with the file name ghosted */
+/* ── Bundle edit ─────────────────────────────────────────────────────────────
+   The mode strip: names the editor while it is on (with the way out) and, for a
+   loaded bundle session, offers the revising author's way in. */
+.rw-app .bundle-edit-bar {
+  display: flex; align-items: center; gap: var(--sp-s);
+  margin-block: 10px 0; padding: 7px 12px;
+  border: 1px solid var(--seam-soft); border-radius: var(--r-s);
+  background: color-mix(in oklab, var(--well) 72%, transparent);
+  font-size: .85rem;
+}
+.rw-app .bundle-edit-bar > svg { width: 15px; height: 15px; flex: none; color: var(--thread-text); }
+.rw-app .bundle-edit-title { font-weight: 650; white-space: nowrap; }
+.rw-app .bundle-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.rw-app .bundle-edit-hint { flex: 1 1 auto; min-width: 0; font-size: .78rem; color: var(--ink-3); }
+.rw-app .bundle-edit-bar .btn { margin-inline-start: auto; flex: none; }
+.rw-app .bundle-edit-bar.is-active { border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-soft)); }
+
+/* Per-row expected-vs-computed verdict inside a Checks drawer. */
+.rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
+.rw-app .ck-mark svg { width: 13px; height: 13px; }
+.rw-app .ck-mark.ok { color: var(--verified); }
+.rw-app .ck-mark.bad { color: var(--fault); }
+
+/* The ROM card's bundle-checks editor (bundle-edit mode). */
+.rw-app .rom-bundle-checks .patch-check-group { margin-block-start: 3px; }
+.rw-app .rom-bundle-checks .hintline { margin-top: 6px; }
+
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .bundle-edit-hint { display: none; }
+}
+
 .rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
 .rw-app .bundle-rom-expectation .card {
   border-style: dashed;

@@ -6,6 +6,14 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
+import {
+  CHECK_ALGORITHMS,
+  CHECK_FIELDS,
+  CHECK_HEX_LENGTHS,
+  CHECK_LABELS,
+  isValidCheckValue,
+  normalizeCheckInput,
+} from "./components/ds/check-fields.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import { Drawer, DrawerMark, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
@@ -182,17 +190,6 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   );
 };
 
-const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
-/* the editable verification fields: the three hashes plus the exact byte size */
-const CHECK_FIELDS = ["crc32", "md5", "sha1", "bytes"] as const;
-const CHECK_LABELS = { bytes: "BYTES", crc32: "CRC32", md5: "MD5", sha1: "SHA-1" } as const;
-const CHECK_HEX_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
-
-const normalizeCheckInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
-
-const isValidCheckValue = (algorithm: (typeof CHECK_ALGORITHMS)[number], value: string) =>
-  value.length === CHECK_HEX_LENGTHS[algorithm] && /^[0-9a-f]+$/.test(value);
-
 /** Grow a textarea to its content (`field-sizing: content` isn't in every
  * target browser yet); runs on mount and on every input. */
 const autosizeTextarea = (element: HTMLTextAreaElement | null) => {
@@ -224,12 +221,14 @@ const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "output") 
 
 const PatchOptions = ({
   disabled,
+  editMode,
   index,
   isChainInput,
   isChainOutput,
   item,
   meta,
   onMetaChange,
+  outputCheckHint,
   patchStack,
   showVerdict,
 }: {
@@ -237,6 +236,10 @@ const PatchOptions = ({
    * plan, so the header verdict/timing readouts stay off - the drawer remains
    * editable for bundle authors. */
   disabled?: boolean;
+  /** Bundle-edit mode: the authoring fields (name/description + editable check
+   * grids) render only inside the editor - the plain apply view keeps the
+   * drawer to its functional options. */
+  editMode?: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
@@ -247,6 +250,9 @@ const PatchOptions = ({
   item: PatchStackItemState;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  /** Chain-output card of a bundle with optional patches: remind the author the
+   * expected output only describes the full chain. */
+  outputCheckHint?: boolean;
   patchStack: PatcherStackController;
   /** Carry the dry-run verdict/timing on this header - off when the card renders
    * a Checks drawer, which owns the verdict instead. */
@@ -319,97 +325,106 @@ const PatchOptions = ({
         </>
       }
     >
-      <div className="optsgrid">
-        <div className="ofld patch-name-field">
-          <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
-            Patch name
-          </label>
-          <input
-            className="input popt-input"
-            defaultValue={meta?.name || ""}
-            id={`rom-weaver-patch-name-${index}`}
-            key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
-            onBlur={(event) => onMetaChange?.({ name: event.currentTarget.value.trim() || undefined })}
-            placeholder={item.fileName.replace(/\.[^.]+$/, "")}
-            type="text"
-          />
-        </div>
-        <div className="ofld patch-description-field">
-          <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
-            Description
-          </label>
-          <textarea
-            className="input popt-input"
-            defaultValue={meta?.description || ""}
-            id={`rom-weaver-patch-description-${index}`}
-            key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
-            onBlur={(event) => onMetaChange?.({ description: event.currentTarget.value.trim() || undefined })}
-            onInput={(event) => autosizeTextarea(event.currentTarget)}
-            placeholder="What this patch changes"
-            ref={autosizeTextarea}
-            rows={1}
-          />
-        </div>
-      </div>
-      <div className="verification-pair">
-        {(["input", "output"] as const).map((side) => {
-          const embedded = side === "input" ? embeddedInput : embeddedOutput;
-          const field = side === "input" ? "inputChecks" : "outputChecks";
-          return (
-            <div className="patch-check-group" key={side}>
-              <div className="ck-group-head">
-                <span>{side === "input" ? "Input verification" : "Output verification"}</span>
-              </div>
-              <div className="verification-list">
-                {CHECK_FIELDS.map((checkField) => {
-                  const isBytes = checkField === "bytes";
-                  const builtIn = embedded[checkField];
-                  const metaValue = isBytes
-                    ? typeof meta?.[field]?.size === "number"
-                      ? String(meta?.[field]?.size)
-                      : ""
-                    : meta?.[field]?.checksums?.[checkField] || "";
-                  const value = builtIn || metaValue;
-                  const invalid = !builtIn && !!invalidChecks[`${side}:${checkField}`];
-                  return (
-                    <div className="verification-row" key={`${side}:${checkField}`}>
-                      <label className="ofld-l" htmlFor={`rom-weaver-patch-${side}-${checkField}-${index}`}>
-                        {CHECK_LABELS[checkField]}
-                        {builtIn ? <span className="built-in">Built in</span> : null}
-                      </label>
-                      <input
-                        aria-invalid={invalid || undefined}
-                        className="input mono popt-input"
-                        defaultValue={value}
-                        id={`rom-weaver-patch-${side}-${checkField}-${index}`}
-                        key={`${side}:${checkField}:${item.key ?? index}:${value}`}
-                        onBlur={
-                          builtIn
-                            ? undefined
-                            : (event) =>
-                                isBytes
-                                  ? commitSize(side, event.currentTarget.value)
-                                  : commitCheck(side, checkField, event.currentTarget.value)
-                        }
-                        readOnly={!!builtIn}
-                        spellCheck={false}
-                        title={
-                          invalid
-                            ? isBytes
-                              ? "Expected a whole number of bytes"
-                              : `Expected ${CHECK_HEX_LENGTHS[checkField]} hex characters`
-                            : value || undefined
-                        }
-                        type="text"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+      {editMode ? (
+        <>
+          <div className="optsgrid">
+            <div className="ofld patch-name-field">
+              <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
+                Patch name
+              </label>
+              <input
+                className="input popt-input"
+                defaultValue={meta?.name || ""}
+                id={`rom-weaver-patch-name-${index}`}
+                key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
+                onBlur={(event) => onMetaChange?.({ name: event.currentTarget.value.trim() || undefined })}
+                placeholder={item.fileName.replace(/\.[^.]+$/, "")}
+                type="text"
+              />
             </div>
-          );
-        })}
-      </div>
+            <div className="ofld patch-description-field">
+              <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
+                Description
+              </label>
+              <textarea
+                className="input popt-input"
+                defaultValue={meta?.description || ""}
+                id={`rom-weaver-patch-description-${index}`}
+                key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
+                onBlur={(event) => onMetaChange?.({ description: event.currentTarget.value.trim() || undefined })}
+                onInput={(event) => autosizeTextarea(event.currentTarget)}
+                placeholder="What this patch changes"
+                ref={autosizeTextarea}
+                rows={1}
+              />
+            </div>
+          </div>
+          <div className="verification-pair">
+            {(["input", "output"] as const).map((side) => {
+              const embedded = side === "input" ? embeddedInput : embeddedOutput;
+              const field = side === "input" ? "inputChecks" : "outputChecks";
+              return (
+                <div className="patch-check-group" key={side}>
+                  <div className="ck-group-head">
+                    <span>{side === "input" ? "Input verification" : "Output verification"}</span>
+                  </div>
+                  <div className="verification-list">
+                    {CHECK_FIELDS.map((checkField) => {
+                      const isBytes = checkField === "bytes";
+                      const builtIn = embedded[checkField];
+                      const metaValue = isBytes
+                        ? typeof meta?.[field]?.size === "number"
+                          ? String(meta?.[field]?.size)
+                          : ""
+                        : meta?.[field]?.checksums?.[checkField] || "";
+                      const value = builtIn || metaValue;
+                      const invalid = !builtIn && !!invalidChecks[`${side}:${checkField}`];
+                      return (
+                        <div className="verification-row" key={`${side}:${checkField}`}>
+                          <label className="ofld-l" htmlFor={`rom-weaver-patch-${side}-${checkField}-${index}`}>
+                            {CHECK_LABELS[checkField]}
+                            {builtIn ? <span className="built-in">Built in</span> : null}
+                          </label>
+                          <input
+                            aria-invalid={invalid || undefined}
+                            className="input mono popt-input"
+                            defaultValue={value}
+                            id={`rom-weaver-patch-${side}-${checkField}-${index}`}
+                            key={`${side}:${checkField}:${item.key ?? index}:${value}`}
+                            onBlur={
+                              builtIn
+                                ? undefined
+                                : (event) =>
+                                    isBytes
+                                      ? commitSize(side, event.currentTarget.value)
+                                      : commitCheck(side, checkField, event.currentTarget.value)
+                            }
+                            readOnly={!!builtIn}
+                            spellCheck={false}
+                            title={
+                              invalid
+                                ? isBytes
+                                  ? "Expected a whole number of bytes"
+                                  : `Expected ${CHECK_HEX_LENGTHS[checkField]} hex characters`
+                                : value || undefined
+                            }
+                            type="text"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {outputCheckHint ? (
+            <p className="hintline" id={`rom-weaver-patch-output-check-hint-${index}`}>
+              The expected output is verified only when every patch in the bundle is applied.
+            </p>
+          ) : null}
+        </>
+      ) : null}
       {item.showHeaderOption ? (
         <div className="optschecks">
           <label
@@ -606,6 +621,8 @@ const PatchEnableToggle = ({
 );
 
 const ApplyPatchListStep = ({
+  bundleEditMode,
+  bundleOutputCheckHint,
   disabledFlags,
   emptyState,
   fault,
@@ -621,6 +638,11 @@ const ApplyPatchListStep = ({
   ui,
   woven,
 }: {
+  /** Bundle-edit mode: reveal the per-patch authoring fields. */
+  bundleEditMode?: boolean;
+  /** The bundle has optional patches: hint on the chain-output card that its
+   * expected output only describes the full chain. */
+  bundleOutputCheckHint?: boolean;
   disabledFlags?: readonly boolean[];
   /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
   emptyState?: ReactNode;
@@ -822,12 +844,14 @@ const ApplyPatchListStep = ({
                   )}
                   <PatchOptions
                     disabled={isDisabled}
+                    editMode={bundleEditMode}
                     index={index}
                     isChainInput={index === chainInputIndex}
                     isChainOutput={index === chainOutputIndex}
                     item={item}
                     meta={bundleMeta?.[index]}
                     onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+                    outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
                     patchStack={patchStack}
                     showVerdict={!hasChecksDrawer}
                   />

@@ -10,6 +10,7 @@ import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
+import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import {
@@ -46,6 +47,7 @@ import { inertUiController } from "./patcher-form-session.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
+import { type RomBundleChecksDraft, RomBundleChecksEditor } from "./rom-bundle-checks-editor.tsx";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
@@ -241,6 +243,66 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
   </div>
 );
 
+/** The bundle-edit mode surface, threaded from the form. */
+type BundleEditState = {
+  active: boolean;
+  enter: () => void;
+  exit: () => void;
+  /** The bundle has optional entries (or patches are toggled off): output
+   * checks only describe the full chain. */
+  hasOptionalEntries: boolean;
+  /** The bundle records an expected output the current bench can't verify. */
+  outputStandDown: "diverged" | "partial" | null;
+  sessionActive: boolean;
+  sessionName?: string;
+};
+
+/**
+ * The "Bundle edit" strip: while the editor is on it names the mode and offers
+ * the way out; otherwise it appears only for a loaded bundle session as the
+ * revising author's way in. Authors starting from scratch enter through the
+ * output card's "Create bundle…" action instead.
+ */
+const BundleEditBar = ({ bundleEdit }: { bundleEdit?: BundleEditState }) => {
+  if (!bundleEdit) return null;
+  if (bundleEdit.active) {
+    return (
+      <div className="bundle-edit-bar is-active" id="rom-weaver-bundle-edit-bar">
+        <Package aria-hidden="true" />
+        <span className="bundle-edit-title">Bundle edit</span>
+        {bundleEdit.sessionName ? <span className="bundle-edit-name mono">{bundleEdit.sessionName}</span> : null}
+        <span className="bundle-edit-hint">
+          Name, describe, and pin checks on the chain, then export it in <b className="hexref mono">0x04</b>.
+        </span>
+        <button
+          className="btn ghost slim"
+          id="rom-weaver-button-bundle-edit-exit"
+          onClick={bundleEdit.exit}
+          type="button"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+  if (!bundleEdit.sessionActive) return null;
+  return (
+    <div className="bundle-edit-bar" id="rom-weaver-bundle-edit-bar">
+      <Package aria-hidden="true" />
+      <span className="bundle-edit-title">Bundle</span>
+      {bundleEdit.sessionName ? <span className="bundle-edit-name mono">{bundleEdit.sessionName}</span> : null}
+      <button
+        className="btn ghost slim"
+        id="rom-weaver-button-bundle-edit-session"
+        onClick={bundleEdit.enter}
+        type="button"
+      >
+        Bundle edit
+      </button>
+    </div>
+  );
+};
+
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
   if (!state.visible) return null;
   return (
@@ -312,6 +374,13 @@ type RomRowDeps = {
   romInputs: RomInputRowState[];
   verificationStates: Map<string, "bad" | "ok">;
   ui: PatcherUiController;
+  /** The bundle's expected base-ROM checks - an "Expected" group with match
+   * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
+  expectedChecks?: ParsedBundleChecks;
+  /** Bundle-edit mode: the ROM card carries the bundle-checks editor. */
+  bundleEditMode?: boolean;
+  romBundleChecks?: RomBundleChecksDraft;
+  onRomBundleChecksChange?: (updates: RomBundleChecksDraft) => void;
 };
 
 /**
@@ -394,8 +463,24 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       ],
     },
   ];
+  // Bundle-edit mode: the ROM card carries the bundle's global rom.checks
+  // editor once the ROM has settled (its computed hashes are the placeholders).
+  const bundleChecksEditor =
+    deps.bundleEditMode && deps.onRomBundleChecksChange && !staging ? (
+      <RomBundleChecksEditor
+        computed={{
+          ...(romInput.info.crc32 ? { crc32: romInput.info.crc32 } : {}),
+          ...(romInput.info.md5 ? { md5: romInput.info.md5 } : {}),
+          ...(romInput.info.sha1 ? { sha1: romInput.info.sha1 } : {}),
+          ...(typeof romBytes === "number" ? { bytes: String(Math.floor(romBytes)) } : {}),
+        }}
+        onChange={deps.onRomBundleChecksChange}
+        value={deps.romBundleChecks || {}}
+      />
+    ) : undefined;
   return {
     card: {
+      ...(bundleChecksEditor ? { children: bundleChecksEditor } : {}),
       extract: {
         always: staging && romInput.info.validationPhase === "extract",
         fileName: romInput.info.fileName,
@@ -425,6 +510,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
             ? undefined
             : { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
+          ...(deps.expectedChecks && !staging ? { expected: deps.expectedChecks } : {}),
           lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,
@@ -555,13 +641,17 @@ const APPLY_ACTIVITY_KEY = "react-apply-view";
 
 function ApplyWorkflowFormView({
   controllers,
+  bundleEdit,
+  bundleExpectedRomChecks,
   bundleExport,
   bundleMetaById,
   bundleRomExpectation,
   onBundleMetaChange,
+  onRomBundleChecksChange,
   onUnifiedDrop,
   patchEnablement,
   pendingDrops = [],
+  romBundleChecks,
   startup = { message: "", status: "ready" },
 }: {
   controllers: {
@@ -585,11 +675,18 @@ function ApplyWorkflowFormView({
     setBundleRom: (value: boolean) => void;
     setFormat: (value: string) => void;
   };
+  /** The bundle-edit mode surface: state, entry/exit, and its notices. */
+  bundleEdit?: BundleEditState;
+  /** The bundle's expected base-ROM checks, folded into the staged ROM card. */
+  bundleExpectedRomChecks?: ParsedBundleChecks;
   /** Per-patch bundle metadata (label/description chips), keyed by stable source id. */
   bundleMetaById?: ReadonlyMap<string, BundlePatchMeta>;
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
+  /** Bundle-edit mode: the ROM card's global rom.checks draft + its editor callback. */
+  onRomBundleChecksChange?: (updates: RomBundleChecksDraft) => void;
+  romBundleChecks?: RomBundleChecksDraft;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
@@ -689,10 +786,21 @@ function ApplyWorkflowFormView({
   const wovenSteps = running || applyDone;
 
   const romVerificationStates = buildRomVerificationStates(patches, romInputs, disabledPatchFlags);
+  // The bundle's expected-ROM group and the bundle-checks editor describe THE
+  // base ROM, so they only render for an unambiguous single-ROM bench.
+  const singleRom = romInputs.length === 1;
   const romRowDeps: RomRowDeps = {
     romInputs,
     ui: uiController,
     verificationStates: romVerificationStates,
+    ...(singleRom && bundleExpectedRomChecks ? { expectedChecks: bundleExpectedRomChecks } : {}),
+    ...(singleRom && bundleEdit?.active && onRomBundleChecksChange
+      ? {
+          bundleEditMode: true,
+          onRomBundleChecksChange,
+          ...(romBundleChecks ? { romBundleChecks } : {}),
+        }
+      : {}),
   };
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
@@ -778,42 +886,43 @@ function ApplyWorkflowFormView({
     const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
     return localizer.message(createKey, { format: formatName });
   })();
-  const bundleOutputFields = bundleExport ? (
-    <>
-      {outputHeaderField}
-      <OutputField
-        className="export-type-field"
-        label="Bundle"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
-      >
-        <select
-          className="select"
-          disabled={bundleExport.busy}
-          id="rom-weaver-bundle-export-format"
-          onChange={(event) => {
-            const [format, contents] = event.currentTarget.value.split(":");
-            bundleExport.setFormat(format || "");
-            bundleExport.setBundleRom(contents === "rom");
-          }}
-          value={
-            bundleExport.format
-              ? bundleExport.format === "bundle"
-                ? "bundle"
-                : `${bundleExport.format}:${bundleExport.bundleRom ? "rom" : "patches"}`
-              : ""
-          }
+  // The bundle package select lives inside bundle-edit mode: entering the
+  // editor IS the "show bundle creation" signal (it arms a default format), so
+  // the old "Hide bundle creation" sentinel row is gone.
+  const bundleFormatValue = (() => {
+    if (!bundleExport?.format || bundleExport.format === "bundle") return "zip:patches";
+    return `${bundleExport.format}:${bundleExport.bundleRom ? "rom" : "patches"}`;
+  })();
+  const bundleOutputFields =
+    bundleExport && bundleEdit?.active ? (
+      <>
+        {outputHeaderField}
+        <OutputField
+          className="export-type-field"
+          label="Bundle"
+          labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
         >
-          <option value="">Hide bundle creation</option>
-          <option value="zip:patches">Bundle + patches (.zip)</option>
-          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-          <option value="7z:patches">Bundle + patches (.7z)</option>
-          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
-        </select>
-      </OutputField>
-    </>
-  ) : (
-    outputHeaderField
-  );
+          <select
+            className="select"
+            disabled={bundleExport.busy}
+            id="rom-weaver-bundle-export-format"
+            onChange={(event) => {
+              const [format, contents] = event.currentTarget.value.split(":");
+              bundleExport.setFormat(format || "");
+              bundleExport.setBundleRom(contents === "rom");
+            }}
+            value={bundleFormatValue}
+          >
+            <option value="zip:patches">Bundle + patches (.zip)</option>
+            <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
+            <option value="7z:patches">Bundle + patches (.7z)</option>
+            <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+          </select>
+        </OutputField>
+      </>
+    ) : (
+      outputHeaderField
+    );
 
   // Combined drop surface (--rom-filter + --patch-filter): the parent's unified
   // drop handler stages bare files immediately and shows an "identifying"
@@ -897,6 +1006,7 @@ function ApplyWorkflowFormView({
         onFiles={handleUnifiedDrop}
         supported={APPLY_SUPPORTED_FILES}
       />
+      <BundleEditBar bundleEdit={bundleEdit} />
       {workflowEmpty ? (
         <GhostSteps
           steps={[
@@ -970,7 +1080,9 @@ function ApplyWorkflowFormView({
           />
 
           <ApplyPatchListStep
+            bundleEditMode={bundleEdit?.active}
             bundleMeta={bundleMeta}
+            bundleOutputCheckHint={!!bundleEdit?.active && bundleEdit.hasOptionalEntries}
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
@@ -1050,7 +1162,25 @@ function ApplyWorkflowFormView({
                   totalTime={applyTotalTime || undefined}
                 />
                 {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-                {bundleExport?.format ? (
+                {bundleEdit?.outputStandDown ? (
+                  <p className="hintline" id="rom-weaver-bundle-output-unverified">
+                    {bundleEdit.outputStandDown === "partial"
+                      ? "Output won't be verified - the bundle's expected result only covers its full patch chain."
+                      : "Output won't be verified - the patch chain differs from the bundle."}
+                  </p>
+                ) : null}
+                {bundleEdit && !bundleEdit.active ? (
+                  <button
+                    className="btn ghost slim bundle-dl"
+                    id="rom-weaver-button-bundle-edit"
+                    onClick={bundleEdit.enter}
+                    type="button"
+                  >
+                    <Package aria-hidden="true" />
+                    Create bundle…
+                  </button>
+                ) : null}
+                {bundleExport && bundleEdit?.active ? (
                   bundleExport.busy ? (
                     <ProgressActionButton
                       cancelLabel="Cancel bundle export"

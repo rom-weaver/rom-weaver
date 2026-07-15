@@ -24,17 +24,20 @@ const FIT_VALUE_MIN_CHARS = 16;
    row. Derived from the label so real and pending rows agree. */
 const isHalfRowLabel = (label: ReactNode): boolean => label === "CRC32" || label === "BYTES";
 
-/** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`. */
+/** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`.
+ * `mark` renders a per-row verified/mismatch verdict (expected-vs-computed rows). */
 const ChecksumRow = ({
   label,
   value,
   copyValue,
   bad,
+  mark,
 }: {
   label: ReactNode;
   value: ReactNode;
   copyValue?: string;
   bad?: boolean;
+  mark?: "bad" | "ok";
 }) => {
   const text = copyValue ?? (typeof value === "string" ? value : "");
   const { copied, copy } = useClipboardCopy(text);
@@ -43,12 +46,18 @@ const ChecksumRow = ({
   return (
     <button
       aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
-      className={join("ck mono", bad && "bad", isHalfRowLabel(label) && "ck-half")}
+      className={join("ck mono", (bad || mark === "bad") && "bad", isHalfRowLabel(label) && "ck-half")}
       onClick={copy}
       type="button"
     >
       <span className="ck-k">{label}</span>
       <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
+      {mark ? (
+        <span className={join("ck-mark", mark)} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>
+          {mark === "ok" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+          <span className="sr-only">{mark === "ok" ? "matches" : "mismatch"}</span>
+        </span>
+      ) : null}
       <span aria-hidden="true" className={join("copy", copied && "copied")}>
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </span>

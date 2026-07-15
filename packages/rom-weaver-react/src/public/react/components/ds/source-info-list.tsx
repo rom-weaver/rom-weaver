@@ -63,6 +63,80 @@ type SourceInfoChecksums = {
   sha1?: string;
 };
 
+/** What a bundle expects this file to be (its rom/chain-input checks). */
+type SourceInfoExpectedChecks = {
+  checksums?: Record<string, string>;
+  size?: number;
+};
+
+const EXPECTED_CHECK_LABELS: Record<string, string> = { crc32: "CRC32", md5: "MD5", sha1: "SHA-1" };
+
+const expectedRowMark = (expected: string, computed: string | undefined): "bad" | "ok" | undefined => {
+  const actual = (computed || "").trim().toLowerCase();
+  if (!actual) return undefined;
+  return actual === expected.trim().toLowerCase() ? "ok" : "bad";
+};
+
+const expectedSizeMark = (expectedSize: string, computedBytes: string): "bad" | "ok" | undefined => {
+  if (!computedBytes) return undefined;
+  return computedBytes === expectedSize ? "ok" : "bad";
+};
+
+/* The bundle's expected-ROM rows inside the same Checks drawer, each carrying a
+   per-row match/mismatch mark against the computed checksums - so the
+   expectation survives the ghost card once the real ROM is staged. */
+const ExpectedChecksGroup = ({
+  bytes,
+  checksums,
+  expected,
+}: {
+  bytes?: number;
+  checksums?: SourceInfoChecksums | null;
+  expected?: SourceInfoExpectedChecks;
+}) => {
+  const expectedChecksums = expected?.checksums || {};
+  const expectedSize = typeof expected?.size === "number" ? String(expected.size) : "";
+  if (!(Object.keys(expectedChecksums).length || expectedSize)) return null;
+  const computedBytes = typeof bytes === "number" && Number.isFinite(bytes) ? String(Math.floor(bytes)) : "";
+  // CRC32 then BYTES first so the two short ck-half rows pair on one grid row.
+  const orderedAlgorithms = ["crc32", "md5", "sha1", ...Object.keys(expectedChecksums).sort()].filter(
+    (algorithm, index, all) => expectedChecksums[algorithm] && all.indexOf(algorithm) === index,
+  );
+  return (
+    <div className="ck-group" id="rom-weaver-rom-expected-checks">
+      <div className="ck-group-head">Expected</div>
+      {orderedAlgorithms.map((algorithm) => (
+        <Fragment key={algorithm}>
+          <ChecksumRow
+            label={EXPECTED_CHECK_LABELS[algorithm] || algorithm.toUpperCase()}
+            mark={expectedRowMark(
+              expectedChecksums[algorithm] || "",
+              checksums?.[algorithm as keyof SourceInfoChecksums],
+            )}
+            value={expectedChecksums[algorithm] || ""}
+          />
+          {algorithm === "crc32" && expectedSize ? (
+            <ChecksumRow
+              copyValue={expectedSize}
+              label="BYTES"
+              mark={expectedSizeMark(expectedSize, computedBytes)}
+              value={expectedSize}
+            />
+          ) : null}
+        </Fragment>
+      ))}
+      {!expectedChecksums.crc32 && expectedSize ? (
+        <ChecksumRow
+          copyValue={expectedSize}
+          label="BYTES"
+          mark={expectedSizeMark(expectedSize, computedBytes)}
+          value={expectedSize}
+        />
+      ) : null}
+    </div>
+  );
+};
+
 type SourceInfoProgress = Parameters<typeof FileProgress>[0];
 
 const CHECKSUM_VARIANT_ALGORITHMS = [
@@ -126,6 +200,7 @@ const SourceInfoList = ({
   checksums,
   checksumVariants,
   defaultOpen = false,
+  expected,
   extractTiming,
   label = "Checks",
   lead,
@@ -140,6 +215,9 @@ const SourceInfoList = ({
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
+  /** Bundle-expected checks for this file, rendered as an "Expected" group with
+   * per-row match marks against the computed values. */
+  expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
@@ -160,12 +238,14 @@ const SourceInfoList = ({
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
   if (!(hasBytes || checksums || lead || progress || trim?.detected)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
-  // When transform variants (headerless, auto-trimmed…) are present, the base
-  // checksums become one of several groups, so they get their own labeled head
-  // ("Unchanged") to match - an unlabeled block alongside labeled variants reads
-  // as if it belonged to the first variant.
+  const hasExpected = !!(Object.keys(expected?.checksums || {}).length || typeof expected?.size === "number");
+  // When transform variants (headerless, auto-trimmed…) are present - or the
+  // bundle contributes an "Expected" group - the base checksums become one of
+  // several groups, so they get their own labeled head ("Unchanged"/"Computed")
+  // to match - an unlabeled block alongside labeled groups reads as if it
+  // belonged to the first one.
   const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
-  const baseGroupLabel = "Unchanged";
+  const baseGroupLabel = variantRows.length ? "Unchanged" : "Computed";
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
@@ -185,7 +265,7 @@ const SourceInfoList = ({
       open={open}
       timing={timing}
     >
-      {variantRows.length ? (
+      {variantRows.length || hasExpected ? (
         <div className="ck-group">
           <div className="ck-group-head">{baseGroupLabel}</div>
           {baseRows}
@@ -193,6 +273,7 @@ const SourceInfoList = ({
       ) : (
         baseRows
       )}
+      {hasExpected ? <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} /> : null}
       <VariantGroups bytes={bytes} variants={checksumVariants} />
       <TrimFixGroup trim={trim} />
       <ExtractTimingGroup timing={extractTiming} />
@@ -255,6 +336,7 @@ export {
   type DiscTrackPanelInfo,
   DiscTracksPanel,
   type SourceInfoChecksums,
+  type SourceInfoExpectedChecks,
   SourceInfoList,
   type SourceInfoProgress,
   type TrimFixDetails,

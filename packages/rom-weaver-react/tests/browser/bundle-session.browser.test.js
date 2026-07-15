@@ -333,9 +333,12 @@ test("bundle url session seeds enablement + output defaults and applies to a dow
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(true);
   getPatchToggles()[1]?.click();
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(false);
-  // Bundle metadata reaches the patch cards and editable Options fields.
+  // Bundle metadata reaches the patch cards; the editable Options fields live
+  // behind bundle-edit mode, entered here through the session bar's action.
   const patchStackText = () => document.getElementById("rom-weaver-list-patch-stack")?.textContent || "";
   expect(patchStackText()).toContain("stable");
+  const sessionEditButton = await waitForState(() => document.getElementById("rom-weaver-button-bundle-edit-session"));
+  sessionEditButton?.click();
   document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
   const descriptionInput = await waitForState(() => document.getElementById("rom-weaver-patch-description-0"));
   expect(descriptionInput?.value).toBe("Required core patch");

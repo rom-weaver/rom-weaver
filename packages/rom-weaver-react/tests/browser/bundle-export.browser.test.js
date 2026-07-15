@@ -49,22 +49,25 @@ test("export bundle bundles the session from main-page options with a checks-onl
   );
   await waitForApplyButtonEnabled();
 
-  // Bundle creation stays opt-in even after a ROM and patch are staged.
+  // Bundle creation stays opt-in even after a ROM and patch are staged: the
+  // authoring surface (format select + export action) lives behind bundle-edit
+  // mode, entered through the output card's "Create bundle…" action.
   expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
-  const formatSelect = document.getElementById("rom-weaver-bundle-export-format");
+  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
+  document.getElementById("rom-weaver-button-bundle-edit")?.click();
+  const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect).not.toBeNull();
-  expect(formatSelect.value).toBe("");
+  // Entering the editor arms the default package format and deep-links the mode.
+  expect(window.location.hash).toBe("#bundle-edit");
+  await expect.poll(() => formatSelect.value).toBe("zip:patches");
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
-    "Hide bundle creation",
     "Bundle + patches (.zip)",
     "Bundle + ROM + patches (.zip)",
     "Bundle + patches (.7z)",
     "Bundle + ROM + patches (.7z)",
   ]);
-  setFormControlValue(formatSelect, "zip:patches");
-  formatSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-  // Selecting a bundle reveals and arms the secondary action.
+  // Entering the editor reveals and arms the export action.
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
@@ -151,7 +154,9 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   );
   await waitForApplyButtonEnabled();
 
-  const formatSelect = document.getElementById("rom-weaver-bundle-export-format");
+  // The settings default (bundlePackage) fills the format once the editor opens.
+  document.getElementById("rom-weaver-button-bundle-edit")?.click();
+  const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect?.value).toBe("zip:rom");
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");

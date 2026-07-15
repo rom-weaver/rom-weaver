@@ -6,6 +6,7 @@ import {
   type DiscTrackPanelInfo,
   DiscTracksPanel,
   type SourceInfoChecksums,
+  type SourceInfoExpectedChecks,
   SourceInfoList,
   type SourceInfoProgress,
   type TrimFixDetails,
@@ -16,6 +17,8 @@ type RomInputInfoPanelProps = {
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
+  /** Bundle-expected ROM checks, rendered as an "Expected" group with match marks. */
+  expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
