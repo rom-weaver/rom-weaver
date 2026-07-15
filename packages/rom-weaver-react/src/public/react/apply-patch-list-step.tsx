@@ -92,6 +92,31 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
   return { inputRows: bytesAfterCrc32(inputRows), outputRows: bytesAfterCrc32(outputRows) };
 };
 
+/* The dry-run's "validation failed: " lead-in duplicates the well's title -
+   strip it and re-capitalize what remains so the detail reads as a sentence. */
+const toFaultDetail = (message: string): string => {
+  const detail = message.replace(/^\s*validation failed:?\s*/i, "").trim();
+  if (!detail) return "The patch's checks did not match this ROM.";
+  return detail.charAt(0).toUpperCase() + detail.slice(1);
+};
+
+/** Failed dry-run verdict: an inset fault well with the verdict, the detail,
+ * and what to do next (naming the 0x04 override toggle when it is offered). */
+const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => (
+  <div className="pverdict pfault">
+    <div className="pfault-title">
+      <X aria-hidden="true" />
+      <span>Validation failed</span>
+    </div>
+    <p className="pfault-detail">{toFaultDetail(message)}</p>
+    <p className="pfault-hint">
+      {overrideAvailable
+        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x04."
+        : "Pick the ROM this patch was made for."}
+    </p>
+  </div>
+);
+
 const DryApplySuccess = () => (
   <InfoToggle
     ariaLabel="Dry apply passed"
@@ -553,6 +578,7 @@ const ApplyPatchListStep = ({
   bundleMeta,
   onBundleMetaChange,
   onTogglePatch,
+  overrideAvailable,
   patchInput,
   patchNotice,
   patches,
@@ -570,6 +596,8 @@ const ApplyPatchListStep = ({
   bundleMeta?: readonly (BundlePatchMeta | undefined)[];
   onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
+  /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
+  overrideAvailable?: boolean;
   patchInput: PatcherUiState["patchInput"];
   patchNotice: NoticeState;
   patches: PatchStackItemState[];
@@ -746,10 +774,7 @@ const ApplyPatchListStep = ({
               <div className="patch-body">
                 <div className="patch-body-inner">
                   {verdict === "bad" ? (
-                    <div className="pverdict dryrun-verdict bad">
-                      <X aria-hidden="true" />
-                      <span>{item.validationMessage || "Patch validation failed"}</span>
-                    </div>
+                    <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
                   ) : null}
                   {isDisabled ? null : (
                     <ExtractDrawer

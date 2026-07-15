@@ -1255,6 +1255,20 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the unified patch verdict line (top of the Checks body) - same accent verdict for every patch
    type, whether it was requirement-checked or dry-run validated */
 .rw-app .pverdict { padding: 8px 9px; }
+/* failed dry-run: an inset well dyed with the fault - verdict line in fault
+   red, the detail and next-step hint stepping down to ink so the message
+   reads as structure instead of one red smear */
+.rw-app .pfault {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 12px; border-radius: var(--r-s);
+  border: 1px solid color-mix(in oklab, var(--fault) 36%, var(--seam-soft));
+  background: color-mix(in oklab, var(--fault) 7%, var(--well));
+  animation: pverdict-in .3s var(--ease) both;
+}
+.rw-app .pfault-title { display: flex; gap: 7px; align-items: center; color: var(--fault); font-weight: 700; font-size: .86rem; }
+.rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
+.rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
 /* the verdict lands after the verify bar: the line fades + rises in, its icon pops, and a passing
    check draws its own stroke - the signature "done" moment, replacing an abrupt swap. */
 .rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
@@ -1263,7 +1277,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .pverdict.dryrun-verdict,
-  .rw-app .pverdict.dryrun-verdict svg { animation: none; }
+  .rw-app .pverdict.dryrun-verdict svg,
+  .rw-app .pfault,
+  .rw-app .pfault-title svg { animation: none; }
 }
 
 /* inline help - clickable i's. a quiet line-glyph at rest (no box, so it adds no

@@ -179,7 +179,7 @@ const createEmptyPatcherUiState = (): PatcherUiState => ({
   checksumOverride: {
     checked: false,
     disabled: true,
-    label: "Apply anyway despite checksum mismatch",
+    label: "Apply anyway despite patch & ROM check mismatch",
     visible: false,
   },
   outputChecksumWarning: {
@@ -438,7 +438,9 @@ const normalizePatcherUiState = (
       checked: !!checksumOverride.checked,
       disabled: !!checksumOverride.disabled,
       label:
-        typeof checksumOverride.label === "string" ? checksumOverride.label : "Apply anyway despite checksum mismatch",
+        typeof checksumOverride.label === "string"
+          ? checksumOverride.label
+          : "Apply anyway despite patch & ROM check mismatch",
       visible: !!checksumOverride.visible,
     },
     inputNotice: normalizeNoticeState(isRecord(nextState.inputNotice) ? nextState.inputNotice : null),

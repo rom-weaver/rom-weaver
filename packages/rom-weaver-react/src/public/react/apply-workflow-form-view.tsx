@@ -974,6 +974,7 @@ function ApplyWorkflowFormView({
               if (id) onBundleMetaChange?.(id, updates);
             }}
             onTogglePatch={patchEnablement?.onToggle}
+            overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
             patchInput={uiState.patchInput}
             patchNotice={uiState.patchNotice}
