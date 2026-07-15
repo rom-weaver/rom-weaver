@@ -126,8 +126,8 @@ const PRE_EXTRACT_GAP = {
   //     dispatch to *gracefully* dispose it (graceful dispose of a wedged worker can block for seconds;
   //     terminate() is instant and the browser releases its OPFS handles on worker teardown).
   hardTerminateStaleOnOom: true,
-  // #1: after warmup, recycle the heap-dirtied worker to a fresh clean-heap one while still idle, so the
-  //     first real op starts clean and never pays an OOM-triggered recycle on the critical path.
+  // #1: after warmup, release the heap-dirtied worker while still idle. The compiled module stays cached,
+  //     but idle tabs no longer retain a shared WASM heap and its maximum address-space reservation.
   recycleRunnerAfterWarmup: true,
 };
 
@@ -454,16 +454,16 @@ const markRomWeaverRunnerStale = () => {
   runnerPool?.markAllStale();
 };
 
-// #1: Drop heap-dirtied idle runners and stand up a fresh clean-heap one. Meant to run during idle
-// (right after warmup) so the user's first real op starts on a clean heap and never pays an
-// out-of-memory worker recycle on the critical path. No-op while any runner has work in flight.
+// #1: Drop heap-dirtied idle runners after warmup. The page-thread compiled-module cache remains warm,
+// while idle tabs release their shared WASM heaps and maximum address-space reservations. The first real
+// operation creates a clean runner without recompiling the module. No-op while any runner is busy.
 const recycleWarmRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
   if (!PRE_EXTRACT_GAP.recycleRunnerAfterWarmup) return;
   if (!isBrowserRuntime()) return;
   const pool = getRunnerPool();
   if (pool.busyCount !== 0) return;
+  runnerCreateWorkerThreads = workerThreads ?? runnerCreateWorkerThreads;
   await pool.disposeAll();
-  await warmupRomWeaverRunner(workerThreads ?? runnerCreateWorkerThreads);
 };
 
 // Back-to-back ops should be as fast as the first. The wasm heap only ever grows, so a runner that just
