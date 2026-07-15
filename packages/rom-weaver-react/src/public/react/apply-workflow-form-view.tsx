@@ -222,15 +222,11 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
       name={<ExtractName fileName={expectation.name || "Expected ROM"} />}
     >
       <ChecksumList defaultOpen label="Checks" sublabel="expected">
-        {Object.entries(expectation.checks?.checksums || {}).map(([algorithm, value]) =>
-          value ? (
-            <ChecksumRow
-              key={algorithm}
-              label={EXPECTED_ROM_CHECK_LABELS[algorithm] || algorithm.toUpperCase()}
-              value={value}
-            />
-          ) : null,
-        )}
+        {/* CRC32 then BYTES first: the two short ck-half rows must sit adjacent
+            so the ckrows grid can pair them, matching the resolved ROM card */}
+        {expectation.checks?.checksums?.crc32 ? (
+          <ChecksumRow label="CRC32" value={expectation.checks.checksums.crc32} />
+        ) : null}
         {typeof expectation.checks?.size === "number" ? (
           <ChecksumRow
             copyValue={String(expectation.checks.size)}
@@ -238,6 +234,15 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
             value={String(expectation.checks.size)}
           />
         ) : null}
+        {Object.entries(expectation.checks?.checksums || {}).map(([algorithm, value]) =>
+          value && algorithm !== "crc32" ? (
+            <ChecksumRow
+              key={algorithm}
+              label={EXPECTED_ROM_CHECK_LABELS[algorithm] || algorithm.toUpperCase()}
+              value={value}
+            />
+          ) : null,
+        )}
       </ChecksumList>
     </FileCard>
   </div>
