@@ -2438,13 +2438,13 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
    so Apply/Create/Trim/Tools keep the same state and behavior as desktop. */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   :root:has(.rw-app) {
-    scroll-padding-block-end: calc(var(--rw-dock-h, calc(70px + env(safe-area-inset-bottom))) + 8px);
+    scroll-padding-block-end: calc(var(--rw-dock-h, calc(56px + env(safe-area-inset-bottom))) + 8px);
   }
 
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    --mobile-shuttle-h: 70px;
+    --mobile-shuttle-h: 56px;
     /* dock total height: the JS-measured --rw-dock-h when available (tracks
        larger text sizes), else the design-time estimate */
     --dock-total: var(--rw-dock-h, calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom)));
@@ -2597,7 +2597,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     order: initial;
     width: 100%;
     margin: 0;
-    padding: 7px max(10px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    padding: 4px max(10px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
     background: color-mix(in srgb, var(--chassis) 82%, transparent);
     border-block-start: 1px solid var(--seam-strong);
     box-shadow: 0 -12px 28px -22px rgb(0 0 0 / .8);
@@ -2607,7 +2607,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .mode-rail {
     display: flex;
     width: min(100%, 520px);
-    min-height: 48px;
+    min-height: 40px;
     margin-inline: auto;
     padding: 0;
     border: 0;
@@ -2622,8 +2622,8 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 
   .rw-app .mode {
     min-width: 0;
-    min-height: 48px;
-    padding: 5px 4px;
+    min-height: 40px;
+    padding: 3px 4px;
     flex: 1 1 0;
     flex-direction: column;
     justify-content: center;
@@ -2631,13 +2631,24 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     line-height: 1;
   }
 
-  .rw-app .mode svg { width: 19px; height: 19px; }
+  .rw-app .mode svg { width: 17px; height: 17px; }
   .rw-app .mode span:not(.mode-thumb) { font-size: .66rem; letter-spacing: .04em; }
 
   /* the whole empty hero is the tap target - flash it on touch so taps
      anywhere in the panel visibly register */
   .rw-app .step.is-input.is-empty .drop.hero:active {
     background: color-mix(in oklab, var(--thread) 6%, transparent);
+  }
+
+  /* the output step pins to the viewport bottom (above the dock) while its
+     natural position is below the fold, so the run/download action is always
+     in reach on a long form; it settles back in place at the end of scroll */
+  .rw-app .panel.workflow .step:has(> .step-body .card.outcard) {
+    position: sticky;
+    bottom: calc(var(--dock-total) + 6px);
+    z-index: 40;
+    background: var(--chassis);
+    box-shadow: 0 12px 26px -16px rgb(0 0 0 / .55);
   }
 
   /* the tools sub-picker becomes a full-width segmented control */
