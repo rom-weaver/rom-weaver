@@ -2720,20 +2720,13 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
   .rw-app .updates .banner-x { width: 28px; height: 32px; }
 
-  .rw-app .app > .reveal:has(> .update-ready) {
-    position: fixed;
-    z-index: 46;
-    inset-inline: 10px;
-    bottom: calc(var(--dock-total) + 8px);
-    margin: 0;
-  }
+  /* in-flow at the top like desktop (was a fixed toast pinned above the dock,
+     which covered the apply button and the content behind it) */
+  .rw-app .app > .reveal:has(> .update-ready) { margin-inline: 10px; }
 
   .rw-app .update-ready {
-    width: min(100%, 420px);
     min-height: 38px;
-    margin-inline: auto;
     background: var(--plate);
-    box-shadow: 0 10px 28px -14px rgb(0 0 0 / .8);
   }
 
   .rw-app .modes {
