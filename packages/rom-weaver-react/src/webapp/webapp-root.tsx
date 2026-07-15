@@ -386,7 +386,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             <>
               <button className="btn ghost" onClick={actions.onRestoreDefaults} title="Reset to defaults" type="button">
                 <RotateCcw aria-hidden="true" />
-                <span className="bl">Reset</span>
+                <span className="bl">Defaults</span>
               </button>
               <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
                 <Save aria-hidden="true" />
