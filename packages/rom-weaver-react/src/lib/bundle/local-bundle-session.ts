@@ -1,9 +1,15 @@
 import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { ParsedBundleSourceRef } from "../../types/bundle.ts";
+import { setBundleRomProvenance } from "../input/bundle-rom-provenance.ts";
+import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { BundleApplySession, BundleApplySessionEntry } from "./bundle-session-model.ts";
 import { bundleChainEndpointChecks, bundleRomExpectation, bundleSessionDisplayName } from "./bundle-session-model.ts";
+
+// The archive-nesting chain a fanned-out leaf patch carries on its File so a re-stage still renders
+// the "extract section"; a bundle-extracted patch rides the same channel (see apply-prepared-metadata).
+type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
 
 const normalizePath = (value: string) =>
   value
@@ -99,12 +105,14 @@ async function loadLocalBundleSession(
   const parse = browserRuntime.bundle?.parse;
   if (!parse) throw new Error("Bundle parsing is not available in this runtime");
   let parsed: Awaited<ReturnType<typeof parse>>;
+  const parseStartedAt = performance.now();
   try {
     parsed = await parse({ fileName: bundleFile.name, signal, source: bundleFile });
   } catch (error) {
     if (probe && !signal?.aborted) return null;
     throw error;
   }
+  const parseElapsedMs = Math.max(0, performance.now() - parseStartedAt);
   const { result, extractedFiles } = parsed;
   const acquiredCleanups: Array<() => Promise<void>> = [parsed.cleanup];
   const cleanup = createCleanupOnce(async () => {
@@ -148,7 +156,33 @@ async function loadLocalBundleSession(
     const romSource = settledRom.status === "fulfilled" ? settledRom.value : undefined;
     const acquiredPatches = settledPatches.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));
     const romFile = romSource?.file;
+    // A ROM extracted from the bundle archive keeps that provenance: register a bundle -> rom breadcrumb
+    // (keyed by the extracted ROM's File) so its ROM card renders the same "Extract" section a
+    // plainly-dropped archive would, instead of appearing as a bare, chainless input.
+    if (romFile && result.romSource?.kind === "extracted") {
+      setBundleRomProvenance(romFile, [
+        {
+          decompressionTimeMs: parseElapsedMs,
+          depth: 0,
+          fileName: bundleFile.name,
+          kind: "archive",
+          outputSize: romFile.size,
+          sourceSize: bundleFile.size,
+        },
+      ]);
+    }
     const patchFiles = acquiredPatches.map((entry) => entry.file);
+    // A patch extracted from the bundle archive keeps that provenance too: carry a bundle -> patch
+    // breadcrumb on the leaf File (the same `__nestedParentCompressions` side-channel a fanned-out
+    // archive patch uses) so its patch-stack row renders the "Extract" section instead of a bare leaf.
+    // Sizes stay unset - the bundle-archive-over-one-tiny-patch ratio would be nonsensical - matching
+    // the archive-patch-leaf treatment; only the root extract time rides along.
+    patchFiles.forEach((file, index) => {
+      if (result.patchSources[index]?.source.kind !== "extracted") return;
+      (file as File & NestedPatchSourceMetadata).__nestedParentCompressions = [
+        { decompressionTimeMs: parseElapsedMs, depth: 0, fileName: bundleFile.name, kind: "archive" },
+      ];
+    });
     const entries: BundleApplySessionEntry[] = result.bundle.patches.map((patch, index) => {
       const file = patchFiles[index];
       if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);

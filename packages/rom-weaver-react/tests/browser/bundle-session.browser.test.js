@@ -360,3 +360,42 @@ test("bundle url session seeds enablement + output defaults and applies to a dow
   expect(outcome).toEqual({ kind: "download" });
   await cleanup();
 });
+
+test("a rom extracted from the bundle archive shows the bundle -> rom extract chain", async () => {
+  // A ROM shipped inside the bundle archive is pulled out out-of-band by the bundle parse, so it reaches
+  // the ROM card as a bare file. It must still render the same "Extract" section (bundle archive -> rom)
+  // a ROM dropped inside a plain archive shows, rather than appearing as a chainless input.
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const romInBundle = new File([await romFile.arrayBuffer()], "game.bin", { type: "application/octet-stream" });
+  const bundleJson = {
+    output: { name: "bundled-output" },
+    patches: [{ name: "Core", path: "change.ips" }],
+    rom: { path: "game.bin" },
+    version: 1,
+  };
+  const bundleFile = new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" });
+  const bundleArchive = await buildZip(
+    [
+      { file: bundleFile, fileName: "rom-weaver-bundle.json" },
+      { file: romInBundle, fileName: "game.bin" },
+      { file: patchFile, fileName: "change.ips" },
+    ],
+    "with-rom.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 1 } }));
+
+  const extractTreeNames = (listId) => () => {
+    const drawer = document.querySelector(`#${listId} .card.file .extract-d`);
+    if (!drawer) return null;
+    return Array.from(drawer.querySelectorAll(".tree-name")).map((node) => node.textContent || "");
+  };
+  // The ROM extracted from the bundle archive shows the full bundle -> rom chain.
+  await expect
+    .poll(extractTreeNames("rom-weaver-list-input-stack"), { timeout: 30000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("game.bin")]));
+  // A patch extracted from the same bundle archive keeps the parent breadcrumb, not just its bare leaf.
+  await expect
+    .poll(extractTreeNames("rom-weaver-list-patch-stack"), { timeout: 30000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("change.ips")]));
+});
