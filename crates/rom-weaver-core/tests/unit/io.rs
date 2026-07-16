@@ -142,6 +142,59 @@ fn ordered_streaming_compress_returns_collector_errors_without_deadlock() {
 }
 
 #[test]
+fn ordered_streaming_compress_returns_worker_panics_without_deadlock() {
+    let result = ordered_streaming_compress(
+        0usize..8,
+        3,
+        OrderedStreamingMessages {
+            worker_closed: "workers closed",
+            result_closed: "results closed",
+        },
+        |_, task| Ok(task),
+        || (),
+        |_, _, task| {
+            if task == 0 {
+                panic!("test worker panic");
+            }
+            Ok(task)
+        },
+        |_, _| Ok(()),
+    );
+
+    let Err(RomWeaverError::Validation(message)) = result else {
+        panic!("expected worker panic validation error");
+    };
+    assert_eq!(
+        message,
+        "ordered compression worker panicked while processing task 0"
+    );
+}
+
+#[test]
+fn ordered_streaming_compress_returns_worker_initialization_panics_without_deadlock() {
+    let result = ordered_streaming_compress(
+        0usize..8,
+        3,
+        OrderedStreamingMessages {
+            worker_closed: "workers closed",
+            result_closed: "results closed",
+        },
+        |_, task| Ok(task),
+        || -> () { panic!("test worker initialization panic") },
+        |_, _, task| Ok(task),
+        |_, _| Ok(()),
+    );
+
+    let Err(RomWeaverError::Validation(message)) = result else {
+        panic!("expected worker initialization panic validation error");
+    };
+    assert_eq!(
+        message,
+        "ordered compression worker panicked while initializing"
+    );
+}
+
+#[test]
 fn block_cache_reader_reads_across_block_boundaries() {
     let temp_file = std::env::temp_dir().join(format!(
         "rom-weaver-core-io-{}-{}.bin",

@@ -170,7 +170,18 @@ where
             let make_worker_state = &make_worker_state;
             let compress_task = &compress_task;
             scope.spawn(move || {
-                let mut worker_state = make_worker_state();
+                let mut worker_state =
+                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(make_worker_state))
+                    {
+                        Ok(worker_state) => worker_state,
+                        Err(_) => {
+                            let _ = result_tx.send(Err(RomWeaverError::Validation(
+                                "ordered compression worker panicked while initializing"
+                                    .to_string(),
+                            )));
+                            return;
+                        }
+                    };
                 loop {
                     let received = {
                         let guard = work_rx.lock().unwrap_or_else(|err| err.into_inner());
@@ -179,8 +190,15 @@ where
                     let Ok((index, work)) = received else {
                         break;
                     };
-                    let outcome =
-                        compress_task(&mut worker_state, index, work).map(|output| (index, output));
+                    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        compress_task(&mut worker_state, index, work)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err(RomWeaverError::Validation(format!(
+                            "ordered compression worker panicked while processing task {index}"
+                        )))
+                    })
+                    .map(|output| (index, output));
                     let failed = outcome.is_err();
                     if result_tx.send(outcome).is_err() || failed {
                         break;
