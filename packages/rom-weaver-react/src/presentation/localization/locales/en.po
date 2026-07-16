@@ -51,7 +51,7 @@ msgstr "and produce a sharable patch —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "compressed for storage or bundled for sharing —"
+msgstr "and compress the result —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -466,7 +466,7 @@ msgstr "using the patch's own undo data —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Weave patches into your ROM and download the result,"
+msgstr "Weave patches into any ROM or a sharable patch bundle,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
