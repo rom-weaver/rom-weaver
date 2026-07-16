@@ -54,6 +54,7 @@ const COEP_MODE_URL = new URL("/__rom-weaver-coep-mode__", self.location.origin)
 const COEP_MODE_REQUIRE_CORP = "require-corp";
 const COEP_MODE_CREDENTIALLESS = "credentialless";
 let coepModeHydrated = false;
+let coepModeHydration: Promise<boolean> | null = null;
 
 const logServiceWorker = (message: string, details?: Record<string, unknown>) => {
   if (details) console.info(SW_LOG_PREFIX, message, details);
@@ -69,24 +70,30 @@ const formatError = (error: unknown) => {
 // touches CacheStorage; later calls return the cached flag, so this is cheap to call per request.
 const ensureCoepModeHydrated = async (): Promise<boolean> => {
   if (coepModeHydrated) return coepCredentialless;
-  coepModeHydrated = true;
-  try {
-    const cache = await caches.open(RUNTIME_CACHE_NAME);
-    const stored = await cache.match(COEP_MODE_URL);
-    if (stored) {
-      coepCredentialless = (await stored.text()) !== COEP_MODE_REQUIRE_CORP;
-      logServiceWorker("hydrated persisted COEP mode", { coepCredentialless });
-    }
-  } catch (err) {
-    logServiceWorker("COEP mode hydration failed", { error: formatError(err) });
+  if (!coepModeHydration) {
+    coepModeHydration = (async () => {
+      try {
+        const cache = await caches.open(RUNTIME_CACHE_NAME);
+        const stored = await cache.match(COEP_MODE_URL);
+        if (stored) {
+          coepCredentialless = (await stored.text()) !== COEP_MODE_REQUIRE_CORP;
+          logServiceWorker("hydrated persisted COEP mode", { coepCredentialless });
+        }
+      } catch (err) {
+        logServiceWorker("COEP mode hydration failed", { error: formatError(err) });
+      } finally {
+        coepModeHydrated = true;
+      }
+      return coepCredentialless;
+    })();
   }
-  return coepCredentialless;
+  return coepModeHydration;
 };
 
 // Update both the in-memory flag and the durable copy so the choice survives a worker restart.
 const persistCoepMode = async (credentialless: boolean): Promise<void> => {
+  await ensureCoepModeHydrated();
   coepCredentialless = credentialless;
-  coepModeHydrated = true;
   try {
     const cache = await caches.open(RUNTIME_CACHE_NAME);
     await cache.put(
