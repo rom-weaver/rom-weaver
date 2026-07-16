@@ -1,6 +1,8 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
+import X from "lucide-react/dist/esm/icons/x.js";
 import { Fragment, type ReactNode, useState } from "react";
+import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
@@ -84,6 +86,37 @@ const expectedSizeMark = (expectedSize: string, computedBytes: string): "bad" | 
   return computedBytes === expectedSize ? "ok" : "bad";
 };
 
+/* At least one expected field was actually compared and disagreed - the
+   header-level "this is not the expected ROM" signal. */
+const hasExpectedMismatch = (
+  expected: SourceInfoExpectedChecks,
+  checksums: SourceInfoChecksums | null | undefined,
+  computedBytes: string,
+): boolean => {
+  for (const [algorithm, value] of Object.entries(expected.checksums || {})) {
+    if (!value) continue;
+    const actual = checksums?.[algorithm as keyof SourceInfoChecksums];
+    if (actual && actual.trim().toLowerCase() !== value.trim().toLowerCase()) return true;
+  }
+  return typeof expected.size === "number" && !!computedBytes && computedBytes !== String(expected.size);
+};
+
+/** Drawer-header ✗ for a failed expectation - click for what it means. */
+const ExpectedMismatchInfo = () => (
+  <InfoToggle
+    ariaLabel="Not the expected ROM"
+    className="expected-mismatch-info"
+    icon={<X aria-hidden="true" />}
+    panelClassName="dry-apply-pop"
+    portalPanel
+    title="Not the expected ROM"
+  >
+    <strong>Not the expected ROM</strong>
+    <p>This ROM's checks do not match what the bundle was authored against - see the Expected rows below.</p>
+    <p>You can still apply, but the result may differ from what the bundle's author intended.</p>
+  </InfoToggle>
+);
+
 /** One computed hash set the expectation can match: the base checksums or a
  * transform variant's. */
 type ComputedCheckSet = { byteValue: string; checksums?: SourceInfoChecksums | null; id: string; label: string };
@@ -125,12 +158,12 @@ const MatchedExpectedGroup = ({
   return (
     <div className="ck-group" id="rom-weaver-rom-expected-checks">
       <div className="ck-group-head">
-        Expected
+        {matched.label}
         <span className="ck-mark ok" title="The staged ROM matches the bundle's expectation">
           <Check aria-hidden="true" />
-          <span className="sr-only">matched</span>
+          <span className="sr-only">matches</span>
         </span>
-        <span className="ck-head-note">{matched.label}</span>
+        <span className="ck-head-note">Expected</span>
       </div>
       {rowValue("crc32") ? <ChecksumRow label="CRC32" mark={rowMark("crc32")} value={rowValue("crc32")} /> : null}
       {byteValue ? (
@@ -187,10 +220,13 @@ const ExpectedChecksGroup = ({
   bytes,
   checksums,
   expected,
+  mismatch,
 }: {
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
   expected?: SourceInfoExpectedChecks;
+  /** A compared field disagreed: the head carries the ✗ / "No match" verdict. */
+  mismatch?: boolean;
 }) => {
   const expectedChecksums = expected?.checksums || {};
   const expectedSize = typeof expected?.size === "number" ? String(expected.size) : "";
@@ -202,7 +238,17 @@ const ExpectedChecksGroup = ({
   );
   return (
     <div className="ck-group" id="rom-weaver-rom-expected-checks">
-      <div className="ck-group-head">Expected</div>
+      <div className="ck-group-head">
+        Expected
+        {mismatch ? (
+          <>
+            <span className="ck-mark bad" title="This ROM does not match the bundle's expectation">
+              <X aria-hidden="true" />
+            </span>
+            <span className="ck-head-note">No match</span>
+          </>
+        ) : null}
+      </div>
       {orderedAlgorithms.map((algorithm) => (
         <Fragment key={algorithm}>
           <ChecksumRow
@@ -358,6 +404,8 @@ const SourceInfoList = ({
         })),
       ].find((set) => matchesExpected(expected as SourceInfoExpectedChecks, set))
     : undefined;
+  const expectedMismatch =
+    hasExpected && !expectedMatch && hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue);
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
@@ -370,6 +418,7 @@ const SourceInfoList = ({
   );
   return (
     <ChecksumList
+      action={expectedMismatch ? <ExpectedMismatchInfo /> : undefined}
       defaultOpen={defaultOpen}
       label={label}
       lead={progress ? <FileProgress {...progress} /> : lead}
@@ -397,7 +446,9 @@ const SourceInfoList = ({
           ) : (
             baseRows
           )}
-          {hasExpected ? <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} /> : null}
+          {hasExpected ? (
+            <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} mismatch={expectedMismatch} />
+          ) : null}
           <VariantGroups bytes={bytes} variants={checksumVariants} />
         </>
       )}
