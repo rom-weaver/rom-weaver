@@ -269,7 +269,7 @@ impl CliApp {
     ) {
         if !path.is_file()
             || !Self::should_probe_nested_candidate(path, kind_filter)
-            || self.containers.probe(path).is_none()
+            || self.nested_candidate_container(path).is_none()
         {
             return;
         }
@@ -323,7 +323,7 @@ impl CliApp {
                 }
                 if !file_type.is_file()
                     || !Self::should_probe_nested_candidate(&path, kind_filter)
-                    || self.containers.probe(&path).is_none()
+                    || self.nested_candidate_container(&path).is_none()
                 {
                     continue;
                 }
@@ -342,6 +342,31 @@ impl CliApp {
             "completed nested candidate scan"
         );
         Ok(())
+    }
+
+    /// Resolve the container handler for a nested-extract candidate, short-circuiting the
+    /// container-probe cascade for files that are unambiguously patches.
+    ///
+    /// Nested-extract descends into nested *containers*; a patch leaf (e.g. an `.ips`/`.bps`/
+    /// `.xdelta` extracted from a patch bundle) is never a container, yet the general
+    /// [`ContainerRegistry::probe`] cascade would still signature-probe it against every registered
+    /// container format (dozens of header reads per file - the dominant cost when a bundle holds
+    /// many patch entries). When the file both carries a patch extension and positively matches a
+    /// patch magic, we know it is a patch and skip the cascade. This is behavior-preserving: a file
+    /// with patch magic has no container magic, so the cascade would have returned no handler
+    /// anyway. Ambiguous patch-extension files without magic (e.g. a `.dcp` that is really a ZIP)
+    /// fail the signature check and fall through to the normal container probe unchanged.
+    fn nested_candidate_container(&self, path: &Path) -> Option<Arc<dyn ContainerHandler>> {
+        if is_patch_filter_candidate_name(&path.to_string_lossy())
+            && self.patches.probe_signature(path).is_some()
+        {
+            trace!(
+                candidate = %path.display(),
+                "skipping container probe for signature-confirmed patch leaf"
+            );
+            return None;
+        }
+        self.containers.probe(path)
     }
 
     pub(super) fn should_probe_nested_candidate(

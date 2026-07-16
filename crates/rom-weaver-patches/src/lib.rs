@@ -437,6 +437,21 @@ impl PatchRegistry {
         extension_match
     }
 
+    /// Positively identify a patch by its leading magic alone (no extension fallback).
+    ///
+    /// Returns a handler only when the file's bytes carry a recognized patch signature. A file with
+    /// patch magic is unambiguously a patch and can never also be a container (patch magics and
+    /// container magics are disjoint), so callers use this to short-circuit the container-probe
+    /// cascade for such files: there is no point signature-probing a confirmed patch against every
+    /// registered container format. Unlike [`probe`], this never falls back to an extension-only
+    /// match, so an ambiguous file (patch extension but no magic, e.g. a `.dcp` ZIP) returns `None`
+    /// and the caller keeps probing it as a container exactly as before.
+    pub fn probe_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
+        let ebp_extension = is_ebp_extension(path);
+        let xdelta_extension = is_xdelta_extension(path);
+        self.probe_by_signature(path, ebp_extension, xdelta_extension)
+    }
+
     pub fn find_by_name(&self, name: &str) -> Option<Arc<dyn PatchHandler>> {
         self.handlers
             .iter()
