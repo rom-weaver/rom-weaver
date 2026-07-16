@@ -129,15 +129,35 @@ const hasStagingProgress = () =>
   );
 
 export const waitForApplyButtonEnabled = async () => {
-  await expect
-    .poll(
-      () =>
-        document.getElementById("rom-weaver-button-apply") instanceof HTMLButtonElement &&
-        !document.getElementById("rom-weaver-button-apply").disabled &&
-        !hasStagingProgress(),
-      { timeout: 30000 },
-    )
-    .toBe(true);
+  try {
+    await expect
+      .poll(
+        () =>
+          document.getElementById("rom-weaver-button-apply") instanceof HTMLButtonElement &&
+          !document.getElementById("rom-weaver-button-apply").disabled &&
+          !hasStagingProgress(),
+        { timeout: 30000 },
+      )
+      .toBe(true);
+  } catch (error) {
+    const notice = getSectionNoticeText();
+    const applyButton = document.getElementById("rom-weaver-button-apply");
+    const progress = [...document.querySelectorAll("[id^='rom-weaver-progress-']")]
+      .map((element) => `${element.id}=${element.textContent?.trim() || ""}`)
+      .join(", ");
+    const details = [
+      notice && `notice=${notice}`,
+      `button=${applyButton?.textContent?.trim() || "missing"}`,
+      `disabled=${applyButton instanceof HTMLButtonElement ? String(applyButton.disabled) : "n/a"}`,
+      `input=${getInputStackFileName() || "missing"}`,
+      `patches=${getPatchStackFileNames().join(",") || "missing"}`,
+      `output=${getOutputFileNameValue() || "missing"}`,
+      progress && `progress=${progress}`,
+    ]
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(`Apply did not become ready (${details})`, { cause: error });
+  }
 };
 
 export const clickApplyButton = async () => {

@@ -14,7 +14,7 @@
 // with no neighbours before it counts as a real failure.
 //
 // Usage:
-//   node scripts/run-browser-tests.mjs [file ...]
+//   node scripts/run-browser-tests.mjs [file ...] [summary-preserving vitest flags ...]
 //   BROWSER_TEST_CONCURRENCY=3 node scripts/run-browser-tests.mjs
 //   ROM_WEAVER_BROWSER=webkit node scripts/run-browser-tests.mjs
 
@@ -44,10 +44,40 @@ const resolveConcurrency = () => {
   return Math.max(2, Math.min(4, cores));
 };
 
-const discoverTestFiles = (argv) => {
-  if (argv.length) {
-    return argv.map((entry) => path.resolve(process.cwd(), entry));
+const partitionRunnerArgs = (argv) => {
+  const files = [];
+  const vitestArgs = [];
+  for (const entry of argv) {
+    const resolved = path.resolve(process.cwd(), entry);
+    const relativeToTests = path.relative(TEST_DIR, resolved);
+    const isBrowserTestPath =
+      relativeToTests === "" || (!relativeToTests.startsWith(`..${path.sep}`) && relativeToTests !== "..");
+    if (isBrowserTestPath && (entry.endsWith(TEST_FILE_SUFFIX) || fs.existsSync(resolved))) {
+      files.push(resolved);
+    } else {
+      vitestArgs.push(entry);
+    }
   }
+  return { files, vitestArgs };
+};
+
+const assertSummaryPreservingArgs = (vitestArgs) => {
+  const unsupported = vitestArgs.find(
+    (entry) =>
+      entry === "--help" ||
+      entry === "-h" ||
+      entry === "--version" ||
+      entry === "-v" ||
+      entry === "--reporter" ||
+      entry.startsWith("--reporter="),
+  );
+  if (unsupported) {
+    throw new Error(`Unsupported browser-test runner flag: ${unsupported} (the default Vitest summary is required)`);
+  }
+};
+
+const discoverTestFiles = (requestedFiles) => {
+  if (requestedFiles.length) return requestedFiles;
   return fs
     .readdirSync(TEST_DIR)
     .filter((name) => name.endsWith(TEST_FILE_SUFFIX))
@@ -55,9 +85,9 @@ const discoverTestFiles = (argv) => {
     .map((name) => path.join(TEST_DIR, name));
 };
 
-const runFile = (file) =>
+const runFile = (file, vitestArgs) =>
   new Promise((resolve) => {
-    const child = childProcess.spawn(VITEST_BIN, ["--config", CONFIG_PATH, "run", file], {
+    const child = childProcess.spawn(VITEST_BIN, ["--config", CONFIG_PATH, "run", file, ...vitestArgs], {
       cwd: ROOT_DIR,
       env: process.env,
     });
@@ -72,7 +102,14 @@ const runFile = (file) =>
       resolve({ code: 1, output: `${output}\n${String(error)}` });
     });
     child.on("close", (code) => {
-      resolve({ code: code ?? 1, output });
+      const exitCode = code ?? 1;
+      const missingTestSummary = exitCode === 0 && summarizeOutput(output) === "no test summary";
+      resolve({
+        code: missingTestSummary ? 1 : exitCode,
+        output: missingTestSummary
+          ? `${output.trimEnd()}\nVitest exited successfully without reporting a test summary.`
+          : output,
+      });
     });
   });
 
@@ -82,13 +119,13 @@ const summarizeOutput = (output) => {
   return last ? last[1].replace(/\s+/g, " ").trim() : "no test summary";
 };
 
-const runPool = async (files, concurrency, onResult) => {
+const runPool = async (files, vitestArgs, concurrency, onResult) => {
   let cursor = 0;
   const worker = async () => {
     while (cursor < files.length) {
       const file = files[cursor];
       cursor += 1;
-      const result = await runFile(file);
+      const result = await runFile(file, vitestArgs);
       onResult(file, result);
     }
   };
@@ -96,7 +133,9 @@ const runPool = async (files, concurrency, onResult) => {
 };
 
 const main = async () => {
-  const files = discoverTestFiles(process.argv.slice(2));
+  const { files: requestedFiles, vitestArgs } = partitionRunnerArgs(process.argv.slice(2));
+  assertSummaryPreservingArgs(vitestArgs);
+  const files = discoverTestFiles(requestedFiles);
   if (!files.length) {
     process.stdout.write("No browser test files found.\n");
     return;
@@ -114,14 +153,14 @@ const main = async () => {
     process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
   };
 
-  await runPool(files, concurrency, recordResult);
+  await runPool(files, vitestArgs, concurrency, recordResult);
 
   // Retry failures once, serially with no neighbours, to absorb contention flakes.
   const initialFailures = files.filter((file) => results.get(file)?.code !== 0);
   if (initialFailures.length) {
     process.stdout.write(`\nRetrying ${initialFailures.length} failed file(s) in isolation…\n`);
     for (const file of initialFailures) {
-      const result = await runFile(file);
+      const result = await runFile(file, vitestArgs);
       results.set(file, result);
       const name = path.basename(file);
       const status = result.code === 0 ? "PASS (recovered)" : "FAIL";
