@@ -13,6 +13,8 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
 type FormatOption = { value: string; label: string };
 type OutputCompressPanel = {
   summary?: ReactNode;
+  /** Extra readout chips for the drawer header, beside the format/summary chips. */
+  readouts?: ReactNode;
   timing?: ReactNode;
   children: ReactNode;
   format?: string;
@@ -121,6 +123,7 @@ const OutputCard = ({
           <>
             {compress.format ? <DrawerReadout>{compress.format}</DrawerReadout> : null}
             {compress.summary ? <DrawerReadout>{compress.summary}</DrawerReadout> : null}
+            {compress.readouts}
             {compress.timing ? <DrawerReadout time>{compress.timing}</DrawerReadout> : null}
           </>
         }

@@ -150,6 +150,9 @@ type OutputCompressionPanelConfig = {
   formatValue?: string;
   onFieldChange?: (key: string, value: string, updates?: Record<string, string>) => void;
   onFormatChange?: (value: string) => void;
+  /** Extra drawer-header readout chips for non-compression options (e.g. the apply
+   * output's bundle package). */
+  readouts?: ReactNode;
   summary?: ReactNode;
   timing?: ReactNode;
 };
@@ -180,6 +183,7 @@ const buildOutputCompressionPanel = ({
   formatValue,
   onFieldChange,
   onFormatChange,
+  readouts,
   summary,
   timing,
 }: OutputCompressionPanelConfig): OutputCompressPanel => ({
@@ -202,6 +206,7 @@ const buildOutputCompressionPanel = ({
   formatOptions,
   formatValue,
   onFormatChange,
+  readouts,
   summary,
   timing,
 });

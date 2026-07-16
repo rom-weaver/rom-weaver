@@ -1157,6 +1157,9 @@ function ApplyWorkflowFormView({
               formatValue: outputState.compressionFormat,
               onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
               onFormatChange: (value) => controllers.output.setOutputCompression(value),
+              readouts: bundleExport ? (
+                <DrawerReadout muted={!bundleFormatValue}>bundle:{bundleFormatValue || "hide"}</DrawerReadout>
+              ) : null,
               summary: outputState.compress?.summary,
               timing: outputState.compressTiming || undefined,
             })}
