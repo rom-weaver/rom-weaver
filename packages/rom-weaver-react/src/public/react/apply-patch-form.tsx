@@ -202,7 +202,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Controllers are created further down, so the hook reads them through a ref.
   const [localBundleSession, setLocalBundleSession] = useState<BundleApplySession | null>(null);
   const [bundleDismissed, setBundleDismissed] = useState(false);
-  useEffect(() => setBundleDismissed(false), [props.bundleSession?.key]);
+  const bundleSessionKey = props.bundleSession?.key;
+  const previousBundleSessionKeyRef = useRef(bundleSessionKey);
+  useEffect(() => {
+    if (previousBundleSessionKeyRef.current === bundleSessionKey) return;
+    previousBundleSessionKeyRef.current = bundleSessionKey;
+    setBundleDismissed(false);
+  }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
   const { handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
