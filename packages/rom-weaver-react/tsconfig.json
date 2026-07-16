@@ -2,11 +2,16 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "checkJs": false,
+    "checkJs": true,
     "lib": ["dom", "dom.iterable", "webworker", "esnext"],
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
     "types": ["vite/client", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "src/**/*.mjs"
+  ]
 }

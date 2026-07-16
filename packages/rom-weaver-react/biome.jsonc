@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
   "root": true,
   "assist": {
     "actions": {
@@ -31,25 +31,39 @@
         "noUselessStringConcat": "error",
         "useSimplifiedLogicExpression": "error",
       },
+      "performance": {
+        "useTopLevelRegex": "off",
+      },
       "recommended": true,
+      "correctness": {
+        "useExhaustiveDependencies": "error",
+      },
       "style": {
         "noCommonJs": "error",
         "noNegationElse": "error",
+        "noNestedTernary": "off",
+        "noNonNullAssertion": "error",
         "noSubstr": "error",
         "noUselessElse": "error",
         "noYodaExpression": "error",
+        "useAtIndex": "error",
         "useCollapsedElseIf": "error",
         "useCollapsedIf": "error",
         "useForOf": "error",
       },
       "suspicious": {
         "noAlert": "error",
+        "noArrayIndexKey": "error",
         "noDuplicateTestHooks": "error",
         "noEmptyBlockStatements": "error",
         "noExplicitAny": "error",
+        "noMisplacedAssertion": "error",
         "noSkippedTests": "error",
         "useErrorMessage": "error",
         "useNumberToFixedDigitsArgument": "error",
+      },
+      "security": {
+        "noGlobalEval": "error",
       },
     },
   },
@@ -87,6 +101,27 @@
         "enabled": false,
       },
       "includes": ["src/presentation/localization/locales/*.ts"],
+    },
+    {
+      "includes": ["src/workers/shared/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noImplicitAnyLet": "error",
+          },
+        },
+      },
+    },
+    {
+      // Test helpers intentionally perform assertions on behalf of their caller's test case.
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noMisplacedAssertion": "off",
+          },
+        },
+      },
     },
     {
       "assist": {

@@ -163,7 +163,6 @@
         : `clean · ${result.states} states`;
       render(result);
       // full detail for the console
-      // eslint-disable-next-line no-console
       console.groupCollapsed(`[a11y] ${result.findings.length} violation rules across ${result.states} states`);
       for (const f of result.findings) console.log(`${(f.impact || "minor").toUpperCase()} ${f.rule} - ${f.help} (${f.nodes.size} nodes)`, { states: [...f.states], targets: [...f.nodes] });
       console.groupEnd();
