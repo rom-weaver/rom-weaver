@@ -26,7 +26,7 @@
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
     "lint": "npm run lint:i18n && npm run lint:code && npm run lint:types && npm run lint:browser-compat && npm run lint:knip && npm run audit:strings",
     "lint:browser-compat": "node scripts/check-browser-compat.mjs",
-    "lint:code": "biome check package.json index.html vite.config.mjs vitest.config.base.mjs vitest.browser.config.mjs vitest.unit.config.mjs vitest.wasm.browser.config.mjs tsconfig.base.json tsconfig.json src tests --diagnostic-level=error",
+    "lint:code": "biome lint . --diagnostic-level=error",
     "lint:i18n": "lingui compile --strict --typescript",
     "lint:knip": "knip --no-progress",
     "i18n:extract": "lingui extract",
@@ -64,7 +64,7 @@
     "valibot": "1.4.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.13",
+    "@biomejs/biome": "2.5.4",
     "@lingui/babel-plugin-lingui-macro": "6.4.0",
     "@lingui/cli": "6.4.0",
     "@lingui/conf": "6.4.0",

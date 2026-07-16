@@ -13,22 +13,7 @@
     "enabled": true
   },
   "files": {
-    "ignoreUnknown": true,
-    "includes": [
-      "package.json",
-      "index.html",
-      "vite.config.mjs",
-      "vitest.config.base.mjs",
-      "vitest.browser.config.mjs",
-      "src/**/*.js",
-      "src/**/*.jsx",
-      "src/**/*.mjs",
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "tests/**/*.js",
-      "tests/**/*.mjs",
-      "tests/**/*.ts"
-    ]
+    "ignoreUnknown": true
   },
   "formatter": {
     "enabled": true,
@@ -46,39 +31,25 @@
         "noUselessStringConcat": "error",
         "useSimplifiedLogicExpression": "error"
       },
-      "performance": {
-        "useTopLevelRegex": "off"
-      },
       "recommended": true,
-      "correctness": {
-        "useExhaustiveDependencies": "off"
-      },
       "style": {
         "noCommonJs": "error",
         "noNegationElse": "error",
-        "noNestedTernary": "off",
-        "noNonNullAssertion": "off",
         "noSubstr": "error",
         "noUselessElse": "error",
         "noYodaExpression": "error",
-        "useAtIndex": "off",
         "useCollapsedElseIf": "error",
         "useCollapsedIf": "error",
         "useForOf": "error"
       },
       "suspicious": {
         "noAlert": "error",
-        "noArrayIndexKey": "off",
         "noDuplicateTestHooks": "error",
         "noEmptyBlockStatements": "error",
         "noExplicitAny": "error",
-        "noMisplacedAssertion": "off",
         "noSkippedTests": "error",
         "useErrorMessage": "error",
         "useNumberToFixedDigitsArgument": "error"
-      },
-      "security": {
-        "noGlobalEval": "off"
       }
     }
   },
@@ -116,16 +87,6 @@
         "enabled": false
       },
       "includes": ["src/presentation/localization/locales/*.ts"]
-    },
-    {
-      "includes": ["src/workers/shared/**/*.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noImplicitAnyLet": "off"
-          }
-        }
-      }
     },
     {
       "assist": {
