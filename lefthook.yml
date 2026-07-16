@@ -24,6 +24,9 @@ pre-commit:
     react-lint:
       glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:code
+    react-format:
+      glob: "packages/rom-weaver-react/**"
+      run: npm --prefix packages/rom-weaver-react run format:check
     react-types:
       glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:types

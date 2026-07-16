@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "unicorn"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-alert": "error",
+    "no-empty": "error",
+    "no-useless-concat": "error",
+    "react-hooks/exhaustive-deps": "off",
+    "eslint/no-unused-vars": "off",
+    "eslint/no-control-regex": "off",
+    "typescript/no-explicit-any": "error",
+    "unicorn/no-single-promise-in-promise-methods": "off",
+    "unicorn/require-number-to-fixed-digits-argument": "error",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-useless-spread": "off"
+  },
+  "ignorePatterns": ["dist/**", "src/wasm/generated/**", "src/presentation/localization/locales/*.ts"]
+}

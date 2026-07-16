@@ -12,11 +12,11 @@ cargo test --workspace                             # full Rust suite
 cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED after Rust type/metadata changes)
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-react run dev     # webapp dev server
-npm --prefix packages/rom-weaver-react run lint    # biome + tsc + browser-compat + knip
+npm --prefix packages/rom-weaver-react run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
 npm --prefix packages/rom-weaver-react run test:browser:wasm  # wasm-layer browser tests
 ```
 
-Pre-commit hooks (lefthook) run fmt/clippy/typegen/biome/tsc scoped to changed
+Pre-commit hooks (lefthook) run oxfmt/clippy/typegen/oxlint/biome/tsc scoped to changed
 paths; CI runs all of it unconditionally plus the full test suites.
 
 ## Hard rules
