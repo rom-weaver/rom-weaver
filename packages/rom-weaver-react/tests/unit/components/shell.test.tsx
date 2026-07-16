@@ -51,18 +51,19 @@ describe("Masthead", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // reset leads the app tools; a separator fences off the external links,
-    // which trail the row (GitHub then Donate)
+    // the external links (GitHub then Donate) lead the row; a separator fences
+    // them off from the app tools (Reset, Theme, Log, Settings) that trail
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".language-tool")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
-    expect(getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
-    const reset = getByRole("button", { name: "Reset" });
-    expect(container.querySelector(".masthead-tools > .tool")).toBe(reset);
-    const settings = getByRole("button", { name: "Settings" });
-    expect(container.querySelector(".masthead-tools > .tools-sep")?.previousElementSibling).toBe(settings);
+    const github = getByRole("link", { name: "GitHub" });
+    expect(github.getAttribute("href")).toBe("https://example.com/repo");
+    expect(container.querySelector(".masthead-tools > .tool")).toBe(github);
     const donate = getByRole("link", { name: "Donate" });
-    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(donate);
+    expect(container.querySelector(".masthead-tools > .tools-sep")?.previousElementSibling).toBe(donate);
+    const settings = getByRole("button", { name: "Settings" });
+    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
+    const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3· 8 threads");
     fireEvent.click(getByRole("button", { name: "Build information for v1.2.3" }));
     expect(document.body.querySelector(".build-version-pop")?.textContent).toContain("prototype/mobile-forward-ui");
