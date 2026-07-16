@@ -50,6 +50,29 @@ test("concurrent stages of the same source coalesce onto one bare-named copy (no
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
+test("distinct Files with identical metadata keep their own staged bytes", async () => {
+  const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
+  const metadata = { lastModified: 123, type: "application/octet-stream" };
+  const firstFile = new File([new Uint8Array([1, 2, 3, 4])], "game.bin", metadata);
+  const secondFile = new File([new Uint8Array([5, 6, 7, 8])], "game.bin", metadata);
+
+  const [first, second] = await Promise.all([
+    io.stageSource(stageRequest(firstFile)),
+    io.stageSource(stageRequest(secondFile)),
+  ]);
+
+  try {
+    expect(first.filePath).toBe("/work/game.bin");
+    expect(second.filePath).toBe("/work/game-2.bin");
+    const active = getActiveBrowserVirtualFiles();
+    await expect(active[0]?.source?.arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3, 4]).buffer);
+    await expect(active[1]?.source?.arrayBuffer()).resolves.toEqual(new Uint8Array([5, 6, 7, 8]).buffer);
+  } finally {
+    await io.releaseSources([firstFile, secondFile]);
+  }
+  expect(getActiveBrowserVirtualFiles()).toEqual([]);
+});
+
 // Guards 7d3e95f8: several passes waking from the SAME failed in-flight stage must coalesce onto the one
 // retry the first waker starts, not each spawn a duplicate stage (game-2/-3/-4.bin). Reverting the
 // coalesce `while` loop to a single check silently reintroduces the `-2` phantom under 3+ waiters.

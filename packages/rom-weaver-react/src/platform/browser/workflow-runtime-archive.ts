@@ -41,6 +41,7 @@ import {
 } from "./workflow-runtime-vfs-cleanup.ts";
 
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
+const zipAliasFiles = new WeakMap<File, File>();
 
 const toFileBlobPart = (source: ArrayBufferLike | Uint8Array): BlobPart => {
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
@@ -70,10 +71,14 @@ const normalizeZipLikeArchiveSource = (source: unknown): unknown => {
   const aliasFileName = toZipAliasFileName(fileName);
   if (!aliasFileName) return source;
   if (typeof File !== "undefined" && source instanceof File) {
-    return new File([source], aliasFileName, {
+    const cached = zipAliasFiles.get(source);
+    if (cached) return cached;
+    const alias = new File([source], aliasFileName, {
       lastModified: source.lastModified,
       type: source.type || "application/zip",
     });
+    zipAliasFiles.set(source, alias);
+    return alias;
   }
   if (!source || typeof source !== "object") return source;
   return {

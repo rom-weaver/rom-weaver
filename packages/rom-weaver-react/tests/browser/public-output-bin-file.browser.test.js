@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import {
+  createBlobBackedPatchFile,
   getPatchFileBytes,
   getPatchFileExternalSource,
   isLazyExternalPatchFile,
@@ -73,4 +74,16 @@ test("direct Blob public outputs can stay lazy", async () => {
   });
   expect(sourceRef?.source).toBe(blob);
   expect(() => getPatchFileBytes(file)).toThrow(/Browser-backed file cannot be read synchronously/);
+});
+
+test("renamed Blob sources preserve object identity across staging passes", async () => {
+  const blob = new File([new Uint8Array([1, 2, 3, 4])], "source.bin");
+  const file = await createBlobBackedPatchFile(blob, "alias.bin", undefined, null, { materialize: false });
+
+  const first = getPatchFileExternalSource(file, "alias.bin", { preferDirectBrowserSource: true });
+  const second = getPatchFileExternalSource(file, "alias.bin", { preferDirectBrowserSource: true });
+
+  expect(first?.source).toBe(second?.source);
+  expect(first?.source).not.toBe(blob);
+  expect(first?.source).toMatchObject({ name: "alias.bin" });
 });

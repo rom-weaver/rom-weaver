@@ -74,8 +74,9 @@ let nextStageToken = 0;
 // starts later (a different token) is never destroyed by this stale release; a later re-stage of the same
 // source also clears the mark.
 const releasedStagingSources = new Map<string, number>();
-// Per-object identity key for sources that carry no derivable content identity (file handles, nameless
-// Blobs). Those are reused by reference across passes, so object identity is the right key.
+// Per-object identity key for staged sources. File metadata is not content identity: two distinct files
+// can have the same name, size, and lastModified. Callers that intentionally derive a new File view keep
+// that view stable across passes instead (see normalizeZipLikeArchiveSource).
 let nextObjectIdentityKey = 0;
 const objectIdentityKeys = new WeakMap<object, string>();
 const getObjectIdentityKey = (candidate: object): string => {
@@ -142,11 +143,6 @@ const createBrowserRuntimeVfsIo = ({
     // different mount point. All current runtimes share WORKER_OPFS_MOUNTPOINT; this stays correct if
     // that ever changes.
     const mountPrefix = `${mountPoint}|`;
-    // A File carries a stable content identity (name + size + lastModified) that survives the per-pass
-    // re-wrapping of one dropped input into fresh File objects, so every pass resolves to one key.
-    if (typeof File !== "undefined" && candidate instanceof File) {
-      return `${mountPrefix}file:${candidate.name}:${candidate.size}:${candidate.lastModified}`;
-    }
     return `${mountPrefix}${getObjectIdentityKey(candidate)}`;
   };
   const releaseSources: RuntimeWorkerIo["releaseSources"] = async (sources) => {

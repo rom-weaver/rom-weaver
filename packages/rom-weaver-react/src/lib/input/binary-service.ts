@@ -174,16 +174,23 @@ const getPatchFileBlob = (file: PatchFileInstance): Blob | null => {
 const getPatchFileHandle = (file: PatchFileInstance): FileSystemFileHandle | null =>
   (file as CleanablePatchFile)._fileHandle || null;
 
+const namedBlobSources = new WeakMap<Blob, Map<string, File>>();
 const toNamedBlobSource = (blob: Blob, fileName: string): Blob => {
-  if (typeof File !== "undefined" && blob instanceof File) {
-    if (blob.name === fileName) return blob;
-    return new File([blob], fileName, {
-      lastModified: blob.lastModified,
-      type: blob.type || "application/octet-stream",
-    });
+  if (typeof File === "undefined") return blob;
+  if (blob instanceof File && blob.name === fileName) return blob;
+  let aliases = namedBlobSources.get(blob);
+  if (!aliases) {
+    aliases = new Map();
+    namedBlobSources.set(blob, aliases);
   }
-  if (typeof File !== "undefined") return new File([blob], fileName, { type: blob.type || "application/octet-stream" });
-  return blob;
+  const cached = aliases.get(fileName);
+  if (cached) return cached;
+  const alias = new File([blob], fileName, {
+    lastModified: blob instanceof File ? blob.lastModified : undefined,
+    type: blob.type || "application/octet-stream",
+  });
+  aliases.set(fileName, alias);
+  return alias;
 };
 
 const createPatchFileSourceRef = (fileName: string, source: DirectSource, size?: number): PatchFileSourceRef => ({
