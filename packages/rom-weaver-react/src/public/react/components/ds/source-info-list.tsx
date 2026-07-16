@@ -1,4 +1,6 @@
-import { Fragment, type ReactNode } from "react";
+import Check from "lucide-react/dist/esm/icons/check.js";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
+import { Fragment, type ReactNode, useState } from "react";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
@@ -80,6 +82,102 @@ const expectedRowMark = (expected: string, computed: string | undefined): "bad" 
 const expectedSizeMark = (expectedSize: string, computedBytes: string): "bad" | "ok" | undefined => {
   if (!computedBytes) return undefined;
   return computedBytes === expectedSize ? "ok" : "bad";
+};
+
+/** One computed hash set the expectation can match: the base checksums or a
+ * transform variant's. */
+type ComputedCheckSet = { byteValue: string; checksums?: SourceInfoChecksums | null; id: string; label: string };
+
+/* The expectation matches a computed set when every expected field that the
+   set can answer agrees, and at least one field was actually compared. */
+const matchesExpected = (expected: SourceInfoExpectedChecks, set: ComputedCheckSet): boolean => {
+  let compared = 0;
+  for (const [algorithm, value] of Object.entries(expected.checksums || {})) {
+    if (!value) continue;
+    const actual = set.checksums?.[algorithm as keyof SourceInfoChecksums];
+    if (!actual) continue;
+    compared += 1;
+    if (actual.trim().toLowerCase() !== value.trim().toLowerCase()) return false;
+  }
+  if (typeof expected.size === "number" && set.byteValue) {
+    compared += 1;
+    if (set.byteValue !== String(expected.size)) return false;
+  }
+  return compared > 0;
+};
+
+/* When the expectation matches, the drawer collapses to this ONE group: the
+   expected values with their verified marks, filled out with the matched set's
+   remaining hashes - no duplicate Computed group, no other variants. */
+const MatchedExpectedGroup = ({
+  expected,
+  matched,
+}: {
+  expected: SourceInfoExpectedChecks;
+  matched: ComputedCheckSet;
+}) => {
+  const expectedChecksums = expected.checksums || {};
+  const expectedSize = typeof expected.size === "number" ? String(expected.size) : "";
+  const rowValue = (algorithm: keyof SourceInfoChecksums) =>
+    expectedChecksums[algorithm] || matched.checksums?.[algorithm] || "";
+  const rowMark = (algorithm: string) => (expectedChecksums[algorithm] ? "ok" : undefined);
+  const byteValue = expectedSize || matched.byteValue;
+  return (
+    <div className="ck-group" id="rom-weaver-rom-expected-checks">
+      <div className="ck-group-head">
+        Expected
+        <span className="ck-mark ok" title="The staged ROM matches the bundle's expectation">
+          <Check aria-hidden="true" />
+          <span className="sr-only">matched</span>
+        </span>
+        <span className="ck-head-note">{matched.label}</span>
+      </div>
+      {rowValue("crc32") ? <ChecksumRow label="CRC32" mark={rowMark("crc32")} value={rowValue("crc32")} /> : null}
+      {byteValue ? (
+        <ChecksumRow copyValue={byteValue} label="BYTES" mark={expectedSize ? "ok" : undefined} value={byteValue} />
+      ) : null}
+      {rowValue("md5") ? <ChecksumRow label="MD5" mark={rowMark("md5")} value={rowValue("md5")} /> : null}
+      {rowValue("sha1") ? <ChecksumRow label="SHA-1" mark={rowMark("sha1")} value={rowValue("sha1")} /> : null}
+    </div>
+  );
+};
+
+/* After a satisfied expectation, the remaining computed sets (the base rows
+   and the other transform variants) stay available but fold behind a quiet
+   disclosure - the match already answered the question they exist for. */
+const CollapsedVariantGroups = ({
+  baseLabel,
+  baseRows,
+  bytes,
+  variants,
+}: {
+  baseLabel?: string;
+  baseRows?: ReactNode;
+  bytes?: number;
+  variants: ChecksumVariant[];
+}) => {
+  const [open, setOpen] = useState(false);
+  const count = (baseRows ? 1 : 0) + variants.length;
+  if (!count) return null;
+  return (
+    <>
+      <button aria-expanded={open} className="ck-more" onClick={() => setOpen(!open)} type="button">
+        <ChevronRight aria-hidden="true" className="chev-i" />
+        {open ? "Hide" : "Show"} {count} more {count === 1 ? "variant" : "variants"}
+      </button>
+      {open ? (
+        <>
+          {baseRows ? (
+            <div className="ck-group">
+              <div className="ck-group-head">{baseLabel}</div>
+              {baseRows}
+            </div>
+          ) : null}
+          <VariantGroups bytes={bytes} variants={variants} />
+        </>
+      ) : null}
+    </>
+  );
 };
 
 /* The bundle's expected-ROM rows inside the same Checks drawer, each carrying a
@@ -246,6 +344,20 @@ const SourceInfoList = ({
   // belonged to the first one.
   const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
   const baseGroupLabel = variantRows.length ? "Unchanged" : "Computed";
+  // A satisfied expectation collapses the drawer to a single verified group -
+  // repeating the same hashes as "Computed" (and listing the other transform
+  // variants) would only restate what the match already settled.
+  const expectedMatch = hasExpected
+    ? [
+        { byteValue, checksums, id: "base", label: baseGroupLabel },
+        ...variantRows.map((variant) => ({
+          byteValue: getVariantBytes(variant, bytes),
+          checksums: variant.checksums,
+          id: variant.id,
+          label: variant.label,
+        })),
+      ].find((set) => matchesExpected(expected as SourceInfoExpectedChecks, set))
+    : undefined;
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
@@ -265,16 +377,30 @@ const SourceInfoList = ({
       open={open}
       timing={timing}
     >
-      {variantRows.length || hasExpected ? (
-        <div className="ck-group">
-          <div className="ck-group-head">{baseGroupLabel}</div>
-          {baseRows}
-        </div>
+      {expectedMatch ? (
+        <>
+          <MatchedExpectedGroup expected={expected as SourceInfoExpectedChecks} matched={expectedMatch} />
+          <CollapsedVariantGroups
+            baseLabel={expectedMatch.id === "base" ? undefined : baseGroupLabel}
+            baseRows={expectedMatch.id === "base" ? undefined : baseRows}
+            bytes={bytes}
+            variants={variantRows.filter((variant) => variant.id !== expectedMatch.id)}
+          />
+        </>
       ) : (
-        baseRows
+        <>
+          {variantRows.length || hasExpected ? (
+            <div className="ck-group">
+              <div className="ck-group-head">{baseGroupLabel}</div>
+              {baseRows}
+            </div>
+          ) : (
+            baseRows
+          )}
+          {hasExpected ? <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} /> : null}
+          <VariantGroups bytes={bytes} variants={checksumVariants} />
+        </>
       )}
-      {hasExpected ? <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} /> : null}
-      <VariantGroups bytes={bytes} variants={checksumVariants} />
       <TrimFixGroup trim={trim} />
       <ExtractTimingGroup timing={extractTiming} />
     </ChecksumList>
