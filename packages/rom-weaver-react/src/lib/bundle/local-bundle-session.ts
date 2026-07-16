@@ -1,4 +1,5 @@
 import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
+import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { ParsedBundleSourceRef } from "../../types/bundle.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { BundleApplySession, BundleApplySessionEntry } from "./bundle-session-model.ts";
@@ -13,6 +14,12 @@ const normalizePath = (value: string) =>
     .join("/");
 
 const baseName = (value: string) => normalizePath(value).split("/").pop() || value;
+
+const createBundleAbortError = () => {
+  const error = new Error("Bundle loading was aborted");
+  error.name = "AbortError";
+  return error;
+};
 
 const resolveDroppedPath = (files: File[], requested: string, label: string): File => {
   const normalized = normalizePath(requested);
@@ -30,20 +37,24 @@ const loadSource = async (
   files: File[],
   extractedFiles: Map<string, File>,
   label: string,
-): Promise<File> => {
+  signal?: AbortSignal,
+): Promise<{ cleanup?: () => Promise<void>; file: File }> => {
+  if (signal?.aborted) throw createBundleAbortError();
   if (source.kind === "extracted") {
     const file = extractedFiles.get(source.extractedPath);
     if (!file) throw new Error(`Bundle ${label} was not extracted: ${source.extractedPath}`);
-    return file;
+    return { file };
   }
-  if (source.kind === "path") return resolveDroppedPath(files, source.path, label);
+  if (source.kind === "path") return { file: resolveDroppedPath(files, source.path, label) };
   try {
     const url = new URL(source.url);
-    const [fetched] = await fetchRemoteFiles([{ url: url.toString() }]);
+    const [fetched] = await fetchRemoteFiles([{ url: url.toString() }], signal);
     if (!fetched) throw new Error(`Bundle ${label} download returned no file`);
-    return fetched.file;
+    return { cleanup: fetched.cleanup, file: fetched.file };
   } catch (error) {
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(source.url)) return resolveDroppedPath(files, source.url, label);
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(source.url)) {
+      return { file: resolveDroppedPath(files, source.url, label) };
+    }
     throw error;
   }
 };
@@ -58,73 +69,124 @@ type LoadLocalBundleOptions = {
    * missing member is a real, surfaceable error.
    */
   probe?: boolean;
+  signal?: AbortSignal;
 };
 
-type LoadedLocalBundle = { patchFiles: File[]; romFile: File | undefined; session: BundleApplySession };
+type LoadedLocalBundle = {
+  cleanup: () => Promise<void>;
+  patchFiles: File[];
+  romFile: File | undefined;
+  session: BundleApplySession;
+};
 
 // Authoritative load (canonical name): parse errors surface.
-async function loadLocalBundleSession(bundleFile: File, droppedFiles: File[]): Promise<LoadedLocalBundle>;
+async function loadLocalBundleSession(
+  bundleFile: File,
+  droppedFiles: File[],
+  options?: { probe?: false; signal?: AbortSignal },
+): Promise<LoadedLocalBundle>;
 // Probe load: a parse failure resolves to null so the caller can fall back.
 async function loadLocalBundleSession(
   bundleFile: File,
   droppedFiles: File[],
-  options: { probe: true },
+  options: { probe: true; signal?: AbortSignal },
 ): Promise<LoadedLocalBundle | null>;
 async function loadLocalBundleSession(
   bundleFile: File,
   droppedFiles: File[],
-  { probe = false }: LoadLocalBundleOptions = {},
+  { probe = false, signal }: LoadLocalBundleOptions = {},
 ): Promise<LoadedLocalBundle | null> {
   const parse = browserRuntime.bundle?.parse;
   if (!parse) throw new Error("Bundle parsing is not available in this runtime");
   let parsed: Awaited<ReturnType<typeof parse>>;
   try {
-    parsed = await parse({ fileName: bundleFile.name, source: bundleFile });
+    parsed = await parse({ fileName: bundleFile.name, signal, source: bundleFile });
   } catch (error) {
-    if (probe) return null;
+    if (probe && !signal?.aborted) return null;
     throw error;
   }
   const { result, extractedFiles } = parsed;
-  const romFile = result.romSource
-    ? await loadSource(result.romSource, droppedFiles, extractedFiles, "ROM")
-    : undefined;
-  const patchFiles = await Promise.all(
-    result.patchSources.map((patch, index) =>
-      loadSource(patch.source, droppedFiles, extractedFiles, `patch ${index + 1}`),
-    ),
-  );
-  const entries: BundleApplySessionEntry[] = result.bundle.patches.map((patch, index) => {
-    const file = patchFiles[index];
-    if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);
-    return {
-      acquisition: { extractedPath: file.name, kind: "extracted" },
-      fileName: file.name,
-      optional: patch.optional === true,
-      ...(patch.name ? { name: patch.name } : {}),
-      ...(patch.description ? { description: patch.description } : {}),
-      ...(patch.label ? { label: patch.label } : {}),
-      ...(patch.header ? { header: patch.header } : {}),
-      ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
-      ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
-    };
+  const acquiredCleanups: Array<() => Promise<void>> = [parsed.cleanup];
+  const cleanup = createCleanupOnce(async () => {
+    await Promise.all(acquiredCleanups.map((release) => release()));
   });
-  const output = result.bundle.output;
-  const name = bundleSessionDisplayName(result.bundle);
-  const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
-  const session: BundleApplySession = {
-    chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
-    entries,
-    key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
-    ...(name ? { name } : {}),
-    outputDefaults: {
-      ...(output?.name ? { name: output.name } : {}),
-      ...(output?.header ? { header: output.header } : {}),
-    },
-    ...(romFile ? { romFileName: romFile.name } : {}),
-    ...(romExpectation ? { romExpectation } : {}),
-    warnings: result.warnings,
-  };
-  return { patchFiles, romFile, session };
+  const acquisitionController = new AbortController();
+  const abortAcquisition = () => acquisitionController.abort();
+  if (signal?.aborted) abortAcquisition();
+  else signal?.addEventListener("abort", abortAcquisition, { once: true });
+  let acquisitionFailed = false;
+  let firstAcquisitionError: unknown;
+  const acquire = <T>(promise: Promise<T>) =>
+    promise.catch((error: unknown) => {
+      if (!acquisitionFailed) {
+        acquisitionFailed = true;
+        firstAcquisitionError = error;
+      }
+      abortAcquisition();
+      throw error;
+    });
+  try {
+    const [settledRom, ...settledPatches] = await Promise.allSettled([
+      result.romSource
+        ? acquire(loadSource(result.romSource, droppedFiles, extractedFiles, "ROM", acquisitionController.signal))
+        : Promise.resolve(undefined),
+      ...result.patchSources.map((patch, index) =>
+        acquire(
+          loadSource(patch.source, droppedFiles, extractedFiles, `patch ${index + 1}`, acquisitionController.signal),
+        ),
+      ),
+    ]);
+    const acquiredSources = [settledRom, ...settledPatches].flatMap((entry) =>
+      entry.status === "fulfilled" && entry.value ? [entry.value] : [],
+    );
+    for (const acquired of acquiredSources) {
+      if (acquired.cleanup) acquiredCleanups.push(acquired.cleanup);
+    }
+    if (acquisitionFailed || signal?.aborted) {
+      throw acquisitionFailed ? firstAcquisitionError : createBundleAbortError();
+    }
+    const romSource = settledRom.status === "fulfilled" ? settledRom.value : undefined;
+    const acquiredPatches = settledPatches.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));
+    const romFile = romSource?.file;
+    const patchFiles = acquiredPatches.map((entry) => entry.file);
+    const entries: BundleApplySessionEntry[] = result.bundle.patches.map((patch, index) => {
+      const file = patchFiles[index];
+      if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);
+      return {
+        acquisition: { extractedPath: file.name, kind: "extracted" },
+        fileName: file.name,
+        optional: patch.optional === true,
+        ...(patch.name ? { name: patch.name } : {}),
+        ...(patch.description ? { description: patch.description } : {}),
+        ...(patch.label ? { label: patch.label } : {}),
+        ...(patch.header ? { header: patch.header } : {}),
+        ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
+        ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
+      };
+    });
+    const output = result.bundle.output;
+    const name = bundleSessionDisplayName(result.bundle);
+    const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
+    const session: BundleApplySession = {
+      chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
+      entries,
+      key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
+      ...(name ? { name } : {}),
+      outputDefaults: {
+        ...(output?.name ? { name: output.name } : {}),
+        ...(output?.header ? { header: output.header } : {}),
+      },
+      ...(romFile ? { romFileName: romFile.name } : {}),
+      ...(romExpectation ? { romExpectation } : {}),
+      warnings: result.warnings,
+    };
+    return { cleanup, patchFiles, romFile, session };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", abortAcquisition);
+  }
 }
 
 export { loadLocalBundleSession };

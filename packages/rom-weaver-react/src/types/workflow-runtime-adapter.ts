@@ -98,6 +98,8 @@ type RuntimeWorkerIo = {
     fallbackFileName: string,
     failureMessage?: string,
   ) => Promise<PublicOutput>;
+  /** Releases externally managed source storage after its workflow owner is disposed. */
+  releaseOwnedSources?: (sources: unknown[]) => Promise<void>;
   releaseSources?: (sources: unknown[]) => Promise<void>;
   runPathWorkerToOutput: (input: {
     failureMessage?: string;
@@ -415,9 +417,9 @@ type WorkflowRuntimeIngest = {
 
 type WorkflowRuntimeBundle = {
   // Parse a dropped/fetched rom-weaver-bundle.json (plain, compressed, or an archive carrying one). Bundled
-  // ROM/patch members are extracted, materialized as plain `File`s keyed by their reported
-  // `extracted` path, and cleaned out of the runtime's staging area before returning - the caller
-  // routes the Files through the standard drop pipeline.
+  // ROM/patch members are extracted into an operation-scoped directory and exposed as OPFS-backed
+  // `File`s keyed by their reported path. The caller transfers them to workflow ownership or runs
+  // `cleanup` on failure/cancellation.
   parse?: (input: {
     source: unknown;
     fileName?: string;
@@ -425,7 +427,11 @@ type WorkflowRuntimeBundle = {
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
     signal?: AbortSignal;
-  }) => Promise<{ result: ParsedBundleParseResult; extractedFiles: Map<string, File> }>;
+  }) => Promise<{
+    cleanup: () => Promise<void>;
+    result: ParsedBundleParseResult;
+    extractedFiles: Map<string, File>;
+  }>;
   // Write a rom-weaver-bundle.json bundle (and optional everything-bundle .zip) from the current session's
   // files. Cached ROM checks avoid a second hash; outputs stay as VFS-backed runtime outputs.
   create?: (input: {

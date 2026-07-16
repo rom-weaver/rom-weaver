@@ -1,16 +1,22 @@
 /**
- * Fetch layer for URL-session sources. Downloads land as in-memory `File`s
- * and enter the exact same pipeline as dropped files. Cross-origin hosts must
- * allow CORS; a blocked fetch surfaces as `RemoteFetchError` with kind
- * `blocked` so the UI can explain the host requirement.
+ * Fetch layer for URL-session sources. Downloads stream into OPFS and the
+ * resulting disk-backed `File` enters the same pipeline as dropped files.
+ * Cross-origin hosts must allow CORS; a blocked fetch surfaces as
+ * `RemoteFetchError` with kind `blocked` so the UI can explain the host
+ * requirement.
  */
 
+import { browserVfs } from "../../platform/browser/workflow-runtime-vfs-cleanup.ts";
+import { registerBrowserSourceCleanup } from "../../storage/browser/browser-source-primitives.ts";
+import { joinVfsPath } from "../../storage/vfs/path.ts";
+import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { createLogger } from "../logging.ts";
 
 const logger = createLogger("remote-fetch");
 
-/** Hard guard against unbounded downloads; heap-backed Files must fit memory. */
+/** Hard guard against unbounded remote storage consumption. */
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+const OPFS_WRITE_CHUNK_SIZE = 8 * 1024 * 1024;
 
 type RemoteFetchErrorKind = "blocked" | "http" | "too-large" | "aborted";
 
@@ -42,7 +48,9 @@ type FetchRemoteFileOptions = {
 };
 
 type RemoteFile = {
+  cleanup: () => Promise<void>;
   file: File;
+  filePath: string;
   finalUrl: string;
 };
 
@@ -112,6 +120,7 @@ async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}
   const parsedLength = contentLengthRaw === null ? Number.NaN : Number.parseInt(contentLengthRaw, 10);
   const totalBytes = Number.isFinite(parsedLength) && parsedLength >= 0 ? parsedLength : null;
   if (totalBytes !== null && totalBytes > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
     throw new RemoteFetchError("too-large", url, `download is ${totalBytes} bytes (limit ${maxBytes})`);
   }
 
@@ -122,37 +131,105 @@ async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}
       "download.bin",
   );
 
-  const chunks: BlobPart[] = [];
+  const filePath = joinVfsPath(browserVfs.rootPath, "remote-fetch", `${createVfsPathId()}.bin`);
   let loadedBytes = 0;
-  const body = response.body;
-  if (body) {
-    const reader = body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      loadedBytes += value.byteLength;
-      if (loadedBytes > maxBytes) {
-        await reader.cancel();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    await browserVfs.truncate(filePath, 0);
+    const writeBufferLimit = Math.max(1, Math.min(OPFS_WRITE_CHUNK_SIZE, maxBytes));
+    let writeBuffer: Uint8Array | undefined;
+    let bufferedBytes = 0;
+    let writtenBytes = 0;
+    const assertNotAborted = () => {
+      if (signal?.aborted) throw new RemoteFetchError("aborted", url, "download aborted");
+    };
+    const flush = async () => {
+      if (!(writeBuffer && bufferedBytes)) return;
+      assertNotAborted();
+      await browserVfs.write(filePath, writeBuffer.subarray(0, bufferedBytes), { fileOffset: writtenBytes });
+      writtenBytes += bufferedBytes;
+      bufferedBytes = 0;
+      assertNotAborted();
+    };
+    const growWriteBuffer = (requiredBytes: number) => {
+      if (writeBuffer && writeBuffer.byteLength >= requiredBytes) return;
+      const initialSize = totalBytes === null ? requiredBytes : Math.min(totalBytes, writeBufferLimit);
+      const nextSize = Math.min(
+        writeBufferLimit,
+        Math.max(requiredBytes, initialSize, writeBuffer ? writeBuffer.byteLength * 2 : 0),
+      );
+      const next = new Uint8Array(nextSize);
+      if (writeBuffer && bufferedBytes) next.set(writeBuffer.subarray(0, bufferedBytes));
+      writeBuffer = next;
+    };
+    const bufferNetworkChunk = async (value: Uint8Array) => {
+      assertNotAborted();
+      const nextLoadedBytes = loadedBytes + value.byteLength;
+      if (nextLoadedBytes > maxBytes) {
         throw new RemoteFetchError("too-large", url, `download exceeded the ${maxBytes} byte limit`);
       }
-      chunks.push(value);
+      loadedBytes = nextLoadedBytes;
       onProgress?.({ loadedBytes, totalBytes });
+      let sourceOffset = 0;
+      while (sourceOffset < value.byteLength) {
+        if (writeBuffer && bufferedBytes === writeBuffer.byteLength) {
+          if (writeBuffer.byteLength === writeBufferLimit) await flush();
+          else growWriteBuffer(Math.min(writeBufferLimit, bufferedBytes + value.byteLength - sourceOffset));
+        }
+        growWriteBuffer(Math.min(writeBufferLimit, bufferedBytes + value.byteLength - sourceOffset));
+        const availableBytes = (writeBuffer?.byteLength || 0) - bufferedBytes;
+        const copyBytes = Math.min(availableBytes, value.byteLength - sourceOffset);
+        writeBuffer?.set(value.subarray(sourceOffset, sourceOffset + copyBytes), bufferedBytes);
+        bufferedBytes += copyBytes;
+        sourceOffset += copyBytes;
+        if (bufferedBytes === writeBufferLimit) await flush();
+      }
+    };
+    const body = response.body;
+    if (body) {
+      reader = body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        if (loadedBytes + value.byteLength > maxBytes) {
+          await reader.cancel().catch(() => undefined);
+          throw new RemoteFetchError("too-large", url, `download exceeded the ${maxBytes} byte limit`);
+        }
+        await bufferNetworkChunk(value);
+      }
+    } else {
+      // Compatibility fallback for fetch implementations without a ReadableStream body.
+      // This branch must materialize the response once, but still stores the retained file in OPFS.
+      const buffer = await response.arrayBuffer();
+      await bufferNetworkChunk(new Uint8Array(buffer));
     }
-  } else {
-    const buffer = await response.arrayBuffer();
-    loadedBytes = buffer.byteLength;
-    if (loadedBytes > maxBytes) {
-      throw new RemoteFetchError("too-large", url, `download exceeded the ${maxBytes} byte limit`);
+    await flush();
+    assertNotAborted();
+    const storedFile = await browserVfs.getFile?.(filePath);
+    if (!storedFile) throw new Error(`Remote download was not stored in browser OPFS: ${fileName}`);
+    const file = new File([storedFile], fileName, {
+      type: response.headers.get("content-type") || storedFile.type || "application/octet-stream",
+    });
+    // Keep the public File shape expected by drop routing while letting worker staging reuse the OPFS
+    // path directly instead of registering another virtual file view of the same bytes.
+    Object.defineProperty(file, "filePath", { value: filePath });
+    const cleanup = registerBrowserSourceCleanup(file, () => browserVfs.remove(filePath));
+    logger.debug(`fetched remote file: ${url} (${loadedBytes} bytes as ${fileName})`);
+    return {
+      cleanup,
+      file,
+      filePath,
+      finalUrl: response.url || url,
+    };
+  } catch (error) {
+    await reader?.cancel().catch(() => undefined);
+    await browserVfs.remove(filePath).catch(() => undefined);
+    if (signal?.aborted && !(error instanceof RemoteFetchError)) {
+      throw new RemoteFetchError("aborted", url, "download aborted");
     }
-    chunks.push(buffer);
-    onProgress?.({ loadedBytes, totalBytes });
+    throw error;
   }
-  logger.debug(`fetched remote file: ${url} (${loadedBytes} bytes as ${fileName})`);
-  return {
-    file: new File(chunks, fileName),
-    finalUrl: response.url || url,
-  };
 }
 
 type RemoteFetchEntry = {
@@ -165,22 +242,30 @@ type RemoteFetchEntry = {
  * Fetch several sources concurrently; the first hard failure aborts the rest.
  */
 async function fetchRemoteFiles(entries: readonly RemoteFetchEntry[], signal?: AbortSignal): Promise<RemoteFile[]> {
+  if (signal?.aborted) {
+    throw new RemoteFetchError("aborted", entries[0]?.url || "", "download aborted");
+  }
   const controller = new AbortController();
   const onOuterAbort = () => controller.abort();
   signal?.addEventListener("abort", onOuterAbort, { once: true });
   try {
-    return await Promise.all(
-      entries.map((entry) =>
-        fetchRemoteFile(entry.url, {
-          fallbackFileName: entry.fallbackFileName,
-          onProgress: entry.onProgress,
-          signal: controller.signal,
-        }).catch((error: unknown) => {
-          controller.abort();
-          throw error;
-        }),
-      ),
+    const downloads = entries.map((entry) =>
+      fetchRemoteFile(entry.url, {
+        fallbackFileName: entry.fallbackFileName,
+        onProgress: entry.onProgress,
+        signal: controller.signal,
+      }),
     );
+    try {
+      return await Promise.all(downloads);
+    } catch (error) {
+      controller.abort();
+      const settled = await Promise.allSettled(downloads);
+      await Promise.all(
+        settled.map((result) => (result.status === "fulfilled" ? result.value.cleanup() : Promise.resolve())),
+      );
+      throw error;
+    }
   } finally {
     signal?.removeEventListener("abort", onOuterAbort);
   }

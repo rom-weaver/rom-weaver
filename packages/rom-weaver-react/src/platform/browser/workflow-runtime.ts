@@ -19,7 +19,13 @@ import {
   createSharedTrimRuntime,
   type RomSpecificRuntimeAdapter,
 } from "../../lib/runtime/workflow-runtime-core.ts";
-import { configureBrowserSourcePrimitives } from "../../storage/browser/browser-source-primitives.ts";
+import {
+  configureBrowserSourcePrimitives,
+  registerBrowserSourceCleanup,
+} from "../../storage/browser/browser-source-primitives.ts";
+import { createCleanupOnce } from "../../storage/shared/disposal.ts";
+import { joinVfsPath } from "../../storage/vfs/path.ts";
+import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import {
   createRuntimeOutputFromBytes,
   createRuntimeOutputFromSource,
@@ -181,32 +187,9 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
   },
 });
 
-// Bundle parsing hands extracted members to the normal drop pipeline, so those
-// small leaves still need a browser File. Bundle creation never uses this path.
-const readBrowserVfsFileAsHeapFile = async (filePath: string, fileName: string): Promise<File> => {
-  const stat = await browserVfs.stat(filePath);
-  if (!stat) throw new Error(`Bundle file is not available: ${filePath}`);
-  const bytes = new Uint8Array(stat.size);
-  let readBytes = 0;
-  while (readBytes < stat.size) {
-    const chunk = await browserVfs.read(filePath, bytes, {
-      bufferOffset: readBytes,
-      fileOffset: readBytes,
-      length: stat.size - readBytes,
-    });
-    if (!chunk) break;
-    readBytes += chunk;
-  }
-  if (readBytes !== stat.size) {
-    throw new Error(`Bundle file read was truncated: ${filePath} (${readBytes}/${stat.size} bytes)`);
-  }
-  return new File([bytes], fileName, { type: "application/octet-stream" });
-};
-
 // Parse a rom-weaver-bundle.json source (plain/compressed/archive). Bundled ROM/patch leaves land under
-// the worker OPFS mount; they are materialized as plain heap `File`s (keyed by extracted path) and
-// their OPFS copies removed, so the caller can hand them to the standard drop pipeline with nothing
-// left dangling in staging.
+// a unique per-parse OPFS scope. Disk-backed File views carry their path into the normal drop pipeline;
+// final workflow ownership releases each member and removes the scope after the last member is gone.
 const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["bundle"] => ({
   create: async ({
     rom,
@@ -329,6 +312,7 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     }
   },
   parse: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
+    const extractDirPath = joinVfsPath(WORKER_OPFS_MOUNTPOINT, "bundle-parse", createVfsPathId());
     const staged = await workerIo.stageSource({
       fallbackFileName: fileName || "rom-weaver-bundle.json",
       pathPrefix: "bundle-input",
@@ -339,7 +323,7 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     try {
       const result = await invokeRomWeaverBundleParseWorker(
         {
-          extractDirPath: WORKER_OPFS_MOUNTPOINT,
+          extractDirPath,
           knownInputPaths: [staged.filePath],
           logLevel,
           signal,
@@ -354,17 +338,33 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
         if (patchSource.source.kind === "extracted") extractedPaths.add(patchSource.source.extractedPath);
       }
       const extractedFiles = new Map<string, File>();
-      try {
-        for (const extractedPath of extractedPaths) {
-          extractedFiles.set(
-            extractedPath,
-            await readBrowserVfsFileAsHeapFile(extractedPath, getPathBaseName(extractedPath, "bundle-entry.bin")),
-          );
-        }
-      } finally {
-        await Promise.all([...extractedPaths].map((path) => browserVfs.remove(path).catch(() => undefined)));
+      const remainingPaths = new Set(extractedPaths);
+      const removeExtractedPath = async (path: string) => {
+        await browserVfs.remove(path).catch(() => undefined);
+        remainingPaths.delete(path);
+        if (!remainingPaths.size) await browserVfs.remove(extractDirPath).catch(() => undefined);
+      };
+      const extractedCleanups: Array<() => Promise<void>> = [];
+      for (const extractedPath of extractedPaths) {
+        const storedFile = await browserVfs.getFile?.(extractedPath);
+        if (!storedFile) throw new Error(`Bundle file is not available: ${extractedPath}`);
+        const file = new File([storedFile], getPathBaseName(extractedPath, "bundle-entry.bin"), {
+          lastModified: storedFile.lastModified,
+          type: storedFile.type || "application/octet-stream",
+        });
+        Object.defineProperty(file, "filePath", { value: extractedPath });
+        const release = registerBrowserSourceCleanup(file, () => removeExtractedPath(extractedPath));
+        extractedCleanups.push(release);
+        extractedFiles.set(extractedPath, file);
       }
-      return { extractedFiles, result };
+      const cleanup = createCleanupOnce(async () => {
+        await Promise.all(extractedCleanups.map((release) => release()));
+        await browserVfs.remove(extractDirPath).catch(() => undefined);
+      });
+      return { cleanup, extractedFiles, result };
+    } catch (error) {
+      await browserVfs.remove(extractDirPath).catch(() => undefined);
+      throw error;
     } finally {
       await staged.cleanup().catch(() => undefined);
     }

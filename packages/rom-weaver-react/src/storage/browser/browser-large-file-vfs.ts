@@ -144,6 +144,10 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
 
   const vfs: LargeFileVfs = {
     createOutputRef,
+    getFile: async (filePath) => {
+      const fileHandle = await resolveFileHandle(normalizeAbsoluteVfsPath(filePath, rootPath), false);
+      return fileHandle ? fileHandle.getFile() : null;
+    },
     hostKind: "browser-opfs",
     normalizePath: (filePath) => normalizeAbsoluteVfsPath(filePath, rootPath),
     read: async (filePath, buffer, options) => {

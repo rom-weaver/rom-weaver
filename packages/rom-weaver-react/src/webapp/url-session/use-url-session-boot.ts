@@ -49,6 +49,7 @@ function useUrlSessionBoot(
   useEffect(() => {
     if (!request) return undefined;
     let cancelled = false;
+    let cleanupSessionFiles: (() => Promise<void>) | undefined;
     const controller = new AbortController();
     const loadedByEntry = new Map<number | string, number>();
     const totalsByEntry = new Map<number | string, number | null>();
@@ -80,8 +81,14 @@ function useUrlSessionBoot(
         url,
       }));
       logger.info(`loading url session (${entries.length} file(s))`);
-      run = fetchRemoteFiles(entries, controller.signal).then((files) => {
-        if (cancelled) return;
+      run = fetchRemoteFiles(entries, controller.signal).then(async (files) => {
+        cleanupSessionFiles = async () => {
+          await Promise.all(files.map((entry) => entry.cleanup()));
+        };
+        if (cancelled) {
+          await cleanupSessionFiles();
+          return;
+        }
         // One delivery preserves patch order through the drop router.
         deliverRef.current(files.map((entry) => entry.file));
       });
@@ -96,8 +103,12 @@ function useUrlSessionBoot(
           reportProgress();
         },
         signal: controller.signal,
-      }).then(({ files, session }) => {
-        if (cancelled) return;
+      }).then(async ({ cleanup, files, session }) => {
+        cleanupSessionFiles = cleanup;
+        if (cancelled) {
+          await cleanup();
+          return;
+        }
         // A retry after failure must re-seed the form, so the session identity carries the attempt.
         bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
         deliverRef.current(files);
@@ -124,6 +135,7 @@ function useUrlSessionBoot(
     return () => {
       cancelled = true;
       controller.abort();
+      void cleanupSessionFiles?.();
     };
   }, [attempt, request]);
 

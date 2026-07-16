@@ -1,4 +1,5 @@
 import { emitTraceLog } from "../../lib/logging.ts";
+import { releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
@@ -171,6 +172,14 @@ const createBrowserRuntimeVfsIo = ({
       cleanups.push(cleanupCachedStagedSource(key, cached));
     }
     await Promise.all(cleanups);
+  };
+  const releaseOwnedSources: RuntimeWorkerIo["releaseOwnedSources"] = async (sources) => {
+    await Promise.all(
+      sources.map((source) => {
+        const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
+        return releaseBrowserSource(directSource || source);
+      }),
+    );
   };
   const statWithRetries = async (filePath: string) => {
     let stat = await vfs.stat(filePath);
@@ -420,6 +429,7 @@ const createBrowserRuntimeVfsIo = ({
       }
       throw new Error(failureMessage || "Worker did not return browser output");
     },
+    releaseOwnedSources,
     releaseSources,
     runPathWorkerToOutput: async ({
       failureMessage,

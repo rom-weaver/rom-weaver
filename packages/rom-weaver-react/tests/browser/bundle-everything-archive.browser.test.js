@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
@@ -93,7 +93,9 @@ test("everything-archive bundle extracts its members and applies to a download",
   // the bundled patch must carry its ingest-grade descriptor (no second describe round-trip).
   const parse = browserRuntime.bundle?.parse;
   if (!parse) throw new Error("Runtime bundle parse capability is unavailable");
+  const readSpy = vi.spyOn(browserVfs, "read");
   const parsed = await parse({ fileName: bundleFile.name, source: bundleFile });
+  const secondParsed = await parse({ fileName: bundleFile.name, source: bundleFile });
   expect(parsed.result.sourceKind).toBe("archive");
   expect(parsed.result.romSource?.kind).toBe("extracted");
   expect(parsed.result.patchSources).toHaveLength(1);
@@ -105,6 +107,19 @@ test("everything-archive bundle extracts its members and applies to a download",
   const extractedPatch =
     patchSource.source.kind === "extracted" ? parsed.extractedFiles.get(patchSource.source.extractedPath) : undefined;
   expect(extractedPatch?.name).toBe("change.ips");
+  expect(extractedPatch?.filePath).toBe(patchSource.source.extractedPath);
+  expect(await extractedPatch?.arrayBuffer()).toHaveProperty("byteLength", 14);
+  expect(readSpy).not.toHaveBeenCalled();
+  const firstPaths = [...parsed.extractedFiles.keys()];
+  const secondPaths = [...secondParsed.extractedFiles.keys()];
+  expect(firstPaths.every((path) => path.includes("/bundle-parse/"))).toBe(true);
+  expect(new Set([...firstPaths, ...secondPaths])).toHaveLength(4);
+  expect(await Promise.all([...firstPaths, ...secondPaths].map((path) => browserVfs.stat(path)))).not.toContain(null);
+  await Promise.all([parsed.cleanup(), secondParsed.cleanup()]);
+  await expect
+    .poll(async () => Promise.all([...firstPaths, ...secondPaths].map((path) => browserVfs.stat(path))))
+    .toEqual([null, null, null, null]);
+  readSpy.mockRestore();
 
   // Full boot flow over the same archive fetched from a URL (stubbed - the fixture is virtual).
   const originalFetch = globalThis.fetch;
@@ -125,6 +140,8 @@ test("everything-archive bundle extracts its members and applies to a download",
   }
   const { files, session } = loaded;
   expect(files.map((file) => file.name)).toEqual(["game.bin", "change.ips"]);
+  const loadedPaths = files.map((file) => file.filePath);
+  expect(await Promise.all(loadedPaths.map((path) => browserVfs.stat(path)))).not.toContain(null);
   expect(session.name).toBe("bundled-output");
   expect(session.entries.map((entry) => entry.optional)).toEqual([false]);
 
@@ -142,4 +159,7 @@ test("everything-archive bundle extracts its members and applies to a download",
   await clickApplyButton();
   const outcome = await waitForApplyOutcome();
   expect(outcome).toEqual({ kind: "download" });
+  mount(createElement("div"));
+  await expect.poll(async () => Promise.all(loadedPaths.map((path) => browserVfs.stat(path)))).toEqual([null, null]);
+  await loaded.cleanup();
 });

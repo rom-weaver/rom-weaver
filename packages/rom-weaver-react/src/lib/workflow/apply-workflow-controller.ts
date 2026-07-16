@@ -98,6 +98,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   ApplySettings,
   ApplyWorkflowSnapshot
 > {
+  private readonly ownedSourceRefCounts = new Map<unknown, number>();
+  private readonly pendingOwnedSourceReleases = new Map<unknown, ReturnType<typeof setTimeout>>();
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
@@ -217,12 +219,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
       });
+      this.validateSources?.(input);
+      const retainedInputs = Array.isArray(input) ? [...input] : [input];
+      if (!retainedInputs.length) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
+      let replacementSessionCreated = false;
       try {
+        this.retainOwnedSources(retainedInputs);
         await this.releaseInputSession();
-        this.inputs = [];
-        this.validateSources?.(input);
-        this.inputs = Array.isArray(input) ? [...input] : [input];
-        if (!this.inputs.length) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
+        this.inputs = retainedInputs;
         const initial = this.createInitialInputView(this.inputs);
         this.inputSession = {
           role: "input",
@@ -231,6 +235,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           synthetic: false,
           view: initial,
         };
+        replacementSessionCreated = true;
         this.trace("input.set.initialized", {
           fileName: initial.state.fileName,
           inputCount: this.inputs.length,
@@ -283,7 +288,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           status: this.inputSession.view.state.status,
         });
       } catch (error) {
-        await this.releaseInputSession();
+        if (replacementSessionCreated) await this.releaseInputSession();
+        else await this.releaseOwnedSources(retainedInputs);
         this.inputs = [];
         this.trace("input.set.fail", {
           error,
@@ -311,6 +317,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       throw toRomWeaverError(error);
     }
     const patchIndex = this.patches.length;
+    this.retainOwnedSources([patch]);
     const stage = this.createInitialSource("patch", patch, patchIndex);
     stage.outputLabel = createPatchOutputLabel(stage.state.fileName);
     this.patches.push(stage);
@@ -351,6 +358,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (index !== -1) this.patches.splice(index, 1);
         await releasePreparedSourceAndWait(stage);
         await this.releaseRuntimeSources([stage.source]);
+        await this.releaseOwnedSources([stage.source]);
         this.recomputeOutputState();
         throw error;
       }
@@ -543,7 +551,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // Fallback (the early streamed dialog never ran - e.g. the sidecar event was missed): surface
       // the multi-select now by re-staging the archive as a patch source.
       this.trace("patch.implicit.sidecar-surface", { count: sidecarPatches.length, fileName: stage.state.fileName });
-      await this.surfaceArchivePatchSelection(this.cloneArchiveAsPatchSource(stage.source));
+      // The staging cache is reference-counted, so the patch flow can share the exact source object
+      // with the input flow without conflating a same-metadata but different File.
+      await this.surfaceArchivePatchSelection(stage.source);
     }
   }
 
@@ -565,22 +575,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     }
   }
 
-  // Hand the patch flow a fresh File over the same bytes (lazy, no copy) instead of the original input
-  // source, which is already claimed by the staged input session.
-  private cloneArchiveAsPatchSource(source: TSource): TSource {
-    if (typeof File !== "undefined" && source instanceof File) {
-      return new File([source], source.name, {
-        lastModified: source.lastModified,
-        type: source.type || "application/octet-stream",
-      }) as TSource;
-    }
-    return source;
-  }
-
   // Stage a ROM-bearing archive as a patch source through the same machinery as a dropped patch
   // archive (enumerate → 1 auto-prepares, 2+ → selection dialog → fan-out). Inlined without `mutate`
   // because this runs inside `setInput`'s mutation; awaiting `addPatch` here would deadlock the queue.
   private async surfaceArchivePatchSelection(patchSource: TSource): Promise<void> {
+    this.retainOwnedSources([patchSource]);
     const stage = this.createInitialSource("patch", patchSource, this.patches.length);
     stage.outputLabel = createPatchOutputLabel(stage.state.fileName);
     this.patches.push(stage);
@@ -594,6 +593,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (index !== -1) this.patches.splice(index, 1);
       await releasePreparedSourceAndWait(stage);
       await this.releaseRuntimeSources([stage.source]);
+      await this.releaseOwnedSources([stage.source]);
       this.trace("patch.implicit.surface-failed", { error });
     }
   }
@@ -754,6 +754,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.abort();
     await this.releaseInputSession();
     await this.releasePatchSources();
+    await this.flushPendingOwnedSourceReleases();
+    await this.runtime.workerIo?.releaseOwnedSources?.([...this.ownedSourceRefCounts.keys()]).catch(() => undefined);
+    this.ownedSourceRefCounts.clear();
     this.patches = [];
     this.clearListeners();
     this.disposed = true;
@@ -1072,7 +1075,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       }
       // Replace the archive source with the extracted leaf so a later re-stage resolves a single
       // patch directly and never re-opens the multi-select dialog (only when several were picked).
-      if (restIds.length) stage.source = this.createImplicitPatchSource(firstLeaf, firstParentCompressions);
+      if (restIds.length) {
+        await this.replaceOwnedStageSource(stage, this.createImplicitPatchSource(firstLeaf, firstParentCompressions));
+      }
     }
     await this.prepareSelectedSource(stage);
     // Each additional pick becomes its own patch-stack entry, mirroring implicit-patch discovery.
@@ -1393,10 +1398,59 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.runtime.workerIo?.releaseSources?.(sources).catch(() => undefined);
   }
 
+  private retainOwnedSources(sources: unknown[]): void {
+    for (const source of sources) {
+      const pendingRelease = this.pendingOwnedSourceReleases.get(source);
+      if (pendingRelease) {
+        clearTimeout(pendingRelease);
+        this.pendingOwnedSourceReleases.delete(source);
+      }
+      this.ownedSourceRefCounts.set(source, (this.ownedSourceRefCounts.get(source) || 0) + 1);
+    }
+  }
+
+  private async replaceOwnedStageSource(stage: StagedSource<TSource>, replacement: TSource): Promise<void> {
+    const previous = stage.source;
+    if (previous === replacement) return;
+    // Retain first so replacement is atomic from the ownership ledger's perspective. Otherwise a
+    // clear/dispose racing the swap can release neither the old archive nor the extracted leaf.
+    this.retainOwnedSources([replacement]);
+    stage.source = replacement;
+    await this.releaseOwnedSources([previous]);
+  }
+
+  private async releaseOwnedSources(sources: unknown[]): Promise<void> {
+    for (const source of sources) {
+      const refCount = this.ownedSourceRefCounts.get(source) || 0;
+      if (refCount > 1) this.ownedSourceRefCounts.set(source, refCount - 1);
+      else if (refCount === 1) {
+        this.ownedSourceRefCounts.delete(source);
+        if (!this.pendingOwnedSourceReleases.has(source)) {
+          this.pendingOwnedSourceReleases.set(
+            source,
+            setTimeout(() => {
+              this.pendingOwnedSourceReleases.delete(source);
+              void this.runtime.workerIo?.releaseOwnedSources?.([source]).catch(() => undefined);
+            }, 0),
+          );
+        }
+      }
+    }
+  }
+
+  private async flushPendingOwnedSourceReleases(): Promise<void> {
+    const sources = [...this.pendingOwnedSourceReleases.keys()];
+    for (const timer of this.pendingOwnedSourceReleases.values()) clearTimeout(timer);
+    this.pendingOwnedSourceReleases.clear();
+    if (sources.length) await this.runtime.workerIo?.releaseOwnedSources?.(sources).catch(() => undefined);
+  }
+
   private async releasePatchSources(): Promise<void> {
+    const ownedSources = this.patches.map((patch) => patch.source);
     const sources = this.patches.flatMap((patch) => [patch.source, ...this.getRuntimeSourcesForStage(patch)]);
     await Promise.all(this.patches.map((patch) => releasePreparedSourceAndWait(patch)));
     await this.releaseRuntimeSources(sources);
+    await this.releaseOwnedSources(ownedSources);
   }
 
   private async releaseInputSession() {
@@ -1406,6 +1460,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.earlySidecarSelections.clear();
     this.earlySidecarSelectionInFlight.clear();
     await this.inputStages.releaseSession(session);
+    await this.releaseOwnedSources(session?.sources || []);
   }
 }
 
