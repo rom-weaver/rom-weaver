@@ -149,12 +149,12 @@ const useWorkbenchActivity = (workflowId: string, { busy, queued, completed }: W
  * Forwards a page-level drop (dragging anywhere on the page) to the form's
  * unified drop handler, so the whole tab is a drop target - not just the
  * dropzone box. Each drop id is handled once; the handler runs in a microtask so
- * it does not fire synchronously during render. `isCancelled` lets handlers that
- * await async work bail out if the effect was torn down meanwhile.
+ * it does not fire synchronously during render. The cleanup guard suppresses a
+ * queued call if the effect is torn down before that microtask starts.
  */
 const usePageDropForwarder = (
   pageDrop: PageFileDrop | null | undefined,
-  handler: (files: File[], isCancelled: () => boolean) => void,
+  handler: (files: File[]) => void,
   handledPageDropIdRef: { current: number | null },
 ) => {
   const handlerRef = useLatestRef(handler);
@@ -164,7 +164,7 @@ const usePageDropForwarder = (
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      handlerRef.current(pageDrop.files, () => cancelled);
+      handlerRef.current(pageDrop.files);
     });
     return () => {
       cancelled = true;

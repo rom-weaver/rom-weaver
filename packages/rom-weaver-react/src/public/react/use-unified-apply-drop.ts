@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
@@ -59,7 +59,12 @@ const isRootJsonArchiveEntry = (name: string) => {
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
-  onDrop: (files: File[], isCancelled?: () => boolean) => void;
+  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal) => void;
+};
+type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
+type DropRouteLifecycle = {
+  beforeNonBundleDelivery?: () => Promise<void>;
+  onBundleDetected?: () => void;
 };
 
 /**
@@ -95,12 +100,16 @@ const routeUnifiedDrop = async (
   onBundleSession?: (session: BundleApplySession) => void,
   isCancelled?: () => boolean,
   onPendingUpdate?: (file: File, update: PendingDropUpdate) => void,
+  signal?: AbortSignal,
+  lifecycle?: DropRouteLifecycle,
 ): Promise<void> => {
+  if (signal?.aborted || isCancelled?.()) return;
   const { archives, inputs, patches } = classifyDroppedFiles(files);
   const directBundles = files.filter((file) => isBundleFileName(file.name));
   const archiveEntries = await Promise.all(
     archives.map((archive) => listDroppedArchiveEntryNames(archive).catch(() => [] as string[])),
   );
+  if (signal?.aborted || isCancelled?.()) return;
   const bundleArchives = archives.filter((_archive, index) =>
     archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rom-weaver-bundle.json"),
   );
@@ -129,21 +138,28 @@ const routeUnifiedDrop = async (
   // Yield one task so React can paint the newly learned shape before routing
   // replaces the placeholder. This does not wait on a timer interval.
   if (archives.length && onPendingUpdate) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (signal?.aborted || isCancelled?.()) return;
   // Deliver a loaded bundle into the form: seed the session, then hand its ROM
   // (bundled, or a companion dropped alongside a checks-only bundle) and its
   // patches to the input pipeline.
-  const applyLoadedBundle = (
+  const applyLoadedBundle = async (
     loaded: NonNullable<Awaited<ReturnType<typeof loadLocalBundleSession>>>,
     bundleFile: File,
   ) => {
-    onBundleSession?.(loaded.session);
     const companionRoms = inputs.filter((file) => file !== bundleFile);
     if (!loaded.romFile && companionRoms.length > 1) {
+      await loaded.cleanup();
       throw new Error("A checks-only bundle drop contains more than one possible ROM");
     }
-    const romFile = loaded.romFile || companionRoms[0];
-    if (romFile) controller.provideRomInputFiles?.([romFile]);
-    controller.providePatchInputFiles?.(loaded.patchFiles);
+    try {
+      onBundleSession?.(loaded.session);
+      const romFile = loaded.romFile || companionRoms[0];
+      if (romFile) controller.provideRomInputFiles?.([romFile]);
+      controller.providePatchInputFiles?.(loaded.patchFiles);
+    } catch (error) {
+      await loaded.cleanup();
+      throw error;
+    }
   };
 
   // 1) Canonical `rom-weaver-bundle.json` (by name, direct or an archive root):
@@ -151,10 +167,14 @@ const routeUnifiedDrop = async (
   const canonicalBundles = [...directBundles, ...bundleArchives.filter((file) => !directBundles.includes(file))];
   if (canonicalBundles.length > 1) throw new Error("Drop contains more than one bundle");
   if (canonicalBundles[0]) {
+    lifecycle?.onBundleDetected?.();
     onPendingUpdate?.(canonicalBundles[0], { bundle: true });
-    const loaded = await loadLocalBundleSession(canonicalBundles[0], files);
-    if (isCancelled?.()) return;
-    applyLoadedBundle(loaded, canonicalBundles[0]);
+    const loaded = await loadLocalBundleSession(canonicalBundles[0], files, { signal });
+    if (signal?.aborted || isCancelled?.()) {
+      await loaded.cleanup();
+      return;
+    }
+    await applyLoadedBundle(loaded, canonicalBundles[0]);
     return;
   }
 
@@ -170,15 +190,21 @@ const routeUnifiedDrop = async (
     ),
   ];
   for (const candidate of probeCandidates) {
-    const loaded = await loadLocalBundleSession(candidate, files, { probe: true });
-    if (isCancelled?.()) return;
+    const loaded = await loadLocalBundleSession(candidate, files, { probe: true, signal });
+    if (signal?.aborted || isCancelled?.()) {
+      await loaded?.cleanup();
+      return;
+    }
     if (!loaded) continue;
     logger.debug("content-probed a bundle from a non-canonical json candidate", { name: candidate.name });
+    lifecycle?.onBundleDetected?.();
     onPendingUpdate?.(candidate, { bundle: true });
-    applyLoadedBundle(loaded, candidate);
+    await applyLoadedBundle(loaded, candidate);
     return;
   }
-  if (isCancelled?.()) return;
+  if (signal?.aborted || isCancelled?.()) return;
+  await lifecycle?.beforeNonBundleDelivery?.();
+  if (signal?.aborted || isCancelled?.()) return;
   const romArchives = archives.filter((_archive, index) => archiveBuckets[index] === "rom");
   const patchArchives = archives.filter((_archive, index) => archiveBuckets[index] === "patch");
   const romInputs = [...inputs, ...romArchives];
@@ -204,10 +230,58 @@ const useUnifiedApplyDrop = (
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
+  const activeDropsRef = useRef(new Map<AbortController, ActiveDropKind>());
+  const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
+  useEffect(
+    () => () => {
+      for (const controller of activeDropsRef.current.keys()) controller.abort();
+      activeDropsRef.current.clear();
+    },
+    [],
+  );
   const onDrop = useCallback(
-    (files: File[], isCancelled?: () => boolean) => {
-      if (isCancelled?.()) return;
-      const { archives } = classifyDroppedFiles(files);
+    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
+      const classification = classifyDroppedFiles(files);
+      const hasBundle = files.some((file) => isBundleFileName(file.name));
+      // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
+      // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
+      // keep the name predicate for ROM/container overlaps such as RVZ and CHD that probe as archives.
+      const hasRom = classification.inputs.length > 0 || files.some((file) => isRomFileName(file.name));
+      const dropKind: ActiveDropKind = hasBundle
+        ? "bundle"
+        : hasRom
+          ? "rom"
+          : classification.archives.length
+            ? "unknown"
+            : "patch";
+      // Dynamic bundle promotion must mirror a direct canonical bundle submitted at this moment:
+      // it supersedes only routes that already existed, never newer user actions added while probing.
+      const precedingDropControllers = new Set(activeDropsRef.current.keys());
+      if (dropKind === "bundle") {
+        for (const activeController of activeDropsRef.current.keys()) activeController.abort();
+        activeDropsRef.current.clear();
+        dropQueueRef.current = Promise.resolve();
+      } else if (dropKind === "rom") {
+        // A later explicit ROM replaces an earlier explicit ROM/bundle, but patch routes are additive.
+        // An archive of unknown contents stays ordered ahead of the ROM: it may itself be a patch bundle.
+        for (const [activeController, activeKind] of activeDropsRef.current) {
+          if (activeKind !== "rom" && activeKind !== "bundle") continue;
+          activeController.abort();
+          activeDropsRef.current.delete(activeController);
+        }
+        if (!activeDropsRef.current.size) dropQueueRef.current = Promise.resolve();
+      }
+      const dropController = new AbortController();
+      activeDropsRef.current.set(dropController, dropKind);
+      const abortDrop = () => dropController.abort();
+      if (outerSignal?.aborted || isCancelled?.()) abortDrop();
+      else outerSignal?.addEventListener("abort", abortDrop, { once: true });
+      if (dropController.signal.aborted) {
+        activeDropsRef.current.delete(dropController);
+        outerSignal?.removeEventListener("abort", abortDrop);
+        return;
+      }
+      const { archives } = classification;
       const identifiedFiles = files.filter((file) => archives.includes(file) || isBundleFileName(file.name));
       const pending: PendingDrop[] = identifiedFiles.map((file) => {
         nextIdRef.current += 1;
@@ -234,12 +308,42 @@ const useUnifiedApplyDrop = (
         if (remaining > 0) setTimeout(clear, remaining);
         else clear();
       };
-      void routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending)
+      const previousRoute = dropQueueRef.current.catch(() => undefined);
+      const mayContainBundle =
+        classification.archives.length > 0 || files.some((file) => isJsonCandidateName(file.name));
+      const promoteToBundle = () => {
+        for (const activeController of precedingDropControllers) {
+          if (!activeDropsRef.current.has(activeController)) continue;
+          activeController.abort();
+          activeDropsRef.current.delete(activeController);
+        }
+        activeDropsRef.current.set(dropController, "bundle");
+      };
+      const runRoute = () =>
+        routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending, dropController.signal, {
+          ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
+          onBundleDetected: promoteToBundle,
+        });
+      // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
+      // overtake an earlier archive/bundle that is still being identified or downloaded. Potential
+      // bundles identify concurrently; a real bundle supersedes prior routes, while an ordinary
+      // archive/JSON waits on the captured tail before delivering and preserves drop order.
+      const route = mayContainBundle ? runRoute() : previousRoute.then(runRoute);
+      dropQueueRef.current = route.then(
+        () => undefined,
+        () => undefined,
+      );
+      void route
         .catch((error) => {
+          if (dropController.signal.aborted || isCancelled?.()) return;
           logger.error("bundle drop failed", { error: String(error) });
           onError?.(error instanceof Error ? error : new Error(String(error)));
         })
-        .finally(clearPending);
+        .finally(() => {
+          outerSignal?.removeEventListener("abort", abortDrop);
+          activeDropsRef.current.delete(dropController);
+          clearPending();
+        });
     },
     [controller, onError, onBundleSession],
   );
