@@ -2451,6 +2451,11 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 @media (pointer: coarse) {
   .rw-app .ck .copy, .rw-app .cue-copy, .rw-app .info-btn { position: relative; }
   .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  /* every masthead tool gets a 44px-tall touch target at any width; vertical-only
+     (the top-right row's inter-button gap is only 2px, so a horizontal inflation
+     would overlap neighbours) - width already clears the 24px AA floor */
+  .rw-app .masthead-tools .tool { position: relative; }
+  .rw-app .masthead-tools .tool::after { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
 }
 
 /* trace lines render as buttons (keyboard-copyable) - strip the UA chrome so
@@ -2649,7 +2654,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 
   .rw-app .masthead {
     display: grid;
-    grid-template-columns: minmax(112px, 1fr) minmax(0, 240px);
+    grid-template-columns: minmax(112px, 1fr) auto;
     grid-template-areas: "brand tools";
     align-items: center;
     gap: var(--sp-s);
@@ -2671,22 +2676,21 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
     min-width: 0;
   }
 
-  /* six equal button tracks plus a slim auto track for the hairline sep
-     between app tools and the external links */
+  /* hug the tools to the right at their natural size instead of stretching them
+     across the column - a full-width stretch floats each icon in a wide cell */
   .rw-app .masthead-tools {
     grid-area: tools;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) auto repeat(2, minmax(0, 1fr));
-    justify-content: end;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     min-width: 0;
-    width: 100%;
-    gap: var(--sp-xs);
+    gap: var(--sp-2xs);
     margin: 0;
   }
 
   .rw-app .tool {
     position: relative;
-    width: 100%;
+    width: 36px;
     height: 40px;
     min-width: 0;
     padding: 0;
@@ -2699,14 +2703,6 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
     grid-area: 1 / 1;
     width: 15px;
     height: 15px;
-  }
-
-  /* inflate the hit area to ~44px tall without growing the visual buttons;
-     vertical-only so neighbouring buttons in the row never overlap */
-  .rw-app .masthead-tools .tool::after {
-    content: "";
-    position: absolute;
-    inset: -2px 0;
   }
 
   .rw-app .updates {
