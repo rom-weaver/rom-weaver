@@ -2684,10 +2684,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
   .rw-app .updates .banner-x { width: 28px; height: 32px; }
 
-  /* in-flow at the top like desktop (was a fixed toast pinned above the dock,
-     which covered the apply button and the content behind it) */
-  .rw-app .app > .reveal:has(> .update-ready) { margin-inline: 10px; }
-
   .rw-app .update-ready {
     min-height: 38px;
     background: var(--plate);
