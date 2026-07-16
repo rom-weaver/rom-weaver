@@ -118,7 +118,9 @@ describe("apply workflow view - empty bench", () => {
     expect(card?.textContent).toContain("bundle");
     expect(card?.textContent).toContain("Identifying");
     expect(card?.textContent).toContain("Extract");
-    expect(card?.textContent).toContain("Options");
+    // Most patch cards have no options outside bundle-edit mode, so the
+    // skeleton no longer reserves an Options drawer that would then vanish.
+    expect(card?.textContent).not.toContain("Options");
     expect(card?.textContent).not.toContain("Checks");
   });
 
@@ -150,7 +152,9 @@ describe("apply workflow view - staged bench", () => {
     const patchLabels = Array.from(
       container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
     ).map((el) => el.textContent);
-    expect(patchLabels).toEqual(["Extract", "Options"]);
+    // No Options drawer: a staging patch offers no header choice yet, and
+    // empty drawers stay off the plain apply view.
+    expect(patchLabels).toEqual(["Extract"]);
   });
 
   it("keeps Checks on a staging patch once real requirements are known", () => {
@@ -163,7 +167,7 @@ describe("apply workflow view - staged bench", () => {
     const patchLabels = Array.from(
       container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
     ).map((el) => el.textContent);
-    expect(patchLabels).toEqual(["Options", "Checks"]);
+    expect(patchLabels).toEqual(["Checks"]);
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
