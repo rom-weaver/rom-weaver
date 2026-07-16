@@ -1544,9 +1544,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
    (the same "off" language as a disabled patch) with the file name ghosted */
 /* ── Bundle edit ─────────────────────────────────────────────────────────────
-   The mode toggle: one compact pill, right-aligned above 0x01 - small when
-   idle, thread-lit while the editor is on. The whole pill is the switch. */
-.rw-app .bundle-edit-bar { display: flex; justify-content: flex-end; margin-block: 10px 0; }
+   The mode toggle: one compact pill, right-aligned in the 0x01 header - small
+   when idle, thread-lit while the editor is on. The whole pill is the switch. */
+.rw-app .bundle-edit-bar { display: inline-flex; align-items: center; margin-inline-start: auto; align-self: center; }
 .rw-app .bundle-edit-pill {
   display: inline-flex; align-items: center; gap: var(--sp-s); max-width: 100%;
   padding: 4px 11px; border: 1px dashed var(--seam); border-radius: 99px;
@@ -2814,6 +2814,13 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     position: relative;
     z-index: 2;
     pointer-events: none;
+  }
+
+  /* The bundle-edit toggle sits over the covering add-files action - keep it
+     interactive so its tap toggles the mode instead of opening the picker. */
+  .rw-app .unified-drop-step > .step-head > .bundle-edit-bar {
+    position: relative;
+    z-index: 2;
   }
 
   .rw-app .unified-drop-step > .step-head > .info {

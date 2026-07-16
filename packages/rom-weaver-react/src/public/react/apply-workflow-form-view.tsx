@@ -248,8 +248,8 @@ type BundleEditState = {
 };
 
 /**
- * The "Bundle edit" pill: a compact persistent toggle above 0x01 - the mode's
- * one stable home on every bench state, hero included (the output card's
+ * The "Bundle edit" pill: a compact persistent toggle on the right of the 0x01
+ * header - the mode's one stable home on every bench state, hero included (the output card's
  * "Create bundle…" action and the URL hash are shortcuts to the same switch).
  * Small when idle, thread-lit when the editor is on.
  */
@@ -975,7 +975,6 @@ function ApplyWorkflowFormView({
 
   return (
     <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
-      <BundleEditBar bundleEdit={bundleEdit} />
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         addLabel="Replace the ROM or add patches"
@@ -991,6 +990,7 @@ function ApplyWorkflowFormView({
           ) : null
         }
         big={workflowEmpty}
+        headerExtra={<BundleEditBar bundleEdit={bundleEdit} />}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
         id="rom-weaver-row-unified-drop"

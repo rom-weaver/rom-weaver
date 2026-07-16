@@ -40,6 +40,8 @@ type UnifiedDropZoneProps = {
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
+  /** Right-aligned control sharing the 0x01 header row (e.g. the bundle-edit toggle). */
+  headerExtra?: ReactNode;
   /** Fires at the drop gesture, before files enter routing or staging. */
   onDropStart?: () => void;
   onFiles: (files: File[]) => void;
@@ -51,6 +53,7 @@ type UnifiedDropZoneProps = {
 const UnifiedDropZone = ({
   addLabel,
   afterDropZone,
+  headerExtra,
   heroLabel,
   heroLabelCoarse,
   info,
@@ -110,6 +113,7 @@ const UnifiedDropZone = ({
         label: "Add files",
         onClick: () => inputRef.current?.click(),
       }}
+      headerExtra={headerExtra}
       info={popover}
       num={num}
       title={title}

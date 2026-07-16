@@ -23,6 +23,7 @@ const StepSection = ({
   title,
   info,
   meta,
+  headerExtra,
   children,
   id,
   className,
@@ -34,6 +35,8 @@ const StepSection = ({
   title: ReactNode;
   info?: ReactNode;
   meta?: ReactNode;
+  /** Right-aligned control that shares the header row (e.g. a mode toggle). */
+  headerExtra?: ReactNode;
   children: ReactNode;
   id?: string;
   className?: string;
@@ -50,6 +53,7 @@ const StepSection = ({
       <h2 className="step-title">{title}</h2>
       {info}
       {meta ? <span className="step-meta mono">{meta}</span> : null}
+      {headerExtra}
       {headerAction ? (
         <button
           aria-label={headerAction.label}
