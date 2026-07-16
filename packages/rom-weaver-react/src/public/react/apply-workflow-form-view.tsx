@@ -763,11 +763,6 @@ function ApplyWorkflowFormView({
   const headeredExtension = outputHeaderTransform?.headeredExtension;
   const headerlessExtension = outputHeaderTransform?.headerlessExtension;
   const extensionsDiffer = !!headeredExtension && !!headerlessExtension && headeredExtension !== headerlessExtension;
-  // Option labels carry the resulting extension when keeping vs dropping the
-  // header changes the ROM's conventional one (.smc vs .sfc) - the output file
-  // name follows the choice automatically.
-  const withExtension = (label: string, extension: string | undefined) =>
-    extensionsDiffer && extension ? `${label} (${extension})` : label;
   const outputHeaderInfo = {
     items: [
       `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${outputHeaderRetained ? "" : " - this ROM's header is copier junk, so auto drops it"}.`,
@@ -781,12 +776,12 @@ function ApplyWorkflowFormView({
     ],
     summary:
       "Whether the patched output carries the ROM's copier header. Separate from the per-patch strip choice, which only controls what bytes the patch applies against.",
-    title: "ROM header",
+    title: "Output Header",
   };
   const outputHeaderField = outputHeaderVariant ? (
-    <OutputField label="ROM header" labelInfo={<FieldInfoToggle info={outputHeaderInfo} label="ROM header" />}>
+    <OutputField label="Output Header" labelInfo={<FieldInfoToggle info={outputHeaderInfo} label="Output Header" />}>
       <select
-        aria-label="ROM header"
+        aria-label="Output Header"
         className="select"
         disabled={outputState.disabled}
         id="rom-weaver-select-output-header"
@@ -795,13 +790,9 @@ function ApplyWorkflowFormView({
         }
         value={outputState.outputHeader || "auto"}
       >
-        <option value="auto">
-          {outputHeaderRetained
-            ? withExtension("Auto - keep header", headeredExtension)
-            : withExtension("Auto - headerless", headerlessExtension)}
-        </option>
-        <option value="keep">{withExtension("Keep header", headeredExtension)}</option>
-        <option value="strip">{withExtension("Headerless", headerlessExtension)}</option>
+        <option value="auto">auto ({outputHeaderRetained ? "keep" : "strip"})</option>
+        <option value="keep">keep</option>
+        <option value="strip">strip</option>
       </select>
     </OutputField>
   ) : null;
