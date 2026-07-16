@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import type {
   DialogController,
@@ -221,5 +221,90 @@ describe("apply workflow view - patch enable toggles", () => {
     expect(run.disabled).toBe(true);
     // the step header reports the enabled/disabled split
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta")?.textContent).toContain("1 disabled");
+  });
+});
+
+describe("apply workflow view - bundle controls", () => {
+  const bundleExport = (bundleRom = false) => ({
+    bundleRom,
+    busy: false,
+    cancelExport: () => undefined,
+    downloadable: false,
+    error: "",
+    format: "zip",
+    progress: null,
+    ready: true,
+    runExport: async () => undefined,
+    setBundleRom: () => undefined,
+    setFormat: () => undefined,
+  });
+
+  const bundleTools = (hideExport: () => void, exportVisible = true) => ({
+    exportVisible,
+    hasOptionalEntries: false,
+    hideExport,
+    outputStandDown: null,
+    showExport: () => undefined,
+  });
+
+  it("hides bundle creation from the Output options drawer", () => {
+    const hideExport = vi.fn();
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(hideExport)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    fireEvent.change(container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
+      target: { value: "hide" },
+    });
+    expect(hideExport).toHaveBeenCalledOnce();
+  });
+
+  it("names the export action when the ROM is included", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport(true)}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Create ZIP ROM Bundle");
+  });
+
+  it("includes the format on the bundle reveal button", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined, false)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.querySelector("#rom-weaver-button-create-bundle")?.textContent).toContain("Create ZIP Bundle");
   });
 });

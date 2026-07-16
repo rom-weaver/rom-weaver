@@ -1196,6 +1196,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setBundleExportRom(false);
   }, [bundleExportVisible, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
   const showBundleExport = useCallback(() => setBundleExportVisible(true), []);
+  const hideBundleExport = useCallback(() => setBundleExportVisible(false), []);
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
@@ -1261,6 +1262,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           exportVisible: bundleExportVisible,
           hasOptionalEntries:
             !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
+          hideExport: hideBundleExport,
           outputStandDown: bundleOutputStandDown,
           showExport: showBundleExport,
         }}

@@ -237,6 +237,7 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
 type BundleToolsState = {
   /** Show the bundle package select + export action in the output card. */
   exportVisible: boolean;
+  hideExport: () => void;
   showExport: () => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
@@ -818,15 +819,19 @@ function ApplyWorkflowFormView({
   // The bundle action names what it does: "Create <format> [ROM] Bundle" until
   // an export exists, then "Download <format> [ROM] Bundle". "ROM" appears only
   // when the dropdown packs the ROM in.
-  const bundleActionLabel = (() => {
-    if (!bundleExport?.format) return "";
-    const formatName = bundleExport.format === "7z" ? "7z" : bundleExport.format.toUpperCase();
-    if (bundleExport.downloadable) {
-      const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
-      return localizer.message(downloadKey, { format: formatName });
-    }
+  const bundleCreateLabel = (() => {
+    if (!bundleExport) return "";
+    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
     const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
     return localizer.message(createKey, { format: formatName });
+  })();
+  const bundleActionLabel = (() => {
+    if (!bundleExport?.downloadable) return bundleCreateLabel;
+    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
+    const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
+    return localizer.message(downloadKey, { format: formatName });
   })();
   // The bundle package select stays hidden until the user reveals it via the
   // "Create bundle…" action (which arms a default format), so the output card
@@ -849,12 +854,18 @@ function ApplyWorkflowFormView({
             disabled={bundleExport.busy}
             id="rom-weaver-bundle-export-format"
             onChange={(event) => {
-              const [format, contents] = event.currentTarget.value.split(":");
+              const value = event.currentTarget.value;
+              if (value === "hide") {
+                bundleTools?.hideExport();
+                return;
+              }
+              const [format, contents] = value.split(":");
               bundleExport.setFormat(format || "");
               bundleExport.setBundleRom(contents === "rom");
             }}
             value={bundleFormatValue}
           >
+            <option value="hide">Hide bundle creation</option>
             <option value="zip:patches">Bundle + patches (.zip)</option>
             <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
             <option value="7z:patches">Bundle + patches (.7z)</option>
@@ -1120,7 +1131,7 @@ function ApplyWorkflowFormView({
                     type="button"
                   >
                     <Package aria-hidden="true" />
-                    Create bundle…
+                    {bundleCreateLabel}…
                   </button>
                 ) : null}
                 {bundleExport && bundleTools?.exportVisible ? (
