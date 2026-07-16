@@ -729,7 +729,7 @@ const useLocalApplyPatchFormSession = ({
           id: rowId,
           info: {
             ...existing.info,
-            ...(patch.info || {}),
+            ...patch.info,
             archiveName,
             checksumTiming: info.checksumTiming ?? patch.info?.checksumTiming ?? existing.info.checksumTiming,
             checksumVariants: info.checksumVariants ?? patch.info?.checksumVariants ?? existing.info.checksumVariants,

@@ -125,21 +125,21 @@ const createPwaServiceWorkerClient = ({
   const setSessionStorageItem = (key: string, value: string) => {
     try {
       sessionStorage?.setItem(key, value);
-    } catch (_err) {
+    } catch {
       // session storage is best-effort
     }
   };
   const getSessionStorageItem = (key: string) => {
     try {
       return sessionStorage?.getItem(key) || "";
-    } catch (_err) {
+    } catch {
       return "";
     }
   };
   const removeSessionStorageItem = (key: string) => {
     try {
       sessionStorage?.removeItem(key);
-    } catch (_err) {
+    } catch {
       // session storage is best-effort
     }
   };
@@ -345,12 +345,12 @@ const createPwaServiceWorkerClient = ({
       channel.port1.onmessage = null;
       try {
         channel.port1.close();
-      } catch (_err) {
+      } catch {
         // best-effort cleanup
       }
       try {
         channel.port2.close();
-      } catch (_err) {
+      } catch {
         // best-effort cleanup
       }
       setVersion(version || "unknown", title);

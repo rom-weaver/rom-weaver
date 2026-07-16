@@ -82,7 +82,7 @@ const useStableSourceKeys = (sources: BinarySource[], prefix: "input" | "patch")
     // list so a fresh re-add mints a new key. Pure appends keep every existing binding, so the
     // append fast-path (no full re-stage) is preserved.
     const liveStableIds = new Set(getBinarySourceListStableIds(sources));
-    for (const stableId of [...stableKeyMapRef.current.keys()]) {
+    for (const stableId of stableKeyMapRef.current.keys()) {
       if (!liveStableIds.has(stableId)) stableKeyMapRef.current.delete(stableId);
     }
     const result = getKeys(sources);

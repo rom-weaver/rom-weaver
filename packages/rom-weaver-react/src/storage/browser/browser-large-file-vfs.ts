@@ -199,7 +199,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         for (const segment of segments)
           currentDirectory = await currentDirectory.getDirectoryHandle(segment, { create: false });
         await currentDirectory.removeEntry(fileName, { recursive: true });
-      } catch (_error) {
+      } catch {
         /* ignore cleanup errors */
       }
     },

@@ -15,7 +15,7 @@ const normalizeAssetBaseUrl = (value: unknown): string | null => {
           : "https://rom-weaver.local/";
     const normalized = new URL(trimmed, base).href;
     return normalized.endsWith("/") ? normalized : `${normalized}/`;
-  } catch (_error) {
+  } catch {
     return null;
   }
 };

@@ -303,7 +303,7 @@ const useBundleExport = ({
       // The exported rom.checks are the staged ROM's computed values; a
       // different expected base ROM is expressed as the first patch's input
       // checks (which the bundle schema prefers over rom.checks).
-      const romChecksums = { ...(rom.checksums || {}) };
+      const romChecksums = { ...rom.checksums };
       const romSize = rom.size;
       const { result, bundleOutput, archiveOutput } = await create({
         ...(bundleFileName ? { bundleFileName } : {}),

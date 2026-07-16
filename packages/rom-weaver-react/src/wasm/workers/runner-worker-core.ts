@@ -108,7 +108,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
         postTraceLine(requestId, `[runner-worker] runJson received ${summarizeRunRequest(message)}`);
         const activeRunner = requireRunner();
         const runOptions: RunnerWorkerRunOptions = {
-          ...(message.options ?? {}),
+          ...message.options,
           // Synchronous host selection callback. The wasm app calls this (on this worker thread)
           // when it needs the user to pick one or more candidates; it blocks the worker on a
           // SharedArrayBuffer while the main thread resolves the choice via the worker client's

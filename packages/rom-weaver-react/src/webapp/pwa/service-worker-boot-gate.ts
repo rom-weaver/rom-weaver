@@ -76,14 +76,14 @@ const createServiceWorkerBootGate = ({
   const setReloadCount = (value: number) => {
     try {
       sessionStorage?.setItem(RELOAD_COUNT_KEY, String(value));
-    } catch (_err) {
+    } catch {
       // session storage is best-effort
     }
   };
   const clearReloadCount = () => {
     try {
       sessionStorage?.removeItem(RELOAD_COUNT_KEY);
-    } catch (_err) {
+    } catch {
       // session storage is best-effort
     }
   };

@@ -93,7 +93,7 @@ const crc32Hex = async (file) => {
 };
 
 test("toggling the strip-header option settles instead of loading forever", async () => {
-  const [patchFile] = await Promise.all([loadFixtureFile(RAW_PATCH)]);
+  const patchFile = await loadFixtureFile(RAW_PATCH);
   const romFile = buildInesRom();
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();

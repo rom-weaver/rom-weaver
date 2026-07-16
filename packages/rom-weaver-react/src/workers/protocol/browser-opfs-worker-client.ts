@@ -38,7 +38,7 @@ const createOpfsWorker = () => {
         name: "rpjs-opfs-storage-worker",
         type: "module",
       });
-    } catch (_error) {
+    } catch {
       // Fall through to the bundled worker.
     }
   }

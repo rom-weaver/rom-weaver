@@ -438,10 +438,10 @@ const PatchChecksDrawer = ({
     setInvalid(`${side}:${algorithm}`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
-    const checksums = { ...(meta?.[field]?.checksums || {}) };
+    const checksums = { ...meta?.[field]?.checksums };
     if (value) checksums[algorithm] = value;
     else delete checksums[algorithm];
-    onMetaChange?.({ [field]: { ...(meta?.[field] || {}), checksums } });
+    onMetaChange?.({ [field]: { ...meta?.[field], checksums } });
     syncEndpointValidation(side, checksums);
   };
   // The bytes field carries the endpoint's exact size into the bundle metadata
@@ -452,7 +452,7 @@ const PatchChecksDrawer = ({
     setInvalid(`${side}:bytes`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
-    onMetaChange?.({ [field]: { ...(meta?.[field] || {}), size: value ? Number(value) : undefined } });
+    onMetaChange?.({ [field]: { ...meta?.[field], size: value ? Number(value) : undefined } });
   };
   const removeCheck = (side: "input" | "output", field: CheckField) => {
     setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));

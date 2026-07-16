@@ -36,7 +36,7 @@ const runGit = (command) => {
     })
       .toString()
       .trim();
-  } catch (_error) {
+  } catch {
     return "";
   }
 };
@@ -59,7 +59,7 @@ const getUntrackedFileDigestInput = () => {
       hash.update("\0");
     }
     return hash.digest("hex");
-  } catch (_error) {
+  } catch {
     return "";
   }
 };

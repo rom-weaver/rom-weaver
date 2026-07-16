@@ -7,7 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 export const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const REPO_ROOT = path.resolve(PACKAGE_DIR, "..", "..");
+const REPO_ROOT = path.resolve(PACKAGE_DIR, "..", "..");
 export const WASM_ARTIFACT = path.join(PACKAGE_DIR, "src", "wasm", "rom-weaver-app.wasm");
 
 export const mtimeMs = (filePath) => {

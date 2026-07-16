@@ -142,7 +142,7 @@ async function describeWasmModuleIdentity(response: Response): Promise<WasmModul
         .join("");
     }
     return { wasmByteLength: bytes.byteLength, wasmSha: sha };
-  } catch (_identityError) {
+  } catch {
     return { wasmByteLength: null, wasmSha: "" };
   }
 }
@@ -161,7 +161,7 @@ async function compileBrowserModuleFromUrl(url: string): Promise<ResolvedBrowser
         wasmUrl: String(url),
         ...identity,
       };
-    } catch (_streamingError) {
+    } catch {
       // Fallback for runtimes/servers that do not satisfy streaming compile constraints.
     }
   }

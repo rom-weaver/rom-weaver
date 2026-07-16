@@ -189,7 +189,7 @@ const getOpfsPathSize = async (
     const handle = await getManagedOpfsFileHandle(filePath, { navigatorObject: navigator, trace });
     const file = await handle?.getFile();
     return typeof file?.size === "number" ? file.size : undefined;
-  } catch (_error) {
+  } catch {
     return undefined;
   }
 };

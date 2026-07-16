@@ -100,7 +100,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   const baseMountHandles = normalizeMountHandleMap({
     mountHandles: {
       [workGuestPath]: opfsHandle,
-      ...(options.mountHandles ?? {}),
+      ...options.mountHandles,
     },
   });
   const baseWritableRoots = normalizeWritableRoots({
@@ -489,8 +489,8 @@ function createRunEnv({
   threaded: boolean;
 }): RomWeaverEnv {
   const merged = {
-    ...(baseEnv ?? {}),
-    ...(runEnv ?? {}),
+    ...baseEnv,
+    ...runEnv,
   };
   if (!threaded) return merged;
   applyBrowserThreadedRayonEnvDefaults(merged, requestedThreadCount);

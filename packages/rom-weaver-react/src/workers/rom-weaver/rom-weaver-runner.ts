@@ -847,7 +847,7 @@ const publishRomWeaverWasmDiagnostic = (message: {
       ...message,
     });
     channel.close();
-  } catch (_err) {
+  } catch {
     // diagnostics are best-effort
   }
 };
@@ -856,7 +856,7 @@ const getResourceName = (urlLike: string) => {
   try {
     const url = new URL(urlLike, globalThis.location?.href || "http://localhost/");
     return url.pathname.split("/").filter(Boolean).pop() || "rom-weaver-app.wasm";
-  } catch (_err) {
+  } catch {
     return urlLike.split("/").filter(Boolean).pop() || "rom-weaver-app.wasm";
   }
 };

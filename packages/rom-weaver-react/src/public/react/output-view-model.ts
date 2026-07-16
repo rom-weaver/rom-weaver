@@ -158,7 +158,7 @@ const getOutputOptionExtensionLabel = (option: string, source?: GeneratedOutputS
     );
     const extension = getBaseFileName(fileName).match(EXTENSION_REGEX)?.[1]?.toLowerCase();
     return extension ? `.${extension}` : "";
-  } catch (_error) {
+  } catch {
     return "";
   }
 };

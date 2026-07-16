@@ -213,7 +213,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         modified: this.toSelectedInputInfo(modified, "modified"),
         original: this.toSelectedInputInfo(original, "original"),
         output,
-        sizeSummary: { ...(result.sizeSummary || {}), outputSize: output.size, rawSize },
+        sizeSummary: { ...result.sizeSummary, outputSize: output.size, rawSize },
         type: result.format as PatchFormat,
       };
     });

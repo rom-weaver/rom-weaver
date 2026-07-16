@@ -165,7 +165,7 @@ const runCreateWorkflow = async (
       format,
       output,
       sizeSummary: {
-        ...(result.sizeSummary || {}),
+        ...result.sizeSummary,
         ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
         outputSize: output.size,
         rawSize: patchFile.fileSize,

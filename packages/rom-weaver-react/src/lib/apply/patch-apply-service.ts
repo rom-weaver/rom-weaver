@@ -227,7 +227,7 @@ const resolvePatchRequirementsForApply = async (
       source: externalSource.source,
     });
     return patchProbeRequirementsFromDescriptor(result.patches[0]);
-  } catch (_error) {
+  } catch {
     return undefined;
   }
 };

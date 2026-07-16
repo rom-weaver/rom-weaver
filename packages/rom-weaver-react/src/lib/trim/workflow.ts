@@ -211,7 +211,7 @@ const runTrimWorkflow = async (
     return {
       ...result,
       sizeSummary: {
-        ...(result.sizeSummary || {}),
+        ...result.sizeSummary,
         inputSize,
         outputSize: result.output.size,
         rawSize,
@@ -231,7 +231,7 @@ const runTrimWorkflow = async (
   return {
     output,
     sizeSummary: {
-      ...(result.sizeSummary || {}),
+      ...result.sizeSummary,
       ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
       inputSize,
       outputSize: output.size,

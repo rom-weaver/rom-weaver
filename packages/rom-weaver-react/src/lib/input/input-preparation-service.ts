@@ -385,7 +385,7 @@ const resolveCueInputAssets = async (
       );
       assets.push(asset);
       candidates.push(makeAssetSelectionCandidate(asset));
-    } catch (_err) {
+    } catch {
       missingReferences.push(reference.fileName);
       candidates.push(
         makeMissingTrackSelectionCandidate(sourceIndex, reference.fileName, groupId, reference.patchable),
@@ -455,7 +455,7 @@ const withBundleRomProvenance = (source: SourceRef, assets: InputAsset[]): Input
   if (!provenance?.length) return assets;
   const existing = getInputPreparationMetrics(assets);
   if (existing?.parentCompressions?.length) return assets;
-  return attachInputPreparationMetrics(assets, { ...(existing || {}), parentCompressions: provenance });
+  return attachInputPreparationMetrics(assets, { ...existing, parentCompressions: provenance });
 };
 
 const prepareMultipleDirectInputAssets = async (

@@ -324,7 +324,7 @@ export class RomWeaverWorkerClientCore {
     this._detachListeners();
     // Release any worker thread still blocked on an unanswered selection prompt before rejecting
     // its run, so the wedged synchronous wait cannot outlive the client.
-    for (const respond of [...this._openSelectResponders]) respond([]);
+    for (const respond of this._openSelectResponders) respond([]);
     this._rejectAllPending(new Error(reason));
   }
 
@@ -448,7 +448,7 @@ function createWorkerStreamChannel({
     }
   };
   payload.options = {
-    ...(payload.options ?? {}),
+    ...payload.options,
     __streamBroadcastChannelName: name,
     __streamRequestId: requestId,
   };

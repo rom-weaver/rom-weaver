@@ -4,18 +4,23 @@
   "categories": {
     "correctness": "error"
   },
+  "options": {
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error",
+    "respectEslintDisableDirectives": false
+  },
   "rules": {
     "no-alert": "error",
     "no-empty": "error",
     "no-useless-concat": "error",
-    "react-hooks/exhaustive-deps": "off",
-    "eslint/no-unused-vars": "off",
-    "eslint/no-control-regex": "off",
+    "react-hooks/exhaustive-deps": "error",
+    "eslint/no-unused-vars": "error",
+    "eslint/no-control-regex": "error",
     "typescript/no-explicit-any": "error",
-    "unicorn/no-single-promise-in-promise-methods": "off",
+    "unicorn/no-single-promise-in-promise-methods": "error",
     "unicorn/require-number-to-fixed-digits-argument": "error",
-    "unicorn/no-useless-fallback-in-spread": "off",
-    "unicorn/no-useless-spread": "off"
+    "unicorn/no-useless-fallback-in-spread": "error",
+    "unicorn/no-useless-spread": "error"
   },
   "ignorePatterns": ["dist/**", "src/wasm/generated/**", "src/presentation/localization/locales/*.ts"]
 }

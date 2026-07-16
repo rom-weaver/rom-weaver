@@ -43,7 +43,7 @@ const toReactProgressEvent = (event: {
       : event.hasProgress === true || event.indeterminate === true || "percent" in event;
   return {
     details: {
-      ...(event.details || {}),
+      ...event.details,
       id: event.id,
       role: event.role,
       stage: event.stage,

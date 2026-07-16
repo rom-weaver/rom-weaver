@@ -1172,13 +1172,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
                 (candidateId) => publicIdByCandidateId.get(candidateId) || candidateId,
               ),
             }
-          : {
-              ...(publicCandidate.parentCandidateId
-                ? {
-                    parentCandidateId: publicIdByCandidateId.get(publicCandidate.parentCandidateId),
-                  }
-                : {}),
-            }),
+          : publicCandidate.parentCandidateId
+            ? {
+                parentCandidateId: publicIdByCandidateId.get(publicCandidate.parentCandidateId),
+              }
+            : {}),
       } as SelectionCandidate;
     });
     stage.state.candidates = candidates;

@@ -26,7 +26,7 @@ const getDevBuildToken = () => {
   try {
     const query = new URL(self.location.href).searchParams;
     return query.get("build") || "";
-  } catch (_err) {
+  } catch {
     return "";
   }
 };

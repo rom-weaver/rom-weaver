@@ -305,9 +305,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       return {
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
-        sizeSummary: {
-          ...(createTimeMs === undefined ? {} : { createTimeMs }),
-        },
+        sizeSummary: createTimeMs === undefined ? {} : { createTimeMs },
       };
     } finally {
       await cleanupWorkerSources(workerSources);
@@ -387,7 +385,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           Boolean(requirements),
         );
       const validationOptions = {
-        ...(options || {}),
+        ...options,
         ...(validationRequirements.length ? { validationRequirements } : {}),
       };
       return await adapter.invokeValidatePatchWorker(
@@ -451,9 +449,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           result.fileName || outputName || "trimmed.bin",
           adapter.workerOutputFailureMessage,
         ),
-        sizeSummary: {
-          ...(trimTimeMs === undefined ? {} : { trimTimeMs }),
-        },
+        sizeSummary: trimTimeMs === undefined ? {} : { trimTimeMs },
       };
     } finally {
       await workerSource.cleanup().catch(() => undefined);

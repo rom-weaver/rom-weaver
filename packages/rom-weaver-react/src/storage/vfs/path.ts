@@ -4,11 +4,11 @@ type AbsoluteVfsPath = string & {
   readonly __absoluteVfsPath: unique symbol;
 };
 
-const NUL_BYTE_REGEX = /\0/;
+const NUL_BYTE = "\u0000";
 
 const assertSafePathText = (value: string, label: string) => {
   if (!value) throw new Error(`${label} is required`);
-  if (NUL_BYTE_REGEX.test(value)) throw new Error(`${label} cannot contain null bytes`);
+  if (value.includes(NUL_BYTE)) throw new Error(`${label} cannot contain null bytes`);
   if (value.includes("\\")) throw new Error(`${label} must use POSIX separators`);
 };
 

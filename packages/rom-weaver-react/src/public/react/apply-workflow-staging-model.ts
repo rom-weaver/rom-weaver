@@ -328,7 +328,7 @@ const createBaseApplyWorkflowSettings = (
   return {
     ...settings,
     output: {
-      ...(settings.output || {}),
+      ...settings.output,
       compression: undefined,
       outputName: undefined,
     },

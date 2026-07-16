@@ -583,7 +583,7 @@ const handlePreviewRequest = (distDir, req, res, securityOptions) => {
   let filePath;
   try {
     filePath = resolveDistRequestPath(distDir, req.url);
-  } catch (_err) {
+  } catch {
     send(res, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad Request", securityOptions);
     return;
   }

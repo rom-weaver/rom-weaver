@@ -82,6 +82,7 @@ const buildEagerPatchStageInfo = (
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
+  const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, workerThreads } = props;
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -180,9 +181,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
       syncInputSelectionRefs(nextInputs);
-      props.onInputsChange?.(nextInputs);
+      onInputsChange?.(nextInputs);
     },
-    [props.onInputsChange, syncInputSelectionRefs],
+    [onInputsChange, syncInputSelectionRefs],
   );
 
   // Patch enable toggles (the loom On/Off switch): disabled patches stay on
@@ -236,9 +237,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       );
       handleBundlePatchesChange(nextPatches);
       syncPatchSelectionRefs(nextPatches);
-      props.onPatchesChange?.(nextPatches);
+      onPatchesChange?.(nextPatches);
     },
-    [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
+    [handleBundlePatchesChange, onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
   // How the current bench relates to the loaded bundle's authored chain:
@@ -350,11 +351,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const emitWorkflowProgress = useCallback(
     (event: WorkflowProgress, onProgress?: (event: ProgressEvent) => void) => {
       const progressEvent = toReactProgressEvent(event);
+      onProgressChange?.(progressEvent);
       onProgress?.(progressEvent);
-      props.onProgress?.(progressEvent);
       return { progressEvent, workflowProgress: event };
     },
-    [props.onProgress],
+    [onProgressChange],
   );
 
   const applyOutputOverrides = useCallback(async (workflow: ApplyWorkflow, snapshot: ApplyWorkflowSessionInput) => {
@@ -750,7 +751,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
           const result = (await workflow.run()) as BrowserApplyResult;
-          props.onApplyComplete?.(result);
+          onApplyComplete?.(result);
           return normalizeApplyResult(result);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
@@ -759,7 +760,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
       return queueMutation(async () => {
         syncSelectionRefs(input);
-        const baseSettings = createBaseApplyWorkflowSettings(input.options, props.workerThreads);
+        const baseSettings = createBaseApplyWorkflowSettings(input.options, workerThreads);
         const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
         const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
@@ -811,8 +812,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [
       emitWorkflowProgress,
-      props.onApplyComplete,
-      props.workerThreads,
+      onApplyComplete,
+      workerThreads,
       queueMutation,
       syncSelectionRefs,
       syncWorkflowOutputOverrides,

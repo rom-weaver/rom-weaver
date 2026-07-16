@@ -425,7 +425,7 @@ const createArchiveEntriesFromOutputAssets = (
         cueOutput.asset.file.metadata?.cueText || decodeUtf8(getPatchFileBytes(cueOutput.file)),
         trackFileName,
       );
-    } catch (_error) {
+    } catch {
       return createDefaultEntries();
     }
     return outputAssets.map(({ asset, file }) =>

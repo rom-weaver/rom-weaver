@@ -190,7 +190,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       return {
         input: this.toSelectedInputInfo(stage),
         output,
-        sizeSummary: { ...(result.sizeSummary || {}), outputSize: output.size },
+        sizeSummary: { ...result.sizeSummary, outputSize: output.size },
       };
     });
   }

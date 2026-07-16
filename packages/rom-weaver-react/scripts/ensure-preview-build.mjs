@@ -14,7 +14,7 @@
 
 import path from "node:path";
 import process from "node:process";
-import { mtimeMs, newestMtime, PACKAGE_DIR, REPO_ROOT, run, WASM_ARTIFACT } from "./build-utils.mjs";
+import { mtimeMs, newestMtime, PACKAGE_DIR, run, WASM_ARTIFACT } from "./build-utils.mjs";
 
 const DIST_INDEX = path.join(PACKAGE_DIR, "dist", "index.html");
 

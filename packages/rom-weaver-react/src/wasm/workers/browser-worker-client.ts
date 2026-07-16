@@ -21,7 +21,7 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
     options.worker ??
     new Worker(options.workerUrl ?? new URL("./browser-runner-worker.ts", import.meta.url), {
       type: "module",
-      ...(options.workerOptions ?? {}),
+      ...options.workerOptions,
     });
 
   return new BrowserRomWeaverWorkerClient(createWorker(), {

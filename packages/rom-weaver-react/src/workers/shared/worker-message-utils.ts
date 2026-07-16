@@ -37,7 +37,7 @@ const getWorkerErrorMessage = <T>(error: T): string => {
     }
     try {
       return JSON.stringify(error);
-    } catch (_err) {
+    } catch {
       return String(error);
     }
   }

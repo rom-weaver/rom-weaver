@@ -205,7 +205,7 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
           ...(mobileModule ? { module: mobileModule } : {}),
           wasmUrl,
           workGuestPath: OPFS_GUEST_ROOT,
-          ...(options.initOptions || {}),
+          ...options.initOptions,
         });
         assert(init?.mode === "browser-opfs", `expected browser-opfs init mode, got ${String(init?.mode)}`);
         return worker;
@@ -256,7 +256,7 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
   } finally {
     try {
       sharedWorker?.terminate();
-    } catch (_error) {
+    } catch {
       // Best-effort cleanup; the original matrix error is more relevant.
     }
     await removeFixtureDirectory(root, fixtureName);
@@ -984,7 +984,7 @@ async function getGuestFileHandle(
 async function removeFixtureDirectory(rootHandle: FileSystemDirectoryHandle, directoryName: string) {
   try {
     await rootHandle.removeEntry(directoryName, { recursive: true });
-  } catch (_error) {
+  } catch {
     // Best-effort cleanup for browsers that hold transient OPFS locks after worker termination.
   }
 }

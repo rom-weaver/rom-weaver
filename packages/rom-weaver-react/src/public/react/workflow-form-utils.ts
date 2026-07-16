@@ -67,11 +67,11 @@ const mergeSettingsWithOutput = <TSettings extends SettingsWithOutput>(
   baseSettings: TSettings | undefined,
   overrideSettings: TSettings | undefined,
 ): TSettings => {
-  const merged = { ...(baseSettings || {}), ...(overrideSettings || {}) } as TSettings;
+  const merged = { ...baseSettings, ...overrideSettings } as TSettings;
   if (baseSettings?.output || overrideSettings?.output) {
     merged.output = {
-      ...(baseSettings?.output || {}),
-      ...(overrideSettings?.output || {}),
+      ...baseSettings?.output,
+      ...overrideSettings?.output,
     };
   }
   return merged;

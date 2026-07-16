@@ -78,6 +78,7 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
 };
 
 function CreatePatchForm(props: CreatePatchFormProps) {
+  const { onError } = props;
   const internalProps = props as InternalCreatePatchFormProps;
   const CreateWorkflowConstructor = internalProps.createWorkflow || CreateWorkflow;
   const resolveCreatePatchFormatCandidates =
@@ -235,7 +236,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     () => createIndeterminateWorkflowProgress({ label: "Creating patch...", role: "worker", stage: "create" }),
     [],
   );
-  const notifyError = useCallback((error: Error) => props.onError?.(error), [props.onError]);
+  const notifyError = useCallback((error: Error) => onError?.(error), [onError]);
   const { cancelOutputProgress, runWorkflow } = useWorkflowRunLifecycle({
     abortActiveOperation,
     activeAbortControllerRef,
@@ -553,7 +554,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
               ? activeWorkflow.getModified()
               : null;
         if (!hasSourceQueueWarning(failedSource)) setWorkflowMessage(failedRole, normalizedError);
-        props.onError?.(normalizedError);
+        onError?.(normalizedError);
       } finally {
         activeWorkflow.off("progress", handleProgress);
         if (isCurrentStaging()) {
@@ -575,7 +576,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     modifiedSourceKey,
     original,
     originalSourceKey,
-    props.onError,
+    onError,
     resolvedAssetBaseUrl,
     setWorkflowMessage,
     stagingSettingsKey,

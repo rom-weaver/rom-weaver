@@ -65,7 +65,7 @@ const getTraceMessage = (value: unknown): string => {
   try {
     const serialized = JSON.stringify(value);
     return typeof serialized === "string" ? serialized.trim() : String(value || "").trim();
-  } catch (_error) {
+  } catch {
     return String(value || "").trim();
   }
 };

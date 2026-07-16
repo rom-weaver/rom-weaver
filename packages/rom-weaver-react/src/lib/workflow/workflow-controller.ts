@@ -17,7 +17,7 @@ abstract class WorkflowController<TEvents extends Record<string, unknown>> {
   protected trigger<TEvent extends keyof TEvents & string>(event: TEvent, payload: TEvents[TEvent]): void {
     const listeners = this.listeners.get(event);
     if (!listeners?.size) return;
-    for (const listener of [...listeners]) listener(payload);
+    for (const listener of listeners) listener(payload);
   }
 
   protected clearListeners(): void {

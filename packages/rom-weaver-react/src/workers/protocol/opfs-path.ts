@@ -169,7 +169,7 @@ const removeManagedOpfsPath = async (
   try {
     for (const part of parts) parentDirectory = await parentDirectory.getDirectoryHandle(part, { create: false });
     await parentDirectory.removeEntry(fileName, { recursive: true });
-  } catch (_error) {
+  } catch {
     /* ignore cleanup errors */
   }
 };

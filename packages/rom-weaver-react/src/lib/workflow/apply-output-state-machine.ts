@@ -80,7 +80,7 @@ const setApplyOutputName = (
   if (state.manualOutputName) {
     state.outputName = name;
     settings.output = {
-      ...(settings.output || {}),
+      ...settings.output,
       outputName: name,
     };
     return;
@@ -97,7 +97,7 @@ const setApplyOutputFormat = (
   state.manualOutputFormat = true;
   state.outputFormat = format;
   settings.output = {
-    ...(settings.output || {}),
+    ...settings.output,
     compression: format,
   };
 };

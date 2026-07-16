@@ -75,7 +75,7 @@ function ProcessingWakeLockNotice({ active }: { active: boolean }) {
         setLockHeld(true);
         setWarningMessage("");
         sentinel.addEventListener?.("release", handleRelease);
-      } catch (_err) {
+      } catch {
         setWarningMessage(DEFAULT_WAKE_LOCK_WARNING);
       }
     };

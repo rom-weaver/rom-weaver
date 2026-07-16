@@ -29,7 +29,7 @@ const createRomInputRow = (
     romInfo: "",
     sha1: "",
     validationPhase: "idle",
-    ...(partial.info || {}),
+    ...partial.info,
   },
   kind: partial.kind || "",
   order: partial.order ?? 0,
@@ -156,7 +156,7 @@ const isCompressedInputFileName = (fileName: string) => {
   if (!fileName) return false;
   try {
     return classifyPatcherInput({ fileName }).kind === "compression";
-  } catch (_error) {
+  } catch {
     return false;
   }
 };

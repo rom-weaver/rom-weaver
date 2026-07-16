@@ -134,7 +134,7 @@ const createWorkflowProgress = (
       typeof event.current === "number" ||
       typeof event.total === "number");
   const details = {
-    ...(event.details || {}),
+    ...event.details,
     role: event.role,
     stage: event.stage,
     workflow: event.workflow,

@@ -245,7 +245,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         if (useChecksumOverride) setChecksumOverrideChecked(false);
         const runtimeValidationSettings = useChecksumOverride
           ? {
-              ...(activeSettings.validation || {}),
+              ...activeSettings.validation,
               requireInputChecksumMatch: false,
             }
           : activeSettings.validation;
