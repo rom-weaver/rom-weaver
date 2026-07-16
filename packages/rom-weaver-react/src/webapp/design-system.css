@@ -1547,6 +1547,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .bundle-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .rw-app .bundle-edit-hint { flex: 1 1 auto; min-width: 0; font-size: .78rem; color: var(--ink-3); }
 .rw-app .bundle-edit-bar .btn { margin-inline-start: auto; flex: none; }
+.rw-app .bundle-edit-bar .bundle-edit-toggle { margin-inline-start: auto; flex: none; }
 .rw-app .bundle-edit-bar.is-active { border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-soft)); }
 
 /* Per-row expected-vs-computed verdict inside a Checks drawer. */
@@ -1565,12 +1566,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* Inline bundle-edit description on the patch card: a touch of air below the
    toggle/meta row so the field group doesn't crowd it. */
 .rw-app .patch-meta-inline { margin-block-start: 2px; }
-/* Bundle-edit: the card title is the patch name, edited in place - a quiet
-   field that keeps the title's face until it is focused. */
-.rw-app .nm-input { width: 100%; min-width: 0; font: inherit; color: var(--ink); background: transparent; border: 1px dashed color-mix(in oklab, var(--seam) 85%, transparent); border-radius: var(--r-s); padding: 1px 8px; line-height: 1.35; }
-.rw-app .nm-input:hover { border-color: var(--seam); }
-.rw-app .nm-input:focus-visible { outline: none; border-style: solid; border-color: var(--thread); background: var(--well); }
+/* Bundle-edit: the card title is the patch name, edited in place. The field
+   wears the standard filled-input look (solid seam + well) at title size, with
+   a pencil glyph so it unmistakably reads as editable - dashed borders are
+   this system's "off/slot" language, not an edit affordance. */
+.rw-app .nm-edit { position: relative; display: block; flex: 1; min-width: 0; }
+.rw-app .nm-input { width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--well); border: 1px solid var(--seam); border-radius: var(--r-s); padding: 2px 30px 2px 8px; line-height: 1.35; }
+.rw-app .nm-input:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
+.rw-app .nm-input:focus-visible { outline: none; border-color: var(--thread); }
 .rw-app .nm-input::placeholder { color: var(--ink-3); opacity: 1; }
+.rw-app .nm-edit-glyph { position: absolute; right: 9px; top: 50%; translate: 0 -50%; width: 13px; height: 13px; color: var(--ink-3); pointer-events: none; }
+.rw-app .nm-edit:focus-within .nm-edit-glyph { color: var(--thread); }
 
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app .bundle-edit-hint { display: none; }

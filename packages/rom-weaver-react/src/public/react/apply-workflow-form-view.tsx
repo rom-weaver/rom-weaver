@@ -248,47 +248,38 @@ type BundleEditState = {
 };
 
 /**
- * The "Bundle edit" strip: while the editor is on it names the mode and offers
- * the way out; otherwise it appears only for a loaded bundle session as the
- * revising author's way in. Authors starting from scratch enter through the
- * output card's "Create bundle…" action instead.
+ * The "Bundle edit" strip: a persistent switch at the top of the form - the
+ * mode's one stable home (the output card's "Create bundle…" action and the
+ * URL hash are shortcuts to the same switch). Hidden on the pristine empty
+ * bench unless the mode is already on (deep link), so the hero stays clean.
  */
-const BundleEditBar = ({ bundleEdit }: { bundleEdit?: BundleEditState }) => {
+const BundleEditBar = ({ bundleEdit, workflowEmpty }: { bundleEdit?: BundleEditState; workflowEmpty?: boolean }) => {
   if (!bundleEdit) return null;
-  if (bundleEdit.active) {
-    return (
-      <div className="bundle-edit-bar is-active" id="rom-weaver-bundle-edit-bar">
-        <Package aria-hidden="true" />
-        <span className="bundle-edit-title">Bundle edit</span>
-        {bundleEdit.sessionName ? <span className="bundle-edit-name mono">{bundleEdit.sessionName}</span> : null}
+  const { active, enter, exit, sessionName } = bundleEdit;
+  if (workflowEmpty && !active) return null;
+  return (
+    <div className={active ? "bundle-edit-bar is-active" : "bundle-edit-bar"} id="rom-weaver-bundle-edit-bar">
+      <Package aria-hidden="true" />
+      <span className="bundle-edit-title">Bundle edit</span>
+      {sessionName ? <span className="bundle-edit-name mono">{sessionName}</span> : null}
+      {active ? (
         <span className="bundle-edit-hint">
           Name, describe, and pin checks on the chain, then export it in <b className="hexref mono">0x04</b>.
         </span>
-        <button
-          className="btn ghost slim"
-          id="rom-weaver-button-bundle-edit-exit"
-          onClick={bundleEdit.exit}
-          type="button"
-        >
-          Done
-        </button>
-      </div>
-    );
-  }
-  if (!bundleEdit.sessionActive) return null;
-  return (
-    <div className="bundle-edit-bar" id="rom-weaver-bundle-edit-bar">
-      <Package aria-hidden="true" />
-      <span className="bundle-edit-title">Bundle</span>
-      {bundleEdit.sessionName ? <span className="bundle-edit-name mono">{bundleEdit.sessionName}</span> : null}
-      <button
-        className="btn ghost slim"
-        id="rom-weaver-button-bundle-edit-session"
-        onClick={bundleEdit.enter}
-        type="button"
-      >
-        Bundle edit
-      </button>
+      ) : null}
+      <label className="patch-enable bundle-edit-toggle">
+        <input
+          aria-label="Bundle edit mode"
+          checked={active}
+          id="rom-weaver-toggle-bundle-edit"
+          onChange={() => (active ? exit() : enter())}
+          type="checkbox"
+        />
+        <span aria-hidden="true" className="switch-state">
+          <b className="on">On</b>
+          <b className="off">Off</b>
+        </span>
+      </label>
     </div>
   );
 };
@@ -996,7 +987,7 @@ function ApplyWorkflowFormView({
         onFiles={handleUnifiedDrop}
         supported={APPLY_SUPPORTED_FILES}
       />
-      <BundleEditBar bundleEdit={bundleEdit} />
+      <BundleEditBar bundleEdit={bundleEdit} workflowEmpty={workflowEmpty} />
       {workflowEmpty ? (
         <GhostSteps
           steps={[
