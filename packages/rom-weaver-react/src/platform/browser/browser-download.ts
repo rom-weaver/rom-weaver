@@ -44,17 +44,19 @@ const isShareCancellation = (error: unknown): boolean =>
 const tryWebKitShare = async (blob: Blob, fileName?: string, options?: BrowserDownloadOptions): Promise<boolean> => {
   if (!isIosStandalonePwa()) return false;
   if (typeof navigator.share !== "function") {
-    logger.debug("iOS standalone PWA without navigator.share; falling back to anchor download");
-    return false;
+    if (options?.interactive) throw new Error("This iOS installation cannot open a share sheet to save the file.");
+    logger.warn("iOS standalone PWA cannot save because navigator.share is unavailable");
+    return true;
   }
   const file = new File([blob], fileName || "download", { type: blob.type || "application/octet-stream" });
   if (typeof navigator.canShare === "function" && !navigator.canShare({ files: [file] })) {
-    logger.warn("navigator.canShare rejected the output file; falling back to anchor download", {
+    if (options?.interactive) throw new Error("iOS cannot share this output file. Try a smaller or different format.");
+    logger.warn("navigator.canShare rejected the output file", {
       fileName: file.name,
       size: file.size,
       type: file.type,
     });
-    return false;
+    return true;
   }
   logger.debug("opening iOS share sheet for output", {
     fileName: file.name,

@@ -58,6 +58,27 @@ describe("triggerBrowserDownload (iOS standalone PWA share path)", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("does not use the dead anchor fallback when share is unavailable", async () => {
+    stubIosPwaNavigator({ share: undefined });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click");
+
+    await expect(triggerBrowserDownload(new Blob(["rom"]), "output.sfc")).resolves.toBeUndefined();
+    expect(click).not.toHaveBeenCalled();
+    await expect(triggerBrowserDownload(new Blob(["rom"]), "output.sfc", { interactive: true })).rejects.toThrow(
+      /cannot open a share sheet/,
+    );
+  });
+
+  it("does not use the dead anchor fallback when iOS rejects the file", async () => {
+    const share = vi.fn();
+    stubIosPwaNavigator({ canShare: () => false, share });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click");
+
+    await expect(triggerBrowserDownload(new Blob(["rom"]), "output.sfc")).resolves.toBeUndefined();
+    expect(share).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
+
   it("falls back to the anchor download outside a standalone PWA", async () => {
     const share = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", {
