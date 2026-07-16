@@ -290,3 +290,30 @@ fn shared_block_cache_reader_supports_parallel_reads() {
 
     fs::remove_file(&temp_file).expect("cleanup temp file");
 }
+
+#[test]
+fn shared_block_cache_reader_reuses_cached_blocks() {
+    let temp_file = std::env::temp_dir().join(format!(
+        "rom-weaver-core-shared-cache-{}-{}.bin",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_nanos()
+    ));
+    let payload = (0..128u8).collect::<Vec<_>>();
+    fs::write(&temp_file, &payload).expect("write payload");
+    let reader = SharedBlockCacheReader::open(&temp_file, 64, 2).expect("reader");
+
+    let mut first = [0u8; 8];
+    reader.read_exact_at(8, &mut first).expect("prime cache");
+    fs::remove_file(&temp_file).expect("remove source after cache fill");
+
+    let mut cached = [0u8; 8];
+    reader
+        .read_exact_at(16, &mut cached)
+        .expect("same block should be cached");
+    assert_eq!(first, payload[8..16]);
+    assert_eq!(cached, payload[16..24]);
+    assert!(reader.read_exact_at(72, &mut cached).is_err());
+}

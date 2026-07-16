@@ -5,7 +5,7 @@ use std::{
     num::NonZeroU64,
     path::{Path, PathBuf},
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
         mpsc,
     },
@@ -390,19 +390,99 @@ pub struct BlockCacheReader {
 }
 
 pub struct SharedBlockCacheReader {
+    block_size: usize,
+    file_len: u64,
+    max_blocks: usize,
+    state: Mutex<SharedBlockCacheState>,
     source: BlockCacheReaderSource,
+}
+
+#[derive(Default)]
+struct SharedBlockCacheState {
+    cache: HashMap<u64, Arc<Vec<u8>>>,
+    order: VecDeque<u64>,
 }
 
 impl SharedBlockCacheReader {
     pub fn open(path: &Path, block_size: usize, max_blocks: usize) -> Result<Self> {
         BlockCacheReader::validate_options(block_size, max_blocks)?;
+        let file_len = File::open(path)?.metadata()?.len();
         Ok(Self {
+            block_size,
+            file_len,
+            max_blocks,
+            state: Mutex::new(SharedBlockCacheState::default()),
             source: BlockCacheReaderSource::new(path),
         })
     }
 
     pub fn read_exact_at(&self, offset: u64, output: &mut [u8]) -> Result<()> {
-        read_exact_from_path(&self.source.path, offset, output)
+        if output.is_empty() {
+            return Ok(());
+        }
+        let read_len = u64::try_from(output.len()).map_err(|_| {
+            RomWeaverError::Validation("requested read length overflowed u64".to_string())
+        })?;
+        if offset
+            .checked_add(read_len)
+            .is_none_or(|end| end > self.file_len)
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "read range exceeds file bounds (offset={offset}, len={})",
+                output.len()
+            )));
+        }
+
+        let block_size = self.block_size as u64;
+        let mut copied = 0usize;
+        while copied < output.len() {
+            let absolute_offset = offset.saturating_add(copied as u64);
+            let block_index = absolute_offset / block_size;
+            let block_offset = (absolute_offset % block_size) as usize;
+            let block = self.get_block(block_index)?;
+            let copy_len = (block.len() - block_offset).min(output.len() - copied);
+            output[copied..copied + copy_len]
+                .copy_from_slice(&block[block_offset..block_offset + copy_len]);
+            copied += copy_len;
+        }
+        Ok(())
+    }
+
+    fn get_block(&self, block_index: u64) -> Result<Arc<Vec<u8>>> {
+        {
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            if let Some(block) = state.cache.get(&block_index).cloned() {
+                if let Some(position) = state.order.iter().position(|value| *value == block_index) {
+                    state.order.remove(position);
+                }
+                state.order.push_back(block_index);
+                return Ok(block);
+            }
+        }
+
+        // Load misses outside the lock so unrelated blocks can be read in parallel. Two workers may
+        // race to load the same missing block; the second insertion simply reuses the first.
+        let start = block_index.saturating_mul(self.block_size as u64);
+        let remaining = self.file_len.saturating_sub(start);
+        let block_len = usize::try_from(remaining.min(self.block_size as u64)).map_err(|_| {
+            RomWeaverError::Validation("shared block cache length overflowed usize".to_string())
+        })?;
+        let mut loaded = vec![0u8; block_len];
+        read_exact_from_path(&self.source.path, start, &mut loaded)?;
+        let loaded = Arc::new(loaded);
+
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if let Some(block) = state.cache.get(&block_index).cloned() {
+            return Ok(block);
+        }
+        state.cache.insert(block_index, Arc::clone(&loaded));
+        state.order.push_back(block_index);
+        while state.order.len() > self.max_blocks {
+            if let Some(evicted) = state.order.pop_front() {
+                state.cache.remove(&evicted);
+            }
+        }
+        Ok(loaded)
     }
 }
 
