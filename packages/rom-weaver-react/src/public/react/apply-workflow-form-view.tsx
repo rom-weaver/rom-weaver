@@ -313,6 +313,36 @@ const matchPastedInputChecksum = (pasted: string, info: RomInputRowState["info"]
  * user-pasted input checksum, red on mismatch, and no color when there is
  * nothing to verify against. A mismatch from any signal wins over a match.
  */
+/* The chain-input patch's own ROM requirements (embedded in the patch file,
+   or carried by its manifest entry) describe the base ROM exactly like bundle
+   rom.checks do - fold them into the same Expected marks on the ROM card
+   whenever the bundle itself offers nothing. */
+const parseChainInputExpectation = (
+  patches: PatchStackItemState[],
+  disabledFlags?: readonly boolean[],
+): ParsedBundleChecks | undefined => {
+  const chainInput = patches.find((_, index) => !disabledFlags?.[index]);
+  if (!chainInput) return undefined;
+  const checksums: Record<string, string> = {};
+  let size: number | undefined;
+  for (const entry of chainInput.validationValues || []) {
+    // "in min size" (xdelta) is a lower bound, not an identity - skip it.
+    const match = /^in (crc32|md5|sha-?1|size)=(.+)$/i.exec(entry);
+    if (!match) continue;
+    const key = (match[1] || "").toLowerCase().replace("sha-1", "sha1");
+    const value = (match[2] || "").trim();
+    if (!value) continue;
+    if (key === "size") {
+      const bytes = Number(value);
+      if (Number.isFinite(bytes)) size = bytes;
+      continue;
+    }
+    checksums[key] = value;
+  }
+  if (!(Object.keys(checksums).length || size !== undefined)) return undefined;
+  return { checksums, ...(size === undefined ? {} : { size }) };
+};
+
 const buildRomVerificationStates = (
   patches: PatchStackItemState[],
   romInputs: RomInputRowState[],
@@ -758,13 +788,15 @@ function ApplyWorkflowFormView({
 
   const romVerificationStates = buildRomVerificationStates(patches, romInputs, disabledPatchFlags);
   // The bundle's expected-ROM group and the bundle-checks editor describe THE
-  // base ROM, so they only render for an unambiguous single-ROM bench.
+  // base ROM, so they only render for an unambiguous single-ROM bench. Without
+  // a bundle expectation, the chain-input patch's own checks stand in.
   const singleRom = romInputs.length === 1;
+  const expectedRomChecks = bundleExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
   const romRowDeps: RomRowDeps = {
     romInputs,
     ui: uiController,
     verificationStates: romVerificationStates,
-    ...(singleRom && bundleExpectedRomChecks ? { expectedChecks: bundleExpectedRomChecks } : {}),
+    ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
     ...(singleRom && bundleEdit?.active && onRomBundleChecksChange
       ? {
           bundleEditMode: true,
