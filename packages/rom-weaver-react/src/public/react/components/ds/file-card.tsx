@@ -89,56 +89,65 @@ const FileCard = ({
    */
   verifyBar?: boolean;
   children?: ReactNode;
-}) => (
-  <div
-    className={join(
-      "card file",
-      state,
-      inputMatch && "im",
-      patch && "grabbable patch",
-      (stageBar != null || verifyBar) && "has-stage-bar",
-      className,
-    )}
-    ref={rootRef}
-    style={style}
-  >
-    {stageBar == null ? null : (
-      <div
-        aria-hidden="true"
-        className={join("stage-bar", stageBar === "indeterminate" && "is-indeterminate")}
-        style={stageBar === "indeterminate" ? undefined : { width: `${Math.max(0, Math.min(100, stageBar))}%` }}
-      />
-    )}
-    {stageBar == null && verifyBar ? (
-      <div aria-hidden="true" className="stage-bar verify-bar is-indeterminate" />
-    ) : null}
-    {hideName ? (
-      onRemove ? (
-        <RemoveButton label={removeLabel} onClick={onRemove} />
-      ) : null
-    ) : (
-      <div className="card-top">
-        <div className="card-name">
-          {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
-          {name}
-          {description}
-          {meta || target ? (
-            <span className="card-meta">
-              {target}
-              {meta}
-            </span>
-          ) : null}
-        </div>
-        <div className="card-actions">
-          <div className="card-btns">
-            {handle}
-            {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
-          </div>
-        </div>
+}) => {
+  const actions = (
+    <div className="card-actions">
+      <div className="card-btns">
+        {handle}
+        {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
       </div>
-    )}
-    {children}
-  </div>
-);
+    </div>
+  );
+  return (
+    <div
+      className={join(
+        "card file",
+        state,
+        inputMatch && "im",
+        patch && "grabbable patch",
+        (stageBar != null || verifyBar) && "has-stage-bar",
+        className,
+      )}
+      ref={rootRef}
+      style={style}
+    >
+      {stageBar == null ? null : (
+        <div
+          aria-hidden="true"
+          className={join("stage-bar", stageBar === "indeterminate" && "is-indeterminate")}
+          style={stageBar === "indeterminate" ? undefined : { width: `${Math.max(0, Math.min(100, stageBar))}%` }}
+        />
+      )}
+      {stageBar == null && verifyBar ? (
+        <div aria-hidden="true" className="stage-bar verify-bar is-indeterminate" />
+      ) : null}
+      {hideName ? (
+        onRemove ? (
+          <RemoveButton label={removeLabel} onClick={onRemove} />
+        ) : null
+      ) : (
+        <div className="card-top">
+          {/* Patch cards float the actions on the right and let the name wrap
+              under them - the float must precede the text it wraps, so the
+              actions render first there. */}
+          {patch ? actions : null}
+          <div className="card-name">
+            {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
+            {name}
+            {description}
+            {meta || target ? (
+              <span className="card-meta">
+                {target}
+                {meta}
+              </span>
+            ) : null}
+          </div>
+          {patch ? null : actions}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+};
 
 export { FileCard, FileTargetPill, RemoveButton };

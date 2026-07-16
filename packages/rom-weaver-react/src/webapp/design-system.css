@@ -823,13 +823,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: clamp(.8rem, 1.1vw + .55rem, 1.06rem);
 }
-/* Patch names may wrap, but a runaway name must not swallow the card: clamp
-   the displayed title to two lines (the `title` attr and sr-only filename
-   carry the full text); slightly tighter leading keeps two lines compact. */
+/* Patch names never truncate: they wrap freely (mid-word only as a last
+   resort) beside and under the floated controls. */
 .rw-app .patch-cards .nm {
   white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  line-height: 1.25;
+  display: inline; overflow: visible; line-height: 1.25;
 }
 /* in-archive folder path prefix on the name line - quieter than the file itself */
 .rw-app .nm .nm-folder { font-weight: 500; color: var(--ink-3); }
@@ -2459,30 +2457,26 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .meter:not(.indet) .fill::after { animation: none; }
 }
 
-/* Keep patch controls in the same content / controls order at every width -
-   the compact card-top grid is universal, so a card renders identically in
-   the single-column stack and the wide-bench 2-up grid. The name owns the
-   card's full left width (long names wrap without a leading chip squeezing
-   them); the position/drag chip sits on the right beside remove. */
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto auto auto;
-  align-items: start; column-gap: var(--sp-m); row-gap: var(--sp-xs);
+/* Patch card header: the controls (position/drag chip + remove) FLOAT on the
+   right and the name owns everything else - it never truncates, wrapping
+   beside and then UNDER the buttons. FileCard renders the actions before the
+   name on patch cards so the float precedes the text it wraps. */
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top { display: flow-root; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions {
+  float: right; display: flex; margin: 0 0 var(--sp-xs) var(--sp-m);
 }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
-  grid-column: 1; grid-row: 1; align-self: center;
-}
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .patch-desc { grid-column: 1 / -1; grid-row: 2; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .card-meta { grid-column: 1 / -1; grid-row: 2; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name:has(> .patch-desc) > .card-meta { grid-row: 3; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions,
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: contents; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: block; min-width: 0; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline { display: block; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .card-meta) { margin-block-start: var(--sp-xs); }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
-  grid-column: 2; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
+  width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .rm {
-  grid-column: 3; grid-row: 1; align-self: start;
+/* The bundle-edit name textarea is a replaced box that cannot wrap around a
+   float - keep it beside the buttons by giving up their width explicitly. */
+.rw-app #rom-weaver-list-patch-stack > .card.patch .nmline > .nm-input {
+  width: calc(100% - 2 * var(--ctrl-h) - var(--sp-s) - var(--sp-m));
 }
 
 /* ── wide-bench layout ──
