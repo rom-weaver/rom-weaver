@@ -23,7 +23,7 @@ resolver = "2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
-version = "0.4.1"
+version = "0.5.0"
 
 [workspace.dependencies]
 adler2 = "2.0.1"
