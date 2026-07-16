@@ -1072,11 +1072,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         validateInputChecksum?: string;
         validateOutputChecksum?: string;
         header?: "keep" | "strip";
+        revalidate?: boolean;
       },
     ) => {
       const originalNames = input.patches.map((patch, index) =>
         getReactBinarySourceFileName(patch, `Patch ${index + 1}`),
       );
+      const { revalidate, ...patchOption } = option;
       return withPreparedWorkflow(
         input,
         {
@@ -1086,7 +1088,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           },
         },
         async ({ input: stagedInput, workflow }) => {
-          await workflow.setPatchOption(patchIndex, option);
+          await workflow.setPatchOption(patchIndex, patchOption);
+          // A user edit changed what the run verifies (header bytes / expected
+          // checks): rerun the deep validation - patches whose validation key is
+          // unchanged short-circuit, the affected one re-verifies. Programmatic
+          // seeding (bundle sessions) skips this; the staging-completion pass
+          // validates those on its own schedule.
+          if (revalidate) await workflow.validatePatches();
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
           const inputLabelById = new Map(

@@ -903,6 +903,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .meta-target-select {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
   padding: 0 13px 0 1px; margin: 0; line-height: 1.35;
+  /* a real (WCAG 2.5.8) touch target without growing the meta line's text rhythm */
+  min-height: 24px;
   background-image: var(--chevron);
   background-repeat: no-repeat; background-position: right center;
 }
@@ -1631,28 +1633,31 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .nm-edit.is-editing { color: var(--thread-text); }
 .rw-app .nm-edit svg { width: 13px; height: 13px; }
 /* Editable Checks-drawer rows: label column matches the read-only .ck rows;
-   the remove X trails the input on the same line. */
+   the remove X trails the input on the same line, in the quiet copy-glyph
+   language of the computed rows (color-only hover, red for removal). */
 .rw-app .patch-checks-body .verification-row { grid-template-columns: 47px minmax(0, 1fr) auto; padding-block: 2px; }
 .rw-app .ck-remove {
   appearance: none; flex: none; display: inline-grid; place-items: center;
-  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px;
-  background: none; color: var(--ink-4); cursor: pointer;
-  transition: color .15s, background .15s;
+  width: 20px; height: 20px; padding: 0; border: 0; background: none;
+  color: var(--ink-4); cursor: pointer; transition: color .15s;
 }
-.rw-app .ck-remove:hover { color: var(--fault); background: color-mix(in oklab, var(--fault) 8%, transparent); }
+.rw-app .ck-remove:hover { color: var(--fault); }
 .rw-app .ck-remove svg { width: 12px; height: 12px; }
-/* "+ Add check": a slim ghost select at the end of each side's rows. */
-.rw-app .ck-add { display: block; margin-block: 3px 2px; }
-.rw-app .ck-add-select {
-  width: auto; min-width: 0; height: 24px; padding: 0 22px 0 6px;
-  border: 1px dashed var(--seam); border-radius: 5px; background-color: transparent;
-  color: var(--ink-3); font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-  cursor: pointer;
+/* "Add check": the same quiet uppercase action row as .ck-more (the checks
+   drawer's disclosure idiom) - a plus glyph leading a text-styled select. */
+.rw-app .ck-add {
+  display: flex; align-items: center; gap: 6px; width: fit-content;
+  margin-block-start: var(--sp-xs); padding: 4px 2px;
+  color: var(--ink-3); cursor: pointer;
 }
-.rw-app .ck-add-select:hover { color: var(--ink); border-color: var(--seam-strong); }
-/* ROM-header handling row inside the Checks drawer's Input group. */
-.rw-app .header-mode-row { margin-block-start: 3px; }
-.rw-app .header-mode-select { height: 28px; font-size: .74rem; }
+.rw-app .ck-add > svg { width: 12px; height: 12px; flex: none; }
+.rw-app .ck-add-select {
+  appearance: none; width: auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none;
+  color: inherit; cursor: pointer;
+  font-family: var(--font); font-size: .66rem; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.rw-app .ck-add:hover { color: var(--ink); }
 
 .rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
 .rw-app .bundle-rom-expectation .card {

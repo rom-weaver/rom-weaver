@@ -191,6 +191,8 @@ type LocalApplyPatchFormSessionOptions = Pick<
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";
+      /** A user edit: rerun the deep validation so the card verdict reflects the change. */
+      revalidate?: boolean;
     },
   ) => Promise<Array<StagedInputInfo | null | undefined>>;
 };

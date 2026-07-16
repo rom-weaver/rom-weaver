@@ -39,13 +39,26 @@ const createApplyPatchChecksumPreflight = <TSource>(
   target: InputAsset,
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
+  // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
+  // the engine at apply time) joins the patch's own requirements: it feeds the
+  // header auto-resolution and the preflight verdict exactly like a filename token.
+  const userInputCrc32 =
+    stage.state.validateInputChecksum && /^(0x)?[0-9a-f]{8}$/i.test(stage.state.validateInputChecksum.trim())
+      ? stage.state.validateInputChecksum.trim()
+      : undefined;
   // Header decision first: when the effective handling is "strip" (auto-decided from the
   // patch's required checksum, or user-chosen in the drawer), the apply runs against the
   // headerless bytes - so the preflight must compare those, not the raw file.
-  const headerResolution = resolveApplyHeaderMode(requirements, {
-    checksums: getInputAssetChecksums(target),
-    checksumVariants: target.checksumVariants,
-  });
+  const headerResolution = resolveApplyHeaderMode(
+    {
+      ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
+      filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
+    },
+    {
+      checksums: getInputAssetChecksums(target),
+      checksumVariants: target.checksumVariants,
+    },
+  );
   stage.state.headerResolution = headerResolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -64,7 +77,10 @@ const createApplyPatchChecksumPreflight = <TSource>(
     typeof requirements?.minimumSourceSize === "number" && Number.isFinite(requirements.minimumSourceSize)
       ? requirements.minimumSourceSize
       : undefined;
-  const requiredCrc32 = toNormalizedCrc32(requirements?.sourceCrc32) ?? toNormalizedCrc32(requirements?.filenameCrc32);
+  const requiredCrc32 =
+    toNormalizedCrc32(requirements?.sourceCrc32) ??
+    toNormalizedCrc32(requirements?.filenameCrc32) ??
+    toNormalizedCrc32(userInputCrc32);
   if (requiredSize === undefined && minimumSourceSize === undefined && !requiredCrc32) {
     return {
       actualCrc32,

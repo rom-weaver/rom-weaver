@@ -224,6 +224,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
           validateInputChecksum?: string;
           validateOutputChecksum?: string;
           header?: "keep" | "strip";
+          revalidate?: boolean;
         },
       ) => {
         const { actions } = contextRef.current;

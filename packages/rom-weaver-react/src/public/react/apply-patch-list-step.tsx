@@ -1,6 +1,8 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import Pencil from "lucide-react/dist/esm/icons/pencil.js";
+import Plus from "lucide-react/dist/esm/icons/plus.js";
+import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -227,11 +229,11 @@ const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
   </div>
 );
 
-/** The ROM-header handling row inside the Checks drawer's Input group: Auto
- * (the engine's checksum-driven decision, labeled with its outcome when it
- * decided), or an explicit Keep/Strip pin. Only rendered when the target ROM
- * actually has a strippable header. */
-const PatchHeaderModeRow = ({
+/** The ROM-header handling select on the patch card's meta line (beside the
+ * Included/Skipped switch): Auto (the engine's checksum-driven decision,
+ * labeled with its outcome when it decided), or an explicit Keep/Strip pin.
+ * Only rendered when the target ROM actually has a strippable header. */
+const PatchHeaderModeSelect = ({
   index,
   item,
   patchStack,
@@ -240,15 +242,17 @@ const PatchHeaderModeRow = ({
   item: PatchStackItemState;
   patchStack: PatcherStackController;
 }) => {
-  const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes}-byte ROM header` : "ROM header";
-  const autoLabel = item.headerAutoDecided ? `Auto (${item.headerAutoMode || "keep"})` : "Auto (keep)";
+  if (!item.showHeaderOption) return null;
+  const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes} B header` : "header";
+  const autoLabel = `header auto (${item.headerAutoDecided ? item.headerAutoMode || "keep" : "keep"})`;
   return (
-    <div className="verification-row header-mode-row">
-      <label className="ofld-l" htmlFor={`rom-weaver-patch-header-mode-${index}`}>
-        HEADER
+    <span className="target-grp header-grp">
+      <Scissors aria-hidden="true" />
+      <label className="sr-only" htmlFor={`rom-weaver-patch-header-mode-${index}`}>
+        ROM header handling before patching
       </label>
       <select
-        className="select popt-input header-mode-select"
+        className="meta-target-select mono ptgt-sel"
         disabled={item.optionsDisabled}
         id={`rom-weaver-patch-header-mode-${index}`}
         onChange={(event) => {
@@ -256,16 +260,17 @@ const PatchHeaderModeRow = ({
           // Auto clears the pin - the engine's checksum-driven decision applies again.
           void patchStack.setPatchOption?.(index, {
             header: next === "keep" || next === "strip" ? next : undefined,
+            revalidate: true,
           });
         }}
         title="Strip patches the headerless bytes when the patch was authored against a ROM without its copier header. Whether the header appears on the final output is the output card's separate ROM header setting."
         value={item.headerChoice ?? "auto"}
       >
         <option value="auto">{autoLabel}</option>
-        <option value="keep">Keep {headerNoun}</option>
-        <option value="strip">Strip {headerNoun} before patching</option>
+        <option value="keep">keep {headerNoun}</option>
+        <option value="strip">strip {headerNoun}</option>
       </select>
-    </div>
+    </span>
   );
 };
 
@@ -372,8 +377,10 @@ const PatchChecksDrawer = ({
   // ROM re-verifies immediately (card coloring) and the apply enforces it.
   const syncEndpointValidation = (side: "input" | "output", checksums: Record<string, string>) => {
     const preferred = checksums.sha1 || checksums.md5 || checksums.crc32 || "";
-    if (side === "input" && isChainInput) void setOption?.(index, { validateInputChecksum: preferred });
-    if (side === "output" && isChainOutput) void setOption?.(index, { validateOutputChecksum: preferred });
+    if (side === "input" && isChainInput)
+      void setOption?.(index, { revalidate: true, validateInputChecksum: preferred });
+    if (side === "output" && isChainOutput)
+      void setOption?.(index, { revalidate: true, validateOutputChecksum: preferred });
   };
   const commitCheck = (side: "input" | "output", algorithm: CheckAlgorithm, raw: string) => {
     const value = normalizeCheckInput(raw);
@@ -465,9 +472,10 @@ const PatchChecksDrawer = ({
           ))}
           {onMetaChange && addableFields.length ? (
             <label className="ck-add">
+              <Plus aria-hidden="true" />
               <span className="sr-only">Add {side} check</span>
               <select
-                className="select ck-add-select"
+                className="ck-add-select"
                 id={`rom-weaver-patch-${side}-add-check-${index}`}
                 onChange={(event) => {
                   const field = event.currentTarget.value as CheckField;
@@ -477,7 +485,7 @@ const PatchChecksDrawer = ({
                 value=""
               >
                 <option disabled value="">
-                  + Add check
+                  Add check
                 </option>
                 {addableFields.map((field) => (
                   <option key={field} value={field}>
@@ -486,9 +494,6 @@ const PatchChecksDrawer = ({
                 ))}
               </select>
             </label>
-          ) : null}
-          {side === "input" && item.showHeaderOption ? (
-            <PatchHeaderModeRow index={index} item={item} patchStack={patchStack} />
           ) : null}
         </div>
       ))}
@@ -805,6 +810,7 @@ const PatchCard = ({
           {onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
+          {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
           {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
           {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
           {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}

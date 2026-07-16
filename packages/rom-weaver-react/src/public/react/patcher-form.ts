@@ -49,6 +49,8 @@ type PatcherStackController = StoreController<PatchStackState> & {
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";
+      /** A user edit: rerun the deep validation so the card verdict reflects the change. */
+      revalidate?: boolean;
     },
   ) => void;
 };

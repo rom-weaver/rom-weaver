@@ -51,7 +51,6 @@ test("strip-header toggle settles inside an everything archive bundle session", 
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 2 } }));
   await waitForApplyButtonEnabled();
 
-  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
   const headerSelect = await waitForState(() => document.getElementById("rom-weaver-patch-header-mode-0"));
   expect(headerSelect).not.toBeNull();
   headerSelect.value = "strip";
@@ -99,8 +98,7 @@ test("toggling the strip-header option settles instead of loading forever", asyn
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
 
-  // Open the patch Checks drawer and pin the header mode to strip.
-  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  // Pin the header mode to strip via the meta-line select.
   const headerSelect = await waitForState(() => document.getElementById("rom-weaver-patch-header-mode-0"));
   expect(headerSelect).not.toBeNull();
   headerSelect.value = "strip";

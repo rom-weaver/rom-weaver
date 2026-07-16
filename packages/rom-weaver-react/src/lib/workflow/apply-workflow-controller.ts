@@ -670,20 +670,27 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.mutate("setPatchOption", async () => {
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      let verificationChanged = false;
       if ("validateInputChecksum" in option) {
-        const value = option.validateInputChecksum?.trim();
-        stage.state.validateInputChecksum = value ? value : undefined;
+        const value = option.validateInputChecksum?.trim() || undefined;
+        verificationChanged ||= stage.state.validateInputChecksum !== value;
+        stage.state.validateInputChecksum = value;
       }
       if ("validateOutputChecksum" in option) {
-        const value = option.validateOutputChecksum?.trim();
-        stage.state.validateOutputChecksum = value ? value : undefined;
+        const value = option.validateOutputChecksum?.trim() || undefined;
+        verificationChanged ||= stage.state.validateOutputChecksum !== value;
+        stage.state.validateOutputChecksum = value;
       }
       if ("header" in option) {
+        verificationChanged ||= stage.state.headerChoice !== option.header;
         stage.state.headerChoice = option.header;
-        // The header choice changes which bytes the apply runs against, so the checksum
-        // preflight (and its target validation) must be recomputed.
-        await this.evaluatePatchReadiness(stage);
       }
+      // Any of these change what the run verifies (the header changes which bytes
+      // the apply runs against; a user input check joins the preflight
+      // requirements), so the checksum preflight - and with it the target
+      // validation key - must be recomputed. The caller reruns the deep
+      // validation off the new key. No-op writes skip the recompute entirely.
+      if (verificationChanged) await this.evaluatePatchReadiness(stage);
       this.recomputeOutputState();
     });
   }
