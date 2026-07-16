@@ -170,6 +170,8 @@ const buildStackViewState = ({
         })(),
       fileSize: patchInfo?.size ?? patchInfo?.sourceSize ?? getBinarySourceSize(patch) ?? undefined,
       format: patchInfo?.format,
+      headerAutoDecided: patchInfo?.headerAutoDecided === true,
+      headerAutoMode: patchInfo?.headerAutoMode,
       headerChoice: patchInfo?.headerChoice,
       headerStrippedBytes: patchInfo?.headerStrippedBytes,
       index: index + 1,

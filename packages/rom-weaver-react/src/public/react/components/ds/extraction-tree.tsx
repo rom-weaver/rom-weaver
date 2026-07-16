@@ -192,12 +192,15 @@ const ExtractName = ({
   folderPath,
   legacyArchiveClassName = "rom-weaver-patch-stack-archive",
   legacyFileClassName,
+  nameActions,
   nameEditor,
   parentCompressions,
 }: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & {
   displayName?: string;
-  /** Bundle Author mode: an in-place editor rendered instead of the static name
-   * face (the sr-only filename and legacy label stay for identity). */
+  /** Trailing controls on the name line (e.g. the pencil edit toggle). */
+  nameActions?: ReactNode;
+  /** An in-place editor rendered instead of the static name face (the sr-only
+   * filename and legacy label stay for identity). */
   nameEditor?: ReactNode;
 }) => (
   <>
@@ -226,6 +229,7 @@ const ExtractName = ({
           {displayName?.trim() || getDisplayName(fileName)}
         </span>
       )}
+      {nameActions}
     </div>
   </>
 );

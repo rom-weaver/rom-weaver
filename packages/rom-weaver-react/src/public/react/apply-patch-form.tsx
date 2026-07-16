@@ -42,7 +42,6 @@ import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-ses
 import type { BinarySource } from "./patcher-form.ts";
 import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
-import type { RomBundleChecksDraft } from "./rom-bundle-checks-editor.tsx";
 import { useApplySettings, useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
@@ -80,30 +79,6 @@ const buildEagerPatchStageInfo = (
     (patch.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
     "None selected";
   return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
-};
-
-/** The URL hash segment that deep-links into bundle-author mode. The webapp's
- * tab router owns the hash's first segment (`#/apply`), so the mode rides as
- * an extra segment (`#/apply/bundle-author`); a bare `#bundle-author` also counts
- * (embedding without the router, and the router resolves it to the Weave tab). */
-const BUNDLE_AUTHOR_HASH = "bundle-author";
-
-const readHashSegments = (): string[] =>
-  typeof window === "undefined" ? [] : window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-
-const readBundleAuthorHash = (): boolean =>
-  readHashSegments().some((segment) => segment.toLowerCase() === BUNDLE_AUTHOR_HASH);
-
-const writeBundleAuthorHash = (active: boolean) => {
-  if (typeof window === "undefined") return;
-  if (readBundleAuthorHash() === active) return;
-  const kept = readHashSegments().filter((segment) => segment.toLowerCase() !== BUNDLE_AUTHOR_HASH);
-  const segments = active ? [...kept, BUNDLE_AUTHOR_HASH] : kept;
-  const url = new URL(window.location.href);
-  // Preserve the router's `#/<slug>` shape when a route segment is present.
-  url.hash = segments.length ? (kept.length ? `/${segments.join("/")}` : segments.join("/")) : "";
-  // replaceState: toggling the editor is a mode, not a navigation - no history entries.
-  window.history.replaceState(window.history.state, "", url);
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
@@ -260,27 +235,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
-  // Bundle Author mode: the authoring layer (patch name/description/check fields,
-  // ROM bundle checks, export controls) stays hidden until the user explicitly
-  // enters the editor. The mode deep-links via the #bundle-author URL hash.
-  const [bundleAuthorMode, setBundleAuthorMode] = useState(readBundleAuthorHash);
-  const setBundleAuthorModeAndHash = useCallback((active: boolean) => {
-    setBundleAuthorMode(active);
-    writeBundleAuthorHash(active);
-  }, []);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onHashChange = () => setBundleAuthorMode(readBundleAuthorHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
-  // The bundle-checks grid on the ROM card (bundle-author mode): overrides the
-  // exported rom.checks/rom.size when set; empty fields fall back to the staged
-  // ROM's computed hashes.
-  const [romBundleChecks, setRomBundleChecks] = useState<RomBundleChecksDraft>({});
-  const updateRomBundleChecks = useCallback((updates: RomBundleChecksDraft) => {
-    setRomBundleChecks((previous) => ({ ...previous, ...updates }));
-  }, []);
+  // The bundle package select + export action stay hidden until the user
+  // reveals them via the output card's "Create bundle…" action.
+  const [bundleExportVisible, setBundleExportVisible] = useState(false);
 
   // How the current bench relates to the loaded bundle's authored chain:
   // - "full": every bundle patch enabled, in bundle order, nothing foreign -
@@ -1191,16 +1148,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     disabledPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
-    getRomChecksOverrides: () => {
-      const checksums: Record<string, string> = {};
-      for (const algorithm of ["crc32", "md5", "sha1"] as const) {
-        const value = romBundleChecks[algorithm]?.trim();
-        if (value) checksums[algorithm] = value;
-      }
-      const size = romBundleChecks.bytes?.trim();
-      if (!(Object.keys(checksums).length || size)) return null;
-      return { checksums, ...(size ? { size: Number(size) } : {}) };
-    },
     getSessionSources: (): ApplyWorkflowBundleSources => {
       const workflowSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
       if (workflowSources?.rom || workflowSources?.patches.length) return workflowSources;
@@ -1227,21 +1174,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
-  const enterBundleAuthorMode = useCallback(() => setBundleAuthorModeAndHash(true), [setBundleAuthorModeAndHash]);
-  const exitBundleAuthorMode = useCallback(() => setBundleAuthorModeAndHash(false), [setBundleAuthorModeAndHash]);
-  // Being in the editor is the "I'm making a bundle" signal: arm a default
-  // package format so the export action is live without a second decision.
-  // An effect (not the enter callback) so the #bundle-author hash entry arms too.
+  // Revealing the export controls is the "I'm making a bundle" signal: arm a
+  // default package format so the export action is live without a second decision.
   const {
     format: bundleExportFormat,
     setBundleRom: setBundleExportRom,
     setFormat: setBundleExportFormat,
   } = bundleExport;
   useEffect(() => {
-    if (!bundleAuthorMode || bundleExportFormat) return;
+    if (!bundleExportVisible || bundleExportFormat) return;
     setBundleExportFormat("zip");
     setBundleExportRom(false);
-  }, [bundleAuthorMode, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
+  }, [bundleExportVisible, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
+  const showBundleExport = useCallback(() => setBundleExportVisible(true), []);
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
@@ -1290,16 +1235,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        bundleAuthor={{
-          active: bundleAuthorMode,
-          enter: enterBundleAuthorMode,
-          exit: exitBundleAuthorMode,
-          hasOptionalEntries:
-            !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
-          outputStandDown: bundleOutputStandDown,
-          sessionActive: !!activeBundleSession,
-          ...(activeBundleSession?.name ? { sessionName: activeBundleSession.name } : {}),
-        }}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}
         controllers={{
@@ -1313,8 +1248,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           ? { bundleExpectedRomChecks: activeBundleSession.chainEndpointChecks.input }
           : {})}
         {...(activeBundleSession?.romExpectation ? { bundleRomExpectation: activeBundleSession.romExpectation } : {})}
+        bundleTools={{
+          exportVisible: bundleExportVisible,
+          hasOptionalEntries:
+            !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
+          outputStandDown: bundleOutputStandDown,
+          showExport: showBundleExport,
+        }}
         onBundleMetaChange={updateBundleMeta}
-        onRomBundleChecksChange={updateRomBundleChecks}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{
@@ -1323,7 +1264,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           onToggle: togglePatchEnabled,
         }}
         pendingDrops={pendingDrops}
-        romBundleChecks={romBundleChecks}
         startup={startup}
       />
       {candidateSelectionDialog}

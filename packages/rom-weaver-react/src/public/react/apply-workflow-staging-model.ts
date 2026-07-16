@@ -224,14 +224,16 @@ const toPatchStageInfo = (
     decompressionTimeMs: patch.decompressionTimeMs,
     fileName,
     format: patch.requirements?.format,
+    headerAutoDecided: patch.headerResolution?.decided === true,
+    headerAutoMode: patch.headerResolution?.mode,
     headerChoice: patch.headerChoice,
     headerStrippedBytes: patch.headerResolution?.strippedBytes,
     id: patch.id,
     order,
     parentCompressions: patch.parentCompressions,
-    // Only surface a header choice when there is actually a strippable header AND the
-    // required checksums didn't already decide what to do with it.
-    showHeaderOption: !!patch.headerResolution && !patch.headerResolution.decided,
+    // Surface the header choice whenever the target ROM has a strippable header -
+    // Auto reflects the checksum-driven decision; Keep/Strip pin an override.
+    showHeaderOption: !!patch.headerResolution,
     size: patch.size,
     sourceChecksumState: patch.checksumPreflight?.status || "",
     sourceSize: patch.sourceSize,

@@ -100,9 +100,6 @@ type UseBundleExportOptions = {
   /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the bundle's `output.header`. */
   getOutputHeader?: () => "auto" | "keep" | "strip" | undefined;
-  /** Bundle Author overrides for the exported rom.checks/rom.size; null falls
-   * back to the staged ROM's computed hashes. */
-  getRomChecksOverrides?: () => { checksums: Record<string, string>; size?: number } | null;
   disabledPatchIds: ReadonlySet<string>;
   /** Originating per-patch metadata (name/label/description round-trips). */
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
@@ -131,7 +128,6 @@ const useBundleExport = ({
   getStackItems,
   getName,
   getOutputHeader,
-  getRomChecksOverrides,
   disabledPatchIds,
   bundleMetaById,
   initialBundleRom = false,
@@ -304,14 +300,11 @@ const useBundleExport = ({
         }
       }
       const outputHeader = getOutputHeader?.();
-      // Bundle Author overrides win over the staged ROM's computed values - the
-      // author is pinning what the bundle should expect, per field.
-      const romChecksOverrides = getRomChecksOverrides?.() || null;
-      const romChecksums = {
-        ...(rom.checksums || {}),
-        ...(romChecksOverrides?.checksums || {}),
-      };
-      const romSize = romChecksOverrides?.size ?? rom.size;
+      // The exported rom.checks are the staged ROM's computed values; a
+      // different expected base ROM is expressed as the first patch's input
+      // checks (which the bundle schema prefers over rom.checks).
+      const romChecksums = { ...(rom.checksums || {}) };
+      const romSize = rom.size;
       const { result, bundleOutput, archiveOutput } = await create({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
@@ -378,7 +371,6 @@ const useBundleExport = ({
     getStackItems,
     getName,
     getOutputHeader,
-    getRomChecksOverrides,
     bundleMetaById,
     onComplete,
     ready,

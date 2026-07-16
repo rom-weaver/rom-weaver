@@ -1,6 +1,6 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
-import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.js";
+import Pencil from "lucide-react/dist/esm/icons/pencil.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -13,11 +13,12 @@ import {
   CHECK_FIELDS_PAIRED,
   CHECK_HEX_LENGTHS,
   CHECK_LABELS,
+  type CheckAlgorithm,
+  type CheckField,
   isValidCheckValue,
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
-import { Drawer, DrawerMark, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -142,56 +143,6 @@ const DryApplySuccess = () => (
   </InfoToggle>
 );
 
-/** Read-only Checks drawer for a patch that declares real requirements: the
- * INPUT / OUTPUT rows it will verify, with the dry-run verdict + timing riding
- * the drawer header. Requirement-less patches render no drawer - their verdict
- * rides the Options header instead. Authoring (editable check fields) stays in
- * the Options drawer. */
-const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
-  const { inputRows, outputRows } = getPatchVerificationRows(item);
-  if (!(inputRows.length || outputRows.length)) return null;
-  const verifying = item.validationState === "verifying";
-  const bad = item.validationState === "invalid";
-  const ok = item.validationState === "valid";
-  const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
-  const compact =
-    inputRows.length > 0 &&
-    outputRows.length > 0 &&
-    [...inputRows, ...outputRows].every((row) => String(row.value).length < 16);
-  return (
-    <ChecksumList
-      action={ok ? <DryApplySuccess /> : undefined}
-      bodyClassName={compact ? "ckrows patch-check-columns" : undefined}
-      defaultOpen
-      label="Checks"
-      match={ok ? undefined : match}
-      timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
-      verifying={verifying}
-    >
-      {inputRows.length ? (
-        <div className="ck-group">
-          <div className="ck-group-head">
-            <span>Input</span>
-          </div>
-          {inputRows.map((row) => (
-            <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
-          ))}
-        </div>
-      ) : null}
-      {outputRows.length ? (
-        <div className="ck-group">
-          <div className="ck-group-head">
-            <span>Output</span>
-          </div>
-          {outputRows.map((row) => (
-            <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
-          ))}
-        </div>
-      ) : null}
-    </ChecksumList>
-  );
-};
-
 /** Grow a textarea to its content (`field-sizing: content` isn't in every
  * target browser yet); runs on mount and on every input. */
 const autosizeTextarea = (element: HTMLTextAreaElement | null) => {
@@ -228,7 +179,7 @@ type PatchMetaFieldProps = {
   onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
 };
 
-/** Bundle Author mode: the card title IS the patch's display name, edited in
+/** Pencil-editing a card: the title IS the patch's display name, edited in
  * place (placeholder = the file name it falls back to). A textarea only so a
  * long name can wrap and grow - names never contain newlines, Enter commits. */
 const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
@@ -253,8 +204,8 @@ const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
   />
 );
 
-/** Bundle Author mode: the description sits inline on the card (in place of the
- * static description line), not tucked inside the Options drawer. */
+/** Pencil-editing a card: the description editor sits inline, in place of the
+ * static description line. */
 const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
   <div className="patch-meta-inline">
     <div className="ofld patch-description-field">
@@ -276,9 +227,112 @@ const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
   </div>
 );
 
-const PatchOptions = ({
+/** The ROM-header handling row inside the Checks drawer's Input group: Auto
+ * (the engine's checksum-driven decision, labeled with its outcome when it
+ * decided), or an explicit Keep/Strip pin. Only rendered when the target ROM
+ * actually has a strippable header. */
+const PatchHeaderModeRow = ({
+  index,
+  item,
+  patchStack,
+}: {
+  index: number;
+  item: PatchStackItemState;
+  patchStack: PatcherStackController;
+}) => {
+  const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes}-byte ROM header` : "ROM header";
+  const autoLabel = item.headerAutoDecided ? `Auto (${item.headerAutoMode || "keep"})` : "Auto (keep)";
+  return (
+    <div className="verification-row header-mode-row">
+      <label className="ofld-l" htmlFor={`rom-weaver-patch-header-mode-${index}`}>
+        HEADER
+      </label>
+      <select
+        className="select popt-input header-mode-select"
+        disabled={item.optionsDisabled}
+        id={`rom-weaver-patch-header-mode-${index}`}
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          // Auto clears the pin - the engine's checksum-driven decision applies again.
+          void patchStack.setPatchOption?.(index, {
+            header: next === "keep" || next === "strip" ? next : undefined,
+          });
+        }}
+        title="Strip patches the headerless bytes when the patch was authored against a ROM without its copier header. Whether the header appears on the final output is the output card's separate ROM header setting."
+        value={item.headerChoice ?? "auto"}
+      >
+        <option value="auto">{autoLabel}</option>
+        <option value="keep">Keep {headerNoun}</option>
+        <option value="strip">Strip {headerNoun} before patching</option>
+      </select>
+    </div>
+  );
+};
+
+/** An editable expected-check field (user-specified, not built into the patch):
+ * commits on blur, removable via the trailing X. */
+const EditableCheckRow = ({
+  focusOnMount,
+  field,
+  id,
+  invalid,
+  onCommit,
+  onRemove,
+  value,
+}: {
+  /** A field just opened via "Add check": move focus into it (a user-gesture
+   * focus handoff, not a page-load autofocus). */
+  focusOnMount?: boolean;
+  field: CheckField;
+  id: string;
+  invalid: boolean;
+  onCommit: (raw: string) => void;
+  onRemove: () => void;
+  value: string;
+}) => (
+  <div className="verification-row" key={`${id}:${value}`}>
+    <label className="ofld-l" htmlFor={id}>
+      {CHECK_LABELS[field]}
+    </label>
+    <input
+      aria-invalid={invalid || undefined}
+      className="input mono popt-input"
+      defaultValue={value}
+      id={id}
+      onBlur={(event) => onCommit(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+      ref={focusOnMount ? (element) => element?.focus() : undefined}
+      spellCheck={false}
+      title={
+        invalid
+          ? field === "bytes"
+            ? "Expected a whole number of bytes"
+            : `Expected ${CHECK_HEX_LENGTHS[field as CheckAlgorithm]} hex characters`
+          : value || undefined
+      }
+      type="text"
+    />
+    <button aria-label={`Remove ${CHECK_LABELS[field]} check`} className="ck-remove" onClick={onRemove} type="button">
+      <X aria-hidden="true" />
+    </button>
+  </div>
+);
+
+/**
+ * The one Checks drawer every patch card carries: the requirements built into
+ * the patch file (read-only rows), the user's own expected checks (editable,
+ * addable per side), and the ROM-header handling when the target has a
+ * strippable header. The dry-run verdict + timing ride the drawer header.
+ * User checks always export with the bundle; on the chain endpoints they also
+ * gate the live run (input checks verify the ROM, output checks the result).
+ */
+const PatchChecksDrawer = ({
   disabled,
-  editMode,
   index,
   isChainInput,
   isChainOutput,
@@ -287,16 +341,11 @@ const PatchOptions = ({
   onMetaChange,
   outputCheckHint,
   patchStack,
-  showVerdict,
 }: {
   /** The patch is toggled out of the run: verification state is not part of the
    * plan, so the header verdict/timing readouts stay off - the drawer remains
-   * editable for bundle authors. */
+   * editable. */
   disabled?: boolean;
-  /** Bundle Author mode: the authoring fields (name/description + editable check
-   * grids) render only inside the editor - the plain apply view keeps the
-   * drawer to its functional options. */
-  editMode?: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
@@ -307,171 +356,149 @@ const PatchOptions = ({
   item: PatchStackItemState;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
-  /** Chain-output card of a bundle with optional patches: remind the author the
+  /** Chain-output card of a run with optional/skipped patches: remind that the
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
   patchStack: PatcherStackController;
-  /** Carry the dry-run verdict/timing on this header - off when the card renders
-   * a Checks drawer, which owns the verdict instead. */
-  showVerdict?: boolean;
 }) => {
   const setOption = patchStack.setPatchOption;
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
-  const stripHeaderChecked = item.headerChoice === "strip";
-  const headerLabel = item.headerStrippedBytes
-    ? `Strip ${item.headerStrippedBytes}-byte ROM header before patching`
-    : "Strip ROM header before patching";
-  const embeddedInput = getEmbeddedChecks(item, "input");
-  const embeddedOutput = getEmbeddedChecks(item, "output");
-  const commitCheck = (side: "input" | "output", algorithm: (typeof CHECK_ALGORITHMS)[number], raw: string) => {
-    const value = normalizeCheckInput(raw);
-    const fieldKey = `${side}:${algorithm}`;
-    const invalid = !!value && !isValidCheckValue(algorithm, value);
+  // Fields opened via "Add check" that have no committed value yet.
+  const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
+  const { inputRows, outputRows } = getPatchVerificationRows(item);
+  const setInvalid = (fieldKey: string, invalid: boolean) =>
     setInvalidChecks((previous) => (previous[fieldKey] === invalid ? previous : { ...previous, [fieldKey]: invalid }));
-    if (invalid) return;
-    const field = side === "input" ? "inputChecks" : "outputChecks";
-    const checksums = { ...(meta?.[field]?.checksums || {}), [algorithm]: value };
-    onMetaChange?.({ [field]: { ...(meta?.[field] || {}), checksums } });
-    // A valid check on a chain endpoint feeds the run's validation option so the
-    // ROM re-verifies immediately (card coloring) and the apply enforces it.
+  // A valid check on a chain endpoint feeds the run's validation option so the
+  // ROM re-verifies immediately (card coloring) and the apply enforces it.
+  const syncEndpointValidation = (side: "input" | "output", checksums: Record<string, string>) => {
     const preferred = checksums.sha1 || checksums.md5 || checksums.crc32 || "";
     if (side === "input" && isChainInput) void setOption?.(index, { validateInputChecksum: preferred });
     if (side === "output" && isChainOutput) void setOption?.(index, { validateOutputChecksum: preferred });
+  };
+  const commitCheck = (side: "input" | "output", algorithm: CheckAlgorithm, raw: string) => {
+    const value = normalizeCheckInput(raw);
+    const invalid = !!value && !isValidCheckValue(algorithm, value);
+    setInvalid(`${side}:${algorithm}`, invalid);
+    if (invalid) return;
+    const field = side === "input" ? "inputChecks" : "outputChecks";
+    const checksums = { ...(meta?.[field]?.checksums || {}) };
+    if (value) checksums[algorithm] = value;
+    else delete checksums[algorithm];
+    onMetaChange?.({ [field]: { ...(meta?.[field] || {}), checksums } });
+    syncEndpointValidation(side, checksums);
   };
   // The bytes field carries the endpoint's exact size into the bundle metadata
   // (inputChecks/outputChecks.size); it is descriptive, not a live run gate.
   const commitSize = (side: "input" | "output", raw: string) => {
     const value = raw.trim();
-    const fieldKey = `${side}:bytes`;
     const invalid = !!value && !/^\d+$/.test(value);
-    setInvalidChecks((previous) => (previous[fieldKey] === invalid ? previous : { ...previous, [fieldKey]: invalid }));
+    setInvalid(`${side}:bytes`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
     onMetaChange?.({ [field]: { ...(meta?.[field] || {}), size: value ? Number(value) : undefined } });
   };
-  // The dry-run verdict rides this drawer's header (pass/fail mark + timing, or a
-  // "Verifying…" readout while the deferred dry-run runs) ONLY when the patch has no
-  // Checks drawer of its own - a patch with real requirements carries the verdict
-  // on that drawer instead.
-  const verifying = !!showVerdict && !disabled && item.validationState === "verifying";
-  const bad = !!showVerdict && !disabled && item.validationState === "invalid";
-  const ok = !!showVerdict && !disabled && item.validationState === "valid";
-  const timing = showVerdict && !disabled ? CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks") : undefined;
-  // Outside the bundle editor a patch without a header choice has no options at
-  // all - skip the drawer instead of rendering an empty body (the card state /
-  // verify bar / fault well already carry the dry-run verdict).
-  if (!(editMode || item.showHeaderOption)) return null;
+  const removeCheck = (side: "input" | "output", field: CheckField) => {
+    setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+    setInvalid(`${side}:${field}`, false);
+    if (field === "bytes") {
+      commitSize(side, "");
+      return;
+    }
+    commitCheck(side, field, "");
+  };
+  const verifying = !disabled && item.validationState === "verifying";
+  const bad = !disabled && item.validationState === "invalid";
+  const ok = !disabled && item.validationState === "valid";
+  const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
+  const hasBuiltIn = !!(inputRows.length || outputRows.length);
+  const sides = (["input", "output"] as const).map((side) => {
+    const builtInRows = side === "input" ? inputRows : outputRows;
+    const embedded = getEmbeddedChecks(item, side);
+    const metaField = side === "input" ? ("inputChecks" as const) : ("outputChecks" as const);
+    const userSize = meta?.[metaField]?.size;
+    const userChecks = meta?.[metaField]?.checksums || {};
+    const userValue = (field: CheckField): string => {
+      if (field === "bytes") return typeof userSize === "number" ? String(userSize) : "";
+      return userChecks[field] || "";
+    };
+    const editableFields = CHECK_FIELDS_PAIRED.filter(
+      (field) => !embedded[field] && (!!userValue(field) || !!draftFields[`${side}:${field}`]),
+    );
+    const addableFields = CHECK_FIELDS_PAIRED.filter((field) => !(embedded[field] || editableFields.includes(field)));
+    return { addableFields, builtInRows, editableFields, side, userValue };
+  });
+  const hasUserChecks = sides.some((entry) => entry.editableFields.length > 0);
+  const compact =
+    !hasUserChecks &&
+    inputRows.length > 0 &&
+    outputRows.length > 0 &&
+    [...inputRows, ...outputRows].every((row) => String(row.value).length < 16);
   return (
-    <Drawer
+    <ChecksumList
       action={ok ? <DryApplySuccess /> : undefined}
-      bodyClassName="optsbody"
-      className="optsblock"
-      label="Options"
-      labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
-      readouts={
-        <>
-          {item.format ? <DrawerReadout>{item.format}</DrawerReadout> : null}
-          {verifying ? (
-            <DrawerReadout muted>Verifying…</DrawerReadout>
-          ) : (
-            <>
-              {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
-              {bad ? (
-                <DrawerMark className="cks-match bad" ok={false} title="Verification failed">
-                  <X aria-hidden="true" />
-                </DrawerMark>
-              ) : null}
-            </>
-          )}
-        </>
-      }
+      bodyClassName={compact ? "ckrows patch-check-columns" : "ckrows patch-checks-body"}
+      defaultOpen={hasBuiltIn || hasUserChecks}
+      label="Checks"
+      match={ok ? undefined : match}
+      timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
+      verifying={verifying}
     >
-      {editMode ? (
-        <>
-          <div className="verification-pair">
-            {(["input", "output"] as const).map((side) => {
-              const embedded = side === "input" ? embeddedInput : embeddedOutput;
-              const field = side === "input" ? "inputChecks" : "outputChecks";
-              return (
-                <div className="patch-check-group" key={side}>
-                  <div className="ck-group-head">
-                    <span>{side === "input" ? "Input checks" : "Output checks"}</span>
-                  </div>
-                  <div className="verification-list ck-fields-paired">
-                    {CHECK_FIELDS_PAIRED.map((checkField) => {
-                      const isBytes = checkField === "bytes";
-                      const builtIn = embedded[checkField];
-                      const metaValue = isBytes
-                        ? typeof meta?.[field]?.size === "number"
-                          ? String(meta?.[field]?.size)
-                          : ""
-                        : meta?.[field]?.checksums?.[checkField] || "";
-                      const value = builtIn || metaValue;
-                      const invalid = !builtIn && !!invalidChecks[`${side}:${checkField}`];
-                      return (
-                        <div className="verification-row" key={`${side}:${checkField}`}>
-                          <label className="ofld-l" htmlFor={`rom-weaver-patch-${side}-${checkField}-${index}`}>
-                            {CHECK_LABELS[checkField]}
-                            {builtIn ? <span className="built-in">Built in</span> : null}
-                          </label>
-                          <input
-                            aria-invalid={invalid || undefined}
-                            className="input mono popt-input"
-                            defaultValue={value}
-                            id={`rom-weaver-patch-${side}-${checkField}-${index}`}
-                            key={`${side}:${checkField}:${item.key ?? index}:${value}`}
-                            onBlur={
-                              builtIn
-                                ? undefined
-                                : (event) =>
-                                    isBytes
-                                      ? commitSize(side, event.currentTarget.value)
-                                      : commitCheck(side, checkField, event.currentTarget.value)
-                            }
-                            readOnly={!!builtIn}
-                            spellCheck={false}
-                            title={
-                              invalid
-                                ? isBytes
-                                  ? "Expected a whole number of bytes"
-                                  : `Expected ${CHECK_HEX_LENGTHS[checkField]} hex characters`
-                                : value || undefined
-                            }
-                            type="text"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+      {sides.map(({ addableFields, builtInRows, editableFields, side, userValue }) => (
+        <div className="ck-group" key={side}>
+          <div className="ck-group-head">
+            <span>{side === "input" ? "Input" : "Output"}</span>
           </div>
-          {outputCheckHint ? (
-            <p className="patch-off-note" id={`rom-weaver-patch-output-check-hint-${index}`}>
-              <TriangleAlert aria-hidden="true" />
-              <span>The expected output is verified only when every patch in the bundle is applied.</span>
-            </p>
-          ) : null}
-        </>
-      ) : null}
-      {item.showHeaderOption ? (
-        <div className="optschecks">
-          <label
-            className="popt"
-            title="Patch the headerless bytes when this patch was authored against a ROM without its copier header. Whether the header appears on the final output is the output card's separate ROM header setting (auto keeps emulator-required headers, drops copier junk)."
-          >
-            <input
-              checked={stripHeaderChecked}
-              disabled={item.optionsDisabled}
-              onChange={(event) => setOption?.(index, { header: event.currentTarget.checked ? "strip" : "keep" })}
-              type="checkbox"
+          {builtInRows.map((row) => (
+            <ChecksumRow key={`${side}:${row.label}:${row.value}`} label={row.label} value={row.value} />
+          ))}
+          {editableFields.map((field) => (
+            <EditableCheckRow
+              field={field}
+              focusOnMount={!!draftFields[`${side}:${field}`] && !userValue(field)}
+              id={`rom-weaver-patch-${side}-${field}-${index}`}
+              invalid={!!invalidChecks[`${side}:${field}`]}
+              key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
+              onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
+              onRemove={() => removeCheck(side, field)}
+              value={userValue(field)}
             />
-            <span>{headerLabel}</span>
-          </label>
+          ))}
+          {onMetaChange && addableFields.length ? (
+            <label className="ck-add">
+              <span className="sr-only">Add {side} check</span>
+              <select
+                className="select ck-add-select"
+                id={`rom-weaver-patch-${side}-add-check-${index}`}
+                onChange={(event) => {
+                  const field = event.currentTarget.value as CheckField;
+                  event.currentTarget.value = "";
+                  if (field) setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: true }));
+                }}
+                value=""
+              >
+                <option disabled value="">
+                  + Add check
+                </option>
+                {addableFields.map((field) => (
+                  <option key={field} value={field}>
+                    {CHECK_LABELS[field]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {side === "input" && item.showHeaderOption ? (
+            <PatchHeaderModeRow index={index} item={item} patchStack={patchStack} />
+          ) : null}
         </div>
+      ))}
+      {outputCheckHint ? (
+        <p className="patch-off-note" id={`rom-weaver-patch-output-check-hint-${index}`}>
+          <TriangleAlert aria-hidden="true" />
+          <span>The expected output is verified only when every patch in the bundle is applied.</span>
+        </p>
       ) : null}
-    </Drawer>
+    </ChecksumList>
   );
 };
 
@@ -650,8 +677,212 @@ const PatchEnableToggle = ({
   </label>
 );
 
+/** The pencil next to the patch name: toggles the card's inline name +
+ * description editors. Shows a check while editing (commit happens on each
+ * field's blur; the toggle just closes the editors). */
+const PatchMetaEditToggle = ({
+  editing,
+  index,
+  onToggle,
+}: {
+  editing: boolean;
+  index: number;
+  onToggle: () => void;
+}) => (
+  <button
+    aria-expanded={editing}
+    aria-label={editing ? "Done editing patch name and description" : "Edit patch name and description"}
+    className={editing ? "nm-edit is-editing" : "nm-edit"}
+    id={`rom-weaver-patch-meta-edit-${index}`}
+    onClick={onToggle}
+    title={editing ? "Done" : "Edit name & description"}
+    type="button"
+  >
+    {editing ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+  </button>
+);
+
+/** One patch card: staging presentation, pencil-editable name/description,
+ * the Extract drawer, and the unified Checks drawer (which owns the dry-run
+ * verdict). */
+const PatchCard = ({
+  canReorder,
+  handleProps,
+  index,
+  internalDescription,
+  isChainInput,
+  isChainOutput,
+  isDisabled,
+  item,
+  meta,
+  onMetaChange,
+  onReorder,
+  onTogglePatch,
+  outputCheckHint,
+  overrideAvailable,
+  patchStack,
+  position,
+  rowProps,
+  total,
+}: {
+  canReorder: boolean;
+  handleProps: ReorderHandleProps;
+  index: number;
+  /** Embedded description fallback (first patch only); edited metadata wins. */
+  internalDescription?: string;
+  isChainInput: boolean;
+  isChainOutput: boolean;
+  isDisabled: boolean;
+  item: PatchStackItemState;
+  meta?: BundlePatchMeta;
+  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  onReorder: (from: number, to: number) => void;
+  onTogglePatch?: (index: number) => void;
+  outputCheckHint?: boolean;
+  overrideAvailable?: boolean;
+  patchStack: PatcherStackController;
+  position: number;
+  rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
+  total: number;
+}) => {
+  // Pencil edit state: the name and description editors open/close together.
+  const [metaEditing, setMetaEditing] = useState(false);
+  const editing = metaEditing && !!onMetaChange;
+  const description = meta?.description || internalDescription || "";
+  // Mirrors the ROM card: the resolved card structure (collapsed Extract +
+  // Checks drawers) stays mounted through staging - a determinate bar on the
+  // top edge + a "Reading…" status in the meta line carry progress - so the
+  // stack doesn't jump when the result lands.
+  // The bar stays full once finished. Staging a patch is extract
+  // (if archived) + parse - the patch is never hashed - so this reads "Reading",
+  // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
+  const staging = !!item.progress;
+  const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
+  const percent = stagePercent(stagingProps);
+  // A patch pulled from a container archive extracts before it is parsed; the
+  // runtime labels that stage "extracting …". (Patch rows have no validationPhase,
+  // so the label is the available signal here - unlike ROM inputs.)
+  const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
+  const disabledClass = isDisabled ? "is-disabled" : undefined;
+  // A disabled patch is out of the run: its (stale) verification verdict
+  // stays off the card; the Checks drawer stays editable (metadata only).
+  let verdict: "bad" | "ok" | undefined;
+  if (item.validationState === "invalid") verdict = "bad";
+  else if (item.validationState === "valid") verdict = "ok";
+  if (isDisabled) verdict = undefined;
+  // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
+  // the card already shows its full body (Extract + Checks). A top-edge bar carries
+  // that async work - a later phase following the "Reading…" staging bar.
+  const verifying = !(staging || isDisabled) && item.validationState === "verifying";
+  return (
+    <FileCard
+      {...rowProps}
+      className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
+      description={
+        editing && onMetaChange ? (
+          <PatchMetaFields index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
+        ) : description ? (
+          <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
+            {description}
+          </p>
+        ) : undefined
+      }
+      handle={
+        <PatchDragHandle
+          disabled={!canReorder}
+          handleProps={handleProps}
+          index={index}
+          onReorder={onReorder}
+          position={position}
+          total={total}
+        />
+      }
+      meta={
+        <>
+          {onTogglePatch ? (
+            <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
+          ) : null}
+          {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
+          {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
+          {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}
+          {staging ? (
+            <StageStatus
+              id={`rom-weaver-progress-patch-${index}`}
+              label={stageStatusLabel("Reading", patchExtracting)}
+              percent={percent}
+            />
+          ) : null}
+        </>
+      }
+      name={
+        <ExtractName
+          displayName={meta?.name}
+          fileName={item.fileName}
+          fileSize={item.fileSize}
+          // The first archive-path entry is the source archive itself (shown
+          // in the Extract drawer / picker); the rest is the folder path
+          // within it, surfaced inline on the name.
+          folderPath={
+            (item.archivePathEntries || [])
+              .slice(1)
+              .map((entry) => entry.fileName)
+              .filter(Boolean)
+              .join(" › ") || undefined
+          }
+          legacyFileClassName="rom-weaver-patch-stack-file"
+          nameActions={
+            onMetaChange && !staging ? (
+              <PatchMetaEditToggle editing={editing} index={index} onToggle={() => setMetaEditing(!metaEditing)} />
+            ) : undefined
+          }
+          nameEditor={
+            editing && onMetaChange ? (
+              <PatchNameInline index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
+            ) : undefined
+          }
+          parentCompressions={item.archivePathEntries}
+        />
+      }
+      onRemove={() => patchStack.removeItem(index)}
+      patch
+      removeLabel="Remove patch"
+      stageBar={stageBarValue(staging, percent)}
+      state={staging ? undefined : verdict}
+      target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
+      verifyBar={verifying}
+    >
+      <div className="patch-body">
+        <div className="patch-body-inner">
+          {verdict === "bad" ? (
+            <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
+          ) : null}
+          {isDisabled ? null : (
+            <ExtractDrawer
+              always={!!meta || (staging && patchExtracting)}
+              fileName={item.fileName}
+              fileSize={item.fileSize}
+              parentCompressions={item.archivePathEntries}
+              timing={TIMING_LABEL(item.decompressionTimeMs)}
+            />
+          )}
+          <PatchChecksDrawer
+            disabled={isDisabled}
+            index={index}
+            isChainInput={isChainInput}
+            isChainOutput={isChainOutput}
+            item={item}
+            meta={meta}
+            onMetaChange={onMetaChange}
+            outputCheckHint={outputCheckHint}
+            patchStack={patchStack}
+          />
+        </div>
+      </div>
+    </FileCard>
+  );
+};
+
 const ApplyPatchListStep = ({
-  bundleAuthorMode,
   bundleOutputCheckHint,
   disabledFlags,
   emptyState,
@@ -668,9 +899,7 @@ const ApplyPatchListStep = ({
   ui,
   woven,
 }: {
-  /** Bundle Author mode: reveal the per-patch authoring fields. */
-  bundleAuthorMode?: boolean;
-  /** The bundle has optional patches: hint on the chain-output card that its
+  /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   bundleOutputCheckHint?: boolean;
   disabledFlags?: readonly boolean[];
@@ -750,165 +979,29 @@ const ApplyPatchListStep = ({
         id="rom-weaver-list-patch-stack"
         ref={reorderList.containerRef}
       >
-        {patches.map((item, index) => {
-          const description = bundleMeta?.[index]?.description || (index === 0 ? internalDescription : "");
-          // Mirrors the ROM card: the resolved card structure (collapsed Extract +
-          // Options drawers) stays mounted through staging - a determinate bar on the
-          // top edge + a "Reading…" status in the meta line carry progress - so the
-          // stack doesn't jump when the result lands.
-          // The bar stays full once finished. Staging a patch is extract
-          // (if archived) + parse - the patch is never hashed - so this reads "Reading",
-          // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
-          const staging = !!item.progress;
-          const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
-          const percent = stagePercent(stagingProps);
-          // A patch pulled from a container archive extracts before it is parsed; the
-          // runtime labels that stage "extracting …". (Patch rows have no validationPhase,
-          // so the label is the available signal here - unlike ROM inputs.)
-          const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
-          const rowProps = reorderList.rowProps(index);
-          const isDisabled = !!disabledFlags?.[index];
-          const disabledClass = isDisabled ? "is-disabled" : undefined;
-          // A disabled patch is out of the run: its (stale) verification verdict
-          // stays off the card, and the body keeps only the Options drawer so
-          // bundle authors can still edit name/description/checks.
-          let verdict: "bad" | "ok" | undefined;
-          if (item.validationState === "invalid") verdict = "bad";
-          else if (item.validationState === "valid") verdict = "ok";
-          if (isDisabled) verdict = undefined;
-          // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
-          // the card already shows its full body (Extract + Options). A top-edge bar carries
-          // that async work - a later phase following the "Reading…" staging bar.
-          const verifying = !(staging || isDisabled) && item.validationState === "verifying";
-          // A read-only Checks drawer appears once the patch declares real requirements
-          // (embedded hashes, sizes, validation notes) - it owns the dry-run verdict, so
-          // the Options header only carries it for requirement-less patches. Disabled
-          // patches keep just the Options drawer.
-          const checksRows = getPatchVerificationRows(item);
-          const hasChecksDrawer = !isDisabled && !!(checksRows.inputRows.length || checksRows.outputRows.length);
-          return (
-            <FileCard
-              key={item.key ?? `${index}:${item.fileName}`}
-              {...rowProps}
-              className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
-              description={
-                description && !bundleAuthorMode ? (
-                  <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
-                    {description}
-                  </p>
-                ) : undefined
-              }
-              handle={
-                <PatchDragHandle
-                  disabled={!canReorder}
-                  handleProps={reorderList.handleProps(index)}
-                  index={index}
-                  onReorder={patchStack.reorder}
-                  position={reorderList.displayIndex(index) + 1}
-                  total={total}
-                />
-              }
-              meta={
-                <>
-                  {onTogglePatch ? (
-                    <PatchEnableToggle
-                      disabled={!!disabledFlags?.[index]}
-                      fileName={item.fileName}
-                      onToggle={() => onTogglePatch(index)}
-                    />
-                  ) : null}
-                  {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
-                  {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
-                  {bundleMeta?.[index]?.label ? (
-                    <span className="meta-fmt mono">{bundleMeta[index]?.label}</span>
-                  ) : null}
-                  {staging ? (
-                    <StageStatus
-                      id={`rom-weaver-progress-patch-${index}`}
-                      label={stageStatusLabel("Reading", patchExtracting)}
-                      percent={percent}
-                    />
-                  ) : null}
-                </>
-              }
-              name={
-                <ExtractName
-                  displayName={bundleAuthorMode ? undefined : bundleMeta?.[index]?.name}
-                  fileName={item.fileName}
-                  fileSize={item.fileSize}
-                  // The first archive-path entry is the source archive itself (shown
-                  // in the Extract drawer / picker); the rest is the folder path
-                  // within it, surfaced inline on the name.
-                  folderPath={
-                    (item.archivePathEntries || [])
-                      .slice(1)
-                      .map((entry) => entry.fileName)
-                      .filter(Boolean)
-                      .join(" › ") || undefined
-                  }
-                  legacyFileClassName="rom-weaver-patch-stack-file"
-                  nameEditor={
-                    bundleAuthorMode && onBundleMetaChange ? (
-                      <PatchNameInline
-                        index={index}
-                        item={item}
-                        meta={bundleMeta?.[index]}
-                        onMetaChange={(updates) => onBundleMetaChange(index, updates)}
-                      />
-                    ) : undefined
-                  }
-                  parentCompressions={item.archivePathEntries}
-                />
-              }
-              onRemove={() => patchStack.removeItem(index)}
-              patch
-              removeLabel="Remove patch"
-              stageBar={stageBarValue(staging, percent)}
-              state={staging ? undefined : verdict}
-              target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
-              verifyBar={verifying}
-            >
-              <div className="patch-body">
-                <div className="patch-body-inner">
-                  {verdict === "bad" ? (
-                    <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
-                  ) : null}
-                  {bundleAuthorMode && onBundleMetaChange ? (
-                    <PatchMetaFields
-                      index={index}
-                      item={item}
-                      meta={bundleMeta?.[index]}
-                      onMetaChange={(updates) => onBundleMetaChange(index, updates)}
-                    />
-                  ) : null}
-                  {isDisabled ? null : (
-                    <ExtractDrawer
-                      always={!!bundleMeta?.[index] || (staging && patchExtracting)}
-                      fileName={item.fileName}
-                      fileSize={item.fileSize}
-                      parentCompressions={item.archivePathEntries}
-                      timing={TIMING_LABEL(item.decompressionTimeMs)}
-                    />
-                  )}
-                  <PatchOptions
-                    disabled={isDisabled}
-                    editMode={bundleAuthorMode}
-                    index={index}
-                    isChainInput={index === chainInputIndex}
-                    isChainOutput={index === chainOutputIndex}
-                    item={item}
-                    meta={bundleMeta?.[index]}
-                    onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
-                    outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
-                    patchStack={patchStack}
-                    showVerdict={!hasChecksDrawer}
-                  />
-                  {hasChecksDrawer ? <PatchInfo item={item} /> : null}
-                </div>
-              </div>
-            </FileCard>
-          );
-        })}
+        {patches.map((item, index) => (
+          <PatchCard
+            canReorder={canReorder}
+            handleProps={reorderList.handleProps(index)}
+            index={index}
+            internalDescription={index === 0 ? internalDescription : undefined}
+            isChainInput={index === chainInputIndex}
+            isChainOutput={index === chainOutputIndex}
+            isDisabled={!!disabledFlags?.[index]}
+            item={item}
+            key={item.key ?? `${index}:${item.fileName}`}
+            meta={bundleMeta?.[index]}
+            onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+            onReorder={patchStack.reorder}
+            onTogglePatch={onTogglePatch}
+            outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
+            overrideAvailable={overrideAvailable}
+            patchStack={patchStack}
+            position={reorderList.displayIndex(index) + 1}
+            rowProps={reorderList.rowProps(index)}
+            total={total}
+          />
+        ))}
       </div>
       {total === 0 &&
       emptyState &&

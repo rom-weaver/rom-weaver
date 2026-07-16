@@ -85,12 +85,16 @@ type PatchStackItemState = {
   targetValue?: string;
   /** Detected patch format (e.g. "PPF", "IPS"); drives format-specific options. */
   format?: string;
-  /** Whether the header choice should be shown (strippable header + checksums undecided). */
+  /** Whether the header choice should be shown (the target ROM has a strippable header). */
   showHeaderOption?: boolean;
-  /** Current header handling override; `undefined` means the default (keep). */
+  /** Current header pin; `undefined` means Auto (the checksum-driven decision). */
   headerChoice?: "keep" | "strip";
   /** Detected copier-header size in bytes, for the header option label. */
   headerStrippedBytes?: number;
+  /** What Auto resolves to when it decided (checksum-proven), for the Auto label. */
+  headerAutoMode?: "keep" | "strip";
+  /** Whether the checksum preflight proved the Auto mode (vs the ambiguous keep default). */
+  headerAutoDecided?: boolean;
   /** User-pasted checksum (raw hex) used to validate the target input before apply. */
   validateInputChecksum?: string;
   /** User-pasted checksum (raw hex) used to validate the patched output after apply. */

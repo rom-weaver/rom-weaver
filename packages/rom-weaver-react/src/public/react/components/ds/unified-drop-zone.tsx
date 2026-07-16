@@ -40,7 +40,7 @@ type UnifiedDropZoneProps = {
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
-  /** Right-aligned control sharing the 0x01 header row (e.g. the bundle-author toggle). */
+  /** Right-aligned control sharing the 0x01 header row. */
   headerExtra?: ReactNode;
   /** Fires at the drop gesture, before files enter routing or staging. */
   onDropStart?: () => void;

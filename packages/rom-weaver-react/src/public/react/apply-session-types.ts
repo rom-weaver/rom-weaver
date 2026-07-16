@@ -52,11 +52,15 @@ type StagedInputInfo = {
   format?: string;
   validateInputChecksum?: string;
   validateOutputChecksum?: string;
-  /** User header override from the Options drawer (`undefined` = default keep). */
+  /** User header pin from the Checks drawer (`undefined` = Auto). */
   headerChoice?: "keep" | "strip";
   /** Detected copier-header size in bytes, for labeling the header option. */
   headerStrippedBytes?: number;
-  /** Show the header choice: strippable header present and checksums didn't decide. */
+  /** What Auto resolves to when it decided (checksum-proven), for the Auto label. */
+  headerAutoMode?: "keep" | "strip";
+  /** Whether the checksum preflight proved the Auto mode (vs the ambiguous keep default). */
+  headerAutoDecided?: boolean;
+  /** Show the header choice: the target ROM has a strippable header. */
   showHeaderOption?: boolean;
 };
 
