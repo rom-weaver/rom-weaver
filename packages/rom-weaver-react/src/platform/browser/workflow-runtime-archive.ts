@@ -1,11 +1,11 @@
 import { isRomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
   runRomWeaverProbeWorker,
-  selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import {
   createCompressionExtractResult,
@@ -20,7 +20,6 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { forwardArchiveProgress } from "../shared/workflow-runtime-progress.ts";
 import { stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
 import {
@@ -212,9 +211,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       const levelProfile = toLevelProfile(level);
       const codecEntries = withCodecLevel(codec, level);
       const inputTotalBytes = await sumBrowserVfsPathBytes(staged.inputPaths);
-      const fallbackOutputPathSource = staged.stagedEntries[0]?.filePath || `${WORKER_OPFS_MOUNTPOINT}/archive.bin`;
       const outputFileName = workflowInput.options?.outputName || (format === "zip" ? "archive.zip" : "archive.7z");
-      const outputPath = selectRomWeaverOutputPath(fallbackOutputPathSource, outputFileName, staged.inputPaths);
       emitBrowserWorkflowTrace(trace, "archive create names resolved", {
         codec,
         entryFileNames: normalizeCompressionWorkerEntries(workflowInput.entries).map(
@@ -224,7 +221,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         inputPaths: staged.inputPaths,
         inputTotalBytes,
         outputFileName,
-        outputPath,
       });
       return {
         output: await workerIo.createWorkerOutput(
@@ -238,7 +234,6 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               levelProfile,
               logLevel: workflowInput.options?.logLevel,
               outputFileName,
-              outputPath,
               signal: workflowInput.options?.signal,
               totalBytes: inputTotalBytes,
               workerThreads: workflowInput.options?.workerThreads,
@@ -264,12 +259,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
     });
     try {
       if (workflowInput.descendSinglePayload) {
-        const outDirPath = WORKER_OPFS_MOUNTPOINT;
+        const outputScope = createRomWeaverOutputScope();
+        const outDirPath = outputScope.rootPath;
         const selectedEntries = Array.isArray(workflowInput.entries)
           ? workflowInput.entries.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
           : [];
-        const cleanupExtractedFiles = async (filePaths: string[]) => {
-          await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
+        const cleanupFailure = async (error: unknown): Promise<never> => {
+          await outputScope.cleanup().catch(() => undefined);
+          throw error;
         };
         const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
           ? workflowInput.options.extractChecksumAlgorithms
@@ -311,7 +308,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           },
           forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
           workflowInput.options?.onLog,
-        );
+        ).catch(cleanupFailure);
         // A split extraction fans a multi-track CD into per-track bins named "(Track N)"; the primary
         // ("Track 1") is rebased onto the source stem below. Ingest does not tag these per-track bins
         // with a disc_format, so detect the fan-out by counting the non-cue data leaves - only a split
@@ -330,11 +327,17 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         // Patch intent: ingest surfaces the descended patch leaf in `patches` (no checksums/disc
         // structure); map it directly. ROM intent: map the `assets` leaves with full disc grouping.
         if (workflowInput.options?.patchFilter === true) {
+          const outputCleanups = await outputScope
+            .createOutputCleanups(
+              extracted.patches.map((patch) => patch.leafPath),
+              (filePath) => browserVfs.remove(filePath),
+            )
+            .catch(cleanupFailure);
           const patchOutputs = await Promise.all(
-            extracted.patches.map((patch) =>
+            extracted.patches.map((patch, index) =>
               workerIo.createWorkerOutput(
                 {
-                  cleanup: () => cleanupExtractedFiles([patch.leafPath]),
+                  cleanup: outputCleanups[index],
                   fileName: patch.fileName,
                   filePath: patch.leafPath,
                   size: patch.sizeBytes,
@@ -343,7 +346,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 "archive descend extract worker did not return browser output",
               ),
             ),
-          );
+          ).catch(cleanupFailure);
           return createCompressionExtractResult(patchOutputs);
         }
         const primaryDataEntry = extracted.assets.find((entry) => {
@@ -351,8 +354,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           const entryName = entry.fileName || getPathBaseName(entry.path, entry.path);
           return entryKind !== "cue" && !isCueEntryName(entryName);
         });
+        const outputCleanups = await outputScope
+          .createOutputCleanups(
+            extracted.assets.map((entry) => entry.path),
+            (filePath) => browserVfs.remove(filePath),
+          )
+          .catch(cleanupFailure);
         const descendOutputs = await Promise.all(
-          extracted.assets.map((entry) => {
+          extracted.assets.map((entry, index) => {
             const extractedFileName = entry.fileName || getPathBaseName(entry.path, entry.path);
             const normalizedFileName = isRomSpecificCompressionFormat(normalizedFormat)
               ? normalizeRomSpecificEntryNameForSource(extractedFileName, stagedSourceFileName, sourceFileName)
@@ -368,7 +377,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 // (which omitted sheet checksums entirely) rather than surfacing an empty `{}`.
                 checksums: Object.keys(entry.checksums).length ? entry.checksums : undefined,
                 checksumVariants: entry.checksumVariants.length ? entry.checksumVariants : undefined,
-                cleanup: () => cleanupExtractedFiles([entry.path]),
+                cleanup: outputCleanups[index],
                 // Disc structure folded in by Rust so the host groups + renders a disc without
                 // re-parsing the sheet (see `attach_disc_group_details`).
                 cueText: entry.cueText,
@@ -387,23 +396,21 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               "archive descend extract worker did not return browser output",
             );
           }),
-        );
+        ).catch(cleanupFailure);
         return createCompressionExtractResult(descendOutputs);
       }
-      const outputs = [];
+      const outputs: Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>[] = [];
       for (const entryName of workflowInput.entries) {
-        const outDirPath = WORKER_OPFS_MOUNTPOINT;
-        const cleanupExtractedFiles = async (filePaths: string[]) => {
-          await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
-        };
-        const outputPathCandidates = filterOutputCandidatesAwayFromSource(
-          getBrowserExtractOutputPathCandidates(outDirPath, entryName),
-          archive.filePath,
-        );
-        if (!outputPathCandidates.length) {
-          throw new Error(`Browser extract output path conflicts with the active input: ${entryName}`);
-        }
+        const outputScope = createRomWeaverOutputScope();
         try {
+          const outDirPath = outputScope.rootPath;
+          const outputPathCandidates = filterOutputCandidatesAwayFromSource(
+            getBrowserExtractOutputPathCandidates(outDirPath, entryName),
+            archive.filePath,
+          );
+          if (!outputPathCandidates.length) {
+            throw new Error(`Browser extract output path conflicts with the active input: ${entryName}`);
+          }
           const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
             ? workflowInput.options.extractChecksumAlgorithms
                 .map((algorithm) =>
@@ -476,18 +483,21 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               `Archive entry was not extracted: ${entryName} (emitted: ${emittedNames.join(", ") || "none"})`,
             );
           };
-          const createOutput = (matched: {
-            checksums?: Record<string, string>;
-            discFormat?: string;
-            fileName: string;
-            path: string;
-            platform?: string;
-            sizeBytes?: number;
-          }) =>
+          const createOutput = (
+            matched: {
+              checksums?: Record<string, string>;
+              discFormat?: string;
+              fileName: string;
+              path: string;
+              platform?: string;
+              sizeBytes?: number;
+            },
+            cleanup: () => Promise<void>,
+          ) =>
             workerIo.createWorkerOutput(
               {
                 checksums: matched.checksums,
-                cleanup: () => cleanupExtractedFiles([matched.path]),
+                cleanup,
                 fileName: entryName,
                 filePath: matched.path,
                 romType: romTypeFromEmittedFile(matched),
@@ -499,9 +509,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
 
           const extracted = await runExtractWithStorageContext();
           const matched = await selectMatchedOutput(extracted);
-          outputs.push(await createOutput(matched));
+          const [cleanup] = await outputScope.createOutputCleanups([matched.path], (filePath) =>
+            browserVfs.remove(filePath),
+          );
+          if (!cleanup) throw new Error(`Archive entry cleanup was not created: ${entryName}`);
+          outputs.push(await createOutput(matched, cleanup));
         } catch (error) {
-          await cleanupExtractedFiles(outputPathCandidates).catch(() => undefined);
+          await outputScope.cleanup().catch(() => undefined);
+          await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
           throw error;
         }
       }

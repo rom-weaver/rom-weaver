@@ -1,4 +1,5 @@
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import { assertBrowserBinarySource } from "../../lib/runtime/source-normalization.ts";
 import {
@@ -102,6 +103,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       source,
       trace: { logLevel, onLog },
     });
+    const outputScope = createRomWeaverOutputScope();
     try {
       const result = await invokeRomWeaverIngestWorker(
         {
@@ -111,71 +113,68 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
           ...(typeof splitBin === "boolean" ? { splitBin } : {}),
           knownInputPaths: [staged.filePath],
           logLevel,
-          outDirPath: WORKER_OPFS_MOUNTPOINT,
+          outDirPath: outputScope.rootPath,
           signal,
           sourcePath: staged.filePath,
         },
         onProgress,
         onLog,
       );
+      const extractedAssets = result.assets.filter((asset) => !asset.copiedInPlace);
+      const extractedPatches = result.patches.filter((patch) => patch.leafPath !== staged.filePath);
+      const outputCleanups = await outputScope.createOutputCleanups(
+        [...extractedAssets.map((asset) => asset.path), ...extractedPatches.map((patch) => patch.leafPath)],
+        (filePath) => browserVfs.remove(filePath),
+      );
       const outputs = await Promise.all(
-        result.assets
-          .filter((asset) => !asset.copiedInPlace)
-          .map((asset) =>
-            workerIo.createWorkerOutput(
-              {
-                checksums: asset.checksums,
-                checksumVariants: asset.checksumVariants,
-                cleanup: () =>
-                  browserVfs
-                    .remove(asset.path)
-                    .then(() => undefined)
-                    .catch(() => undefined),
-                ...(asset.cueText ? { cueText: asset.cueText } : {}),
-                ...(asset.discGroupId ? { discGroupId: asset.discGroupId } : {}),
-                // Rebase a split CD's primary track ("Game (Track 1).bin" -> "Game.bin") to match the
-                // descend/extract runtimes, which strip the same suffix; ingest emits the raw name.
-                fileName: asset.trackNumber === 1 ? stripPrimaryChdTrackSuffix(asset.fileName) : asset.fileName,
-                filePath: asset.path,
-                ...(asset.gdiText ? { gdiText: asset.gdiText } : {}),
-                romType: romTypeFromEmittedFile({
-                  discFormat: asset.discFormat,
-                  platform: asset.platform,
-                  recommendedFormat: asset.recommendedFormat,
-                }),
-                size: asset.sizeBytes,
-                ...(typeof asset.trackNumber === "number" ? { trackNumber: asset.trackNumber } : {}),
-              },
-              asset.fileName,
-              "ingest worker did not return browser output",
-            ),
+        extractedAssets.map((asset, index) =>
+          workerIo.createWorkerOutput(
+            {
+              checksums: asset.checksums,
+              checksumVariants: asset.checksumVariants,
+              cleanup: outputCleanups[index],
+              ...(asset.cueText ? { cueText: asset.cueText } : {}),
+              ...(asset.discGroupId ? { discGroupId: asset.discGroupId } : {}),
+              // Rebase a split CD's primary track ("Game (Track 1).bin" -> "Game.bin") to match the
+              // descend/extract runtimes, which strip the same suffix; ingest emits the raw name.
+              fileName: asset.trackNumber === 1 ? stripPrimaryChdTrackSuffix(asset.fileName) : asset.fileName,
+              filePath: asset.path,
+              ...(asset.gdiText ? { gdiText: asset.gdiText } : {}),
+              romType: romTypeFromEmittedFile({
+                discFormat: asset.discFormat,
+                platform: asset.platform,
+                recommendedFormat: asset.recommendedFormat,
+              }),
+              size: asset.sizeBytes,
+              ...(typeof asset.trackNumber === "number" ? { trackNumber: asset.trackNumber } : {}),
+            },
+            asset.fileName,
+            "ingest worker did not return browser output",
           ),
+        ),
       );
       // Adopt each ARCHIVE patch leaf (extracted into the worker OPFS mount) as a path-backed output so
       // the patch-staging path reuses the same PublicOutput→PatchFileInstance bridge. A bare patch's
       // leaf IS the staged source (cleaned up in `finally`), so it is skipped - the caller keeps its
       // own dropped file and only consumes the descriptor's metadata.
       const patchOutputs = await Promise.all(
-        result.patches
-          .filter((patch) => patch.leafPath !== staged.filePath)
-          .map((patch) =>
-            workerIo.createWorkerOutput(
-              {
-                cleanup: () =>
-                  browserVfs
-                    .remove(patch.leafPath)
-                    .then(() => undefined)
-                    .catch(() => undefined),
-                fileName: patch.fileName,
-                filePath: patch.leafPath,
-                size: patch.sizeBytes,
-              },
-              patch.fileName,
-              "ingest worker did not return browser patch output",
-            ),
+        extractedPatches.map((patch, index) =>
+          workerIo.createWorkerOutput(
+            {
+              cleanup: outputCleanups[extractedAssets.length + index],
+              fileName: patch.fileName,
+              filePath: patch.leafPath,
+              size: patch.sizeBytes,
+            },
+            patch.fileName,
+            "ingest worker did not return browser patch output",
           ),
+        ),
       );
       return { outputs, patchOutputs, result };
+    } catch (error) {
+      await outputScope.cleanup().catch(() => undefined);
+      throw error;
     } finally {
       await staged.cleanup().catch(() => undefined);
     }
@@ -226,6 +225,8 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     signal,
   }) => {
     const staged: Array<{ cleanup: () => Promise<void> }> = [];
+    const createdOutputs: Array<{ dispose: () => Promise<void> }> = [];
+    const outputScope = createRomWeaverOutputScope();
     try {
       let romPath: string | undefined;
       if (rom) {
@@ -263,16 +264,19 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
         staged.push(stagedPatch);
         patchPaths.push(stagedPatch.filePath);
       }
-      const outputPath = `${WORKER_OPFS_MOUNTPOINT}/rom-weaver-bundle.json`;
+      const inputPaths = [...(romPath ? [romPath] : []), ...(bundleRomPath ? [bundleRomPath] : []), ...patchPaths];
+      const outputPath = outputScope.selectOutputPath("", "rom-weaver-bundle.json", inputPaths);
       // The bundle name comes from the caller (its extension picks the archive
       // format); only its base name is honored so it stays inside the mount.
       const bundleBaseName = bundleFileName ? getPathBaseName(bundleFileName, "rom-weaver-bundle.zip") : undefined;
-      const bundlePath = bundleBaseName ? `${WORKER_OPFS_MOUNTPOINT}/${bundleBaseName}` : undefined;
+      const bundlePath = bundleBaseName
+        ? outputScope.selectOutputPath("", bundleBaseName, [...inputPaths, outputPath])
+        : undefined;
       const result = await invokeRomWeaverBundleCreateWorker(
         {
           ...(bundlePath ? { bundlePath } : {}),
           ...(bundleRomPath ? { bundleRomPath } : {}),
-          knownInputPaths: [...(romPath ? [romPath] : []), ...patchPaths],
+          knownInputPaths: inputPaths,
           logLevel,
           ...(noBundleRom ? { noBundleRom: true } : {}),
           ...(outputCheck ? { outputCheck } : {}),
@@ -295,21 +299,31 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
         onProgress,
         onLog,
       );
+      const outputCleanups = await outputScope.createOutputCleanups(
+        [result.bundlePath, ...(result.archivePath ? [result.archivePath] : [])],
+        (filePath) => browserVfs.remove(filePath),
+      );
       const bundleOutput = await createRuntimeOutputFromVfs(
         browserVfs,
         result.bundlePath,
         getPathBaseName(result.bundlePath, "rom-weaver-bundle.json"),
-        { cleanup: () => browserVfs.remove(result.bundlePath).catch(() => undefined) },
+        { cleanup: outputCleanups[0] },
       );
+      createdOutputs.push(bundleOutput);
       const archiveOutput = result.archivePath
         ? await createRuntimeOutputFromVfs(
             browserVfs,
             result.archivePath,
             getPathBaseName(result.archivePath, "rom-weaver-bundle.zip"),
-            { cleanup: () => browserVfs.remove(result.archivePath as string).catch(() => undefined) },
+            { cleanup: outputCleanups[1] },
           )
         : undefined;
+      if (archiveOutput) createdOutputs.push(archiveOutput);
       return { ...(archiveOutput ? { archiveOutput } : {}), bundleOutput, result };
+    } catch (error) {
+      await Promise.all(createdOutputs.map((output) => output.dispose().catch(() => undefined)));
+      await outputScope.cleanup().catch(() => undefined);
+      throw error;
     } finally {
       await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
     }

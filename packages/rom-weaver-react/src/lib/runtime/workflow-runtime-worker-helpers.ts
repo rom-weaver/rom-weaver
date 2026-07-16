@@ -1,3 +1,4 @@
+import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { getArchiveEntryArrayBuffer, getArchiveEntryUint8Array } from "./source-normalization.ts";
@@ -39,4 +40,44 @@ const createCompressionExtractResult = (outputs: CompressionExtractResult["outpu
   outputs,
 });
 
-export { attachRomSpecificOutputMetadata, createCompressionExtractResult, normalizeCompressionWorkerEntries };
+const sharesOutputLifetime = (left: PublicOutput, right: PublicOutput): boolean =>
+  left === right ||
+  (!!left.path &&
+    left.path === right.path &&
+    (left.dispose === right.dispose || (!!left.cleanup && left.cleanup === right.cleanup)));
+
+const transferRetainedOutputOwnership = (
+  sourceOutputs: readonly PublicOutput[],
+  retainedOutputs: readonly PublicOutput[],
+): { cleanup: () => Promise<void>; outputs: PublicOutput[] } => {
+  const uniqueSourceOutputs: PublicOutput[] = [];
+  for (const output of sourceOutputs) {
+    if (!uniqueSourceOutputs.some((candidate) => sharesOutputLifetime(output, candidate))) {
+      uniqueSourceOutputs.push(output);
+    }
+  }
+  const cleanup = createCleanupOnce(async () => {
+    await Promise.all(uniqueSourceOutputs.map((output) => output.dispose().catch(() => undefined)));
+  });
+  const hasOmittedOutputs = uniqueSourceOutputs.some(
+    (output) => !retainedOutputs.some((retained) => sharesOutputLifetime(output, retained)),
+  );
+  if (!hasOmittedOutputs) return { cleanup, outputs: [...retainedOutputs] };
+
+  let remainingOwners = retainedOutputs.length;
+  const outputs = retainedOutputs.map((output) => {
+    const release = createCleanupOnce(async () => {
+      remainingOwners -= 1;
+      if (!remainingOwners) await cleanup();
+    });
+    return { ...output, cleanup: release, dispose: release };
+  });
+  return { cleanup, outputs };
+};
+
+export {
+  attachRomSpecificOutputMetadata,
+  createCompressionExtractResult,
+  normalizeCompressionWorkerEntries,
+  transferRetainedOutputOwnership,
+};

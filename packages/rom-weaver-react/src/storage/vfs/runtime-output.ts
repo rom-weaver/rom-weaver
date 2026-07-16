@@ -5,6 +5,7 @@ import { copySourceToWriter } from "../shared/binary/binary-source-utils.ts";
 import { getNamedSource } from "../shared/binary/source-file-utils.ts";
 import { createCleanupOnce } from "../shared/disposal.ts";
 import { joinVfsPath } from "./path.ts";
+import { createVfsPathId } from "./path-id.ts";
 import { isVfsFileRef } from "./source-ref.ts";
 
 const OUTPUT_CHUNK_SIZE = 8 * 1024 * 1024;
@@ -28,8 +29,8 @@ const getOutputFileName = (fileName: string, fallback = "output.bin") => {
   return getPathBaseName(fileName, fallback);
 };
 
-const createRuntimeOutputPath = (rootPath: string, fileName: string, _pathPrefix = "runtime-output") => {
-  return joinVfsPath(rootPath, getOutputFileName(fileName));
+const createRuntimeOutputPath = (rootPath: string, fileName: string, pathPrefix = "runtime-output") => {
+  return joinVfsPath(rootPath, pathPrefix, `${createVfsPathId()}-${getOutputFileName(fileName)}`);
 };
 
 const createOutputPathCleanup =
@@ -70,13 +71,19 @@ const createRuntimeOutputFromBytes = async (
   } = {},
 ): Promise<PublicOutput> => {
   const outputPath = createRuntimeOutputPath(vfs.rootPath, fileName, options.pathPrefix);
-  await vfs.truncate(outputPath, 0);
-  if (bytes.byteLength) await vfs.write(outputPath, bytes, { fileOffset: 0 });
-  return createRuntimeOutputFromVfs(vfs, outputPath, fileName, {
-    cleanup: createOutputPathCleanup(vfs, outputPath, options.cleanup),
-    mediaType: options.mediaType,
-    size: bytes.byteLength,
-  });
+  const cleanup = createOutputPathCleanup(vfs, outputPath, options.cleanup);
+  try {
+    await vfs.truncate(outputPath, 0);
+    if (bytes.byteLength) await vfs.write(outputPath, bytes, { fileOffset: 0 });
+    return await createRuntimeOutputFromVfs(vfs, outputPath, fileName, {
+      cleanup,
+      mediaType: options.mediaType,
+      size: bytes.byteLength,
+    });
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
 };
 
 const createRuntimeOutputFromSource = async (
@@ -99,38 +106,44 @@ const createRuntimeOutputFromSource = async (
     });
   }
   const outputPath = createRuntimeOutputPath(vfs.rootPath, fallbackFileName, options.pathPrefix);
-  await vfs.truncate(outputPath, 0);
-  const size = vfsSource
-    ? await (async () => {
-        const stat = await vfsSource.vfs.stat(vfsSource.path);
-        const total = Math.max(0, Math.floor(stat?.size || 0));
-        const buffer = new Uint8Array(OUTPUT_CHUNK_SIZE);
-        let offset = 0;
-        while (offset < total) {
-          const bytesRead = await vfsSource.vfs.read(vfsSource.path, buffer, {
-            fileOffset: offset,
-            length: Math.min(buffer.byteLength, total - offset),
-          });
-          if (!bytesRead) break;
-          await vfs.write(outputPath, buffer.subarray(0, bytesRead), { fileOffset: offset });
-          offset += bytesRead;
-        }
-        return offset;
-      })()
-    : await copySourceToWriter(
-        source,
-        async (bytes, offset) => {
-          await vfs.write(outputPath, bytes, { fileOffset: offset });
-        },
-        {
-          chunkSize: OUTPUT_CHUNK_SIZE,
-        },
-      );
-  return createRuntimeOutputFromVfs(vfs, outputPath, fallbackFileName, {
-    cleanup: createOutputPathCleanup(vfs, outputPath, options.cleanup),
-    mediaType: options.mediaType,
-    size,
-  });
+  const cleanup = createOutputPathCleanup(vfs, outputPath, options.cleanup);
+  try {
+    await vfs.truncate(outputPath, 0);
+    const size = vfsSource
+      ? await (async () => {
+          const stat = await vfsSource.vfs.stat(vfsSource.path);
+          const total = Math.max(0, Math.floor(stat?.size || 0));
+          const buffer = new Uint8Array(OUTPUT_CHUNK_SIZE);
+          let offset = 0;
+          while (offset < total) {
+            const bytesRead = await vfsSource.vfs.read(vfsSource.path, buffer, {
+              fileOffset: offset,
+              length: Math.min(buffer.byteLength, total - offset),
+            });
+            if (!bytesRead) break;
+            await vfs.write(outputPath, buffer.subarray(0, bytesRead), { fileOffset: offset });
+            offset += bytesRead;
+          }
+          return offset;
+        })()
+      : await copySourceToWriter(
+          source,
+          async (bytes, offset) => {
+            await vfs.write(outputPath, bytes, { fileOffset: offset });
+          },
+          {
+            chunkSize: OUTPUT_CHUNK_SIZE,
+          },
+        );
+    return await createRuntimeOutputFromVfs(vfs, outputPath, fallbackFileName, {
+      cleanup,
+      mediaType: options.mediaType,
+      size,
+    });
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
 };
 
 const readRuntimeOutputBytes = async (
@@ -156,7 +169,17 @@ const readRuntimeOutputBytes = async (
 const readRuntimeOutputBlob = async (
   output: Pick<PublicOutput, "mediaType" | "path" | "size" | "vfs">,
 ): Promise<Blob> => {
+  const nativeFile = await output.vfs.getFile?.(output.path);
+  if (nativeFile && typeof Response === "function" && typeof nativeFile.stream === "function") {
+    // getBlob callers own the returned Blob after output disposal. Stream the OPFS snapshot into
+    // browser-managed Blob storage so no full-size Uint8Array is allocated on the JS heap and removing
+    // the output path cannot invalidate the returned value.
+    const mediaType = output.mediaType || nativeFile.type || "application/octet-stream";
+    const size = Math.max(0, Math.floor(output.size || 0));
+    return new Response(nativeFile.slice(0, size).stream(), { headers: { "content-type": mediaType } }).blob();
+  }
   const bytes = await readRuntimeOutputBytes(output);
+  // Compatibility fallback for VFS implementations that cannot expose a native disk-backed snapshot.
   // readRuntimeOutputBytes returns a freshly-owned (never SAB-backed) array; the Blob ctor snapshots it.
   return new Blob([bytes], {
     type: output.mediaType || "application/octet-stream",

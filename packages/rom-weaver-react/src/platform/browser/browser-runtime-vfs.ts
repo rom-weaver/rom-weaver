@@ -394,23 +394,29 @@ const createBrowserRuntimeVfsIo = ({
       const fileName = result.fileName || result.outputRef?.fileName || result.patchFileName || fallbackFileName;
       const filePath = result.outputRef?.filePath || result.filePath || result.patchFilePath;
       if (filePath) {
+        const resultCleanup = result.cleanup;
         const cleanup = async () => {
-          await Promise.resolve(result.cleanup?.()).catch(() => undefined);
-          await vfs.remove(filePath).catch(() => undefined);
+          if (resultCleanup) await Promise.resolve(resultCleanup()).catch(() => undefined);
+          else await vfs.remove(filePath).catch(() => undefined);
         };
-        const output = await createRuntimeOutputFromVfs(vfs, filePath, fileName, {
-          checksums: result.checksums,
-          cleanup,
-          size: result.outputRef?.size || result.size,
-          timing: result.timing,
-        });
-        if (result.checksumVariants?.length) output.checksumVariants = result.checksumVariants;
-        if (result.romType) output.romType = result.romType;
-        if (result.cueText) output.cueText = result.cueText;
-        if (result.gdiText) output.gdiText = result.gdiText;
-        if (result.discGroupId) output.discGroupId = result.discGroupId;
-        if (typeof result.trackNumber === "number") output.trackNumber = result.trackNumber;
-        return output;
+        try {
+          const output = await createRuntimeOutputFromVfs(vfs, filePath, fileName, {
+            checksums: result.checksums,
+            cleanup,
+            size: result.outputRef?.size || result.size,
+            timing: result.timing,
+          });
+          if (result.checksumVariants?.length) output.checksumVariants = result.checksumVariants;
+          if (result.romType) output.romType = result.romType;
+          if (result.cueText) output.cueText = result.cueText;
+          if (result.gdiText) output.gdiText = result.gdiText;
+          if (result.discGroupId) output.discGroupId = result.discGroupId;
+          if (typeof result.trackNumber === "number") output.trackNumber = result.trackNumber;
+          return output;
+        } catch (error) {
+          await cleanup();
+          throw error;
+        }
       }
       throw new Error(failureMessage || "Worker did not return browser output");
     },

@@ -35,7 +35,7 @@ import { emitTraceLog } from "../logging.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization.ts";
-import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
+import { createCompressionExtractResult, transferRetainedOutputOwnership } from "./workflow-runtime-worker-helpers.ts";
 
 const CUE_FILE_REGEX = /\.cue$/i;
 const LEGACY_ROM_SPECIFIC_CREATE_FIELDS = [
@@ -590,12 +590,13 @@ const createSharedCompressionRuntime = (
     const cueOutput = extracted.outputs.find(isCueOutput) || null;
     const dataOutputs = extracted.outputs.filter((output) => !isCueOutput(output));
     if (dataOutputs.length > 1) {
-      return createCompressionExtractResult([
+      const outputs = [
         ...(cueOutput && cueEntryName
           ? [withOutputFileName(cueOutput, getPathBaseName(cueEntryName, cueEntryName))]
           : []),
         ...dataOutputs,
-      ]);
+      ];
+      return createCompressionExtractResult(transferRetainedOutputOwnership(extracted.outputs, outputs).outputs);
     }
     const outputs = request.entries
       .map((entryName) => {
@@ -614,7 +615,8 @@ const createSharedCompressionRuntime = (
         return output ? withOutputFileName(output, getPathBaseName(entryName, entryName)) : null;
       })
       .filter((output): output is PublicOutput => !!output);
-    return createCompressionExtractResult(outputs.length ? outputs : extracted.outputs);
+    const retainedOutputs = outputs.length ? outputs : extracted.outputs;
+    return createCompressionExtractResult(transferRetainedOutputOwnership(extracted.outputs, retainedOutputs).outputs);
   };
   const extractSingleOutputRomSpecific = async (
     registration: RomSpecificCompressionFormatRegistration,

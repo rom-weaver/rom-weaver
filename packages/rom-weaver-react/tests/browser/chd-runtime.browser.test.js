@@ -9,6 +9,8 @@ const loadFixtureBytes = async (filePath) => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
+const parentPath = (filePath) => filePath.replace(/\/[^/]+$/, "");
+
 const clearOpfsRuntimeBuckets = async () => {
   if (!navigator.storage?.getDirectory) return;
   const root = await navigator.storage.getDirectory();
@@ -164,6 +166,16 @@ test("rom-weaver runtime extracts a CHD staged through browser OPFS", async () =
       expect(binOutput.checksums?.sha1).toMatch(/^[0-9a-f]{40}$/i);
     }
     expect(progressEvents.length).toBeGreaterThan(0);
+    expect(outputs.every((entry) => /^\/work\/operations\/[^/]+\//.test(entry.path))).toBe(true);
+    const outputScopes = new Set(outputs.map((entry) => parentPath(entry.path)));
+    expect(outputScopes.size).toBe(1);
+    if (!cueOutput) throw new Error("CHD extraction did not return its cue output");
+    await cueOutput.dispose();
+    expect(await browserRuntime.vfs.stat(cueOutput.path)).toBeNull();
+    expect(await Promise.all(binOutputs.map((entry) => browserRuntime.vfs.stat(entry.path)))).not.toContain(null);
+    await Promise.all(outputs.map((entry) => entry.dispose()));
+    expect(await browserRuntime.vfs.stat([...outputScopes][0])).toBeNull();
+    outputs = [];
   } finally {
     await Promise.all(outputs.map((output) => output?.cleanup?.().catch(() => undefined)));
     await browserRuntime.vfs.remove(source).catch(() => undefined);
@@ -350,7 +362,7 @@ test("rom-weaver runtime keeps original CHD basename for extracted output", asyn
   await browserRuntime.vfs.truncate(sourcePath, 0);
   await browserRuntime.vfs.write(sourcePath, bytes, { fileOffset: 0 });
 
-  let output = null;
+  let outputs = [];
   try {
     const result = await browserRuntime.compression.extract?.({
       entries: ["Crash Bandicoot (USA).bin", "Crash Bandicoot (USA).cue"],
@@ -361,12 +373,13 @@ test("rom-weaver runtime keeps original CHD basename for extracted output", asyn
       },
     });
 
-    output = result?.output || null;
+    outputs = result?.outputs || [];
+    const output = result?.output || null;
     expect(output?.fileName).toMatch(/^Crash Bandicoot \(USA\)\.(bin|iso)$/i);
     expect(output?.fileName).not.toMatch(/^chd-input-/i);
     expect(output?.size).toBeGreaterThan(0);
   } finally {
-    await output?.cleanup?.().catch(() => undefined);
+    await Promise.all(outputs.map((output) => output.cleanup?.().catch(() => undefined)));
     await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
   }
 });
@@ -383,7 +396,7 @@ test("rom-weaver runtime extracts a single-bin CD CHD from an OPFS path", async 
   await browserRuntime.vfs.truncate(sourcePath, 0);
   await browserRuntime.vfs.write(sourcePath, bytes, { fileOffset: 0 });
 
-  let output = null;
+  let outputs = [];
   let recompressed = null;
   try {
     const result = await browserRuntime.compression.extract?.({
@@ -395,7 +408,8 @@ test("rom-weaver runtime extracts a single-bin CD CHD from an OPFS path", async 
       },
     });
 
-    output = result?.output || null;
+    outputs = result?.outputs || [];
+    const output = result?.output || null;
     expect(output?.fileName).toBe(outputFileName);
     expect(output?.size).toBeGreaterThan(0);
     expect(output?.chdCuePath).toMatch(/\.cue$/i);
@@ -419,7 +433,7 @@ test("rom-weaver runtime extracts a single-bin CD CHD from an OPFS path", async 
     expect(recompressed?.size).toBeGreaterThan(0);
   } finally {
     await recompressed?.cleanup?.().catch(() => undefined);
-    await output?.cleanup?.().catch(() => undefined);
+    await Promise.all(outputs.map((output) => output.cleanup?.().catch(() => undefined)));
     await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
   }
 });

@@ -68,6 +68,7 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
     scope: "rvz",
     source,
   });
+  let extractOutput = null;
   try {
     const checksumResult = await runRomWeaverJson({
       args: { algo: ["crc32"], no_extract: true, source: staged.filePath },
@@ -88,9 +89,16 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
       outputName: "game.iso",
       source,
     });
-    expect(extractResult?.output.fileName).toBe("game.iso");
-    expect(extractResult?.output.size).toBeGreaterThan(0);
+    extractOutput = extractResult?.output || null;
+    expect(extractOutput?.fileName).toBe("game.iso");
+    expect(extractOutput?.size).toBeGreaterThan(0);
+    expect(extractOutput?.path).toMatch(/^\/work\/operations\/[^/]+\/[^/]+\.iso$/);
+    const outputScopePath = extractOutput?.path.replace(/\/[^/]+$/, "") || "";
+    await extractOutput?.dispose();
+    expect(await browserRuntime.vfs.stat(outputScopePath)).toBeNull();
+    extractOutput = null;
   } finally {
+    await extractOutput?.dispose().catch(() => undefined);
     await staged.cleanup().catch(() => undefined);
     await browserRuntime.vfs.remove(checksumSource).catch(() => undefined);
     await browserRuntime.vfs.remove(source).catch(() => undefined);

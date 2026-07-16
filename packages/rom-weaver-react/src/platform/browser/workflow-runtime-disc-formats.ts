@@ -4,25 +4,23 @@ import {
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
 } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
-  selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { RomSpecificRuntimeAdapter } from "../../lib/runtime/workflow-runtime-core.ts";
 import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
-import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
   getPathDerivedFileName,
-  getPathDirectory,
   joinPath,
   normalizeRomSpecificEntryNameForSource,
   replaceProgressSourceLabel,
   withCodecLevel,
 } from "./workflow-runtime-helpers.ts";
-import { selectPreferredExtractedFile, waitForBrowserVfsPath } from "./workflow-runtime-vfs-cleanup.ts";
+import { browserVfs, selectPreferredExtractedFile, waitForBrowserVfsPath } from "./workflow-runtime-vfs-cleanup.ts";
 
 const RVZ_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.rvz;
 const Z3DS_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.z3ds;
@@ -49,7 +47,6 @@ const createBrowserDiscFormatsRuntime = (
       pathPrefix: RVZ_ROM_SPECIFIC_FORMAT.pathPrefix.create,
       run: async (workerSource) => {
         const outputFileName = outputName || "output.rvz";
-        const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         const codecs = withCodecLevel(codec || COMPRESSION_DEFAULTS.rvzCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -60,7 +57,6 @@ const createBrowserDiscFormatsRuntime = (
             knownInputPaths: [workerSource.filePath],
             logLevel,
             outputFileName,
-            outputPath,
             signal,
             workerThreads: threads,
           },
@@ -91,7 +87,6 @@ const createBrowserDiscFormatsRuntime = (
       pathPrefix: Z3DS_ROM_SPECIFIC_FORMAT.pathPrefix.create,
       run: async (workerSource) => {
         const outputFileName = outputName || "output.z3ds";
-        const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         const codecs = withCodecLevel(COMPRESSION_DEFAULTS.z3dsCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -102,7 +97,6 @@ const createBrowserDiscFormatsRuntime = (
             knownInputPaths: [workerSource.filePath],
             logLevel,
             outputFileName,
-            outputPath,
             signal,
             workerThreads: threads,
           },
@@ -125,6 +119,8 @@ const createBrowserDiscFormatsRuntime = (
         trace: { logLevel, onLog },
       });
     let workerSource = await stageRvzSource();
+    const outputScope = createRomWeaverOutputScope();
+    let outputScopeAdopted = false;
     const ensureRvzSourceExists = async () => {
       if (workerSource.virtual) return;
       if (await waitForBrowserVfsPath(workerSource.filePath)) return;
@@ -135,7 +131,7 @@ const createBrowserDiscFormatsRuntime = (
       throw new Error(`Browser VFS staged input is not available: ${workerSource.filePath}`);
     };
     try {
-      const outDirPath = WORKER_OPFS_MOUNTPOINT;
+      const outDirPath = outputScope.rootPath;
       const sourceFileName = fileName || workerSource.fileName || RVZ_ROM_SPECIFIC_FORMAT.fallbackFileName;
       const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
       const actualOutputFileName = getRomSpecificExtractedFileName("rvz", { fileName: sourceFileName });
@@ -183,18 +179,26 @@ const createBrowserDiscFormatsRuntime = (
           )
         : "";
       const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
-      return await workerIo.createWorkerOutput(
+      const outputFilePath = primaryFile?.path || joinPath(outDirPath, outputFileName);
+      const [cleanup] = await outputScope.createOutputCleanups([outputFilePath], (filePath) =>
+        browserVfs.remove(filePath),
+      );
+      const output = await workerIo.createWorkerOutput(
         {
           checksums: primaryFile?.checksums,
+          cleanup,
           fileName: outputFileName,
-          filePath: primaryFile?.path || joinPath(outDirPath, outputFileName),
+          filePath: outputFilePath,
           romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },
         outputFileName,
         "RVZ extraction worker did not return browser output",
       );
+      outputScopeAdopted = true;
+      return output;
     } finally {
+      if (!outputScopeAdopted) await outputScope.cleanup().catch(() => undefined);
       await workerSource.cleanup().catch(() => undefined);
     }
   },
@@ -206,8 +210,10 @@ const createBrowserDiscFormatsRuntime = (
       source,
       trace: { logLevel, onLog },
     });
+    const outputScope = createRomWeaverOutputScope();
+    let outputScopeAdopted = false;
     try {
-      const outDirPath = getPathDirectory(workerSource.filePath);
+      const outDirPath = outputScope.rootPath;
       const sourceFileName = fileName || workerSource.fileName || Z3DS_ROM_SPECIFIC_FORMAT.fallbackFileName;
       const displaySourceFileName = sourceFileName;
       const actualOutputFileName = getRomSpecificExtractedFileName("z3ds", { fileName: sourceFileName });
@@ -249,18 +255,26 @@ const createBrowserDiscFormatsRuntime = (
           )
         : "";
       const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
-      return await workerIo.createWorkerOutput(
+      const outputFilePath = primaryFile?.path || joinPath(outDirPath, outputFileName);
+      const [cleanup] = await outputScope.createOutputCleanups([outputFilePath], (filePath) =>
+        browserVfs.remove(filePath),
+      );
+      const output = await workerIo.createWorkerOutput(
         {
           checksums: primaryFile?.checksums,
+          cleanup,
           fileName: outputFileName,
-          filePath: primaryFile?.path || joinPath(outDirPath, outputFileName),
+          filePath: outputFilePath,
           romType: romTypeFromEmittedFile(primaryFile ?? undefined),
           size: primaryFile?.sizeBytes,
         },
         outputFileName,
         "Z3DS extraction worker did not return browser output",
       );
+      outputScopeAdopted = true;
+      return output;
     } finally {
+      if (!outputScopeAdopted) await outputScope.cleanup().catch(() => undefined);
       await workerSource.cleanup().catch(() => undefined);
     }
   },

@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expect, test } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { loadBundleUrlSession } from "../../src/webapp/url-session/bundle-url-session.ts";
 import {
@@ -52,6 +53,38 @@ const buildEverythingArchive = async () => {
     await output.dispose().catch(() => undefined);
   }
 };
+
+test("bundle create keeps its operation scope until the last output is disposed", async () => {
+  const create = browserRuntime.bundle?.create;
+  if (!create) throw new Error("Runtime bundle create capability is unavailable");
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const created = await create({
+    bundleFileName: "scoped-bundle.zip",
+    noBundleRom: true,
+    patches: [{ fileName: "change.ips", source: patchFile }],
+    rom: { fileName: "game.bin", source: romFile },
+  });
+  const { archiveOutput, bundleOutput } = created;
+  if (!archiveOutput) throw new Error("Bundle create did not return an archive output");
+  const scopePath = bundleOutput.path.replace(/\/[^/]+$/, "");
+  try {
+    expect(bundleOutput.path).toMatch(/^\/work\/operations\/[^/]+\/rom-weaver-bundle\.json$/);
+    expect(archiveOutput.path).toBe(`${scopePath}/scoped-bundle.zip`);
+    expect(await browserVfs.stat(bundleOutput.path)).not.toBeNull();
+    expect(await browserVfs.stat(archiveOutput.path)).not.toBeNull();
+
+    await bundleOutput.dispose();
+    expect(await browserVfs.stat(bundleOutput.path)).toBeNull();
+    expect(await browserVfs.stat(archiveOutput.path)).not.toBeNull();
+
+    await archiveOutput.dispose();
+    await expect
+      .poll(() => Promise.all([browserVfs.stat(bundleOutput.path), browserVfs.stat(archiveOutput.path)]))
+      .toEqual([null, null]);
+  } finally {
+    await Promise.all([bundleOutput.dispose(), archiveOutput.dispose()]);
+  }
+});
 
 test("everything-archive bundle extracts its members and applies to a download", async () => {
   const bundleFile = await buildEverythingArchive();

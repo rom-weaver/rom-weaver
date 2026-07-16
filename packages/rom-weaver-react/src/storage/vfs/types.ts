@@ -42,6 +42,8 @@ type LargeFileVfs = {
       timing?: RuntimeTiming | null;
     },
   ) => Promise<VfsOutputRef>;
+  /** Returns the browser's disk-backed snapshot when the VFS can expose one. */
+  getFile?: (path: string) => Promise<File | null>;
   normalizePath: (path: string) => AbsoluteVfsPath;
   read: (
     path: string,

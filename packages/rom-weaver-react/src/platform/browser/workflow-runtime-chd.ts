@@ -4,12 +4,12 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import { replaceCuePatchFileName } from "../../lib/input/rom-specific-file-utils.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverIngestWorker,
   normalizeCodecEntries,
-  selectRomWeaverOutputPath,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { RomSpecificRuntimeAdapter } from "../../lib/runtime/workflow-runtime-core.ts";
 import {
@@ -191,10 +191,6 @@ const createBrowserChdRuntime = (
       }
 
       const outputFileName = outputName || "output.chd";
-      const outputPath = selectRomWeaverOutputPath(workerInput.filePath, outputFileName, [
-        ...stagedInputPaths,
-        ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath]),
-      ]);
       const codecs = normalizeCodecEntries(compressionCodecs);
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
@@ -205,7 +201,6 @@ const createBrowserChdRuntime = (
           knownInputPaths: uniqueNonEmptyStrings([...stagedInputPaths, chdInputPath]),
           logLevel,
           outputFileName,
-          outputPath,
           signal,
           workerThreads: threads,
         },
@@ -241,8 +236,10 @@ const createBrowserChdRuntime = (
       source,
       trace: { logLevel, onLog },
     });
+    const outputScope = createRomWeaverOutputScope();
+    let outputScopeAdopted = false;
     try {
-      const outDirPath = getPathDirectory(workerSource.filePath);
+      const outDirPath = outputScope.rootPath;
       const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName);
       const shouldPreseedSingleBinCdOutputs = mode !== "cd" && CHD_SINGLE_BIN_OUTPUT_REGEX.test(outputName || "");
       const actualOutputFileName =
@@ -327,15 +324,16 @@ const createBrowserChdRuntime = (
         primaryFile: ReturnType<typeof selectChdOutputs>["primaryFile"],
       ) => {
         if (!outputFiles.length) throw new Error("CHD extraction did not emit any output files");
-        const cleanupPaths = uniqueNonEmptyStrings(outputFiles.map((entry) => entry.path));
-        let cleanupDone = false;
-        const cleanupAllOutputs = async () => {
-          if (cleanupDone) return;
-          cleanupDone = true;
-          await Promise.all(cleanupPaths.map((path) => browserVfs.remove(path).catch(() => undefined)));
-        };
-        const outputs = await Promise.all(
-          outputFiles.map(async (entry) => {
+        const outputPaths = outputFiles.map((entry) => String(entry.path || "").trim());
+        if (outputPaths.some((filePath) => !filePath)) {
+          throw new Error("CHD extraction returned an output without a browser VFS path");
+        }
+        const outputCleanups = await outputScope.createOutputCleanups(outputPaths, (filePath) =>
+          browserVfs.remove(filePath),
+        );
+        const outputs = [];
+        try {
+          for (const [index, entry] of outputFiles.entries()) {
             const isCue = isChdCueOutput(entry);
             const normalizedFileName = normalizeRomSpecificEntryNameForSource(
               entry.fileName,
@@ -357,7 +355,7 @@ const createBrowserChdRuntime = (
             const output = await workerIo.createWorkerOutput(
               {
                 checksums: isCue ? undefined : entry.checksums,
-                cleanup: cleanupAllOutputs,
+                cleanup: outputCleanups[index],
                 fileName: fileNameForOutput,
                 filePath: entry.path,
                 romType: isCue ? undefined : romTypeFromEmittedFile(entry),
@@ -366,16 +364,24 @@ const createBrowserChdRuntime = (
               fileNameForOutput,
               "CHD extraction worker did not return browser output",
             );
-            return isCue ? output : attachRomSpecificOutputMetadata(output, { chdCuePath: cueFile?.path });
-          }),
-        );
+            outputs.push(output);
+            if (!isCue) attachRomSpecificOutputMetadata(output, { chdCuePath: cueFile?.path });
+          }
+        } catch (error) {
+          await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+          await outputScope.cleanup().catch(() => undefined);
+          throw error;
+        }
         return createCompressionExtractResult(outputs);
       };
 
       const extracted = await runExtract();
       const selected = selectChdOutputs(extracted);
-      return await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
+      const result = await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
+      outputScopeAdopted = true;
+      return result;
     } finally {
+      if (!outputScopeAdopted) await outputScope.cleanup().catch(() => undefined);
       await workerSource.cleanup().catch(() => undefined);
     }
   },

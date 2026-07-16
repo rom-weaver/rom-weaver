@@ -7,6 +7,7 @@ import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { RomWeaverError } from "../errors.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { romTypeFromEmittedFile } from "../runtime/run-result-parsing.ts";
+import { transferRetainedOutputOwnership } from "../runtime/workflow-runtime-worker-helpers.ts";
 import { isCueEntryFileName, isGdiEntryFileName } from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
 import {
@@ -316,13 +317,27 @@ const resolveArchiveInputFileByDescent = async (
   });
   const output = result.output || (Array.isArray(result.outputs) ? result.outputs[0] : undefined);
   if (!output) throw new Error(`${file.fileName || "Archive"} produced no extractable ${role}`);
-  const fileName = getBaseFileName(output.fileName || file.fileName || (role === "patch" ? "patch.bin" : "rom.bin"));
-  const extracted = await createPatchFileFromPublicOutput(output, fileName, {
-    materializeBlob: false,
-    preferExternalFilePath: true,
-  });
+  const ownership = transferRetainedOutputOwnership([...result.outputs, output], [output]);
+  const ownedOutput = ownership.outputs[0];
+  if (!ownedOutput) {
+    await ownership.cleanup();
+    throw new Error(`${file.fileName || "Archive"} did not retain its selected ${role} output`);
+  }
+  const fileName = getBaseFileName(
+    ownedOutput.fileName || file.fileName || (role === "patch" ? "patch.bin" : "rom.bin"),
+  );
+  let extracted: PatchFileInstance;
+  try {
+    extracted = await createPatchFileFromPublicOutput(ownedOutput, fileName, {
+      materializeBlob: false,
+      preferExternalFilePath: true,
+    });
+  } catch (error) {
+    await ownership.cleanup();
+    throw error;
+  }
   extracted.fileName = fileName;
-  const extractTimeMs = output.timing?.elapsedMs;
+  const extractTimeMs = ownedOutput.timing?.elapsedMs;
   if (typeof extractTimeMs === "number" && Number.isFinite(extractTimeMs)) {
     (extracted as PatchFileInstance & { _extractTimeMs?: number })._extractTimeMs = Math.max(0, extractTimeMs);
   }
