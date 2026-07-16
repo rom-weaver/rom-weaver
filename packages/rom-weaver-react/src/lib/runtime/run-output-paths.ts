@@ -7,6 +7,29 @@ import { getFileNameParts, getPathBaseName, joinPath } from "../path-utils.ts";
 const WORK_ROOT_PATH = "/work";
 const OPERATION_ROOT_NAME = "operations";
 
+// A `createVfsPathId()` segment: a `crypto.randomUUID()` (dashed) or the 32-hex fallback.
+const VFS_PATH_ID_REGEX = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
+
+/** Drop the internal per-operation output scratch dir (`operations/<uuid>`) from a display path chain.
+ * Ingest extracts leaves into this scope root, so without stripping it its two segments surface as a
+ * meaningless `operations › <uuid>` breadcrumb in the file picker and patch-stack rows. Removes the
+ * `operations` element together with the id element that immediately follows it, wherever the pair
+ * appears; other segments (real archive/folder names) are preserved in order. Generic over the item
+ * shape so it works on bare segment strings and on `{ fileName }` breadcrumb entries alike. */
+const stripOperationScopeChain = <T>(items: readonly T[], getName: (item: T) => string | undefined): T[] => {
+  const kept: T[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const current = items[index] as T;
+    const next = items[index + 1];
+    if (getName(current) === OPERATION_ROOT_NAME && next !== undefined && VFS_PATH_ID_REGEX.test(getName(next) ?? "")) {
+      index += 1;
+      continue;
+    }
+    kept.push(current);
+  }
+  return kept;
+};
+
 const normalizeAbsolutePosixPath = (pathValue: string): string => {
   const normalized = String(pathValue || "")
     .trim()
@@ -120,4 +143,4 @@ const getTrimOutputFileName = (sourceFilePath: string, requestedOutputName: stri
   return requestedBaseName;
 };
 
-export { createRomWeaverOutputScope, getTrimOutputFileName, runWithRomWeaverOutputScope };
+export { createRomWeaverOutputScope, getTrimOutputFileName, runWithRomWeaverOutputScope, stripOperationScopeChain };

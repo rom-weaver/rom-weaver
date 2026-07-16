@@ -5,6 +5,7 @@ import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { attachIngestPatchRequirements, patchProbeRequirementsFromDescriptor } from "../apply/patch-apply-service.ts";
 import { RomWeaverError } from "../errors.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import { stripOperationScopeChain } from "../runtime/run-output-paths.ts";
 import { getPatchFileCleanup, type PatchFileInstance } from "./binary-service.ts";
 import {
   ensureValidatedPatchArchiveEntryCleanup,
@@ -49,7 +50,9 @@ const PATCH_LEAF_ROOT_SEGMENTS = DEFAULT_VFS_ROOT.split("/").filter(Boolean);
  * patch yields `[]`, a nested patch yields its chain of containing nested-archive directories (named
  * after each archive, e.g. `["B_disc1"]`, `["C_set", "C_sub"]`). Stripping the fixed root (rather
  * than the prefix shared across leaves) keeps the nesting visible even when every patch sits under
- * the same nested archive. */
+ * the same nested archive. The per-operation output scratch dir (`operations/<uuid>`) ingest extracts
+ * into is an internal path, not a real archive folder, so its two leading segments are stripped too -
+ * otherwise every ingested leaf would surface a meaningless `operations › <uuid>` breadcrumb. */
 const derivePatchLeafBreadcrumbs = (path: string): string[] => {
   const dirSegments = String(path || "")
     .split("/")
@@ -59,7 +62,7 @@ const derivePatchLeafBreadcrumbs = (path: string): string[] => {
   while (start < PATCH_LEAF_ROOT_SEGMENTS.length && dirSegments[start] === PATCH_LEAF_ROOT_SEGMENTS[start]) {
     start += 1;
   }
-  return dirSegments.slice(start);
+  return stripOperationScopeChain(dirSegments.slice(start), (segment) => segment);
 };
 
 /** Discover EVERY patch across all (nested) branches of a patch archive in one recursive `ingest`

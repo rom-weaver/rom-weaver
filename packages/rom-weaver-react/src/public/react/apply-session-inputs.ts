@@ -1,4 +1,5 @@
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
+import { stripOperationScopeChain } from "../../lib/runtime/run-output-paths.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ArchivePathEntry, StagedInputInfo } from "./apply-session-types.ts";
@@ -44,7 +45,7 @@ const getProgressDetails = (event: ProgressEvent): Record<string, unknown> =>
 
 const getArchivePathEntriesFromProgressDetails = (details: Record<string, unknown>): ArchivePathEntry[] => {
   const parentCompressions = Array.isArray(details.parentCompressions) ? details.parentCompressions : [];
-  return parentCompressions
+  const entries = parentCompressions
     .map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}))
     .sort((left, right) => Number(left.depth || 0) - Number(right.depth || 0))
     .map((entry) => ({
@@ -60,6 +61,9 @@ const getArchivePathEntriesFromProgressDetails = (details: Record<string, unknow
         typeof entry.sourceSize === "number" && Number.isFinite(entry.sourceSize) ? entry.sourceSize : undefined,
     }))
     .filter((entry) => !!entry.fileName);
+  // The runtime chain can include the internal `operations/<uuid>` scratch dir ingest extracted into;
+  // it is not a real archive folder, so keep it out of the surfaced path.
+  return stripOperationScopeChain(entries, (entry) => entry.fileName);
 };
 
 const getArchiveNameFromProgressDetails = (details: Record<string, unknown>) => {
