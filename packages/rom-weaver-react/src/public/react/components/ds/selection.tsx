@@ -87,16 +87,6 @@ const SelectionCheckList = ({
   const toggleAll = () => setSelectedIds(allSelected ? [] : selectableItems.map((item) => item.id));
   return (
     <div className="selcheckwrap">
-      {selectableItems.length > 1 ? (
-        <div className="seltoolbar">
-          <button className="btn ghost selall" onClick={toggleAll} type="button">
-            {allSelected ? "Clear all" : "Select all"}
-          </button>
-          <span className="selcount">
-            {selectedIds.length} of {selectableItems.length} selected
-          </span>
-        </div>
-      ) : null}
       <div className="seltree picklist">
         {items.map((item) =>
           item.selectable ? (
@@ -118,6 +108,16 @@ const SelectionCheckList = ({
           ),
         )}
       </div>
+      {selectableItems.length > 1 ? (
+        <div className="seltoolbar">
+          <button className="btn ghost selall" onClick={toggleAll} type="button">
+            {allSelected ? "Clear all" : "Select all"}
+          </button>
+          <span className="selcount">
+            {selectedIds.length} of {selectableItems.length} selected
+          </span>
+        </div>
+      ) : null}
       <div className="selfoot">
         {onCancel ? (
           <button className="btn ghost" onClick={onCancel} type="button">

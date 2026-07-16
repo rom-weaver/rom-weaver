@@ -2483,7 +2483,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 .rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; min-width: 0; }
 .rw-app .pick-row.off:hover { border-color: var(--seam); }
 .rw-app .pick-row .pick-note { min-width: 0; font-size: .74rem; color: var(--ink-4); overflow-wrap: anywhere; }
-.rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); margin-bottom: var(--sp-xs); }
+.rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); margin-top: var(--sp-s); }
 .rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
 .rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
 .rw-app .selfoot { display: flex; justify-content: flex-end; gap: var(--sp-m); margin-top: var(--sp-s); }
