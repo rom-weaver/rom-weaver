@@ -1693,15 +1693,33 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   width: 24px; height: 24px; padding: 0; border: 0; background: none;
   color: var(--ink-4); cursor: pointer; transition: color .15s; opacity: .6;
 }
-.rw-app .ck-remove:hover { opacity: 1; }
-.rw-app .ck-remove:hover { color: var(--fault); }
+.rw-app .ck-remove:hover { opacity: 1; color: var(--fault); }
 .rw-app .ck-remove svg { width: 12px; height: 12px; }
-/* "Add check": the same quiet uppercase action row as .ck-more (the checks
-   drawer's disclosure idiom) - a plus glyph leading a text-styled select. */
+/* Inline validation error under an editable check field: a small fault line in
+   the value column (auto-flows to a second grid row beneath the input). */
+.rw-app .patch-checks-body .verification-row .ck-err {
+  grid-column: 2 / -1; margin: 0 0 2px; padding-inline-start: 4px;
+  color: var(--fault); font-size: .62rem; letter-spacing: .01em; line-height: 1.2;
+}
+/* trailing controls (verify mark + remove X) share the row's third column */
+.rw-app .patch-checks-body .verification-row .vrow-tail { display: inline-flex; align-items: center; gap: 1px; }
+/* Per-row verify mark (✓/✗) trailing a committed check that was compared to the
+   real ROM value - matches the read-only .ck-mark language. */
+.rw-app .patch-checks-body .verification-row .ck-mark {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none;
+}
+.rw-app .patch-checks-body .verification-row .ck-mark svg { width: 12px; height: 12px; }
+.rw-app .patch-checks-body .verification-row .ck-mark.ok { color: var(--verified); }
+.rw-app .patch-checks-body .verification-row .ck-mark.bad { color: var(--fault); }
+/* "Add check": a quiet dashed chip that reads as an add affordance (was a bare
+   text row that didn't look actionable) - a plus glyph leading the select. */
 .rw-app .ck-add {
-  display: flex; align-items: center; gap: 6px; width: fit-content;
-  margin-block-start: var(--sp-xs); padding: 4px 2px;
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  margin-block-start: 7px; padding: 4px 10px 4px 8px;
+  border: 1px dashed var(--seam-strong); border-radius: var(--r-s);
+  background: color-mix(in oklab, var(--well) 55%, transparent);
   color: var(--ink-3); cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
 }
 .rw-app .ck-add > svg { width: 12px; height: 12px; flex: none; }
 .rw-app .ck-add-select {
@@ -1710,7 +1728,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   font-family: var(--font); font-size: .66rem; font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
 }
-.rw-app .ck-add:hover { color: var(--ink); }
+.rw-app .ck-add:hover,
+.rw-app .ck-add:focus-within {
+  color: var(--ink); border-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 9%, var(--well));
+}
 
 .rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
 .rw-app .bundle-rom-expectation .card {

@@ -10,7 +10,7 @@ import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
-import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
+import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import {
   buildOutputCompressionPanel,
@@ -734,6 +734,19 @@ function ApplyWorkflowFormView({
   const wovenSteps = running || applyDone;
 
   const romVerificationStates = buildRomVerificationStates(patches, romInputs, disabledPatchFlags);
+  // Each ROM's computed identity, keyed by id, so a patch card can verify the
+  // input checks a user types against the real target ROM values.
+  const romActualsById = new Map<string, RomCheckActuals>(
+    romInputs.map((row) => [
+      row.id,
+      {
+        bytes: typeof row.size === "number" ? row.size : row.sourceSize,
+        crc32: row.info.crc32 || undefined,
+        md5: row.info.md5 || undefined,
+        sha1: row.info.sha1 || undefined,
+      },
+    ]),
+  );
   // The expected-ROM group describes THE base ROM, so it only renders for an
   // unambiguous single-ROM bench. Without a bundle expectation, the chain-input
   // patch's own checks stand in.
@@ -1039,6 +1052,7 @@ function ApplyWorkflowFormView({
             patchInput={uiState.patchInput}
             patchNotice={uiState.patchNotice}
             patchStack={controllers.patchStack}
+            romActualsById={romActualsById}
             ui={uiController}
             woven={wovenSteps}
           />

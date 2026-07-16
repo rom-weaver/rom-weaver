@@ -274,13 +274,40 @@ const PatchHeaderModeSelect = ({
   );
 };
 
+/** A ROM's computed identity values, used to verify user-entered input checks. */
+type RomCheckActuals = { crc32?: string; md5?: string; sha1?: string; bytes?: number };
+
+/** Compare a committed (already-valid) input check to the real ROM value.
+ * Returns undefined when there is nothing to compare against (the ROM value has
+ * not been computed, or the field is empty). */
+const matchInputCheck = (field: CheckField, value: string, actuals?: RomCheckActuals): "bad" | "ok" | undefined => {
+  if (!(actuals && value)) return undefined;
+  if (field === "bytes") {
+    if (typeof actuals.bytes !== "number") return undefined;
+    return Number(value) === actuals.bytes ? "ok" : "bad";
+  }
+  const actual = (actuals[field] || "").trim().toLowerCase();
+  if (!actual) return undefined;
+  return normalizeCheckInput(value) === actual ? "ok" : "bad";
+};
+
+/** Why a committed check value failed validation - shown inline under the field
+ * and as its title. */
+const checkErrorMessage = (field: CheckField): string =>
+  field === "bytes"
+    ? "Expected a whole number of bytes"
+    : `Expected ${CHECK_HEX_LENGTHS[field as CheckAlgorithm]} hex characters`;
+
 /** An editable expected-check field (user-specified, not built into the patch):
- * commits on blur, removable via the trailing X. */
+ * commits on blur, removable via the trailing X. A malformed value shows an
+ * inline error; a well-formed value that was compared to the real ROM shows a
+ * match/mismatch mark. */
 const EditableCheckRow = ({
   focusOnMount,
   field,
   id,
   invalid,
+  mark,
   onCommit,
   onRemove,
   value,
@@ -291,42 +318,61 @@ const EditableCheckRow = ({
   field: CheckField;
   id: string;
   invalid: boolean;
+  /** Verdict of comparing this (valid) value to the real ROM value; undefined
+   * when there is nothing to compare against yet. */
+  mark?: "bad" | "ok";
   onCommit: (raw: string) => void;
   onRemove: () => void;
   value: string;
-}) => (
-  <div className="verification-row" key={`${id}:${value}`}>
-    <label className="ofld-l" htmlFor={id}>
-      {CHECK_LABELS[field]}
-    </label>
-    <input
-      aria-invalid={invalid || undefined}
-      className="input mono popt-input"
-      defaultValue={value}
-      id={id}
-      onBlur={(event) => onCommit(event.currentTarget.value)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.currentTarget.blur();
-        }
-      }}
-      ref={focusOnMount ? (element) => element?.focus() : undefined}
-      spellCheck={false}
-      title={
-        invalid
-          ? field === "bytes"
-            ? "Expected a whole number of bytes"
-            : `Expected ${CHECK_HEX_LENGTHS[field as CheckAlgorithm]} hex characters`
-          : value || undefined
-      }
-      type="text"
-    />
-    <button aria-label={`Remove ${CHECK_LABELS[field]} check`} className="ck-remove" onClick={onRemove} type="button">
-      <X aria-hidden="true" />
-    </button>
-  </div>
-);
+}) => {
+  const errorId = `${id}-err`;
+  return (
+    <div className="verification-row" key={`${id}:${value}`}>
+      <label className="ofld-l" htmlFor={id}>
+        {CHECK_LABELS[field]}
+      </label>
+      <input
+        aria-describedby={invalid ? errorId : undefined}
+        aria-invalid={invalid || undefined}
+        className="input mono popt-input"
+        defaultValue={value}
+        id={id}
+        onBlur={(event) => onCommit(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+        }}
+        ref={focusOnMount ? (element) => element?.focus() : undefined}
+        spellCheck={false}
+        title={invalid ? checkErrorMessage(field) : value || undefined}
+        type="text"
+      />
+      <span className="vrow-tail">
+        {mark && !invalid ? (
+          <span className={`ck-mark ${mark}`} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>
+            {mark === "ok" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+            <span className="sr-only">{mark === "ok" ? "matches the ROM" : "does not match the ROM"}</span>
+          </span>
+        ) : null}
+        <button
+          aria-label={`Remove ${CHECK_LABELS[field]} check`}
+          className="ck-remove"
+          onClick={onRemove}
+          type="button"
+        >
+          <X aria-hidden="true" />
+        </button>
+      </span>
+      {invalid ? (
+        <p className="ck-err" id={errorId}>
+          {checkErrorMessage(field)}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 /**
  * The one Checks drawer every patch card carries: the requirements built into
@@ -346,6 +392,7 @@ const PatchChecksDrawer = ({
   onMetaChange,
   outputCheckHint,
   patchStack,
+  romActuals,
 }: {
   /** The patch is toggled out of the run: verification state is not part of the
    * plan, so the header verdict/timing readouts stay off - the drawer remains
@@ -365,6 +412,9 @@ const PatchChecksDrawer = ({
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
   patchStack: PatcherStackController;
+  /** The chain-input patch's target ROM computed checks - the actual values a
+   * user-entered INPUT check is compared against for its per-row match mark. */
+  romActuals?: RomCheckActuals;
 }) => {
   const setOption = patchStack.setPatchOption;
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
@@ -413,11 +463,6 @@ const PatchChecksDrawer = ({
     }
     commitCheck(side, field, "");
   };
-  const verifying = !disabled && item.validationState === "verifying";
-  const bad = !disabled && item.validationState === "invalid";
-  const ok = !disabled && item.validationState === "valid";
-  const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
-  const hasBuiltIn = !!(inputRows.length || outputRows.length);
   const sides = (["input", "output"] as const).map((side) => {
     const builtInRows = side === "input" ? inputRows : outputRows;
     const embedded = getEmbeddedChecks(item, side);
@@ -432,9 +477,25 @@ const PatchChecksDrawer = ({
       (field) => !embedded[field] && (!!userValue(field) || !!draftFields[`${side}:${field}`]),
     );
     const addableFields = CHECK_FIELDS_PAIRED.filter((field) => !(embedded[field] || editableFields.includes(field)));
-    return { addableFields, builtInRows, editableFields, side, userValue };
+    // Only the chain-input side's checks describe the ROM we actually hold, so
+    // only those can be matched against a real value; every other side stays
+    // metadata-only (no mark).
+    const markFor = (field: CheckField): "bad" | "ok" | undefined =>
+      side === "input" && isChainInput && !invalidChecks[`${side}:${field}`]
+        ? matchInputCheck(field, userValue(field), romActuals)
+        : undefined;
+    return { addableFields, builtInRows, editableFields, markFor, side, userValue };
   });
   const hasUserChecks = sides.some((entry) => entry.editableFields.length > 0);
+  // A user-entered input check that disagrees with the real ROM fails the drawer
+  // verdict even when the patch itself dry-applies (the ROM just isn't the one
+  // the check describes).
+  const userMismatch = sides.some((entry) => entry.editableFields.some((field) => entry.markFor(field) === "bad"));
+  const verifying = !disabled && item.validationState === "verifying";
+  const bad = !disabled && (item.validationState === "invalid" || userMismatch);
+  const ok = !disabled && item.validationState === "valid" && !userMismatch;
+  const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
+  const hasBuiltIn = !!(inputRows.length || outputRows.length);
   const compact =
     !hasUserChecks &&
     inputRows.length > 0 &&
@@ -450,7 +511,7 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
       verifying={verifying}
     >
-      {sides.map(({ addableFields, builtInRows, editableFields, side, userValue }) => (
+      {sides.map(({ addableFields, builtInRows, editableFields, markFor, side, userValue }) => (
         <div className="ck-group" key={side}>
           <div className="ck-group-head">
             <span>{side === "input" ? "Input" : "Output"}</span>
@@ -465,6 +526,7 @@ const PatchChecksDrawer = ({
               id={`rom-weaver-patch-${side}-${field}-${index}`}
               invalid={!!invalidChecks[`${side}:${field}`]}
               key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
+              mark={markFor(field)}
               onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
               onRemove={() => removeCheck(side, field)}
               value={userValue(field)}
@@ -731,6 +793,7 @@ const PatchCard = ({
   overrideAvailable,
   patchStack,
   position,
+  romActuals,
   rowProps,
   total,
 }: {
@@ -751,6 +814,8 @@ const PatchCard = ({
   overrideAvailable?: boolean;
   patchStack: PatcherStackController;
   position: number;
+  /** This patch's target ROM computed checks, for verifying input checks. */
+  romActuals?: RomCheckActuals;
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
   total: number;
 }) => {
@@ -906,6 +971,7 @@ const PatchCard = ({
               onMetaChange={onMetaChange}
               outputCheckHint={outputCheckHint}
               patchStack={patchStack}
+              romActuals={romActuals}
             />
           )}
         </div>
@@ -928,6 +994,7 @@ const ApplyPatchListStep = ({
   patchNotice,
   patches,
   patchStack,
+  romActualsById,
   ui,
   woven,
 }: {
@@ -947,6 +1014,9 @@ const ApplyPatchListStep = ({
   /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
   patchInput: PatcherUiState["patchInput"];
+  /** ROM id → its computed checks, for verifying user-entered input checks against
+   * the real ROM (the chain-input patch's target). */
+  romActualsById?: ReadonlyMap<string, RomCheckActuals>;
   patchNotice: NoticeState;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
@@ -1030,6 +1100,7 @@ const ApplyPatchListStep = ({
             overrideAvailable={overrideAvailable}
             patchStack={patchStack}
             position={reorderList.displayIndex(index) + 1}
+            romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
             rowProps={reorderList.rowProps(index)}
             total={total}
           />
@@ -1080,4 +1151,4 @@ const ApplyPatchListStep = ({
   );
 };
 
-export { ApplyPatchListStep };
+export { ApplyPatchListStep, type RomCheckActuals };
