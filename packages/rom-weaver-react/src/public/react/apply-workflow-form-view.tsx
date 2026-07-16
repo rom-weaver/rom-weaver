@@ -235,10 +235,10 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
 
 /** Bundle-related notices and export reveal state, threaded from the form. */
 type BundleToolsState = {
-  /** Show the bundle package select + export action in the output card. */
+  /** True when a bundle package is selected (drives the export/create action). */
   exportVisible: boolean;
-  hideExport: () => void;
-  showExport: () => void;
+  /** Persist the bundle package choice ("" hides it), synced to user settings. */
+  setBundlePackage: (value: string) => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
   hasOptionalEntries: boolean;
@@ -837,49 +837,40 @@ function ApplyWorkflowFormView({
     const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
     return localizer.message(downloadKey, { format: formatName });
   })();
-  // The bundle package select stays hidden until the user reveals it via the
-  // "Create bundle…" action (which arms a default format), so the output card
-  // keeps its everyday shape for plain applies.
+  // The bundle package select lives permanently in Output options and mirrors
+  // the persisted "Bundle" user setting - "" hides the create action, a format
+  // arms it. Empty string is the hide sentinel so it matches the stored value.
   const bundleFormatValue = (() => {
-    if (!bundleExport?.format || bundleExport.format === "bundle") return "zip:patches";
-    return `${bundleExport.format}:${bundleExport.bundleRom ? "rom" : "patches"}`;
+    const format = bundleTools?.exportVisible ? bundleExport?.format : "";
+    if (!format || format === "bundle") return "";
+    return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
   })();
-  const bundleOutputFields =
-    bundleExport && bundleTools?.exportVisible ? (
-      <>
-        {outputHeaderField}
-        <OutputField
-          className="export-type-field"
-          label="Bundle"
-          labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+  const bundleOutputFields = bundleExport ? (
+    <>
+      {outputHeaderField}
+      <OutputField
+        className="export-type-field"
+        label="Bundle"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+      >
+        <select
+          className="select"
+          disabled={bundleExport.busy}
+          id="rom-weaver-bundle-export-format"
+          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
+          value={bundleFormatValue}
         >
-          <select
-            className="select"
-            disabled={bundleExport.busy}
-            id="rom-weaver-bundle-export-format"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              if (value === "hide") {
-                bundleTools?.hideExport();
-                return;
-              }
-              const [format, contents] = value.split(":");
-              bundleExport.setFormat(format || "");
-              bundleExport.setBundleRom(contents === "rom");
-            }}
-            value={bundleFormatValue}
-          >
-            <option value="hide">Hide bundle creation</option>
-            <option value="zip:patches">Bundle + patches (.zip)</option>
-            <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-            <option value="7z:patches">Bundle + patches (.7z)</option>
-            <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
-          </select>
-        </OutputField>
-      </>
-    ) : (
-      outputHeaderField
-    );
+          <option value="">Hide bundle creation</option>
+          <option value="zip:patches">Bundle + patches (.zip)</option>
+          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
+          <option value="7z:patches">Bundle + patches (.7z)</option>
+          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+        </select>
+      </OutputField>
+    </>
+  ) : (
+    outputHeaderField
+  );
 
   // Combined drop surface (--rom-filter + --patch-filter): the parent's unified
   // drop handler stages bare files immediately and shows an "identifying"
@@ -1127,17 +1118,6 @@ function ApplyWorkflowFormView({
                         : "Output won't be verified - the patch chain differs from the bundle."}
                     </span>
                   </p>
-                ) : null}
-                {bundleTools && !bundleTools.exportVisible ? (
-                  <button
-                    className="btn ghost slim bundle-dl"
-                    id="rom-weaver-button-create-bundle"
-                    onClick={bundleTools.showExport}
-                    type="button"
-                  >
-                    <Package aria-hidden="true" />
-                    {bundleCreateLabel}…
-                  </button>
                 ) : null}
                 {bundleExport && bundleTools?.exportVisible ? (
                   bundleExport.busy ? (

@@ -339,6 +339,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
               "patcher",
               <ApplyPatchForm
                 bundleSession={bundleSession}
+                onBundlePackageChange={actions.onPatcherBundlePackageChange}
                 onInputsChange={actions.onPatcherInputsChange}
                 onPatchesChange={actions.onPatcherPatchesChange}
                 onSettingsChange={actions.onPatcherSettingsChange}

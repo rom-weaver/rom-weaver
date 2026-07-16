@@ -236,10 +236,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
-  // The bundle package select + export action stay hidden until the user
-  // reveals them via the output card's "Create bundle…" action.
-  const [bundleExportVisible, setBundleExportVisible] = useState(false);
-
   // How the current bench relates to the loaded bundle's authored chain:
   // - "full": every bundle patch enabled, in bundle order, nothing foreign -
   //   the only state the bundle's expected output describes.
@@ -1183,20 +1179,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
-  // Revealing the export controls is the "I'm making a bundle" signal: arm a
-  // default package format so the export action is live without a second decision.
+  // The bundle package dropdown lives permanently in Output options and mirrors
+  // the persisted "Bundle" user setting: a format arms the create/download
+  // action, "" hides it. The selection drives visibility - no separate reveal.
   const {
     format: bundleExportFormat,
     setBundleRom: setBundleExportRom,
     setFormat: setBundleExportFormat,
   } = bundleExport;
-  useEffect(() => {
-    if (!bundleExportVisible || bundleExportFormat) return;
-    setBundleExportFormat("zip");
-    setBundleExportRom(false);
-  }, [bundleExportVisible, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
-  const showBundleExport = useCallback(() => setBundleExportVisible(true), []);
-  const hideBundleExport = useCallback(() => setBundleExportVisible(false), []);
+  const bundleExportVisible = !!bundleExportFormat && bundleExportFormat !== "bundle";
+  const { onBundlePackageChange } = props;
+  const changeBundlePackage = useCallback(
+    (value: string) => {
+      const [format = "", contents = ""] = value.split(":");
+      setBundleExportFormat(format);
+      setBundleExportRom(contents === "rom");
+      onBundlePackageChange?.(value);
+    },
+    [onBundlePackageChange, setBundleExportFormat, setBundleExportRom],
+  );
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
@@ -1262,9 +1263,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           exportVisible: bundleExportVisible,
           hasOptionalEntries:
             !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
-          hideExport: hideBundleExport,
           outputStandDown: bundleOutputStandDown,
-          showExport: showBundleExport,
+          setBundlePackage: changeBundlePackage,
         }}
         onBundleMetaChange={updateBundleMeta}
         onTrace={emitApplyFormInputTrace}

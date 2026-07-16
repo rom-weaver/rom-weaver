@@ -49,25 +49,26 @@ test("export bundle bundles the session from main-page options with a checks-onl
   );
   await waitForApplyButtonEnabled();
 
-  // Bundle creation stays opt-in even after a ROM and patch are staged: the
-  // export surface (format select + export action) reveals through the output
-  // card's "Create bundle…" action.
-  expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
-  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
-  document.getElementById("rom-weaver-button-create-bundle")?.click();
+  // The bundle package dropdown lives permanently in Output options and mirrors
+  // the persisted "Bundle" setting: it defaults to hidden ("") with no export
+  // action until the user picks a package format.
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect).not.toBeNull();
-  // Revealing the export arms the default package format; no mode, no deep link.
-  expect(window.location.hash).toBe("");
-  await expect.poll(() => formatSelect.value).toBe("zip:patches");
+  expect(formatSelect.value).toBe("");
+  expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
+    "Hide bundle creation",
     "Bundle + patches (.zip)",
     "Bundle + ROM + patches (.zip)",
     "Bundle + patches (.7z)",
     "Bundle + ROM + patches (.7z)",
   ]);
+  // Choosing a package arms the export; no mode, no deep link.
+  setFormControlValue(formatSelect, "zip:patches");
+  expect(window.location.hash).toBe("");
+  await expect.poll(() => formatSelect.value).toBe("zip:patches");
 
-  // Revealing the export also arms the export action.
+  // Choosing a package also arms the export action.
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
@@ -165,8 +166,8 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   );
   await waitForApplyButtonEnabled();
 
-  // The settings default (bundlePackage) fills the format once the export reveals.
-  document.getElementById("rom-weaver-button-create-bundle")?.click();
+  // The persisted bundlePackage setting pre-arms the dropdown and the export
+  // action - no reveal step needed.
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect?.value).toBe("zip:rom");
   const exportButton = await waitForState(() => {

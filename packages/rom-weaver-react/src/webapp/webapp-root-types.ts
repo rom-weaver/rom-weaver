@@ -71,6 +71,7 @@ type WebappRootProps = {
     onCreatorOriginalChange: (file: unknown) => void;
     onCreatorPatchTypeChange: (patchType: string) => void;
     onCreatorSettingsChange: (settings: unknown) => void;
+    onPatcherBundlePackageChange: (value: string) => void;
     onPatcherInputsChange: (inputs: readonly unknown[]) => void;
     onPatcherPatchesChange: (patches: readonly unknown[]) => void;
     onPatcherSettingsChange: (settings: unknown) => void;

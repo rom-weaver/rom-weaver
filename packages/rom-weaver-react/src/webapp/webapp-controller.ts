@@ -383,6 +383,17 @@ const createWebappRootController = (options: ControllerOptions) => {
       commitMode(nextView);
       return nextView;
     },
+    setBundlePackage(value: string) {
+      const state = store.getState();
+      if (state.settings.bundlePackage === value) return;
+      const validValues = new Set(SETTINGS_FIELD_METADATA.bundlePackage.validValues || []);
+      if (!validValues.has(value)) return;
+      const nextSettings = { ...copySettings(state.settings), bundlePackage: value };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, bundlePackage: value },
+      });
+    },
     setCreatorModifiedState(file: unknown) {
       updateCreatorSession({ modifiedFilePresent: !!file });
     },

@@ -9,6 +9,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
+  setFormControlValue,
   waitForApplyButtonEnabled,
   waitForState,
 } from "./patcher-test-shared.js";
@@ -86,7 +87,12 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
   expect(document.getElementById("rom-weaver-toggle-bundle-author")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
+  // The bundle dropdown is always present in Output options but defaults to
+  // hidden ("") with no create action.
+  const bundleFormat = document.getElementById("rom-weaver-bundle-export-format");
+  expect(bundleFormat).not.toBeNull();
+  expect(bundleFormat.value).toBe("");
+  expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
 
   // The pencil on the card opens the name/description editors in place; the
   // same control (now a check) closes them. No mode, no hash.
@@ -109,12 +115,9 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   document.querySelector("#rom-weaver-list-patch-stack .ck-remove")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
 
-  // Export controls reveal via the output card's "Create bundle…" action,
-  // which swaps itself out for the format select + export button.
-  document.getElementById("rom-weaver-button-create-bundle")?.click();
-  await expect.poll(() => document.getElementById("rom-weaver-bundle-export-format")).not.toBeNull();
-  expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
-  expect(document.getElementById("rom-weaver-button-create-bundle")).toBeNull();
+  // Choosing a bundle package in Output options arms the export button.
+  setFormControlValue(document.getElementById("rom-weaver-bundle-export-format"), "zip:patches");
+  await expect.poll(() => document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });
 
 test("bundle-expected ROM checks fold into the staged ROM card with match marks", async () => {

@@ -102,6 +102,8 @@ type ApplyPatchFormProps = {
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
+  /** Fires when the output-card bundle dropdown changes, to persist the "Bundle" setting ("" hides it). */
+  onBundlePackageChange?: (value: string) => void;
   onProgress?: (event: ProgressEvent) => void;
   onApplyComplete?: (result: ApplyWorkflowResult) => void;
   /** Fires after an "Export bundle…" run with the parsed create result (before the download). */

@@ -94,6 +94,24 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().draftSettings.language).toBe("de");
   });
 
+  it("commits and persists the bundle package selection from the output card", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+    controller.setBundlePackage("zip:rom");
+    expect(controller.getState().settings.bundlePackage).toBe("zip:rom");
+    expect(controller.getState().draftSettings.bundlePackage).toBe("zip:rom");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").apply?.output?.bundlePackage).toBe("zip:rom");
+    // An unknown package is rejected rather than persisted.
+    controller.setBundlePackage("tar:rom");
+    expect(controller.getState().settings.bundlePackage).toBe("zip:rom");
+  });
+
   it("notifies subscribers on a state mutation and stops after unsubscribe", () => {
     const controller = createController();
     const listener = vi.fn();
