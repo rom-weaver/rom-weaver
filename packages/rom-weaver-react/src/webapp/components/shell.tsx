@@ -266,6 +266,39 @@ const Masthead = ({
       </span>
       <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
+        {githubHref ? (
+          <a
+            aria-label="GitHub"
+            className="tool"
+            href={githubHref}
+            onClick={(event) => guardExternalClick(event, githubHref)}
+            rel="noreferrer"
+            target="_blank"
+            title="GitHub"
+          >
+            <Github aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              GitHub
+            </span>
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            aria-label={localizer.message("ui.footer.donate")}
+            className="tool masthead-donate"
+            href={donateHref}
+            onClick={(event) => guardExternalClick(event, donateHref)}
+            rel="noreferrer"
+            target="_blank"
+            title={localizer.message("ui.footer.donate")}
+          >
+            <Heart aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              {localizer.message("ui.footer.donate")}
+            </span>
+          </a>
+        ) : null}
+        {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
         <button
           aria-label={localizer.message("ui.settings.reset")}
           className="tool"
@@ -306,39 +339,6 @@ const Masthead = ({
             {settingsLabel}
           </span>
         </button>
-        {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
-        {githubHref ? (
-          <a
-            aria-label="GitHub"
-            className="tool"
-            href={githubHref}
-            onClick={(event) => guardExternalClick(event, githubHref)}
-            rel="noreferrer"
-            target="_blank"
-            title="GitHub"
-          >
-            <Github aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              GitHub
-            </span>
-          </a>
-        ) : null}
-        {donateHref ? (
-          <a
-            aria-label={localizer.message("ui.footer.donate")}
-            className="tool masthead-donate"
-            href={donateHref}
-            onClick={(event) => guardExternalClick(event, donateHref)}
-            rel="noreferrer"
-            target="_blank"
-            title={localizer.message("ui.footer.donate")}
-          >
-            <Heart aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {localizer.message("ui.footer.donate")}
-            </span>
-          </a>
-        ) : null}
       </div>
     </header>
   );
