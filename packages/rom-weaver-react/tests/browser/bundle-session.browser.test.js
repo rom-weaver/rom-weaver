@@ -342,10 +342,9 @@ test("bundle url session seeds enablement + output defaults and applies to a dow
   const patchStackText = () => document.getElementById("rom-weaver-list-patch-stack")?.textContent || "";
   expect(patchStackText()).toContain("stable");
   expect(document.getElementById("rom-weaver-patch-card-description-0")?.textContent).toBe("Required core patch");
-  // Bundle Author mode (entered through the session bar's action) swaps the
-  // static description for the inline editable fields on the card.
-  const modeToggle = await waitForState(() => document.getElementById("rom-weaver-toggle-bundle-author"));
-  modeToggle?.click();
+  // The pencil on the patch card swaps the static description for the inline
+  // editable fields.
+  document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
   const descriptionInput = await waitForState(() => document.getElementById("rom-weaver-patch-description-0"));
   expect(descriptionInput?.value).toBe("Required core patch");
   expect(descriptionInput?.tagName).toBe("TEXTAREA");

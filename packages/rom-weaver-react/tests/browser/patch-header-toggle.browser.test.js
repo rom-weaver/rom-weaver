@@ -51,13 +51,11 @@ test("strip-header toggle settles inside an everything archive bundle session", 
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 2 } }));
   await waitForApplyButtonEnabled();
 
-  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
-  const headerToggle = await waitForState(() => {
-    const toggles = Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .optschecks input"));
-    return toggles.find((input) => input.closest("label")?.textContent?.toLowerCase().includes("header")) || null;
-  });
-  expect(headerToggle).not.toBeNull();
-  headerToggle.click();
+  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  const headerSelect = await waitForState(() => document.getElementById("rom-weaver-patch-header-mode-0"));
+  expect(headerSelect).not.toBeNull();
+  headerSelect.value = "strip";
+  headerSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
   await expect
     .poll(
@@ -101,14 +99,12 @@ test("toggling the strip-header option settles instead of loading forever", asyn
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
 
-  // Open the patch Options drawer and find the header checkbox.
-  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
-  const headerToggle = await waitForState(() => {
-    const toggles = Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .optschecks input"));
-    return toggles.find((input) => input.closest("label")?.textContent?.toLowerCase().includes("header")) || null;
-  });
-  expect(headerToggle).not.toBeNull();
-  headerToggle.click();
+  // Open the patch Checks drawer and pin the header mode to strip.
+  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  const headerSelect = await waitForState(() => document.getElementById("rom-weaver-patch-header-mode-0"));
+  expect(headerSelect).not.toBeNull();
+  headerSelect.value = "strip";
+  headerSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
   // The re-validation must finish: no lingering progress bar on the patch
   // card and the apply button re-arms.

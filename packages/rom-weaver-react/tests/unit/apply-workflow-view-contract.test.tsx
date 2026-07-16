@@ -118,8 +118,8 @@ describe("apply workflow view - empty bench", () => {
     expect(card?.textContent).toContain("bundle");
     expect(card?.textContent).toContain("Identifying");
     expect(card?.textContent).toContain("Extract");
-    // Most patch cards have no options outside bundle-author mode, so the
-    // skeleton no longer reserves an Options drawer that would then vanish.
+    // A still-identifying archive has no parsed requirements, so the skeleton
+    // reserves no Options/Checks drawer that would then vanish or move.
     expect(card?.textContent).not.toContain("Options");
     expect(card?.textContent).not.toContain("Checks");
   });

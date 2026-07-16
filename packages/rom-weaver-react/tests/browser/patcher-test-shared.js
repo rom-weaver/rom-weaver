@@ -401,8 +401,8 @@ export const installPatcherTestHooks = () => {
     await clearOpfsInputDirectory();
     await warmupRomWeaverRunner();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
-    // Bundle Author mode persists in the URL hash (#bundle-author); a fresh mount
-    // must not inherit the previous test's editor state.
+    // A previous test may have left a routing hash behind; a fresh mount must
+    // not inherit it.
     if (globalThis.location.hash) {
       globalThis.history.replaceState(
         globalThis.history.state,

@@ -50,15 +50,15 @@ test("export bundle bundles the session from main-page options with a checks-onl
   await waitForApplyButtonEnabled();
 
   // Bundle creation stays opt-in even after a ROM and patch are staged: the
-  // authoring surface (format select + export action) lives behind bundle-author
-  // mode, entered through the output card's "Create bundle…" action.
+  // export surface (format select + export action) reveals through the output
+  // card's "Create bundle…" action.
   expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
   expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
-  document.getElementById("rom-weaver-button-bundle-author")?.click();
+  document.getElementById("rom-weaver-button-create-bundle")?.click();
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect).not.toBeNull();
-  // Entering the editor arms the default package format and deep-links the mode.
-  expect(window.location.hash).toBe("#bundle-author");
+  // Revealing the export arms the default package format; no mode, no deep link.
+  expect(window.location.hash).toBe("");
   await expect.poll(() => formatSelect.value).toBe("zip:patches");
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
     "Bundle + patches (.zip)",
@@ -67,7 +67,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
     "Bundle + ROM + patches (.7z)",
   ]);
 
-  // Entering the editor reveals and arms the export action.
+  // Revealing the export also arms the export action.
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
@@ -77,7 +77,8 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(nameInput).not.toBeNull();
   setFormControlValue(nameInput, "Exported Hack");
 
-  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
+  // The pencil on the patch card opens the inline name/description editors.
+  document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
   const patchNameInput = await waitForState(() => document.getElementById("rom-weaver-patch-name-0"));
   expect(patchNameInput).not.toBeNull();
   setFormControlValue(patchNameInput, "Core change");
@@ -89,7 +90,12 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // The committed description remounts the keyed inline field (the static card
   // line stays hidden while editing) - wait for that render before exporting.
   await expect.poll(() => document.getElementById("rom-weaver-patch-description-0") !== descriptionInput).toBe(true);
-  const checksInput = document.getElementById("rom-weaver-patch-input-crc32-0");
+  // Expected input checks live in the Checks drawer: open it and add a CRC32.
+  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"));
+  addCheck.value = "crc32";
+  addCheck.dispatchEvent(new Event("change", { bubbles: true }));
+  const checksInput = await waitForState(() => document.getElementById("rom-weaver-patch-input-crc32-0"));
   expect(checksInput).not.toBeNull();
   setFormControlValue(checksInput, "deadbeef");
   checksInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
@@ -132,9 +138,14 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // Patch entries carry no file hashes - the format has no integrity field.
   expect(patchEntry.integrity).toBeUndefined();
 
-  const downloadButton = document.getElementById("rom-weaver-button-export-bundle");
-  expect(downloadButton?.textContent).toContain("Download");
-  downloadButton?.click();
+  // The action re-renders as its Download form once the auto-download settles
+  // (a progress button carries the in-flight state in between).
+  const downloadButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled ? button : null;
+  }, 30000);
+  expect(downloadButton.textContent).toContain("Download");
+  downloadButton.click();
   await expect.poll(() => saveAs.mock.calls.length).toBe(2);
   saveAs.mockRestore();
 });
@@ -154,8 +165,8 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   );
   await waitForApplyButtonEnabled();
 
-  // The settings default (bundlePackage) fills the format once the editor opens.
-  document.getElementById("rom-weaver-button-bundle-author")?.click();
+  // The settings default (bundlePackage) fills the format once the export reveals.
+  document.getElementById("rom-weaver-button-create-bundle")?.click();
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect?.value).toBe("zip:rom");
   const exportButton = await waitForState(() => {

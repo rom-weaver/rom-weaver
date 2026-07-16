@@ -225,9 +225,8 @@ test("source-check patch formats report runtime patch validation success", async
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
     selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(patchPath));
 
-    // BPS/UPS declare embedded requirements, so the card renders a Checks drawer
-    // carrying the clickable dry-apply success control (requirement-less patches
-    // carry it on Options instead).
+    // BPS/UPS declare embedded requirements, so the card's Checks drawer opens
+    // by default and carries the clickable dry-apply success control.
     const validation = await waitForState(() => {
       const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
       if (!(element instanceof HTMLElement)) return null;
@@ -235,7 +234,6 @@ test("source-check patch formats report runtime patch validation success", async
     }, 60000);
     expect(validation).toBeInstanceOf(HTMLElement);
     expect(validation.textContent).toContain("Checks");
-    expect(validation.querySelector(".optsblock .dry-apply-info")).toBeNull();
   }
 });
 
@@ -370,13 +368,13 @@ test("requirement-less patch passes without requirement rows", async () => {
   );
 
   // A dry-run-only patch declares no requirements: the ok mark rides the card
-  // (and the Options drawer header), and no aux requirement rows render inside
-  // the verification groups.
+  // (and the Checks drawer header), and no requirement rows render inside the
+  // verification groups - only the per-side "Add check" affordances.
   const validation = await waitForState(() => {
     const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
     return element instanceof HTMLElement ? element : null;
   }, 30000);
-  expect(validation.querySelector(".optsblock .ck")).toBeNull();
+  expect(validation.querySelector(".cks .ck")).toBeNull();
   expect(validation.textContent).not.toContain("VALIDATION");
 });
 
@@ -396,9 +394,12 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
   await waitForApplyButtonEnabled();
 
-  // The editable check fields live behind bundle-author mode.
-  document.getElementById("rom-weaver-button-bundle-author")?.click();
-  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
+  // The Checks drawer starts collapsed for a requirement-less patch: open it
+  // and add an input CRC32 check.
+  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"), 30000);
+  addCheck.value = "crc32";
+  addCheck.dispatchEvent(new Event("change", { bubbles: true }));
   const crcInput = await waitForState(() => document.getElementById("rom-weaver-patch-input-crc32-0"), 30000);
   expect(crcInput).toBeInstanceOf(HTMLInputElement);
   expect(crcInput.value).toBe("");

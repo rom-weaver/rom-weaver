@@ -60,26 +60,13 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.hash).toBe("#/apply");
   });
 
-  it("carries the bundle-author hash segment through routing", () => {
-    // A bare deep link resolves to the Weave tab and normalizes to the
-    // router's shape with the mode segment preserved.
-    window.location.hash = "#bundle-author";
-    const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.hash).toBe("#/apply/bundle-author");
-    // The mode segment belongs to the apply form: navigating away drops it,
-    // returning does not resurrect it.
-    controller.selectView("creator");
-    expect(window.location.hash).toBe("#/create");
-    controller.selectView("patcher");
-    expect(window.location.hash).toBe("#/apply");
-  });
-
-  it("keeps the routed bundle-author deep link on the weave tab", () => {
+  it("normalizes a legacy bundle-author deep link to the weave tab", () => {
+    // The retired bundle-author mode segment still routes by its first
+    // segment; the router normalizes the hash to its own shape.
     window.location.hash = "#/apply/bundle-author";
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.hash).toBe("#/apply/bundle-author");
+    expect(window.location.hash).toBe("#/apply");
   });
 
   it("routes and tracks the tools workflow", () => {
