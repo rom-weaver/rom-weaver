@@ -1543,27 +1543,27 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* "provide this ROM" card in the ROM step: the standard file-card anatomy,
    but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
    (the same "off" language as a disabled patch) with the file name ghosted */
-/* ── Bundle edit ─────────────────────────────────────────────────────────────
+/* ── Bundle Author ─────────────────────────────────────────────────────────────
    The mode toggle: one compact pill, right-aligned in the 0x01 header - small
    when idle, thread-lit while the editor is on. The whole pill is the switch. */
-.rw-app .bundle-edit-bar { display: inline-flex; align-items: center; margin-inline-start: auto; align-self: center; }
-.rw-app .bundle-edit-pill {
+.rw-app .bundle-author-bar { display: inline-flex; align-items: center; margin-inline-start: auto; align-self: center; }
+.rw-app .bundle-author-pill {
   display: inline-flex; align-items: center; gap: var(--sp-s); max-width: 100%;
   padding: 4px 11px; border: 1px dashed var(--seam); border-radius: 99px;
   background: color-mix(in oklab, var(--well) 72%, transparent);
   font-size: .8rem; cursor: pointer;
   transition: border-color .18s, background .18s;
 }
-.rw-app .bundle-edit-pill:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
-.rw-app .bundle-edit-pill > svg { width: 14px; height: 14px; flex: none; color: var(--ink-3); transition: color .18s; }
-.rw-app .bundle-edit-title { font-weight: 650; white-space: nowrap; }
-.rw-app .bundle-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: .72rem; }
-.rw-app .bundle-edit-pill input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 14px; --sw-pad: 1px; --sw-travel: 12px; }
-.rw-app .bundle-edit-bar.is-active .bundle-edit-pill {
+.rw-app .bundle-author-pill:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
+.rw-app .bundle-author-pill > svg { width: 14px; height: 14px; flex: none; color: var(--ink-3); transition: color .18s; }
+.rw-app .bundle-author-title { font-weight: 650; white-space: nowrap; }
+.rw-app .bundle-author-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: .72rem; }
+.rw-app .bundle-author-pill input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 14px; --sw-pad: 1px; --sw-travel: 12px; }
+.rw-app .bundle-author-bar.is-active .bundle-author-pill {
   border-style: solid; border-color: var(--thread);
   background: color-mix(in oklab, var(--thread) 14%, var(--well));
 }
-.rw-app .bundle-edit-bar.is-active .bundle-edit-pill > svg { color: var(--thread-text); }
+.rw-app .bundle-author-bar.is-active .bundle-author-pill > svg { color: var(--thread-text); }
 
 /* Per-row expected-vs-computed verdict inside a Checks drawer. */
 .rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
@@ -1596,17 +1596,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
 @media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
 
-/* The ROM card's bundle-checks editor (bundle-edit mode). */
+/* The ROM card's bundle-checks editor (bundle-author mode). */
 /* Editable check grids (bundle authoring): CRC32 + BYTES pair on one row (the
    same rhythm as the computed Checks rows); MD5/SHA-1 need the full width. */
 .rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
 .rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
 @container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
 .rw-app .rom-bundle-checks .hintline { margin-top: 6px; }
-/* Inline bundle-edit description on the patch card: a touch of air below the
+/* Inline bundle-author description on the patch card: a touch of air below the
    toggle/meta row so the field group doesn't crowd it. */
 .rw-app .patch-meta-inline { margin-block-start: 2px; }
-/* Bundle-edit: the card title is the patch name, edited in place. The field
+/* Bundle Author: the card title is the patch name, edited in place. The field
    wears the standard filled-input look (solid seam + well) at title size and
    matches the handle/remove button height; long names wrap and the textarea
    grows (autosizeTextarea) - it never scrolls or resizes by hand. */
@@ -2504,7 +2504,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
-/* The bundle-edit name textarea is a replaced box that cannot wrap around a
+/* The bundle-author name textarea is a replaced box that cannot wrap around a
    float - keep it beside the buttons by giving up their width explicitly. */
 .rw-app #rom-weaver-list-patch-stack > .card.patch .nmline > .nm-input {
   width: calc(100% - 2 * var(--ctrl-h) - var(--sp-s) - var(--sp-m));
@@ -2806,9 +2806,9 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     pointer-events: none;
   }
 
-  /* The bundle-edit toggle sits over the covering add-files action - keep it
+  /* The bundle-author toggle sits over the covering add-files action - keep it
      interactive so its tap toggles the mode instead of opening the picker. */
-  .rw-app .unified-drop-step > .step-head > .bundle-edit-bar {
+  .rw-app .unified-drop-step > .step-head > .bundle-author-bar {
     position: relative;
     z-index: 2;
   }

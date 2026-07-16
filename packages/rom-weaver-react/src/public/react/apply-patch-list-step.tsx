@@ -228,7 +228,7 @@ type PatchMetaFieldProps = {
   onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
 };
 
-/** Bundle-edit mode: the card title IS the patch's display name, edited in
+/** Bundle Author mode: the card title IS the patch's display name, edited in
  * place (placeholder = the file name it falls back to). A textarea only so a
  * long name can wrap and grow - names never contain newlines, Enter commits. */
 const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
@@ -253,7 +253,7 @@ const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
   />
 );
 
-/** Bundle-edit mode: the description sits inline on the card (in place of the
+/** Bundle Author mode: the description sits inline on the card (in place of the
  * static description line), not tucked inside the Options drawer. */
 const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
   <div className="patch-meta-inline">
@@ -293,7 +293,7 @@ const PatchOptions = ({
    * plan, so the header verdict/timing readouts stay off - the drawer remains
    * editable for bundle authors. */
   disabled?: boolean;
-  /** Bundle-edit mode: the authoring fields (name/description + editable check
+  /** Bundle Author mode: the authoring fields (name/description + editable check
    * grids) render only inside the editor - the plain apply view keeps the
    * drawer to its functional options. */
   editMode?: boolean;
@@ -651,7 +651,7 @@ const PatchEnableToggle = ({
 );
 
 const ApplyPatchListStep = ({
-  bundleEditMode,
+  bundleAuthorMode,
   bundleOutputCheckHint,
   disabledFlags,
   emptyState,
@@ -668,8 +668,8 @@ const ApplyPatchListStep = ({
   ui,
   woven,
 }: {
-  /** Bundle-edit mode: reveal the per-patch authoring fields. */
-  bundleEditMode?: boolean;
+  /** Bundle Author mode: reveal the per-patch authoring fields. */
+  bundleAuthorMode?: boolean;
   /** The bundle has optional patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   bundleOutputCheckHint?: boolean;
@@ -792,7 +792,7 @@ const ApplyPatchListStep = ({
               {...rowProps}
               className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
               description={
-                description && !bundleEditMode ? (
+                description && !bundleAuthorMode ? (
                   <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
                     {description}
                   </p>
@@ -833,7 +833,7 @@ const ApplyPatchListStep = ({
               }
               name={
                 <ExtractName
-                  displayName={bundleEditMode ? undefined : bundleMeta?.[index]?.name}
+                  displayName={bundleAuthorMode ? undefined : bundleMeta?.[index]?.name}
                   fileName={item.fileName}
                   fileSize={item.fileSize}
                   // The first archive-path entry is the source archive itself (shown
@@ -848,7 +848,7 @@ const ApplyPatchListStep = ({
                   }
                   legacyFileClassName="rom-weaver-patch-stack-file"
                   nameEditor={
-                    bundleEditMode && onBundleMetaChange ? (
+                    bundleAuthorMode && onBundleMetaChange ? (
                       <PatchNameInline
                         index={index}
                         item={item}
@@ -873,7 +873,7 @@ const ApplyPatchListStep = ({
                   {verdict === "bad" ? (
                     <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
                   ) : null}
-                  {bundleEditMode && onBundleMetaChange ? (
+                  {bundleAuthorMode && onBundleMetaChange ? (
                     <PatchMetaFields
                       index={index}
                       item={item}
@@ -892,7 +892,7 @@ const ApplyPatchListStep = ({
                   )}
                   <PatchOptions
                     disabled={isDisabled}
-                    editMode={bundleEditMode}
+                    editMode={bundleAuthorMode}
                     index={index}
                     isChainInput={index === chainInputIndex}
                     isChainOutput={index === chainOutputIndex}

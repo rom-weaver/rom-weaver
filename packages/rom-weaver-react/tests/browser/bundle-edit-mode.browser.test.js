@@ -75,7 +75,7 @@ const buildWithoutRomBundle = async ({ romCrc32, outputCrc32 }) => {
 
 const getPatchToggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
 
-test("authoring fields stay hidden until bundle-edit mode; enter/exit round-trips the hash", async () => {
+test("authoring fields stay hidden until bundle-author mode; enter/exit round-trips the hash", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
@@ -85,18 +85,18 @@ test("authoring fields stay hidden until bundle-edit mode; enter/exit round-trip
   expect(document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  const modeToggle = document.getElementById("rom-weaver-toggle-bundle-edit");
+  const modeToggle = document.getElementById("rom-weaver-toggle-bundle-author");
   expect(modeToggle).not.toBeNull();
   expect(modeToggle.checked).toBe(false);
-  expect(document.getElementById("rom-weaver-bundle-edit-bar")?.classList.contains("is-active")).toBe(false);
+  expect(document.getElementById("rom-weaver-bundle-author-bar")?.classList.contains("is-active")).toBe(false);
   expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
 
   // The output card's "Create bundle…" action enters the editor.
-  document.getElementById("rom-weaver-button-bundle-edit")?.click();
-  await expect.poll(() => window.location.hash).toBe("#bundle-edit");
-  const editBar = await waitForState(() => document.getElementById("rom-weaver-bundle-edit-bar"));
+  document.getElementById("rom-weaver-button-bundle-author")?.click();
+  await expect.poll(() => window.location.hash).toBe("#bundle-author");
+  const editBar = await waitForState(() => document.getElementById("rom-weaver-bundle-author-bar"));
   expect(editBar.classList.contains("is-active")).toBe(true);
-  expect(document.getElementById("rom-weaver-toggle-bundle-edit")?.checked).toBe(true);
+  expect(document.getElementById("rom-weaver-toggle-bundle-author")?.checked).toBe(true);
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).not.toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).not.toBeNull();
   // The ROM card gains the bundle-checks editor, prefilled with computed hashes.
@@ -109,20 +109,20 @@ test("authoring fields stay hidden until bundle-edit mode; enter/exit round-trip
 
   // Switching the mode off leaves the editor and clears the deep link; the
   // switch itself stays put.
-  document.getElementById("rom-weaver-toggle-bundle-edit")?.click();
+  document.getElementById("rom-weaver-toggle-bundle-author")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(window.location.hash).toBe("");
-  expect(document.getElementById("rom-weaver-toggle-bundle-edit")?.checked).toBe(false);
-  expect(document.getElementById("rom-weaver-bundle-edit-bar")?.classList.contains("is-active")).toBe(false);
+  expect(document.getElementById("rom-weaver-toggle-bundle-author")?.checked).toBe(false);
+  expect(document.getElementById("rom-weaver-bundle-author-bar")?.classList.contains("is-active")).toBe(false);
 });
 
-test("#bundle-edit hash deep-links straight into the editor", async () => {
-  window.location.hash = "bundle-edit";
+test("#bundle-author hash deep-links straight into the editor", async () => {
+  window.location.hash = "bundle-author";
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
 
-  const editBar = await waitForState(() => document.getElementById("rom-weaver-bundle-edit-bar"));
+  const editBar = await waitForState(() => document.getElementById("rom-weaver-bundle-author-bar"));
   expect(editBar.classList.contains("is-active")).toBe(true);
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).not.toBeNull();
 });

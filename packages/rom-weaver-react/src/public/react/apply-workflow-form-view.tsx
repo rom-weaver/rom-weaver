@@ -233,8 +233,8 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
   </div>
 );
 
-/** The bundle-edit mode surface, threaded from the form. */
-type BundleEditState = {
+/** The bundle-author mode surface, threaded from the form. */
+type BundleAuthorState = {
   active: boolean;
   enter: () => void;
   exit: () => void;
@@ -248,24 +248,24 @@ type BundleEditState = {
 };
 
 /**
- * The "Bundle edit" pill: a compact persistent toggle on the right of the 0x01
+ * The "Bundle Author" pill: a compact persistent toggle on the right of the 0x01
  * header - the mode's one stable home on every bench state, hero included (the output card's
  * "Create bundle…" action and the URL hash are shortcuts to the same switch).
  * Small when idle, thread-lit when the editor is on.
  */
-const BundleEditBar = ({ bundleEdit }: { bundleEdit?: BundleEditState }) => {
-  if (!bundleEdit) return null;
-  const { active, enter, exit, sessionName } = bundleEdit;
+const BundleAuthorBar = ({ bundleAuthor }: { bundleAuthor?: BundleAuthorState }) => {
+  if (!bundleAuthor) return null;
+  const { active, enter, exit, sessionName } = bundleAuthor;
   return (
-    <div className={active ? "bundle-edit-bar is-active" : "bundle-edit-bar"} id="rom-weaver-bundle-edit-bar">
-      <label className="bundle-edit-pill">
+    <div className={active ? "bundle-author-bar is-active" : "bundle-author-bar"} id="rom-weaver-bundle-author-bar">
+      <label className="bundle-author-pill">
         <Package aria-hidden="true" />
-        <span className="bundle-edit-title">Bundle edit</span>
-        {sessionName ? <span className="bundle-edit-name mono">{sessionName}</span> : null}
+        <span className="bundle-author-title">Bundle Author</span>
+        {sessionName ? <span className="bundle-author-name mono">{sessionName}</span> : null}
         <input
-          aria-label="Bundle edit mode"
+          aria-label="Bundle Author mode"
           checked={active}
-          id="rom-weaver-toggle-bundle-edit"
+          id="rom-weaver-toggle-bundle-author"
           onChange={() => (active ? exit() : enter())}
           type="checkbox"
         />
@@ -378,8 +378,8 @@ type RomRowDeps = {
   /** The bundle's expected base-ROM checks - an "Expected" group with match
    * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
   expectedChecks?: ParsedBundleChecks;
-  /** Bundle-edit mode: the ROM card carries the bundle-checks editor. */
-  bundleEditMode?: boolean;
+  /** Bundle Author mode: the ROM card carries the bundle-checks editor. */
+  bundleAuthorMode?: boolean;
   romBundleChecks?: RomBundleChecksDraft;
   onRomBundleChecksChange?: (updates: RomBundleChecksDraft) => void;
 };
@@ -464,10 +464,10 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       ],
     },
   ];
-  // Bundle-edit mode: the ROM card carries the bundle's global rom.checks
+  // Bundle Author mode: the ROM card carries the bundle's global rom.checks
   // editor once the ROM has settled (its computed hashes are the placeholders).
   const bundleChecksEditor =
-    deps.bundleEditMode && deps.onRomBundleChecksChange && !staging ? (
+    deps.bundleAuthorMode && deps.onRomBundleChecksChange && !staging ? (
       <RomBundleChecksEditor
         computed={{
           ...(romInput.info.crc32 ? { crc32: romInput.info.crc32 } : {}),
@@ -642,7 +642,7 @@ const APPLY_ACTIVITY_KEY = "react-apply-view";
 
 function ApplyWorkflowFormView({
   controllers,
-  bundleEdit,
+  bundleAuthor,
   bundleExpectedRomChecks,
   bundleExport,
   bundleMetaById,
@@ -676,8 +676,8 @@ function ApplyWorkflowFormView({
     setBundleRom: (value: boolean) => void;
     setFormat: (value: string) => void;
   };
-  /** The bundle-edit mode surface: state, entry/exit, and its notices. */
-  bundleEdit?: BundleEditState;
+  /** The bundle-author mode surface: state, entry/exit, and its notices. */
+  bundleAuthor?: BundleAuthorState;
   /** The bundle's expected base-ROM checks, folded into the staged ROM card. */
   bundleExpectedRomChecks?: ParsedBundleChecks;
   /** Per-patch bundle metadata (label/description chips), keyed by stable source id. */
@@ -685,7 +685,7 @@ function ApplyWorkflowFormView({
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
-  /** Bundle-edit mode: the ROM card's global rom.checks draft + its editor callback. */
+  /** Bundle Author mode: the ROM card's global rom.checks draft + its editor callback. */
   onRomBundleChecksChange?: (updates: RomBundleChecksDraft) => void;
   romBundleChecks?: RomBundleChecksDraft;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
@@ -797,9 +797,9 @@ function ApplyWorkflowFormView({
     ui: uiController,
     verificationStates: romVerificationStates,
     ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
-    ...(singleRom && bundleEdit?.active && onRomBundleChecksChange
+    ...(singleRom && bundleAuthor?.active && onRomBundleChecksChange
       ? {
-          bundleEditMode: true,
+          bundleAuthorMode: true,
           onRomBundleChecksChange,
           ...(romBundleChecks ? { romBundleChecks } : {}),
         }
@@ -889,7 +889,7 @@ function ApplyWorkflowFormView({
     const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
     return localizer.message(createKey, { format: formatName });
   })();
-  // The bundle package select lives inside bundle-edit mode: entering the
+  // The bundle package select lives inside bundle-author mode: entering the
   // editor IS the "show bundle creation" signal (it arms a default format), so
   // the old "Hide bundle creation" sentinel row is gone.
   const bundleFormatValue = (() => {
@@ -897,7 +897,7 @@ function ApplyWorkflowFormView({
     return `${bundleExport.format}:${bundleExport.bundleRom ? "rom" : "patches"}`;
   })();
   const bundleOutputFields =
-    bundleExport && bundleEdit?.active ? (
+    bundleExport && bundleAuthor?.active ? (
       <>
         {outputHeaderField}
         <OutputField
@@ -990,7 +990,7 @@ function ApplyWorkflowFormView({
           ) : null
         }
         big={workflowEmpty}
-        headerExtra={<BundleEditBar bundleEdit={bundleEdit} />}
+        headerExtra={<BundleAuthorBar bundleAuthor={bundleAuthor} />}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
         id="rom-weaver-row-unified-drop"
@@ -1083,9 +1083,9 @@ function ApplyWorkflowFormView({
           />
 
           <ApplyPatchListStep
-            bundleEditMode={bundleEdit?.active}
+            bundleAuthorMode={bundleAuthor?.active}
             bundleMeta={bundleMeta}
-            bundleOutputCheckHint={!!bundleEdit?.active && bundleEdit.hasOptionalEntries}
+            bundleOutputCheckHint={!!bundleAuthor?.active && bundleAuthor.hasOptionalEntries}
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
@@ -1165,28 +1165,28 @@ function ApplyWorkflowFormView({
                   totalTime={applyTotalTime || undefined}
                 />
                 {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-                {bundleEdit?.outputStandDown ? (
+                {bundleAuthor?.outputStandDown ? (
                   <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
                     <TriangleAlert aria-hidden="true" />
                     <span>
-                      {bundleEdit.outputStandDown === "partial"
+                      {bundleAuthor.outputStandDown === "partial"
                         ? "Output won't be verified - the bundle's expected result only covers its full patch chain."
                         : "Output won't be verified - the patch chain differs from the bundle."}
                     </span>
                   </p>
                 ) : null}
-                {bundleEdit && !bundleEdit.active ? (
+                {bundleAuthor && !bundleAuthor.active ? (
                   <button
                     className="btn ghost slim bundle-dl"
-                    id="rom-weaver-button-bundle-edit"
-                    onClick={bundleEdit.enter}
+                    id="rom-weaver-button-bundle-author"
+                    onClick={bundleAuthor.enter}
                     type="button"
                   >
                     <Package aria-hidden="true" />
                     Create bundle…
                   </button>
                 ) : null}
-                {bundleExport && bundleEdit?.active ? (
+                {bundleExport && bundleAuthor?.active ? (
                   bundleExport.busy ? (
                     <ProgressActionButton
                       cancelLabel="Cancel bundle export"

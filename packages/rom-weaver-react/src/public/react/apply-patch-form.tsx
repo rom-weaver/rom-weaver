@@ -82,23 +82,23 @@ const buildEagerPatchStageInfo = (
   return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
 };
 
-/** The URL hash segment that deep-links into bundle-edit mode. The webapp's
+/** The URL hash segment that deep-links into bundle-author mode. The webapp's
  * tab router owns the hash's first segment (`#/apply`), so the mode rides as
- * an extra segment (`#/apply/bundle-edit`); a bare `#bundle-edit` also counts
+ * an extra segment (`#/apply/bundle-author`); a bare `#bundle-author` also counts
  * (embedding without the router, and the router resolves it to the Weave tab). */
-const BUNDLE_EDIT_HASH = "bundle-edit";
+const BUNDLE_AUTHOR_HASH = "bundle-author";
 
 const readHashSegments = (): string[] =>
   typeof window === "undefined" ? [] : window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
 
-const readBundleEditHash = (): boolean =>
-  readHashSegments().some((segment) => segment.toLowerCase() === BUNDLE_EDIT_HASH);
+const readBundleAuthorHash = (): boolean =>
+  readHashSegments().some((segment) => segment.toLowerCase() === BUNDLE_AUTHOR_HASH);
 
-const writeBundleEditHash = (active: boolean) => {
+const writeBundleAuthorHash = (active: boolean) => {
   if (typeof window === "undefined") return;
-  if (readBundleEditHash() === active) return;
-  const kept = readHashSegments().filter((segment) => segment.toLowerCase() !== BUNDLE_EDIT_HASH);
-  const segments = active ? [...kept, BUNDLE_EDIT_HASH] : kept;
+  if (readBundleAuthorHash() === active) return;
+  const kept = readHashSegments().filter((segment) => segment.toLowerCase() !== BUNDLE_AUTHOR_HASH);
+  const segments = active ? [...kept, BUNDLE_AUTHOR_HASH] : kept;
   const url = new URL(window.location.href);
   // Preserve the router's `#/<slug>` shape when a route segment is present.
   url.hash = segments.length ? (kept.length ? `/${segments.join("/")}` : segments.join("/")) : "";
@@ -260,21 +260,21 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [handleBundlePatchesChange, props.onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
-  // Bundle-edit mode: the authoring layer (patch name/description/check fields,
+  // Bundle Author mode: the authoring layer (patch name/description/check fields,
   // ROM bundle checks, export controls) stays hidden until the user explicitly
-  // enters the editor. The mode deep-links via the #bundle-edit URL hash.
-  const [bundleEditMode, setBundleEditMode] = useState(readBundleEditHash);
-  const setBundleEditModeAndHash = useCallback((active: boolean) => {
-    setBundleEditMode(active);
-    writeBundleEditHash(active);
+  // enters the editor. The mode deep-links via the #bundle-author URL hash.
+  const [bundleAuthorMode, setBundleAuthorMode] = useState(readBundleAuthorHash);
+  const setBundleAuthorModeAndHash = useCallback((active: boolean) => {
+    setBundleAuthorMode(active);
+    writeBundleAuthorHash(active);
   }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onHashChange = () => setBundleEditMode(readBundleEditHash());
+    const onHashChange = () => setBundleAuthorMode(readBundleAuthorHash());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
-  // The bundle-checks grid on the ROM card (bundle-edit mode): overrides the
+  // The bundle-checks grid on the ROM card (bundle-author mode): overrides the
   // exported rom.checks/rom.size when set; empty fields fall back to the staged
   // ROM's computed hashes.
   const [romBundleChecks, setRomBundleChecks] = useState<RomBundleChecksDraft>({});
@@ -1227,21 +1227,21 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
-  const enterBundleEditMode = useCallback(() => setBundleEditModeAndHash(true), [setBundleEditModeAndHash]);
-  const exitBundleEditMode = useCallback(() => setBundleEditModeAndHash(false), [setBundleEditModeAndHash]);
+  const enterBundleAuthorMode = useCallback(() => setBundleAuthorModeAndHash(true), [setBundleAuthorModeAndHash]);
+  const exitBundleAuthorMode = useCallback(() => setBundleAuthorModeAndHash(false), [setBundleAuthorModeAndHash]);
   // Being in the editor is the "I'm making a bundle" signal: arm a default
   // package format so the export action is live without a second decision.
-  // An effect (not the enter callback) so the #bundle-edit hash entry arms too.
+  // An effect (not the enter callback) so the #bundle-author hash entry arms too.
   const {
     format: bundleExportFormat,
     setBundleRom: setBundleExportRom,
     setFormat: setBundleExportFormat,
   } = bundleExport;
   useEffect(() => {
-    if (!bundleEditMode || bundleExportFormat) return;
+    if (!bundleAuthorMode || bundleExportFormat) return;
     setBundleExportFormat("zip");
     setBundleExportRom(false);
-  }, [bundleEditMode, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
+  }, [bundleAuthorMode, bundleExportFormat, setBundleExportFormat, setBundleExportRom]);
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
@@ -1290,10 +1290,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        bundleEdit={{
-          active: bundleEditMode,
-          enter: enterBundleEditMode,
-          exit: exitBundleEditMode,
+        bundleAuthor={{
+          active: bundleAuthorMode,
+          enter: enterBundleAuthorMode,
+          exit: exitBundleAuthorMode,
           hasOptionalEntries:
             !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputStandDown: bundleOutputStandDown,

@@ -77,10 +77,10 @@ const HASH_SLUG_TO_VIEW: Record<string, WorkflowView> = {
   trim: "trim",
 };
 
-/** The apply form's bundle-edit mode rides the hash as an extra segment
- * (`#/apply/bundle-edit`) - the router owns only the first segment and must
+/** The apply form's bundle-author mode rides the hash as an extra segment
+ * (`#/apply/bundle-author`) - the router owns only the first segment and must
  * carry the mode segment along instead of clobbering it. */
-const BUNDLE_EDIT_HASH_SEGMENT = "bundle-edit";
+const BUNDLE_AUTHOR_HASH_SEGMENT = "bundle-author";
 
 const readHashSegments = (): string[] => {
   if (typeof window === "undefined") return [];
@@ -94,18 +94,18 @@ const readWorkflowViewFromHash = (): WorkflowView | null => {
   const slug = readHashSlug();
   const view = HASH_SLUG_TO_VIEW[slug] || normalizeWorkflowView(slug);
   if (view) return view;
-  // A bare `#bundle-edit` deep link means the Weave tab's bundle editor.
-  if (readHashSegments().includes(BUNDLE_EDIT_HASH_SEGMENT)) return "patcher";
+  // A bare `#bundle-author` deep link means the Weave tab's bundle editor.
+  if (readHashSegments().includes(BUNDLE_AUTHOR_HASH_SEGMENT)) return "patcher";
   return null;
 };
 
 const writeWorkflowViewToHash = (view: WorkflowView): void => {
   if (typeof window === "undefined") return;
   const slug = VIEW_TO_HASH_SLUG[view];
-  // The bundle-edit segment belongs to the apply form: keep it while the
+  // The bundle-author segment belongs to the apply form: keep it while the
   // Weave tab is active, drop it when navigating to another workflow.
-  const bundleEdit = view === "patcher" && readHashSegments().includes(BUNDLE_EDIT_HASH_SEGMENT);
-  const nextHash = bundleEdit ? `#/${slug}/${BUNDLE_EDIT_HASH_SEGMENT}` : `#/${slug}`;
+  const bundleAuthor = view === "patcher" && readHashSegments().includes(BUNDLE_AUTHOR_HASH_SEGMENT);
+  const nextHash = bundleAuthor ? `#/${slug}/${BUNDLE_AUTHOR_HASH_SEGMENT}` : `#/${slug}`;
   if (window.location.hash !== nextHash) {
     if (typeof window.history?.replaceState === "function") {
       window.history.replaceState(window.history.state, "", nextHash);

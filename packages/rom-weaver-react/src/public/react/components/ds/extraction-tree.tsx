@@ -196,7 +196,7 @@ const ExtractName = ({
   parentCompressions,
 }: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & {
   displayName?: string;
-  /** Bundle-edit mode: an in-place editor rendered instead of the static name
+  /** Bundle Author mode: an in-place editor rendered instead of the static name
    * face (the sr-only filename and legacy label stay for identity). */
   nameEditor?: ReactNode;
 }) => (

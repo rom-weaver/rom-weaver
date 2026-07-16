@@ -11,12 +11,12 @@ import {
 } from "./components/ds/check-fields.ts";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 
-/** Bundle-checks values as typed on the ROM card in bundle-edit mode. Empty
+/** Bundle-checks values as typed on the ROM card in bundle-author mode. Empty
  * fields fall back to the staged ROM's computed hashes at export. */
 type RomBundleChecksDraft = { crc32?: string; md5?: string; sha1?: string; bytes?: string };
 
 /**
- * Bundle-edit editor for the bundle's global ROM expectation (`rom.checks`).
+ * Bundle Author editor for the bundle's global ROM expectation (`rom.checks`).
  * Prefilled placeholders show the staged ROM's computed hashes - the values the
  * export uses when a field is left empty - so authors only type when the bundle
  * should expect a different base ROM than the one on the bench.

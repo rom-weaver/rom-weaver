@@ -100,7 +100,7 @@ type UseBundleExportOptions = {
   /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the bundle's `output.header`. */
   getOutputHeader?: () => "auto" | "keep" | "strip" | undefined;
-  /** Bundle-edit overrides for the exported rom.checks/rom.size; null falls
+  /** Bundle Author overrides for the exported rom.checks/rom.size; null falls
    * back to the staged ROM's computed hashes. */
   getRomChecksOverrides?: () => { checksums: Record<string, string>; size?: number } | null;
   disabledPatchIds: ReadonlySet<string>;
@@ -304,7 +304,7 @@ const useBundleExport = ({
         }
       }
       const outputHeader = getOutputHeader?.();
-      // Bundle-edit overrides win over the staged ROM's computed values - the
+      // Bundle Author overrides win over the staged ROM's computed values - the
       // author is pinning what the bundle should expect, per field.
       const romChecksOverrides = getRomChecksOverrides?.() || null;
       const romChecksums = {
