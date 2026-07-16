@@ -1,4 +1,5 @@
 import Archive from "lucide-react/dist/esm/icons/archive.js";
+import type { ReactNode } from "react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
@@ -191,8 +192,14 @@ const ExtractName = ({
   folderPath,
   legacyArchiveClassName = "rom-weaver-patch-stack-archive",
   legacyFileClassName,
+  nameEditor,
   parentCompressions,
-}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & { displayName?: string }) => (
+}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & {
+  displayName?: string;
+  /** Bundle-edit mode: an in-place editor rendered instead of the static name
+   * face (the sr-only filename and legacy label stay for identity). */
+  nameEditor?: ReactNode;
+}) => (
   <>
     {legacyFileClassName ? (
       <LegacyExtractionLabel
@@ -207,10 +214,12 @@ const ExtractName = ({
       {/* assistive tech (and text-based assertions) get the full filename;
           the visible face drops the extension - the format badge carries it */}
       <span className="sr-only">{fileName}</span>
-      <span aria-hidden="true" className="nm" title={folderPath ? `${folderPath} › ${fileName}` : fileName}>
-        {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
-        {displayName?.trim() || getDisplayName(fileName)}
-      </span>
+      {nameEditor ?? (
+        <span aria-hidden="true" className="nm" title={folderPath ? `${folderPath} › ${fileName}` : fileName}>
+          {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
+          {displayName?.trim() || getDisplayName(fileName)}
+        </span>
+      )}
     </div>
   </>
 );

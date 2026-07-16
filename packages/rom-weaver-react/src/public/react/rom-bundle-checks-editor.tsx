@@ -1,7 +1,7 @@
 import ListChecks from "lucide-react/dist/esm/icons/list-checks.js";
 import { useState } from "react";
 import {
-  CHECK_FIELDS,
+  CHECK_FIELDS_PAIRED,
   CHECK_HEX_LENGTHS,
   CHECK_LABELS,
   type CheckAlgorithm,
@@ -9,7 +9,7 @@ import {
   isValidCheckValue,
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
-import { Drawer } from "./components/ds/drawer.tsx";
+import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 
 /** Bundle-checks values as typed on the ROM card in bundle-edit mode. Empty
  * fields fall back to the staged ROM's computed hashes at export. */
@@ -46,45 +46,41 @@ const RomBundleChecksEditor = ({
     if (invalid) return;
     onChange({ [field]: normalized || undefined });
   };
+  const customized = Boolean(value.crc32 || value.md5 || value.sha1 || value.bytes);
   return (
     <Drawer
       bodyClassName="optsbody"
       className="optsblock rom-bundle-checks"
-      defaultOpen
       label="Bundle checks"
       labelIcon={<ListChecks aria-hidden="true" />}
+      readouts={<DrawerReadout muted={!customized}>{customized ? "custom" : "auto"}</DrawerReadout>}
     >
-      <div className="patch-check-group">
-        <div className="ck-group-head">
-          <span>Expected ROM verification</span>
-        </div>
-        <div className="verification-list">
-          {CHECK_FIELDS.map((field) => {
-            const invalid = !!invalidFields[field];
-            const fieldValue = value[field] || "";
-            return (
-              <div className="verification-row" key={field}>
-                <label className="ofld-l" htmlFor={`rom-weaver-rom-bundle-${field}`}>
-                  {CHECK_LABELS[field]}
-                </label>
-                <input
-                  aria-invalid={invalid || undefined}
-                  className="input mono popt-input"
-                  defaultValue={fieldValue}
-                  id={`rom-weaver-rom-bundle-${field}`}
-                  key={`${field}:${fieldValue}`}
-                  onBlur={(event) => commit(field, event.currentTarget.value)}
-                  placeholder={computed[field] || ""}
-                  spellCheck={false}
-                  title={invalid ? invalidFieldTitle(field) : fieldValue || computed[field] || undefined}
-                  type="text"
-                />
-              </div>
-            );
-          })}
-        </div>
-        <p className="hintline">Empty fields export the staged ROM's computed values.</p>
+      <div className="verification-list ck-fields-paired">
+        {CHECK_FIELDS_PAIRED.map((field) => {
+          const invalid = !!invalidFields[field];
+          const fieldValue = value[field] || "";
+          return (
+            <div className="verification-row" key={field}>
+              <label className="ofld-l" htmlFor={`rom-weaver-rom-bundle-${field}`}>
+                {CHECK_LABELS[field]}
+              </label>
+              <input
+                aria-invalid={invalid || undefined}
+                className="input mono popt-input"
+                defaultValue={fieldValue}
+                id={`rom-weaver-rom-bundle-${field}`}
+                key={`${field}:${fieldValue}`}
+                onBlur={(event) => commit(field, event.currentTarget.value)}
+                placeholder={computed[field] || ""}
+                spellCheck={false}
+                title={invalid ? invalidFieldTitle(field) : fieldValue || computed[field] || undefined}
+                type="text"
+              />
+            </div>
+          );
+        })}
       </div>
+      <p className="hintline">Empty fields export the staged ROM's computed values.</p>
     </Drawer>
   );
 };

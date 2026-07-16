@@ -6,6 +6,9 @@
  */
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const CHECK_FIELDS = ["crc32", "md5", "sha1", "bytes"] as const;
+/** Render order for editable check grids: CRC32 pairs with BYTES on one grid
+ * row (the short values), the long hashes follow full-width. */
+const CHECK_FIELDS_PAIRED = ["crc32", "bytes", "md5", "sha1"] as const;
 const CHECK_LABELS = { bytes: "BYTES", crc32: "CRC32", md5: "MD5", sha1: "SHA-1" } as const;
 const CHECK_HEX_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
 
@@ -20,6 +23,7 @@ const isValidCheckValue = (algorithm: CheckAlgorithm, value: string) =>
 export {
   CHECK_ALGORITHMS,
   CHECK_FIELDS,
+  CHECK_FIELDS_PAIRED,
   CHECK_HEX_LENGTHS,
   CHECK_LABELS,
   type CheckAlgorithm,

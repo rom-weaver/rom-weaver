@@ -1556,8 +1556,21 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .ck-mark.bad { color: var(--fault); }
 
 /* The ROM card's bundle-checks editor (bundle-edit mode). */
-.rw-app .rom-bundle-checks .patch-check-group { margin-block-start: 3px; }
+/* Editable check grids (bundle authoring): CRC32 + BYTES pair on one row (the
+   same rhythm as the computed Checks rows); MD5/SHA-1 need the full width. */
+.rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
+.rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
+@container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
 .rw-app .rom-bundle-checks .hintline { margin-top: 6px; }
+/* Inline bundle-edit description on the patch card: a touch of air below the
+   toggle/meta row so the field group doesn't crowd it. */
+.rw-app .patch-meta-inline { margin-block-start: 2px; }
+/* Bundle-edit: the card title is the patch name, edited in place - a quiet
+   field that keeps the title's face until it is focused. */
+.rw-app .nm-input { width: 100%; min-width: 0; font: inherit; color: var(--ink); background: transparent; border: 1px dashed color-mix(in oklab, var(--seam) 85%, transparent); border-radius: var(--r-s); padding: 1px 8px; line-height: 1.35; }
+.rw-app .nm-input:hover { border-color: var(--seam); }
+.rw-app .nm-input:focus-visible { outline: none; border-style: solid; border-color: var(--thread); background: var(--well); }
+.rw-app .nm-input::placeholder { color: var(--ink-3); opacity: 1; }
 
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app .bundle-edit-hint { display: none; }

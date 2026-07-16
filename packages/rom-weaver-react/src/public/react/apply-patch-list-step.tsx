@@ -9,6 +9,7 @@ import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import {
   CHECK_ALGORITHMS,
   CHECK_FIELDS,
+  CHECK_FIELDS_PAIRED,
   CHECK_HEX_LENGTHS,
   CHECK_LABELS,
   isValidCheckValue,
@@ -219,34 +220,33 @@ const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "output") 
   return checks;
 };
 
-/** Bundle-edit mode: name/description sit inline on the card (in place of the
- * static display name/description), not tucked inside the Options drawer. */
-const PatchMetaFields = ({
-  index,
-  item,
-  meta,
-  onMetaChange,
-}: {
+type PatchMetaFieldProps = {
   index: number;
   item: PatchStackItemState;
   meta?: BundlePatchMeta;
   onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
-}) => (
-  <div className="optsgrid patch-meta-inline">
-    <div className="ofld patch-name-field">
-      <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
-        Patch name
-      </label>
-      <input
-        className="input popt-input"
-        defaultValue={meta?.name || ""}
-        id={`rom-weaver-patch-name-${index}`}
-        key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
-        onBlur={(event) => onMetaChange({ name: event.currentTarget.value.trim() || undefined })}
-        placeholder={item.fileName.replace(/\.[^.]+$/, "")}
-        type="text"
-      />
-    </div>
+};
+
+/** Bundle-edit mode: the card title IS the patch's display name, edited in
+ * place (placeholder = the file name it falls back to). */
+const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
+  <input
+    aria-label="Patch name"
+    className="nm-input"
+    defaultValue={meta?.name || ""}
+    id={`rom-weaver-patch-name-${index}`}
+    key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
+    onBlur={(event) => onMetaChange({ name: event.currentTarget.value.trim() || undefined })}
+    placeholder={item.fileName.replace(/\.[^.]+$/, "")}
+    spellCheck={false}
+    type="text"
+  />
+);
+
+/** Bundle-edit mode: the description sits inline on the card (in place of the
+ * static description line), not tucked inside the Options drawer. */
+const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
+  <div className="patch-meta-inline">
     <div className="ofld patch-description-field">
       <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
         Description
@@ -387,8 +387,8 @@ const PatchOptions = ({
                   <div className="ck-group-head">
                     <span>{side === "input" ? "Input verification" : "Output verification"}</span>
                   </div>
-                  <div className="verification-list">
-                    {CHECK_FIELDS.map((checkField) => {
+                  <div className="verification-list ck-fields-paired">
+                    {CHECK_FIELDS_PAIRED.map((checkField) => {
                       const isBytes = checkField === "bytes";
                       const builtIn = embedded[checkField];
                       const metaValue = isBytes
@@ -836,6 +836,16 @@ const ApplyPatchListStep = ({
                       .join(" › ") || undefined
                   }
                   legacyFileClassName="rom-weaver-patch-stack-file"
+                  nameEditor={
+                    bundleEditMode && onBundleMetaChange ? (
+                      <PatchNameInline
+                        index={index}
+                        item={item}
+                        meta={bundleMeta?.[index]}
+                        onMetaChange={(updates) => onBundleMetaChange(index, updates)}
+                      />
+                    ) : undefined
+                  }
                   parentCompressions={item.archivePathEntries}
                 />
               }
