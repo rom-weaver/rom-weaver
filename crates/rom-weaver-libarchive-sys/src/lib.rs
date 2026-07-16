@@ -1,4 +1,4 @@
-#![allow(non_camel_case_types)]
+#![expect(non_camel_case_types)]
 #![allow(non_snake_case)]
 
 pub use bzip2_sys;

@@ -95,7 +95,6 @@ fn edc_compute(tables: &EccTables, data: &[u8]) -> u32 {
 ///
 /// `dest` is the parity output buffer (the ECC region of the sector); parity is
 /// written at `dest[major * 2]` and `dest[major * 2 + 1]`.
-#[allow(clippy::too_many_arguments)]
 fn ecc_compute(
     tables: &EccTables,
     sector: &[u8; RAW_SECTOR_SIZE],

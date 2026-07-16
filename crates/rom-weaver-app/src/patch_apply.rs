@@ -1341,7 +1341,6 @@ impl CliApp {
     /// evidence, or evidence matching the current bytes, carries the state over
     /// untouched, and evidence matching neither variant is left for the handler's
     /// own strict validation to report.
-    #[allow(clippy::too_many_arguments)]
     fn chain_header_transition(
         &self,
         mode: PatchApplyHeaderMode,
@@ -1655,7 +1654,7 @@ impl CliApp {
     /// patch handler is missing or an apply fails - the exact reports the
     /// inline loop produced. Extracted from `run_patch_apply` to shrink it; the
     /// `Err` early-exits map one-to-one onto the loop's former `return`s.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn run_patch_apply_loop(
         &self,
         resolved_patches: &[(PathBuf, PathBuf)],

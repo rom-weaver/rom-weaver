@@ -261,7 +261,7 @@ impl CliApp {
     /// Shared by `extract` (which wraps the leaves into its report) and `ingest` (which checksums
     /// each leaf). Reuses [`Self::extract_nested_archives`] so nested provenance/read-on-main rules
     /// are preserved identically.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(super) fn assemble_extracted_leaves(
         &self,
         format_name: &str,

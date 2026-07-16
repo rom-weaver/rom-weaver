@@ -508,16 +508,16 @@ impl<R: Read> HdiffFileParser<R> {
     }
 }
 
-enum HdiffOldData<'a> {
-    #[allow(dead_code)]
-    Bytes(&'a [u8]),
+enum HdiffOldData {
+    #[cfg(test)]
+    Bytes(Vec<u8>),
     Cached {
         len: usize,
         reader: Arc<SharedBlockCacheReader>,
     },
 }
 
-impl<'a> HdiffOldData<'a> {
+impl HdiffOldData {
     fn from_path(path: &Path) -> Result<Self> {
         let reader = SharedBlockCacheReader::open(
             path,
@@ -535,6 +535,7 @@ impl<'a> HdiffOldData<'a> {
 
     fn len(&self) -> usize {
         match self {
+            #[cfg(test)]
             Self::Bytes(bytes) => bytes.len(),
             Self::Cached { len, .. } => *len,
         }
@@ -542,6 +543,7 @@ impl<'a> HdiffOldData<'a> {
 
     fn read_range(&self, start: usize, len: usize) -> Result<Vec<u8>> {
         match self {
+            #[cfg(test)]
             Self::Bytes(bytes) => {
                 let end = start.checked_add(len).ok_or_else(|| {
                     RomWeaverError::Validation("HDiffPatch source range overflowed".into())
@@ -773,13 +775,13 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
 
 #[cfg(test)]
 fn apply_hdiff13(old_bytes: &[u8], patch_bytes: &[u8], header: &ParsedHdiff13) -> Result<Vec<u8>> {
-    let old_data = HdiffOldData::Bytes(old_bytes);
+    let old_data = HdiffOldData::Bytes(old_bytes.to_vec());
     apply_hdiff13_with_chunk_parallelism(&old_data, patch_bytes, header, false)
 }
 
 #[cfg(test)]
 fn apply_hdiff13_with_chunk_parallelism(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     patch_bytes: &[u8],
     header: &ParsedHdiff13,
     parallel_chunks: bool,
@@ -789,7 +791,7 @@ fn apply_hdiff13_with_chunk_parallelism(
 }
 
 fn apply_hdiff13_with_chunk_parallelism_from_reader(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiff13,
@@ -1038,7 +1040,7 @@ fn read_hdiff13_chunks_from_patch_reader(
 }
 
 fn apply_hdiff13_with_chunks(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     header: &ParsedHdiff13,
     chunks: Hdiff13Chunks,
 ) -> Result<Vec<u8>> {
@@ -1244,7 +1246,7 @@ fn apply_hdiffsf20(
     patch_bytes: &[u8],
     header: &ParsedHdiffSf20,
 ) -> Result<Vec<u8>> {
-    let old_data = HdiffOldData::Bytes(old_bytes);
+    let old_data = HdiffOldData::Bytes(old_bytes.to_vec());
     Ok(apply_hdiffsf20_with_step_parallelism(&old_data, patch_bytes, header, false)?.output)
 }
 
@@ -1259,7 +1261,7 @@ fn hdiffsf20_apply_thread_capability(header: &ParsedHdiffSf20) -> ThreadCapabili
 
 #[cfg(test)]
 fn apply_hdiffsf20_with_step_parallelism(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     patch_bytes: &[u8],
     header: &ParsedHdiffSf20,
     enable_parallel_steps: bool,
@@ -1269,7 +1271,7 @@ fn apply_hdiffsf20_with_step_parallelism(
 }
 
 fn apply_hdiffsf20_with_step_parallelism_from_reader(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiffSf20,
@@ -1323,7 +1325,7 @@ fn read_hdiffsf20_diff_from_patch_reader(
 }
 
 fn apply_hdiffsf20_with_diff(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     diff: &[u8],
     header: &ParsedHdiffSf20,
     enable_parallel_steps: bool,
@@ -1553,7 +1555,7 @@ fn parse_hdiffsf20_steps(
 }
 
 fn render_hdiffsf20_step(
-    old_data: &HdiffOldData<'_>,
+    old_data: &HdiffOldData,
     diff: &[u8],
     step: &Sf20StepPlan,
 ) -> Result<Vec<u8>> {

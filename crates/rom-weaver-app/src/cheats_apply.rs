@@ -258,11 +258,10 @@ mod tests {
             },
         ];
         let ips = serialize_cheat_ips(&writes, &[0u8; 0x40]).unwrap();
-        #[rustfmt::skip]
         let expected = [
-            b'P', b'A', b'T', b'C', b'H',
-            0x00, 0x00, 0x10, 0x00, 0x01, 0xAB,            // width-1 at 0x10
-            0x00, 0x00, 0x20, 0x00, 0x02, 0x12, 0x34,      // big-endian word at 0x20
+            b'P', b'A', b'T', b'C', b'H', 0x00, 0x00, 0x10, 0x00, 0x01,
+            0xAB, // width-1 at 0x10
+            0x00, 0x00, 0x20, 0x00, 0x02, 0x12, 0x34, // big-endian word at 0x20
             b'E', b'O', b'F',
         ];
         assert_eq!(ips, expected);
@@ -281,11 +280,9 @@ mod tests {
         }];
         let ips = serialize_cheat_ips(&writes, &rom).unwrap();
         // Record: offset 0x454F45, len 2, data [0x99 (unchanged), 0x42].
-        #[rustfmt::skip]
         let expected = [
-            b'P', b'A', b'T', b'C', b'H',
-            0x45, 0x4F, 0x45, 0x00, 0x02, 0x99, 0x42,
-            b'E', b'O', b'F',
+            b'P', b'A', b'T', b'C', b'H', 0x45, 0x4F, 0x45, 0x00, 0x02, 0x99, 0x42, b'E', b'O',
+            b'F',
         ];
         assert_eq!(ips, expected);
     }

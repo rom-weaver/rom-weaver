@@ -50,9 +50,7 @@ enum VmOutcome {
     Failure(u32),
 }
 
-enum PatchSpace<'a> {
-    #[allow(dead_code)]
-    Borrowed(&'a [u8]),
+enum PatchSpace {
     Owned(Vec<u8>),
     Cached {
         len: usize,
@@ -60,10 +58,9 @@ enum PatchSpace<'a> {
     },
 }
 
-impl<'a> PatchSpace<'a> {
+impl PatchSpace {
     fn len(&self) -> usize {
         match self {
-            Self::Borrowed(bytes) => bytes.len(),
             Self::Owned(bytes) => bytes.len(),
             Self::Cached { len, .. } => *len,
         }
@@ -102,10 +99,6 @@ impl<'a> PatchSpace<'a> {
         }
 
         match self {
-            Self::Borrowed(bytes) => {
-                output.copy_from_slice(&bytes[start..end]);
-                Ok(())
-            }
             Self::Owned(bytes) => {
                 output.copy_from_slice(&bytes[start..end]);
                 Ok(())
@@ -117,17 +110,17 @@ impl<'a> PatchSpace<'a> {
     }
 }
 
-struct Frame<'a> {
+struct Frame {
     instruction_pointer: u32,
     variables: [u32; 256],
-    patch_space: PatchSpace<'a>,
+    patch_space: PatchSpace,
     stack: VecDeque<u32>,
     waiting_var: Option<u8>,
     message_buffer: String,
 }
 
-impl<'a> Frame<'a> {
-    fn new(patch_space: PatchSpace<'a>) -> Self {
+impl Frame {
+    fn new(patch_space: PatchSpace) -> Self {
         Self {
             instruction_pointer: 0,
             variables: [0; 256],
@@ -279,30 +272,30 @@ impl VmFileBuffer {
     }
 }
 
-struct BspVm<'a, 'pool> {
+struct BspVm<'pool> {
     file_buffer: VmFileBuffer,
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
     /// The frame currently executing. A frame always exists, so frame access is
     /// infallible - the "empty stack" state the VM previously guarded with a
     /// panic is unrepresentable by construction.
-    current_frame: Frame<'a>,
+    current_frame: Frame,
     /// Frames suspended by a nested BSP patch (`bsppatch`), innermost last. Each
     /// carries the `waiting_var` that receives the child's exit code on return.
-    suspended_frames: Vec<Frame<'a>>,
+    suspended_frames: Vec<Frame>,
     dirty: bool,
     sha1: [u8; 20],
     _thread_pool: std::marker::PhantomData<&'pool SharedThreadPool>,
 }
 
-impl<'a, 'pool> BspVm<'a, 'pool> {
+impl<'pool> BspVm<'pool> {
     #[cfg(test)]
     fn new(
-        patch_bytes: &'a [u8],
+        patch_bytes: &[u8],
         input_path: &Path,
         _thread_pool: Option<&'pool SharedThreadPool>,
     ) -> VmResult<Self> {
-        Self::new_with_patch_space(PatchSpace::Borrowed(patch_bytes), input_path, None)
+        Self::new_with_patch_space(PatchSpace::Owned(patch_bytes.to_vec()), input_path, None)
     }
 
     fn new_from_patch_path(
@@ -330,7 +323,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     }
 
     fn new_with_patch_space(
-        patch_space: PatchSpace<'a>,
+        patch_space: PatchSpace,
         input_path: &Path,
         _thread_pool: Option<&'pool SharedThreadPool>,
     ) -> VmResult<Self> {
@@ -391,11 +384,11 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         )
     }
 
-    fn top_frame(&self) -> &Frame<'a> {
+    fn top_frame(&self) -> &Frame {
         &self.current_frame
     }
 
-    fn top_frame_mut(&mut self) -> &mut Frame<'a> {
+    fn top_frame_mut(&mut self) -> &mut Frame {
         &mut self.current_frame
     }
 

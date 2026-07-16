@@ -150,7 +150,7 @@ impl CliApp {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(super) fn finalize_patch_apply_output(
         staged_output: &Path,
         final_output: &Path,

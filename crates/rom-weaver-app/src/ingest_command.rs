@@ -290,7 +290,7 @@ impl CliApp {
         self.finish("ingest", report)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn run_ingest_inner(
         &self,
         source: &Path,
@@ -339,7 +339,7 @@ impl CliApp {
         self.ingest_bare_source(source, algorithms, context)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn ingest_container(
         &self,
         handler: &dyn ContainerHandler,
@@ -541,7 +541,7 @@ impl CliApp {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn ingest_rom_leaves(
         &self,
         handler: &dyn ContainerHandler,
@@ -660,7 +660,7 @@ impl CliApp {
         Ok(assets)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn ingest_patch_leaves(
         &self,
         handler: &dyn ContainerHandler,
@@ -708,7 +708,7 @@ impl CliApp {
     /// Extract `source` (and any nested containers) to `out_dir`, returning the bottom/leaf
     /// `emitted_files` detail objects. Shares the exact selection-resolution and nested-leaf
     /// assembly the `extract` command uses.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn ingest_extract_leaves(
         &self,
         handler: &dyn ContainerHandler,

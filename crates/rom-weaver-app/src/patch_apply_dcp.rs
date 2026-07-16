@@ -272,7 +272,7 @@ impl CliApp {
     }
 
     /// Compress the staged disc to the requested container (CHD by default).
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn compress_dcp_disc(
         &self,
         output: &Path,

@@ -756,7 +756,6 @@ fn encode_path_table(placed: &[PlacedDir], start_lba: u32, big_endian: bool) -> 
 }
 
 /// Encode the Primary Volume Descriptor.
-#[allow(clippy::too_many_arguments)]
 fn encode_pvd(
     volume_space_size: u32,
     path_table_size: u32,

@@ -421,7 +421,7 @@ impl CliApp {
     /// Resolve one bundle entry to a local file. Returns `Ok(None)` only for
     /// an entry with neither url nor path (the caller decides whether that is
     /// legal). URL entries are not downloadable here yet.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn resolve_bundle_apply_entry(
         &self,
         url: Option<&str>,
