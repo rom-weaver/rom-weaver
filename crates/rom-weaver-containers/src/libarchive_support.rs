@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, File},
+    ffi::OsString,
+    fs::{self, DirBuilder, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
     sync::{
@@ -704,7 +705,9 @@ pub(crate) fn list_regular_archive_entry_records_with_libarchive(
 struct LibarchiveExtractTask {
     index: usize,
     archive_name: String,
+    relative_path: PathBuf,
     output_path: PathBuf,
+    write_path: PathBuf,
     is_dir: bool,
     logical_bytes: Option<u64>,
 }
@@ -749,6 +752,7 @@ enum LibarchiveExtractOutput {
         index: usize,
         archive_name: String,
         output_path: PathBuf,
+        write_path: PathBuf,
         logical_bytes: Option<u64>,
     },
     FileData {
@@ -764,7 +768,567 @@ struct LibarchiveOpenExtractOutput {
     archive_name: String,
     hasher: ExtractHasher,
     output_path: PathBuf,
+    write_path: PathBuf,
     writer: BufWriter<File>,
+}
+
+#[cfg(windows)]
+fn extract_path_metadata_is_link(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    metadata.file_type().is_symlink()
+        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn extract_path_metadata_is_link(metadata: &fs::Metadata) -> bool {
+    metadata.file_type().is_symlink()
+}
+
+/// Reject pre-existing links below the extraction root before directory creation or file writes can
+/// follow them outside that root. The root itself may be a caller-selected symlink (for example a
+/// platform temp-directory alias); only archive-controlled descendants are forbidden.
+fn ensure_extract_path_has_no_links(out_dir: &Path, output_path: &Path) -> Result<()> {
+    let relative = output_path.strip_prefix(out_dir).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "archive output `{}` is outside extraction directory `{}`",
+            output_path.display(),
+            out_dir.display()
+        ))
+    })?;
+    let mut current = out_dir.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if extract_path_metadata_is_link(&metadata) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "refusing to extract through existing link `{}`",
+                    current.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(any(test, target_family = "wasm"))]
+fn normalize_confined_extract_root(out_dir: &Path) -> Result<PathBuf> {
+    let mut normalized = PathBuf::new();
+    for component in out_dir.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "extraction directory `{}` escapes its confined filesystem root",
+                        out_dir.display()
+                    )));
+                }
+            }
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        normalized.push(".");
+    }
+    Ok(normalized)
+}
+
+#[cfg(target_family = "wasm")]
+fn resolve_extract_root(out_dir: &Path) -> Result<PathBuf> {
+    // Browser WASI paths are already confined to the preopened OPFS mount, whose shim does not
+    // implement canonicalize/readlink. Lexical normalization is sufficient because parent escapes
+    // are rejected and the mount does not expose symlinks.
+    normalize_confined_extract_root(out_dir)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn resolve_extract_root(out_dir: &Path) -> Result<PathBuf> {
+    Ok(fs::canonicalize(out_dir)?)
+}
+
+static NEXT_EXTRACT_TRANSACTION_ID: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(any(test, target_family = "wasm"))]
+fn wasm_extract_transaction_owner_id(now: SystemTime) -> String {
+    let epoch_nanos = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("wasm-{epoch_nanos:x}")
+}
+
+#[cfg(target_family = "wasm")]
+fn extract_transaction_owner_id() -> String {
+    // WASI preview1 does not implement std::process::id(). A time-based module nonce prevents a
+    // fresh worker from exhausting its create-new collision loop on staging directories left by a
+    // killed predecessor. Unknown directories are never removed because another tab may own them.
+    wasm_extract_transaction_owner_id(SystemTime::now())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn extract_transaction_owner_id() -> String {
+    std::process::id().to_string()
+}
+
+#[cfg(unix)]
+fn create_private_extract_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    let mut builder = DirBuilder::new();
+    builder.mode(0o700).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_private_extract_directory(path: &Path) -> std::io::Result<()> {
+    DirBuilder::new().create(path)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn copy_extract_file_create_new(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut source_file = File::open(source)?;
+    let mut destination_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)?;
+    let copy_result = std::io::copy(&mut source_file, &mut destination_file)
+        .and_then(|_| destination_file.flush());
+    drop(destination_file);
+    if let Err(error) = copy_result {
+        let _ = fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(target_family = "wasm")]
+fn copy_extract_file_create_new(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut source_file = File::open(source)?;
+    let mut destination_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)?;
+    let copy_result = (|| {
+        let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+        loop {
+            let read = source_file.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            destination_file.write_all(&buffer[..read])?;
+        }
+        destination_file.flush()
+    })();
+    drop(destination_file);
+    if let Err(error) = copy_result {
+        let _ = fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn install_staged_no_overwrite_with<F>(
+    staged_path: &Path,
+    destination_path: &Path,
+    hard_link: F,
+) -> std::io::Result<()>
+where
+    F: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
+    match hard_link(staged_path, destination_path) {
+        Ok(()) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::NotFound
+            ) =>
+        {
+            return Err(error);
+        }
+        Err(_) => copy_extract_file_create_new(staged_path, destination_path)?,
+    }
+    // The installed file is complete. Transaction cleanup retries the staging removal, so failure
+    // to remove its old name is not a reason to roll the destination back.
+    let _ = fs::remove_file(staged_path);
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> std::io::Result<()> {
+    install_staged_no_overwrite_with(staged_path, destination_path, |source, destination| {
+        fs::hard_link(source, destination)
+    })
+}
+
+#[cfg(target_family = "wasm")]
+fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> std::io::Result<()> {
+    copy_extract_file_create_new(staged_path, destination_path)?;
+    let _ = fs::remove_file(staged_path);
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn backup_extract_output(source: &Path, backup: &Path) -> std::io::Result<()> {
+    fs::rename(source, backup)
+}
+
+#[cfg(target_family = "wasm")]
+fn backup_extract_output(source: &Path, backup: &Path) -> std::io::Result<()> {
+    copy_extract_file_create_new(source, backup)?;
+    if let Err(error) = fs::remove_file(source) {
+        let _ = fs::remove_file(backup);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn install_staged_overwrite(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(target_family = "wasm")]
+fn install_staged_overwrite(source: &Path, destination: &Path) -> std::io::Result<()> {
+    copy_extract_file_create_new(source, destination)?;
+    let _ = fs::remove_file(source);
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn restore_extract_backup(backup: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(backup, destination)
+}
+
+#[cfg(target_family = "wasm")]
+fn restore_extract_backup(backup: &Path, destination: &Path) -> std::io::Result<()> {
+    copy_extract_file_create_new(backup, destination)?;
+    let _ = fs::remove_file(backup);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct CommittedExtractOutput {
+    destination_path: PathBuf,
+    backup_path: Option<PathBuf>,
+}
+
+/// Stages every decoded archive member before publishing it. Existing outputs are first moved into
+/// the private backup tree so an error (or panic) during a later install can restore them instead of
+/// leaving truncated files.
+struct LibarchiveExtractTransaction<'a> {
+    format_name: &'a str,
+    overwrite: bool,
+    root_path: PathBuf,
+    staging_dir: PathBuf,
+    staged_outputs_dir: PathBuf,
+    backup_dir: PathBuf,
+    committed_outputs: Vec<CommittedExtractOutput>,
+    created_destination_dirs: Vec<PathBuf>,
+    committed: bool,
+    preserve_staging: bool,
+}
+
+impl<'a> LibarchiveExtractTransaction<'a> {
+    fn new(out_dir: &Path, overwrite: bool, format_name: &'a str) -> Result<Self> {
+        // Resolve a caller-selected root symlink once. Every subsequent path is rooted at the same
+        // physical directory, so retargeting that symlink cannot redirect an in-flight extract.
+        let root_path = resolve_extract_root(out_dir)?;
+        // Keep staging inside the output root so native rename/hard-link installs stay on one
+        // filesystem, including when out_dir itself is a mount point. stage_tasks reserves this
+        // hidden namespace so archive members cannot address the transaction's new/backup trees.
+        let mut staging_dir = None;
+        let owner_id = extract_transaction_owner_id();
+        for _ in 0..100 {
+            let sequence = NEXT_EXTRACT_TRANSACTION_ID.fetch_add(1, Ordering::Relaxed);
+            let candidate = root_path.join(format!(".rom-weaver-extract-{owner_id}-{sequence}"));
+            match create_private_extract_directory(&candidate) {
+                Ok(()) => {
+                    staging_dir = Some(candidate);
+                    break;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let staging_dir = staging_dir.ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "{format_name} extract could not allocate a private staging directory"
+            ))
+        })?;
+        let staged_outputs_dir = staging_dir.join("new");
+        let backup_dir = staging_dir.join("old");
+        if let Err(error) = create_private_extract_directory(&staged_outputs_dir)
+            .and_then(|()| create_private_extract_directory(&backup_dir))
+        {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(error.into());
+        }
+        Ok(Self {
+            format_name,
+            overwrite,
+            root_path,
+            staging_dir,
+            staged_outputs_dir,
+            backup_dir,
+            committed_outputs: Vec::new(),
+            created_destination_dirs: Vec::new(),
+            committed: false,
+            preserve_staging: false,
+        })
+    }
+
+    fn stage_tasks(&self, tasks: &[LibarchiveExtractTask]) -> Result<Vec<LibarchiveExtractTask>> {
+        tasks
+            .iter()
+            .cloned()
+            .map(|mut task| -> Result<LibarchiveExtractTask> {
+                let uses_reserved_namespace = task
+                    .relative_path
+                    .components()
+                    .next()
+                    .and_then(|component| match component {
+                        std::path::Component::Normal(component) => component.to_str(),
+                        _ => None,
+                    })
+                    .is_some_and(|component| {
+                        component
+                            .to_ascii_lowercase()
+                            .starts_with(".rom-weaver-extract-")
+                    });
+                if uses_reserved_namespace {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} extract entry `{}` uses the reserved transaction namespace",
+                        self.format_name, task.archive_name
+                    )));
+                }
+                // Archive names that alias on a case-insensitive filesystem must still decode into
+                // independent files. Preserve only the extension needed by checksum/identity logic;
+                // the entry index supplies uniqueness without recreating the archive's directory
+                // chain inside the private staging tree.
+                let mut staging_name = OsString::from(task.index.to_string());
+                if let Some(extension) = task.output_path.extension() {
+                    staging_name.push(".");
+                    staging_name.push(extension);
+                }
+                task.write_path = self.staged_outputs_dir.join(staging_name);
+                Ok(task)
+            })
+            .collect()
+    }
+
+    fn ensure_destination_directory(&mut self, relative: &Path) -> Result<()> {
+        let mut current = self.root_path.clone();
+        for component in relative.components() {
+            let std::path::Component::Normal(component) = component else {
+                return Err(RomWeaverError::Validation(format!(
+                    "{} extract produced invalid destination path `{}`",
+                    self.format_name,
+                    relative.display()
+                )));
+            };
+            current.push(component);
+            match fs::symlink_metadata(&current) {
+                Ok(metadata) if extract_path_metadata_is_link(&metadata) => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "refusing to extract through existing link `{}`",
+                        current.display()
+                    )));
+                }
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "refusing to replace non-directory extraction parent `{}`",
+                        current.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    match fs::create_dir(&current) {
+                        Ok(()) => self.created_destination_dirs.push(current.clone()),
+                        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                            let metadata = fs::symlink_metadata(&current)?;
+                            if extract_path_metadata_is_link(&metadata) || !metadata.is_dir() {
+                                return Err(RomWeaverError::Validation(format!(
+                                    "refusing to extract through replaced parent `{}`",
+                                    current.display()
+                                )));
+                            }
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(())
+    }
+
+    fn commit_file(&mut self, task: &LibarchiveExtractTask) -> Result<()> {
+        let destination_path = self.root_path.join(&task.relative_path);
+        let staged_path = &task.write_path;
+        let parent = task.relative_path.parent().unwrap_or_else(|| Path::new(""));
+        self.ensure_destination_directory(parent)?;
+        // Revalidate at the mutation boundary rather than relying on the preflight performed before
+        // decoding. Completed bytes remain private until this check succeeds.
+        ensure_extract_path_has_no_links(&self.root_path, &destination_path)?;
+
+        let backup_path = match fs::symlink_metadata(&destination_path) {
+            Ok(metadata) if extract_path_metadata_is_link(&metadata) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "refusing to overwrite existing link `{}`",
+                    destination_path.display()
+                )));
+            }
+            Ok(metadata) if metadata.is_file() && self.overwrite => {
+                // Each archive entry gets its own backup. When several entries alias the same
+                // destination, rollback walks these generations in reverse and restores the
+                // original chain exactly.
+                let backup_path = self.backup_dir.join(task.index.to_string());
+                if let Some(parent) = backup_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                backup_extract_output(&destination_path, &backup_path)?;
+                Some(backup_path)
+            }
+            Ok(metadata) if metadata.is_file() => {
+                return Err(RomWeaverError::Validation(format!(
+                    "refusing to overwrite existing output `{}`",
+                    destination_path.display()
+                )));
+            }
+            Ok(_) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "refusing to replace non-file extraction output `{}`",
+                    destination_path.display()
+                )));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        // Record a moved original before installing its replacement. If unwinding occurs between
+        // those two filesystem operations, Drop can still put the original back.
+        if backup_path.is_some() {
+            self.committed_outputs.push(CommittedExtractOutput {
+                destination_path: destination_path.clone(),
+                backup_path: backup_path.clone(),
+            });
+        }
+
+        ensure_extract_path_has_no_links(&self.root_path, &destination_path)?;
+        let install_result = if self.overwrite || backup_path.is_some() {
+            install_staged_overwrite(staged_path, &destination_path)
+        } else {
+            install_staged_no_overwrite(staged_path, &destination_path)
+        };
+        if let Err(error) = install_result {
+            return Err(RomWeaverError::Validation(format!(
+                "{} extract failed while installing `{}`: {error}",
+                self.format_name,
+                destination_path.display()
+            )));
+        }
+
+        if backup_path.is_none() {
+            self.committed_outputs.push(CommittedExtractOutput {
+                destination_path,
+                backup_path: None,
+            });
+        }
+        Ok(())
+    }
+
+    fn rollback(&mut self) -> std::result::Result<(), String> {
+        let mut errors = Vec::new();
+        for output in self.committed_outputs.drain(..).rev() {
+            if let Err(error) = fs::remove_file(&output.destination_path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                errors.push(format!(
+                    "remove `{}`: {error}",
+                    output.destination_path.display()
+                ));
+            }
+            if let Some(backup_path) = output.backup_path
+                && let Err(error) = restore_extract_backup(&backup_path, &output.destination_path)
+            {
+                errors.push(format!(
+                    "restore `{}` from `{}`: {error}",
+                    output.destination_path.display(),
+                    backup_path.display()
+                ));
+            }
+        }
+        for path in self.created_destination_dirs.drain(..).rev() {
+            if let Err(error) = fs::remove_dir(&path)
+                && error.kind() != std::io::ErrorKind::NotFound
+                && error.kind() != std::io::ErrorKind::DirectoryNotEmpty
+            {
+                errors.push(format!("remove directory `{}`: {error}", path.display()));
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            self.preserve_staging = true;
+            Err(errors.join("; "))
+        }
+    }
+
+    fn commit(&mut self, tasks: &[LibarchiveExtractTask]) -> Result<()> {
+        let mut directories = tasks
+            .iter()
+            .filter(|task| task.is_dir)
+            .map(|task| task.relative_path.clone())
+            .collect::<Vec<_>>();
+        directories.sort_by_key(|path| path.components().count());
+        directories.dedup();
+        for directory in directories {
+            if let Err(error) = self.ensure_destination_directory(&directory) {
+                let rollback_error = self.rollback().err();
+                return Err(match rollback_error {
+                    Some(rollback_error) => RomWeaverError::Validation(format!(
+                        "{error}; rollback failed: {rollback_error}"
+                    )),
+                    None => error,
+                });
+            }
+        }
+
+        for task in tasks.iter().filter(|task| !task.is_dir) {
+            if let Err(error) = self.commit_file(task) {
+                let rollback_error = self.rollback().err();
+                return Err(match rollback_error {
+                    Some(rollback_error) => RomWeaverError::Validation(format!(
+                        "{error}; rollback failed: {rollback_error}"
+                    )),
+                    None => error,
+                });
+            }
+        }
+        self.committed = true;
+        Ok(())
+    }
+}
+
+impl Drop for LibarchiveExtractTransaction<'_> {
+    fn drop(&mut self) {
+        if !self.committed
+            && let Err(error) = self.rollback()
+        {
+            trace!(
+                format = self.format_name,
+                %error,
+                "archive extract rollback was incomplete"
+            );
+        }
+        if !self.preserve_staging {
+            let _ = fs::remove_dir_all(&self.staging_dir);
+        }
+    }
 }
 
 fn build_libarchive_extract_tasks(
@@ -796,10 +1360,13 @@ fn build_libarchive_extract_tasks(
         }
         let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
         let is_dir = entry.is_dir;
+        let output_path = out_dir.join(&relative);
         let task = LibarchiveExtractTask {
             index: entry.index,
             archive_name: archive_name.clone(),
-            output_path: out_dir.join(relative),
+            relative_path: relative,
+            write_path: output_path.clone(),
+            output_path,
             is_dir,
             logical_bytes: if is_dir { Some(0) } else { entry.size },
         };
@@ -894,7 +1461,7 @@ where
                             entry.index
                         ))
                     })?;
-                    fs::create_dir_all(&task.output_path)?;
+                    fs::create_dir_all(&task.write_path)?;
                 }
                 SelectedRegularArchiveEntry::File { entry, reader } => {
                     let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
@@ -904,7 +1471,7 @@ where
                         ))
                     })?;
                     if task.is_dir {
-                        fs::create_dir_all(&task.output_path)?;
+                        fs::create_dir_all(&task.write_path)?;
                     } else {
                         trace!(
                             format = format_name,
@@ -913,11 +1480,11 @@ where
                             size = task.logical_bytes.unwrap_or(0),
                             "libarchive extract entry"
                         );
-                        if let Some(parent) = task.output_path.parent() {
+                        if let Some(parent) = task.write_path.parent() {
                             fs::create_dir_all(parent)?;
                         }
                         let mut output = BufWriter::new(create_extract_output_file(
-                            &task.output_path,
+                            &task.write_path,
                             overwrite,
                         )?);
                         let mut hasher =
@@ -967,7 +1534,7 @@ where
                         drop(output);
                         written_bytes = written_bytes.saturating_add(copied);
                         let finalize_at = SystemTime::now();
-                        let (finished, checksum_timing) = hasher.finish_timed(&task.output_path)?;
+                        let (finished, checksum_timing) = hasher.finish_timed(&task.write_path)?;
                         let timing = ExtractChecksumTimingSample {
                             format: format_name,
                             file: task.archive_name.as_str(),
@@ -981,6 +1548,7 @@ where
                         }
                         .finish();
                         if let Some(mut entry) = finished {
+                            entry.path = task.output_path.clone();
                             entry.timing = Some(timing);
                             output_checksums.push(entry);
                         }
@@ -1104,7 +1672,7 @@ fn extract_libarchive_task_chunk_to_sender(
                 send_libarchive_extract_output(
                     sender,
                     LibarchiveExtractOutput::Directory {
-                        output_path: task.output_path.clone(),
+                        output_path: task.write_path.clone(),
                     },
                     format_name,
                 )?;
@@ -1120,7 +1688,7 @@ fn extract_libarchive_task_chunk_to_sender(
                     send_libarchive_extract_output(
                         sender,
                         LibarchiveExtractOutput::Directory {
-                            output_path: task.output_path.clone(),
+                            output_path: task.write_path.clone(),
                         },
                         format_name,
                     )?;
@@ -1138,6 +1706,7 @@ fn extract_libarchive_task_chunk_to_sender(
                             index: task.index,
                             archive_name: task.archive_name.clone(),
                             output_path: task.output_path.clone(),
+                            write_path: task.write_path.clone(),
                             logical_bytes: task.logical_bytes,
                         },
                         format_name,
@@ -1184,45 +1753,13 @@ fn extract_libarchive_task_chunk_to_sender(
     Ok(())
 }
 
-/// Removes the output files an in-flight extract created when dropped without being committed, so a
-/// failed multi-file extract does not leave partial outputs that block a retry with "refusing to
-/// overwrite". Mirrors the cleanup-on-error the single-file container handlers already perform, and
-/// (being Drop-based) also cleans up on a panic.
-struct PartialExtractCleanup<'a> {
-    output_paths: &'a BTreeSet<PathBuf>,
-    format_name: &'a str,
-    committed: bool,
-}
-
-impl PartialExtractCleanup<'_> {
-    fn commit(&mut self) {
-        self.committed = true;
-    }
-}
-
-impl Drop for PartialExtractCleanup<'_> {
-    fn drop(&mut self) {
-        if self.committed {
-            return;
-        }
-        trace!(
-            format = self.format_name,
-            outputs = self.output_paths.len(),
-            "removing partial extract outputs after error"
-        );
-        for path in self.output_paths {
-            let _ = fs::remove_file(path);
-        }
-    }
-}
-
 pub(crate) fn extract_regular_archive_with_libarchive(
     request: &ContainerExtractRequest,
     context: &OperationContext,
     format_name: &'static str,
 ) -> Result<OperationReport> {
     fs::create_dir_all(&request.out_dir)?;
-    let tasks = build_libarchive_extract_tasks(
+    let destination_tasks = build_libarchive_extract_tasks(
         &request.source,
         &request.out_dir,
         &request.selections,
@@ -1231,8 +1768,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         request.containing_archive.is_some(),
         format_name,
     )?;
-    let total_tasks = tasks.len();
-    let total_file_bytes = libarchive_extract_total_file_bytes(&tasks).filter(|total| *total > 0);
+    let total_tasks = destination_tasks.len();
+    let total_file_bytes =
+        libarchive_extract_total_file_bytes(&destination_tasks).filter(|total| *total > 0);
     debug!(
         format = format_name,
         tasks = total_tasks,
@@ -1242,27 +1780,18 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         "libarchive archive extract start"
     );
 
-    let mut output_paths = BTreeSet::new();
-    let mut duplicate_output_paths = false;
-    for task in &tasks {
+    for task in &destination_tasks {
+        ensure_extract_path_has_no_links(&request.out_dir, &task.output_path)?;
         if task.is_dir {
             continue;
         }
         ensure_extract_output_available(&task.output_path, request.overwrite)?;
-        duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
     }
+    let mut transaction =
+        LibarchiveExtractTransaction::new(&request.out_dir, request.overwrite, format_name)?;
+    let tasks = transaction.stage_tasks(&destination_tasks)?;
 
-    // Any failure past this point can leave partially written output files on disk; this guard
-    // removes them on an early return (or panic) so a retry isn't blocked by "refusing to
-    // overwrite". It is committed once the extract completes successfully.
-    let mut cleanup = PartialExtractCleanup {
-        output_paths: &output_paths,
-        format_name,
-        committed: false,
-    };
-
-    let (execution, written_bytes, output_checksums) = if tasks.is_empty() || duplicate_output_paths
-    {
+    let (execution, written_bytes, output_checksums) = if tasks.is_empty() {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let emitted_progress_bucket = AtomicU8::new(0);
         let mut copied_bytes = 0u64;
@@ -1424,16 +1953,17 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                             index,
                             archive_name,
                             output_path,
+                            write_path,
                             logical_bytes,
                         } => {
-                            if let Some(parent) = output_path.parent() {
+                            if let Some(parent) = write_path.parent() {
                                 fs::create_dir_all(parent)?;
                             }
                             if let std::collections::btree_map::Entry::Vacant(e) =
                                 open_outputs.entry(index)
                             {
                                 let writer = BufWriter::new(create_extract_output_file(
-                                    &output_path,
+                                    &write_path,
                                     request.overwrite,
                                 )?);
                                 let hasher =
@@ -1442,6 +1972,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                     archive_name,
                                     hasher,
                                     output_path,
+                                    write_path,
                                     writer,
                                 });
                                 Ok(())
@@ -1506,11 +2037,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                             let LibarchiveOpenExtractOutput {
                                 hasher,
                                 output_path,
+                                write_path,
                                 writer,
                                 ..
                             } = output;
                             drop(writer);
-                            if let Some(entry) = hasher.finish(&output_path)? {
+                            if let Some(mut entry) = hasher.finish(&write_path)? {
+                                entry.path = output_path;
                                 output_checksums.push(entry);
                             }
                             if total_file_bytes.is_none() {
@@ -1607,10 +2140,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         (execution, written_bytes, output_checksums)
     };
 
-    // The extract succeeded; keep its outputs rather than removing them on drop.
-    cleanup.commit();
+    transaction.commit(&tasks)?;
 
-    let file_count = tasks.iter().filter(|task| !task.is_dir).count();
+    let file_count = destination_tasks.iter().filter(|task| !task.is_dir).count();
     debug!(
         format = format_name,
         files = file_count,
@@ -1632,12 +2164,17 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         Some(100.0),
         Some(execution.clone()),
     );
-    let report =
-        attach_extraction_details(report, tasks.len(), file_count, written_bytes, &execution);
+    let report = attach_extraction_details(
+        report,
+        destination_tasks.len(),
+        file_count,
+        written_bytes,
+        &execution,
+    );
     let report = attach_extract_checksum_details(report, output_checksums);
     // Report every file this extract wrote (path-attach skips directory tasks via its is_file gate),
     // so the app treats this report as authoritative and never infers outputs from an out_dir scan.
-    let produced_outputs = tasks
+    let produced_outputs = destination_tasks
         .iter()
         .map(|task| task.output_path.clone())
         .collect::<Vec<_>>();
@@ -1663,57 +2200,279 @@ mod tests {
     }
 
     fn write_file(path: &Path, bytes: &[u8]) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create test output parent");
+        }
         let mut file = File::create(path).expect("create test output file");
         file.write_all(bytes).expect("write test output file");
     }
 
-    #[test]
-    fn partial_extract_cleanup_removes_outputs_when_not_committed() {
-        let dir = unique_temp_dir("uncommitted");
-        let first = dir.join("a.bin");
-        let second = dir.join("b.bin");
-        write_file(&first, b"partial");
-        write_file(&second, b"partial");
-        let mut output_paths = BTreeSet::new();
-        output_paths.insert(first.clone());
-        output_paths.insert(second.clone());
-
-        {
-            let _cleanup = PartialExtractCleanup {
-                output_paths: &output_paths,
-                format_name: "zip",
-                committed: false,
-            };
+    fn extract_task(out_dir: &Path, index: usize, relative_path: &str) -> LibarchiveExtractTask {
+        let relative_path = PathBuf::from(relative_path);
+        let output_path = out_dir.join(&relative_path);
+        LibarchiveExtractTask {
+            index,
+            archive_name: relative_path.to_string_lossy().into_owned(),
+            relative_path,
+            write_path: output_path.clone(),
+            output_path,
+            is_dir: false,
+            logical_bytes: Some(3),
         }
+    }
+
+    #[test]
+    fn extract_transaction_removes_uncommitted_staging_outputs() {
+        let dir = unique_temp_dir("uncommitted");
+        let task = extract_task(&dir, 0, "a.bin");
+        let transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+        let staging_dir = transaction.staging_dir.clone();
+        let staged = transaction.stage_tasks(&[task]).expect("stage tasks");
+        write_file(&staged[0].write_path, b"partial");
+
+        drop(transaction);
 
         assert!(
-            !first.exists() && !second.exists(),
-            "an uncommitted cleanup guard must remove every partial output on drop"
+            !staging_dir.exists() && !dir.join("a.bin").exists(),
+            "an uncommitted transaction must remove staging without publishing partial output"
         );
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn partial_extract_cleanup_keeps_outputs_when_committed() {
+    fn extract_transaction_atomically_replaces_existing_output() {
         let dir = unique_temp_dir("committed");
-        let kept = dir.join("a.bin");
-        write_file(&kept, b"complete");
-        let mut output_paths = BTreeSet::new();
-        output_paths.insert(kept.clone());
+        let destination = dir.join("a.bin");
+        write_file(&destination, b"old");
+        let tasks = vec![extract_task(&dir, 0, "a.bin")];
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+        let staging_dir = transaction.staging_dir.clone();
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        write_file(&staged[0].write_path, b"new");
 
-        {
-            let mut cleanup = PartialExtractCleanup {
-                output_paths: &output_paths,
-                format_name: "zip",
-                committed: false,
-            };
-            cleanup.commit();
+        transaction.commit(&staged).expect("commit transaction");
+        drop(transaction);
+
+        assert_eq!(fs::read(&destination).expect("read output"), b"new");
+        assert!(!staging_dir.exists(), "committed staging tree is removed");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_overwrite_transaction_rejects_destination_created_after_staging() {
+        let dir = unique_temp_dir("no-overwrite-race");
+        let destination = dir.join("a.bin");
+        let tasks = vec![extract_task(&dir, 0, "a.bin")];
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, false, "zip").expect("transaction");
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        write_file(&staged[0].write_path, b"new");
+        write_file(&destination, b"concurrent");
+
+        transaction
+            .commit(&staged)
+            .expect_err("no-overwrite commit must recheck the destination");
+
+        assert_eq!(
+            fs::read(&destination).expect("read concurrent output"),
+            b"concurrent"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_overwrite_transaction_installs_completed_staged_output() {
+        let dir = unique_temp_dir("no-overwrite");
+        let tasks = vec![extract_task(&dir, 0, "a.bin")];
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, false, "zip").expect("transaction");
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        write_file(&staged[0].write_path, b"new");
+
+        transaction.commit(&staged).expect("commit transaction");
+
+        assert_eq!(fs::read(dir.join("a.bin")).expect("read output"), b"new");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn extract_transaction_restores_all_overwrites_when_later_install_fails() {
+        let dir = unique_temp_dir("rollback");
+        let first = dir.join("a.bin");
+        let second = dir.join("b.bin");
+        write_file(&first, b"old-a");
+        write_file(&second, b"old-b");
+        let tasks = vec![
+            extract_task(&dir, 0, "a.bin"),
+            extract_task(&dir, 1, "b.bin"),
+        ];
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        write_file(&staged[0].write_path, b"new-a");
+        // Leave the second staged output absent so the first install succeeds and the second fails.
+
+        transaction
+            .commit(&staged)
+            .expect_err("missing staged output must fail commit");
+
+        assert_eq!(fs::read(&first).expect("read first output"), b"old-a");
+        assert_eq!(fs::read(&second).expect("read second output"), b"old-b");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn filesystem_is_case_insensitive(dir: &Path) -> bool {
+        let upper = dir.join("rom-weaver-case-probe-A");
+        let lower = dir.join("rom-weaver-case-probe-a");
+        write_file(&upper, b"probe");
+        let insensitive = lower.exists();
+        fs::remove_file(&upper).ok();
+        if !insensitive {
+            fs::remove_file(&lower).ok();
         }
+        insensitive
+    }
+
+    #[test]
+    fn entry_unique_staging_preserves_alias_last_wins_and_rollback() {
+        let dir = unique_temp_dir("aliases");
+        let case_insensitive = filesystem_is_case_insensitive(&dir);
+        let second_name = if case_insensitive { "a.bin" } else { "A.bin" };
+        let destination = dir.join("A.bin");
+        let tasks = vec![
+            extract_task(&dir, 0, "A.bin"),
+            extract_task(&dir, 1, second_name),
+        ];
+        write_file(&destination, b"old");
+
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        assert_ne!(
+            staged[0].write_path, staged[1].write_path,
+            "every archive entry needs a distinct staging path"
+        );
+        write_file(&staged[0].write_path, b"first");
+        write_file(&staged[1].write_path, b"last");
+        transaction.commit(&staged).expect("commit aliases");
+        drop(transaction);
+        assert_eq!(
+            fs::read(dir.join(second_name)).expect("read last alias"),
+            b"last",
+            "archive order must remain last-wins"
+        );
+
+        write_file(&destination, b"old");
+        let mut rollback_tasks = tasks;
+        rollback_tasks.push(extract_task(&dir, 2, "later.bin"));
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+        let staged = transaction
+            .stage_tasks(&rollback_tasks)
+            .expect("stage rollback tasks");
+        write_file(&staged[0].write_path, b"first");
+        write_file(&staged[1].write_path, b"last");
+        transaction
+            .commit(&staged)
+            .expect_err("missing later entry must roll every alias generation back");
+        assert_eq!(
+            fs::read(&destination).expect("read restored original"),
+            b"old"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn no_overwrite_install_falls_back_when_hard_links_are_unsupported() {
+        let dir = unique_temp_dir("hard-link-fallback");
+        let staged = dir.join("staged.bin");
+        let destination = dir.join("output.bin");
+        write_file(&staged, b"complete");
+
+        install_staged_no_overwrite_with(&staged, &destination, |_, _| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "hard links unsupported",
+            ))
+        })
+        .expect("copy fallback");
+
+        assert_eq!(
+            fs::read(&destination).expect("read fallback output"),
+            b"complete"
+        );
+        assert!(!staged.exists(), "successful fallback removes staging file");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn confined_wasm_root_normalization_rejects_parent_escape() {
+        assert_eq!(
+            normalize_confined_extract_root(Path::new("/work/./outputs")).expect("normalize"),
+            PathBuf::from("/work/outputs")
+        );
+        normalize_confined_extract_root(Path::new("/../outside"))
+            .expect_err("normalization must reject a mount escape");
+    }
+
+    #[test]
+    fn wasm_transaction_owner_changes_across_module_start_times() {
+        let first = wasm_extract_transaction_owner_id(std::time::UNIX_EPOCH);
+        let later =
+            wasm_extract_transaction_owner_id(std::time::UNIX_EPOCH + Duration::from_millis(1));
+
+        assert_ne!(first, later);
+        assert!(first.starts_with("wasm-"));
+        assert!(!later.contains('/') && !later.contains('\\'));
+    }
+
+    #[test]
+    fn extract_transaction_rejects_reserved_staging_namespace() {
+        let dir = unique_temp_dir("reserved");
+        let task = extract_task(&dir, 0, ".rom-weaver-extract-attacker/new/payload.bin");
+        let transaction =
+            LibarchiveExtractTransaction::new(&dir, true, "zip").expect("transaction");
+
+        let error = transaction
+            .stage_tasks(&[task])
+            .expect_err("archive entries must not overlap the private transaction namespace");
 
         assert!(
-            kept.exists(),
-            "a committed cleanup guard must keep the finished outputs"
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("reserved transaction namespace")),
+            "unexpected error: {error:?}"
         );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_transaction_rejects_parent_replaced_with_symlink_after_staging() {
+        use std::os::unix::fs::symlink;
+
+        let dir = unique_temp_dir("symlink-parent");
+        let out_dir = dir.join("out");
+        let outside = dir.join("outside");
+        fs::create_dir_all(&out_dir).expect("create output dir");
+        fs::create_dir_all(&outside).expect("create outside dir");
+        let tasks = vec![extract_task(&out_dir, 0, "link/escaped.bin")];
+        let mut transaction =
+            LibarchiveExtractTransaction::new(&out_dir, true, "zip").expect("transaction");
+        let staged = transaction.stage_tasks(&tasks).expect("stage tasks");
+        write_file(&staged[0].write_path, b"new");
+        symlink(&outside, out_dir.join("link")).expect("create parent symlink");
+
+        let error = transaction
+            .commit(&staged)
+            .expect_err("a parent replaced after preflight must be rejected");
+
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("existing link")),
+            "unexpected error: {error:?}"
+        );
+        assert!(!outside.join("escaped.bin").exists());
         fs::remove_dir_all(&dir).ok();
     }
 }
