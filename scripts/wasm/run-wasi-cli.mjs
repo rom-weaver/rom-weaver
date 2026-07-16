@@ -4,7 +4,7 @@ import { appendFileSync, closeSync, mkdtempSync, openSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { Worker, isMainThread, workerData } from 'node:worker_threads';
 import { WASI } from 'node:wasi';
 import { createWasmEnvImports } from './rom-weaver-runtime-utils.mjs';
 
@@ -21,33 +21,10 @@ const THREAD_ID_COUNTER_INDEX = 0;
 const THREAD_ID_COUNTER_INITIAL = 43;
 const THREAD_WORKER_DATA_KEY = '__rom_weaver_wasi_thread';
 const THREAD_WORKER_MODE_START = 'start';
-const THREAD_WORKER_MODE_POOL = 'pool';
-const THREAD_WORKER_POOL_READY = 'ready';
-const THREAD_WORKER_POOL_RUN = 'run-thread';
-const THREAD_WORKER_POOL_DONE = 'thread-done';
-const THREAD_WORKER_POOL_FAIL = 'thread-failed';
-const THREAD_WORKER_POOL_SHUTDOWN = 'shutdown';
-const THREAD_SLOT_STATE_INDEX = 0;
-const THREAD_SLOT_TID_INDEX = 1;
-const THREAD_SLOT_START_ARG_INDEX = 2;
-const THREAD_SLOT_ERROR_INDEX = 3;
-const THREAD_SLOT_LENGTH = 4;
-const THREAD_SLOT_STATE_IDLE = 0;
-const THREAD_SLOT_STATE_REQUESTED = 1;
-const THREAD_SLOT_STATE_STARTING = 2;
-const THREAD_SLOT_STATE_RUNNING = 3;
-const THREAD_SLOT_STATE_DONE = 4;
-const THREAD_SLOT_STATE_FAILED = 5;
-const THREAD_SLOT_STATE_SHUTDOWN = 6;
 const WASI_ERRNO_AGAIN = 6;
 const WASI_ERRNO_ENOSYS = 52;
 const THREAD_DEBUG_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG';
-const THREAD_POOL_SIZE_ENV = 'ROM_WEAVER_WASM_THREAD_POOL_SIZE';
-const THREAD_PREWARM_ENV = 'ROM_WEAVER_WASM_PREWARM_THREADS';
 const THREAD_DEBUG_LOG_FILE_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG_LOG_FILE';
-const THREAD_START_ACK_TIMEOUT_MS = 30000;
-const DEFAULT_THREAD_POOL_SIZE = 4;
-const MAX_THREAD_POOL_SIZE = 256;
 
 function parseArgs(argv) {
   let wasmModule = DEFAULT_WASM_MODULE;
@@ -91,15 +68,12 @@ async function main() {
   const wasiArgs = ['rom-weaver-app'];
   try {
     const wasi = createWasiRuntime(wasiArgs, requestStdin.fd);
-    const requestedThreadCount = readRequestThreadCount(request);
     const threadSpawner = createThreadSpawner({
       moduleImports,
       wasmModule: compiledModule,
       wasmMemory: threadedMemory,
       wasiArgs,
       threadIdState,
-      spawnPoolSize: requestedThreadCount,
-      allowPrewarmedPool: shouldPrewarmThreadPool(),
     });
     await threadSpawner.ready;
     const importObject = createImportObject({
@@ -176,17 +150,6 @@ function normalizeRunRequest(request) {
     command: request,
     output: {},
   };
-}
-
-function readRequestThreadCount(request) {
-  const normalized = normalizeRunRequest(request);
-  const threads = normalized.command?.type === 'patch'
-    ? normalized.command?.args?.args?.threads
-    : normalized.command?.args?.threads;
-  if (Number.isInteger(threads) && threads > 0) {
-    return threads;
-  }
-  return DEFAULT_THREAD_POOL_SIZE;
 }
 
 function commandArgsToRunRequest(args) {
@@ -416,39 +379,6 @@ function requirePositional(parsed, index, label) {
   return value;
 }
 
-function parseThreadPoolSize(defaultValue) {
-  const fallback = clampThreadPoolSize(defaultValue);
-  const rawValue = process.env[THREAD_POOL_SIZE_ENV];
-  if (rawValue == null || rawValue.trim().length === 0) {
-    return fallback;
-  }
-  const parsedValue = Number.parseInt(rawValue, 10);
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    throw new Error(`${THREAD_POOL_SIZE_ENV} must be a positive integer; received: ${rawValue}`);
-  }
-  return clampThreadPoolSize(parsedValue);
-}
-
-function shouldPrewarmThreadPool() {
-  const rawValue = process.env[THREAD_PREWARM_ENV];
-  if (rawValue == null) {
-    return false;
-  }
-  const normalized = rawValue.trim().toLowerCase();
-  const enabled = normalized.length > 0
-    && normalized !== '0'
-    && normalized !== 'false'
-    && normalized !== 'off';
-  if (enabled) {
-    threadDebugLog(`${THREAD_PREWARM_ENV} is ignored; WASI threads use one Worker per thread-spawn`);
-  }
-  return false;
-}
-
-function clampThreadPoolSize(value) {
-  return Math.max(1, Math.min(MAX_THREAD_POOL_SIZE, Number(value) || DEFAULT_THREAD_POOL_SIZE));
-}
-
 function createWasiRuntime(args, stdinFd = undefined) {
   return new WASI({
     version: 'preview1',
@@ -494,25 +424,6 @@ function allocateThreadId(threadIdState) {
   return tid;
 }
 
-function threadStartControlFromBuffer(controlBuffer) {
-  if (!(controlBuffer instanceof SharedArrayBuffer)) {
-    return null;
-  }
-  const control = new Int32Array(controlBuffer);
-  if (control.length < THREAD_SLOT_LENGTH) {
-    return null;
-  }
-  return control;
-}
-
-function signalThreadStartState(control, state) {
-  if (!(control instanceof Int32Array) || control.length < THREAD_SLOT_LENGTH) {
-    return;
-  }
-  Atomics.store(control, THREAD_SLOT_STATE_INDEX, state);
-  Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
-}
-
 function storeThreadSpawnResult(wasmMemory, errorOrTidPtr, isError, value) {
   if (!(wasmMemory instanceof WebAssembly.Memory)) {
     return false;
@@ -546,55 +457,12 @@ function finishThreadSpawn(wasmMemory, errorOrTidPtr, tidOrErrno, isError = fals
   return stored && !isError ? 0 : 1;
 }
 
-function waitForThreadStartAck(control, tid) {
-  const deadline = Date.now() + THREAD_START_ACK_TIMEOUT_MS;
-  while (true) {
-    const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
-    if (
-      state === THREAD_SLOT_STATE_RUNNING
-      || state === THREAD_SLOT_STATE_IDLE
-    ) {
-      return null;
-    }
-    if (state === THREAD_SLOT_STATE_FAILED) {
-      return new Error(`wasi thread ${tid} failed before start acknowledgement`);
-    }
-    if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-      return new Error(`wasi thread ${tid} was shut down before start acknowledgement`);
-    }
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
-      return new Error(`wasi thread ${tid} start acknowledgement timed out`);
-    }
-    if (state === THREAD_SLOT_STATE_STARTING) {
-      Atomics.wait(
-        control,
-        THREAD_SLOT_STATE_INDEX,
-        THREAD_SLOT_STATE_STARTING,
-        Math.min(remainingMs, 100),
-      );
-      continue;
-    }
-    if (state !== THREAD_SLOT_STATE_REQUESTED) {
-      return new Error(`wasi thread ${tid} entered unexpected start state ${state}`);
-    }
-    Atomics.wait(
-      control,
-      THREAD_SLOT_STATE_INDEX,
-      THREAD_SLOT_STATE_REQUESTED,
-      Math.min(remainingMs, 100),
-    );
-  }
-}
-
 function createThreadSpawner({
   moduleImports,
   wasmModule,
   wasmMemory,
   wasiArgs,
   threadIdState,
-  spawnPoolSize = DEFAULT_THREAD_POOL_SIZE,
-  allowPrewarmedPool = false,
 }) {
   if (!needsWasiThreadSpawnImport(moduleImports)) {
     return {
@@ -613,17 +481,6 @@ function createThreadSpawner({
       'threaded wasm requires shared memory; env.memory is not backed by SharedArrayBuffer',
     );
   }
-
-  if (allowPrewarmedPool && isMainThread) {
-    return createPrewarmedThreadSpawner({
-      wasmModule,
-      wasmMemory,
-      wasiArgs,
-      threadIdState,
-      spawnPoolSize,
-    });
-  }
-
   return createOnDemandThreadSpawner({
     wasmModule,
     wasmMemory,
@@ -739,339 +596,14 @@ function createOnDemandThreadSpawner({
   return { spawn, waitForWorkers, ready: Promise.resolve() };
 }
 
-function createPrewarmedThreadSpawner({
-  wasmModule,
-  wasmMemory,
-  wasiArgs,
-  threadIdState,
-  spawnPoolSize,
-}) {
-  const requestedThreads = Math.max(1, Number(spawnPoolSize) || DEFAULT_THREAD_POOL_SIZE);
-  const requestedPoolSize = parseThreadPoolSize(
-    Math.max(DEFAULT_THREAD_POOL_SIZE, requestedThreads),
-  );
-  const activeWorkers = new Map();
-  const poolWorkers = [];
-  let firstThreadFailure = null;
-  let shutdownPromise = null;
-  let isShuttingDown = false;
-
-  const recordFailure = (tid, error) => {
-    if (!firstThreadFailure) {
-      firstThreadFailure = error instanceof Error ? error : new Error(String(error));
-    }
-    threadDebugLog(`recorded thread failure tid=${tid}: ${firstThreadFailure.message}`);
-  };
-
-  const handlePoolMessage = (slot, message) => {
-    if (!message || typeof message !== 'object') {
-      return;
-    }
-
-    if (message.type === THREAD_WORKER_POOL_READY) {
-      slot.online = true;
-      slot.resolveReady?.();
-      slot.resolveReady = null;
-      slot.rejectReady = null;
-      threadDebugLog(`pool worker ready index=${slot.index}`);
-    }
-  };
-
-  const handlePoolWorkerFailure = (slot, error) => {
-    if (isShuttingDown) {
-      return;
-    }
-    const activeTid = slot.tid;
-    const wrapped = new Error(
-      `wasi pool worker ${slot.index} failed${activeTid == null ? '' : ` while running tid=${activeTid}`}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    if (activeTid != null) {
-      activeWorkers.delete(activeTid);
-      recordFailure(activeTid, wrapped);
-      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
-      Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED);
-      Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
-    } else if (slot.rejectReady) {
-      slot.rejectReady(wrapped);
-    } else if (!firstThreadFailure) {
-      firstThreadFailure = wrapped;
-    }
-    slot.busy = false;
-    slot.tid = null;
-  };
-
-  const poolReadyPromises = [];
-  for (let index = 0; index < requestedPoolSize; index += 1) {
-    const control = new Int32Array(
-      new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * THREAD_SLOT_LENGTH),
-    );
-    control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
-    control[THREAD_SLOT_TID_INDEX] = 0;
-    control[THREAD_SLOT_START_ARG_INDEX] = 0;
-    control[THREAD_SLOT_ERROR_INDEX] = 0;
-    const slot = {
-      index,
-      worker: null,
-      control,
-      online: false,
-      busy: false,
-      tid: null,
-      resolveReady: null,
-      rejectReady: null,
-    };
-    const readyPromise = new Promise((resolveReady, rejectReady) => {
-      slot.resolveReady = resolveReady;
-      slot.rejectReady = rejectReady;
-    });
-    poolReadyPromises.push(readyPromise);
-    const worker = new Worker(new URL(import.meta.url), {
-      type: 'module',
-      workerData: {
-        [THREAD_WORKER_DATA_KEY]: {
-          mode: THREAD_WORKER_MODE_POOL,
-          wasiArgs,
-          wasmModule,
-          wasmMemory,
-          threadIdState,
-          controlBuffer: control.buffer,
-        },
-      },
-    });
-    slot.worker = worker;
-    worker.on('message', (message) => handlePoolMessage(slot, message));
-    worker.on('error', (error) => handlePoolWorkerFailure(slot, error));
-    worker.on('exit', (code) => {
-      if (code === 0) {
-        return;
-      }
-      handlePoolWorkerFailure(slot, new Error(`pool worker exited with code ${code}`));
-    });
-    poolWorkers.push(slot);
-  }
-
-  const ready = Promise.all(poolReadyPromises).then(() => {
-    threadDebugLog(`prewarmed thread pool online size=${requestedPoolSize}`);
-  });
-
-  const shutdownPool = async () => {
-    if (shutdownPromise) {
-      return shutdownPromise;
-    }
-    shutdownPromise = (async () => {
-      isShuttingDown = true;
-      for (const slot of poolWorkers) {
-        try {
-          slot.worker.postMessage({ type: THREAD_WORKER_POOL_SHUTDOWN });
-        } catch {
-          // ignored
-        }
-        Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
-        Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
-      }
-      await Promise.allSettled(poolWorkers.map(async (slot) => {
-        const exitedCleanly = await Promise.race([
-          new Promise((resolve) => {
-            slot.worker.once('exit', () => resolve(true));
-          }),
-          new Promise((resolve) => {
-            setTimeout(() => resolve(false), 250);
-          }),
-        ]);
-        if (exitedCleanly) {
-          return;
-        }
-        try {
-          await slot.worker.terminate();
-        } catch {
-          // ignored
-        }
-      }));
-    })();
-    return shutdownPromise;
-  };
-
-  function spawn(startArg) {
-    const spawnArgCount = arguments.length;
-    const errorOrTidPtr = spawnArgCount > 1 ? arguments[1] : undefined;
-    for (const [activeTid, activeSlot] of activeWorkers.entries()) {
-      const state = Atomics.load(activeSlot.control, THREAD_SLOT_STATE_INDEX);
-      if (state === THREAD_SLOT_STATE_IDLE) {
-        activeSlot.busy = false;
-        activeSlot.tid = null;
-        activeWorkers.delete(activeTid);
-        continue;
-      }
-      if (state === THREAD_SLOT_STATE_FAILED) {
-        activeSlot.busy = false;
-        activeSlot.tid = null;
-        activeWorkers.delete(activeTid);
-        recordFailure(activeTid, new Error(`wasi thread ${activeTid} failed in pool worker ${activeSlot.index}`));
-      }
-    }
-
-    const tid = allocateThreadId(threadIdState);
-    if (tid < 0) {
-      threadDebugLog(`thread-spawn rejected startArg=${startArg} errno=${tid} argc=${spawnArgCount}`);
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
-    }
-    const slot = poolWorkers.find((candidate) => candidate.online
-      && !candidate.busy
-      && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
-    if (!slot) {
-      threadDebugLog(`thread-spawn no idle worker tid=${tid} startArg=${Number(startArg) | 0} argc=${spawnArgCount}`);
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
-    }
-
-    slot.busy = true;
-    slot.tid = tid;
-    activeWorkers.set(tid, slot);
-
-    try {
-      Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
-      Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
-      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
-      Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
-      Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
-      threadDebugLog(`pool dispatch tid=${tid} worker=${slot.index} startArg=${Number(startArg) | 0} argc=${spawnArgCount} errPtr=${errorOrTidPtr ?? 'n/a'}`);
-      const startAckError = waitForThreadStartAck(slot.control, tid);
-      if (startAckError) {
-        activeWorkers.delete(tid);
-        slot.busy = false;
-        slot.tid = null;
-        threadDebugLog(`pool dispatch failed tid=${tid}: ${startAckError.message}`);
-        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
-      }
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
-    } catch (error) {
-      activeWorkers.delete(tid);
-      slot.busy = false;
-      slot.tid = null;
-      threadDebugLog(`pool dispatch failed tid=${tid}: ${error instanceof Error ? error.message : String(error)}`);
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
-    }
-  }
-
-  const waitForWorkers = async () => {
-    while (activeWorkers.size > 0) {
-      for (const [tid, slot] of activeWorkers.entries()) {
-        while (true) {
-          const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
-          if (state === THREAD_SLOT_STATE_IDLE) {
-            slot.busy = false;
-            slot.tid = null;
-            activeWorkers.delete(tid);
-            break;
-          }
-          if (state === THREAD_SLOT_STATE_FAILED) {
-            recordFailure(tid, new Error(`wasi thread ${tid} failed in pool worker ${slot.index}`));
-            slot.busy = false;
-            slot.tid = null;
-            activeWorkers.delete(tid);
-            break;
-          }
-          Atomics.wait(slot.control, THREAD_SLOT_STATE_INDEX, state, 100);
-        }
-      }
-    }
-    activeWorkers.clear();
-    await shutdownPool();
-    if (firstThreadFailure) {
-      throw firstThreadFailure;
-    }
-  };
-
-  return { spawn, waitForWorkers, ready };
-}
-
 function getThreadWorkerPayload(data) {
-  if (isMainThread) {
-    return null;
-  }
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-  if (!(THREAD_WORKER_DATA_KEY in data)) {
+  if (isMainThread || !data || typeof data !== 'object') {
     return null;
   }
   const payload = data[THREAD_WORKER_DATA_KEY];
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-  if (payload.mode !== THREAD_WORKER_MODE_START && payload.mode !== THREAD_WORKER_MODE_POOL) {
-    return null;
-  }
-  return payload;
-}
-
-async function runThreadPoolWorker(payload) {
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('missing worker payload for wasi thread pool worker');
-  }
-  const {
-    wasmModule,
-    wasmMemory,
-    wasiArgs,
-    threadIdState,
-    controlBuffer,
-  } = payload;
-  if (!(wasmModule instanceof WebAssembly.Module)) {
-    throw new Error('pool worker payload missing compiled WebAssembly.Module');
-  }
-  if (!(wasmMemory instanceof WebAssembly.Memory)) {
-    throw new Error('pool worker payload missing shared WebAssembly.Memory');
-  }
-  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
-    throw new Error('pool worker payload memory is not shared');
-  }
-  if (!parentPort) {
-    throw new Error('pool worker requires parentPort');
-  }
-  const control = new Int32Array(controlBuffer);
-  if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
-    throw new Error('pool worker payload missing thread control buffer');
-  }
-  threadDebugLog('pool worker online');
-  parentPort.postMessage({ type: THREAD_WORKER_POOL_READY });
-
-  while (true) {
-    while (Atomics.load(control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE) {
-      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_IDLE);
-    }
-    const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
-    if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-      return;
-    }
-    if (state === THREAD_SLOT_STATE_FAILED) {
-      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED, 100);
-      continue;
-    }
-    if (state !== THREAD_SLOT_STATE_REQUESTED) {
-      continue;
-    }
-    const tid = Atomics.load(control, THREAD_SLOT_TID_INDEX) | 0;
-    const startArg = Atomics.load(control, THREAD_SLOT_START_ARG_INDEX) | 0;
-    Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 0);
-    Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_STARTING);
-    Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
-    threadDebugLog(`pool worker running tid=${tid} startArg=${startArg}`);
-    try {
-      await runSpawnedThread({
-        mode: THREAD_WORKER_MODE_START,
-        tid,
-        startArg,
-        wasmModule,
-        wasmMemory,
-        wasiArgs,
-        threadIdState,
-        startControlBuffer: control.buffer,
-      });
-      Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_IDLE);
-    } catch {
-      Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 1);
-      Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED);
-    }
-    Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
-  }
+  return payload && typeof payload === 'object' && payload.mode === THREAD_WORKER_MODE_START
+    ? payload
+    : null;
 }
 
 async function runSpawnedThread(payload) {
@@ -1086,64 +618,50 @@ async function runSpawnedThread(payload) {
     wasmModule,
     wasmMemory,
     threadIdState,
-    startControlBuffer,
   } = payload;
-  const startControl = threadStartControlFromBuffer(startControlBuffer);
-  signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
-  let startAcked = false;
-  try {
-    if (!(wasmModule instanceof WebAssembly.Module)) {
-      throw new Error('worker payload missing compiled WebAssembly.Module');
-    }
-    if (!(wasmMemory instanceof WebAssembly.Memory)) {
-      throw new Error('worker payload missing shared WebAssembly.Memory');
-    }
-    if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
-      throw new Error('worker payload memory is not shared');
-    }
-
-    const moduleImports = WebAssembly.Module.imports(wasmModule);
-    const threadWasi = createWasiRuntime(
-      Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
-    );
-    const threadSpawner = createThreadSpawner({
-      moduleImports,
-      wasmModule,
-      wasmMemory,
-      wasiArgs: Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
-      threadIdState,
-      allowPrewarmedPool: false,
-    });
-    await threadSpawner.ready;
-    const importObject = createImportObject({
-      moduleImports,
-      wasi: threadWasi,
-      memory: wasmMemory,
-      threadSpawner,
-    });
-
-    const instance = await WebAssembly.instantiate(wasmModule, importObject);
-    threadDebugLog(`worker tid=${Number(tid) | 0} entering wasi_thread_start startArg=${Number(startArg) | 0}`);
-    if (typeof threadWasi.finalizeBindings === 'function') {
-      threadWasi.finalizeBindings(instance, { memory: wasmMemory });
-    } else {
-      threadWasi.initialize(instance);
-    }
-    if (typeof instance.exports.wasi_thread_start !== 'function') {
-      throw new Error('threaded wasm module does not export wasi_thread_start');
-    }
-    signalThreadStartState(startControl, THREAD_SLOT_STATE_RUNNING);
-    startAcked = true;
-    instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
-    threadDebugLog(`worker tid=${Number(tid) | 0} completed wasi_thread_start`);
-    await threadSpawner.waitForWorkers();
-    threadDebugLog(`worker tid=${Number(tid) | 0} completed nested worker waits`);
-  } catch (error) {
-    if (!startAcked) {
-      signalThreadStartState(startControl, THREAD_SLOT_STATE_FAILED);
-    }
-    throw error;
+  if (!(wasmModule instanceof WebAssembly.Module)) {
+    throw new Error('worker payload missing compiled WebAssembly.Module');
   }
+  if (!(wasmMemory instanceof WebAssembly.Memory)) {
+    throw new Error('worker payload missing shared WebAssembly.Memory');
+  }
+  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
+    throw new Error('worker payload memory is not shared');
+  }
+
+  const moduleImports = WebAssembly.Module.imports(wasmModule);
+  const threadWasi = createWasiRuntime(
+    Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
+  );
+  const threadSpawner = createThreadSpawner({
+    moduleImports,
+    wasmModule,
+    wasmMemory,
+    wasiArgs: Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
+    threadIdState,
+  });
+  await threadSpawner.ready;
+  const importObject = createImportObject({
+    moduleImports,
+    wasi: threadWasi,
+    memory: wasmMemory,
+    threadSpawner,
+  });
+
+  const instance = await WebAssembly.instantiate(wasmModule, importObject);
+  threadDebugLog(`worker tid=${Number(tid) | 0} entering wasi_thread_start startArg=${Number(startArg) | 0}`);
+  if (typeof threadWasi.finalizeBindings === 'function') {
+    threadWasi.finalizeBindings(instance, { memory: wasmMemory });
+  } else {
+    threadWasi.initialize(instance);
+  }
+  if (typeof instance.exports.wasi_thread_start !== 'function') {
+    throw new Error('threaded wasm module does not export wasi_thread_start');
+  }
+  instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
+  threadDebugLog(`worker tid=${Number(tid) | 0} completed wasi_thread_start`);
+  await threadSpawner.waitForWorkers();
+  threadDebugLog(`worker tid=${Number(tid) | 0} completed nested worker waits`);
 }
 
 function needsEnvMemoryImport(moduleImports) {
@@ -1201,9 +719,7 @@ if (isThreadDebugEnabled() && !isMainThread) {
 }
 const run = threadWorkerMode?.mode === THREAD_WORKER_MODE_START
   ? runSpawnedThread(threadWorkerMode)
-  : threadWorkerMode?.mode === THREAD_WORKER_MODE_POOL
-    ? runThreadPoolWorker(threadWorkerMode)
-    : main();
+  : main();
 
 run.catch((error) => {
   const message = error instanceof Error ? error.stack || error.message : String(error);

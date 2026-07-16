@@ -49,8 +49,6 @@ They do **not** affect the native CLI or the browser runtime.
 
 | Variable | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `ROM_WEAVER_WASM_THREAD_POOL_SIZE` | positive int (clamped 1–256) | 4 | Size of the harness thread pool. Rejected with an error if not a positive integer. |
-| `ROM_WEAVER_WASM_PREWARM_THREADS` | bool | off | **Parsed but intentionally ignored** - WASI threads spawn one Worker per `thread-spawn`, so prewarming is a no-op (logs a notice when set). |
 | `ROM_WEAVER_WASM_SHARED_MEMORY_INITIAL_PAGES` | positive int | harness default | Initial pages for the shared `WebAssembly.Memory`. |
 | `ROM_WEAVER_WASM_SHARED_MEMORY_MAX_PAGES` | positive int | harness default | Maximum pages for the shared `WebAssembly.Memory`; must be `>=` the initial pages or the harness throws. |
 | `ROM_WEAVER_WASI_THREAD_DEBUG` | bool | off | Enables `[wasi-thread]` debug logging from the harness. |
