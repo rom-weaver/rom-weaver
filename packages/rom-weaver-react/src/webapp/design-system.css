@@ -2459,16 +2459,18 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
   .rw-app .meter:not(.indet) .fill::after { animation: none; }
 }
 
-/* Keep patch controls in the same left / content / right order at every width
-   - the compact card-top grid is universal, so a card renders identically in
-   the single-column stack and the wide-bench 2-up grid. */
+/* Keep patch controls in the same content / controls order at every width -
+   the compact card-top grid is universal, so a card renders identically in
+   the single-column stack and the wide-bench 2-up grid. The name owns the
+   card's full left width (long names wrap without a leading chip squeezing
+   them); the position/drag chip sits on the right beside remove. */
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto auto auto;
   align-items: start; column-gap: var(--sp-m); row-gap: var(--sp-xs);
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: contents; }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
-  grid-column: 2; grid-row: 1; align-self: center;
+  grid-column: 1; grid-row: 1; align-self: center;
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .patch-desc { grid-column: 1 / -1; grid-row: 2; }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .card-meta { grid-column: 1 / -1; grid-row: 2; }
@@ -2476,7 +2478,7 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions,
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: contents; }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
-  grid-column: 1; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
+  grid-column: 2; grid-row: 1; width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .rm {
