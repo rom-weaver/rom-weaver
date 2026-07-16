@@ -495,8 +495,24 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .drop .hint b { color: var(--ink-2); font-weight: 600; }
 .rw-app .drop .pointer-copy.coarse { display: none; }
 
-.rw-app .drop.hero { min-height: 0; gap: var(--sp-s); padding: 18px 24px 15px; }
-.rw-app .drop.hero .main { flex-direction: column; gap: var(--sp-m); font-size: clamp(.82rem, 3.4vw, 1.08rem); font-weight: 700; white-space: nowrap; }
+/* Variant B empty hero: warp (thesis), the fell line with the upload bead, then
+   the woven cloth (instruction + formats) - one cluster centred in a tall,
+   fully-droppable hero (see the is-empty rule for the fill height). */
+.rw-app .drop.hero { min-height: 0; gap: clamp(28px, 4.8vw, 62px); padding: 0; justify-content: center; }
+/* the shuttle is the upload bead - no pill; the fell threads meet it directly */
+.rw-app .drop.hero .main { flex: none; flex-direction: row; padding: 0; border: 0; background: none; box-shadow: none; }
+/* the fell line reaches the bead from both selvages - two thread segments that
+   brighten toward the bead rather than a single line skewering the glyph */
+.rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
+.rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
+.rw-app .drop.hero .fell-thread:first-child { background: linear-gradient(to right, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
+.rw-app .drop.hero .fell-thread:last-child { background: linear-gradient(to left, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
+/* woven cloth below the fell: the drop instruction over the format reed */
+.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(20px, 2.6vw, 34px); }
+.rw-app .drop.hero .drop-belowlabel {
+  display: block; max-width: min(94%, 42ch); margin-inline: auto; text-align: center; text-wrap: balance;
+  font-size: clamp(.9rem, .85rem + .3vw, 1.02rem); font-weight: 600; line-height: 1.35; color: var(--ink-2);
+}
 /* the hero opens with the product thesis - the page's one headline - and the
    drop instruction steps down to a supporting line beneath it */
 /* the empty page opens with the product thesis - the one headline - above the
@@ -542,17 +558,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 /* copy sits above the woven layers */
 .rw-app .hero-lead > * { position: relative; }
+/* the thesis is the top block - no divider under it; the fell line below is the
+   real seam between warp and cloth */
 .rw-app .drop.hero > .hero-lead {
-  align-self: stretch; margin: 0 0 16px; padding: 20px 20px 22px;
-  border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; background: none;
+  align-self: stretch; margin: 0; padding: 0 var(--pad); gap: var(--sp-m);
+  border: 0; border-radius: 0; background: none;
 }
 .rw-app .drop.hero > .hero-lead::before, .rw-app .drop.hero > .hero-lead::after { display: none; }
 /* viewport-driven up to the desktop cap so phones get the biggest thesis type
    that fits: 5.2vw ≈ 20px on a 390px phone (was flooring at 1.05rem there) */
-.rw-app .hero-lead .lead-title { font-size: clamp(1rem, 5.2vw, 1.45rem); font-weight: 750; letter-spacing: -.01em; color: var(--ink); text-wrap: balance; }
-/* deliberate two-line headline: each clause holds its own line (still wraps
-   balanced on narrow screens) */
-.rw-app .hero-lead .lead-line { display: block; }
+/* the headline flows across a wide measure and scales with the viewport, letting
+   the large type settle onto two lines without a forced break */
+.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, 3.25vw, 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
+.rw-app .hero-lead .lead-line { display: inline; }
 .rw-app .hero-lead .lead-accent { color: var(--thread-text); }
 .rw-app .hero-lead .lead-sub {
   display: inline-flex; align-items: center; gap: var(--sp-s);
@@ -563,13 +581,13 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%;
   background: var(--thread-text);
 }
-.rw-app .step.is-input.is-empty .drop.hero .main { font-size: .92rem; font-weight: 600; color: var(--ink-2); }
+/* the shuttle bead: an opaque round chip the fell threads run up to */
 .rw-app .drop.hero .main svg {
-  width: 21px; height: 21px; box-sizing: content-box; padding: 11px; border-radius: 13px;
-  color: var(--thread-text); background: color-mix(in oklab, var(--thread) 13%, transparent);
+  width: 22px; height: 22px; box-sizing: content-box; padding: 14px; border-radius: 50%;
+  color: var(--thread-text); background: color-mix(in oklab, var(--thread) 16%, var(--plate-2));
 }
 .rw-app .drop.hero .formats {
-  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 34rem); margin-block-start: 2px; overflow: hidden; pointer-events: none;
+  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(16px, 3vw, 24px); overflow: hidden; pointer-events: none;
   /* wide fade lanes so pills dissolve instead of clipping mid-pill at the edges */
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
@@ -680,8 +698,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    claims a healthy share of the viewport, capped so the thesis + ghost steps
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
-  min-height: clamp(140px, calc(100svh - var(--dock-total) - var(--hero-chrome)), 680px);
-  padding-block: 26px;
+  min-height: clamp(360px, calc(100svh - var(--dock-total) - var(--hero-chrome)), 920px);
+  padding-block: 0;
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
 
@@ -2171,7 +2189,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   }
   .rw-app .hero-lead::before { display: none; }
   .rw-app .hero-lead::after { display: block; }
-  .rw-app .hero-lead .lead-title { font-size: .86rem; line-height: 1.25; }
+  .rw-app .hero-lead .lead-title { font-size: clamp(1.05rem, 4.6vw, 1.5rem); line-height: 1.2; }
   .rw-app .hero-lead .lead-line { display: inline; }
   .rw-app .hero-lead .lead-sub { padding: 1px 7px; font-size: .65rem; }
   .rw-app .drop.hero > .hero-lead { margin-block-end: 8px; padding: 0 8px 10px; }
@@ -2216,9 +2234,11 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   .rw-app .runprog .meter { height: 8px; transform: none; }
   .rw-app .runprog .prog-actions { top: 6px; }
   .rw-app .cards > .prog-panel { border-radius: var(--r-s); }
-  .rw-app .step.is-input.is-empty .drop.hero { gap: var(--sp-xs); padding-inline: 12px; }
-  .rw-app .drop.hero .main { gap: var(--sp-s); font-size: clamp(.76rem, 3.5vw, .9rem); white-space: normal; text-wrap: balance; }
-  .rw-app .drop.hero .main svg { padding: 8px; border-radius: 11px; }
+  /* keep the same vertical spread on phones - only the fell's inline padding
+     and the bead size adjust; the cluster gap stays the base clamp */
+  .rw-app .step.is-input.is-empty .drop.hero { padding-inline: 0; }
+  .rw-app .drop.hero .fell { padding-inline: 12px; }
+  .rw-app .drop.hero .main svg { padding: 13px; border-radius: 50%; }
   .rw-app .needs-input { min-height: 54px; padding: 10px 14px; gap: var(--sp-s); font-size: .78rem; }
   .rw-app .cards { gap: var(--sp-m); }
   .rw-app .patch-cards { gap: var(--sp-m); }

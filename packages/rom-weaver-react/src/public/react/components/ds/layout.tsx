@@ -146,6 +146,49 @@ const DropZone = ({
     onFiles(files);
   };
 
+  // The drop instruction. In the hero it sits below the fell line as the woven
+  // cloth; in the compact add-row it rides inline in the button.
+  const renderLabelBody = () =>
+    reading ? (
+      <span>{readingLabel}</span>
+    ) : labelCoarse ? (
+      <>
+        <span className="pointer-copy fine">{label}</span>
+        <span className="pointer-copy coarse">{labelCoarse}</span>
+      </>
+    ) : (
+      <span>{label}</span>
+    );
+  // In the hero the glyph is the shuttle bead that rides the fell line (no
+  // label - that drops below); in the compact add-row it is the plain button
+  // with its label inline.
+  const mainNode = (
+    <span className={join("main", !big && "btnish")}>
+      {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
+      {big ? null : renderLabelBody()}
+    </span>
+  );
+  const formatsNode =
+    big && formats?.length ? (
+      <span aria-hidden="true" className="formats">
+        {formatRows.map((row, lane) => (
+          <span className="formats-lane" key={lane}>
+            <span className="formats-track">
+              {[0, 1].map((copy) => (
+                <span className="formats-set" key={copy}>
+                  {row.map((format, index) => (
+                    <span className="fmt mono" key={`${copy}-${index}-${format}`}>
+                      {format}
+                    </span>
+                  ))}
+                </span>
+              ))}
+            </span>
+          </span>
+        ))}
+      </span>
+    ) : null;
+
   // A <label> wrapping the hidden file input is natively clickable and
   // keyboard-accessible (focus lands on the input), so no role/tabindex needed.
   return (
@@ -184,40 +227,28 @@ const DropZone = ({
       }}
     >
       {lead}
-      <span className={join("main", !big && "btnish")}>
-        {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
-        {reading ? (
-          <span>{readingLabel}</span>
-        ) : labelCoarse ? (
-          <>
-            <span className="pointer-copy fine">{label}</span>
-            <span className="pointer-copy coarse">{labelCoarse}</span>
-          </>
-        ) : (
-          <span>{label}</span>
-        )}
-      </span>
-      {hint ? <span className="hint fine">{hint}</span> : null}
-      {hintCoarse ? <span className="hint coarse">{hintCoarse}</span> : null}
-      {big && formats?.length ? (
-        <span aria-hidden="true" className="formats">
-          {formatRows.map((row, lane) => (
-            <span className="formats-lane" key={lane}>
-              <span className="formats-track">
-                {[0, 1].map((copy) => (
-                  <span className="formats-set" key={copy}>
-                    {row.map((format, index) => (
-                      <span className="fmt mono" key={`${copy}-${index}-${format}`}>
-                        {format}
-                      </span>
-                    ))}
-                  </span>
-                ))}
-              </span>
-            </span>
-          ))}
-        </span>
-      ) : null}
+      {big ? (
+        <>
+          {/* the fell line: the active weave row the upload bead sits on as the
+              mid-point pivot, with the woven threads meeting it from both selvages */}
+          <div className="fell">
+            <span aria-hidden="true" className="fell-thread" />
+            {mainNode}
+            <span aria-hidden="true" className="fell-thread" />
+          </div>
+          {/* woven cloth below the fell: the drop instruction, then the format reed */}
+          <div className="drop-base">
+            <span className="drop-belowlabel">{renderLabelBody()}</span>
+            {formatsNode}
+          </div>
+        </>
+      ) : (
+        <>
+          {mainNode}
+          {hint ? <span className="hint fine">{hint}</span> : null}
+          {hintCoarse ? <span className="hint coarse">{hintCoarse}</span> : null}
+        </>
+      )}
       <input
         accept={accept}
         aria-label={typeof label === "string" ? label : "Add files"}
