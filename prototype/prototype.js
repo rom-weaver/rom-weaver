@@ -9,7 +9,7 @@
   /* ════════ i18n ════════ */
   const CATALOGS = {
     en: {
-      "mode.apply": "Apply", "mode.create": "Create", "mode.trim": "Trim",
+      "mode.apply": "Apply", "mode.create": "Make Patch", "mode.trim": "Trim",
       "theme.toLight": "Switch to light theme", "theme.toDark": "Switch to dark theme",
       "tools.log": "Log",
       "log.empty": "No {level}-level entries", "log.emptyFilter": "No lines match “{q}”", "log.filter": "Filter", "log.filterLabel": "Filter log",
@@ -140,7 +140,7 @@
       "announce.scenario": "Scenario: {name}", "announce.copied": "Copied to clipboard", "announce.reordered": "Patch moved to position {n}",
     },
     es: {
-      "mode.apply": "Aplicar", "mode.create": "Crear", "mode.trim": "Recortar",
+      "mode.apply": "Aplicar", "mode.create": "Crear parche", "mode.trim": "Recortar",
       "theme.toLight": "Cambiar a tema claro", "theme.toDark": "Cambiar a tema oscuro",
       "tools.log": "Registro",
       "log.empty": "Sin entradas de nivel {level}", "log.emptyFilter": "Ninguna línea coincide con «{q}»", "log.filter": "Filtrar", "log.filterLabel": "Filtrar el registro",
@@ -271,7 +271,7 @@
       "announce.scenario": "Escenario: {name}", "announce.copied": "Copiado al portapapeles", "announce.reordered": "Parche movido a la posición {n}",
     },
     de: {
-      "mode.apply": "Anwenden", "mode.create": "Erstellen", "mode.trim": "Trimmen",
+      "mode.apply": "Anwenden", "mode.create": "Patch erstellen", "mode.trim": "Trimmen",
       "theme.toLight": "Zum hellen Design wechseln", "theme.toDark": "Zum dunklen Design wechseln",
       "tools.log": "Protokoll",
       "log.empty": "Keine {level}-Einträge", "log.emptyFilter": "Keine Zeile passt zu „{q}“", "log.filter": "Filtern", "log.filterLabel": "Protokoll filtern",

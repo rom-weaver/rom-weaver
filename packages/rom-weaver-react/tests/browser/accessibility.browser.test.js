@@ -22,8 +22,8 @@
  * Every scan runs at WCAG 2.0 + 2.1 + 2.2 (A/AA) across a viewport ladder that
  * lands inside each responsive layout regime (see VIEWPORTS), in both themes.
  *
- * Forms render inert: Apply via controllers-as-stores, Create/Trim via their
- * presentational views (Create/TrimPatchFormView) fed a staged model, the empty
+ * Forms render inert: Apply via controllers-as-stores, Make Patch/Trim via their
+ * presentational views (CreatePatchFormView/TrimPatchFormView) fed a staged model, the empty
  * benches via the real forms (wasm only boots on a file action). No wasm/OPFS/
  * worker boot. Runs in-browser via axe-core (same engine as prototype/a11y.js)
  * rather than @axe-core/playwright, because vitest browser mode's `page` is not
@@ -362,7 +362,7 @@ describe("design-system sections + states (expanded)", () => {
 // ── Full-page scans ──────────────────────────────────────────────────────────
 // Mounts the production page shell - Masthead + <main> - around each
 // workflow. Apply uses the inert ApplyWorkflowFormView (controllers-as-stores,
-// no wasm) with a staged ROM card. Create/Trim are stateful forms with no inert
+// no wasm) with a staged ROM card. Make Patch/Trim are stateful forms with no inert
 // view, but render fine EMPTY (wasm only boots on a file action), so we scan
 // their empty bench. All page scans add best-practice + landmark rules.
 
@@ -419,7 +419,7 @@ const stagedPatchItem = (fileName) => ({
 
 const PAGE_TABS = [
   { icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
-  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
+  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Make Patch" },
   { icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
 ];
 
@@ -647,8 +647,8 @@ const emptyTrimPage = () =>
     createElement(TrimPatchForm, { onOutputFormatChange: noop, onSettingsChange: noop, onSourceChange: noop }),
   );
 
-// Create/Trim are stateful forms with no inert controller, but their markup is
-// owned by presentational views (Create/TrimPatchFormView) that the controllers
+// Make Patch/Trim are stateful forms with no inert controller, but their markup is
+// owned by presentational views (CreatePatchFormView/TrimPatchFormView) that the controllers
 // feed prop bundles. Mounting those views directly with a staged model exercises
 // the loaded source cards (Extract + Info open, incl. the trim group) + swap row
 // + output step without booting wasm - the coverage gap empty benches can't reach.

@@ -17,7 +17,7 @@ const withSettings = (children: ReactNode) => (
 
 const TABS = [
   { icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
-  { icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
+  { icon: <svg aria-hidden="true" />, id: "creator", label: "Make Patch" },
   { icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 
@@ -47,7 +47,7 @@ describe("Masthead", () => {
     expect(rail.classList.contains("mode-rail")).toBe(true);
     expect(rail.querySelector(".mode-thumb")).toBeTruthy();
     const tabs = Array.from(rail.querySelectorAll('[role="tab"]'));
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Apply", "Create", "Trim"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Apply", "Make Patch", "Trim"]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");

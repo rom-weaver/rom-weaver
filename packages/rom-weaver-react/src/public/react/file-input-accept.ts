@@ -14,7 +14,7 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENS
  *   - `unifiedApply` - ROMs, patches, bundles, and archives (`--rom-filter`
  *     + `--patch-filter`), used by the Apply tab.
  *   - `unifiedRom` - ROMs and archives only (`--rom-filter`), used by the
- *     Create and Trim tabs, which have no patch bucket.
+ *     Make Patch and Trim tabs, which have no patch bucket.
  *
  * Mobile Safari ignores extension-only `accept` lists, so it falls back to a
  * MIME + archive-extension list that still lets any binary ROM/patch through.

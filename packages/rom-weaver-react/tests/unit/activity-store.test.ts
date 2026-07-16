@@ -42,7 +42,7 @@ describe("activity store", () => {
     setWorkbenchActivity("trim", { state: "idle" });
     setWorkbenchActivity("trim", { stage: "Trim", state: "running" });
     expect(getWorkbenchActivity().state).toBe("running");
-    // Create tab mounts with busy=false and publishes idle - must NOT win.
+    // Make Patch tab mounts with busy=false and publishes idle - must NOT win.
     setWorkbenchActivity("create", { state: "idle" });
     expect(getWorkbenchActivity().state).toBe("running");
     setWorkbenchActivity("trim", { state: "idle" });

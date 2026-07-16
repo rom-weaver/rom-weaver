@@ -155,7 +155,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: /make patch/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));

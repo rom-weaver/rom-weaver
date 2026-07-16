@@ -434,7 +434,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   mask-image: linear-gradient(90deg, #000 0 34%, transparent 34% 39%, #000 39% 42%, transparent 42%);
 }
 @keyframes weft-throw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-/* a touch more air above each section so straddling controls (the create-mode
+/* a touch more air above each section so straddling controls (the make-patch-mode
    swap hinge) have room to breathe */
 .rw-app .step-head { display: flex; align-items: baseline; gap: var(--sp-m); padding: var(--step-pt) var(--pad) 2px; position: relative; }
 .rw-app .step-head-action { display: none; }
@@ -2640,7 +2640,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 /* ═══ phone dock layout ═══
    On a phone the workflow rail becomes a persistent thumb-reachable shuttle
    dock and the masthead re-grids. The workflow components themselves stay
-   untouched, so Apply/Create/Trim/Tools keep the same state and behavior as
+   untouched, so Apply/Make Patch/Trim/Tools keep the same state and behavior as
    desktop. */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   :root:has(.rw-app) {

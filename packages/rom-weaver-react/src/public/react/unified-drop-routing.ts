@@ -10,7 +10,7 @@ import { classifyDroppedFiles } from "./file-classification.ts";
 const logger = createLogger("unified-drop-routing");
 
 /**
- * ROM-only tabs (Create/Trim) have no patch bucket. Drop patches silently (with
+ * ROM-only tabs (Make Patch/Trim) have no patch bucket. Drop patches silently (with
  * a log) and keep ROMs + archives, which the workflow extracts into ROMs.
  */
 const collectRomDropFiles = (files: File[]): File[] => {
@@ -25,7 +25,7 @@ const collectRomDropFiles = (files: File[]): File[] => {
 };
 
 /**
- * Create-tab strategy: fill empty slots in drop order; if more ROMs are dropped
+ * Make Patch-tab strategy: fill empty slots in drop order; if more ROMs are dropped
  * than there are empty slots, the last dropped ROM overflows into the final slot
  * (matching the legacy "default to modified" page-drop behavior).
  *
