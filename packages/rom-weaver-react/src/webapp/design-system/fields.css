@@ -1,0 +1,302 @@
+/* ═══ fields ═══ */
+.rw-app .input, .rw-app .select {
+  height: var(--ctl); width: 100%; padding-inline: 12px;
+  border: 1px solid var(--seam-strong); border-radius: var(--r-s);
+  background: var(--well); color: var(--ink); font: 500 .92rem var(--font);
+  transition: border-color .15s, box-shadow .15s;
+}
+.rw-app .select { appearance: none; padding-inline-end: 30px; cursor: pointer;
+  background-image: var(--chevron);
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+/* combo box: editable input + datalist, drawn with the same dropdown chevron as
+   a select; the native datalist picker sits invisibly over the chevron */
+.rw-app .input.combo { padding-inline-end: 30px;
+  background-image: var(--chevron);
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+.rw-app .input.combo::-webkit-calendar-picker-indicator { opacity: 0; width: 24px; margin: 0; padding: 0; cursor: pointer; }
+.rw-app .input:focus-visible, .rw-app .select:focus-visible { outline: none; border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
+.rw-app .input[aria-invalid="true"], .rw-app .select[aria-invalid="true"] { border-color: var(--fault); box-shadow: 0 0 0 1px color-mix(in oklab, var(--fault) 50%, transparent); }
+.rw-app .input:disabled, .rw-app .select:disabled { opacity: .5; cursor: not-allowed; }
+.rw-app .input::placeholder, .rw-app textarea::placeholder { color: var(--ink-3); opacity: 1; }
+/* every boolean control is a sliding switch - one shared primitive so option
+   drawers, settings, the patch enable, checksum overrides and the archive picker
+   all read identically: the input IS the recessed track, ::after is the knob.
+   per-context size lives in the --sw-* vars so callers only retune dimensions. */
+.rw-app input[type="checkbox"] {
+  --sw-w: 38px; --sw-h: 22px; --sw-thumb: 14px; --sw-pad: 3px; --sw-travel: 16px;
+  appearance: none; -webkit-appearance: none; margin: 0; flex: none; cursor: pointer;
+  position: relative; display: block; width: var(--sw-w); height: var(--sw-h);
+  border-radius: 99px; border: 1px solid var(--seam-strong); background: var(--well);
+  transition: background .18s var(--ease), border-color .18s;
+}
+.rw-app input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 50%; inset-inline-start: var(--sw-pad); translate: 0 -50%;
+  width: var(--sw-thumb); height: var(--sw-thumb); border-radius: 50%;
+  background: var(--ink-4); box-shadow: 0 1px 2px rgb(0 0 0 / .3);
+  transition: translate .18s var(--ease), background .18s;
+}
+.rw-app input[type="checkbox"]:hover { border-color: var(--ink-4); }
+.rw-app input[type="checkbox"]:checked { background: var(--thread); border-color: var(--thread); }
+.rw-app input[type="checkbox"]:checked::after { translate: var(--sw-travel) -50%; background: var(--thread-ink); }
+.rw-app input[type="checkbox"]:focus-visible { outline: 2px solid color-mix(in oklab, var(--thread) 55%, transparent); outline-offset: 2px; }
+.rw-app input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+.rw-app input[type="range"] { accent-color: var(--thread); width: 100%; }
+
+.rw-app .outbar { display: flex; gap: var(--sp-m); flex-wrap: wrap; }
+/* collapsed height tracks the drawer header (.cks-head min-height: 36px); the
+   name textarea still grows the row taller when it wraps to multiple lines */
+.rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; min-height: 36px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
+.rw-app .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
+.rw-app .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
+.rw-app .fname .input:focus-visible { box-shadow: none; }
+/* output name grows with its content instead of truncating - natively via
+   field-sizing where supported; the JS measure-and-set is the fallback */
+.rw-app .fname .outname {
+  height: auto; min-height: 0; resize: none; overflow: hidden;
+  field-sizing: content;
+  padding-block: 8px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  /* the textarea is content-sized and centered in the row (textarea text is
+     always top-anchored, so stretching it leaves a single line riding high
+     against the vertically centered format select) */
+  align-self: center;
+}
+.rw-app .fname .sep { width: 1px; background: var(--seam); flex: none; }
+/* the name textarea grows multi-line; the format control fills the full height
+   of the box beside it (override the fixed control height so align-self:stretch
+   can grow it - otherwise it pins to the top and leaves an empty notch) */
+.rw-app .fname .select { flex: none; align-self: stretch; height: auto; width: auto; border: 0; background-color: var(--plate-2); font-weight: 650; }
+.rw-app .fname .select:focus-visible { box-shadow: none; }
+
+/* options: a collapsible drawer (default open) marked by the tune icon, so it
+   reads in the same language as the rest of the card sections */
+/* any drawer label icon rides the tune glyph's metrics */
+.rw-app .cks .opts-lab { display: inline-flex; align-items: center; gap: var(--sp-s); }
+.rw-app .cks .opts-lab svg { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
+.rw-app .optsbody { display: flex; flex-direction: column; gap: var(--sp-m); padding-block: 9px 2px; }
+/* controls recess into the card face like every other input */
+.rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--sp-m); }
+.rw-app .patch-name-field { grid-column: 1 / -1; }
+.rw-app .patch-description-field { grid-column: 1 / -1; }
+/* export-type flows in the options grid like every other field (no full-width
+   row); its option strings are the widest in the drawer, so let the select
+   ellipsize instead of stretching the layout */
+.rw-app .export-type-field { min-width: 0; }
+.rw-app .export-type-field .select { text-overflow: ellipsis; }
+.rw-app .patch-description-field textarea.input { height: auto; min-height: 36px; padding-block: 8px; line-height: 1.4; resize: vertical; overflow: hidden; }
+.rw-app .verification-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--sp-m); margin-block-start: 3px; }
+.rw-app .patch-check-group { min-width: 0; padding: var(--sp-m); border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: color-mix(in oklab, var(--well) 72%, transparent); }
+.rw-app .patch-check-group .ck-group-head { margin-block-end: 7px; }
+.rw-app .verification-list { display: flex; flex-direction: column; gap: var(--sp-s); }
+/* "provide this ROM" card in the ROM step: the standard file-card anatomy,
+   but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
+   (the same "off" language as a disabled patch) with the file name ghosted */
+/* Per-row expected-vs-computed verdict inside a Checks drawer. */
+.rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
+.rw-app .ck-mark svg { width: 13px; height: 13px; }
+.rw-app .ck-mark.ok { color: var(--verified); }
+.rw-app .ck-mark.bad { color: var(--fault); }
+/* a row with a match mark carries FOUR cells - widen the row grid so the copy
+   glyph stays on the line instead of wrapping under the label */
+.rw-app .ck:not(.req):has(> .ck-mark) { grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto; }
+/* the merged Expected group verdict rides the group head */
+.rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
+.rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
+/* the Expected group is the bundle's voice, not a computed readout - it sits
+   on its own darker recessed band. Full bleed with block seams only (no inline
+   inset), so its label/value columns line up with the groups above and below. */
+.rw-app .ckrows #rom-weaver-rom-expected-checks {
+  background: color-mix(in oklab, var(--chassis) 55%, var(--well));
+  border-block: 1px solid var(--seam-soft);
+  padding: 6px 0 2px; margin-block: 3px;
+}
+/* post-match disclosure: the folded-away computed variants */
+.rw-app .ck-more {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-block-start: var(--sp-xs);
+  padding: 4px 2px; border: 0; background: none; cursor: pointer;
+  color: var(--ink-3); font-family: var(--font); font-size: .66rem; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.rw-app .ck-more:hover { color: var(--ink); }
+.rw-app .ck-more .chev-i { width: 12px; height: 12px; flex: none; transition: rotate .16s var(--ease); }
+.rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
+@media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
+
+/* Editable check grids: CRC32 + BYTES pair on one row (the same rhythm as the
+   computed Checks rows); MD5/SHA-1 need the full width. */
+.rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
+.rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
+@container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
+/* Inline description editor on the patch card: a touch of air below the
+   toggle/meta row so the field group doesn't crowd it. */
+.rw-app .patch-meta-inline { margin-block-start: 2px; }
+/* Pencil editing: the card title is the patch name, edited in place. The field
+   wears the standard filled-input look (solid seam + well) at title size and
+   matches the handle/remove button height; long names wrap and the textarea
+   grows (autosizeTextarea) - it never scrolls or resizes by hand. */
+.rw-app .nm-input {
+  display: block; width: 100%; min-width: 0; box-sizing: border-box;
+  height: var(--ctrl-h); min-height: var(--ctrl-h);
+  font: inherit; line-height: 1.35; color: var(--ink);
+  background: var(--well); border: 1px solid var(--seam); border-radius: var(--r-s);
+  padding: calc((var(--ctrl-h) - 1.35em - 2px) / 2) 8px; resize: none; overflow: hidden;
+}
+.rw-app .nm-input:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
+.rw-app .nm-input:focus-visible { outline: none; border-color: var(--thread); }
+.rw-app .nm-input::placeholder { color: var(--ink-3); opacity: 1; }
+/* The pencil beside the patch name: a quiet inline icon that opens the
+   name/description editors; it wears the thread color while editing. */
+.rw-app .nm-edit {
+  appearance: none; flex: none; display: inline-grid; place-items: center;
+  width: 22px; height: 22px; margin-inline-start: var(--sp-xs); padding: 0;
+  border: 0; border-radius: 5px; background: none; color: var(--ink-4); cursor: pointer;
+  /* the box is taller than the name/description text - centre it on the text's
+     mid-line so the glyph sits with the words rather than riding above them */
+  vertical-align: middle;
+  transition: color .15s, background .15s;
+}
+.rw-app .nm-edit:hover { color: var(--ink); background: color-mix(in oklab, var(--well) 80%, transparent); }
+.rw-app .nm-edit.is-editing { color: var(--thread-text); }
+.rw-app .nm-edit svg { width: 13px; height: 13px; }
+/* Editable Checks-drawer rows read like the computed .ck rows they sit beside:
+   the SAME hairline-divided row geometry (label column, min-height, padding,
+   seam), so a filled field is visually indistinguishable from a read-only
+   value. The only difference is the value cell is a live input and the trailing
+   copy-glyph slot holds the remove X (color-only hover, red for removal). */
+.rw-app .patch-checks-body .verification-row {
+  grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto;
+  align-items: center; gap: var(--sp-xs) var(--sp-s);
+  min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
+  border-block: 1px solid var(--seam-soft);
+}
+/* touching rows read as one hairline: drop the duplicate top border (mirrors the
+   .ck:not(.req) + .ck:not(.req) rule) */
+.rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
+/* label speaks the read-only rows' lowercase ck-k voice, not a heavy form label */
+.rw-app .patch-checks-body .verification-row .ofld-l {
+  font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
+}
+/* value cell is flush like .ck-v - transparent, unboxed, in the same mono/weft
+   language and unified clamp size - so a filled field matches its computed
+   neighbours. The editable affordance only surfaces on hover/focus. */
+.rw-app .patch-checks-body .verification-row .popt-input {
+  box-sizing: border-box;
+  height: auto; min-height: 0; padding: 2px 4px;
+  /* pull the box left by its own padding so the TEXT origin lands exactly on the
+     read-only .ck-v origin (which has no padding); the box keeps 4px of focus
+     breathing room by extending into the label gap. */
+  margin-inline: -4px 0; width: calc(100% + 4px);
+  background: transparent; border: 1px solid transparent; border-radius: 5px;
+  font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
+  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
+  color: var(--weft); text-transform: uppercase;
+  /* snappy focus/hover - the base .input's .15s fade read as sluggish here */
+  transition: border-color .08s, background-color .08s;
+}
+.rw-app .patch-checks-body .verification-row .popt-input::placeholder { text-transform: none; }
+.rw-app .patch-checks-body .verification-row .popt-input:hover {
+  border-color: var(--seam); background: color-mix(in oklab, var(--thread) 5%, var(--well));
+}
+.rw-app .patch-checks-body .verification-row .popt-input:focus,
+.rw-app .patch-checks-body .verification-row .popt-input:focus-visible {
+  outline: none; border-color: var(--thread); background: var(--well); color: var(--ink);
+}
+.rw-app .patch-checks-body .verification-row .popt-input[aria-invalid] {
+  color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam));
+}
+.rw-app .ck-remove {
+  appearance: none; flex: none; display: inline-grid; place-items: center;
+  width: 24px; height: 24px; padding: 0; border: 0; background: none;
+  color: var(--ink-4); cursor: pointer; transition: color .15s; opacity: .6;
+}
+.rw-app .ck-remove:hover { opacity: 1; color: var(--fault); }
+.rw-app .ck-remove svg { width: 12px; height: 12px; }
+/* Inline validation error under an editable check field: a small fault line in
+   the value column (auto-flows to a second grid row beneath the input). */
+.rw-app .patch-checks-body .verification-row .ck-err {
+  grid-column: 2 / -1; margin: 0 0 2px; padding-inline-start: 4px;
+  color: var(--fault); font-size: .62rem; letter-spacing: .01em; line-height: 1.2;
+}
+/* trailing controls (verify mark + remove X) share the row's third column */
+.rw-app .patch-checks-body .verification-row .vrow-tail { display: inline-flex; align-items: center; gap: 1px; }
+/* Per-row verify mark (✓/✗) trailing a committed check that was compared to the
+   real ROM value - matches the read-only .ck-mark language. */
+.rw-app .patch-checks-body .verification-row .ck-mark {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none;
+}
+.rw-app .patch-checks-body .verification-row .ck-mark svg { width: 12px; height: 12px; }
+.rw-app .patch-checks-body .verification-row .ck-mark.ok { color: var(--verified); }
+.rw-app .patch-checks-body .verification-row .ck-mark.bad { color: var(--fault); }
+/* "Add check": a quiet dashed chip that reads as an add affordance (was a bare
+   text row that didn't look actionable) - a plus glyph leading the select. */
+.rw-app .ck-add {
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  margin-block-start: 7px; padding: 4px 10px 4px 8px;
+  border: 1px dashed var(--seam-strong); border-radius: var(--r-s);
+  background: color-mix(in oklab, var(--well) 55%, transparent);
+  color: var(--ink-3); cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.rw-app .ck-add > svg { width: 12px; height: 12px; flex: none; }
+.rw-app .ck-add-select {
+  appearance: none; width: auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none;
+  color: inherit; cursor: pointer;
+  font-family: var(--font); font-size: .66rem; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.rw-app .ck-add:hover,
+.rw-app .ck-add:focus-within {
+  color: var(--ink); border-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 9%, var(--well));
+}
+
+.rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
+.rw-app .bundle-rom-expectation .card {
+  border-style: dashed;
+  border-color: var(--seam-strong);
+  background: color-mix(in oklab, var(--plate-2) 55%, var(--chassis));
+}
+.rw-app .bundle-rom-expectation .card .card-name { color: var(--ink-2); }
+.rw-app .bundle-rom-expectation .card .card-meta { color: var(--thread-text); }
+/* ck rows inside a boxed verification group (expected-ROM card, patch aux
+   requirement rows) sit in the box, not a bleeding drawer - keep them inset */
+.rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
+.rw-app .verification-list .ck + .ck { margin-block-start: 0; }
+.rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--sp-xs); min-width: 0; }
+/* field labels speak the same lowercase language as the checks rows (.ck-k);
+   the Built-in chip keeps its own uppercase */
+.rw-app .verification-row .ofld-l { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.05; text-transform: lowercase; }
+/* hashes get a TRUE monospace (the design-system "mono" is condensed Archivo)
+   so a 40-hex SHA-1 has a predictable width and always fits the input */
+.rw-app .verification-row .popt-input {
+  width: 100%; min-width: 0; height: 30px; padding-inline: 5px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .68rem; font-stretch: 100%; letter-spacing: -.02em;
+}
+.rw-app .built-in { display: block; margin: 2px 0 0; color: var(--verified); font-size: .5rem; letter-spacing: .03em; white-space: nowrap; text-transform: uppercase; }
+.rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
+/* keyed to the drawer's own width (the cks-inner container), not the
+   viewport, so the pair also stacks when the drawer is narrow inside the
+   wide-bench 2-up patch grid */
+@container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
+.rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
+.rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
+/* toggles are weighted, recessed rows - same well language as the task/ck rows */
+.rw-app .optschecks { display: flex; flex-direction: column; gap: var(--sp-s); }
+/* label leads, switch sits on the right edge - the row uses its full width instead
+   of leaving dead space after a small box on the left */
+.rw-app .optschecks .popt {
+  flex-direction: row-reverse; justify-content: space-between;
+  gap: var(--sp-m); padding: var(--sp-s) var(--sp-m); border-radius: var(--r-s);
+  border: 1px solid var(--seam-soft); background: var(--well);
+  font-size: .8rem; color: var(--ink); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.rw-app .optschecks .popt > span { flex: 1 1 auto; min-width: 0; }
+.rw-app .optschecks .popt:hover { border-color: var(--seam); background: var(--plate-2); }
+.rw-app .optschecks .popt:has(:focus-visible) { border-color: var(--thread); }
+.rw-app .optschecks .popt:has(:checked) { color: var(--ink); }
+.rw-app .optschecks .popt:has(:disabled) { cursor: default; opacity: .55; }
+.rw-app .btn.run, .rw-app .runprog { margin-block-start: 2px; }

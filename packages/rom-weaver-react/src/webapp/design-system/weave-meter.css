@@ -1,0 +1,100 @@
+/* ═══ weave meter ═══ */
+/* progress is cloth on the loom: the empty track is strung with sparse
+   vertical warp threads waiting for weft, the fill is finished cloth (the
+   plain-weave tile), and while the job runs a cream shuttle rides the fell
+   line - the fill's leading edge. */
+.rw-app .meter { position: relative; height: 8px; border-radius: 99px; background: var(--well); overflow: clip; box-shadow: inset 0 1px 2px rgb(0 0 0 / .25); }
+:root[data-theme="light"] .meter { box-shadow: inset 0 1px 2px rgb(40 36 28 / .14); }
+.rw-app .meter::before {
+  /* warp strung across the empty track - faint, so 0% still reads empty */
+  content: ""; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 22%, var(--well)) 0 1px, transparent 1px 7px);
+}
+.rw-app .meter .fill {
+  position: relative; height: 100%; width: var(--p, 0%); border-radius: 99px;
+  background: var(--thread);
+  transition: width .4s var(--ease);
+}
+/* the woven cloth: a fine grain, not dashes - the fill must still read as a
+   solid bar at a glance. The weave only travels while the job runs. */
+.rw-app .meter .fill::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: rgb(255 255 255 / .16);
+  mask-image: var(--weave-mask); mask-size: 6px 6px;
+}
+/* (motion lives in the compositor-driven section at the end of the file:
+   weft-slide translates the texture; indet grain rides the bounce) */
+/* the shuttle: visible only while weft is actually being thrown */
+.rw-app .meter .fill::before {
+  content: ""; position: absolute; inset-block: 0; right: 0; width: 4px; border-radius: 99px;
+  background: var(--shuttle); box-shadow: 0 0 6px color-mix(in srgb, var(--shuttle) 70%, transparent);
+  opacity: 0; transition: opacity .25s;
+}
+.rw-app .running .meter .fill::before, .rw-app .meter.live .fill::before { opacity: 1; }
+.rw-app .meter.indet .fill::before { opacity: 0; }
+/* the last pick: when the cloth reaches the fell (--scale hits 1) the shuttle
+   glows once and settles instead of vanishing mid-throw. Style query resolves
+   against the .fill (the ::before's originating element carries --scale);
+   where style queries aren't supported the shuttle just rides to unmount. */
+@container style(--scale: 1) {
+  .rw-app .meter:not(.indet) .fill::before { animation: shuttle-park 1.1s var(--ease) both; }
+}
+@keyframes shuttle-park {
+  0% { opacity: 1; }
+  45% { opacity: 1; box-shadow: 0 0 12px color-mix(in srgb, var(--shuttle) 90%, transparent); }
+  100% { opacity: 0; box-shadow: 0 0 0 transparent; }
+}
+.rw-app .meter.live .fill { transition: none; }
+.rw-app .meter.indet .fill { width: 32%; animation: indet 1.8s ease-in-out infinite; }
+.rw-app .prog { display: flex; flex-direction: column; gap: var(--sp-s); min-width: 0; }
+.rw-app .prog .lab { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .8rem; color: var(--ink-2); }
+.rw-app .prog .lab .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-app .prog .sub { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .7rem; color: var(--ink-4); }
+.rw-app .cancel {
+  appearance: none; flex: none; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--plate-2); color: var(--ink-3);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.rw-app .cancel:hover { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
+.rw-app .cancel svg { width: 14px; height: 14px; }
+/* every progress meter (staging reads + live run) sits in a recessed well panel
+   so it reads as one of the form's contained instrument rows, not a loose bar */
+.rw-app .prog-panel {
+  position: relative; display: flex; align-items: stretch;
+  padding: 16px 14px; min-height: 116px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate-2);
+}
+/* the label/bar/stats spread to fill the panel height + a taller bar, so the
+   progress doesn't float in empty space. the bar runs the full panel width - the
+   actions (cancel, plus a drag handle on a staging patch) sit in the top-right
+   corner (consistent placement across stage + run) and the label reserves room so
+   its percentage clears them (wider when a handle rides alongside the cancel) */
+.rw-app .prog-panel .prog { flex: 1 1 auto; justify-content: space-between; gap: var(--sp-m); }
+/* nudge the bar down a touch so it sits visually mid-way between the label row and
+   the threads/percent row (transform = no effect on the panel's height) */
+.rw-app .prog-panel .meter { height: 14px; transform: translateY(3px); }
+/* the corner buttons centre on the label's text line: panel top padding (16px)
+   plus half the difference between the label line-height and the button box */
+.rw-app .prog-panel { --lab-lh: 1.2rem; }
+.rw-app .prog-panel .prog-actions { position: absolute; top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2); inset-inline-end: 10px; display: flex; align-items: center; gap: var(--sp-s); }
+/* the label reserve DERIVES from the button size so touch-sized (36px) or
+   phone-sized (24px) controls never render over the label text */
+.rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }
+.rw-app .prog-panel .cancel { width: var(--ctrl-h); height: var(--ctrl-h); background: var(--well); }
+.rw-app .runprog .prog { flex: 1 1 auto; }
+/* the live-run panel replaces the full-width run button INSIDE the apply card, so a
+   bordered sub-box would double-inset it (card padding + its own) and leave the bar
+   indented from the fields above. drop the side borders + inline padding so it spans
+   the card's content width and its label/bar/stats line up with the rows above; the
+   top+bottom border keeps it reading as a contained instrument row */
+.rw-app .runprog .prog-actions { inset-inline-end: 0; }
+/* the run panel lives inside the output card, which already adds 10px below it - so
+   trim its own height + bottom padding by that much, keeping the same content spread
+   as the standalone staging panel (no extra dead space under the bar) */
+.rw-app .runprog { border-inline: 0; border-block-end: 0; border-radius: 0; padding-inline: 0; padding-block-end: 6px; min-height: 106px; }
+/* threads sit at the left of the foot row, the percentage at the right - the run's
+   headline number, a touch larger + accented. while indeterminate (staging) the same
+   slot shows a - placeholder, styled identically so the layout + colour match */
+.rw-app .prog-panel .sub { align-items: baseline; }
+.rw-app .prog-panel .sub .run-pct { font-size: .92rem; font-weight: 650; color: var(--thread-text); font-variant-numeric: tabular-nums; }
+/* write-throughput readout (size / total · rate) - sits between threads and percent */
+.rw-app .prog .sub .run-rate { margin-inline: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }

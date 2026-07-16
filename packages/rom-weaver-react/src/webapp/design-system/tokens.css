@@ -1,0 +1,78 @@
+/* ═══ tokens + themes ═══ */
+:root {
+  --thread: #d9690f;            /* cartridge-label orange - the weft */
+  --thread-ink: #1c1206;        /* text on a thread-colored surface */
+  /* plain-weave tile (alpha mask): a 2×2 over-under interlace, 20px period.
+     Threads are 6px wide with a 1.5px relief gap where one dips under the
+     other, so a single color reads as cloth. Paint any background through it
+     via mask-image; scale with mask-size. */
+  --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
+  --shuttle: #f6ead0;           /* cream shuttle cap on the meter's fell line - rides --thread, which is theme-constant */
+  --font: "Archivo", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
+  --ctl: 40px;
+  /* fluid rhythm tokens: one continuous scale from phone to desktop instead of
+     discrete breakpoint jumps. Each clamp hits its old mobile value at ≤560px
+     and its old desktop value by ~840-880px. */
+  --ctrl-h: clamp(24px, 12px + 2.15vw, 30px); /* row-button size (handle / remove / progress cancel) - 24px floor is the WCAG 2.5.8 target minimum */
+  --badge-fs: clamp(0.7rem, 0.684rem + 0.1vw, 0.72rem); /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
+  --pad: clamp(12px, 2.5vw - 2px, 20px); /* section gutter */
+  --gutter: clamp(10px, 2.5vw, 28px); /* the app column's single horizontal inset - the only inline gutter the workflow rail gets */
+  --step-pt: clamp(16px, 4vw - 8px, 22px);   /* step-head top padding: the single source of air below the rope line at every width - no per-breakpoint override */
+  --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
+  --r-s: 6px; --r-m: 9px; --r-l: 13px;
+  /* spacing scale: one responsive ramp for gap + padding, so rhythm comes from
+     ~6 tokens instead of ~25 scattered px values. Static below 4px (hairline
+     seams shouldn't grow); fluid above, each clamp hitting its phone floor at
+     ≤560px and its desktop ceiling by ~840-880px - same convention as --pad /
+     --step-*, so one token replaces a desktop value AND its phone override. */
+  --sp-2xs: 2px;                                /* micro seams (2/3px) - static */
+  --sp-xs:  4px;                                /* tight gaps (4/5px) - static */
+  --sp-s:   clamp(6px, 2.5px + .625vw,  8px);   /* small-gap cluster (6/7/8px) */
+  --sp-m:   clamp(8px, 1px + 1.25vw, 12px);     /* medium gap/pad (9/10/11/12px) */
+  --sp-l:   clamp(11px, 2.25px + 1.5625vw, 16px); /* card-list / block gaps (13/14/16) */
+  --sp-xl:  clamp(16px, 2px + 2.5vw, 24px);     /* section-scale (18/20/24px) */
+  --ease: cubic-bezier(.2, .85, .3, 1);
+  /* the one dropdown chevron, shared by selects, combo inputs and the inline target select */
+  --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>");
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --chassis: #0c0f13;           /* console shell */
+  --plate: #161b21;             /* mounted plate */
+  --plate-2: #1c222a;           /* raised plate */
+  --well: #0f1318;              /* inset well - inputs sit *into* the bench */
+  /* borders lifted off the panel colors so seams/rows actually read on the dark bench */
+  --seam: #39414e; --seam-soft: #2c333f; --seam-strong: #4b5564;
+  --ink: #edf0f5; --ink-2: #b3bbc8; --ink-3: #9aa3b1; --ink-4: #939cab;
+  --weft: #e7d3a8;              /* cream label-stock - hash readouts */
+  --thread-text: #ef8534;       /* accent as text, lifted for contrast */
+  --verified: #69aa84;          /* sage quadrant */
+  --fault: #e0606a;
+  --care: #d8a64f;
+  --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / .7), 0 4px 16px rgb(0 0 0 / .35);
+  --scrim: rgb(4 6 9 / .62);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --chassis: #ece9e1;           /* warm gallery paper */
+  --plate: #ffffff;
+  --plate-2: #f7f5ef;
+  --well: #efede6;
+  --seam: #d4d2ca; --seam-soft: #e1dfd8; --seam-strong: #b4b1a6;
+  --ink: #1a1d22; --ink-2: #4b5159; --ink-3: #62686f; --ink-4: #686d76;
+  --weft: #92400e;              /* cream goes rich amber on paper */
+  /* deep enough that badge-sized text clears 4.5:1 on every light surface
+     (was #c2410c - 4.42:1 on the --well chips, just under) */
+  --thread-text: #b03a0a;
+  /* deep enough that verified-green text clears 4.5:1 on the green-tinted light
+     surfaces - the built-in checksum inputs in the patch Options drawer (was
+     #047857 - 4.29:1 on the .popt-input[readonly] tint) */
+  --verified: #04684e;
+  /* deep enough that fault-card titles/codes clear 4.5:1 on the pink-tinted
+     light surfaces (was #dc2626 - 4.41:1 on the fault card) */
+  --fault: #b91c1c;
+  --care: #c4870f;              /* golden caution (was burnt #b45309 → salmon tint) */
+  --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / .35), 0 4px 14px rgb(35 30 18 / .14);
+  --scrim: rgb(40 36 28 / .42);
+}

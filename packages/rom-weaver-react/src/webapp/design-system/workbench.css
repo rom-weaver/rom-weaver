@@ -1,0 +1,80 @@
+/* ═══ workbench grid ═══ */
+/* align-content:start so the form panel hugs its content instead of stretching
+   to fill the viewport (which left a tall empty container below short forms) */
+.rw-app .workbench { position: relative; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding-block-end: clamp(8px, 2.9vw - 8px, 16px); }
+
+/* ═══ panel + loom rail ═══ */
+/* the page IS the form on every size (the mobile flattening promoted to base):
+   no outer panel chrome - what remains is card → drawer, the one nesting that
+   carries meaning. Step hairlines still separate the sections. */
+.rw-app .panel { overflow: clip; }
+.rw-app .workflow-body { min-width: 0; animation: panel-in .3s var(--ease); }
+/* Identification has its own indeterminate row; once routing clears, bring the
+   actual form sections in as a second, quieter beat. */
+.rw-app .form-ready > .step:not(.unified-drop-step) { animation: form-ready-in .22s var(--ease) both; }
+
+/* step = a loom stage */
+.rw-app .step { position: relative; border-block-start: 1px solid var(--seam-soft); }
+.rw-app .step:first-child { border-block-start: 0; }
+/* a woven step's top seam takes the weft: the same twisted-rope strokes as
+   the waiting grey line, re-dyed in thread color and thrown left to right
+   when the step completes. */
+/* full-bleed like the between-step rope line it rides (headers and cards sit
+   flush with the step edges since the gutter moved into the step itself) */
+.rw-app .step.is-woven::before, .rw-app .step.is-fault::before {
+  content: ""; position: absolute; top: 0; inset-inline: 0; height: 3px; pointer-events: none;
+  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--thread) 2px 5px, transparent 5px 7px);
+  animation: weft-throw .8s var(--ease) both;
+}
+/* a faulted step's weft snapped mid-throw: fault-colored, ending in a frayed
+   stub short of the far edge - the seam stays bare where the pass never landed */
+.rw-app .step.is-fault::before {
+  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--fault) 2px 5px, transparent 5px 7px);
+  mask-image: linear-gradient(90deg, #000 0 34%, transparent 34% 39%, #000 39% 42%, transparent 42%);
+}
+@keyframes weft-throw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* a touch more air above each section so straddling controls (the make-patch-mode
+   swap hinge) have room to breathe */
+.rw-app .step-head { display: flex; align-items: baseline; gap: var(--sp-m); padding: var(--step-pt) var(--pad) 2px; position: relative; }
+.rw-app .step-head-action { display: none; }
+/* header type rides the same fluid scale as the card names (.nm) so the 0x0N
+   headings match their content's size on desktop; .9rem floor keeps phones as-is */
+.rw-app .step-num { font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
+/* the 0x0N sits on a scrap of actual cloth: thread paint pushed through the
+   plain-weave tile, no box around it - the scrap's selvage edge sits flush
+   left and its weft frays out to the right. Completing the step saturates
+   the weave; a fault re-dyes the scrap. */
+.rw-app .step-num {
+  position: relative; isolation: isolate;
+  padding: 2px 18px 2px 9px;
+}
+.rw-app .step-num::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(90deg, var(--thread) 52%, transparent 96%);
+  opacity: .2;
+  mask-image: var(--weave-mask); mask-size: 9px 9px;
+  transition: opacity .3s, background-color .3s;
+}
+.rw-app .step.is-woven .step-num { color: var(--thread-text); }
+.rw-app .step.is-woven .step-num::before { opacity: .42; }
+.rw-app .step.is-fault .step-num { color: var(--fault); }
+.rw-app .step.is-fault .step-num::before { background: linear-gradient(90deg, var(--fault) 52%, transparent 96%); opacity: .28; }
+/* section titles speak in the same voice as the card names and drawer headers
+   (sentence case, 650) - one type family across the page, size = hierarchy */
+.rw-app .step-title { margin: 0; font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.rw-app .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: var(--sp-2xs) var(--sp-s); align-items: baseline; justify-content: flex-end; }
+.rw-app .step-meta .t { color: var(--thread-text); }
+/* step-header meta rendered as readout chips (matches the drawer-header badges) */
+.rw-app .step-meta:has(.rb) { align-items: center; gap: var(--sp-s); }
+.rw-app .step-meta .rb {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 2px 8px; border-radius: 6px; background: var(--well); border: 1px solid var(--seam-soft);
+  font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft);
+}
+.rw-app .step-meta .rb.muted { color: var(--ink-3); }
+.rw-app .step-meta .rb.time { color: var(--thread-text); }
+/* 24px bottom (vs the prototype's 18px) so the seam rule between sections sits
+   visually centred: below the rule the next head contributes ~24px to its
+   heading's cap height (16px padding + line-box lead). */
+.rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }

@@ -1,0 +1,98 @@
+/* ═══ update banner / wake-lock ═══ */
+/* CSS-only slide reveal (replaces the old JS slideToggle tween): the wrapper
+   collapses via grid-rows, the content fades in a second beat via
+   transition-delay, and display none↔grid rides allow-discrete so [hidden]
+   still removes it from the page at rest. JS only flips hidden + .is-open. */
+.rw-app .reveal {
+  display: grid; grid-template-rows: 0fr; opacity: 0; translate: 0 -6px;
+  transition:
+    grid-template-rows .26s cubic-bezier(.22, .9, .26, 1) .14s, margin-block .26s cubic-bezier(.22, .9, .26, 1) .14s,
+    opacity .14s, translate .16s, display .42s allow-discrete;
+}
+.rw-app .reveal > * { min-height: 0; overflow: clip; }
+.rw-app .reveal.is-open {
+  grid-template-rows: 1fr; opacity: 1; translate: 0 0;
+  transition:
+    grid-template-rows .26s cubic-bezier(.22, .9, .26, 1), margin-block .26s cubic-bezier(.22, .9, .26, 1),
+    opacity .18s .16s, translate .2s .16s cubic-bezier(.22, .9, .26, 1), display .42s allow-discrete;
+}
+/* only the page-level banners carry margins; in-card reveals (the patch-off
+   note) rely on the card's own grid gap. 6px on top matches the workflow
+   plate's margin-block-start so the gaps above and below the banner are equal
+   (masthead pad 10 + 6 = reveal 10 + plate 6). */
+.rw-app .app > .reveal.is-open { margin-block: 6px 10px; }
+@starting-style {
+  .rw-app .reveal.is-open { grid-template-rows: 0fr; margin-block: 0; opacity: 0; translate: 0 -6px; }
+}
+.rw-app .updates {
+  display: flex; align-items: center; gap: var(--sp-m);
+  padding: var(--sp-s) var(--sp-m); border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
+  border-radius: var(--r-m); background: color-mix(in oklab, var(--thread) 8%, var(--plate));
+}
+.rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
+.rw-app .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
+.rw-app .updates-text b { font-weight: 650; }
+/* the version IS the "what's new" affordance - a quiet dotted-underline link
+   that opens the changelog, instead of a second button crowding the banner */
+.rw-app .updates-ver {
+  appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
+  color: var(--ink-2); font-size: .8rem; margin-inline-start: 6px;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.rw-app .updates-ver:hover { color: var(--thread-text); }
+.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
+.rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
+.rw-app .changelog-subject { font-size: .9rem; }
+.rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
+.rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
+.rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
+/* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
+   sibling of the other row controls, not a stray small glyph */
+.rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
+.rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
+.rw-app .banner-x svg { width: 14px; height: 14px; }
+
+.rw-app .wakelock {
+  display: flex; align-items: center; gap: var(--sp-m);
+  padding: var(--sp-s) var(--sp-m); border: 1px dashed color-mix(in oklab, var(--care) 45%, var(--seam));
+  border-radius: var(--r-m); background: color-mix(in oklab, var(--care) 7%, var(--plate));
+  font-size: .82rem; color: var(--ink-2);
+}
+.rw-app .wakelock svg { width: 15px; height: 15px; color: var(--care); flex: none; }
+.rw-app .wakelock .wakelock-text { flex: 1 1 auto; min-width: 0; }
+.rw-app .wakelock .banner-x svg { color: inherit; }
+
+/* page-wide drop veil */
+/* the veil overlays only the active form panel (same grid cell), not the whole
+   tall workbench / empty page below it */
+.rw-app .workbench > .panel, .rw-app .workbench > .dropveil { grid-area: 1 / 1; }
+.rw-app .dropveil {
+  position: relative; align-self: stretch; z-index: 30; display: grid; place-items: center;
+  border: 2px dashed color-mix(in oklab, var(--thread) 80%, transparent); border-radius: var(--r-l);
+  background: color-mix(in srgb, var(--chassis) 58%, transparent); backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; pointer-events: none; overflow: clip;
+  transition: opacity .18s, visibility .18s;
+}
+.rw-app .dropveil::before {
+  /* cloth forming across the page while a file hovers - the plain-weave tile
+     drifting downward as the loom takes up new rows */
+  content: ""; position: absolute; inset: 0;
+  background: var(--thread);
+  mask-image: var(--weave-mask); mask-size: 28px 28px;
+  opacity: .07;
+  --drift: 0 28px;
+  animation: weave-drift 1.6s linear infinite;
+}
+.rw-app.rw-page-dragging .dropveil { opacity: 1; visibility: visible; }
+.rw-app .dropveil-text {
+  position: relative; display: inline-flex; align-items: center; gap: var(--sp-m);
+  font-size: 1.05rem; font-weight: 700; color: var(--ink);
+  padding: 12px 24px; border-radius: 99px;
+  background: var(--plate); border: 1px solid color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
+  box-shadow: var(--overlay-shadow);
+  animation: pop .35s var(--ease);
+}
+.rw-app .dropveil-text svg { width: 19px; height: 19px; color: var(--thread-text); flex: none; }
+/* one drift keyframe for every woven surface: each sets --drift to a multiple
+   of its own mask-size so the loop is seamless */
+@keyframes weave-drift { to { mask-position: var(--drift, 0 20px); } }

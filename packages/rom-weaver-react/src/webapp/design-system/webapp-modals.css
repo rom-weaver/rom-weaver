@@ -1,0 +1,302 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Webapp adaptations - everything below is NOT from the prototype sheet:
+   the React modal framework (selection / confirm / settings reuse the
+   .rw-modal structure the browser tests target), the codec combobox, and
+   platform ergonomics carried over from the previous design system.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── modal framework: loom dialog visuals on the React-managed modal ── */
+.rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--sp-l); }
+.rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
+.rw-modal-card {
+  /* max-width in viewport units - the grid track grows to the card's
+     max-content, so a `100%` cap alone can't stop a long unbroken file name
+     pushing the card past the screen edge */
+  position: relative; width: min(640px, 100%); max-width: calc(100vw - 32px); max-height: min(82dvh, 760px);
+  display: flex; flex-direction: column;
+  background: var(--plate); border: 1px solid var(--seam-strong); border-radius: var(--r-l);
+  box-shadow: var(--overlay-shadow); overflow: clip;
+  transition: transform .26s var(--ease), opacity .22s ease;
+}
+@starting-style { .rw-modal-card { transform: translateY(10px) scale(.97); opacity: 0; } }
+.rw-modal .modal-head { display: flex; align-items: flex-start; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
+.rw-modal .modal-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+.rw-modal .modal-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; min-width: 0; overflow-wrap: anywhere; }
+.rw-modal .modal-sub { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
+.rw-app .mh-sp { flex: 1 1 auto; }
+.rw-modal .modal-head .dlg-x { align-self: flex-start; margin-inline-end: calc(-1 * var(--sp-2xs)); }
+.rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
+.rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
+.rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
+.rw-modal.changelog-modal .changelog-version {
+  padding-block: 2px 9px;
+  overflow-wrap: anywhere;
+  font-size: .8rem;
+  text-align: start;
+}
+/* settings is the longest dialog - let it use most of the viewport height */
+/* the card is its own layout container so the 2-column/stacked forms track
+   the modal's width, not the viewport. The width MUST stay in viewport units:
+   with inline-size containment a `100%` inside the centered auto grid track
+   is cyclic and can collapse the card. */
+.rw-modal.settings-modal .rw-modal-card {
+  width: min(820px, calc(100vw - 32px));
+  max-height: min(94dvh, 1020px);
+  container: settings-card / inline-size;
+}
+/* the archive/candidate picker can list long nested paths - let it use the
+   full available width (the viewport-minus-padding cap still applies) */
+.rw-modal.select-modal .rw-modal-card { width: 100%; }
+/* a growable multi-line text field in the same recessed language as .input */
+.rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
+.rw-app .ofld .input.tarea { height: auto; }
+@container settings-card (min-width: 688px) {
+  .rw-modal.settings-modal .modal-body { columns: 2; column-gap: var(--sp-m); }
+  .rw-modal.settings-modal .modal-body .setcols { display: contents; }
+  .rw-modal.settings-modal .modal-body .setcols .setgroup { margin-block-end: 11px; }
+  .rw-modal.settings-modal .modal-body .validation { column-span: all; }
+}
+/* stack label over control when the card runs narrow (out-specifies the
+   subgrid rule above) */
+@container settings-card (max-width: 560px) {
+  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: var(--sp-xs); }
+}
+.rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-xs); }
+.rw-app .setrow .sctl .select, .rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
+.rw-app .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-app .setrow .slabel small { flex-basis: 100%; font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
+.rw-app .settings-placeholder-value { color: var(--ink-3); font-style: italic; font-weight: 450; }
+.rw-app .setrow .sctl .input::placeholder { color: var(--ink-3); font-style: italic; opacity: .78; }
+.rw-app .setrow .sctl .select option[value=""] { color: var(--ink-3); font-style: italic; }
+
+/* ── selection tree (archive / disc candidate picker) ──
+   keeps the .seltree/.selnode structure the browser tests drive, drawn in
+   the loom picker language: the row IS the selection state (left bar +
+   weight), with the real checkbox rendered as the shared switch. */
+.rw-app .seltree { display: flex; flex-direction: column; gap: var(--sp-s); }
+/* rows reuse the .pick-row picker language; selnode only resets the button so
+   button rows render identically to label rows */
+.rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; min-width: 0; }
+.rw-app .pick-row.off:hover { border-color: var(--seam); }
+.rw-app .pick-row .pick-note { min-width: 0; font-size: .74rem; color: var(--ink-4); overflow-wrap: anywhere; }
+.rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); margin-top: var(--sp-s); }
+.rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
+.rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
+.rw-app .selfoot { display: flex; justify-content: flex-end; gap: var(--sp-m); margin-top: var(--sp-s); }
+/* the selection modal's own actions stay compact - they don't need the fat
+   48px mobile --ctl thumb target the way the main form inputs do */
+.rw-app .selfoot .btn { height: 34px; padding-inline: 14px; font-size: .8rem; }
+/* the "matches patch" tag also carries .fmt (orange) - match .tag.fmt's
+   specificity so the verified-green actually wins the cascade */
+.rw-app .tag.matches { color: var(--verified); }
+@media (forced-colors: active) {
+  .rw-app .selcheck:has(input:checked) { outline: 3px solid Highlight; outline-offset: -1px; }
+}
+
+/* ── codec combobox (React combobox replacing the prototype's datalist) ── */
+.rw-app .codec-combobox { position: relative; width: 100%; z-index: 1; }
+.rw-app .ofld:focus-within, .rw-app .setrow:focus-within { position: relative; z-index: 90; }
+.rw-app .codec-combobox::after { content: ""; position: absolute; inset-inline-end: 10px; top: 50%; width: 12px; height: 12px; pointer-events: none; transform: translateY(-50%); background: no-repeat center / 12px 12px var(--chevron); }
+.rw-app .codec-combobox .input { padding-inline-end: 30px; }
+.codec-combobox-list { box-sizing: border-box; position: fixed; z-index: 10000; left: 0; top: 0; overflow: auto; padding: 4px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate); box-shadow: var(--overlay-shadow); }
+.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
+
+/* ── platform ergonomics (carried over from the previous design system) ── */
+/* iOS Safari auto-zooms when a focused control's font-size is < 16px. Bump
+   form controls on touch WebKit only; keep pinch-zoom enabled. */
+@supports (-webkit-touch-callout: none) {
+  @media (pointer: coarse) {
+    .rw-app .input, .rw-app .select,
+    .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
+  }
+}
+/* visually-small copy controls keep their icon size and extend an invisible
+   centered hit box so card layouts don't change on touch */
+@media (pointer: coarse) {
+  .rw-app .ck .copy, .rw-app .cue-copy, .rw-app .info-btn { position: relative; }
+  .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  /* every masthead tool gets a 44px-tall touch target at any width; vertical-only
+     (the top-right row's inter-button gap is only 2px, so a horizontal inflation
+     would overlap neighbours) - width already clears the 24px AA floor */
+  .rw-app .masthead-tools .tool { position: relative; }
+  .rw-app .masthead-tools .tool::after { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+}
+
+/* trace lines render as buttons (keyboard-copyable) - strip the UA chrome so
+   they read as the prototype's plain rows */
+.rw-app .tracelog .ln { appearance: none; display: flex; width: max-content; min-width: 100%; border-inline: 0; border-block-start: 0; background: transparent; color: inherit; font: inherit; text-align: start; padding-inline: 0; }
+
+/* error-level notice (the loom prototype only needed warn; the app surfaces
+   runtime errors through the same notice shape) */
+.rw-app .notice.error { color: var(--ink); background: color-mix(in oklab, var(--fault) 9%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam)); }
+.rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
+
+/* confirmation dialog body (React modal card) */
+.rw-modal .confirm-card { width: min(440px, 100%); padding: var(--sp-l); }
+.rw-modal .confirm-card .c-title { display: flex; align-items: center; gap: var(--sp-m); font-size: .95rem; font-weight: 700; color: var(--ink); }
+.rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
+.rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
+.rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); }
+
+/* checksum rows render as real buttons (whole row = the copy control) */
+.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
+
+/* carried-over content blocks used by the apply form */
+.rw-app .pdesc { margin: 0 0 4px; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
+.rw-app .pdesc.bad { color: var(--fault); }
+.rw-app .descblk { padding: 9px var(--pad) 0; }
+.rw-app .descblk .k { font-size: .64rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+.rw-app .descblk .v { color: var(--ink-2); font-size: .86rem; }
+.rw-app .descblk.mono .v { font-stretch: 86%; letter-spacing: .01em; }
+.rw-app .hintline { margin-top: 8px; font-size: .76rem; color: var(--ink-3); }
+.rw-app .workflow-step-after-items:not(:empty) { margin-top: 13px; }
+.rw-app .cards:not(:empty) + .drop, .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 13px; }
+.rw-app .iprog-wrap { min-width: 0; }
+
+/* archive-entry picker rows render as buttons */
+.rw-app .pick-btn, .dlg .pick-btn { appearance: none; width: 100%; font: inherit; color: inherit; text-align: start; }
+.dlg .picklist li { list-style: none; }
+.dlg .picklist { margin: 0; padding: 0; }
+
+/* ── progress performance ──
+   React drives the fill with --scale → transform: scaleX (per-frame width
+   changes force layout; a scale is composited). The fill spans the full track
+   and scales from the inline start; the cloth texture and shuttle counter-
+   scale so the weave stays square and the shuttle stays 4px at any progress.
+   Indeterminate keeps the prototype's width bounce. */
+.rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(var(--scale, 0)); transition: transform .4s var(--ease); }
+.rw-app .meter.live:not(.indet) .fill { transition: none; }
+.rw-app .meter:not(.indet) .fill::before {
+  transform-origin: 100% 50%;
+  transform: scaleX(calc(1 / max(var(--scale, 1), .001)));
+}
+/* cards and progress panels are self-contained - per-tick re-renders inside
+   one panel must not invalidate layout/paint for the rest of the bench */
+.rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
+
+/* ── compositor-driven meter animations ──
+   Heavy pipeline phases can block the main thread for seconds (read-on-main
+   nested-archive checks); the prototype's margin/background-position keyframes
+   freeze with it. Re-expressed as transforms so the indeterminate bounce and
+   the weave sheen keep playing on the compositor through those stalls. */
+.rw-app .meter.indet .fill { width: 32%; margin-inline-start: 0; animation: indet-slide 1.8s ease-in-out infinite; }
+@keyframes indet-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(412%); } }
+.rw-app .meter .fill { overflow: clip; }
+/* the cloth: counter-scaled so the interlace stays square inside the scaled
+   fill (translateX sits left of scaleX, so the drift distance is in visual px
+   - one 6px tile per loop). Oversized leftward to cover the drift. */
+.rw-app .meter:not(.indet) .fill::after {
+  inset: 0 auto 0 -12px; width: calc(100% + 12px);
+  transform-origin: 0 50%;
+  transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), .001)));
+  animation: none;
+}
+.rw-app .running .meter:not(.indet) .fill::after, .rw-app .meter.live:not(.indet) .fill::after { animation: weft-slide .5s linear infinite; }
+@keyframes weft-slide {
+  from { transform: translateX(-6px) scaleX(calc(1 / max(var(--scale, 1), .001))); }
+  to { transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), .001))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .meter.indet .fill { animation: none; transform: none; width: 100%; opacity: .55; }
+  .rw-app .meter:not(.indet) .fill::after { animation: none; }
+}
+
+/* Patch card header: the controls (position/drag chip + remove) FLOAT on the
+   right and the name owns everything else - it never truncates, wrapping
+   beside and then UNDER the buttons. FileCard renders the actions before the
+   name on patch cards so the float precedes the text it wraps. */
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top { display: flow-root; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions {
+  float: right; display: flex; margin: 0 0 var(--sp-xs) var(--sp-m);
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: block; min-width: 0; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline { display: block; }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .patch-desc-line, .card-meta) { margin-block-start: var(--sp-xs); }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
+  width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
+  display: flex; align-items: center; justify-content: center; padding: 2px;
+}
+/* The inline name textarea is a replaced box that cannot wrap around a
+   float - keep it beside the buttons by giving up their width explicitly.
+   inline-block (not block) so the confirm/save check rides on the same line
+   rather than dropping beneath it; the width leaves room for the check + the
+   floated position/remove buttons. */
+.rw-app #rom-weaver-list-patch-stack > .card.patch .nmline > .nm-input {
+  display: inline-block; vertical-align: middle;
+  width: calc(100% - 2 * var(--ctrl-h) - 22px - var(--sp-s) - var(--sp-xs) - var(--sp-m));
+}
+
+/* ── wide-bench layout ──
+   Desktops get real use out of the width: the app column widens and the two
+   parallel input stages sit side by side - ROM | Patches on apply, Original |
+   Modified on create - split by a hairline seam. Steps that concern the whole
+   job (0x01 inputs, 0x04 output) keep the full width. Trim/tools keep the
+   familiar centered column. */
+@media (min-width: 1100px) {
+  .rw-app .app { max-width: 1220px; }
+  .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
+  .rw-app #rom-weaver-container, .rw-app #patch-builder-container {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .rw-app #rom-weaver-container > *, .rw-app #patch-builder-container > * { grid-column: 1 / -1; min-width: 0; }
+  .rw-app #rom-weaver-container { grid-template-columns: minmax(0, 1fr); }
+  .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack { border-block-start: 1px solid var(--seam-soft); }
+  .rw-app #rom-weaver-list-patch-stack.patch-cards {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start;
+  }
+  .rw-app #rom-weaver-list-patch-stack > .card.patch:only-child { grid-column: 1 / -1; }
+  .rw-app #patch-builder-container > #patch-builder-row-original { grid-column: 1; grid-row: 2; }
+  .rw-app #patch-builder-container > #patch-builder-row-modified { grid-column: 2; grid-row: 2; border-inline-start: 1px solid var(--seam-soft); }
+  /* the swap hinge floats centered on the seam between the two source columns */
+  .rw-app #patch-builder-container > .swap-row { grid-row: 2; grid-column: 1 / -1; align-self: center; justify-self: center; }
+  .rw-app #patch-builder-container > .swap-row .swap-btn { translate: 0 0; }
+}
+
+/* the workflow form owns no plate: filled or empty, the page IS the form
+   (the side borders of the old mounted plate framed it like a box). Steps
+   keep their hairlines, cards their wells - depth lives one level down. */
+/* 0x01 sits directly under the masthead rope line with only the shared head
+   slack (--step-pt) above it - no leading --step-pb, since there's no preceding
+   step body to space away from (unlike every later header) */
+.rw-app .panel.workflow .step:last-child { padding-block-end: 4px; }
+/* Section rails belong to the workflow rather than to a breakpoint. Keep the
+   numbered stages and compact add-files row visually consistent on desktop
+   and mobile; only the surrounding navigation shell changes for phones. */
+.rw-app .panel.workflow .step {
+  border: 0;
+  background: transparent;
+}
+
+/* the cloth-scrap 0x0N anchors each header, and the cards below carry their
+   own edges - so the header itself wears no lines below it, ever. ABOVE each
+   header (0x01 included) runs a grey rope line - short diagonal strokes that
+   read as a twisted cord in seam color, the loom's warp waiting for thread.
+   Completing or faulting the stage re-dyes that same line via the
+   .is-woven/.is-fault weft. The scrap's left edge sits flush with the card
+   edges at every width: the step chrome carries no inline padding of its own -
+   the app container's fluid --gutter is the single horizontal inset. */
+.rw-app .panel.workflow .step:not(.is-woven):not(.is-fault)::before,
+.rw-app .panel.workflow .step ~ .ghost-steps::before {
+  content: ""; position: absolute; top: 0; inset-inline: 0; height: 3px; pointer-events: none;
+  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--seam-strong) 2px 5px, transparent 5px 7px);
+}
+.rw-app .panel.workflow .ghost-steps { position: relative; }
+.rw-app .panel.workflow .step > .step-head {
+  min-height: 38px;
+  /* --step-pt of air between the rope line above and the 0x0N header; phones
+     zero this back out (their tighter rail margins carry the rhythm) */
+  padding: var(--step-pt) 0 2px;
+  align-items: center;
+  gap: var(--sp-s);
+  border: 0;
+  border-radius: 0;
+}
+.rw-app .panel.workflow .step > .step-body { padding-inline: 0; }
+
+.rw-app .panel.workflow .unified-drop-step .drop:not(.hero) {
+  min-height: 64px;
+  padding-block: 12px;
+}

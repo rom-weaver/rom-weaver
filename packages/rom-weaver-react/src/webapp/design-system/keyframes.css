@@ -1,0 +1,17 @@
+/* ═══ keyframes ═══ */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes pop { 0% { transform: scale(.5); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes drop-in { from { opacity: 0; translate: 0 -6px; } }
+@keyframes card-in { from { opacity: 0; translate: 0 8px; } }
+@keyframes panel-in { from { opacity: 0; translate: 0 6px; } }
+@keyframes form-ready-in { from { opacity: 0; translate: 0 8px; } }
+@keyframes chip-in { from { opacity: 0; translate: 0 5px; scale: .9; } }
+@keyframes pending-card-in { from { opacity: 0; translate: 0 -6px; scale: .985; } }
+/* The instant "identifying…" source bundle: shown the moment an archive lands, then its footprint
+   fans into the resolved card(s). The motion never blocks staging. The list gets breathing room so
+   the chip doesn't crowd the drop zone above it. */
+.rw-app #rom-weaver-pending-drops { margin-block: 14px 6px; }
+.rw-app .pending-card { animation: pending-card-in .18s var(--ease) both; }
+@keyframes fault-in { 0% { opacity: 0; translate: 0 -4px; } 55% { translate: 2px 0; } 70% { translate: -2px 0; } 85% { translate: 1px 0; } 100% { translate: 0 0; } }
+@keyframes trace-in { from { opacity: 0; translate: -4px 0; } }
+@keyframes indet { 0% { margin-inline-start: -32%; } 100% { margin-inline-start: 100%; } }

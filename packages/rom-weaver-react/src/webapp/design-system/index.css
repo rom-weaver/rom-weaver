@@ -1,0 +1,29 @@
+/* ═══════════════════════════════════════════════════════════════════
+   rom-weaver - "loom workbench" design system (light + dark)
+   A bench instrument for ROM preservation: charcoal chassis, cartridge-
+   orange thread, cream hash readouts, sage verification. Borders-only
+   depth; shadows are reserved for true overlays. Spacing base: 4px.
+   Ported from prototype/prototype.css; component rules are scoped under
+   .rw-app (the app root) so the sheet stays inert outside the webapp.
+   Split into one file per section; @import ORDER IS THE CASCADE ORDER,
+   so responsive overrides and the webapp-only adaptations (modal
+   framework, codec combobox, platform ergonomics) must stay last.
+   ═══════════════════════════════════════════════════════════════════ */
+@import "./tokens.css";
+@import "./base.css";
+@import "./masthead.css";
+@import "./banners.css";
+@import "./workbench.css";
+@import "./dropzone.css";
+@import "./file-cards.css";
+@import "./drawers.css";
+@import "./notices.css";
+@import "./fields.css";
+@import "./buttons.css";
+@import "./weave-meter.css";
+@import "./result.css";
+@import "./dialogs.css";
+@import "./keyframes.css";
+@import "./responsive.css";
+@import "./webapp-modals.css";
+@import "./phone-dock.css";

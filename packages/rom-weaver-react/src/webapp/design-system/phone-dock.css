@@ -1,0 +1,273 @@
+/* ═══ phone dock layout ═══
+   On a phone the workflow rail becomes a persistent thumb-reachable shuttle
+   dock and the masthead re-grids. The workflow components themselves stay
+   untouched, so Apply/Make Patch/Trim/Tools keep the same state and behavior as
+   desktop. */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  :root:has(.rw-app) {
+    scroll-padding-block-end: calc(var(--rw-dock-h, calc(56px + env(safe-area-inset-bottom))) + 8px);
+  }
+
+  .rw-app {
+    --ctl: 48px;
+    --mobile-input-head-h: 38px;
+    --mobile-shuttle-h: 56px;
+    /* dock total height: the JS-measured --rw-dock-h when available (tracks
+       larger text sizes), else the design-time estimate */
+    --dock-total: var(--rw-dock-h, calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom)));
+    --hero-chrome: calc(var(--mobile-input-head-h) + 116px);
+    padding-block-end: var(--dock-total);
+  }
+
+  .rw-app .masthead {
+    display: grid;
+    grid-template-columns: minmax(112px, 1fr) auto;
+    grid-template-areas: "brand tools";
+    align-items: center;
+    gap: var(--sp-s);
+    padding-block: 5px 6px;
+  }
+
+  .rw-app .brand {
+    grid-area: brand;
+    justify-self: start;
+    gap: var(--sp-s);
+    min-width: 0;
+    width: 100%;
+  }
+
+  .rw-app .brand-copy {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* hug the tools to the right at their natural size instead of stretching them
+     across the column - a full-width stretch floats each icon in a wide cell */
+  .rw-app .masthead-tools {
+    grid-area: tools;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    gap: var(--sp-2xs);
+    margin: 0;
+  }
+
+  .rw-app .tool {
+    position: relative;
+    width: 36px;
+    height: 40px;
+    min-width: 0;
+    padding: 0;
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .tool svg,
+  .rw-app .tool .ico-sun,
+  .rw-app .tool .ico-moon {
+    grid-area: 1 / 1;
+    width: 15px;
+    height: 15px;
+  }
+
+  .rw-app .updates {
+    gap: var(--sp-s);
+    min-height: 44px;
+    padding: var(--sp-s);
+  }
+
+  .rw-app .updates-pulse { width: 6px; height: 6px; }
+  .rw-app .updates-text {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+    white-space: nowrap;
+    font-size: .78rem;
+  }
+
+  .rw-app .updates-ver { margin-inline-start: 0; font-size: .7rem; }
+  .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
+  .rw-app .updates .banner-x { width: 28px; height: 32px; }
+
+  .rw-app .update-ready {
+    min-height: 38px;
+    background: var(--plate);
+  }
+
+  .rw-app .modes {
+    position: fixed;
+    z-index: 45;
+    inset: auto 0 0;
+    order: initial;
+    width: 100%;
+    margin: 0;
+    padding: 4px max(10px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--chassis) 82%, transparent);
+    border-block-start: 1px solid var(--seam-strong);
+    box-shadow: 0 -12px 28px -22px rgb(0 0 0 / .8);
+    backdrop-filter: blur(14px);
+  }
+
+  .rw-app .mode-rail {
+    display: flex;
+    width: min(100%, 520px);
+    min-height: 40px;
+    margin-inline: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .rw-app .mode-thumb {
+    inset-block: 0;
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .mode {
+    min-width: 0;
+    min-height: 40px;
+    padding: 3px 4px;
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--sp-2xs);
+    line-height: 1;
+  }
+
+  .rw-app .mode svg { width: 17px; height: 17px; }
+  .rw-app .mode span:not(.mode-thumb) { font-size: .66rem; letter-spacing: .04em; }
+
+  /* the whole empty hero is the tap target - flash it on touch so taps
+     anywhere in the panel visibly register */
+  .rw-app .step.is-input.is-empty .drop.hero:active {
+    background: color-mix(in oklab, var(--thread) 6%, transparent);
+  }
+
+  /* the tools sub-picker becomes a full-width segmented control */
+  .rw-app .tools-subnav { padding: var(--sp-s) var(--sp-m); }
+  .rw-app .tools-subnav-rail { width: 100%; }
+  .rw-app .tools-subnav-tab {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .rw-app .info-btn::after {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Every workflow stage, including the empty input hero, stays in one
+     in-flow mobile rail. File and patch cards keep their own framing. */
+  .rw-app .panel.workflow .step {
+    width: 100%;
+    margin: 8px 0;
+    padding-block-end: 0;
+    overflow: visible;
+  }
+
+  .rw-app .panel.workflow .step > .step-body {
+    padding: 7px 0 0;
+  }
+
+  .rw-app .panel.workflow .step .card,
+  .rw-app .panel.workflow .step .drop,
+  .rw-app .panel.workflow .step .needs-input {
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action {
+    position: absolute;
+    z-index: 1;
+    inset: 50% 0 auto;
+    display: block;
+    width: 100%;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action:focus-visible {
+    outline: 2px solid var(--thread-text);
+    outline-offset: -3px;
+  }
+
+  .rw-app .unified-drop-step > .step-head > .step-head-action:disabled { cursor: default; }
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-num,
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-title,
+  .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-meta {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .rw-app .unified-drop-step > .step-head > .info {
+    position: relative;
+    z-index: 2;
+  }
+
+  .rw-app .step-head .info-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Settings is a task surface on phones, not a small desktop card. */
+  .rw-modal.settings-modal {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .rw-modal.settings-modal .rw-modal-card {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .rw-modal.settings-modal .modal-head {
+    padding-block-start: max(13px, env(safe-area-inset-top));
+  }
+
+  .rw-modal.settings-modal .modal-body {
+    padding-block-end: max(20px, env(safe-area-inset-bottom));
+  }
+
+  .rw-modal.changelog-modal { padding: var(--sp-m); }
+  .rw-modal.changelog-modal .rw-modal-card {
+    width: 100%;
+    max-width: min(520px, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+  }
+
+  .rw-modal.changelog-modal .modal-head { padding: var(--sp-m); }
+  .rw-modal.changelog-modal .modal-body { padding: var(--sp-m); }
+  .rw-modal.changelog-modal .changelog { gap: var(--sp-s); }
+  .rw-modal.changelog-modal .changelog-subject { font-size: .95rem; }
+  .rw-modal.changelog-modal .changelog-version { padding-block: 0 7px; font-size: .76rem; }
+  .rw-modal.changelog-modal .changelog-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-s);
+    padding-block-start: 4px;
+  }
+
+  .rw-modal.changelog-modal .changelog-actions .btn {
+    width: 100%;
+    height: 44px;
+    padding-inline: 10px;
+  }
+}

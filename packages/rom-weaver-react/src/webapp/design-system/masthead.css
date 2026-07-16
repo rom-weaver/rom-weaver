@@ -1,0 +1,90 @@
+/* ═══ masthead ═══ */
+.rw-app .masthead { display: flex; align-items: center; gap: var(--sp-l); padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
+.rw-app .brand { display: inline-flex; align-items: center; gap: var(--sp-m); flex: none; }
+.rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
+/* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
+   values) → 44px cap on desktop; no discrete jumps */
+.rw-app .brand-mark { width: clamp(30px, 2.7vw + 20.6px, 44px); aspect-ratio: 1; height: auto; border-radius: 8px; }
+:root[data-theme="dark"] .brand-mark {
+  filter:
+    drop-shadow(0 1px 0 rgb(255 255 255 / .45))
+    drop-shadow(0 -1px 0 rgb(255 255 255 / .45))
+    drop-shadow(1px 0 0 rgb(255 255 255 / .45))
+    drop-shadow(-1px 0 0 rgb(255 255 255 / .45));
+}
+.rw-app .brand-word { margin: 0; font-size: clamp(.9rem, .78rem + .55vw, 1.12rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
+.rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
+
+.rw-app .modes { margin-inline: auto; }
+.rw-app .mode-rail { position: relative; display: inline-flex; gap: var(--sp-2xs); padding: 3px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--well); }
+.rw-app .mode-thumb {
+  position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--r-s);
+  background: var(--thread);
+  transition: left .3s var(--ease), width .3s var(--ease);
+  /* the slide between tabs rides the mode-switch view transition (the name is
+     in the STYLESHEET, so the vt-flat inline-name suppression leaves it alone) */
+  view-transition-name: vt-thumb;
+}
+html.vt-theme .mode-thumb { view-transition-name: none !important; }
+/* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
+   during the mode-switch transition - without this the thumb's group renders
+   over the root snapshot and the orange briefly covers the tab text */
+.rw-app .mode-rail .mode:nth-of-type(1) { view-transition-name: vt-tab-1; }
+.rw-app .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
+.rw-app .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
+.rw-app .mode-rail .mode:nth-of-type(4) { view-transition-name: vt-tab-4; }
+html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
+/* where CSS anchors exist, the thumb pins itself to the selected tab -
+   placement survives resize/font-swap with no JS measuring at all */
+@supports (anchor-name: --rw-tab) {
+  .rw-app .mode[aria-selected="true"] { anchor-name: --rw-tab; }
+  .rw-app .mode-thumb { position-anchor: --rw-tab; left: anchor(left); width: anchor-size(width); transition: none; }
+}
+.rw-app .mode {
+  position: relative; z-index: 1; appearance: none; border: 0; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-l); border-radius: var(--r-s);
+  font-size: .8rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-2); transition: color .25s var(--ease);
+}
+.rw-app .mode svg { width: 1rem; height: 1rem; }
+.rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
+.rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
+.rw-app .tools-subnav { padding: 10px var(--pad); border-block-end: 1px solid var(--seam-soft); background: var(--plate-2); }
+.rw-app .tools-subnav-rail { display: flex; gap: var(--sp-s); }
+.rw-app .tools-subnav-tab {
+  appearance: none; display: inline-flex; align-items: center; gap: var(--sp-s); min-height: 34px; padding: 6px 13px;
+  border: 1px solid var(--thread); border-radius: var(--r-s); background: color-mix(in oklab, var(--thread) 14%, var(--well));
+  color: var(--thread-text); cursor: pointer; font-size: .78rem; font-weight: 650;
+}
+.rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
+
+.rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
+.rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.5rem, .44rem + .27vw, .62rem); line-height: 1.2; white-space: nowrap; }
+.rw-app .masthead-threads { flex: none; }
+.rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
+.rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
+/* ghost tools at every width: the buttons drop their box chrome at rest -
+   border/fill only appear on hover - so six controls stop reading as a
+   second nav beside the mode rail */
+.rw-app .tool {
+  appearance: none; cursor: pointer; width: 36px; height: 36px; display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
+  transition: color .18s, border-color .18s, background .18s;
+}
+.rw-app .tool:hover { color: var(--ink); background: var(--well); border-color: var(--seam); }
+.rw-app .tool:active { background: var(--plate-2); }
+.rw-app .tool svg { width: 17px; height: 17px; }
+.rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the tools are icon-only everywhere; the title/aria-label carries the name
+   (the spans stay in the DOM so the localized names remain available) */
+.rw-app .tool-text { display: none; }
+/* hairline between the app tools and the external links (GitHub/Donate) */
+.rw-app .tools-sep { display: block; flex: none; width: 1px; height: 20px; margin-inline: 5px; align-self: center; background: var(--seam); }
+/* sun/moon cross-morph */
+.rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }
+:root[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
+:root[data-theme="dark"] .ico-moon { opacity: 1; transform: none; }
+:root[data-theme="light"] .ico-sun { opacity: 1; transform: none; }
+:root[data-theme="light"] .ico-moon { opacity: 0; transform: rotate(-90deg) scale(.5); }

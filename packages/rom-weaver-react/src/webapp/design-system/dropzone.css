@@ -1,0 +1,295 @@
+/* ═══ dropzone ═══ */
+.rw-app .drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2xs);
+  width: 100%; min-height: 40px; padding: 8px 16px;
+  border: 0; border-radius: var(--r-m);
+  background: none; color: var(--ink-2); font-size: .88rem; cursor: pointer;
+}
+.rw-app .drop:hover { color: var(--ink); }
+.rw-app .drop .main { display: inline-flex; align-items: center; gap: var(--sp-m); font-weight: 650; color: var(--ink); }
+.rw-app .drop .main svg { width: 16px; height: 16px; color: var(--ink-3); }
+.rw-app .drop:hover .main svg { color: var(--thread-text); }
+.rw-app .drop .hint { font-size: .74rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
+.rw-app .drop .hint b { color: var(--ink-2); font-weight: 600; }
+.rw-app .drop .pointer-copy.coarse { display: none; }
+
+/* Variant B empty hero: warp (thesis), the fell line with the upload bead, then
+   the woven cloth (instruction + formats) - one cluster centred in a tall,
+   fully-droppable hero (see the is-empty rule for the fill height). */
+.rw-app .drop.hero { min-height: 0; gap: clamp(28px, 4.8vw, 62px); padding: 0; justify-content: center; }
+/* the shuttle is the upload bead - no pill; the fell threads meet it directly */
+.rw-app .drop.hero .main { flex: none; flex-direction: row; padding: 0; border: 0; background: none; box-shadow: none; }
+/* the fell line reaches the bead from both selvages - two thread segments that
+   brighten toward the bead rather than a single line skewering the glyph */
+.rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
+.rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
+.rw-app .drop.hero .fell-thread:first-child { background: linear-gradient(to right, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
+.rw-app .drop.hero .fell-thread:last-child { background: linear-gradient(to left, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
+/* woven cloth below the fell: the drop instruction over the format reed */
+.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(20px, 2.6vw, 34px); }
+.rw-app .drop.hero .drop-belowlabel {
+  display: block; max-width: min(94%, 42ch); margin-inline: auto; text-align: center; text-wrap: balance;
+  font-size: clamp(.9rem, .85rem + .3vw, 1.02rem); font-weight: 600; line-height: 1.35; color: var(--ink-2);
+}
+/* the hero opens with the product thesis - the page's one headline - and the
+   drop instruction steps down to a supporting line beneath it */
+/* the empty page opens with the product thesis - the one headline - above the
+   0x01 step, spoken in the loom's own voice: the closing clause takes the
+   thread accent (echoing the rom-weaver wordmark) and the privacy line reads
+   as one of the app's mono readout chips, complete with a status dot */
+.rw-app .hero-lead {
+  position: relative; overflow: clip;
+  display: flex; flex-direction: column; gap: var(--sp-l); align-items: center;
+  margin: 4px var(--pad) 20px; padding: 28px 24px; text-align: center;
+  border: 1px solid var(--seam); border-radius: var(--r-l);
+  background:
+    radial-gradient(120% 150% at 50% -35%, color-mix(in oklab, var(--thread) 12%, transparent), transparent 62%),
+    var(--plate);
+}
+:root[data-theme="light"] .hero-lead {
+  background:
+    radial-gradient(120% 150% at 50% -35%, color-mix(in oklab, var(--thread) 8%, transparent), transparent 62%),
+    var(--plate);
+}
+/* cloth rises from the banner's lower edge - the plain-weave tile drifting
+   slowly downward as the loom takes up rows, fading out before the headline
+   so the type stays crisp (the fade lives in the background gradient; the
+   mask carries the interlace) */
+.rw-app .hero-lead::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, var(--thread), transparent 72%);
+  mask-image: var(--weave-mask); mask-size: 14px 14px;
+  opacity: .12;
+  --drift: 0 14px;
+  animation: weave-drift 9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* woven textures stay; only their motion stops. weft-throw runs `both`, so
+     animation:none leaves the thread fully drawn. */
+  .rw-app .hero-lead::before, .rw-app .dropveil::before,
+  .rw-app .meter .fill::after, .rw-app .step.is-woven::before { animation: none; }
+}
+/* iOS WebKit can't composite mask-position animation - the drifting weave
+   repaints the full hero every frame and lags the whole page. Texture stays
+   (animation:none leaves the mask at rest); only the drift stops. */
+@supports (-webkit-touch-callout: none) {
+  .rw-app .hero-lead::before, .rw-app .dropveil::before { animation: none; }
+}
+/* selvage thread pulled across the top edge, fading at the ends */
+.rw-app .hero-lead::after {
+  content: ""; position: absolute; inset-inline: 0; top: 0; height: 2px; pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--thread) 32% 68%, transparent);
+}
+/* copy sits above the woven layers */
+.rw-app .hero-lead > * { position: relative; }
+/* the thesis is the top block - no divider under it; the fell line below is the
+   real seam between warp and cloth */
+.rw-app .drop.hero > .hero-lead {
+  align-self: stretch; margin: 0; padding: 0 var(--pad); gap: var(--sp-m);
+  border: 0; border-radius: 0; background: none;
+}
+.rw-app .drop.hero > .hero-lead::before, .rw-app .drop.hero > .hero-lead::after { display: none; }
+/* viewport-driven up to the desktop cap so phones get the biggest thesis type
+   that fits: 5.2vw ≈ 20px on a 390px phone (was flooring at 1.05rem there) */
+/* the headline flows across a wide measure and scales with the viewport, letting
+   the large type settle onto two lines without a forced break */
+.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, 3.25vw, 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
+.rw-app .hero-lead .lead-line { display: inline; }
+.rw-app .hero-lead .lead-accent { color: var(--thread-text); }
+.rw-app .hero-lead .lead-sub {
+  display: inline-flex; align-items: center; gap: var(--sp-s);
+  padding: 3px 11px; border: 1px solid var(--seam-soft); border-radius: 99px; background: var(--well);
+  font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-2);
+}
+.rw-app .hero-lead .lead-sub::before {
+  content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%;
+  background: var(--thread-text);
+}
+/* the shuttle bead: an opaque round chip the fell threads run up to */
+.rw-app .drop.hero .main svg {
+  width: 22px; height: 22px; box-sizing: content-box; padding: 14px; border-radius: 50%;
+  color: var(--thread-text); background: color-mix(in oklab, var(--thread) 16%, var(--plate-2));
+}
+.rw-app .drop.hero .formats {
+  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(16px, 3vw, 24px); overflow: hidden; pointer-events: none;
+  /* wide fade lanes so pills dissolve instead of clipping mid-pill at the edges */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+}
+.rw-app .drop.hero .formats-lane { min-width: 0; overflow: hidden; }
+.rw-app .drop.hero .formats-track {
+  display: flex; gap: var(--sp-xs); width: max-content;
+  animation: formats-ticker 120s linear infinite;
+  backface-visibility: hidden; will-change: transform;
+}
+.rw-app .drop.hero .formats-lane:nth-child(2) .formats-track { animation-direction: reverse; }
+.rw-app .drop.hero .formats-set { display: flex; gap: var(--sp-xs); }
+.rw-app .drop.hero .fmt { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 12px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }
+@keyframes formats-ticker {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(calc(-50% - 2.5px), 0, 0); }
+}
+/* iOS WebKit can defer or drop a masked animated layer during first paint.
+   Keep the ticker immediate and reliable there; the edge fade is decorative. */
+@supports (-webkit-touch-callout: none) {
+  .rw-app .drop.hero .formats { -webkit-mask-image: none; mask-image: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .drop.hero .formats-track { animation: none; margin-inline: auto; }
+  .rw-app .drop.hero .formats-set + .formats-set { display: none; }
+}
+
+/* staging reads as the compact add-pill it becomes, with a spinner in place of
+   the drop glyph while files are being routed to their sections */
+.rw-app .drop.staging { cursor: progress; color: var(--ink-3); }
+.rw-app .drop.staging .main.btnish { color: var(--ink-2); }
+/* the spinner is a bobbin: short turns of thread wound around the rim over a
+   faint track, spinning while files are routed. (Was a stock border ring.) */
+.rw-app .spinner {
+  width: 13px; height: 13px; flex: none; border-radius: 50%;
+  background:
+    repeating-conic-gradient(var(--thread-text) 0 26deg, transparent 26deg 45deg),
+    conic-gradient(color-mix(in oklab, var(--seam-strong) 65%, transparent) 0 360deg);
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.4px));
+  animation: spin .9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .rw-app .spinner { animation: none; } }
+
+/* the add action reads as a button for everyone - tap-first users see tap copy.
+   Once content is staged the row shrinks out of the way: tiny pill, hint only on hover. */
+.rw-app .drop .main.btnish {
+  border: 1px solid var(--seam-strong); border-radius: 99px; background: var(--plate-2);
+  padding: 4px 13px; min-height: 28px; font-size: .76rem; font-weight: 600; gap: var(--sp-s);
+  color: var(--ink-2);
+}
+/* the add pill lights to the brand thread on hover/focus */
+.rw-app .drop:hover .main.btnish, .rw-app .drop:focus-within .main.btnish {
+  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); color: var(--thread-text);
+}
+.rw-app .drop:hover .main.btnish svg, .rw-app .drop:focus-within .main.btnish svg { color: var(--thread-text); }
+.rw-app .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: var(--sp-xs); }
+.rw-app .drop:not(.hero) .main svg { width: 13px; height: 13px; }
+/* the add-row hint is ALWAYS shown inline beneath the pill - never a hover-only
+   tooltip - so a page that already has files still explains how to add more */
+.rw-app .drop:not(.hero) .hint { display: none; font-size: .72rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
+.rw-app .drop:not(.hero) .hint.fine { display: block; }
+.rw-app .drop .hint.coarse { display: none; }
+@media (pointer: coarse) {
+  /* touch sizing rides the same fluid --ctrl-h as everyone else: 24px (the
+     WCAG floor) on phones, growing to 30px on tablets - no discrete jump */
+  /* the :not(.hero) selector below outranks a plain .drop .hint.fine - match
+     its specificity so touch devices show ONLY the tap hint, never both lines */
+  .rw-app .drop .hint.fine, .rw-app .drop:not(.hero) .hint.fine { display: none; }
+  .rw-app .drop .hint.coarse { display: block; }
+  .rw-app .drop .pointer-copy.fine { display: none; }
+  .rw-app .drop .pointer-copy.coarse { display: inline; }
+  .rw-app .drop .main.btnish { min-height: 40px; padding: 8px 18px; font-size: .82rem; }
+  .rw-app .ck .copy, .rw-app .cue-copy { width: 28px; height: 28px; opacity: 1; }
+}
+.rw-app .drop.hero.bare { min-height: 0; }
+
+/* ═══ step 0x01 = the drop ═══
+   the input step leads with the dropzone: a hero, clearly-droppable panel
+   while nothing is staged, shrinking to a compact add-row once files arrive */
+.rw-app .step.is-input .drop.hero {
+  border: 1px solid var(--seam); border-radius: var(--r-l);
+  background: var(--warp-lines) var(--empty-fill);
+  transition: border-color .2s, background .2s;
+}
+.rw-app .step.is-input .drop.hero:hover, .rw-app .step.is-input .drop.hero:focus-visible {
+  border-color: var(--empty-border-hover);
+  background: var(--warp-lines) var(--empty-fill-hover);
+}
+/* compact add-row sits just above the staged cards */
+/* the "add more files" row matches the form: a full-width panel like a shrunk
+   hero, not a lone floating pill */
+.rw-app .step.is-input .drop:not(.hero) {
+  padding: var(--sp-l); border-radius: var(--r-m);
+  border: 1px solid var(--seam); background: var(--warp-lines) var(--empty-fill);
+  transition: border-color .2s, background .2s;
+}
+.rw-app .step.is-input .drop:not(.hero):hover, .rw-app .step.is-input .drop:not(.hero):focus-within {
+  border-color: var(--empty-border-hover); background: var(--warp-lines) var(--empty-fill-hover);
+}
+/* inside the panel the label is plain (no pill) */
+.rw-app .step.is-input .drop:not(.hero) .main.btnish {
+  border: 0; background: transparent; padding: 0; min-height: 0; font-size: .84rem; color: var(--ink-2);
+}
+.rw-app .step.is-input .drop:not(.hero):hover .main.btnish { color: var(--thread-text); }
+.rw-app .step.is-input .drop:not(.hero) .main.btnish svg { color: var(--thread-text); }
+/* with nothing staged the hero is THE page: a big, obvious drop target that
+   claims a healthy share of the viewport, capped so the thesis + ghost steps
+   below still fit above the fold */
+.rw-app .step.is-input.is-empty .drop.hero {
+  min-height: clamp(360px, calc(100svh - var(--dock-total) - var(--hero-chrome)), 920px);
+  padding-block: 0;
+}
+.rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
+
+/* secondary input sections (patches, modified), when empty, don't offer their
+   own drop target - they point the user UP to the 0x01 hero. they share the
+   hero's framing (solid seam, tinted fill, large radius) so the empty bench
+   reads as one consistent family, while still routing taps back to 0x01. */
+.rw-app .needs-input {
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-m);
+  width: 100%; min-height: 72px; padding: var(--sp-l) var(--sp-xl); margin: 0;
+  appearance: none; border: 1px solid var(--seam); border-radius: var(--r-l);
+  background: var(--warp-lines) var(--empty-fill); cursor: pointer;
+  color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
+  color: var(--ink-2); background: var(--warp-lines) var(--empty-fill-hover);
+  border-color: var(--empty-border-hover);
+}
+.rw-app .needs-input svg { width: 16px; height: 16px; flex: none; color: var(--thread-text); }
+.rw-app .needs-input .hexref { color: var(--thread-text); font-weight: 700; letter-spacing: .04em; }
+
+/* ═══ ghost steps ═══
+   preview of the stages the bench grows once files land - the empty page
+   shows the whole journey as one "Next:" line: mono thread-accent hex numbers
+   beside ink titles, previewing the real 0x0N headings. Input steps join with
+   "+", the arrow marks the final step they flow into. Purely decorative;
+   shared by every viewport. */
+/* air between the live drop hero above and the upcoming-steps line */
+/* the hero keeps the same fluid air above the ghost rope line as the real
+   steps keep above theirs (--step-pb of step-body bottom padding) */
+.rw-app .ghost-steps { margin-block-start: var(--step-pb); pointer-events: none; user-select: none; }
+.rw-app .panel.workflow .ghost-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: var(--sp-s);
+  row-gap: var(--sp-2xs);
+  margin: 0;
+  padding: var(--sp-m);
+}
+.rw-app .ghost-next .ghost-next-label {
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.rw-app .ghost-next .ghost-next-step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-xs);
+  white-space: nowrap;
+}
+.rw-app .ghost-next .ghost-next-num {
+  font-size: .74rem;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--thread-text);
+}
+.rw-app .ghost-next .ghost-next-title {
+  font-size: .76rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.rw-app .ghost-next .ghost-next-arrow {
+  color: var(--ink-3);
+  font-size: .72rem;
+}

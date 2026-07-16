@@ -1,0 +1,85 @@
+/* ═══ result ═══ */
+/* the result is its own card within the output section, matching the form */
+/* the result IS the download row now - the status + per-stage timings live up in
+   the step header, so this is just the orange action button */
+.rw-app .result { margin-block-start: 2px; animation: drop-in .4s var(--ease); }
+/* cloth off the loom: when the download row lands, the shuttle makes one last
+   pass across it - a single cream sweep, then stillness. (.outcard is the live
+   output card; .result kept for the older markup.) */
+.rw-app .result .download-btn, .rw-app .outcard .download-btn { position: relative; overflow: clip; }
+.rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after {
+  content: ""; position: absolute; inset-block: 0; left: 0; width: 22%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--shuttle) 45%, transparent), transparent);
+  translate: -100% 0;
+  animation: shuttle-pass .8s ease-out .3s both;
+}
+@keyframes shuttle-pass { to { translate: 560% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after { animation: none; opacity: 0; }
+}
+/* the download button carries output size + delta on the left and the total
+   time at the right. It prefers one line, but a long segment (e.g. trim's
+   "N MB raw · N MB compressed") wraps onto additional lines and the button
+   grows in height rather than the text running off its edge */
+.rw-app .download-btn { gap: var(--sp-s) var(--sp-m); font-size: .9rem; flex-wrap: wrap; min-width: 0; }
+.rw-app .download-btn > svg { flex: none; }
+.rw-app .download-btn .dl-kind, .rw-app .download-btn .dl-size { flex: 0 1 auto; overflow-wrap: anywhere; }
+.rw-app .download-btn .dl-delta { min-width: 0; overflow-wrap: anywhere; }
+/* the output kind leads (patch type / container · codecs / archive / raw), then
+   size + delta, with the total + threads pushed to the right */
+.rw-app .download-btn .dl-kind { font-weight: 700; font-size: 1.02rem; text-transform: none; letter-spacing: .01em; }
+.rw-app .download-btn .dl-size { font-weight: 600; font-size: .94rem; opacity: .92; text-transform: none; letter-spacing: .01em; }
+.rw-app .download-btn .dl-size::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
+/* full opacity (was .82) so the dark ink keeps a ≥4.5:1 ratio on the orange button */
+.rw-app .download-btn .dl-delta { font-weight: 600; font-size: .88rem; opacity: 1; text-transform: none; letter-spacing: .01em; }
+.rw-app .download-btn .dl-delta::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
+.rw-app .download-btn .dl-total { margin-inline-start: auto; font-weight: 600; font-size: .88rem; opacity: .92; text-transform: none; letter-spacing: .01em; white-space: nowrap; }
+.rw-app .download-btn .dl-total b { font-weight: 750; }
+/* step-header complete-state badges: the green verified mark + per-stage chips
+   stagger in as the result lands (delays are set inline per chip) */
+.rw-app .step-meta .rb { gap: var(--sp-xs); }
+.rw-app .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
+.rw-app .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
+/* light mode: a 12% green tint pulls the chip's grey/orange labels under 4.5:1 -
+   ease the tint and step the stage name up a shade so both stay legible */
+:root[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
+:root[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
+.rw-app .step-meta .rb.verified svg { width: 14px; height: 14px; }
+.rw-app .step-meta .rb .k { color: var(--ink-3); }
+.rw-app .step-meta .rb .t { color: var(--thread-text); }
+
+/* ═══ create: swap hinge ═══ */
+.rw-app .swap-row { display: flex; justify-content: center; height: 0; position: relative; z-index: 1; }
+.rw-app .swap-btn { translate: 0 -50%; height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
+.rw-app .swap-btn svg { transition: transform .4s var(--ease); }
+.rw-app .swap-btn:hover svg { transform: rotate(180deg); }
+
+/* ═══ trace log ═══ */
+.rw-app .tracelog {
+  max-height: 220px; overflow: auto; font-size: .7rem; line-height: 1.65; color: var(--ink-2);
+  background: var(--well); border-radius: var(--r-s); padding: var(--sp-s) var(--sp-m);
+  overscroll-behavior: contain;
+}
+/* rows size to their longest line (not the container) so the log scroller gets
+   a real horizontal extent - long trace lines scroll instead of clipping.
+   each line is a hairline-separated, hoverable click-to-copy row */
+.rw-app .tracelog .ln {
+  display: flex; gap: var(--sp-s); white-space: nowrap; width: max-content; min-width: 100%;
+  padding-block: 2px; border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
+  cursor: pointer; transition: background .12s;
+  animation: trace-in .25s var(--ease);
+}
+.rw-app .tracelog .ln:last-child { border-block-end: 0; }
+.rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
+.rw-app .tracelog .ln.copied { background: color-mix(in oklab, var(--verified) 16%, transparent); }
+.rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
+.rw-app .tracelog .ln-no { color: var(--ink-4); flex: none; min-width: 5ch; text-align: end; font-variant-numeric: tabular-nums; user-select: none; }
+.rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
+.rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
+:root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
+:root[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
+.rw-app .tracelog .lv { flex: none; width: 6ch; font-weight: 650; text-transform: uppercase; font-size: .92em; }
+.rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }
+.rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }
+.rw-app .tracelog .msg { color: var(--ink-2); }
+.rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }

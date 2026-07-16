@@ -57,13 +57,13 @@ import {
 } from "../../src/webapp/settings/settings-state.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 // Load the real design system so axe + getComputedStyle see production colours.
-import "../../src/webapp/design-system.css";
+import "../../src/webapp/design-system/index.css";
 
 const axe = axeModule.default ?? axeModule;
 const THEMES = ["light", "dark"];
 
 // One viewport landing inside each layout regime the design system actually
-// defines (viewport seams in design-system.css: 720/860/1100px; everything
+// defines (viewport seams in design-system/responsive.css: 720/860/1100px; everything
 // else rides fluid tokens or container queries), plus a short-height
 // landscape-phone case for `(max-width: 860px) and (max-height: 520px)`.
 // Every axe scan runs at each, so responsive layouts - the phone dock, the

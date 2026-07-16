@@ -1,0 +1,468 @@
+/* ═══ collapsible drawers - "summary-first" ═══
+   the headline value IS the row: a quiet chevron, the label, then the section's
+   key value as an inset "instrument readout" chip on the right. expanding only
+   reveals the detail, so the card scans unopened. */
+/* a section is ONE rounded plate in both states: a filled, tappable plate when
+   collapsed, and the same plate opened up - a hairline splits the header from
+   the content that now sits inside it - so collapse↔expand reads as one
+   component growing, not two different things. the readout badge lines up with
+   the header's inset on either side. */
+/* structure: <div.cks><button.cks-head aria-expanded>…</button>
+   <div.cks-body><div.cks-inner>content</div></div></div> - the body collapses
+   via grid-rows (pure CSS, same pattern as .reveal); visibility rides the
+   transition so collapsed content is unreachable by tab/AT */
+.rw-app .cks {
+  position: relative; border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: var(--well);
+  transition: background .14s, border-color .14s;
+}
+.rw-app .cks:has(> .drawer-action) > .cks-head { padding-inline-end: 38px; }
+.rw-app .drawer-action {
+  position: absolute; z-index: 2; inset-inline-end: 11px; top: 18px; translate: 0 -50%;
+  display: inline-flex; align-items: center;
+}
+.rw-app .drawer-action .info { font-size: 1rem; }
+.rw-app .drawer-action .info-btn {
+  /* 24px floor keeps the tap target at WCAG 2.2 SC 2.5.8 minimum (the glyph
+     stays 1em, centred) */
+  width: 24px; height: 24px; color: var(--verified); border-radius: 4px;
+  transition: color .15s, transform .12s;
+}
+.rw-app .drawer-action .info-btn::before {
+  content: ""; position: absolute; inset-inline: 4px; bottom: 1px; height: 1px;
+  background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
+  opacity: .72;
+}
+.rw-app .drawer-action .info-btn:hover,
+.rw-app .drawer-action .info-btn[aria-expanded="true"] {
+  color: color-mix(in oklab, var(--verified) 82%, var(--ink));
+}
+.rw-app .drawer-action .info-btn:hover::before,
+.rw-app .drawer-action .info-btn[aria-expanded="true"]::before { opacity: 1; }
+.rw-app .drawer-action .info-btn:active { transform: scale(.92); }
+/* failed-expectation ✗ rides the Checks header in fault red */
+.rw-app .drawer-action .expected-mismatch-info .info-btn { color: var(--fault); }
+.rw-app .drawer-action .expected-mismatch-info .info-btn:hover,
+.rw-app .drawer-action .expected-mismatch-info .info-btn[aria-expanded="true"] {
+  color: color-mix(in oklab, var(--fault) 82%, var(--ink));
+}
+.rw-app .drawer-action .info-btn svg { width: 14px; height: 14px; }
+.rw-app .dry-apply-pop p { margin: 6px 0 0; }
+.rw-app .cks.is-open { background: color-mix(in oklab, var(--well) 45%, transparent); }
+/* on the dark bench the well plates sink into the card - a stronger seam +
+   a touch more lift separates each section header from its container. */
+:root[data-theme="dark"] .cks { border-color: var(--seam-strong); background: color-mix(in oklab, var(--plate-2) 45%, var(--well)); }
+:root[data-theme="dark"] .cks.is-open { background: color-mix(in oklab, var(--plate-2) 30%, var(--well)); }
+:root[data-theme="dark"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
+/* on paper the open plate's 45%-transparent well washed into the cream card
+   (≈4/255 per channel apart) - keep the opened drawer a solid recessed well
+   with a stronger seam so it reads as a distinct panel, not a faint tint */
+:root[data-theme="light"] .cks.is-open { background: var(--well); border-color: var(--seam-strong); }
+:root[data-theme="light"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
+.rw-app .cks > .cks-head {
+  appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
+  width: 100%; cursor: pointer; display: flex; align-items: center; gap: var(--sp-xs);
+  min-height: 36px; padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
+  /* the WHOLE header toggles - a tap on the label or the right-hand readout chip
+     must register as a tap, not start a text selection / iOS callout */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.rw-app .cks:not(.is-open) > .cks-head:hover { background: color-mix(in oklab, var(--thread) 6%, transparent); }
+.rw-app .cks.is-open > .cks-head {
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  border-end-start-radius: 0; border-end-end-radius: 0;
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); }
+/* the body collapses via grid-rows; visibility (discretely transitioned) keeps
+   collapsed content out of the tab order and the accessibility tree */
+.rw-app .cks > .cks-body {
+  /* minmax(0,1fr) column + min-width:0 on the item - wide content (the cue
+     sheet's <pre>) must scroll inside its own box, not push the drawer wider
+     than the card on narrow screens */
+  display: grid; grid-template-rows: 0fr; grid-template-columns: minmax(0, 1fr); visibility: hidden;
+  transition: grid-template-rows .3s cubic-bezier(.22, .9, .26, 1), visibility .3s;
+}
+.rw-app .cks.is-open > .cks-body { grid-template-rows: 1fr; visibility: visible; }
+.rw-app .cks > .cks-body > .cks-inner {
+  min-height: 0; min-width: 0; overflow: clip;
+  opacity: 0; translate: 0 -4px; transition: opacity .16s, translate .2s var(--ease);
+}
+.rw-app .cks.is-open > .cks-body > .cks-inner { opacity: 1; translate: 0 0; transition: opacity .22s .08s, translate .26s .08s var(--ease); }
+/* opened content sits inside the plate, inset from its border. The bottom
+   inset is a MARGIN on the last child, not padding - border-box height can't
+   collapse below its own padding, which left a 9px lip on closed drawers */
+/* round the body's bottom corners (it already clips) to match the drawer, so a
+   full-bleed last row's hover highlight follows the rounded corner instead of
+   poking a square past it */
+.rw-app .cks .cks-inner { padding-inline: 10px; border-end-start-radius: calc(var(--r-s) - 1px); border-end-end-radius: calc(var(--r-s) - 1px); }
+.rw-app .cks .cks-inner > :last-child { margin-block-end: 9px; }
+/* chevron is a quiet affordance - lights to thread when the section is open */
+.rw-app .cks .chev { width: .82rem; height: .82rem; flex: none; color: var(--ink-4); opacity: .6; transition: transform .22s var(--ease), color .18s, opacity .18s; }
+.rw-app .cks > .cks-head:hover .chev { opacity: 1; }
+.rw-app .cks.is-open > .cks-head .chev { transform: rotate(90deg); color: var(--thread-text); opacity: 1; }
+/* drawer headers read in the same voice as the card name above them (sentence
+   case, 650 weight) - one type family for every header on the card, just a
+   step smaller so the hierarchy holds */
+.rw-app .cks .lab { margin-inline-end: auto; font-size: .8rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.rw-app .cks.is-open > .cks-head .lab { color: var(--ink); }
+/* ONE readout-chip language for every drawer header - a recessed grey pill.
+   multiple data points (e.g. a track count + a hash time) are separate chips, not
+   one combined string. the .readouts wrapper groups them at the right edge. */
+.rw-app .cks > .cks-head .readouts { display: inline-flex; align-items: center; gap: var(--sp-s); min-width: 0; max-width: 66%; }
+.rw-app .cks > .cks-head .rb {
+  flex: 0 1 auto; min-width: 0; max-width: 100%;
+  font-size: var(--badge-fs); color: var(--weft); font-stretch: 86%; letter-spacing: .01em;
+  padding: 2px 8px; border-radius: 6px; background: var(--well); border: 1px solid var(--seam-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* only the last chip may shrink/ellipsize; short leading chips (count, container)
+   keep their full width */
+.rw-app .cks > .cks-head .readouts > .rb:not(:last-child) { flex: none; }
+/* on a collapsed plate the chip already sits on a well - recess it instead */
+.rw-app .cks:not(.is-open) > .cks-head .rb { background: var(--plate-2); border-color: transparent; }
+/* timing chips carry the orange accent so a duration reads as distinct from a
+   count / type / system value (which stay cream) */
+.rw-app .cks > .cks-head .rb.time { color: var(--thread-text); }
+/* verify / verified marks ride beside the time chip as a bare icon - NOT their own
+   differently-coloured pill, so every header badge reads as one family */
+.rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
+.rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
+.rw-app .cks > .cks-head .rb-mark.ok { color: var(--verified); }
+/* a verified drawer is sewn shut: fine sage stitches under the check mark */
+.rw-app .cks > .cks-head .rb-mark.ok { position: relative; }
+.rw-app .cks > .cks-head .rb-mark.ok::after {
+  content: ""; position: absolute; inset-inline: 1px; bottom: -3px; height: 1px;
+  background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--verified) 70%, transparent) 0 3px, transparent 3px 5px);
+}
+.rw-app .cks > .cks-head .rb-mark.bad { color: var(--fault); }
+/* verified mark in the Details header (a verified known-good game) */
+/* checksum rows are a full-bleed block: each row fills the drawer body edge to
+   edge (cancelling the .cks-inner inline inset and its block insets), rows sit
+   flush with their top/bottom borders collapsed into shared hairlines, and the
+   drawer frames the sides. (The .ck.req verification rows keep their own table -
+   reset below.) */
+.rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
+.rw-app .ckrows.patch-check-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); column-gap: var(--sp-s); }
+.rw-app .cks .ckrows.patch-check-columns > .ck-group { margin-block-start: 6px; }
+.rw-app .cks > .cks-body > .cks-inner > .ckrows { margin-block: 0; }
+.rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
+/* first heading gets clear air under the drawer header; later headings sit a
+   touch tighter so the sections still read as one stack */
+.rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
+.rw-app .ck-group + .ck-group { margin-block-start: 9px; }
+/* section header for a checksum group: the 0x0N cloth scrap shrunk to caption
+   size - thread paint through the weave tile, selvage flush left, fraying
+   right - so each block (Unchanged / Fix header / Input / Output) visibly
+   joins the header family and anchors its column. The scrap's left edge sits
+   on the rows' box edge; its 9px text inset matches the row labels'. */
+.rw-app .ck-group-head {
+  display: flex; align-items: center; width: fit-content;
+  position: relative; isolation: isolate;
+  font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink); padding: 3px 16px 3px 9px; margin-block-end: 6px;
+}
+.rw-app .ck-group-head::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(90deg, var(--thread) 45%, transparent 96%);
+  opacity: .2;
+  mask-image: var(--weave-mask); mask-size: 7px 7px;
+}
+.rw-app .ck {
+  /* label column sized just to the widest label (CRC32/SHA-1) so values still
+     line up in a column, but without the old wide gap - leaves room for a
+     larger value. Each row is its own grid, so this width must be fixed. */
+  margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-xs) var(--sp-s);
+  min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
+  /* one theme-aware seam colour drives every row edge AND the paired CRC32|BYTES
+     seam below, so light mode's stronger edge (see the light override) reaches
+     the restored half-row borders instead of leaving them a shade lighter */
+  --ck-seam: var(--seam-soft);
+  border-block: 1px solid var(--ck-seam); border-inline: 0; transition: background .15s, border-color .15s;
+}
+/* rows bleed past the .cks-inner inline inset (10px) so the dividers run edge to
+   edge; the width is widened to match (flex-stretch alone leaves a fixed width =
+   container, so the negative end-margin would only shift, not extend, the row).
+   The drawer border frames the sides. Verification rows keep their inset. */
+.rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
+/* rows touch and read as one hairline: instead of overlapping by -1px (which
+   made each 24px-tall copy target partially obscure its neighbour and trip WCAG
+   2.2 SC 2.5.8 Target Size), drop the duplicate top border so only the row
+   above's bottom border draws the seam - no overlap, same single hairline. */
+.rw-app .ck:not(.req) + .ck:not(.req) { border-block-start-color: transparent; }
+/* the whole row is a copy button - ON TOUCH, block text selection / the iOS
+   callout so tapping the hash fires a clean click instead of starting a
+   selection. Mouse/keyboard users keep normal select-to-copy. */
+@media (pointer: coarse) {
+  .rw-app .ck { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+}
+.rw-app .ck:hover { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
+.rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
+/* row labels drop to the CLI's lowercase algo names (crc32, md5, sha-1) so
+   they read as a different voice from the uppercase scrap-backed group heads */
+.rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
+/* ONE unified value size per row list: every value in a checks table (and the
+   staging shimmer, which inherits it) rides the same container-driven clamp,
+   keyed to the longest value class - a 40-char sha-1 at the mono advance
+   (.6ch) plus .03em tracking = 25.2em - so the whole column steps down
+   together instead of each hash picking its own size. The subtrahend is the
+   non-value overhead beside it (label column + copy glyph + gaps + padding
+   − row bleed), so label and hash hold ONE line together all the way down to
+   a 300px viewport. Values never wrap. */
+.rw-app .ck .ck-v {
+  margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
+  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
+}
+.rw-app .ckrows { container-type: inline-size; }
+/* the drawer inner is a NAMED size container so the rules below can key off
+   the drawer's width (an element cannot respond to its own container query,
+   and .ckrows is already the hash-clamp container) */
+.rw-app .cks > .cks-body > .cks-inner { container: cks-inner / inline-size; }
+/* checks pairing grid: whenever the drawer body holds labelled groups or the
+   short paired rows, the row list becomes a two-track grid that carries the
+   rows' old -10px full bleed itself (rows inside sit flush). Full rows and
+   groups span both tracks; the two short rows - CRC32 and BYTES, marked
+   .ck-half - pair onto one grid row with a seam between them, at EVERY width
+   (phones included), inside groups and bare row lists alike.
+   (.patch-check-columns keeps its own tighter grid; .req verification tables
+   are untouched.) */
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) {
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; align-items: start;
+  margin-inline: -10px;
+}
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) .ck:not(.req) { margin-inline: 0; width: 100%; }
+/* intra-group pairing applies to every group flavor, including the compact
+   patch Input/Output columns: rows inside a group sit flush (the enclosing
+   grid or column carries any bleed) */
+.rw-app .ckrows .ck-group { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
+.rw-app .ckrows .ck-group > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows .ck-group .ck:not(.req) { margin-inline: 0; width: 100%; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > .ck.ck-half:not(.req),
+.rw-app .ckrows:not(.patch-check-columns) .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
+/* the paired row: restore the trailing cell's top hairline (the stacked-row
+   border collapse assumed one column) and seam the two cells apart */
+.rw-app .ckrows:not(.patch-check-columns) .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
+  border-inline-start: 1px solid var(--ck-seam);
+  border-block-start-color: var(--ck-seam);
+}
+
+/* wide drawer (≥760px): two-plus labelled groups (Unchanged / Fix header /
+   Input / Output / tracks) additionally split the drawer into side-by-side
+   columns with a center seam; each group becomes its own size container so
+   the hash clamp steps per column */
+@container cks-inner (min-width: 760px) {
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group) {
+    position: relative;
+    gap: var(--sp-m) var(--sp-xl);
+    padding-block-start: 6px;
+  }
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group)::before {
+    content: ""; position: absolute; inset-block: 12px 2px; inset-inline-start: calc(50% - .5px);
+    width: 1px; background: var(--seam-soft);
+  }
+  .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group + .ck-group) > .ck-group {
+    grid-column: auto / span 1;
+    margin-block-start: 0; container-type: inline-size;
+  }
+
+  /* the compact patch Input/Output columns are only wide enough for the
+     CRC32|BYTES pair when the drawer itself is wide */
+  .rw-app .ckrows.patch-check-columns .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
+  .rw-app .ckrows.patch-check-columns .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
+    border-inline-start: 1px solid var(--ck-seam);
+    border-block-start-color: var(--ck-seam);
+  }
+}
+/* below the width where even the floor size can't hold 40ch beside the label
+   (floor .46rem × 25.2em = 11.6rem, plus the phone row overhead), long-value
+   rows (.ck-fit marks values ≥16ch) hand the hash the full row width:
+   label + copy glyph on the first line, the value under them */
+@container (max-width: calc(11.6rem + 64px)) {
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto; }
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-k { grid-row: 1; grid-column: 1; }
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 2; }
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-v { grid-row: 2; grid-column: 1 / -1; }
+}
+.rw-app .ck .ck-v .exp { color: var(--fault); }
+.rw-app .ck .ck-v.copied { animation: copied-value .55s var(--ease); }
+@keyframes copied-value {
+  35% {
+    color: var(--verified);
+    text-shadow: 0 0 10px color-mix(in oklab, var(--verified) 70%, transparent);
+  }
+}
+/* hash + verification readout values ride the brand orange in dark mode (was
+   the cream label-stock); light mode keeps its rich amber --weft */
+:root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
+/* checksum / verification rows need a clearer edge on paper */
+:root[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
+/* tinted row backgrounds (bad / hover / woven) drop the grey label to ~4.4:1 in
+   light mode - one shade darker keeps the label clear on every row state */
+:root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
+.rw-app .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
+.rw-app .ck:hover .copy { opacity: 1; color: var(--thread-text); }
+/* on touch the :hover state sticks until the next tap, so the expand/collapse
+   tint would linger after a tap - restore the resting backgrounds on touch */
+@media (hover: none) {
+  .rw-app .cks:not(.is-open) > .cks-head:hover { background: transparent; }
+  .rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
+  .rw-app .ck:hover { background: transparent; }
+}
+.rw-app .ck .copy:active { transform: scale(.82); }
+.rw-app .ck .copy.copied { color: var(--verified); opacity: 1; animation: pop .32s var(--ease); }
+.rw-app .ck .copy svg { width: 13px; height: 13px; }
+/* patch verification rows: the same checksum-row look (label · VALUE · marks),
+   all-caps value, with every value lined up to the widest label across the
+   whole drawer - a subgrid threads one shared column set through the INPUT /
+   OUTPUT groups so the columns don't drift between them. */
+.rw-app .cks .trackrows:has(.ck.req) { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: center; }
+.rw-app .cks .trackrows:has(.ck.req) > .ckgrp { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; padding-inline-start: 0; }
+/* group heads + non-row content (dry-run) span every column so only the actual
+   dt labels size column 1 - otherwise the long dry-run line inflates it */
+.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
+.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
+/* verification rows stay a contiguous subgrid table - hairline dividers, not boxed */
+.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: var(--sp-m); border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
+.rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
+.rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); }
+.rw-app .ck.req .reqstat { display: inline-flex; align-items: center; }
+.rw-app .ck.req .reqstat svg { width: 14px; height: 14px; color: var(--verified); }
+.rw-app .ck.req.bad .reqstat svg { color: var(--fault); }
+.rw-app .ck.req.bad dd { color: var(--fault); }
+/* a met requirement's value is sewn shut - sage stitches, matching the verdicts */
+.rw-app .ck.req:not(.bad) .ck-v {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
+  text-underline-offset: 4px;
+}
+/* the actual scratch-apply verdict, not a progress bar */
+.rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .82rem; font-weight: 600; }
+.rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
+.rw-app .dryrun-verdict.bad { color: var(--fault); }
+/* a passing dry run is sewn shut like the other ok verdicts */
+.rw-app .dryrun-verdict:not(.bad) {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
+  text-underline-offset: 4px;
+}
+/* the unified patch verdict line (top of the Checks body) - same accent verdict for every patch
+   type, whether it was requirement-checked or dry-run validated */
+.rw-app .pverdict { padding: var(--sp-s) var(--sp-m); }
+/* failed dry-run: an inset well dyed with the fault - verdict line in fault
+   red, the detail and next-step hint stepping down to ink so the message
+   reads as structure instead of one red smear */
+.rw-app .pfault {
+  display: flex; flex-direction: column; gap: var(--sp-2xs);
+  padding: var(--sp-m); border-radius: var(--r-s);
+  border: 1px solid color-mix(in oklab, var(--fault) 36%, var(--seam-soft));
+  background: color-mix(in oklab, var(--fault) 7%, var(--well));
+  animation: pverdict-in .3s var(--ease) both;
+}
+.rw-app .pfault-title { display: flex; gap: var(--sp-s); align-items: center; color: var(--fault); font-weight: 700; font-size: .86rem; }
+.rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
+.rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
+/* the verdict lands after the verify bar: the line fades + rises in, its icon pops, and a passing
+   check draws its own stroke - the signature "done" moment, replacing an abrupt swap. */
+.rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
+.rw-app .pverdict.dryrun-verdict svg { animation: pverdict-mark .34s var(--ease) both; }
+@keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .pverdict.dryrun-verdict,
+  .rw-app .pverdict.dryrun-verdict svg,
+  .rw-app .pfault,
+  .rw-app .pfault-title svg { animation: none; }
+}
+
+/* inline help - clickable i's. a quiet line-glyph at rest (no box, so it adds no
+   visual weight or width next to the label) that reads instantly as an info mark
+   and lights to thread on hover / when open. centered on the line, not baseline. */
+/* the "i" tracks the text it sits beside - its box is sized in em so the glyph is
+   always the same height as that text (default to a small-label size; step heads
+   match the uppercase title) */
+.rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
+/* headings, settings labels, and output labels all leave the same 8px before
+   the toggle; the control's invisible hit target does not affect that rhythm */
+.rw-app .step-head .info { margin-inline-start: 0; font-size: .76rem; }
+.rw-app .info-btn {
+  position: relative; appearance: none; cursor: pointer; width: 1em; height: 1em; padding: 0;
+  border: 0; background: none; color: var(--ink-4);
+  display: grid; place-items: center;
+  transition: color .15s;
+}
+.rw-app .info-btn svg { width: 1em; height: 1em; }
+/* generous invisible hit target so the small glyph is still easy to tap */
+.rw-app .info-btn::after { content: ""; position: absolute; inset: -7px; }
+.rw-app .info-btn:hover { color: var(--ink-2); }
+.rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
+.rw-app .info-pop {
+  position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
+  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  padding: var(--sp-m);
+  border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
+  box-shadow: var(--overlay-shadow);
+  font-size: .78rem; font-weight: 500; line-height: 1.5; color: var(--ink-2);
+  letter-spacing: 0; text-transform: none; white-space: normal; text-align: start;
+  animation: drop-in .2s var(--ease);
+}
+.rw-app .step-meta .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
+/* bulleted help points, like the real app's info popovers */
+.rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-xs); }
+.rw-app .info-list li { position: relative; padding-inline-start: 14px; }
+.rw-app .info-list li::before {
+  content: ""; position: absolute; inset-inline-start: 3px; top: .55em;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--thread-text);
+}
+/* full per-bucket extension support inside the 0x01 info popover */
+.rw-app .info-support { display: flex; flex-direction: column; gap: var(--sp-s); }
+.rw-app .info-list + .info-support { margin-block-start: 9px; padding-block-start: 9px; border-block-start: 1px solid var(--seam); }
+.rw-app .info-support p { margin: 0; }
+.rw-app .info-support b { display: block; color: var(--ink); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
+.rw-app .info-support .mono { color: var(--ink-3); font-size: .72rem; overflow-wrap: anywhere; }
+
+/* the cue/gdi sheet reads as a code block: a title bar (label + copy button) over
+   a monospace listing on a recessed surface. the copy lives in the heading so the
+   listing text itself stays freely selectable, and the heading label lines up with
+   the first column of the code below it */
+.rw-app .cue-sub { border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--chassis); overflow: hidden; }
+/* the box is inset from the drawer by MARGIN (not the drawer's content padding) so
+   its title bar can span edge-to-edge inside the border */
+.rw-app .cks .cks-inner > .cue-sub { margin-block-start: 6px; }
+.rw-app .cue-sub-head { display: flex; align-items: center; gap: var(--sp-s); min-height: 27px; padding: 2px 7px 2px 11px; background: var(--well); border-block-end: 1px solid var(--seam); }
+.rw-app .cue-sub-lab { font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.rw-app .cue-sub-head .cue-copy { margin-inline-start: auto; }
+.rw-app .cue-copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-3); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; transition: transform .12s, color .15s; }
+.rw-app .cue-copy:hover { color: var(--thread-text); }
+.rw-app .cue-copy:active { transform: scale(.85); }
+.rw-app .cue-copy.copied { color: var(--verified); animation: pop .32s var(--ease); }
+.rw-app .cue-copy svg { width: 13px; height: 13px; }
+.rw-app .cue-text { margin: 0; padding: var(--sp-m); max-height: 220px; overflow: auto; background: none; font-size: .74rem; line-height: 1.6; color: var(--ink-2); white-space: pre; user-select: text; -webkit-user-select: text; }
+
+/* drag-to-reorder */
+/* the dragged patch is gently highlighted: a thread-orange border + faint tint +
+   lift, so it reads as the card being moved without shouting */
+/* applies to a settled patch card AND a staging reading card (both reorder) */
+.rw-app .rw-dragging {
+  position: relative; z-index: 6; transition: none; cursor: grabbing;
+  border-color: color-mix(in oklab, var(--thread) 75%, var(--seam-strong));
+  background: color-mix(in oklab, var(--thread) 5%, var(--plate-2));
+  box-shadow: 0 12px 26px -12px rgb(0 0 0 / .5);
+}
+.rw-app .rw-dragging, .rw-app .rw-dragging .handle { cursor: grabbing; }
+.rw-app .rw-dragging .handle { color: var(--thread-text); border-color: var(--thread); }
+.rw-app .rw-shifting { transition: transform .18s var(--ease); }
+@media (prefers-reduced-motion: reduce) { .rw-app .rw-shifting { transition: none; } }
+
+/* inline requirement checks at the verification point */
+
+/* tracks + per-file task history */
+.rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: var(--sp-2xs); padding-block: 4px 2px; }
+/* nested groups are static (not collapsible): a quiet sub-header sits above its
+   always-visible rows. no left indent - the uppercase head is cue enough, and the
+   indent only wasted space on the left of the expanded section */
+.rw-app .ckgrp { padding-inline-start: 0; }
+/* track-head size hugs the same right column as the rows' copy icons (rows inset
+   their copy button ~10px inside the box; match that so the right edge is one line) */
+/* taller, center-aligned sub-heading row so the size badge sits with breathing
+   room above/below instead of filling the line edge-to-edge */
+.rw-app .popt { display: flex; align-items: center; gap: var(--sp-s); font-size: .78rem; color: var(--ink-2); }

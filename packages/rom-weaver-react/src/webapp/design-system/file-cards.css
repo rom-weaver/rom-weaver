@@ -1,0 +1,214 @@
+/* ═══ file cards ═══ */
+.rw-app .cards { display: flex; flex-direction: column; gap: var(--sp-l); }
+/* patches read as discrete, reorderable units - a touch more air between them */
+.rw-app .patch-cards { gap: var(--sp-l); }
+/* no trailing margin - the step-body's own bottom padding closes the section,
+   so card lists don't stack ~28px of dead space at every section's end */
+.rw-app .card {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-s);
+  padding: var(--sp-m); border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
+  animation: card-in .35s var(--ease) backwards;
+}
+.rw-app .card:nth-child(2) { animation-delay: .05s; } .rw-app .card:nth-child(3) { animation-delay: .1s; } .rw-app .card:nth-child(4) { animation-delay: .15s; }
+.rw-app .workflow-body.quiet .card { animation: none; }
+/* verdict borders are a PATCH concept (verified / weakly-verified / failed) -
+   ROM cards always keep the plain --seam border */
+.rw-app .card.ok { border-color: color-mix(in oklab, var(--verified) 42%, var(--seam)); }
+.rw-app .card.warn { border-color: color-mix(in oklab, var(--care) 55%, var(--seam)); }
+.rw-app .card.bad { border-color: color-mix(in oklab, var(--fault) 48%, var(--seam)); }
+
+/* the meta + action buttons ride the NAME line (the heading), not the optical
+   centre of the name+description block - so they stay in line with the title even
+   when a description wraps below */
+/* the card header is two columns: the name over its size·type sub-line on the
+   left, and a stacked actions column on the right - the action buttons on top
+   and the target right-aligned directly beneath them */
+.rw-app .card-top { display: flex; align-items: flex-start; gap: var(--sp-m); min-width: 0; }
+/* the name + sub-line sit at the card's content edge, lined up with the LEFT EDGE
+   of the collapsible section boxes below (not their chevron-indented labels) */
+.rw-app .card-name { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-xs); min-width: 0; }
+/* size·type ride one flush sub-line (plain text, left edge under the name) */
+.rw-app .card-meta { display: inline-flex; align-items: center; gap: var(--sp-s); flex: none; margin-inline-start: 0; }
+.rw-app .card-actions {
+  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-s);
+  /* the button boxes are taller than the name's text line - pull them up so
+     their CENTRE sits on the name line (1.3 × the .nm font size) */
+  margin-block-start: calc((1.3 * clamp(.8rem, 1.1vw + .55rem, 1.06rem) - var(--ctrl-h)) / 2);
+}
+.rw-app .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
+/* reordering happens from the handle only */
+.rw-app .handle {
+  flex: none; appearance: none; display: grid; place-items: center; width: var(--ctrl-h); height: var(--ctrl-h); padding: 0;
+  border: 1px solid var(--seam-strong); border-radius: 6px; background: var(--well);
+  color: var(--ink-3); cursor: grab; touch-action: none;
+  transition: color .15s, border-color .15s;
+}
+.rw-app .phandle { width: auto; min-width: var(--ctrl-h); padding-inline: 5px; grid-auto-flow: column; gap: var(--sp-xs); user-select: none; }
+.rw-app .phandle-number {
+  font-size: .8rem; font-weight: 800; line-height: 1; color: var(--ink-2);
+  text-decoration: underline dotted; text-decoration-color: var(--ink-4); text-underline-offset: 3px;
+}
+.rw-app .phandle-input {
+  width: var(--ctrl-h); min-width: 0; padding-inline: 2px; cursor: text; text-align: center;
+  appearance: textfield; -moz-appearance: textfield;
+}
+.rw-app .phandle-input::-webkit-inner-spin-button, .rw-app .phandle-input::-webkit-outer-spin-button {
+  appearance: none; -webkit-appearance: none; margin: 0;
+}
+.rw-app .handle svg { width: calc(var(--ctrl-h) * .6); height: calc(var(--ctrl-h) * .6); }
+.rw-app .handle:hover:not(:disabled), .rw-app .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
+/* press feedback so the handle reads as live on touch (no hover on mobile) - mirrors
+   the remove button's tactility, same box/size via --ctrl-h */
+.rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
+.rw-app .handle:disabled { cursor: default; opacity: .4; }
+.rw-app .card-name { flex: 1 1 auto; min-width: 0; }
+.rw-app .nmline { display: flex; align-items: center; gap: var(--sp-s); flex-wrap: wrap; width: 100%; min-width: 0; }
+.rw-app .nm-file { flex-basis: 100%; color: var(--ink-4); font-size: .7rem; overflow-wrap: anywhere; }
+.rw-app .nm {
+  font-weight: 650; line-height: 1.3; min-width: 0; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: clamp(.8rem, 1.1vw + .55rem, 1.06rem);
+}
+/* Patch names never truncate: they wrap freely (mid-word only as a last
+   resort) beside and under the floated controls. */
+.rw-app .patch-cards .nm {
+  white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+  display: inline; overflow: visible; line-height: 1.25;
+}
+/* in-archive folder path prefix on the name line - quieter than the file itself */
+.rw-app .nm .nm-folder { font-weight: 500; color: var(--ink-3); }
+/* the file size rides the name line, pushed to its right edge */
+/* file/track sizes render as recessed readout chips (same language as the drawer
+   header badges), cream text so a size reads as its own data point */
+/* the size is plain text (no pill) so it lines up flush under the name/header */
+.rw-app .fsize { flex: none; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); white-space: nowrap; }
+/* patch description rides under the name (some patch types provide one) */
+/* the description is a full-width row below the header, at the card content edge */
+.rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
+/* the description carries its own pencil (only when a description exists): the
+   text flows and the pencil trails it, aligned to the first line via the shared
+   .nm-edit vertical-align */
+.rw-app .patch-desc-line { min-width: 0; }
+.rw-app .patch-desc-line .patch-desc { display: inline; }
+.rw-app .patch-desc-line .nm-edit { width: 20px; height: 20px; }
+.rw-app .patch-desc-line .nm-edit svg { width: 12px; height: 12px; }
+/* Editing: the description field group flows in the row and its confirm/save
+   check trails it, aligned to the textarea's baseline row (bottom) so it sits
+   beside the field the way the name-row check sits beside the name input. */
+.rw-app .patch-desc-line.is-editing { display: flex; align-items: flex-end; gap: var(--sp-xs); }
+.rw-app .patch-desc-line.is-editing .patch-meta-inline { flex: 1 1 auto; min-width: 0; margin-block-start: 0; }
+.rw-app .patch-desc-line.is-editing .nm-edit { margin-block-end: 6px; }
+/* weak-verification note under the name - explains the yellow card border */
+.rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
+.rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
+:root[data-theme="light"] .patch-warn { color: #7a5300; }
+.rw-app .tag {
+  font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
+}
+.rw-app .tag.fmt { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, var(--seam-strong)); }
+/* remove reads as a sibling button to the drag handle - same box and size so
+   the two line up, with a destructive (red) hover */
+.rw-app .rm {
+  flex: none; appearance: none; padding: 0; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center;
+  border: 1px solid var(--seam-strong); border-radius: 6px; background: var(--well);
+  color: var(--ink-3); cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.rw-app .rm:hover, .rw-app .rm:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
+/* icon buttons: drop the UA <button> padding so glyphs center exactly */
+.rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
+.rw-app .rm svg { width: calc(var(--ctrl-h) * .47); height: calc(var(--ctrl-h) * .47); }
+/* the on/off switch leads the sub-heading line - the shared switch primitive scaled
+   down to the meta text (via the --sw-* vars), with a state word beside it. the two
+   words share one grid cell so the row never shifts width when toggled */
+.rw-app .patch-enable {
+  flex: none; display: inline-flex; align-items: center; gap: var(--sp-s); cursor: pointer;
+  padding: 5px; margin-block: -5px; margin-inline: -5px 4px;
+}
+.rw-app .patch-enable input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 14px; --sw-pad: 1px; --sw-travel: 12px; }
+.rw-app .patch-enable .switch-state { display: inline-grid; font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .02em; line-height: 1; color: var(--ink-3); }
+.rw-app .patch-enable .switch-state b { grid-area: 1 / 1; font-weight: 600; }
+.rw-app .patch-enable .switch-state .on { color: var(--thread-text); }
+.rw-app .patch-enable input:checked ~ .switch-state .off, .rw-app .patch-enable input:not(:checked) ~ .switch-state .on { visibility: hidden; }
+/* the target leads the sub-line as plain inline text (no pill): the icon + its
+   track dropdown sit together, the icon's left edge lining up with the name above */
+.rw-app .target-grp { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); white-space: nowrap; }
+.rw-app .target-grp > svg { width: .92rem; height: .92rem; color: var(--thread-text); flex: none; }
+.rw-app .target-grp.bad { color: var(--fault); }
+.rw-app .target-grp.bad > svg { color: var(--fault); }
+/* a disabled patch de-emphasises its track selection like the rest of the card */
+.rw-app .card.is-disabled .target-grp { color: var(--ink-3); }
+.rw-app .card.is-disabled .target-grp > svg { color: var(--ink-4); }
+.rw-app .meta-target-static { color: inherit; }
+.rw-app .meta-target-select {
+  appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+  padding: 0 13px 0 1px; margin: 0; line-height: 1.35;
+  /* a real (WCAG 2.5.8) touch target without growing the meta line's text rhythm */
+  min-height: 24px;
+  background-image: var(--chevron);
+  background-repeat: no-repeat; background-position: right center;
+}
+.rw-app .meta-target-select:focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; border-radius: 3px; }
+/* the format/system type rides the card-meta sub-line as plain text (not a badge),
+   set off from the size by a quiet middot */
+/* the type carries the brand accent on an enabled rom/patch (disabled patches mute
+   it below) */
+.rw-app .meta-fmt { font-size: calc(var(--badge-fs) * 0.92); font-stretch: 86%; letter-spacing: .04em; text-transform: uppercase; color: var(--thread-text); }
+.rw-app .card-meta .meta-fmt::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
+/* a matching middot separates the track selection from the size */
+.rw-app .card-meta .target-grp + .fsize::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
+/* readout / size / type badges hug their text (height ≈ the text line) so they sit
+   inline and vertically center against adjacent text rather than the taller buttons */
+.rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .ckgrp .tsz, .rw-app .meta-fmt {
+  display: inline-flex; align-items: center;
+}
+.rw-app .patch-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .16s var(--ease); }
+.rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: var(--sp-s); }
+.rw-app .card { transition: gap .16s var(--ease), border-color .15s, background .15s; }
+/* a disabled patch stays open - the body keeps its Options drawer so bundle
+   authors can edit name/description/checks without re-enabling - and reads
+   "off" via the dashed frame + desaturation below */
+.rw-app .card.is-disabled { background: color-mix(in oklab, var(--plate-2) 60%, var(--chassis)); border-style: dashed; border-color: var(--seam-strong); }
+/* the header reads clearly "off" by DESATURATING (not opacity-dimming, which
+   tanks text contrast / trips a11y): the name + size go muted grey and the type
+   badge loses its thread accent - all still legible. only the enable checkbox +
+   remove keep their crisp state so re-enabling/dropping is the obvious action. */
+.rw-app .card.is-disabled .nm { color: var(--ink-3); }
+.rw-app .card.is-disabled .patch-desc { color: var(--ink-4); margin-block-start: 6px; }
+.rw-app .card.is-disabled .fsize { color: var(--ink-3); }
+.rw-app .card.is-disabled .meta-fmt { color: var(--ink-3); border-color: var(--seam); }
+.rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
+.rw-app .card.is-disabled .handle { color: var(--ink-4); }
+@media (prefers-reduced-motion: reduce) { .rw-app .patch-body, .rw-app .card { transition: none; } }
+/* the "N patches off" mention above the apply button - no extra bottom margin,
+   the card's own grid gap separates it from the run button */
+.rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }
+.rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
+/* light mode: the golden --care is ~2.9:1 on the pale card face - too light for
+   small text. Use the same deep amber as the notice emphasis (clears 4.5:1). */
+:root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
+
+.rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.rw-app .verdict.ok { color: var(--verified); } .rw-app .verdict.bad { color: var(--fault); }
+.rw-app .verdict svg { width: 14px; height: 14px; }
+.rw-app .verdict.ok svg { animation: pop .35s var(--ease); }
+/* a passing verdict is sewn shut: fine sage stitches under the words */
+.rw-app .verdict.ok {
+  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 60%, transparent);
+  text-underline-offset: 4px;
+}
+
+/* extraction tree */
+.rw-app .tree { display: flex; flex-direction: column; gap: var(--sp-2xs); padding: 4px 0 2px; }
+.rw-app .tree-row { position: relative; display: flex; align-items: baseline; gap: var(--sp-s); min-height: 25px; padding: 3px 9px; border-radius: var(--r-s); background: var(--well); font-size: .78rem; }
+.rw-app .tree-row.d1 { margin-inline-start: 9px; }
+.rw-app .tree-row.d2 { margin-inline-start: 18px; }
+.rw-app .tree-row.d3 { margin-inline-start: 27px; }
+.rw-app .tree-row.d4 { margin-inline-start: 36px; }
+.rw-app .tree-elbow { position: absolute; inset-inline-start: -7px; top: -8px; bottom: 50%; width: 5px; border-inline-start: 2px solid var(--seam-strong); border-block-end: 2px solid var(--seam-strong); border-end-start-radius: 5px; }
+.rw-app .tree-row.d0 .tree-name { color: var(--ink-3); }
+.rw-app .tree-name { flex: 1 1 auto; min-width: 0; color: var(--ink); font-weight: 550; overflow-wrap: anywhere; }
+.rw-app .tree-meta { flex: none; display: inline-flex; gap: var(--sp-m); align-items: baseline; }
+.rw-app .tree-size { color: var(--ink-3); min-width: 62px; text-align: end; }
+.rw-app .tree-time { color: var(--thread-text); min-width: 44px; text-align: end; }

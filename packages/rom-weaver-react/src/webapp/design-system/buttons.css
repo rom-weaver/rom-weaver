@@ -1,0 +1,31 @@
+/* ═══ buttons ═══ */
+.rw-app .btn {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-s);
+  height: var(--ctl); padding-inline: 18px; border-radius: var(--r-s);
+  border: 1px solid var(--seam-strong); background: var(--plate-2); color: var(--ink);
+  font-size: .85rem; font-weight: 650; letter-spacing: .02em;
+  transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease), box-shadow .18s;
+}
+.rw-app .btn:hover { border-color: var(--ink-4); transform: translateY(-1px); }
+.rw-app .btn:active { transform: translateY(0) scale(.99); }
+.rw-app .btn svg { width: 15px; height: 15px; }
+.rw-app .btn.primary { background: var(--thread); border-color: var(--thread); color: var(--thread-ink); }
+.rw-app .btn.primary:hover { background: color-mix(in oklab, var(--thread) 88%, #fff); box-shadow: 0 4px 18px -6px color-mix(in oklab, var(--thread) 60%, transparent); }
+.rw-app .btn.ghost { background: transparent; }
+.rw-app .btn.danger { background: transparent; border-color: color-mix(in oklab, var(--fault) 55%, var(--seam-strong)); color: var(--fault); }
+.rw-app .btn.danger:hover { background: color-mix(in oklab, var(--fault) 10%, transparent); }
+.rw-app .btn.slim { height: 30px; padding-inline: 12px; font-size: .76rem; }
+/* the bundle button is the bundle's shipping tag: label-stock paper held on
+   by a dashed thread stitch - quieter than the solid weft-orange run button
+   above it, but cut from the same cloth */
+.rw-app .btn.bundle-dl {
+  border: 1px dashed color-mix(in oklab, var(--thread) 50%, transparent);
+  background: color-mix(in oklab, var(--weft) 7%, transparent);
+  color: var(--thread-text);
+}
+.rw-app .btn.bundle-dl:hover {
+  border-color: color-mix(in oklab, var(--thread) 75%, transparent);
+  background: color-mix(in oklab, var(--weft) 13%, transparent);
+}
+.rw-app .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.rw-app .btn.run { width: 100%; min-height: 46px; height: auto; padding-block: 6px; font-size: .95rem; letter-spacing: .04em; text-transform: uppercase; }
