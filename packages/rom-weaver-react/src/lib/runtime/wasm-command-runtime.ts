@@ -300,8 +300,8 @@ const invokeRomWeaverPatchValidateWorker = async (
   const ignoreChecksumValidation = Boolean(
     (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
       ?.ignoreChecksumValidation ||
-      (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
-        ?.ignore_checksum_validation,
+    (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
+      ?.ignore_checksum_validation,
   );
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =

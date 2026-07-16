@@ -463,9 +463,9 @@ function createWorkerStreamChannel({
 function hasAnyStreamHandler(handlers: WorkerStreamHandlers | null | undefined): boolean {
   return Boolean(
     typeof handlers?.onEvent === "function" ||
-      typeof handlers?.onNonJsonLine === "function" ||
-      typeof handlers?.onTraceEvent === "function" ||
-      typeof handlers?.onTraceNonJsonLine === "function",
+    typeof handlers?.onNonJsonLine === "function" ||
+    typeof handlers?.onTraceEvent === "function" ||
+    typeof handlers?.onTraceNonJsonLine === "function",
   );
 }
 

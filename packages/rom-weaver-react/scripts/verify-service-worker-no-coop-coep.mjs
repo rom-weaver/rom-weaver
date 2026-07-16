@@ -37,14 +37,10 @@ const readIsolationHeaders = (headers) => ({
 
 const startPreview = () =>
   new Promise((resolve, reject) => {
-    const child = spawn(
-      "npm",
-      ["run", "preview", "--", "--port", PORT, "--no-coop-coep"],
-      {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+    const child = spawn("npm", ["run", "preview", "--", "--port", PORT, "--no-coop-coep"], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let output = "";
     const timer = setTimeout(() => {
       reject(new Error(`Preview did not start within ${STARTUP_TIMEOUT_MS}ms.\n${output}`));

@@ -11,10 +11,7 @@ import type {
   RomWeaverRunRequest,
 } from "./rom-weaver-types.d.ts";
 
-export {
-  KNOWN_COMMAND_TYPES,
-  KNOWN_PATCH_COMMAND_TYPES,
-} from "./generated/rom-weaver-command-types.ts";
+export { KNOWN_COMMAND_TYPES, KNOWN_PATCH_COMMAND_TYPES } from "./generated/rom-weaver-command-types.ts";
 
 type RomWeaverPatchCommand = Extract<RomWeaverCommand, { type: "patch" }>["args"];
 type RomWeaverPatchCommandType = RomWeaverPatchCommand["type"];

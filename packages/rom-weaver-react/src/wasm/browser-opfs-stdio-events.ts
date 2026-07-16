@@ -7,11 +7,7 @@ import {
 import type { LineHandler, TraceLine } from "./browser-opfs-runtime-types.ts";
 import { basenameForTrace } from "./workers/worker-trace-format.ts";
 
-export {
-  basenameForTrace,
-  formatCommandForTrace,
-  formatErrorForTrace,
-} from "./workers/worker-trace-format.ts";
+export { basenameForTrace, formatCommandForTrace, formatErrorForTrace } from "./workers/worker-trace-format.ts";
 
 type RandomAccessFileIoStats = ReturnType<typeof createRandomAccessFileIoStats>;
 

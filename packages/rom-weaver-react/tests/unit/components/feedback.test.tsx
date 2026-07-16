@@ -33,7 +33,13 @@ describe("FileProgress", () => {
   it("renders the recessed panel with label, meter, readout, and cancel", () => {
     const onCancel = vi.fn();
     const { container } = render(
-      <FileProgress cancelLabel="Cancel patch staging" id="prog-1" label="Reading p.ips" onCancel={onCancel} value="12%" />,
+      <FileProgress
+        cancelLabel="Cancel patch staging"
+        id="prog-1"
+        label="Reading p.ips"
+        onCancel={onCancel}
+        value="12%"
+      />,
     );
     const panel = container.querySelector(".prog-panel.fileprog");
     expect(panel?.id).toBe("prog-1");

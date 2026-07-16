@@ -1,9 +1,4 @@
-export type {
-  SettingsDraftState,
-  SettingsFieldKey,
-  SettingsState,
-  SettingsUiState,
-} from "./settings-metadata.ts";
+export type { SettingsDraftState, SettingsFieldKey, SettingsState, SettingsUiState } from "./settings-metadata.ts";
 export {
   copySettings,
   getCompressionProfileFromIndex,

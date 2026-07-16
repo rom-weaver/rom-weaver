@@ -75,9 +75,9 @@ function isDirectoryHandle(handle: unknown): handle is FileSystemDirectoryHandle
   const candidate = handle as Partial<FileSystemDirectoryHandleLike>;
   return Boolean(
     candidate.kind === "directory" &&
-      typeof candidate.entries === "function" &&
-      typeof candidate.getDirectoryHandle === "function" &&
-      typeof candidate.getFileHandle === "function",
+    typeof candidate.entries === "function" &&
+    typeof candidate.getDirectoryHandle === "function" &&
+    typeof candidate.getFileHandle === "function",
   );
 }
 

@@ -679,14 +679,7 @@ const useLocalApplyPatchFormSession = ({
       if (patches === undefined) setInternalPatches(nextPatches);
       onPatchesChange?.(nextPatches);
     },
-    [
-      clearDismissibleErrors,
-      getPatchKey,
-      invalidateCompletedOutputState,
-      onPatchesChange,
-      patches,
-      setPatchInfoByKey,
-    ],
+    [clearDismissibleErrors, getPatchKey, invalidateCompletedOutputState, onPatchesChange, patches, setPatchInfoByKey],
   );
   const getStableInputInfo = useCallback(
     (info: StagedInputInfo, sources: BinarySource[]) => {

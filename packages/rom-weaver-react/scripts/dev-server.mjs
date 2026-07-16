@@ -116,7 +116,8 @@ const parseArguments = (argv) => {
     options.invalid = true;
   }
   if (!Number.isFinite(options.port)) options.port = parseInt(process.env.PORT || "", 10);
-  if (!Number.isFinite(options.port)) options.port = options.mode === "preview" ? DEFAULT_PREVIEW_PORT : DEFAULT_DEV_PORT;
+  if (!Number.isFinite(options.port))
+    options.port = options.mode === "preview" ? DEFAULT_PREVIEW_PORT : DEFAULT_DEV_PORT;
 
   return options;
 };
@@ -458,13 +459,7 @@ const startDevServer = async (options) => {
       setSecurityHeaders(res, securityOptions);
       if (handleE2eCorpusRequest(req, res, securityOptions)) return;
       if (!viteServer) {
-        send(
-          res,
-          503,
-          { "Content-Type": "text/plain; charset=utf-8" },
-          "Vite dev server is starting",
-          securityOptions,
-        );
+        send(res, 503, { "Content-Type": "text/plain; charset=utf-8" }, "Vite dev server is starting", securityOptions);
         return;
       }
       viteServer.middlewares(req, res);
@@ -648,7 +643,13 @@ const startPreviewServer = async (options) => {
 
   await listen(portMuxServer, options.port, BIND_HOST);
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], null);
-  printUrls("RomWeaver React Vite preview server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
+  printUrls(
+    "RomWeaver React Vite preview server:",
+    options.port,
+    lanAddresses,
+    certificate.paths.cert,
+    securityOptions,
+  );
   if (options.open) openBrowser(getLocalUrl(options.port));
 };
 

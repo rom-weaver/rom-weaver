@@ -82,7 +82,11 @@ describe("DropZone", () => {
     expect(drop).toBeTruthy();
     const lanes = Array.from(container.querySelectorAll(".formats-lane"));
     expect(lanes).toHaveLength(2);
-    expect(lanes.map((lane) => Array.from(lane.querySelectorAll(".formats-set:first-child .fmt")).map((pill) => pill.textContent))).toEqual([
+    expect(
+      lanes.map((lane) =>
+        Array.from(lane.querySelectorAll(".formats-set:first-child .fmt")).map((pill) => pill.textContent),
+      ),
+    ).toEqual([
       ["sfc", "nes"],
       ["ips", "bps"],
     ]);

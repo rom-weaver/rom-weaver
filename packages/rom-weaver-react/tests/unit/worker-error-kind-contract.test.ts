@@ -19,14 +19,15 @@ const CANONICAL_DISPLAY_TO_KIND: ReadonlyArray<[message: string, kind: RomWeaver
 ];
 
 describe("worker-error kind contract", () => {
-  it.each(
-    CANONICAL_DISPLAY_TO_KIND,
-  )("classifies %j as kind %j from the canonical Rust Display prefix", (message, kind) => {
-    // A plain Error carries no explicit `kind`, so resolveWorkerErrorKind
-    // falls through to message-prefix inference (the regex under test).
-    const error = new Error(message);
-    expect(resolveWorkerErrorKind(error, error.name, message)).toBe(kind);
-  });
+  it.each(CANONICAL_DISPLAY_TO_KIND)(
+    "classifies %j as kind %j from the canonical Rust Display prefix",
+    (message, kind) => {
+      // A plain Error carries no explicit `kind`, so resolveWorkerErrorKind
+      // falls through to message-prefix inference (the regex under test).
+      const error = new Error(message);
+      expect(resolveWorkerErrorKind(error, error.name, message)).toBe(kind);
+    },
+  );
 
   it("prefers an explicit typed error kind over message-prefix inference", () => {
     // The Rust core attaches the generated RomWeaverErrorKind to a failed event

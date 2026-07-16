@@ -86,7 +86,11 @@ const renderView = ({
   const controllers = {
     dialog: storeOf({ ...createInitialDialogState() }) as unknown as DialogController,
     output: storeOf(outputState()) as unknown as PatcherOutputController,
-    patchStack: { ...storeOf({ items: patches }), removeItem: () => undefined, reorder: () => undefined } as unknown as PatcherStackController,
+    patchStack: {
+      ...storeOf({ items: patches }),
+      removeItem: () => undefined,
+      reorder: () => undefined,
+    } as unknown as PatcherStackController,
     ui: storeOf(ui) as unknown as PatcherUiController,
   };
   return render(
@@ -144,14 +148,14 @@ describe("apply workflow view - staged bench", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
     const { container } = renderView({ patches: [patch], ui });
 
-    const romLabels = Array.from(
-      container.querySelectorAll("#rom-weaver-list-input-stack .cks-head .lab"),
-    ).map((el) => el.textContent);
+    const romLabels = Array.from(container.querySelectorAll("#rom-weaver-list-input-stack .cks-head .lab")).map(
+      (el) => el.textContent,
+    );
     expect(romLabels).toEqual(["Extract", "Checks"]);
 
-    const patchLabels = Array.from(
-      container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
-    ).map((el) => el.textContent);
+    const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
+      (el) => el.textContent,
+    );
     // No Options drawer: a staging patch offers no header choice yet, and
     // empty drawers stay off the plain apply view.
     expect(patchLabels).toEqual(["Extract"]);
@@ -164,9 +168,9 @@ describe("apply workflow view - staged bench", () => {
     patch.validationValues = ["in crc32=C6FB1252", "out crc32=12345678"];
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ patches: [patch], ui });
-    const patchLabels = Array.from(
-      container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab"),
-    ).map((el) => el.textContent);
+    const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
+      (el) => el.textContent,
+    );
     expect(patchLabels).toEqual(["Checks"]);
   });
 

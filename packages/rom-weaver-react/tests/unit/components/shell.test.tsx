@@ -65,9 +65,7 @@ describe("Masthead", () => {
     const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3 · main* · a1b2c3d· 8 threads");
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
-    expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe(
-      "v1.2.3+main.dirty.a1b2c3d",
-    );
+    expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
     expect(getByRole("link", { name: "Donate" }).getAttribute("href")).toBe("https://example.com/donate");
     fireEvent.click(reset);

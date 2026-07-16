@@ -24,11 +24,10 @@ const GIT_COMMON_ROOT = (() => {
 const STRESS_1GB = process.env.ROM_WEAVER_WASM_STRESS_1GB === "1";
 const EXHAUSTIVE = process.env.ROM_WEAVER_WASM_EXHAUSTIVE === "1";
 const BENCH_OUTPUT_JSON = process.env.ROM_WEAVER_WASM_BENCH_OUTPUT_JSON;
-const BENCH_ENV = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => key.startsWith("ROM_WEAVER_WASM_")),
-);
+const BENCH_ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("ROM_WEAVER_WASM_")));
 const BENCH_MODE =
-  process.env.ROM_WEAVER_WASM_BENCH === "1" || Object.keys(BENCH_ENV).some((key) => key.startsWith("ROM_WEAVER_WASM_BENCH_"));
+  process.env.ROM_WEAVER_WASM_BENCH === "1" ||
+  Object.keys(BENCH_ENV).some((key) => key.startsWith("ROM_WEAVER_WASM_BENCH_"));
 const BENCH_PROFILE_DIR = fileURLToPath(new URL("../../target/browser-bench-profile", import.meta.url));
 const PERSISTENT_CONTEXT = STRESS_1GB ? true : BENCH_MODE ? BENCH_PROFILE_DIR : false;
 

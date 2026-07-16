@@ -1,38 +1,33 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 // Destination for synced wasm artifacts inside the merged react package.
-const PACKAGE_DIR = resolve(SCRIPT_DIR, '..', 'src', 'wasm');
-const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..');
+const PACKAGE_DIR = resolve(SCRIPT_DIR, "..", "src", "wasm");
+const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..", "..");
 const ARTIFACTS_DIR_INPUT = process.argv[2] ?? process.env.ROM_WEAVER_WASM_ARTIFACT_DIR;
 
 if (!ARTIFACTS_DIR_INPUT) {
   fail(
-    'Missing artifacts directory. Pass it as `npm run prepare:dist -- /path/to/wasm-artifacts` or set ROM_WEAVER_WASM_ARTIFACT_DIR.',
+    "Missing artifacts directory. Pass it as `npm run prepare:dist -- /path/to/wasm-artifacts` or set ROM_WEAVER_WASM_ARTIFACT_DIR.",
   );
 }
 
 const DIST_WASM_DIR = resolve(process.cwd(), ARTIFACTS_DIR_INPUT);
 
 const REQUIRED_DIST_COPIES = [
-  { src: 'rom-weaver-app.wasm', dst: 'rom-weaver-app.wasm' },
-  { src: 'rom-weaver-app.wasm.br', dst: 'rom-weaver-app.wasm.br' },
+  { src: "rom-weaver-app.wasm", dst: "rom-weaver-app.wasm" },
+  { src: "rom-weaver-app.wasm.br", dst: "rom-weaver-app.wasm.br" },
 ];
 
-const OPTIONAL_ROOT_FILES = [
-  'NOTICE',
-  'THIRD_PARTY_LICENSES.md',
-];
+const OPTIONAL_ROOT_FILES = ["NOTICE", "THIRD_PARTY_LICENSES.md"];
 
 function main() {
   mkdirSync(PACKAGE_DIR, { recursive: true });
 
   if (!existsSync(DIST_WASM_DIR)) {
-    fail(
-      `Missing artifacts directory: ${DIST_WASM_DIR}. Run mise run build-wasm and pass that output directory here.`,
-    );
+    fail(`Missing artifacts directory: ${DIST_WASM_DIR}. Run mise run build-wasm and pass that output directory here.`);
   }
 
   for (const { src: srcName, dst: dstName } of REQUIRED_DIST_COPIES) {
@@ -59,7 +54,7 @@ function main() {
     log(`copied ${relativeFromRepo(src)} -> ${relativeFromRepo(dst)}`);
   }
 
-  log('package sync complete');
+  log("package sync complete");
 }
 
 function relativeFromRepo(path) {

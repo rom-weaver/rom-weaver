@@ -132,11 +132,7 @@ class CreateWorkflow extends CreateWorkflowController<BrowserSourceRef, BrowserS
 
 export type { BrowserSaveDestination } from "../../types/output.ts";
 export type { WorkflowProgress } from "../../types/progress.ts";
-export type {
-  BrowserApplyResult,
-  BrowserCreateResult,
-  BrowserTrimResult,
-} from "../../types/public.ts";
+export type { BrowserApplyResult, BrowserCreateResult, BrowserTrimResult } from "../../types/public.ts";
 export type { CandidateSelectionRequest } from "../../types/selection.ts";
 export type { ApplySettings, CreateSettings } from "../../types/settings.ts";
 
