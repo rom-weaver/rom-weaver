@@ -286,7 +286,7 @@ msgstr "Reading dropped files…"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.release"
-msgstr "Release to stage files"
+msgstr "Release to add files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
