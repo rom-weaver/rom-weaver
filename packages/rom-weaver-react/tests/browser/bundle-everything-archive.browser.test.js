@@ -47,8 +47,12 @@ const buildEverythingArchive = async () => {
   const output = result?.output;
   if (!output) throw new Error("Bundle compression did not return output");
   try {
+    // Materialize the bytes before dispose() deletes the backing OPFS file - a
+    // File built straight from the blob references that file lazily, and reads
+    // during the later drop intermittently fail once it is gone.
     const blob = await browserRuntime.publicOutput.getBlob(output);
-    return new File([blob], "bundle.zip", { type: "application/zip" });
+    const bytes = await blob.arrayBuffer();
+    return new File([bytes], "bundle.zip", { type: "application/zip" });
   } finally {
     await output.dispose().catch(() => undefined);
   }

@@ -74,8 +74,12 @@ const buildZip = async (entries, outputName) => {
   const output = result?.output;
   if (!output) throw new Error("Zip compression did not return output");
   try {
+    // Materialize the bytes before dispose() deletes the backing OPFS file - a
+    // File built straight from the blob references that file lazily, and reads
+    // during the later drop intermittently fail once it is gone.
     const blob = await browserRuntime.publicOutput.getBlob(output);
-    return new File([blob], outputName, { type: "application/zip" });
+    const bytes = await blob.arrayBuffer();
+    return new File([bytes], outputName, { type: "application/zip" });
   } finally {
     await output.dispose().catch(() => undefined);
   }
@@ -333,18 +337,20 @@ test("bundle url session seeds enablement + output defaults and applies to a dow
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(true);
   getPatchToggles()[1]?.click();
   await expect.poll(() => getPatchToggles()[1]?.checked).toBe(false);
-  // Bundle metadata reaches the patch cards; the editable Options fields live
-  // behind bundle-edit mode, entered here through the session bar's action.
+  // Bundle metadata reaches the patch cards; the plain view shows the bundle
+  // description as static card text.
   const patchStackText = () => document.getElementById("rom-weaver-list-patch-stack")?.textContent || "";
   expect(patchStackText()).toContain("stable");
+  expect(document.getElementById("rom-weaver-patch-card-description-0")?.textContent).toBe("Required core patch");
+  // Bundle-edit mode (entered through the session bar's action) swaps the
+  // static description for the inline editable fields on the card.
   const sessionEditButton = await waitForState(() => document.getElementById("rom-weaver-button-bundle-edit-session"));
   sessionEditButton?.click();
-  document.querySelector("#rom-weaver-list-patch-stack .optsblock .cks-head")?.click();
   const descriptionInput = await waitForState(() => document.getElementById("rom-weaver-patch-description-0"));
   expect(descriptionInput?.value).toBe("Required core patch");
   expect(descriptionInput?.tagName).toBe("TEXTAREA");
   expect(document.querySelector(".bundle-banner")).toBeNull();
-  expect(document.getElementById("rom-weaver-patch-card-description-0")?.textContent).toBe("Required core patch");
+  expect(document.getElementById("rom-weaver-patch-card-description-0")).toBeNull();
   // Output defaults applied once through the output controller.
   await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("bundle-output");
 

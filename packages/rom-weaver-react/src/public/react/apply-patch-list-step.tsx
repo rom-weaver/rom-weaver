@@ -219,6 +219,53 @@ const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "output") 
   return checks;
 };
 
+/** Bundle-edit mode: name/description sit inline on the card (in place of the
+ * static display name/description), not tucked inside the Options drawer. */
+const PatchMetaFields = ({
+  index,
+  item,
+  meta,
+  onMetaChange,
+}: {
+  index: number;
+  item: PatchStackItemState;
+  meta?: BundlePatchMeta;
+  onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
+}) => (
+  <div className="optsgrid patch-meta-inline">
+    <div className="ofld patch-name-field">
+      <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
+        Patch name
+      </label>
+      <input
+        className="input popt-input"
+        defaultValue={meta?.name || ""}
+        id={`rom-weaver-patch-name-${index}`}
+        key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
+        onBlur={(event) => onMetaChange({ name: event.currentTarget.value.trim() || undefined })}
+        placeholder={item.fileName.replace(/\.[^.]+$/, "")}
+        type="text"
+      />
+    </div>
+    <div className="ofld patch-description-field">
+      <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
+        Description
+      </label>
+      <textarea
+        className="input popt-input"
+        defaultValue={meta?.description || ""}
+        id={`rom-weaver-patch-description-${index}`}
+        key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
+        onBlur={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
+        onInput={(event) => autosizeTextarea(event.currentTarget)}
+        placeholder="What this patch changes"
+        ref={autosizeTextarea}
+        rows={1}
+      />
+    </div>
+  </div>
+);
+
 const PatchOptions = ({
   disabled,
   editMode,
@@ -331,38 +378,6 @@ const PatchOptions = ({
     >
       {editMode ? (
         <>
-          <div className="optsgrid">
-            <div className="ofld patch-name-field">
-              <label className="ofld-l" htmlFor={`rom-weaver-patch-name-${index}`}>
-                Patch name
-              </label>
-              <input
-                className="input popt-input"
-                defaultValue={meta?.name || ""}
-                id={`rom-weaver-patch-name-${index}`}
-                key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
-                onBlur={(event) => onMetaChange?.({ name: event.currentTarget.value.trim() || undefined })}
-                placeholder={item.fileName.replace(/\.[^.]+$/, "")}
-                type="text"
-              />
-            </div>
-            <div className="ofld patch-description-field">
-              <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
-                Description
-              </label>
-              <textarea
-                className="input popt-input"
-                defaultValue={meta?.description || ""}
-                id={`rom-weaver-patch-description-${index}`}
-                key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
-                onBlur={(event) => onMetaChange?.({ description: event.currentTarget.value.trim() || undefined })}
-                onInput={(event) => autosizeTextarea(event.currentTarget)}
-                placeholder="What this patch changes"
-                ref={autosizeTextarea}
-                rows={1}
-              />
-            </div>
-          </div>
           <div className="verification-pair">
             {(["input", "output"] as const).map((side) => {
               const embedded = side === "input" ? embeddedInput : embeddedOutput;
@@ -766,7 +781,7 @@ const ApplyPatchListStep = ({
               {...rowProps}
               className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
               description={
-                description ? (
+                description && !bundleEditMode ? (
                   <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
                     {description}
                   </p>
@@ -807,7 +822,7 @@ const ApplyPatchListStep = ({
               }
               name={
                 <ExtractName
-                  displayName={bundleMeta?.[index]?.name}
+                  displayName={bundleEditMode ? undefined : bundleMeta?.[index]?.name}
                   fileName={item.fileName}
                   fileSize={item.fileSize}
                   // The first archive-path entry is the source archive itself (shown
@@ -836,6 +851,14 @@ const ApplyPatchListStep = ({
                 <div className="patch-body-inner">
                   {verdict === "bad" ? (
                     <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
+                  ) : null}
+                  {bundleEditMode && onBundleMetaChange ? (
+                    <PatchMetaFields
+                      index={index}
+                      item={item}
+                      meta={bundleMeta?.[index]}
+                      onMetaChange={(updates) => onBundleMetaChange(index, updates)}
+                    />
                   ) : null}
                   {isDisabled ? null : (
                     <ExtractDrawer

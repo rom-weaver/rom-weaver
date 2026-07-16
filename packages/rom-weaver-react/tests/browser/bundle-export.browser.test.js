@@ -86,9 +86,9 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(descriptionInput).not.toBeNull();
   setFormControlValue(descriptionInput, "Adds the change");
   descriptionInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-  await expect
-    .poll(() => document.getElementById("rom-weaver-patch-card-description-0")?.textContent)
-    .toBe("Adds the change");
+  // The committed description remounts the keyed inline field (the static card
+  // line stays hidden while editing) - wait for that render before exporting.
+  await expect.poll(() => document.getElementById("rom-weaver-patch-description-0") !== descriptionInput).toBe(true);
   const checksInput = document.getElementById("rom-weaver-patch-input-crc32-0");
   expect(checksInput).not.toBeNull();
   setFormControlValue(checksInput, "deadbeef");

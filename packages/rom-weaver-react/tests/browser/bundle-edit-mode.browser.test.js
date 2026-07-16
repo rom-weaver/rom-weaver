@@ -29,12 +29,20 @@ const buildZip = async (entries, outputName) => {
   const output = result?.output;
   if (!output) throw new Error("Zip compression did not return output");
   try {
+    // Materialize the bytes before dispose() deletes the backing OPFS file - a
+    // File built straight from the blob references that file lazily, and reads
+    // during the later drop intermittently fail once it is gone.
     const blob = await browserRuntime.publicOutput.getBlob(output);
-    return new File([blob], outputName, { type: "application/zip" });
+    const bytes = await blob.arrayBuffer();
+    return new File([bytes], outputName, { type: "application/zip" });
   } finally {
     await output.dispose().catch(() => undefined);
   }
 };
+
+/** Each built zip gets a unique name - back-to-back tests staging identically
+ * named archives race the previous test's OPFS cleanup. */
+let bundleZipSeq = 0;
 
 /** A checks-only (without-ROM) bundle zip: index + core patch + optional patch. */
 const buildWithoutRomBundle = async ({ romCrc32, outputCrc32 }) => {
@@ -61,7 +69,7 @@ const buildWithoutRomBundle = async ({ romCrc32, outputCrc32 }) => {
       { file: patchFile, fileName: "change.ips" },
       { file: alternateFile, fileName: "alternate.ips" },
     ],
-    "without-rom.zip",
+    `without-rom-${++bundleZipSeq}.zip`,
   );
 };
 
