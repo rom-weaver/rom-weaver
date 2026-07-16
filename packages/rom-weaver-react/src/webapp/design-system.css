@@ -1146,7 +1146,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
      larger value. Each row is its own grid, so this width must be fixed. */
   margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-xs) var(--sp-s);
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
-  border-block: 1px solid var(--seam-soft); border-inline: 0; transition: background .15s, border-color .15s;
+  /* one theme-aware seam colour drives every row edge AND the paired CRC32|BYTES
+     seam below, so light mode's stronger edge (see the light override) reaches
+     the restored half-row borders instead of leaving them a shade lighter */
+  --ck-seam: var(--seam-soft);
+  border-block: 1px solid var(--ck-seam); border-inline: 0; transition: background .15s, border-color .15s;
 }
 /* rows bleed past the .cks-inner inline inset (10px) so the dividers run edge to
    edge; the width is widened to match (flex-stretch alone leaves a fixed width =
@@ -1211,8 +1215,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* the paired row: restore the trailing cell's top hairline (the stacked-row
    border collapse assumed one column) and seam the two cells apart */
 .rw-app .ckrows:not(.patch-check-columns) .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
-  border-inline-start: 1px solid var(--seam-soft);
-  border-block-start-color: var(--seam-soft);
+  border-inline-start: 1px solid var(--ck-seam);
+  border-block-start-color: var(--ck-seam);
 }
 
 /* wide drawer (≥760px): two-plus labelled groups (Unchanged / Fix header /
@@ -1238,8 +1242,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
      CRC32|BYTES pair when the drawer itself is wide */
   .rw-app .ckrows.patch-check-columns .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
   .rw-app .ckrows.patch-check-columns .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
-    border-inline-start: 1px solid var(--seam-soft);
-    border-block-start-color: var(--seam-soft);
+    border-inline-start: 1px solid var(--ck-seam);
+    border-block-start-color: var(--ck-seam);
   }
 }
 /* below the width where even the floor size can't hold 40ch beside the label
@@ -1264,7 +1268,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    the cream label-stock); light mode keeps its rich amber --weft */
 :root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
 /* checksum / verification rows need a clearer edge on paper */
-:root[data-theme="light"] .ck { border-color: var(--seam-strong); }
+:root[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
 /* tinted row backgrounds (bad / hover / woven) drop the grey label to ~4.4:1 in
    light mode - one shade darker keeps the label clear on every row state */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
