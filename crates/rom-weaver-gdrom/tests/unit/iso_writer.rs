@@ -5,7 +5,7 @@
 use std::io::Cursor;
 
 use super::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
-use super::iso_writer::{IsoFile, IsoTimestamp, build_iso};
+use super::iso_writer::{IsoEntry, IsoFile, IsoTimestamp, build_iso, plan_iso};
 use super::mode1::encode_mode1_sector;
 use super::sector::{LOGICAL_SECTOR_SIZE, SectorFormat};
 
@@ -24,6 +24,36 @@ fn sample_files() -> Vec<IsoFile> {
         file("MAKUMA.AFS", vec![0xCD; SECTOR * 3 + 17]), // spans 4 sectors
         file("README.TXT", b"hello gd-rom rebuild".to_vec()),
     ]
+}
+
+fn read_u32(bytes: &[u8], offset: usize, big_endian: bool) -> u32 {
+    let raw: [u8; 4] = bytes[offset..offset + 4].try_into().expect("u32 field");
+    if big_endian {
+        u32::from_be_bytes(raw)
+    } else {
+        u32::from_le_bytes(raw)
+    }
+}
+
+fn decode_path_table(table: &[u8], big_endian: bool) -> Vec<(Vec<u8>, u32, u16)> {
+    let mut entries = Vec::new();
+    let mut offset = 0;
+    while offset < table.len() {
+        let name_len = usize::from(table[offset]);
+        let extent_lba = read_u32(table, offset + 2, big_endian);
+        let parent_raw: [u8; 2] = table[offset + 6..offset + 8]
+            .try_into()
+            .expect("parent index");
+        let parent_index = if big_endian {
+            u16::from_be_bytes(parent_raw)
+        } else {
+            u16::from_le_bytes(parent_raw)
+        };
+        let name = table[offset + 8..offset + 8 + name_len].to_vec();
+        entries.push((name, extent_lba, parent_index));
+        offset += 8 + name_len + (name_len & 1);
+    }
+    entries
 }
 
 fn assert_round_trips(files: &[IsoFile], bias: u32, image: Vec<u8>) {
@@ -86,6 +116,40 @@ fn build_iso_round_trips_nested_directories() {
         let entry = fs.file(&f.path).expect("nested file").clone();
         assert_eq!(fs.read_file(&entry).unwrap(), f.data);
     }
+}
+
+#[test]
+fn path_tables_record_final_directory_extents_in_both_endian_forms() {
+    let bias = GD_HIGH_DENSITY_START_LBA;
+    let image = build_iso(
+        &[file("DATA/ITEM.BIN", vec![1; 32])],
+        bias,
+        IsoTimestamp::default(),
+    )
+    .expect("build");
+    let pvd_sector = &image[16 * SECTOR..17 * SECTOR];
+    let pvd = super::iso9660::parse_primary_volume_descriptor(pvd_sector).expect("PVD");
+    let root_offset = (pvd.root.extent_lba - bias) as usize * SECTOR;
+    let root_extent = &image[root_offset..root_offset + pvd.root.data_len as usize];
+    let data_dir = super::iso9660::parse_directory(root_extent)
+        .expect("root directory")
+        .into_iter()
+        .find(|entry| entry.is_dir && entry.name == "DATA")
+        .expect("DATA directory");
+
+    let table_size = read_u32(pvd_sector, 132, false) as usize;
+    let read_table = |location_offset: usize, big_endian: bool| {
+        let table_lba = read_u32(pvd_sector, location_offset, big_endian);
+        let table_offset = (table_lba - bias) as usize * SECTOR;
+        decode_path_table(&image[table_offset..table_offset + table_size], big_endian)
+    };
+    let expected = vec![
+        (vec![0], pvd.root.extent_lba, 1),
+        (b"DATA".to_vec(), data_dir.extent_lba, 1),
+    ];
+
+    assert_eq!(read_table(140, false), expected);
+    assert_eq!(read_table(148, true), expected);
 }
 
 #[test]
@@ -191,4 +255,49 @@ fn empty_file_is_authored_and_read_back() {
     let empty = fs.file("EMPTY.DAT").expect("empty file").clone();
     assert_eq!(empty.size, 0);
     assert_eq!(fs.read_file(&empty).unwrap(), Vec::<u8>::new());
+}
+
+#[test]
+fn build_iso_rejects_file_identifier_that_overflows_its_directory_record() {
+    let name = "A".repeat(220);
+    let error = build_iso(&[file(&name, vec![1])], 0, IsoTimestamp::default())
+        .expect_err("220-byte leaf plus ;1 must exceed a directory record");
+
+    assert!(
+        error.to_string().contains("256-byte directory record"),
+        "{error}"
+    );
+}
+
+#[test]
+fn plan_iso_rejects_start_lba_that_overflows_recorded_extents() {
+    let error = match plan_iso(
+        &[IsoEntry {
+            path: "FILE.BIN".to_string(),
+            size: 1,
+        }],
+        u32::MAX,
+        IsoTimestamp::default(),
+    ) {
+        Err(error) => error,
+        Ok(_) => panic!("start LBA must not wrap recorded extents"),
+    };
+
+    assert!(error.to_string().contains("plus start LBA"), "{error}");
+}
+
+#[test]
+fn plan_iso_rejects_bias_when_a_two_sector_file_end_overflows() {
+    let entries = [IsoEntry {
+        path: "TWO.BIN".to_string(),
+        size: (SECTOR + 1) as u32,
+    }];
+    let baseline = plan_iso(&entries, 0, IsoTimestamp::default()).expect("baseline plan");
+    let high_bias = u32::MAX - baseline.files[0].lba;
+    let error = match plan_iso(&entries, high_bias, IsoTimestamp::default()) {
+        Err(error) => error,
+        Ok(_) => panic!("last file sector must not wrap"),
+    };
+
+    assert!(error.to_string().contains("volume end"), "{error}");
 }
