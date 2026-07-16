@@ -540,6 +540,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   .rw-app .hero-lead::before, .rw-app .dropveil::before,
   .rw-app .meter .fill::after, .rw-app .step.is-woven::before { animation: none; }
 }
+/* iOS WebKit can't composite mask-position animation - the drifting weave
+   repaints the full hero every frame and lags the whole page. Texture stays
+   (animation:none leaves the mask at rest); only the drift stops. */
+@supports (-webkit-touch-callout: none) {
+  .rw-app .hero-lead::before, .rw-app .dropveil::before { animation: none; }
+}
 /* selvage thread pulled across the top edge, fading at the ends */
 .rw-app .hero-lead::after {
   content: ""; position: absolute; inset-inline: 0; top: 0; height: 2px; pointer-events: none;

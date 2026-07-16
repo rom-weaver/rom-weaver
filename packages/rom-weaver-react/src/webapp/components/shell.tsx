@@ -9,6 +9,7 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
+import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 
@@ -125,11 +126,6 @@ const ModeRail = ({
   );
 };
 
-const reducedMotion = () =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 /**
  * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
  * button via a view transition. The wipe itself is the CSS `theme-wipe`
@@ -141,7 +137,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
     const root = document.documentElement;
-    if (typeof document.startViewTransition !== "function" || reducedMotion()) {
+    if (viewTransitionsUnavailable()) {
       toggleTheme();
       return;
     }
