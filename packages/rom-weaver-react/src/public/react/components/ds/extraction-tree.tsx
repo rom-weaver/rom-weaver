@@ -70,7 +70,7 @@ const buildExtractionLevels = (
   });
   // Compare by basename: when the chain already ends with the extracted leaf (whose name may carry
   // its full in-archive path), don't append a duplicate bare-basename level for the same file.
-  const last = levels[levels.length - 1];
+  const last = levels.at(-1);
   if (!last || getBaseFileName(last.name) !== getBaseFileName(fileName)) {
     levels.push({
       name: fileName,
@@ -105,7 +105,7 @@ const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
 
 const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?: string }) => {
   if (levels.length === 0) return null;
-  const last = levels[levels.length - 1];
+  const last = levels.at(-1);
   if (!last) return null;
 
   const nameLine = (
@@ -143,8 +143,7 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
       >
         <div className="tree mono">
           {levels.map((level, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: Tree depth is intentionally positional and names are not unique.
-            <TreeRow depth={index} key={`${index}:${level.name}`} level={level} />
+            <TreeRow depth={index} key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`} level={level} />
           ))}
         </div>
       </Drawer>
@@ -250,7 +249,7 @@ const ExtractDrawer = ({
   // the card keeps the same structure when extraction metadata lands.
   if (!always && levels.length <= 1 && !resolvedTiming) return null;
   const first = levels[0];
-  const last = levels[levels.length - 1];
+  const last = levels.at(-1);
   if (!last) return null;
   const sizeText =
     levels.length === 1
@@ -273,8 +272,7 @@ const ExtractDrawer = ({
     >
       <div className="tree mono">
         {levels.map((level, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: Tree depth is intentionally positional and names are not unique.
-          <TreeRow depth={index} key={`${index}:${level.name}`} level={level} />
+          <TreeRow depth={index} key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`} level={level} />
         ))}
       </div>
     </Drawer>

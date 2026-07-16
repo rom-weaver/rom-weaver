@@ -448,7 +448,7 @@ class OpfsProxyServer {
       if (part === undefined) throw new ProxyErrno(ERRNO_NOENT);
       dir = (await dir.getDirectoryHandle(part, { create })) as FileSystemDirectoryHandleLike;
     }
-    const name = location.parts[location.parts.length - 1];
+    const name = location.parts.at(-1);
     if (name === undefined) throw new ProxyErrno(ERRNO_NOENT);
     return { dir, name };
   }
@@ -566,11 +566,6 @@ class OpfsProxyServer {
     this.pendingByPath.clear();
   }
 }
-
-// FileSystemFileHandle surface used for rename via move() when the browser supports it.
-type FileSystemFileHandleLike = {
-  move?: (destination: FileSystemDirectoryHandle, name?: string) => Promise<void>;
-};
 
 /** Carries a specific WASI errno out of an op handler so STATUS reflects the real failure kind. */
 class ProxyErrno extends Error {

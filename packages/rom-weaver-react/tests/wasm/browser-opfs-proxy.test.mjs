@@ -30,7 +30,7 @@ async function readGuestFile(rootHandle, guestPath) {
   for (const part of parts.slice(0, -1)) {
     dir = await dir.getDirectoryHandle(part, { create: false });
   }
-  const fileHandle = await dir.getFileHandle(parts[parts.length - 1], { create: false });
+  const fileHandle = await dir.getFileHandle(parts.at(-1), { create: false });
   return new Uint8Array(await (await fileHandle.getFile()).arrayBuffer());
 }
 

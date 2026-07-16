@@ -1042,7 +1042,7 @@ const ApplyPatchListStep = ({
     .map((_, patchIndex) => patchIndex)
     .filter((patchIndex) => !disabledFlags?.[patchIndex]);
   const chainInputIndex = enabledIndexes[0] ?? -1;
-  const chainOutputIndex = enabledIndexes[enabledIndexes.length - 1] ?? -1;
+  const chainOutputIndex = enabledIndexes.at(-1) ?? -1;
   return (
     <StepSection
       fault={fault}

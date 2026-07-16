@@ -142,7 +142,7 @@ const collectBrowserRuntimeDiagnostics = async (): Promise<BrowserRuntimeDiagnos
     opfs: await opfsPromise,
     platform: navigatorObject?.platform || "",
     serviceWorker: typeof navigatorObject?.serviceWorker,
-    serviceWorkerController: navigatorObject?.serviceWorker?.controller ? true : false,
+    serviceWorkerController: !!navigatorObject?.serviceWorker?.controller,
     sharedArrayBuffer: typeof SharedArrayBuffer,
     storageEstimate: await storageEstimatePromise,
     timestamp: new Date().toISOString(),

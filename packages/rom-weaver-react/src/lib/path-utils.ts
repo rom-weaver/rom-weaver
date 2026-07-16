@@ -18,7 +18,7 @@ const getPathBaseName = (value: FileNameValue, fallback = ""): string => {
   const text = String(value || "").trim();
   if (!text) return fallback;
   const parts = text.split(PATH_PART_SPLIT_REGEX).filter((part) => !!part);
-  return parts[parts.length - 1] || fallback;
+  return parts.at(-1) || fallback;
 };
 
 const hasFileNameExtension = (fileName: FileNameValue): boolean => FILE_EXTENSION_REGEX.test(String(fileName || ""));

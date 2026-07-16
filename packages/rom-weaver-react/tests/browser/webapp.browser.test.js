@@ -1,6 +1,6 @@
 import { createElement, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts";

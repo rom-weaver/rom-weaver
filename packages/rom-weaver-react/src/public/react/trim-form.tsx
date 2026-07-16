@@ -702,14 +702,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const cancelTrimOutputProgress = () => cancelOutputProgress(busy);
   const showInputProgress =
     sourceStaging || (busy && progressProps && progress?.stage === "input" && progress.role === "input");
-  const inputProgressProps =
-    showInputProgress && (progressProps || waitingProgressProps)
-      ? {
-          ...(progressProps || waitingProgressProps)!,
-          cancelLabel: "Cancel ROM staging",
-          onCancel: cancelSourceStaging,
-        }
-      : null;
+  const inputProgress = progressProps || waitingProgressProps;
+  const inputProgressProps = showInputProgress
+    ? {
+        ...inputProgress,
+        cancelLabel: "Cancel ROM staging",
+        onCancel: cancelSourceStaging,
+      }
+    : null;
 
   const rawExtensionOption = rawOutputFormat;
   const formatOptions = useMemo(

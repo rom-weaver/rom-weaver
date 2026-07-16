@@ -157,7 +157,11 @@ const ChecksumList = ({
  * drawer reserves their exact height with shimmer placeholders. A group with no
  * `label` renders its rows bare (matching a no-variant resolved layout).
  */
-type ChecksumPendingGroup = { id: string; label?: ReactNode; rows: Array<{ label: ReactNode; length: number }> };
+type ChecksumPendingGroup = {
+  id: string;
+  label?: ReactNode;
+  rows: Array<{ id?: string; label: ReactNode; length: number }>;
+};
 
 /**
  * Staging form of a Checks drawer: an open {@link ChecksumList} whose rows are
@@ -183,9 +187,12 @@ const PendingChecks = ({
 }) => (
   <ChecksumList defaultOpen={defaultOpen} label={label} onToggle={onToggle} open={open}>
     {groups.map((group) => {
-      const rows = group.rows.map((row, rowIndex) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: Pending rows are intentionally positional before checksums resolve.
-        <PendingChecksumRow key={`${group.id}:${rowIndex}`} label={row.label} length={row.length} />
+      const rows = group.rows.map((row) => (
+        <PendingChecksumRow
+          key={`${group.id}:${row.id ?? `${typeof row.label === "string" ? row.label : "row"}:${row.length}`}`}
+          label={row.label}
+          length={row.length}
+        />
       ));
       return group.label ? (
         <div className={groupClassName} key={group.id}>

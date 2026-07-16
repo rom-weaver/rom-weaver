@@ -558,6 +558,8 @@ const useLocalApplyPatchFormSession = ({
       patchNoticeMessage,
       primaryRomInput,
       romInputs,
+      activePatches,
+      activeSettings,
     ],
   );
   const localStackState = useMemo(

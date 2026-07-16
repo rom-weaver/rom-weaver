@@ -1,5 +1,4 @@
 import { STANDARD_CHECKSUM_ALGORITHMS } from "../../lib/checksum-algorithms.ts";
-import { normalizeRomSpecificExtractedFileName } from "../../lib/compression/container-format-registry.ts";
 import {
   getFileNameWithoutExtension,
   getPathBaseName,

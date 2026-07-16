@@ -72,6 +72,6 @@ describe("log store buffer", () => {
     expect(entries.length).toBe(maxLogLines);
     // Oldest lines are dropped: the first kept entry is the (pushed - cap)th.
     expect(entries[0]?.message).toBe(`entry ${pushed - maxLogLines}`);
-    expect(entries[entries.length - 1]?.message).toBe(`entry ${pushed - 1}`);
+    expect(entries.at(-1)?.message).toBe(`entry ${pushed - 1}`);
   });
 });

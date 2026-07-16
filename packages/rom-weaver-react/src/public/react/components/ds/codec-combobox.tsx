@@ -1,4 +1,13 @@
-import { type CSSProperties, type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   type CompressionCodecOption,
@@ -163,54 +172,57 @@ const CodecCombobox = ({
     setActiveIndex(selectedSuggestionIndex === -1 ? 0 : selectedSuggestionIndex);
   }, [selectedSuggestionIndex]);
 
-  const updateDropdownFrame = (measuredHeight?: number) => {
-    const rect = inputRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const viewport = globalThis.visualViewport;
-    const viewportTop = viewport?.offsetTop ?? 0;
-    const viewportLeft = viewport?.offsetLeft ?? 0;
-    const viewportHeight = viewport?.height ?? globalThis.innerHeight;
-    const viewportWidth = viewport?.width ?? globalThis.innerWidth;
-    let belowBoundary = viewportHeight - DROPDOWN_MARGIN;
-    if (typeof document !== "undefined") {
-      for (const blocker of document.querySelectorAll(ACTION_BLOCKER_SELECTOR)) {
-        const blockerRect = blocker.getBoundingClientRect();
-        const overlapsHorizontally = blockerRect.right > rect.left && blockerRect.left < rect.right;
-        if (overlapsHorizontally && blockerRect.top >= rect.bottom && blockerRect.top < belowBoundary) {
-          belowBoundary = blockerRect.top - DROPDOWN_MARGIN;
+  const updateDropdownFrame = useCallback(
+    (measuredHeight?: number) => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewport = globalThis.visualViewport;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportHeight = viewport?.height ?? globalThis.innerHeight;
+      const viewportWidth = viewport?.width ?? globalThis.innerWidth;
+      let belowBoundary = viewportHeight - DROPDOWN_MARGIN;
+      if (typeof document !== "undefined") {
+        for (const blocker of document.querySelectorAll(ACTION_BLOCKER_SELECTOR)) {
+          const blockerRect = blocker.getBoundingClientRect();
+          const overlapsHorizontally = blockerRect.right > rect.left && blockerRect.left < rect.right;
+          if (overlapsHorizontally && blockerRect.top >= rect.bottom && blockerRect.top < belowBoundary) {
+            belowBoundary = blockerRect.top - DROPDOWN_MARGIN;
+          }
         }
       }
-    }
-    const spaceBelow = belowBoundary - rect.bottom;
-    const spaceAbove = rect.top - DROPDOWN_MARGIN;
-    const nextPlacement = spaceBelow < DROPDOWN_MIN_HEIGHT && spaceAbove > spaceBelow ? "above" : "below";
-    const availableSpace = Math.max(
-      DROPDOWN_MIN_HEIGHT,
-      nextPlacement === "above" ? spaceAbove - DROPDOWN_GAP : spaceBelow - DROPDOWN_GAP,
-    );
-    const maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, availableSpace);
-    const estimatedContentHeight = Math.max(
-      OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
-      filteredSuggestions.length * OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
-    );
-    const contentHeight = Math.min(DROPDOWN_MAX_HEIGHT, measuredHeight ?? estimatedContentHeight);
-    const placementHeight = Math.min(maxHeight, contentHeight);
-    const top =
-      nextPlacement === "above"
-        ? viewportTop + Math.max(DROPDOWN_MARGIN, rect.top - DROPDOWN_GAP - placementHeight)
-        : viewportTop + Math.min(rect.bottom + DROPDOWN_GAP, belowBoundary - placementHeight);
-    const left =
-      viewportLeft + Math.max(DROPDOWN_MARGIN, Math.min(rect.left, viewportWidth - DROPDOWN_MARGIN - rect.width));
-    setPlacement(nextPlacement);
-    setDropdownFrame({
-      left: Math.round(left),
-      maxHeight: Math.round(maxHeight),
-      top: Math.round(top),
-      width: Math.round(rect.width),
-    });
-  };
+      const spaceBelow = belowBoundary - rect.bottom;
+      const spaceAbove = rect.top - DROPDOWN_MARGIN;
+      const nextPlacement = spaceBelow < DROPDOWN_MIN_HEIGHT && spaceAbove > spaceBelow ? "above" : "below";
+      const availableSpace = Math.max(
+        DROPDOWN_MIN_HEIGHT,
+        nextPlacement === "above" ? spaceAbove - DROPDOWN_GAP : spaceBelow - DROPDOWN_GAP,
+      );
+      const maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, availableSpace);
+      const estimatedContentHeight = Math.max(
+        OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
+        filteredSuggestions.length * OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
+      );
+      const contentHeight = Math.min(DROPDOWN_MAX_HEIGHT, measuredHeight ?? estimatedContentHeight);
+      const placementHeight = Math.min(maxHeight, contentHeight);
+      const top =
+        nextPlacement === "above"
+          ? viewportTop + Math.max(DROPDOWN_MARGIN, rect.top - DROPDOWN_GAP - placementHeight)
+          : viewportTop + Math.min(rect.bottom + DROPDOWN_GAP, belowBoundary - placementHeight);
+      const left =
+        viewportLeft + Math.max(DROPDOWN_MARGIN, Math.min(rect.left, viewportWidth - DROPDOWN_MARGIN - rect.width));
+      setPlacement(nextPlacement);
+      setDropdownFrame({
+        left: Math.round(left),
+        maxHeight: Math.round(maxHeight),
+        top: Math.round(top),
+        width: Math.round(rect.width),
+      });
+    },
+    [filteredSuggestions.length],
+  );
 
-  const keepInputVisible = () => {
+  const keepInputVisible = useCallback(() => {
     const rect = inputRef.current?.getBoundingClientRect();
     if (!rect) return;
     const viewport = globalThis.visualViewport;
@@ -229,18 +241,18 @@ const CodecCombobox = ({
     if (rect.top < topLimit) {
       globalThis.scrollBy(0, rect.top - topLimit);
     }
-  };
+  }, []);
 
-  const getRenderedDropdownHeight = (): number | undefined => {
+  const getRenderedDropdownHeight = useCallback((): number | undefined => {
     const measuredHeight = listRef.current?.getBoundingClientRect().height;
     return measuredHeight && Number.isFinite(measuredHeight) ? measuredHeight : undefined;
-  };
+  }, []);
 
-  const syncViewportPosition = () => {
+  const syncViewportPosition = useCallback(() => {
     keepInputVisible();
     updateDropdownFrame(getRenderedDropdownHeight());
     requestAnimationFrame(() => updateDropdownFrame(getRenderedDropdownHeight()));
-  };
+  }, [getRenderedDropdownHeight, keepInputVisible, updateDropdownFrame]);
 
   const focusInputIntoView = () => {
     inputRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
@@ -254,7 +266,7 @@ const CodecCombobox = ({
     if (!open) return undefined;
     const frame = requestAnimationFrame(updateDropdownFrame);
     return () => cancelAnimationFrame(frame);
-  }, [open, filteredSuggestions.length]);
+  }, [open, updateDropdownFrame]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: The viewport listener intentionally owns the open lifecycle.
   useEffect(() => {
@@ -274,7 +286,7 @@ const CodecCombobox = ({
       globalThis.removeEventListener("scroll", handleViewportChange);
       globalThis.removeEventListener("resize", handleViewportChange);
     };
-  }, [open]);
+  }, [open, syncViewportPosition]);
 
   const selectOption = (option: CompressionCodecOption) => {
     const selectedValue = getSuggestionValue(option);
@@ -331,7 +343,7 @@ const CodecCombobox = ({
       if (measuredHeight) updateDropdownFrame(measuredHeight);
     });
     return () => cancelAnimationFrame(frame);
-  }, [visible, filteredSuggestions.length]);
+  }, [visible, updateDropdownFrame]);
 
   const dropdownStyle: CSSProperties | undefined = dropdownFrame
     ? {

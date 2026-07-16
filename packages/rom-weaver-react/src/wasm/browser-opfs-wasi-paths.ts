@@ -48,7 +48,7 @@ export function inodeMapContents(entry: wasiShim.Inode): WasiDirectoryContents |
 // Callers verify parts is non-empty before indexing; this re-asserts that for
 // noUncheckedIndexedAccess without resorting to non-null assertions.
 export function lastPathPart(parts: string[]): string {
-  const name = parts[parts.length - 1];
+  const name = parts.at(-1);
   if (name === undefined) throw new Error("path has no segments");
   return name;
 }

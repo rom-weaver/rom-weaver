@@ -170,14 +170,12 @@ const LogDialog = ({
   const hiddenLineCount = visible.length - rendered.length;
 
   // Keep the newest lines in view while the dialog is open.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Scrolling follows the rendered line count while the dialog is open.
   useEffect(() => {
     const trace = traceRef.current;
     if (open && trace) trace.scrollTop = trace.scrollHeight;
-  }, [open, visible.length]);
+  }, [open]);
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click-to-close mirrors <dialog> cancel semantics.
     <dialog
       aria-labelledby="log-title"
       className="dlg log-dlg"
@@ -187,6 +185,9 @@ const LogDialog = ({
       }}
       onClick={(event) => {
         if (event.target === dialogRef.current) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
       }}
       ref={dialogRef}
     >

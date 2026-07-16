@@ -789,7 +789,7 @@ function terminalLabelFromResult(result) {
   if (!(result && Array.isArray(result.events)) || result.events.length === 0) {
     return "";
   }
-  const terminal = result.events[result.events.length - 1];
+  const terminal = result.events.at(-1);
   return typeof terminal?.label === "string" ? terminal.label : "";
 }
 

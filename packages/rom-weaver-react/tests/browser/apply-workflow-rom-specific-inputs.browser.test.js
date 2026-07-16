@@ -170,8 +170,8 @@ test("apply workflow resolves CHD inputs to extracted names during staging", asy
     );
     expect(chdModeIndex).toBeGreaterThanOrEqual(0);
     const messages = logs.map((entry) => String(entry?.message || ""));
-    const modeTraceIndex = messages.findIndex((message) => message === "input.archive.chd-mode");
-    const descentStartIndex = messages.findIndex((message) => message === "input.archive.descent.start");
+    const modeTraceIndex = messages.indexOf("input.archive.chd-mode");
+    const descentStartIndex = messages.indexOf("input.archive.descent.start");
     expect(modeTraceIndex).toBeGreaterThanOrEqual(0);
     expect(descentStartIndex).toBeGreaterThanOrEqual(0);
     expect(modeTraceIndex).toBeGreaterThan(descentStartIndex);
@@ -242,8 +242,8 @@ test("RVZ staging emits descent trace events", async () => {
     await workflow.setInput(await loadFixtureFile("tests/fixtures/browser-generated/game.rvz"));
     const messages = logs.map((entry) => String(entry?.message || ""));
     // Input preparation runs one descending extract instead of separate list + extract passes.
-    const descentStartIndex = messages.findIndex((message) => message === "input.archive.descent.start");
-    const descentFinishIndex = messages.findIndex((message) => message === "input.archive.descent.finish");
+    const descentStartIndex = messages.indexOf("input.archive.descent.start");
+    const descentFinishIndex = messages.indexOf("input.archive.descent.finish");
     const workerTraceLines = logs
       .filter((entry) => entry?.namespace === "runtime:rom-weaver")
       .map((entry) => String(entry?.message || "").trim())
@@ -298,8 +298,8 @@ test("CHD staging emits descent trace events", async () => {
       .map((entry) => String(entry?.message || "").trim())
       .filter((line) => !!line);
     // Input preparation runs one descending extract instead of separate list + extract passes.
-    const descentStartIndex = messages.findIndex((message) => message === "input.archive.descent.start");
-    const descentFinishIndex = messages.findIndex((message) => message === "input.archive.descent.finish");
+    const descentStartIndex = messages.indexOf("input.archive.descent.start");
+    const descentFinishIndex = messages.indexOf("input.archive.descent.finish");
     const checksumDispatch = logs.find((entry) => String(entry?.message || "") === "runJson checksum dispatch");
     expect(descentStartIndex).toBeGreaterThanOrEqual(0);
     expect(descentFinishIndex).toBeGreaterThanOrEqual(0);

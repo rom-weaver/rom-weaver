@@ -274,7 +274,7 @@ export function createBrowserWasiThreadWorkerPool({
       }
       if (reason) rejectShell(previous, reason);
     }
-    trace?.(`[browser-opfs] thread pool replacing worker=${index}` + (reason ? ` ${formatErrorForTrace(reason)}` : ""));
+    trace?.(`[browser-opfs] thread pool replacing worker=${index}${reason ? ` ${formatErrorForTrace(reason)}` : ""}`);
     const replacement = createShell(index, trace);
     workers[index] = replacement;
     return replacement;
@@ -355,7 +355,6 @@ export function createBrowserWasiThreadWorkerPool({
   const selectAvailableShells = async (
     poolSize: number,
     trace: ThreadPoolShell["trace"],
-    commandId: number,
   ): Promise<ThreadPoolShell[]> => {
     const deadline = Date.now() + THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS;
     while (true) {
@@ -450,7 +449,7 @@ export function createBrowserWasiThreadWorkerPool({
         );
       }
       const selectStartMs = monotonicNowMs();
-      const shells = await selectAvailableShells(poolSize, trace ?? null, commandId);
+      const shells = await selectAvailableShells(poolSize, trace ?? null);
       const selectMs = monotonicNowMs() - selectStartMs;
       trace?.(
         `[browser-opfs] thread pool command selected workers id=${commandId} workers=${shells.map((shell) => shell.index).join(",")}`,

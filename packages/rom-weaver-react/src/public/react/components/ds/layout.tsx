@@ -171,15 +171,13 @@ const DropZone = ({
   const formatsNode =
     big && formats?.length ? (
       <span aria-hidden="true" className="formats">
-        {formatRows.map((row, lane) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: Decorative format lanes are intentionally positional.
-          <span className="formats-lane" key={lane}>
+        {formatRows.map((row) => (
+          <span className="formats-lane" key={row.join("|")}>
             <span className="formats-track">
               {[0, 1].map((copy) => (
                 <span className="formats-set" key={copy}>
-                  {row.map((format, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: Decorative format glyphs are intentionally positional.
-                    <span className="fmt mono" key={`${copy}-${index}-${format}`}>
+                  {row.map((format) => (
+                    <span className="fmt mono" key={`${copy}-${format}`}>
                       {format}
                     </span>
                   ))}

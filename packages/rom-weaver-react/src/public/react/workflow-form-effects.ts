@@ -171,7 +171,7 @@ const usePageDropForwarder = (
       cancelled = true;
     };
     // handledPageDropIdRef and handlerRef are stable refs; only pageDrop drives this.
-  }, [pageDrop]);
+  }, [pageDrop, handlerRef.current, handledPageDropIdRef.current, handledPageDropIdRef]);
 };
 
 export {

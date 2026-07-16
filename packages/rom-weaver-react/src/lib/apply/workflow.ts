@@ -46,7 +46,7 @@ const getRuntimeExternalPath = (
   sourceRef: ReturnType<typeof getPatchFileExternalSource>,
   runtime: WorkflowRuntime,
 ): string | null => {
-  if (!(sourceRef && sourceRef.source)) return null;
+  if (!sourceRef?.source) return null;
   if (typeof sourceRef.source === "string" && sourceRef.source.trim()) return sourceRef.source.trim();
   if (isVfsFileRef(sourceRef.source) && sourceRef.source.vfs === runtime.vfs) {
     const path = String(sourceRef.source.path || "").trim();

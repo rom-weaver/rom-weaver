@@ -44,7 +44,7 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): (File | null)[] => 
     fileIndex += 1;
   }
   if (fileIndex < roms.length) {
-    const lastRom = roms[roms.length - 1];
+    const lastRom = roms.at(-1);
     if (lastRom) assignment[assignment.length - 1] = lastRom;
   }
   logger.trace("routed unified drop by order", {

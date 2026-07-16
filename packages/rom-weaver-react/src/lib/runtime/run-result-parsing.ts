@@ -48,7 +48,7 @@ const isLiveProgressEvent = (event: RomWeaverRunJsonEvent): boolean => {
 const getLastEvent = (result: RomWeaverRunJsonResult): RomWeaverRunJsonEvent | null => {
   const events = Array.isArray(result.events) ? result.events : [];
   if (!events.length) return null;
-  const last = events[events.length - 1];
+  const last = events.at(-1);
   return last || null;
 };
 

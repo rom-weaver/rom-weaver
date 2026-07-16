@@ -791,7 +791,7 @@ const invokeRomWeaverPlanExtractBatchWorker = async (input: {
     );
   }
   const events = Array.isArray(result.events) ? result.events : [];
-  const terminal = events.length ? events[events.length - 1] : null;
+  const terminal = events.length ? events.at(-1) : null;
   const plan = parseRomWeaverBatchPlan(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
   if (!plan) throw withRomWeaverFailureKind(new Error("Extract batch plan was missing or malformed"), result);
   return plan;

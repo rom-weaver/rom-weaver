@@ -323,11 +323,12 @@ const createLazyExternalPatchFile = (fileName: string, options: LazyExternalPatc
   file.materialize = throwLazyExternalRead as PatchFileInstance["materialize"];
   file.slice = throwLazyExternalRead as PatchFileInstance["slice"];
   attachPatchFileCleanup(file, options.cleanup);
-  if (options.filePath || options.fileHandle) {
+  const source = options.filePath || options.fileHandle;
+  if (source) {
     attachPatchFileSourceRef(file, {
       fileName: resolvedFileName,
       size: file.fileSize,
-      source: options.filePath || options.fileHandle!,
+      source,
     });
   }
   return file;

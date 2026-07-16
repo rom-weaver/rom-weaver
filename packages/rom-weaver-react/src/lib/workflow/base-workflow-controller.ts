@@ -72,7 +72,7 @@ abstract class BaseWorkflowController<
   TSettings extends CommonSettings,
   TSnapshot extends BaseWorkflowSnapshot,
 > extends WorkflowController<{
-  change: void;
+  change: undefined;
   progress: WorkflowProgress;
 }> {
   readonly id: string;

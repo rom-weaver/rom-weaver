@@ -51,7 +51,7 @@ import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
-const usePendingCardMorph = (pendingCount: number, resolvedCount: number) => {
+const usePendingCardMorph = (pendingCount: number, _resolvedCount: number) => {
   const knownCards = useRef(new WeakSet<Element>());
   const sourceRects = useRef<DOMRect[]>([]);
 
@@ -96,7 +96,7 @@ const usePendingCardMorph = (pendingCount: number, resolvedCount: number) => {
     }
     sourceRects.current = [];
     for (const card of cards) knownCards.current.add(card);
-  }, [pendingCount, resolvedCount]);
+  }, [pendingCount]);
 };
 
 const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
