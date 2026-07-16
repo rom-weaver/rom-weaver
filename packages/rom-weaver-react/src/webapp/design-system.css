@@ -27,7 +27,7 @@
   --badge-fs: clamp(0.7rem, 0.684rem + 0.1vw, 0.72rem); /* badge text - sized to the body text, NOT the tap targets, so pills sit inline and vertically center with adjacent text */
   --pad: clamp(12px, 2.5vw - 2px, 20px); /* section gutter */
   --gutter: clamp(10px, 2.5vw, 28px); /* the app column's single horizontal inset - the only inline gutter the workflow rail gets */
-  --step-pt: clamp(9px, 3vw - 8px, 24px);   /* step-head top padding: air below the rope line */
+  --step-pt: clamp(16px, 4vw - 8px, 22px);   /* step-head top padding: the single source of air below the rope line at every width - no per-breakpoint override */
   --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
   --r-s: 6px; --r-m: 9px; --r-l: 13px;
   /* spacing scale: one responsive ramp for gap + padding, so rhythm comes from
@@ -2764,12 +2764,6 @@ html.vt-theme .unified-drop-step .step-head { view-transition-name: none !import
     margin: 8px 0;
     padding-block-end: 0;
     overflow: visible;
-  }
-
-  /* phones keep the header tight under the rope line - the 8px step margins
-     above already carry the rhythm */
-  .rw-app .panel.workflow .step > .step-head {
-    padding-block-start: 0;
   }
 
   .rw-app .panel.workflow .step > .step-body {
