@@ -15,7 +15,6 @@ crc.workspace = true
 flacenc.workspace = true
 flate2.workspace = true
 liblzma-sys.workspace = true
-rom-weaver-libarchive-sys = { workspace = true, default-features = false }
 serde_json.workspace = true
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }

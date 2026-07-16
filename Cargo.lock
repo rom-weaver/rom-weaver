@@ -1730,7 +1730,6 @@ dependencies = [
  "rom-weaver-checksum",
  "rom-weaver-codecs",
  "rom-weaver-core",
- "rom-weaver-libarchive-sys",
  "serde_json",
  "sha1",
  "tracing",
