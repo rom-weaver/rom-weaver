@@ -83,7 +83,7 @@
     "happy-dom": "20.10.2",
     "knip": "6.16.1",
     "playwright": "1.60.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "8.1.4",
     "vite-plugin-pwa": "1.2.0",
     "vitest": "4.1.10",
