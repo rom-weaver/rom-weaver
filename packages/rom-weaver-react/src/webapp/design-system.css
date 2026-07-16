@@ -1485,7 +1485,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app input[type="range"] { accent-color: var(--thread); width: 100%; }
 
 .rw-app .outbar { display: flex; gap: var(--sp-m); flex-wrap: wrap; }
-.rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; min-height: var(--ctl); border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
+/* collapsed height tracks the drawer header (.cks-head min-height: 36px); the
+   name textarea still grows the row taller when it wraps to multiple lines */
+.rw-app .fname { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; min-height: 36px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well); transition: border-color .15s, box-shadow .15s; }
 .rw-app .fname:focus-within { border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .fname .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
 .rw-app .fname .input:focus-visible { box-shadow: none; }
@@ -1494,7 +1496,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .fname .outname {
   height: auto; min-height: 0; resize: none; overflow: hidden;
   field-sizing: content;
-  padding-block: 9px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  padding-block: 8px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
   /* the textarea is content-sized and centered in the row (textarea text is
      always top-anchored, so stretching it leaves a single line riding high
      against the vertically centered format select) */
