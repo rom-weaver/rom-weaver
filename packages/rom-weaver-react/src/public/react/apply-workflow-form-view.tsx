@@ -248,24 +248,20 @@ type BundleEditState = {
 };
 
 /**
- * The "Bundle edit" strip: a persistent switch above 0x01 - the mode's one
- * stable home on every bench state, hero included (the output card's
+ * The "Bundle edit" pill: a compact persistent toggle above 0x01 - the mode's
+ * one stable home on every bench state, hero included (the output card's
  * "Create bundle…" action and the URL hash are shortcuts to the same switch).
+ * Small when idle, thread-lit when the editor is on.
  */
 const BundleEditBar = ({ bundleEdit }: { bundleEdit?: BundleEditState }) => {
   if (!bundleEdit) return null;
   const { active, enter, exit, sessionName } = bundleEdit;
   return (
     <div className={active ? "bundle-edit-bar is-active" : "bundle-edit-bar"} id="rom-weaver-bundle-edit-bar">
-      <Package aria-hidden="true" />
-      <span className="bundle-edit-title">Bundle edit</span>
-      {sessionName ? <span className="bundle-edit-name mono">{sessionName}</span> : null}
-      {active ? (
-        <span className="bundle-edit-hint">
-          Name, describe, and pin checks on the chain, then export it in <b className="hexref mono">0x04</b>.
-        </span>
-      ) : null}
-      <label className="patch-enable bundle-edit-toggle">
+      <label className="bundle-edit-pill">
+        <Package aria-hidden="true" />
+        <span className="bundle-edit-title">Bundle edit</span>
+        {sessionName ? <span className="bundle-edit-name mono">{sessionName}</span> : null}
         <input
           aria-label="Bundle edit mode"
           checked={active}
@@ -273,10 +269,6 @@ const BundleEditBar = ({ bundleEdit }: { bundleEdit?: BundleEditState }) => {
           onChange={() => (active ? exit() : enter())}
           type="checkbox"
         />
-        <span aria-hidden="true" className="switch-state">
-          <b className="on">On</b>
-          <b className="off">Off</b>
-        </span>
       </label>
     </div>
   );

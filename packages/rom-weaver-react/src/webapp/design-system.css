@@ -1538,28 +1538,56 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    but visibly a slot rather than a loaded ROM - dashed seam + recessed fill
    (the same "off" language as a disabled patch) with the file name ghosted */
 /* ── Bundle edit ─────────────────────────────────────────────────────────────
-   The mode strip: names the editor while it is on (with the way out) and, for a
-   loaded bundle session, offers the revising author's way in. */
-.rw-app .bundle-edit-bar {
-  display: flex; align-items: center; gap: var(--sp-s);
-  margin-block: 10px 0; padding: 7px 12px;
-  border: 1px solid var(--seam-soft); border-radius: var(--r-s);
+   The mode toggle: one compact pill, right-aligned above 0x01 - small when
+   idle, thread-lit while the editor is on. The whole pill is the switch. */
+.rw-app .bundle-edit-bar { display: flex; justify-content: flex-end; margin-block: 10px 0; }
+.rw-app .bundle-edit-pill {
+  display: inline-flex; align-items: center; gap: var(--sp-s); max-width: 100%;
+  padding: 4px 11px; border: 1px dashed var(--seam); border-radius: 99px;
   background: color-mix(in oklab, var(--well) 72%, transparent);
-  font-size: .85rem;
+  font-size: .8rem; cursor: pointer;
+  transition: border-color .18s, background .18s;
 }
-.rw-app .bundle-edit-bar > svg { width: 15px; height: 15px; flex: none; color: var(--thread-text); }
+.rw-app .bundle-edit-pill:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
+.rw-app .bundle-edit-pill > svg { width: 14px; height: 14px; flex: none; color: var(--ink-3); transition: color .18s; }
 .rw-app .bundle-edit-title { font-weight: 650; white-space: nowrap; }
-.rw-app .bundle-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
-.rw-app .bundle-edit-hint { flex: 1 1 auto; min-width: 0; font-size: .78rem; color: var(--ink-3); }
-.rw-app .bundle-edit-bar .btn { margin-inline-start: auto; flex: none; }
-.rw-app .bundle-edit-bar .bundle-edit-toggle { margin-inline-start: auto; flex: none; }
-.rw-app .bundle-edit-bar.is-active { border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-soft)); }
+.rw-app .bundle-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: .72rem; }
+.rw-app .bundle-edit-pill input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 14px; --sw-pad: 1px; --sw-travel: 12px; }
+.rw-app .bundle-edit-bar.is-active .bundle-edit-pill {
+  border-style: solid; border-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 14%, var(--well));
+}
+.rw-app .bundle-edit-bar.is-active .bundle-edit-pill > svg { color: var(--thread-text); }
 
 /* Per-row expected-vs-computed verdict inside a Checks drawer. */
 .rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
 .rw-app .ck-mark svg { width: 13px; height: 13px; }
 .rw-app .ck-mark.ok { color: var(--verified); }
 .rw-app .ck-mark.bad { color: var(--fault); }
+/* a row with a match mark carries FOUR cells - widen the row grid so the copy
+   glyph stays on the line instead of wrapping under the label */
+.rw-app .ck:not(.req):has(> .ck-mark) { grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto; }
+/* the merged Expected group verdict rides the group head */
+.rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
+.rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
+/* the Expected group is the bundle's voice, not a computed readout - it sits
+   in its own darker recessed well so it reads apart from the plain rows */
+.rw-app .ckrows #rom-weaver-rom-expected-checks {
+  background: color-mix(in oklab, var(--chassis) 55%, var(--well));
+  border: 1px solid var(--seam-soft); border-radius: var(--r-s);
+  padding: 6px 10px 2px; margin-block-start: 3px;
+}
+/* post-match disclosure: the folded-away computed variants */
+.rw-app .ck-more {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-block-start: var(--sp-xs);
+  padding: 4px 2px; border: 0; background: none; cursor: pointer;
+  color: var(--ink-4); font-family: var(--font); font-size: .66rem; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.rw-app .ck-more:hover { color: var(--ink-2); }
+.rw-app .ck-more .chev-i { width: 12px; height: 12px; flex: none; transition: rotate .16s var(--ease); }
+.rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
+@media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
 
 /* The ROM card's bundle-checks editor (bundle-edit mode). */
 /* Editable check grids (bundle authoring): CRC32 + BYTES pair on one row (the
@@ -1585,10 +1613,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .nm-input:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
 .rw-app .nm-input:focus-visible { outline: none; border-color: var(--thread); }
 .rw-app .nm-input::placeholder { color: var(--ink-3); opacity: 1; }
-
-@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  .rw-app .bundle-edit-hint { display: none; }
-}
 
 .rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
 .rw-app .bundle-rom-expectation .card {
