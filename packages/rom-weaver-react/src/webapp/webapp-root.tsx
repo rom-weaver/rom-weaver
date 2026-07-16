@@ -374,12 +374,10 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
         </div>
         <ActivityFinishMarker />
         <LogDialog
-          issueHref={GITHUB_URL}
           level={state.settings.logLevel}
           onClose={() => setLogOpen(false)}
           onLevelChange={actions.onLogLevelChange}
           open={logOpen}
-          threads={resolveWorkerThreads(workerThreads)}
         />
         <Modal
           headerActions={
