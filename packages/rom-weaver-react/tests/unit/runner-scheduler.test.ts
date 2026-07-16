@@ -77,6 +77,28 @@ describe("createOperationScheduler", () => {
     await pb;
   });
 
+  it("removes and rejects an aborted operation while it is queued", async () => {
+    const scheduler = createOperationScheduler({ maxConcurrency: 1, totalThreadBudget: 4 });
+    const active = deferred<string>();
+    const controller = new AbortController();
+    let queuedStarted = false;
+    const activeRun = scheduler.schedule({ paths: new Set(), threads: 1 }, () => active.promise);
+    const queuedRun = scheduler.schedule({ paths: new Set(), signal: controller.signal, threads: 1 }, async () => {
+      queuedStarted = true;
+      return "queued";
+    });
+
+    expect(scheduler.waitingCount).toBe(1);
+    controller.abort();
+    await expect(queuedRun).rejects.toMatchObject({ code: "CANCELLED", name: "AbortError" });
+    expect(scheduler.waitingCount).toBe(0);
+
+    active.resolve("active");
+    await activeRun;
+    await tick();
+    expect(queuedStarted).toBe(false);
+  });
+
   it("serializes operations whose path sets intersect even when threads fit", async () => {
     const scheduler = createOperationScheduler({ maxConcurrency: 4, totalThreadBudget: 16 });
     const a = deferred<string>();

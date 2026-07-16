@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const workerClientState = vi.hoisted(() => ({
   disposeCalls: 0,
   initCalls: 0,
+  initError: null,
   resolveRuns: false,
   runCalls: 0,
   runOptions: [],
@@ -11,6 +12,7 @@ const workerClientState = vi.hoisted(() => ({
 
 const resetWorkerClientState = () => {
   workerClientState.disposeCalls = 0;
+  workerClientState.initError = null;
   workerClientState.initCalls = 0;
   workerClientState.resolveRuns = false;
   workerClientState.runCalls = 0;
@@ -27,6 +29,7 @@ vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
       },
       init: async () => {
         workerClientState.initCalls += 1;
+        if (workerClientState.initError) throw workerClientState.initError;
         return {
           mode: "mock",
           threaded: true,
@@ -110,4 +113,20 @@ test("aborting a runner run terminates the active worker and recycles the next r
     ok: true,
   });
   expect(workerClientState.initCalls).toBe(2);
+});
+
+test("terminates a newly-created client when runner initialization fails", async () => {
+  if (!(typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true)) return;
+
+  workerClientState.initError = new Error("init boom");
+  await expect(
+    runRomWeaverJson({
+      args: { source: "/work/input.bin" },
+      type: "probe",
+    }),
+  ).rejects.toThrow("init boom");
+
+  expect(workerClientState.initCalls).toBe(1);
+  expect(workerClientState.runCalls).toBe(0);
+  expect(workerClientState.terminateCalls).toBe(1);
 });

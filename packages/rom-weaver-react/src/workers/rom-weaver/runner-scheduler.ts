@@ -2,6 +2,13 @@ import { createLogger } from "../../lib/logging.ts";
 
 const logger = createLogger("runner-scheduler");
 
+const createSchedulerAbortError = () => {
+  const error = new Error("Workflow was cancelled") as Error & { code?: string };
+  error.name = "AbortError";
+  error.code = "CANCELLED";
+  return error;
+};
+
 /**
  * A unit of work the scheduler admits subject to its gates. Two admission lanes share one scheduler:
  *
@@ -49,6 +56,8 @@ type ScheduledOperation = {
   io?: boolean;
   /** Source size in bytes fed to the Rust planner for an I/O op. */
   jobSizeBytes?: number;
+  /** Cancels this operation while queued. Once admitted, the run callback owns active cancellation. */
+  signal?: AbortSignal;
 };
 
 /** One concurrently-runnable group from the Rust planner: original job indices that may overlap and the
@@ -101,6 +110,7 @@ type InFlightEntry = {
 
 type Waiter = {
   operation: ScheduledOperation;
+  detachAbort: () => void;
   /** Admit this waiter with `threads` worker threads (the planner's wave allotment for an I/O op, the
    * op's own reservation otherwise). The count is recorded for cross-lane gating and forwarded to the
    * run callback so the runner forces exactly that many. */
@@ -395,10 +405,41 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
         // Both lanes go through the waiter queue so the pump (synchronous for non-I/O, asynchronous for
         // the planned I/O lane) is the single admission point. A non-I/O op that fits is admitted within
         // this call by pumpNonIo; an I/O op is admitted once the Rust plan places it in the next wave.
-        waiters.push({
-          admit: (threads: number) => admit(operation, threads, notedMember, run, resolve, reject),
+        if (operation.signal?.aborted) {
+          reject(createSchedulerAbortError());
+          return;
+        }
+        const waiter: Waiter = {
+          admit: (threads: number) => {
+            waiter.detachAbort();
+            admit(operation, threads, notedMember, run, resolve, reject);
+          },
+          detachAbort: () => undefined,
           operation,
-        });
+        };
+        waiters.push(waiter);
+        if (operation.signal) {
+          const abort = () => {
+            const index = waiters.indexOf(waiter);
+            if (index < 0) return;
+            waiters.splice(index, 1);
+            waiter.detachAbort();
+            trace("queued operation aborted", {
+              inFlight: inFlight.size,
+              io: operation.io === true,
+              label: operation.label,
+              waiting: waiters.length,
+            });
+            reject(createSchedulerAbortError());
+            pump();
+          };
+          operation.signal.addEventListener("abort", abort, { once: true });
+          waiter.detachAbort = () => operation.signal?.removeEventListener("abort", abort);
+          if (operation.signal.aborted) {
+            abort();
+            return;
+          }
+        }
         trace("operation queued", {
           inFlight: inFlight.size,
           io: operation.io === true,

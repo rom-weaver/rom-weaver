@@ -366,38 +366,43 @@ const resolveInputSelection: InputSelectionHandler = (request) => {
 const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): Promise<RomWeaverRunner> => {
   const runnerWorkerUrl = await resolveBrowserRunnerWorkerUrl();
   const client = createBrowserWorkerClient({ workerUrl: runnerWorkerUrl }) as unknown as RomWeaverWorkerClient;
-  (client as { setSelectionHandler?: (handler: InputSelectionHandler) => void }).setSelectionHandler?.(
-    resolveInputSelection,
-  );
-  const wasmAsset = await resolveBrowserWasmAsset();
-  const wasmModule = await getCachedBrowserWasmModule(wasmAsset.wasmUrl);
-  const ready = await client.init(createBrowserRunnerInitOptions(wasmAsset, options, wasmModule));
-  const selectedWasmUrl = wasmAsset.wasmUrl ?? ready.wasmUrl ?? "";
-  publishRomWeaverWasmDiagnostic({
-    context: "rom-weaver browser runner",
-    contextUrl: selectedWasmUrl,
-    reason: "cross-origin isolated",
-    threaded: ready.threaded,
-    url: ready.wasmUrl || selectedWasmUrl,
-  });
-  return {
-    dispose: async () => {
-      // Gracefully release the worker's resources (OPFS sync access handles, thread pool) first,
-      // then terminate the Worker thread itself. `dispose()` alone leaves the worker - and its wasm
-      // linear memory, which only ever grows - alive, so recycling it would leak the grown heap.
-      // The graceful request must be time-bounded: a worker blocked in a synchronous wait (e.g. an
-      // interactive selection prompt that was abandoned mid-flight) never acknowledges dispose, and
-      // an unbounded await here deadlocks every later reset/warmup behind it.
-      const graceful = client.dispose?.().catch(() => undefined);
-      if (graceful) {
-        await Promise.race([graceful, new Promise((resolve) => setTimeout(resolve, RUNNER_DISPOSE_GRACE_MS))]);
-      }
-      client.terminate?.();
-    },
-    ready,
-    runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
-    terminate: () => client.terminate?.(),
-  };
+  try {
+    (client as { setSelectionHandler?: (handler: InputSelectionHandler) => void }).setSelectionHandler?.(
+      resolveInputSelection,
+    );
+    const wasmAsset = await resolveBrowserWasmAsset();
+    const wasmModule = await getCachedBrowserWasmModule(wasmAsset.wasmUrl);
+    const ready = await client.init(createBrowserRunnerInitOptions(wasmAsset, options, wasmModule));
+    const selectedWasmUrl = wasmAsset.wasmUrl ?? ready.wasmUrl ?? "";
+    publishRomWeaverWasmDiagnostic({
+      context: "rom-weaver browser runner",
+      contextUrl: selectedWasmUrl,
+      reason: "cross-origin isolated",
+      threaded: ready.threaded,
+      url: ready.wasmUrl || selectedWasmUrl,
+    });
+    return {
+      dispose: async () => {
+        // Gracefully release the worker's resources (OPFS sync access handles, thread pool) first,
+        // then terminate the Worker thread itself. `dispose()` alone leaves the worker - and its wasm
+        // linear memory, which only ever grows - alive, so recycling it would leak the grown heap.
+        // The graceful request must be time-bounded: a worker blocked in a synchronous wait (e.g. an
+        // interactive selection prompt that was abandoned mid-flight) never acknowledges dispose, and
+        // an unbounded await here deadlocks every later reset/warmup behind it.
+        const graceful = client.dispose?.().catch(() => undefined);
+        if (graceful) {
+          await Promise.race([graceful, new Promise((resolve) => setTimeout(resolve, RUNNER_DISPOSE_GRACE_MS))]);
+        }
+        client.terminate?.();
+      },
+      ready,
+      runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
+      terminate: () => client.terminate?.(),
+    };
+  } catch (error) {
+    client.terminate?.();
+    throw error;
+  }
 };
 
 const getRunnerPool = (): RunnerPool<RomWeaverRunner, RunnerCreateOptions> => {
@@ -701,6 +706,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
             jobSizeBytes: inputBytes,
             label: command.type,
             paths: operationPaths,
+            signal,
             threads: operationThreads,
           },
           dispatchRun,

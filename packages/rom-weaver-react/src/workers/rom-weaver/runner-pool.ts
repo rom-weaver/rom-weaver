@@ -55,6 +55,8 @@ export function createRunnerPool<TRunner, TCreateOptions = void>(
   const idle: PoolEntry<TRunner>[] = [];
   const busy = new Set<PoolEntry<TRunner>>();
   const maxIdle = Math.max(0, Math.floor(options.maxIdle));
+  let generation = 0;
+  let hardResetGeneration = 0;
   const trace =
     options.onTrace ?? ((message: string, details?: Record<string, unknown>) => logger.trace(message, details));
 
@@ -115,21 +117,37 @@ export function createRunnerPool<TRunner, TCreateOptions = void>(
 
   return {
     async acquire(createOptions?: TCreateOptions): Promise<RunnerLease<TRunner>> {
-      const reused = takeWarmIdle();
-      const entry: PoolEntry<TRunner> = reused ?? {
-        disposed: false,
-        runner: await options.create(createOptions),
-        stale: false,
-      };
-      busy.add(entry);
-      trace(reused ? "runner acquired (warm)" : "runner acquired (new)", { busy: busy.size, idle: idle.length });
-      return makeLease(entry);
+      for (;;) {
+        const reused = takeWarmIdle();
+        const createGeneration = generation;
+        const entry: PoolEntry<TRunner> = reused ?? {
+          disposed: false,
+          runner: await options.create(createOptions),
+          stale: false,
+        };
+        if (!reused && createGeneration !== generation) {
+          const hardReset = hardResetGeneration > createGeneration;
+          await disposeEntry(entry, hardReset);
+          // A hard reset can arrive while a soft reset's graceful disposal is awaiting the worker.
+          // Re-read the generation after that await so the acquire never resurrects a runner afterward.
+          if (hardReset || hardResetGeneration > createGeneration) {
+            throw new Error("runner pool reset during runner creation");
+          }
+          trace("runner creation crossed soft reset; retrying", { generation });
+          continue;
+        }
+        busy.add(entry);
+        trace(reused ? "runner acquired (warm)" : "runner acquired (new)", { busy: busy.size, idle: idle.length });
+        return makeLease(entry);
+      }
     },
     get busyCount(): number {
       return busy.size;
     },
     async disposeAll(disposeOptions: { terminate?: boolean } = {}): Promise<void> {
+      generation += 1;
       if (disposeOptions.terminate === true) {
+        hardResetGeneration = generation;
         const entries = [...idle.splice(0, idle.length), ...busy];
         busy.clear();
         await Promise.all(entries.map((entry) => disposeEntry(entry, true)));
@@ -144,6 +162,7 @@ export function createRunnerPool<TRunner, TCreateOptions = void>(
       return idle.length;
     },
     markAllStale(): void {
+      generation += 1;
       for (const entry of busy) entry.stale = true;
       const previouslyIdle = idle.splice(0, idle.length);
       for (const entry of previouslyIdle) void disposeEntry(entry, false);

@@ -111,4 +111,86 @@ describe("createRunnerPool", () => {
     lease1.release();
     expect(tracked.disposed).toEqual([2, 1]);
   });
+
+  it("terminates a runner whose creation finishes after a hard reset", async () => {
+    let finishCreate: ((runner: MockRunner) => void) | undefined;
+    const terminated: number[] = [];
+    const pool = createRunnerPool<MockRunner>({
+      create: () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }),
+      dispose: async () => undefined,
+      maxIdle: 1,
+      terminate: (runner) => terminated.push(runner.id),
+    });
+
+    const pendingAcquire = pool.acquire();
+    await pool.disposeAll({ terminate: true });
+    finishCreate?.({ id: 1 });
+
+    await expect(pendingAcquire).rejects.toThrow("runner pool reset during runner creation");
+    expect(terminated).toEqual([1]);
+    expect(pool.busyCount).toBe(0);
+  });
+
+  it("retries when runner creation crosses a soft reset", async () => {
+    const finishCreates: Array<(runner: MockRunner) => void> = [];
+    const disposed: number[] = [];
+    const pool = createRunnerPool<MockRunner>({
+      create: () =>
+        new Promise((resolve) => {
+          finishCreates.push(resolve);
+        }),
+      dispose: async (runner) => {
+        disposed.push(runner.id);
+      },
+      maxIdle: 1,
+      terminate: () => undefined,
+    });
+
+    const pendingAcquire = pool.acquire();
+    await pool.disposeAll();
+    finishCreates[0]?.({ id: 1 });
+    await expect.poll(() => finishCreates.length).toBe(2);
+    finishCreates[1]?.({ id: 2 });
+
+    const lease = await pendingAcquire;
+    expect(lease.runner.id).toBe(2);
+    expect(disposed).toEqual([1]);
+    expect(pool.busyCount).toBe(1);
+  });
+
+  it("rejects when a hard reset arrives during stale runner disposal", async () => {
+    let finishCreate: ((runner: MockRunner) => void) | undefined;
+    let finishDispose: (() => void) | undefined;
+    let disposeStarted = false;
+    let createCount = 0;
+    const pool = createRunnerPool<MockRunner>({
+      create: () => {
+        createCount += 1;
+        return new Promise((resolve) => {
+          finishCreate = resolve;
+        });
+      },
+      dispose: () =>
+        new Promise((resolve) => {
+          disposeStarted = true;
+          finishDispose = resolve;
+        }),
+      maxIdle: 1,
+      terminate: () => undefined,
+    });
+
+    const pendingAcquire = pool.acquire();
+    await pool.disposeAll();
+    finishCreate?.({ id: 1 });
+    await expect.poll(() => disposeStarted).toBe(true);
+    await pool.disposeAll({ terminate: true });
+    finishDispose?.();
+
+    await expect(pendingAcquire).rejects.toThrow("runner pool reset during runner creation");
+    expect(createCount).toBe(1);
+    expect(pool.busyCount).toBe(0);
+  });
 });
