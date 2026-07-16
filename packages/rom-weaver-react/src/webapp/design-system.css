@@ -846,6 +846,19 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* patch description rides under the name (some patch types provide one) */
 /* the description is a full-width row below the header, at the card content edge */
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
+/* the description carries its own pencil (only when a description exists): the
+   text flows and the pencil trails it, aligned to the first line via the shared
+   .nm-edit vertical-align */
+.rw-app .patch-desc-line { min-width: 0; }
+.rw-app .patch-desc-line .patch-desc { display: inline; }
+.rw-app .patch-desc-line .nm-edit { width: 20px; height: 20px; }
+.rw-app .patch-desc-line .nm-edit svg { width: 12px; height: 12px; }
+/* Editing: the description field group flows in the row and its confirm/save
+   check trails it, aligned to the textarea's baseline row (bottom) so it sits
+   beside the field the way the name-row check sits beside the name input. */
+.rw-app .patch-desc-line.is-editing { display: flex; align-items: flex-end; gap: var(--sp-xs); }
+.rw-app .patch-desc-line.is-editing .patch-meta-inline { flex: 1 1 auto; min-width: 0; margin-block-start: 0; }
+.rw-app .patch-desc-line.is-editing .nm-edit { margin-block-end: 6px; }
 /* weak-verification note under the name - explains the yellow card border */
 .rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
 .rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
@@ -1615,21 +1628,66 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   appearance: none; flex: none; display: inline-grid; place-items: center;
   width: 22px; height: 22px; margin-inline-start: var(--sp-xs); padding: 0;
   border: 0; border-radius: 5px; background: none; color: var(--ink-4); cursor: pointer;
-  vertical-align: -5px;
+  /* the box is taller than the name/description text - centre it on the text's
+     mid-line so the glyph sits with the words rather than riding above them */
+  vertical-align: middle;
   transition: color .15s, background .15s;
 }
 .rw-app .nm-edit:hover { color: var(--ink); background: color-mix(in oklab, var(--well) 80%, transparent); }
 .rw-app .nm-edit.is-editing { color: var(--thread-text); }
 .rw-app .nm-edit svg { width: 13px; height: 13px; }
-/* Editable Checks-drawer rows: label column matches the read-only .ck rows;
-   the remove X trails the input on the same line, in the quiet copy-glyph
-   language of the computed rows (color-only hover, red for removal). */
-.rw-app .patch-checks-body .verification-row { grid-template-columns: 47px minmax(0, 1fr) auto; padding-block: 2px; }
+/* Editable Checks-drawer rows read like the computed .ck rows they sit beside:
+   the SAME hairline-divided row geometry (label column, min-height, padding,
+   seam), so a filled field is visually indistinguishable from a read-only
+   value. The only difference is the value cell is a live input and the trailing
+   copy-glyph slot holds the remove X (color-only hover, red for removal). */
+.rw-app .patch-checks-body .verification-row {
+  grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto;
+  align-items: center; gap: var(--sp-xs) var(--sp-s);
+  min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
+  border-block: 1px solid var(--seam-soft);
+}
+/* touching rows read as one hairline: drop the duplicate top border (mirrors the
+   .ck:not(.req) + .ck:not(.req) rule) */
+.rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
+/* label speaks the read-only rows' lowercase ck-k voice, not a heavy form label */
+.rw-app .patch-checks-body .verification-row .ofld-l {
+  font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
+}
+/* value cell is flush like .ck-v - transparent, unboxed, in the same mono/weft
+   language and unified clamp size - so a filled field matches its computed
+   neighbours. The editable affordance only surfaces on hover/focus. */
+.rw-app .patch-checks-body .verification-row .popt-input {
+  box-sizing: border-box;
+  height: auto; min-height: 0; padding: 2px 4px;
+  /* pull the box left by its own padding so the TEXT origin lands exactly on the
+     read-only .ck-v origin (which has no padding); the box keeps 4px of focus
+     breathing room by extending into the label gap. */
+  margin-inline: -4px 0; width: calc(100% + 4px);
+  background: transparent; border: 1px solid transparent; border-radius: 5px;
+  font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
+  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
+  color: var(--weft); text-transform: uppercase;
+  /* snappy focus/hover - the base .input's .15s fade read as sluggish here */
+  transition: border-color .08s, background-color .08s;
+}
+.rw-app .patch-checks-body .verification-row .popt-input::placeholder { text-transform: none; }
+.rw-app .patch-checks-body .verification-row .popt-input:hover {
+  border-color: var(--seam); background: color-mix(in oklab, var(--thread) 5%, var(--well));
+}
+.rw-app .patch-checks-body .verification-row .popt-input:focus,
+.rw-app .patch-checks-body .verification-row .popt-input:focus-visible {
+  outline: none; border-color: var(--thread); background: var(--well); color: var(--ink);
+}
+.rw-app .patch-checks-body .verification-row .popt-input[aria-invalid] {
+  color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam));
+}
 .rw-app .ck-remove {
   appearance: none; flex: none; display: inline-grid; place-items: center;
-  width: 20px; height: 20px; padding: 0; border: 0; background: none;
-  color: var(--ink-4); cursor: pointer; transition: color .15s;
+  width: 24px; height: 24px; padding: 0; border: 0; background: none;
+  color: var(--ink-4); cursor: pointer; transition: color .15s; opacity: .6;
 }
+.rw-app .ck-remove:hover { opacity: 1; }
 .rw-app .ck-remove:hover { color: var(--fault); }
 .rw-app .ck-remove svg { width: 12px; height: 12px; }
 /* "Add check": the same quiet uppercase action row as .ck-more (the checks
@@ -2297,6 +2355,18 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   /* keep the subgrid (set on .ck.req above) - only tune size/gap on mobile */
   .rw-app .ck.req { column-gap: var(--sp-s); }
   .rw-app .ck.req .ck-k { font-size: .72rem; }
+  /* editable check rows track the phone .ck geometry (40px label, 6px inset,
+     tighter row + value clamp) so their labels and values line up with the
+     read-only rows above them at phone width, not just on the desktop bench */
+  .rw-app .patch-checks-body .verification-row {
+    grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;
+    gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; min-height: 24px; padding-block: 1px;
+  }
+  .rw-app .patch-checks-body .verification-row .ofld-l { font-size: .72rem; }
+  .rw-app .patch-checks-body .verification-row .popt-input {
+    font-size: clamp(.46rem, calc((100cqi - 64px) / 25.2), .97rem);
+  }
+  .rw-app .ck-remove { width: 20px; height: 20px; }
   /* stays pinned at the top; the opened panel is capped + scrollable so it never
      runs off the small screen */
 }
@@ -2548,15 +2618,19 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: block; min-width: 0; }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline { display: block; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .card-meta) { margin-block-start: var(--sp-xs); }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .patch-desc-line, .card-meta) { margin-block-start: var(--sp-xs); }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
   width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
 /* The inline name textarea is a replaced box that cannot wrap around a
-   float - keep it beside the buttons by giving up their width explicitly. */
+   float - keep it beside the buttons by giving up their width explicitly.
+   inline-block (not block) so the confirm/save check rides on the same line
+   rather than dropping beneath it; the width leaves room for the check + the
+   floated position/remove buttons. */
 .rw-app #rom-weaver-list-patch-stack > .card.patch .nmline > .nm-input {
-  width: calc(100% - 2 * var(--ctrl-h) - var(--sp-s) - var(--sp-m));
+  display: inline-block; vertical-align: middle;
+  width: calc(100% - 2 * var(--ctrl-h) - 22px - var(--sp-s) - var(--sp-xs) - var(--sp-m));
 }
 
 /* ── wide-bench layout ──

@@ -682,23 +682,27 @@ const PatchEnableToggle = ({
   </label>
 );
 
-/** The pencil next to the patch name: toggles the card's inline name +
- * description editors. Shows a check while editing (commit happens on each
- * field's blur; the toggle just closes the editors). */
+/** The pencil that opens the card's inline name + description editors. Shows a
+ * check while editing (commit happens on each field's blur; the toggle just
+ * closes the editors). Two of them can ride a card: one on the name line, one on
+ * the description line (only when a description exists) - both drive the same
+ * editor, so they carry distinct ids/labels but identical behaviour. */
 const PatchMetaEditToggle = ({
   editing,
   index,
   onToggle,
+  variant = "name",
 }: {
   editing: boolean;
   index: number;
   onToggle: () => void;
+  variant?: "name" | "desc";
 }) => (
   <button
     aria-expanded={editing}
     aria-label={editing ? "Done editing patch name and description" : "Edit patch name and description"}
     className={editing ? "nm-edit is-editing" : "nm-edit"}
-    id={`rom-weaver-patch-meta-edit-${index}`}
+    id={`rom-weaver-patch-meta-edit-${variant === "desc" ? "desc-" : ""}${index}`}
     onClick={onToggle}
     title={editing ? "Done" : "Edit name & description"}
     type="button"
@@ -788,11 +792,24 @@ const PatchCard = ({
       className={[rowProps.className, disabledClass].filter(Boolean).join(" ") || undefined}
       description={
         editing && onMetaChange ? (
-          <PatchMetaFields index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
+          <div className="patch-desc-line is-editing">
+            <PatchMetaFields index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
+            <PatchMetaEditToggle editing index={index} onToggle={() => setMetaEditing(!metaEditing)} variant="desc" />
+          </div>
         ) : description ? (
-          <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
-            {description}
-          </p>
+          <div className="patch-desc-line">
+            <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
+              {description}
+            </p>
+            {onMetaChange && !staging ? (
+              <PatchMetaEditToggle
+                editing={editing}
+                index={index}
+                onToggle={() => setMetaEditing(!metaEditing)}
+                variant="desc"
+              />
+            ) : null}
+          </div>
         ) : undefined
       }
       handle={
