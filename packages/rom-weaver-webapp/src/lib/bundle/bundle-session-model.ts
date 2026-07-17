@@ -23,6 +23,8 @@ type BundlePlanEntry = {
   inputChecks?: ParsedBundleChecks;
   outputChecks?: ParsedBundleChecks;
   header?: BundleHeaderMode;
+  /** Declared input basis (`base` = authored against the bundle's rom; absent = previous/inferred). */
+  basis?: "base" | "previous";
 };
 
 type BundleOutputDefaults = {
@@ -137,6 +139,7 @@ const buildBundleApplySessionPlan = (parsed: ParsedBundleParseResult, bundleUrl:
       ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
       ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
       ...(patch.header ? { header: patch.header } : {}),
+      ...(patch.basis ? { basis: patch.basis } : {}),
     });
   });
   const name = bundleSessionDisplayName(parsed.bundle);

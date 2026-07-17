@@ -113,6 +113,7 @@ const parseBundlePatchEntry = (value: unknown): ParsedBundlePatchEntry => {
   if (outputChecks) entry.outputChecks = outputChecks;
   const header = parseHeaderMode(record.header);
   if (header !== undefined) entry.header = header;
+  if (record.basis === "base" || record.basis === "previous") entry.basis = record.basis;
   return entry;
 };
 

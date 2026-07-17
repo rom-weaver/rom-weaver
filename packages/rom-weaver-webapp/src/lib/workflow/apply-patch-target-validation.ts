@@ -1,6 +1,10 @@
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplySettings } from "../../types/settings.ts";
-import type { PatchValidatePerPatchVerdict, WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import type {
+  PatchValidatePerPatchVerdict,
+  PatchValidateResult,
+  WorkflowRuntime,
+} from "../../types/workflow-runtime-adapter.ts";
 import { toRomWeaverError } from "../errors.ts";
 import { getPatchFileExternalSource } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
@@ -24,13 +28,32 @@ type PatchTargetValidationAdapters = {
     stage: WorkflowProgress["stage"];
     workflow: WorkflowProgress["workflow"];
   }) => void;
+  /** Receives each target chain's verification plan as its batched call resolves. */
+  onChainPlan?: (targetId: string, plan: NonNullable<PatchValidateResult["plan"]>) => void;
   runtime: WorkflowRuntime;
   settings: Partial<ApplySettings>;
   signal: AbortSignal;
   workflowId: string;
 };
 
+/** Declared chain metadata for one patch, forwarded verbatim into the plan-mode call. */
+type PatchChainDeclaration = {
+  /** Declared basis (`auto` defers to the engine's checksum inference). */
+  basis?: "auto" | "base" | "previous";
+  /** Declared input checks as comma-separable `algo=hex` tokens. */
+  inputChecks?: string;
+  /** Declared output checks as comma-separable `algo=hex` tokens. */
+  outputChecks?: string;
+};
+
 type PatchTargetValidationEntry<TSource> = {
+  /** This patch's declared chain metadata (bundle/user), when any. */
+  chain?: PatchChainDeclaration;
+  /** Fingerprint of the enabled chain this entry belongs to (ordered ids + declarations +
+   * target). Order/enablement/check changes change it, invalidating every member's cached
+   * verdict - chain position determines a plan-mode verdict, so per-patch caching alone is
+   * not sound. */
+  chainFingerprint?: string;
   preflight: InternalPatchChecksumPreflight;
   stage: StagedSource<TSource>;
   target: InputAsset;
@@ -66,7 +89,7 @@ const applyPatchVerdict = <TSource>(
   target: InputAsset,
   validationKey: string,
   startedAt: number,
-  verdict: { message: string; status: "valid" | "invalid" | "unknown" },
+  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred" },
 ) => {
   stage.state.patchValidation = {
     message: verdict.message,
@@ -81,6 +104,10 @@ const applyPatchVerdict = <TSource>(
 // per-input options. `null` means the entry resolved to a terminal state (short-circuited cache hit,
 // or an "unavailable" verdict) and needs no worker call.
 type PreparedValidation<TSource> = {
+  /** Terminal verdict already cached for this exact chain state: the entry still rides in its
+   * group's patch list (plan verdicts are position-dependent) but a group of only cached entries
+   * skips the worker call entirely. */
+  cached: boolean;
   entry: PatchTargetValidationEntry<TSource>;
   headerRemoved: boolean;
   inputSource: unknown;
@@ -96,14 +123,15 @@ const prepareValidation = <TSource>(
   adapters: PatchTargetValidationAdapters,
 ): PreparedValidation<TSource> | null => {
   const { stage, target, preflight } = entry;
-  const validationKey = createApplyPatchValidationKey(stage, target, preflight);
+  const validationKey = `${createApplyPatchValidationKey(stage, target, preflight)}${
+    entry.chainFingerprint ? `|chain:${entry.chainFingerprint}` : ""
+  }`;
   const existingValidation = stage.state.patchValidation;
-  if (
+  const cached =
     existingValidation?.validationKey === validationKey &&
-    (existingValidation.status === "valid" || existingValidation.status === "invalid")
-  ) {
-    return null;
-  }
+    (existingValidation.status === "valid" ||
+      existingValidation.status === "invalid" ||
+      existingValidation.status === "deferred");
   const startedAt = Date.now();
   const validatePatch = adapters.runtime.patch.validatePatch;
   const patchFile = stage.preparedPatchFile;
@@ -135,13 +163,16 @@ const prepareValidation = <TSource>(
     stage.state.checksumTimeMs = Date.now() - startedAt;
     return null;
   }
-  stage.state.patchValidation = {
-    message: "Validating patch against selected target",
-    status: "pending",
-    targetInputId: target.id,
-    validationKey,
-  };
+  if (!cached) {
+    stage.state.patchValidation = {
+      message: "Validating patch against selected target",
+      status: "pending",
+      targetInputId: target.id,
+      validationKey,
+    };
+  }
   return {
+    cached,
     entry,
     headerRemoved: isHeaderRemoved(stage, adapters.settings),
     inputSource,
@@ -171,6 +202,9 @@ const validatePreparedGroup = async <TSource>(
 ): Promise<void> => {
   const first = prepared[0];
   if (!first) return;
+  // Every member's verdict is cached for this exact chain state: nothing to run. When any member
+  // needs work the WHOLE chain rides in one plan-mode call - verdicts depend on chain position.
+  if (prepared.every((preparedEntry) => preparedEntry.cached)) return;
   const validatePatch = adapters.runtime.patch.validatePatch;
   if (!validatePatch) return;
 
@@ -226,8 +260,17 @@ const validatePreparedGroup = async <TSource>(
           first.headerRemoved,
           first.n64ByteOrder,
         ),
-        independent: true,
         n64ByteOrder: first.n64ByteOrder,
+        ...(prepared.some(({ entry }) => entry.chain?.basis && entry.chain.basis !== "auto")
+          ? { patchBasis: prepared.map(({ entry }) => entry.chain?.basis ?? "auto") }
+          : {}),
+        ...(prepared.some(({ entry }) => entry.chain?.inputChecks)
+          ? { patchInputChecks: prepared.map(({ entry }) => entry.chain?.inputChecks ?? "") }
+          : {}),
+        ...(prepared.some(({ entry }) => entry.chain?.outputChecks)
+          ? { patchOutputChecks: prepared.map(({ entry }) => entry.chain?.outputChecks ?? "") }
+          : {}),
+        plan: true,
         removeHeader: first.headerRemoved,
         workerThreads: adapters.settings.workers?.threads,
       },
@@ -239,9 +282,34 @@ const validatePreparedGroup = async <TSource>(
       })),
       signal: adapters.signal,
     });
+    if (result.plan) adapters.onChainPlan?.(first.entry.target.id, result.plan);
+    const planVerdicts = new Map<number, { input_verdict: string; message?: string }>();
+    for (const verdict of result.plan?.per_patch || []) planVerdicts.set(verdict.index, verdict);
     const perPatch = new Map<number, PatchValidatePerPatchVerdict>();
     for (const verdict of result.perPatch || []) perPatch.set(verdict.index, verdict);
     for (const [index, { entry, startedAt, validationKey }] of prepared.entries()) {
+      const planVerdict = planVerdicts.get(index);
+      if (planVerdict) {
+        const status =
+          planVerdict.input_verdict === "passed"
+            ? "valid"
+            : planVerdict.input_verdict === "failed"
+              ? "invalid"
+              : planVerdict.input_verdict === "chain_deferred"
+                ? "deferred"
+                : "unknown";
+        applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
+          message:
+            planVerdict.message ||
+            (status === "valid"
+              ? "Patch validation passed"
+              : status === "invalid"
+                ? "Patch cannot be woven into this ROM"
+                : "Input state is only provable during the weave"),
+          status,
+        });
+        continue;
+      }
       const verdict = perPatch.get(index);
       if (verdict) {
         applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
@@ -252,7 +320,7 @@ const validatePreparedGroup = async <TSource>(
         });
         continue;
       }
-      // No index-aligned verdict (a non-independent runtime, or a mock): a resolved call means the
+      // No index-aligned verdict (a non-plan runtime, or a mock): a resolved call means the
       // batch passed, so mark valid - unless the aggregate is explicitly "mixed" and this patch's
       // fate is genuinely unknown.
       applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {

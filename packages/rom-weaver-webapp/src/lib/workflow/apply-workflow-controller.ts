@@ -10,6 +10,7 @@ import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-controller.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { ApplyWorkflowOptions, PatchInput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { getPatchProbeRequirements } from "../apply/patch-apply-service.ts";
@@ -101,6 +102,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 > {
   private readonly ownedSourceRefCounts = new Map<unknown, number>();
   private readonly pendingOwnedSourceReleases = new Map<unknown, ReturnType<typeof setTimeout>>();
+  /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
+   * form reads it for chain verdict chips, order suggestions, and output enforceability. */
+  readonly latestChainPlans = new Map<string, PatchValidationPlan>();
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
@@ -1292,11 +1296,20 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
    * `disabledIndexes` (index-aligned with the staged patch list) marks patches the user toggled off:
    * they are excluded from the run, so their dry-run is skipped too - it runs when (and if) the
    * patch is toggled back on, via the form's enablement-change revalidation pass. */
-  async validatePatches(options?: { disabledIndexes?: ReadonlySet<number> }): Promise<void> {
+  async validatePatches(options?: {
+    /** Index-aligned declared chain metadata (bundle/user basis + checks) per staged patch. */
+    chainMeta?: ReadonlyMap<
+      number,
+      { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
+    >;
+    disabledIndexes?: ReadonlySet<number>;
+  }): Promise<void> {
     return this.mutate("validatePatches", async () => {
       const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{
+        chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
+        chainFingerprint?: string;
         preflight: InternalPatchChecksumPreflight;
         stage: StagedSource<TSource>;
         target: InputAsset;
@@ -1314,7 +1327,28 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
         );
         if (!target) continue;
-        pending.push({ preflight, stage, target });
+        pending.push({ chain: options?.chainMeta?.get(index), preflight, stage, target });
+      }
+      // Plan-mode verdicts depend on chain position, so each target chain gets a fingerprint of
+      // its ordered enabled members + declarations; any order/enablement/declaration change
+      // invalidates every member's cached verdict.
+      const chainsByTarget = new Map<string, typeof pending>();
+      for (const entry of pending) {
+        const bucket = chainsByTarget.get(entry.target.id);
+        if (bucket) bucket.push(entry);
+        else chainsByTarget.set(entry.target.id, [entry]);
+      }
+      for (const [targetId, chain] of chainsByTarget) {
+        const fingerprint = JSON.stringify({
+          chain: chain.map((entry) => [
+            entry.stage.state.id,
+            entry.chain?.basis ?? "auto",
+            entry.chain?.inputChecks ?? "",
+            entry.chain?.outputChecks ?? "",
+          ]),
+          targetId,
+        });
+        for (const entry of chain) entry.chainFingerprint = fingerprint;
       }
       if (skippedDisabled > 0) {
         this.trace("patch.validate.skip-disabled", {
@@ -1324,6 +1358,16 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       }
       const adapters: PatchTargetValidationAdapters = {
         emitProgress: (event) => this.emitProgress(event),
+        onChainPlan: (targetId, plan) => {
+          this.latestChainPlans.set(targetId, plan);
+          this.trace("patch.validate.plan", {
+            failed: plan.failed_count,
+            passed: plan.passed_count,
+            status: plan.status,
+            suggestedOrder: plan.suggested_order?.join(",") ?? "",
+            targetId,
+          });
+        },
         runtime: this.runtime,
         settings: this.settings,
         signal: this.abortController.signal,

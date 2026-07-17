@@ -1,5 +1,12 @@
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
-import type { PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, ThreadBudget } from "../wasm/index.ts";
+import type {
+  PatchApplyCommand,
+  PatchBasisMode,
+  PatchCreateCommand,
+  PatchValidateCommand,
+  PatchValidationPlan,
+  ThreadBudget,
+} from "../wasm/index.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
@@ -246,6 +253,16 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
    * per-patch verdict; a single failing patch never fails the whole call. */
   independent?: boolean;
   n64ByteOrder?: PatchValidateCommand["n64_byte_order"];
+  /** Declared basis per patch, index-aligned with `patches` (auto entries defer to inference). */
+  patchBasis?: PatchBasisMode[];
+  /** Declared input checks per patch (comma-separable `algo=hex`, empty skips), index-aligned. */
+  patchInputChecks?: string[];
+  /** Declared output checks per patch, index-aligned. */
+  patchOutputChecks?: string[];
+  /** Resolve every patch's input basis and chain order statically (the verification plan) and
+   * dry-run only the patches that consume the original input; mid-chain previous-basis patches
+   * report `chain_deferred` instead of a false failure. Supersedes `independent`. */
+  plan?: boolean;
   removeHeader?: PatchValidateCommand["strip_header"];
   validateWithChecksums?: PatchValidateCommand["validate_with_checksums"];
   validationRequirements?: RuntimePatchValidationRequirement | RuntimePatchValidationRequirement[];
@@ -265,6 +282,8 @@ type PatchValidatePerPatchVerdict = {
 type PatchValidateResult = {
   message?: string;
   perPatch?: PatchValidatePerPatchVerdict[];
+  /** The typed verification plan when the call ran with `plan: true`. */
+  plan?: PatchValidationPlan;
   status: "passed" | "mixed";
 };
 

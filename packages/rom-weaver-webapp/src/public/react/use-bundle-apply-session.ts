@@ -15,6 +15,8 @@ type BundlePatchMeta = {
   description?: string;
   inputChecks?: ParsedBundleChecks;
   outputChecks?: ParsedBundleChecks;
+  /** Declared input basis (`base` = authored against the ROM; absent = previous/inferred). */
+  basis?: "base" | "previous";
 };
 
 type BundleSessionControllers = {
@@ -87,6 +89,7 @@ const useBundleApplySession = ({
           ...(entry.description ? { description: entry.description } : {}),
           ...(entry.inputChecks ? { inputChecks: entry.inputChecks } : {}),
           ...(entry.outputChecks ? { outputChecks: entry.outputChecks } : {}),
+          ...(entry.basis ? { basis: entry.basis } : {}),
         });
       });
       setBundleMetaById(meta);

@@ -120,7 +120,10 @@ type ApplyWorkflowPatchState = {
   };
   patchValidation?: {
     message?: string;
-    status: "invalid" | "pending" | "unknown" | "valid";
+    /** `deferred`: a previous-basis mid-chain patch whose input state is only provable during the
+     * apply itself - deliberately NOT dry-run against the original ROM (that reports false
+     * failures). Terminal for caching, advisory in the UI. */
+    status: "deferred" | "invalid" | "pending" | "unknown" | "valid";
     targetInputId?: string;
     validationKey?: string;
   };

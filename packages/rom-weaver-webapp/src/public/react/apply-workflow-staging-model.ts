@@ -169,19 +169,21 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   const message =
     status === "verifying"
       ? "Verifying patch against the ROM…"
-      : deep?.status === "valid"
-        ? "Patch validation passed"
-        : deep?.status === "invalid"
-          ? deep.message || "Patch validation failed"
-          : deep?.status === "pending"
-            ? "Patch validation pending"
-            : status === "valid"
-              ? "Source requirements matched"
-              : status === "invalid"
-                ? "Source requirements mismatch"
-                : status === "pending"
-                  ? "Source requirements pending"
-                  : "Patch does not provide source requirements";
+      : deep?.status === "deferred"
+        ? deep.message || "Applies to the previous patch's output; verified during the weave"
+        : deep?.status === "valid"
+          ? "Patch validation passed"
+          : deep?.status === "invalid"
+            ? deep.message || "Patch validation failed"
+            : deep?.status === "pending"
+              ? "Patch validation pending"
+              : status === "valid"
+                ? "Source requirements matched"
+                : status === "invalid"
+                  ? "Source requirements mismatch"
+                  : status === "pending"
+                    ? "Source requirements pending"
+                    : "Patch does not provide source requirements";
   return {
     checksumMismatch: status === "invalid",
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),

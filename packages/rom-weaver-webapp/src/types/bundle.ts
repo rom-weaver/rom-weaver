@@ -40,6 +40,10 @@ type ParsedBundlePatchEntry = {
   /** Expected post-apply state, only when it differs from the final `output.checks`. */
   outputChecks?: ParsedBundleChecks;
   header?: BundleHeaderMode;
+  /** What this patch's input checks were authored against: the bundle's rom (`base`, verified
+   * once up front) or the previous selected patch's output (`previous`, the default). Absent
+   * means previous/inferred. (schema v2) */
+  basis?: "base" | "previous";
 };
 
 type ParsedBundleOutput = {

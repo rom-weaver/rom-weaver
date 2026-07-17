@@ -219,6 +219,35 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     seedPatchEnablement,
   });
 
+  // Declared chain metadata (bundle/user basis + checks) per patch index, forwarded into the
+  // plan-mode validation so the engine resolves each patch's basis with the same declarations
+  // the apply run will enforce.
+  const bundleMetaRef = useRef(bundleMetaById);
+  bundleMetaRef.current = bundleMetaById;
+  const buildChainMeta = useCallback((patches: BinarySource[]) => {
+    const toTokens = (checks?: { checksums?: Record<string, string> }): string | undefined => {
+      const entries = Object.entries(checks?.checksums || {}).filter(([, hex]) => typeof hex === "string" && !!hex);
+      return entries.length ? entries.map(([algorithm, hex]) => `${algorithm}=${hex}`).join(",") : undefined;
+    };
+    const chainMeta = new Map<
+      number,
+      { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
+    >();
+    getBinarySourceListStableIds(patches).forEach((id, index) => {
+      const meta = bundleMetaRef.current.get(id || "");
+      if (!meta) return;
+      const inputChecks = toTokens(meta.inputChecks);
+      const outputChecks = toTokens(meta.outputChecks);
+      if (!(meta.basis || inputChecks || outputChecks)) return;
+      chainMeta.set(index, {
+        ...(meta.basis ? { basis: meta.basis } : {}),
+        ...(inputChecks ? { inputChecks } : {}),
+        ...(outputChecks ? { outputChecks } : {}),
+      });
+    });
+    return chainMeta;
+  }, []);
+
   // Latest patch list mirror for flows outside the staging pipeline (bundle export).
   const currentPatchesRef = useRef<BinarySource[]>([]);
   // Ordered patch file names as state (the refs above don't re-render): drives
@@ -1020,12 +1049,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           onVerifying?.(buildInfos());
           // Toggled-off patches are excluded from the run, so skip their deep dry-run too; the
           // enablement-change pass revalidates a patch when it is toggled back on.
-          await workflow.validatePatches({ disabledIndexes: getDisabledPatchIndexes(input.patches) });
+          await workflow.validatePatches({
+            chainMeta: buildChainMeta(input.patches),
+            disabledIndexes: getDisabledPatchIndexes(input.patches),
+          });
           return buildInfos();
         },
       );
     },
-    [getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const setPatchTarget = useCallback(
@@ -1102,7 +1134,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           // seeding (bundle sessions) skips this; the staging-completion pass
           // validates those on its own schedule.
           if (revalidate) {
-            await workflow.validatePatches({ disabledIndexes: getDisabledPatchIndexes(input.patches) });
+            await workflow.validatePatches({
+              chainMeta: buildChainMeta(input.patches),
+              disabledIndexes: getDisabledPatchIndexes(input.patches),
+            });
           }
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
@@ -1127,7 +1162,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const { localUiController, localStackController, localOutputController, localNoticeController } =

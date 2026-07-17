@@ -20,7 +20,7 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
-import type { CompressionLevelProfile } from "../../wasm/index.ts";
+import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import {
   getRomWeaverRunEventDetails,
@@ -308,12 +308,37 @@ const parsePatchValidatePerPatch = (terminal: ReturnType<typeof getTerminalEvent
   return verdicts;
 };
 
+// Read the typed verification plan from a plan-mode terminal event. The payload is our own
+// serializer's output, so shape-checking the discriminant + per_patch array is sufficient.
+const parsePatchValidatePlan = (terminal: ReturnType<typeof getTerminalEvent>): PatchValidationPlan | undefined => {
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+  const validation = asRecord(details?.patch_validation);
+  if (validation?.plan !== true || !Array.isArray(validation.per_patch)) return undefined;
+  return validation as unknown as PatchValidationPlan;
+};
+
 const invokeRomWeaverPatchValidateWorker = async (
   input: RuntimePatchValidateWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ message?: string; perPatch?: PatchValidatePerPatchVerdict[]; status: "passed" | "mixed" }> => {
+): Promise<{
+  message?: string;
+  perPatch?: PatchValidatePerPatchVerdict[];
+  plan?: PatchValidationPlan;
+  status: "passed" | "mixed";
+}> => {
   const independent = Boolean((input.options as { independent?: unknown } | undefined)?.independent);
+  const plan = Boolean((input.options as { plan?: unknown } | undefined)?.plan);
+  const planOptionRecord = asRecord(input.options);
+  const patchBasis = Array.isArray(planOptionRecord?.patchBasis)
+    ? (planOptionRecord.patchBasis as PatchBasisMode[])
+    : [];
+  const patchInputChecks = Array.isArray(planOptionRecord?.patchInputChecks)
+    ? (planOptionRecord.patchInputChecks as string[])
+    : [];
+  const patchOutputChecks = Array.isArray(planOptionRecord?.patchOutputChecks)
+    ? (planOptionRecord.patchOutputChecks as string[])
+    : [];
   const requirements = getPatchValidationRequirements(input.options);
   const optionRecord = asRecord(input.options);
   const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
@@ -354,6 +379,10 @@ const invokeRomWeaverPatchValidateWorker = async (
   const command = createRomWeaverCommand("patch-validate", {
     ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
     ...(independent ? { independent: true } : {}),
+    ...(plan ? { plan: true } : {}),
+    ...(patchBasis.length ? { patch_basis: patchBasis } : {}),
+    ...(patchInputChecks.length ? { patch_input_check: patchInputChecks } : {}),
+    ...(patchOutputChecks.length ? { patch_output_check: patchOutputChecks } : {}),
     ignore_checksum_validation: ignoreChecksumValidation,
     input: input.romFilePath,
     ...(n64ByteOrder ? { n64_byte_order: n64ByteOrder } : {}),
@@ -412,11 +441,16 @@ const invokeRomWeaverPatchValidateWorker = async (
   }
 
   const terminal = getTerminalEvent(result);
-  const perPatch = parsePatchValidatePerPatch(terminal);
-  const status = perPatch.some((verdict) => verdict.status === "failed") ? "mixed" : "passed";
+  const chainPlan = parsePatchValidatePlan(terminal);
+  // Plan-mode entries carry input_verdicts, not the independent-mode pass/fail
+  // statuses - consumers read the plan itself.
+  const perPatch = chainPlan ? [] : parsePatchValidatePerPatch(terminal);
+  const status =
+    chainPlan?.status === "mixed" || perPatch.some((verdict) => verdict.status === "failed") ? "mixed" : "passed";
   return {
     message: terminal ? getRomWeaverRunEventLabel(terminal) : "Patch validation passed",
     ...(perPatch.length ? { perPatch } : {}),
+    ...(chainPlan ? { plan: chainPlan } : {}),
     status,
   };
 };
