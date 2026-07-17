@@ -1,6 +1,6 @@
 # Code of conduct
 
-RomWeaver is committed to a welcoming, respectful, and harassment-free
+rom-weaver is committed to a welcoming, respectful, and harassment-free
 community for everyone, regardless of experience, identity, background, or
 ability.
 
@@ -29,4 +29,4 @@ or a permanent ban. Retaliation against someone who reports a concern is also
 a violation.
 
 This code applies to all project-managed spaces and to public conduct when a
-person is representing RomWeaver.
+person is representing rom-weaver.

@@ -1,22 +1,31 @@
-# RomWeaver documentation
+# rom-weaver documentation
 
 Choose the guide that matches what you are trying to do.
 
-## Use RomWeaver
+## Use rom-weaver
 
-- [CLI guide](cli.md): installation, common commands, patching behavior,
+- [CLI guide](cli.md): installation, common workflows, command reference,
   supported formats, compression, checksums, trimming, and JSON output.
 - [Generated man pages](man/): `rom-weaver(1)` and one page per visible CLI
   command, generated directly from Clap.
-- [Self-hosting](self-hosting.md): Docker, static deployment, reverse proxies,
-  subpaths, HTTPS, COOP/COEP, and host-provided OPFS inputs.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle.schema.json): machine-readable
   schema for distributable patch workflows.
+
+## Deploy
+
+- [Self-hosting](self-hosting.md): Docker, static deployment, reverse proxies,
+  subpaths, HTTPS, and COOP/COEP.
 - [Runtime configuration](env-vars.md): native, WASM, webapp, test, and build
   configuration knobs.
 
-Format specifications and upstream reference implementations are cataloged in
-[`references.md`](references.md).
+## Integrate
+
+- [Webapp URL API](ARCHITECTURE.md#rom-weaver-bundlejson-bundles): drive the
+  webapp with `?bundle=` and `?rom=&patch=` links.
+- [OPFS ingest API](self-hosting.md#ingesting-existing-opfs-files): feed
+  same-origin host files into the webapp pipeline.
+- [Browser WASM runtime](../packages/rom-weaver-webapp/src/wasm/README.md):
+  the OPFS runner and worker-client API surface.
 
 ## Develop and contribute
 
@@ -34,6 +43,8 @@ Format specifications and upstream reference implementations are cataloged in
   synchronization, cancellation, and file ownership.
 - [Mobile Safari verification](mobile-safari-verification.md): automated and
   real-device checks for WebKit, OPFS, memory pressure, and PWA behavior.
+- [References](references.md): format specifications and upstream reference
+  implementations.
 
 ## Design and migration notes
 

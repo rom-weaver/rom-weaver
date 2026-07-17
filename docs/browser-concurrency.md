@@ -1,6 +1,6 @@
 # Browser Concurrency Protocols
 
-RomWeaver runs the WASM engine on a dedicated worker thread (and that engine spawns
+rom-weaver runs the WASM engine on a dedicated worker thread (and that engine spawns
 its own pool of WASI threads for rayon-parallel work). Two hand-rolled
 `SharedArrayBuffer` + `Atomics` protocols hold this together. They are subtle, they
 have each been the source of hard-to-reproduce hangs, and their two halves usually

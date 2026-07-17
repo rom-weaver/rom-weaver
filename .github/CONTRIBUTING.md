@@ -1,4 +1,4 @@
-# Contributing to RomWeaver
+# Contributing to rom-weaver
 
 Bug reports, documentation fixes, and focused code contributions are welcome.
 Participation in this project is governed by the
@@ -7,7 +7,7 @@ Participation in this project is governed by the
 ## Report a problem
 
 Search the [issue tracker](https://github.com/brandonocasey/rom-weaver/issues)
-before opening a report. Use the bug-report form and include the RomWeaver
+before opening a report. Use the bug-report form and include the rom-weaver
 version, webapp or CLI environment, exact reproduction steps, and relevant
 diagnostics.
 

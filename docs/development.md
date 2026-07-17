@@ -1,6 +1,6 @@
 # Development guide
 
-RomWeaver is a Rust workspace with a native CLI and a React webapp backed by a
+rom-weaver is a Rust workspace with a native CLI and a React webapp backed by a
 threaded WASI module. [mise](https://mise.jdx.dev) pins the Rust, Node.js,
 Binaryen, and ripgrep versions and exposes the repository's build and test
 tasks.

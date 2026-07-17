@@ -1,6 +1,6 @@
 # Mobile Safari Verification
 
-RomWeaver's browser runtime needs secure-context APIs, cross-origin isolation,
+rom-weaver's browser runtime needs secure-context APIs, cross-origin isolation,
 `SharedArrayBuffer`, `Atomics.waitAsync`, workers, and OPFS. Docker and desktop
 emulation can catch some WebKit regressions, but they do not replace real iOS
 Safari for file picker, storage quota, memory pressure, download, and PWA

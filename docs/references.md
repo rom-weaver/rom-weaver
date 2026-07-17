@@ -59,11 +59,11 @@ It is intentionally a living document. Some patch families do not have stable fo
 
 ### In-Repo (`rom-weaver`) Implementations
 
-- Patch registry: [`crates/rom-weaver-patches/src/lib.rs`](crates/rom-weaver-patches/src/lib.rs)
-- Handlers directory: [`crates/rom-weaver-patches/src/`](crates/rom-weaver-patches/src/)
-- DCP format core: [`crates/rom-weaver-dcp/src/`](crates/rom-weaver-dcp/src/) (zip, manifest, apply, rebuild)
-- GD-ROM filesystem read/write: [`crates/rom-weaver-gdrom/src/`](crates/rom-weaver-gdrom/src/) (sector, iso9660, gdrom, iso_writer, mode1)
-- DCP CLI path: [`crates/rom-weaver-app/src/patch_apply_dcp.rs`](crates/rom-weaver-app/src/patch_apply_dcp.rs)
+- Patch registry: [`crates/rom-weaver-patches/src/lib.rs`](../crates/rom-weaver-patches/src/lib.rs)
+- Handlers directory: [`crates/rom-weaver-patches/src/`](../crates/rom-weaver-patches/src/)
+- DCP format core: [`crates/rom-weaver-dcp/src/`](../crates/rom-weaver-dcp/src/) (zip, manifest, apply, rebuild)
+- GD-ROM filesystem read/write: [`crates/rom-weaver-gdrom/src/`](../crates/rom-weaver-gdrom/src/) (sector, iso9660, gdrom, iso_writer, mode1)
+- DCP CLI path: [`crates/rom-weaver-app/src/patch_apply_dcp.rs`](../crates/rom-weaver-app/src/patch_apply_dcp.rs)
 
 ## Container / Compression Specs
 
@@ -105,7 +105,7 @@ and `CreatePatch(... ty_bps)`.
 
 | Area | MultiPatch / Flips | `rom-weaver` |
 | ---- | ------------------ | ------------ |
-| Format grammar | Uses the standard `BPS1` header, source/target sizes, metadata length, four action kinds (`SourceRead`, `TargetRead`, `SourceCopy`, `TargetCopy`), and CRC32 footer. | Parses and writes the same BPS grammar in [`crates/rom-weaver-patches/src/bps.rs`](crates/rom-weaver-patches/src/bps.rs). |
+| Format grammar | Uses the standard `BPS1` header, source/target sizes, metadata length, four action kinds (`SourceRead`, `TargetRead`, `SourceCopy`, `TargetCopy`), and CRC32 footer. | Parses and writes the same BPS grammar in [`crates/rom-weaver-patches/src/bps.rs`](../crates/rom-weaver-patches/src/bps.rs). |
 | Apply execution | Flips reads the input patch and ROM into memory, applies to an output buffer, then MultiPatch writes the result. | Uses an in-memory fast path for small files, a streaming sequential path for large files, and a parallel source/literal write path when a patch has no `TargetCopy`. `TargetCopy` stays sequential because it depends on previously produced output. |
 | Checksum policy | Flips validates patch/input/output CRCs, but MultiPatch passes `verifyinput = NO`; a wrong-input BPS can still produce an output with a warning. | Defaults to strict patch, input, and output CRC validation. The shared checksum-validation override can skip CRC checks, but input and output sizes are still enforced. |
 | Metadata / manifests | Flips can carry BPS metadata and its app wrapper has manifest plumbing. | Reads and skips metadata during parse/apply, reports sizes/checksums/action count, and currently creates zero-length metadata. |

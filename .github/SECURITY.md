@@ -8,7 +8,7 @@ backported fixes.
 
 ## Report a vulnerability
 
-Email **brandonocasey@gmail.com** with the subject `[RomWeaver security]`.
+Email **brandonocasey@gmail.com** with the subject `[rom-weaver security]`.
 Include the affected version, impact, reproduction steps, and any suggested
 mitigation. Do not open a public issue until the vulnerability has been fixed
 or disclosure has been coordinated.
