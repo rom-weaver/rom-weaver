@@ -21,98 +21,100 @@
 
 <p align="center">
  <a href="https://rom-weaver.com/">Open the webapp</a>
+ · <a href="#install">Install</a>
  · <a href="docs/README.md">Documentation</a>
  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
-rom-weaver can inspect, extract, checksum, compress, trim, patch, and create
-patches for many cartridge and disc formats. The browser app processes files
-locally with WebAssembly; the native CLI exposes the same command core for
-scripts and terminal workflows.
+## Features
+
+- **Apply and create patches.** IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
+  BSDIFF40, APS, DCP (Dreamcast), and more than twenty formats in total, with
+  ordered multi-patch chains, strict checksum validation, and cheat-code
+  baking.
+- **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
+  Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
+- **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
+  codec-aware compression settings, validated against reference tools such as
+  chdman and dolphin-tool.
+- **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
+  with copier-header detection, header repair, and header-aware checksum
+  variants.
+- **Trim and restore.** Reversible trimming for NDS, GBA, 3DS, and XISO with
+  an opt-in revert footer that restores the original file byte-for-byte.
+- **Share workflows.** Distributable [`rom-weaver-bundle.json`](docs/rom-weaver-bundle.schema.json)
+  bundles pin patch order, checksums, and output naming so others can replay
+  the exact workflow.
+- **Local-first and private.** Everything runs on your machine. The webapp is
+  an installable PWA that works offline and never uploads your files.
+- **One engine, two frontends.** The same Rust core powers the terminal CLI
+  and the threaded WASM webapp, with line-delimited JSON output for scripting.
+
+The complete format, codec, and checksum compatibility tables are maintained
+in the [CLI guide](docs/cli.md#supported-formats).
 
 ## Install
 
-### Prerequisites
-
-The hosted webapp needs only a supported browser. The CLI needs Node.js 22+
-for npm or `npx`, or Rust 1.95+, CMake, Clang, and a native compiler
-toolchain for Cargo.
-
-Building the webapp from source additionally needs `mise`, the WASI SDK,
-Brotli, and `sccache`. `mise` installs the pinned Rust, Node.js, Binaryen,
-and ripgrep versions used by the repository; it does not install the WASI SDK
-or system packages. On macOS with Homebrew:
-
-```bash
-brew install mise cmake llvm brotli sccache
-```
-
-On other systems, install [mise](https://mise.jdx.dev/) with your package
-manager or its installer, then run `mise install` and `mise trust`. See the
-[development prerequisites](docs/development.md#prerequisites) for WASI SDK
-locations and platform-specific setup. Docker users need Docker with Compose;
-the webapp image contains the build toolchains.
-
 ### Webapp
 
-Use the [rom-weaver webapp](https://rom-weaver.com/) in a browser. No
-installation or account is required. To run it on your own infrastructure, see
-[Start here](#start-here) below.
+Open the hosted webapp at **[rom-weaver.com](https://rom-weaver.com/)**. There
+is nothing to install and no account: choose **Weave**, add a ROM and one or
+more patches, review the detected formats and checksums, then run the workflow
+and save the result. Use **Make Patch** to create a distributable patch from
+an original and a modified file; optional Trim and Tools workflows can be
+enabled in the webapp settings. Your files are processed locally and never
+leave the device. Install it as a PWA from the browser menu to use it offline.
+
+To run the webapp on your own infrastructure, see
+[Self-host the webapp](#self-host-the-webapp) below.
 
 ### CLI
 
-Choose the installation or execution method that fits your workflow:
+The CLI needs no runtime beyond the install method you pick. Every method
+below installs the same `rom-weaver` command; run `rom-weaver --help` to
+verify it, then start with the [CLI guide](docs/cli.md).
+
+<details>
+<summary><strong>npx</strong> — run once without installing (Node.js 22+)</summary>
 
 ```bash
-# One-off use with Node.js 22+
 npx --yes rom-weaver --help
+```
 
-# Install the native platform package with npm
+Downloads the native binary for the current platform on first use.
+
+</details>
+
+<details>
+<summary><strong>npm</strong> — global install (Node.js 22+)</summary>
+
+```bash
 npm install --global rom-weaver
 rom-weaver --help
-
-# Install the published Rust crate
-cargo install rom-weaver-cli
-rom-weaver --help
-
-# Run from a source checkout
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
-cd rom-weaver
-cargo run --release -p rom-weaver-cli -- --help
-
-# Run the published CLI container
-docker run --rm ghcr.io/brandonocasey/rom-weaver-cli:latest --help
 ```
 
-The npm packages provide macOS arm64/x64, Linux x64 glibc, and Windows x64
-binaries. Cargo builds for other supported Rust targets. The [CLI guide](docs/cli.md)
-covers command behavior, supported formats, compression codecs, checksums, and
-JSON output.
+The npm packages ship prebuilt binaries for macOS arm64/x64, Linux x64
+(glibc), and Windows x64. On Unix, the generated `rom-weaver(1)` man pages are
+installed when npm's global man directory is on `MANPATH`.
 
-## Start here
+</details>
 
-### Use the webapp
-
-Open the [hosted webapp](https://rom-weaver.com/).
-No installation or account is required.
-
-1. Choose **Weave** to add a ROM or disc image and one or more patch files.
-2. Review the detected formats, checksums, patch order, and output settings.
-3. Run the workflow and save the result.
-
-Use **Make Patch** to compare an original file with a modified file and create
-a distributable patch. Optional Trim and Tools workflows can be enabled in the
-webapp settings.
-
-### Use the CLI
-
-Get started without installing:
+<details>
+<summary><strong>Cargo</strong> — build from crates.io</summary>
 
 ```bash
-npx rom-weaver --help
+cargo install rom-weaver-cli
+rom-weaver --help
 ```
 
-Or install the current tagged native CLI from source:
+Builds from source, so it works on any supported Rust target beyond the
+prebuilt npm platforms. Requires Rust 1.95+, CMake, Clang, and a native
+compiler toolchain.
+
+</details>
+
+<details>
+<summary><strong>Cargo</strong> — build a tagged release from Git</summary>
 
 ```bash
 cargo install \
@@ -122,66 +124,86 @@ cargo install \
 rom-weaver --help
 ```
 
-Common commands:
+Same toolchain requirements as the crates.io install. Useful for pinning an
+exact tag or testing an unreleased branch (drop `--tag` for the default
+branch).
+
+</details>
+
+<details>
+<summary><strong>Docker</strong> — published CLI image</summary>
 
 ```bash
-# Identify a file or the payload inside a container
-rom-weaver probe game.sfc
-
-# Apply a patch and write an uncompressed ROM
-rom-weaver patch apply \
-  --input game.sfc \
-  --patch translation.bps \
-  --output game-translated.sfc \
-  --no-compress
-
-# Create a BPS patch
-rom-weaver patch create \
-  --original original.sfc \
-  --modified modified.sfc \
-  --format bps \
-  --output release.bps
-
-# Extract and checksum files
-rom-weaver extract collection.7z --out-dir extracted
-rom-weaver checksum game.sfc --algo sha256
+docker run --rm ghcr.io/brandonocasey/rom-weaver-cli:latest --help
 ```
 
-See the [CLI guide](docs/cli.md) for installation alternatives, command
-behavior, supported formats, compression codecs, checksums, and JSON output.
+Mount a working directory to process local files:
 
-### Self-host with Docker
+```bash
+docker run --rm --volume "$PWD:/data" \
+  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  probe /data/game.sfc
+```
 
-Run the published webapp image:
+</details>
+
+<details>
+<summary><strong>From source</strong> — run a development checkout</summary>
+
+```bash
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+cargo run --release -p rom-weaver-cli -- --help
+```
+
+Requires Rust 1.95+, CMake, Clang, and a native compiler toolchain. The
+[development guide](docs/development.md) covers the full toolchain setup,
+webapp builds, and tests.
+
+</details>
+
+### Self-host the webapp
+
+Each method serves the full webapp — WASM build, cross-origin isolation
+headers, SPA fallback, and precompressed assets included. The
+[self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
+routing, service-worker scope, and the required COOP/COEP headers.
+
+<details>
+<summary><strong>Docker</strong> — published webapp image</summary>
 
 ```bash
 docker run --rm --publish 8080:8080 ghcr.io/brandonocasey/rom-weaver-webapp:latest
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Or build the webapp from a checkout with Docker Compose:
+Open `http://localhost:8080/`. For production, put the container behind an
+HTTPS reverse proxy.
+
+</details>
+
+<details>
+<summary><strong>Docker Compose</strong> — build the image from a checkout</summary>
 
 ```bash
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
 docker compose up --build --detach
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Open `http://localhost:8080/`. The container includes the WASM build,
-cross-origin isolation headers, SPA fallback, and precompressed Brotli assets.
-For production, put it behind an HTTPS reverse proxy. Set `PORT` to use a
-different local port, for example `PORT=3000 docker compose up --build --detach`.
+Only Docker with Compose is required; the image installs its own build
+toolchains. Set `PORT` to change the host port, for example
+`PORT=3000 docker compose up --build --detach`.
 
-### Static hosting
+</details>
 
-Build the static directory from a checkout. This requires `mise`, a WASI SDK,
-and Brotli; the [development guide](docs/development.md) lists platform
-prerequisites. If `mise` is not installed, its upstream installer is:
+<details>
+<summary><strong>Static hosting</strong> — build and upload the static directory</summary>
 
-```bash
-curl https://mise.run | sh
-```
-
-Then build:
+Building from source requires `mise`, the WASI SDK, and Brotli; the
+[development guide](docs/development.md#prerequisites) lists the
+platform-specific setup.
 
 ```bash
 git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
@@ -193,59 +215,50 @@ mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
-Upload `packages/rom-weaver-webapp/dist/` to an HTTPS static host that supports
-SPA fallback and the required COOP/COEP/CORP headers. The [self-hosting guide](docs/self-hosting.md)
-covers reverse proxies, subpath routing, service-worker scope, and static-host
-configuration.
+Upload `packages/rom-weaver-webapp/dist/` to an HTTPS static host that
+supports SPA fallback and the required COOP/COEP/CORP headers; see
+[static files](docs/self-hosting.md#static-files) for host configuration.
 
-## What it supports
-
-- Patch apply and creation for IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
-  BSDIFF40, DCP, and many other formats.
-- Container inspection and extraction for ZIP, 7z, RAR, tar-family archives,
-  CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more.
-- ZIP, 7z, CHD, RVZ, and Z3DS creation with codec-aware compression settings.
-- CRC, MD5, SHA, BLAKE3, ROM-header detection, checksum repair, and reversible
-  trimming for supported systems.
-- Ordered, shareable workflows through `rom-weaver-bundle.json` bundles.
-
-The complete compatibility tables are maintained in the
-[CLI guide](docs/cli.md#supported-formats).
-
-## Develop
-
-Clone the repository with its submodules, then install the pinned toolchains
-and JavaScript dependencies:
-
-```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
-cd rom-weaver
-mise install
-mise trust
-npm ci
-npm ci --prefix packages/rom-weaver-webapp
-mise run build-wasm
-npm run dev
-```
-
-The WASM build also needs WASI SDK and Brotli. See the
-[development guide](docs/development.md) for prerequisites, native CLI builds,
-browser tests, worktrees, and the full `mise run ci` quality gate.
+</details>
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), or jump directly to:
+Start with the [documentation index](docs/README.md).
 
-- [CLI usage and supported formats](docs/cli.md)
-- [Self-hosting and Docker](docs/self-hosting.md)
-- [Webapp integration API](docs/self-hosting.md#ingesting-existing-opfs-files)
-- [Webapp URL API](docs/ARCHITECTURE.md#rom-weaver-bundlejson-bundles)
-- [Development and testing](docs/development.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Runtime configuration](docs/env-vars.md)
+**Use rom-weaver**
 
-Format specifications and reference implementations are collected in
-[`docs/references.md`](docs/references.md).
+- [CLI guide](docs/cli.md) — install alternatives, common workflows, command
+  reference, supported formats, compression codecs, checksums, and JSON
+  output.
+- [Man pages](docs/man/) — `rom-weaver(1)` and one page per command, generated
+  from the CLI definitions.
+- [Bundle schema](docs/rom-weaver-bundle.schema.json) — the machine-readable
+  `rom-weaver-bundle.json` workflow format.
+
+**Deploy**
+
+- [Self-hosting](docs/self-hosting.md) — Docker, static hosting, reverse
+  proxies, subpaths, and cross-origin isolation.
+- [Runtime configuration](docs/env-vars.md) — every `ROM_WEAVER_*`
+  environment variable and runtime knob.
+
+**Integrate**
+
+- [Webapp URL API](docs/ARCHITECTURE.md#rom-weaver-bundlejson-bundles) —
+  drive the webapp with `?bundle=` and `?rom=&patch=` links.
+- [OPFS ingest API](docs/self-hosting.md#ingesting-existing-opfs-files) —
+  feed same-origin host files into the webapp pipeline.
+- [Browser WASM runtime](packages/rom-weaver-webapp/src/wasm/README.md) — the
+  OPFS runner and worker-client API surface.
+
+**Develop**
+
+- [Development guide](docs/development.md) — prerequisites, builds, tests,
+  generated files, and worktrees.
+- [Architecture](docs/ARCHITECTURE.md) — crate graph, command core, browser
+  boundary, and testing layout.
+- [References](docs/references.md) — format specifications and reference
+  implementations.
 
 ## Contributing and support
 
