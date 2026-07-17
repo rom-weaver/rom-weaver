@@ -6,10 +6,15 @@ import { installPatcherTestHooks, loadFixtureFile, mount, RAW_ROM, selectFileInp
 installPatcherTestHooks();
 
 // A true BPS chain built from the 13-byte game.bin: a = base -> inter,
-// b = inter -> final, c = final -> final2.
+// b = inter -> final, c = final -> final2. d is a SIBLING of a: also
+// authored straight against the base (base -> alt).
 const CHAIN_A = "tests/fixtures/browser-generated/chain-step-a.bps";
 const CHAIN_B = "tests/fixtures/browser-generated/chain-step-b.bps";
 const CHAIN_C = "tests/fixtures/browser-generated/chain-step-c.bps";
+const SAME_BASE_D = "tests/fixtures/browser-generated/chain-step-d.bps";
+
+// game.bin's raw crc32 (both base-authored patches embed it as their source).
+const ROM_CRC32 = "c6fb1252";
 
 const chipText = (index) => document.getElementById(`rom-weaver-patch-chain-chip-${index}`)?.textContent?.trim() ?? "";
 
@@ -38,6 +43,25 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => document.getElementById("rom-weaver-output-verified"), { timeout: 60000 }).not.toBeNull();
   expect(document.getElementById("rom-weaver-bundle-output-unverified")).toBeNull();
 });
+
+test("same-base patches all match the ROM and feed the Expected group without conflict", async () => {
+  mount(createElement(ApplyPatchForm, {}));
+  await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
+
+  // Both patches were authored against the base: each one verifies against
+  // the ROM directly instead of chaining off its neighbor.
+  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("matches your ROM");
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
+  expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
+
+  // Their shared base expectation unions into the ROM card's Expected group
+  // (one agreeing crc32 row, verified mark, no conflict notice).
+  const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
+  await expect.poll(() => expectedGroup()?.textContent ?? "", { timeout: 60000 }).toContain(ROM_CRC32);
+  await expect.poll(() => !!expectedGroup()?.querySelector(".ck-mark.ok"), { timeout: 60000 }).toBe(true);
+  expect(expectedGroup()?.querySelector(".ck-mark.bad")).toBeNull();
+  expect(document.getElementById("rom-weaver-rom-expected-conflict")).toBeNull();
+}, 120000);
 
 test("an out-of-order chain names its predecessor and Fix order repairs it", async () => {
   mount(createElement(ApplyPatchForm, {}));

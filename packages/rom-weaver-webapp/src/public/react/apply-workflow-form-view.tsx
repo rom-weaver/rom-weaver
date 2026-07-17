@@ -287,19 +287,14 @@ const matchPastedInputChecksum = (pasted: string, info: RomInputRowState["info"]
  * user-pasted input checksum, red on mismatch, and no color when there is
  * nothing to verify against. A mismatch from any signal wins over a match.
  */
-/* The chain-input patch's own ROM requirements (embedded in the patch file,
-   or carried by its manifest entry) describe the base ROM exactly like bundle
-   rom.checks do - fold them into the same Expected marks on the ROM card
-   whenever the bundle itself offers nothing. */
-const parseChainInputExpectation = (
-  patches: PatchStackItemState[],
-  disabledFlags?: readonly boolean[],
-): ParsedBundleChecks | undefined => {
-  const chainInput = patches.find((_, index) => !disabledFlags?.[index]);
-  if (!chainInput) return undefined;
+/* A patch's own ROM requirements (embedded in the patch file, or carried by
+   its manifest entry) describe its input exactly like bundle rom.checks do -
+   parse them from the card's "in ..." rows so they can fold into the same
+   Expected marks on the ROM card. */
+const parsePatchInputExpectation = (patch: PatchStackItemState): ParsedBundleChecks | undefined => {
   const checksums: Record<string, string> = {};
   let size: number | undefined;
-  for (const entry of chainInput.validationValues || []) {
+  for (const entry of patch.validationValues || []) {
     // "in min size" (xdelta) is a lower bound, not an identity - skip it.
     const match = /^in (crc32|md5|sha-?1|size)=(.+)$/i.exec(entry);
     if (!match) continue;
@@ -315,6 +310,71 @@ const parseChainInputExpectation = (
   }
   if (!(Object.keys(checksums).length || size !== undefined)) return undefined;
   return { checksums, ...(size === undefined ? {} : { size }) };
+};
+
+/* Pre-plan fallback: the chain-input patch (first enabled) is the one whose
+   input describes the base ROM under sequential semantics. */
+const parseChainInputExpectation = (
+  patches: PatchStackItemState[],
+  disabledFlags?: readonly boolean[],
+): ParsedBundleChecks | undefined => {
+  const chainInput = patches.find((_, index) => !disabledFlags?.[index]);
+  return chainInput ? parsePatchInputExpectation(chainInput) : undefined;
+};
+
+/**
+ * Plan-fed base expectation for a single-ROM bench: every enabled patch the
+ * chain plan resolved as base-basis describes THE base ROM, so union its
+ * declared checks (bundle/user), else its embedded input values, with the
+ * bundle's rom.checks. When two contributions disagree on an algorithm the
+ * value matching the staged ROM wins the Expected rows and the disagreement
+ * is reported as a base conflict (the losing patch's own card shows the
+ * mismatch). Returns null when the plan offered no base-basis verdicts -
+ * callers fall back to the sequential chain-input parse.
+ */
+const buildPlanBaseExpectation = (
+  patches: PatchStackItemState[],
+  disabledFlags: readonly boolean[],
+  bundleMeta: ReadonlyArray<BundlePatchMeta | undefined>,
+  bundleRomChecks: ParsedBundleChecks | undefined,
+  romInfo: RomInputRowState["info"] | undefined,
+): { conflict: boolean; expected: ParsedBundleChecks } | null => {
+  const contributions: ParsedBundleChecks[] = [];
+  if (bundleRomChecks) contributions.push(bundleRomChecks);
+  let sawBaseVerdict = false;
+  for (const [index, patch] of patches.entries()) {
+    if (disabledFlags[index]) continue;
+    if (patch.chainVerdict?.basis !== "base") continue;
+    sawBaseVerdict = true;
+    const expectation = bundleMeta[index]?.inputChecks ?? parsePatchInputExpectation(patch);
+    if (expectation) contributions.push(expectation);
+  }
+  if (!(sawBaseVerdict && contributions.length)) return null;
+  const checksums: Record<string, string> = {};
+  let size: number | undefined;
+  let conflict = false;
+  for (const contribution of contributions) {
+    for (const [algorithm, rawValue] of Object.entries(contribution.checksums || {})) {
+      const key = algorithm.toLowerCase().replace("sha-1", "sha1");
+      const value = rawValue.trim().toLowerCase();
+      if (!value) continue;
+      const existing = checksums[key];
+      if (existing === undefined || existing === value) {
+        checksums[key] = value;
+        continue;
+      }
+      conflict = true;
+      const actual =
+        key === "crc32" || key === "md5" || key === "sha1" ? (romInfo?.[key] || "").trim().toLowerCase() : "";
+      if (actual && value === actual) checksums[key] = value;
+    }
+    if (contribution.size !== undefined) {
+      if (size === undefined) size = contribution.size;
+      else if (size !== contribution.size) conflict = true;
+    }
+  }
+  if (!(Object.keys(checksums).length || size !== undefined)) return null;
+  return { conflict, expected: { checksums, ...(size === undefined ? {} : { size }) } };
 };
 
 const buildRomVerificationStates = (
@@ -750,10 +810,17 @@ function ApplyWorkflowFormView({
     ]),
   );
   // The expected-ROM group describes THE base ROM, so it only renders for an
-  // unambiguous single-ROM bench. Without a bundle expectation, the chain-input
-  // patch's own checks stand in.
+  // unambiguous single-ROM bench. The chain plan's base-basis verdicts feed it
+  // (union across every enabled patch authored against the base); without plan
+  // evidence the bundle expectation, then the chain-input patch's own checks,
+  // stand in.
   const singleRom = romInputs.length === 1;
-  const expectedRomChecks = bundleExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
+  const planBaseExpectation = singleRom
+    ? buildPlanBaseExpectation(patches, disabledPatchFlags, bundleMeta, bundleExpectedRomChecks, romInputs[0]?.info)
+    : null;
+  const expectedRomChecks =
+    planBaseExpectation?.expected ?? bundleExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
+  const baseConflict = !!planBaseExpectation?.conflict;
   const romRowDeps: RomRowDeps = {
     romInputs,
     ui: uiController,
@@ -1010,6 +1077,11 @@ function ApplyWorkflowFormView({
               <>
                 {bundleRomExpectation && romInputs.length === 0 ? (
                   <BundleRomExpectationCard expectation={bundleRomExpectation} />
+                ) : null}
+                {baseConflict ? (
+                  <Notice id="rom-weaver-rom-expected-conflict" level="warn">
+                    These patches expect different ROMs - each patch card shows the one it needs.
+                  </Notice>
                 ) : null}
                 <SectionNotice
                   id="rom-weaver-input-notice-message"
