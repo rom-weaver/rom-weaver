@@ -294,7 +294,7 @@ rom-weaver --json probe game.sfc | jq
 ```
 
 For format specifications and upstream implementations, see
-[`REFERENCES.md`](../REFERENCES.md).
+[`references.md`](references.md).
 
 ## Man pages
 

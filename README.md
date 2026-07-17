@@ -245,15 +245,15 @@ Start with the [documentation index](docs/README.md), or jump directly to:
 - [Runtime configuration](docs/env-vars.md)
 
 Format specifications and reference implementations are collected in
-[`REFERENCES.md`](REFERENCES.md).
+[`docs/references.md`](docs/references.md).
 
 ## Contributing and support
 
 Bug reports and contributions are welcome. Read the
-[contribution guide](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md)
+[contribution guide](.github/CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
 before submitting a change, and report
 suspected vulnerabilities through the private channel in the
-[security policy](SECURITY.md). If rom-weaver has been useful to you, you can
+[security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
 support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 
 ## License

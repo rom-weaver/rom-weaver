@@ -24,7 +24,7 @@ For substantial behavior or format changes, open an issue first so the scope
 can be agreed before implementation. Keep pull requests focused and update the
 relevant documentation when behavior changes.
 
-The [development guide](docs/development.md) covers the recursive clone,
+The [development guide](../docs/development.md) covers the recursive clone,
 toolchains, builds, tests, generated files, and linked worktrees. Before
 submitting a pull request, run the smallest relevant checks and, when possible,
 the complete local gate:
@@ -34,4 +34,4 @@ mise run ci
 ```
 
 By contributing, you agree that your contribution is licensed under the
-[GNU Affero General Public License](LICENSE.md), version 3 or later.
+[GNU Affero General Public License](../LICENSE.md), version 3 or later.

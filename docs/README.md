@@ -16,15 +16,15 @@ Choose the guide that matches what you are trying to do.
   configuration knobs.
 
 Format specifications and upstream reference implementations are cataloged in
-[`REFERENCES.md`](../REFERENCES.md).
+[`references.md`](references.md).
 
 ## Develop and contribute
 
-- [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes,
+- [Contribution guide](../.github/CONTRIBUTING.md): reporting bugs, proposing changes,
   validation, and contribution licensing.
-- [Code of conduct](../CODE_OF_CONDUCT.md): expectations for respectful project
+- [Code of conduct](../.github/CODE_OF_CONDUCT.md): expectations for respectful project
   participation and reporting conduct concerns.
-- [Security policy](../SECURITY.md): supported versions and private
+- [Security policy](../.github/SECURITY.md): supported versions and private
   vulnerability reporting.
 - [Development guide](development.md): prerequisites, setup, native and WASM
   builds, the dev server, tests, generated files, and linked worktrees.
