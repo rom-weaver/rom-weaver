@@ -14,7 +14,9 @@ use super::{
 };
 use crate::{
     BPS,
-    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
+    test_support::{
+        RoundTripCase, TestDir, assert_round_trip, report_endpoints, test_context_with_threads,
+    },
 };
 
 #[derive(Debug)]
@@ -57,6 +59,41 @@ fn parse_reports_source_target_and_patch_crc32() {
             .label
             .contains(&format!("patch crc32 {:08x}", parsed.patch_checksum))
     );
+}
+
+#[test]
+fn parse_and_describe_report_normalized_endpoints() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("probe.bps");
+    let patch = build_bps_patch(
+        b"source-data",
+        b"target-data",
+        vec![TestAction::TargetRead(b"target-data".to_vec())],
+    );
+    let parsed = parse_bps_bytes(&patch).expect("parse");
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = BpsPatchHandler::new(&BPS);
+    let context = test_context_with_threads(&temp, 1);
+    for report in [
+        handler.parse(&patch_path, &context).expect("parse report"),
+        handler
+            .describe_metadata(&patch_path, &context)
+            .expect("describe report"),
+    ] {
+        let endpoints = report_endpoints(&report);
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(endpoints[0]["input"]["size"].as_u64(), Some(11));
+        assert_eq!(endpoints[0]["output"]["size"].as_u64(), Some(11));
+        assert_eq!(
+            endpoints[0]["input"]["checksums"]["crc32"].as_str(),
+            Some(format!("{:08x}", parsed.source_checksum).as_str())
+        );
+        assert_eq!(
+            endpoints[0]["output"]["checksums"]["crc32"].as_str(),
+            Some(format!("{:08x}", parsed.target_checksum).as_str())
+        );
+    }
 }
 
 #[test]

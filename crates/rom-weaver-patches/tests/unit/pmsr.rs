@@ -7,7 +7,9 @@ use rom_weaver_core::{
 use super::{CREATE_SCAN_CHUNK_BYTES, PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes};
 use crate::{
     MOD,
-    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
+    test_support::{
+        RoundTripCase, TestDir, assert_round_trip, report_endpoints, test_context_with_threads,
+    },
 };
 
 #[test]
@@ -32,6 +34,36 @@ fn parse_report_includes_expected_crc32() {
         .parse(&patch_path, &test_context_with_threads(&temp, 1))
         .expect("parse");
     assert!(report.label.contains("CRC32 0xA7F5CD7E"));
+}
+
+#[test]
+fn parse_reports_normalized_source_endpoint() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("update.mod");
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"PMSR");
+    patch.extend_from_slice(&0u32.to_be_bytes());
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = PmsrPatchHandler::new(&MOD);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 1);
+    assert_eq!(
+        endpoints[0]["input"]["checksums"]["crc32"].as_str(),
+        Some("a7f5cd7e")
+    );
+    assert_eq!(endpoints[0]["input"]["size"].as_u64(), Some(41_943_040));
+    // A record-less patch grows nothing: no output bound is reported.
+    assert!(
+        endpoints[0]["output"]
+            .as_object()
+            .expect("output")
+            .is_empty()
+    );
 }
 
 #[test]

@@ -16,6 +16,7 @@ use rom_weaver_core::{
 use tracing::{debug, trace};
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
@@ -49,7 +50,7 @@ impl PatchHandler for ApsGbaPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_apsgba_file(patch_path)?;
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -62,7 +63,17 @@ impl PatchHandler for ApsGbaPatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        // Per-block CRC16s are not whole-file identifiers; only sizes qualify.
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            vec![PatchEndpointVariant::new(
+                PatchEndpointSide::sized(u64::from(patch.source_size)),
+                PatchEndpointSide::sized(u64::from(patch.target_size)),
+            )],
+        );
+        Ok(report)
     }
 
     fn apply(

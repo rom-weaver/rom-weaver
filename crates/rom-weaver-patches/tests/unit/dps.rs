@@ -13,8 +13,43 @@ use super::{
 };
 use crate::{
     DPS,
-    test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
+    test_support::{
+        RoundTripCase, TestDir, assert_round_trip, report_endpoints, test_context_with_threads,
+    },
 };
+
+#[test]
+fn parse_reports_normalized_size_endpoints() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("probe.dps");
+    let records = vec![DpsRecord::EmbeddedData {
+        output_offset: 0,
+        data: b"AB".to_vec(),
+    }];
+    let bytes = encode_dps_patch(
+        &records,
+        DpsHeaderMetadata {
+            patch_name: "probe.dps",
+            patch_author: "test",
+            patch_version_text: "1",
+            patch_flag: 0,
+        },
+        16,
+    )
+    .expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 1);
+    assert_eq!(endpoints[0]["input"]["size"].as_u64(), Some(16));
+    assert_eq!(endpoints[0]["output"]["size"].as_u64(), Some(2));
+    assert!(endpoints[0]["input"].get("checksums").is_none());
+}
 
 #[test]
 fn parse_rejects_unsupported_patch_version() {

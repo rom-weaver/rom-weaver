@@ -15,6 +15,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
@@ -52,7 +53,7 @@ impl PatchHandler for PmsrPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_pmsr_file(patch_path)?;
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -63,7 +64,23 @@ impl PatchHandler for PmsrPatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        // The output only grows to cover the highest record (min bound); the
+        // exact result depends on the source length, so no output size/checksum.
+        let output = PatchEndpointSide {
+            min_size: (patch.min_target_size > 0).then_some(patch.min_target_size),
+            ..PatchEndpointSide::default()
+        };
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            vec![PatchEndpointVariant::new(
+                PatchEndpointSide::sized(PAPER_MARIO_USA10_FILE_SIZE)
+                    .with_checksum("crc32", format!("{PAPER_MARIO_USA10_CRC32:08x}")),
+                output,
+            )],
+        );
+        Ok(report)
     }
 
     fn apply(

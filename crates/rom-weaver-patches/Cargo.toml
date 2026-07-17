@@ -21,6 +21,7 @@ rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
 rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-xdelta = { path = "../rom-weaver-xdelta", version = "0.5.0" }
 rayon.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sha1.workspace = true
 suffix_array.workspace = true

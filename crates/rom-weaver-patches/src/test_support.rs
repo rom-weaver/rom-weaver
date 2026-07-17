@@ -51,6 +51,21 @@ pub(crate) fn test_context_with_threads(temp: &TestDir, threads: usize) -> Opera
     test_context_with_threads_named(temp, threads, "temp")
 }
 
+/// The normalized `details.patch.endpoints` array of a parse/describe report.
+pub(crate) fn report_endpoints(
+    report: &rom_weaver_core::OperationReport,
+) -> Vec<serde_json::Value> {
+    report
+        .details
+        .as_ref()
+        .expect("report details")
+        .get("patch")
+        .and_then(|patch| patch.get("endpoints"))
+        .and_then(|endpoints| endpoints.as_array())
+        .cloned()
+        .expect("details.patch.endpoints")
+}
+
 pub(crate) fn test_context_with_threads_named(
     temp: &TestDir,
     threads: usize,

@@ -2246,6 +2246,7 @@ dependencies = [
  "rom-weaver-core",
  "rom-weaver-qbsdiff",
  "rom-weaver-xdelta",
+ "serde",
  "serde_json",
  "sha1",
  "suffix_array",

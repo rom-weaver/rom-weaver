@@ -5,8 +5,29 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 use super::{ApsGbaPatchHandler, create_apsgba_patch_bytes, parse_apsgba_bytes};
 use crate::{
     APSGBA,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{TestDir, report_endpoints, test_context_with_threads},
 };
+
+#[test]
+fn parse_reports_normalized_size_endpoints() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("probe.aps");
+    let created = create_apsgba_patch_bytes(b"abcdefgh", b"abcdefghij").expect("patch");
+    fs::write(&patch_path, created.bytes).expect("fixture");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 1);
+    assert_eq!(endpoints[0]["input"]["size"].as_u64(), Some(8));
+    assert_eq!(endpoints[0]["output"]["size"].as_u64(), Some(10));
+    // Per-block CRC16s are not whole-file identifiers.
+    assert!(endpoints[0]["input"].get("checksums").is_none());
+    assert!(endpoints[0]["output"].get("checksums").is_none());
+}
 
 #[test]
 fn parse_rejects_invalid_header() {

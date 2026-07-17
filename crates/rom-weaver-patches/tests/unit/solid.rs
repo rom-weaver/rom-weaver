@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     SOLID,
     test_support::{
-        RoundTripCase, TestDir, assert_round_trip,
+        RoundTripCase, TestDir, assert_round_trip, report_endpoints,
         test_context_with_threads_in_root as test_context_with_threads,
     },
 };
@@ -58,6 +58,48 @@ fn parse_rejects_invalid_magic() {
         .parse(&patch, &test_context_with_threads(&temp, 1))
         .expect_err("parse should fail");
     assert!(error.to_string().contains("SOLID patch"));
+}
+
+#[test]
+fn parse_reports_normalized_source_md5_endpoint() {
+    let temp = TestDir::new();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("patch.solid");
+    fs::write(&original, b"ABCDEF").expect("source");
+    fs::write(&modified, b"ABCDzz").expect("target");
+
+    let handler = SolidPatchHandler::new(&SOLID);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: original.clone(),
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    let report = handler
+        .parse(&patch, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    let parsed = parse_solid_patch_file(&patch).expect("parsed");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 1);
+    assert_eq!(
+        endpoints[0]["input"]["checksums"]["md5"].as_str(),
+        Some(format_md5_hex(parsed.source_md5).as_str())
+    );
+    assert!(endpoints[0]["input"].get("size").is_none());
+    assert!(
+        endpoints[0]["output"]
+            .as_object()
+            .expect("output")
+            .is_empty()
+    );
 }
 
 #[test]

@@ -2,8 +2,23 @@
 //! human-readable report labels (and the byuu parse `details` JSON) byte-identical across the
 //! formats that previously duplicated the same string assembly inline.
 
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use rom_weaver_core::{FormatDescriptor, OperationReport, ThreadExecution};
 use serde_json::json;
+
+/// The byuu (BPS/UPS) embedded expectations as one normalized endpoint
+/// variant: exact source/target sizes plus whole-file CRC32s.
+fn byuu_endpoint_variant(
+    source_size: u64,
+    target_size: u64,
+    source_crc32: u32,
+    target_crc32: u32,
+) -> PatchEndpointVariant {
+    PatchEndpointVariant::new(
+        PatchEndpointSide::sized(source_size).with_checksum("crc32", format!("{source_crc32:08x}")),
+        PatchEndpointSide::sized(target_size).with_checksum("crc32", format!("{target_crc32:08x}")),
+    )
+}
 
 /// Build the create success report shared by record-based patch formats:
 /// `"created <name> patch with <n> record(s)"`. Formats that append warning
@@ -65,6 +80,16 @@ pub(crate) fn byuu_parse_report(
             "record_count": record_count,
         }
     }));
+    attach_patch_endpoints(
+        &mut report,
+        descriptor.name,
+        vec![byuu_endpoint_variant(
+            source_size,
+            target_size,
+            source_crc32,
+            target_crc32,
+        )],
+    );
     report
 }
 
@@ -98,5 +123,15 @@ pub(crate) fn byuu_metadata_report(
             "patch_crc32": patch_crc32,
         }
     }));
+    attach_patch_endpoints(
+        &mut report,
+        descriptor.name,
+        vec![byuu_endpoint_variant(
+            source_size,
+            target_size,
+            source_crc32,
+            target_crc32,
+        )],
+    );
     report
 }

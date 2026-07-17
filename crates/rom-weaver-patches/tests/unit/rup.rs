@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     RUP,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{TestDir, report_endpoints, test_context_with_threads},
 };
 
 #[test]
@@ -107,6 +107,24 @@ fn parse_reports_md5_for_each_variant() {
         format_md5_hex(source_md5_b),
         format_md5_hex(target_md5_b)
     )));
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 2);
+    for (endpoint, (source_md5, target_md5)) in endpoints
+        .iter()
+        .zip([(source_md5_a, target_md5_a), (source_md5_b, target_md5_b)])
+    {
+        assert_eq!(endpoint["input"]["size"].as_u64(), Some(8));
+        assert_eq!(endpoint["output"]["size"].as_u64(), Some(8));
+        assert_eq!(
+            endpoint["input"]["checksums"]["md5"].as_str(),
+            Some(format_md5_hex(source_md5).as_str())
+        );
+        assert_eq!(
+            endpoint["output"]["checksums"]["md5"].as_str(),
+            Some(format_md5_hex(target_md5).as_str())
+        );
+    }
 }
 
 #[test]

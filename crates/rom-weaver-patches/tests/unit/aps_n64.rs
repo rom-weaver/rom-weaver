@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     APS,
-    test_support::{TestDir, test_context_with_threads},
+    test_support::{TestDir, report_endpoints, test_context_with_threads},
 };
 
 #[derive(Clone)]
@@ -59,6 +59,35 @@ fn parse_reports_concrete_n64_validation_values() {
 
     assert!(report.label.contains("n64 source cart id ABC"));
     assert!(report.label.contains("n64 source crc 0102030405060708"));
+}
+
+#[test]
+fn parse_reports_normalized_output_size_endpoint() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("probe.aps");
+    let patch = build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format: 1,
+            cart_id: *b"ABC",
+            crc: [1, 2, 3, 4, 5, 6, 7, 8],
+            pad: [0; 5],
+        }),
+        0x100,
+        vec![],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse report");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints.len(), 1);
+    // The cart-id/CRC header bytes are not a whole-file checksum.
+    assert!(endpoints[0]["input"].as_object().expect("input").is_empty());
+    assert_eq!(endpoints[0]["output"]["size"].as_u64(), Some(0x100));
 }
 
 #[test]

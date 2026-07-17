@@ -15,6 +15,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, chunk_count_for_len, parallel_chunked_capability,
@@ -59,7 +60,7 @@ impl PatchHandler for DpsPatchHandler {
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let parsed = parse_dps_file(patch_path, DpsParseMode::Strict)?;
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -78,7 +79,16 @@ impl PatchHandler for DpsPatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            vec![PatchEndpointVariant::new(
+                PatchEndpointSide::sized(u64::from(parsed.source_size)),
+                PatchEndpointSide::sized(parsed.output_size),
+            )],
+        );
+        Ok(report)
     }
 
     fn apply(

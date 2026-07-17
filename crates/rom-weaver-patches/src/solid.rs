@@ -14,6 +14,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
 };
@@ -104,14 +105,23 @@ impl PatchHandler for SolidPatchHandler {
             format_md5_hex(parsed.source_md5)
         ));
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
             Some(100.0),
             None,
-        ))
+        );
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            vec![PatchEndpointVariant::new(
+                PatchEndpointSide::checksum("md5", format_md5_hex(parsed.source_md5)),
+                PatchEndpointSide::default(),
+            )],
+        );
+        Ok(report)
     }
 
     fn apply(

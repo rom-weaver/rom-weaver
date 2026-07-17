@@ -19,6 +19,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
     run_with_optional_pool, scan_create_chunks,
@@ -89,14 +90,31 @@ impl PatchHandler for RupPatchHandler {
             ));
         }
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
             Some(100.0),
             None,
-        ))
+        );
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            patch
+                .files
+                .iter()
+                .map(|file| {
+                    PatchEndpointVariant::new(
+                        PatchEndpointSide::sized(file.source_file_size)
+                            .with_checksum("md5", format_md5_hex(file.source_md5)),
+                        PatchEndpointSide::sized(file.target_file_size)
+                            .with_checksum("md5", format_md5_hex(file.target_md5)),
+                    )
+                })
+                .collect(),
+        );
+        Ok(report)
     }
 
     fn apply(

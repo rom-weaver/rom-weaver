@@ -13,6 +13,7 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
@@ -65,7 +66,7 @@ impl PatchHandler for ApsN64PatchHandler {
             String::new()
         };
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -77,7 +78,18 @@ impl PatchHandler for ApsN64PatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        // The N64 header carries cart-id/CRC bytes, not a whole-file checksum;
+        // only the exact output size qualifies as an endpoint.
+        attach_patch_endpoints(
+            &mut report,
+            self.descriptor.name,
+            vec![PatchEndpointVariant::new(
+                PatchEndpointSide::default(),
+                PatchEndpointSide::sized(patch.output_size),
+            )],
+        );
+        Ok(report)
     }
 
     fn apply(
