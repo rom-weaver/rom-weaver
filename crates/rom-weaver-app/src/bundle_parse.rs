@@ -72,7 +72,7 @@ pub(crate) fn parse_bundle_bytes(bytes: &[u8]) -> Result<RomWeaverBundle> {
 }
 
 fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
-    if bundle.version != BUNDLE_VERSION {
+    if !(BUNDLE_MIN_VERSION..=BUNDLE_VERSION).contains(&bundle.version) {
         return Err(RomWeaverError::ValidationCode(
             ValidationCodeError::new("bundle.version.unsupported")
                 .with_message("unsupported bundle version")
@@ -227,14 +227,52 @@ mod tests {
 
     #[test]
     fn parses_minimal_bundle() {
+        // A version-1 bundle (pre-`basis`) still reads.
         let bundle =
             parse_bundle_bytes(br#"{ "version": 1, "patches": [ { "path": "patches/x.bps" } ] }"#)
                 .expect("minimal bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, BUNDLE_MIN_VERSION);
         assert_eq!(bundle.patches.len(), 1);
         assert!(!bundle.patches[0].optional);
         assert_eq!(bundle.patches[0].header, None);
+        assert_eq!(bundle.patches[0].basis, None);
         assert!(bundle.rom.is_none() && bundle.output.is_none());
+    }
+
+    #[test]
+    fn parses_current_version_with_basis() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 2, "patches": [
+                { "path": "a.ips", "basis": "base" },
+                { "path": "b.ips", "basis": "previous" },
+                { "path": "c.ips" }
+            ] }"#,
+        )
+        .expect("v2 bundle parses");
+        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.patches[0].basis, Some(PatchInputBasis::Base));
+        assert_eq!(bundle.patches[1].basis, Some(PatchInputBasis::Previous));
+        assert_eq!(bundle.patches[2].basis, None);
+    }
+
+    #[test]
+    fn basis_round_trips_and_omits_previous_default() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 2, "patches": [ { "path": "a.ips", "basis": "base" } ] }"#,
+        )
+        .expect("v2 bundle parses");
+        let rendered = serde_json::to_string(&bundle).expect("serializes");
+        assert!(rendered.contains(r#""basis":"base""#));
+        let reparsed = parse_bundle_bytes(rendered.as_bytes()).expect("round trip");
+        assert_eq!(reparsed.patches[0].basis, Some(PatchInputBasis::Base));
+    }
+
+    #[test]
+    fn rejects_invalid_basis_value() {
+        assert_eq!(
+            parse_err(r#"{ "version": 2, "patches": [ { "path": "x.ips", "basis": "root" } ] }"#),
+            "bundle.parse"
+        );
     }
 
     #[test]
@@ -262,7 +300,7 @@ mod tests {
     #[test]
     fn rejects_unsupported_version() {
         assert_eq!(
-            parse_err(r#"{ "version": 2, "patches": [ { "path": "x.ips" } ] }"#),
+            parse_err(r#"{ "version": 3, "patches": [ { "path": "x.ips" } ] }"#),
             "bundle.version.unsupported"
         );
     }
@@ -408,6 +446,7 @@ mod tests {
                 }),
                 output_checks: None,
                 header: Some(PatchApplyHeaderMode::Strip),
+                basis: Some(PatchInputBasis::Base),
             }],
             output: Some(BundleOutput {
                 name: Some("out.sfc".to_owned()),

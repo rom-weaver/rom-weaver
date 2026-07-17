@@ -1,7 +1,11 @@
 use super::*;
 
-/// Version of the `rom-weaver-bundle.json` bundle schema this build reads and writes.
-pub const BUNDLE_VERSION: u32 = 1;
+/// Version of the `rom-weaver-bundle.json` bundle schema this build writes.
+/// Version 2 added the per-patch `basis` field; readers accept
+/// [`BUNDLE_MIN_VERSION`]..=[`BUNDLE_VERSION`].
+pub const BUNDLE_VERSION: u32 = 2;
+/// Oldest bundle schema version this build still reads.
+pub const BUNDLE_MIN_VERSION: u32 = 1;
 
 /// A distributable patching workflow definition (`rom-weaver-bundle.json`): ordered patches
 /// with an optional/required selection seed and expected input/output ROM
@@ -101,6 +105,17 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub header: Option<PatchApplyHeaderMode>,
+    /// What this patch's input checks were authored against: `base` (the
+    /// bundle's rom - verified once up front; its embedded checks are skipped
+    /// when the patch runs mid-chain) or `previous` (the previous selected
+    /// patch's output - the default). Omitted means previous/inferred.
+    /// `basis: "base"` with omitted `inputChecks` is the canonical compact
+    /// form - the entry relies on `rom.checks`; declaring it WITH
+    /// `inputChecks` pins a specific variant. The escape hatch for
+    /// checksumless formats (IPS) whose basis cannot be inferred. (v2)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub basis: Option<PatchInputBasis>,
 }
 
 /// Expected checksums (algorithm -> lowercase hex) and/or exact byte size.

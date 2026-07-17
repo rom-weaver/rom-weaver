@@ -1514,6 +1514,8 @@ pub struct BundleCreatePatchSpec {
     /// Emitted `url` source override for the entry.
     pub source_url: Option<String>,
     pub header: Option<PatchApplyHeaderMode>,
+    /// Emitted `basis` for the entry (`None` omits the field).
+    pub basis: Option<PatchInputBasis>,
     /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens),
     /// emitted as the entry's `inputChecks` when they differ from the rom's.
     pub input_checks: Vec<String>,
@@ -1636,6 +1638,17 @@ pub struct BundleCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_header: Vec<PatchApplyHeaderMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-basis",
+            value_enum,
+            help = "What the preceding --patch's input checks were authored against: base (the bundle's rom) or previous (the prior patch's output, the default); auto omits the field for inference"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_basis: Vec<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1846,6 +1859,15 @@ impl BundleCreateCommand {
             headers.len(),
             &mut |spec, index| {
                 spec.header = Some(headers[index]);
+            },
+        );
+        let bases = self.patch_basis.clone();
+        bind(
+            &mut specs,
+            "patch_basis",
+            bases.len(),
+            &mut |spec, index| {
+                spec.basis = bases[index].declared();
             },
         );
         // Checks accumulate (a patch may pin several algorithms) instead of

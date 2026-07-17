@@ -243,6 +243,7 @@ impl CliApp {
                 input_checks: entry_input_checks,
                 output_checks: entry_output_checks,
                 header: spec.header,
+                basis: spec.basis,
             });
         }
 
@@ -463,6 +464,7 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
     let optionals = aligned_metadata(&args.patch_optional, count, "--patch-optional")?;
     let source_urls = aligned_metadata(&args.patch_source_url, count, "--patch-source-url")?;
     let headers = aligned_metadata(&args.patch_header, count, "--patch-header")?;
+    let bases = aligned_metadata(&args.patch_basis, count, "--patch-basis")?;
     let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-input-check")?;
     let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-output-check")?;
     Ok(args
@@ -477,6 +479,7 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
             optional: optionals[index],
             source_url: source_urls[index].clone(),
             header: headers[index],
+            basis: bases[index].and_then(PatchBasisMode::declared),
             input_checks: input_checks[index]
                 .clone()
                 .map(|value| vec![value])

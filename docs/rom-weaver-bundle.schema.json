@@ -8,9 +8,9 @@
   "required": ["version", "patches"],
   "properties": {
     "version": {
-      "description": "Bundle schema version. This build reads and writes version 1.",
+      "description": "Bundle schema version. This build writes version 2 (which added the per-patch `basis` field) and reads versions 1-2.",
       "type": "integer",
-      "const": 1
+      "enum": [1, 2]
     },
     "rom": {
       "description": "The input ROM the patch chain applies to. Omit entirely for a ROM-agnostic bundle; include with only `checks` (no url/path) for a checks-only bundle where the applying user supplies the ROM.",
@@ -115,6 +115,11 @@
         "header": {
           "description": "Per-patch header-mode override (`auto` when omitted).",
           "$ref": "#/$defs/headerMode"
+        },
+        "basis": {
+          "description": "What this patch's input checks were authored against: `base` (the bundle's rom - verified once up front; the patch's embedded checks are skipped when it runs mid-chain) or `previous` (the previous selected patch's output, the default). Omitted means previous/inferred. `basis: \"base\"` with omitted `inputChecks` relies on `rom.checks`; declaring it WITH `inputChecks` pins a specific variant. The escape hatch for checksumless formats (IPS) whose basis cannot be inferred. Added in version 2.",
+          "type": "string",
+          "enum": ["base", "previous"]
         }
       }
     },
