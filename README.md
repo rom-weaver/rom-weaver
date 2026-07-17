@@ -1,366 +1,188 @@
-# rom-weaver
+<p align="center">
+  <img
+    src="packages/rom-weaver-react/design/github-social-preview.svg"
+    alt="RomWeaver: inspect, patch, transform, and preserve video game ROMs and disc images"
+    width="960"
+  >
+</p>
 
-`rom-weaver` is an open-source toolkit by [Brandon O'Casey](https://github.com/brandonocasey)
-for inspecting, patching, transforming, and preserving video game ROMs and
-disc images. It combines a native CLI, WebAssembly runtime, and browser webapp
-for working with files locally in your browser or terminal.
+<h1 align="center">RomWeaver</h1>
 
-The hosted webapp is available at [rom-weaver.com](https://rom-weaver.com).
-Source code and issue tracking are on
-[GitHub](https://github.com/brandonocasey/rom-weaver), and project support is
-available through [Ko-fi](https://ko-fi.com/brandonocasey).
+<p align="center">
+  A local-first toolkit for working with video game ROMs and disc images in your browser or terminal.
+</p>
 
-The toolkit supports:
+<p align="center">
+  <a href="https://github.com/brandonocasey/rom-weaver/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/brandonocasey/rom-weaver?sort=semver&amp;label=version&amp;color=d9690f"></a>
+  <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-4a6d63?logo=nodedotjs&logoColor=white"></a>
+  <a href=".mise.toml"><img alt="Rust 1.95" src="https://img.shields.io/badge/Rust-1.95-2c323b?logo=rust&logoColor=white"></a>
+  <a href="LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
+</p>
 
-- probe containers, patches, and known ROM headers
-- extract containers (with nested extraction)
-- checksum files/ranges and auto-resolved container payloads
-- compress into multiple container formats
-- trim or revert trim for supported ROM/disc image families
-- apply and create many ROM patch formats
-- repair ROM headers/checksums on patch apply (`--repair-checksum`)
+<p align="center">
+  <a href="https://brandonocasey.github.io/rom-weaver/">Open the webapp</a>
+  · <a href="docs/README.md">Documentation</a>
+  · <a href="https://github.com/brandonocasey/rom-weaver/issues">Issues</a>
+  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
+</p>
 
-## Install The CLI
+RomWeaver can inspect, extract, checksum, compress, trim, patch, and create
+patches for many cartridge and disc formats. The browser app processes files
+locally with WebAssembly; the native CLI exposes the same command core for
+scripts and terminal workflows.
 
-The Node.js package follows the native-binary distribution model used by
-projects such as SWC: npm installs the launcher and the matching platform
-package automatically.
+## Start here
+
+### Use the webapp
+
+Open the [hosted webapp](https://brandonocasey.github.io/rom-weaver/).
+No installation or account is required.
+
+1. Choose **Weave** to add a ROM or disc image and one or more patch files.
+2. Review the detected formats, checksums, patch order, and output settings.
+3. Run the workflow and save the result.
+
+Use **Make Patch** to compare an original file with a modified file and create
+a distributable patch. Optional Trim and Tools workflows can be enabled in the
+webapp settings.
+
+### Use the CLI
+
+Install the current tagged CLI from source:
 
 ```bash
-npm install --global rom-weaver
+cargo install \
+  --git https://github.com/brandonocasey/rom-weaver.git \
+  --tag v0.5.0 \
+  rom-weaver-cli
 rom-weaver --help
 ```
 
-To build and install the CLI from source through Cargo instead:
+Common commands:
 
 ```bash
-cargo install rom-weaver-cli
+# Identify a file or the payload inside a container
+rom-weaver probe game.sfc
+
+# Apply a patch and write an uncompressed ROM
+rom-weaver patch apply \
+  --input game.sfc \
+  --patch translation.bps \
+  --output game-translated.sfc \
+  --no-compress
+
+# Create a BPS patch
+rom-weaver patch create \
+  --original original.sfc \
+  --modified modified.sfc \
+  --format bps \
+  --output release.bps
+
+# Extract and checksum files
+rom-weaver extract collection.7z --out-dir extracted
+rom-weaver checksum game.sfc --algo sha256
 ```
 
-The npm package requires Node.js 22 or newer. The Cargo install requires Rust
-1.95 and a native build toolchain with CMake and Clang. The browser webapp
-continues to use the separate WASM build described below. Native npm packages
-currently target macOS arm64/x64, Linux x64 glibc, and Windows x64.
+See the [CLI guide](docs/cli.md) for installation alternatives, command
+behavior, supported formats, compression codecs, checksums, and JSON output.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the workspace layout,
-crate graph, threading model, and the Rust⇄TypeScript boundary.
-See [`docs/self-hosting.md`](docs/self-hosting.md) to deploy the webapp on a
-subdomain or alongside an existing site.
+## What it supports
 
-## Setup
+- Patch apply and creation for IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
+  BSDIFF40, DCP, and many other formats.
+- Container inspection and extraction for ZIP, 7z, RAR, tar-family archives,
+  CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more.
+- ZIP, 7z, CHD, RVZ, and Z3DS creation with codec-aware compression settings.
+- CRC, MD5, SHA, BLAKE3, ROM-header detection, checksum repair, and reversible
+  trimming for supported systems.
+- Ordered, shareable workflows through `rom-weaver-bundle.json` bundles.
 
-Toolchain versions and build tasks are managed with [mise](https://mise.jdx.dev).
-Install it (`brew install mise`, or see the mise docs), then from the repo root:
+The complete compatibility tables are maintained in the
+[CLI guide](docs/cli.md#supported-formats).
+
+## Self-host the webapp
+
+RomWeaver is a static webapp and can run on a dedicated HTTPS subdomain or
+under a path such as `/rom-weaver/`.
+
+### Docker
+
+Build and start the complete webapp with Docker Compose:
 
 ```bash
-mise install        # rust, node, wasm-opt (binaryen), ripgrep - pinned in .mise.toml
-mise trust          # trust this repo's mise config (first time only)
+docker compose up --build --detach
 ```
 
-Two build dependencies are not pinnable through mise and must be installed
-separately:
+No local Rust, Node.js, WASI SDK, or mise installation is required. The first
+image build downloads the build toolchains and compiles the WASM module, so it
+takes longer than later cached builds. The container is available at
+`http://localhost:8080`. In production, put it behind an HTTPS reverse proxy.
+The image supplies the required cross-origin isolation headers, SPA fallback,
+and precompressed Brotli assets.
 
-- **WASI SDK** (for the WebAssembly build). Install [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases)
-  to `/opt/wasi-sdk`, `/opt/homebrew/opt/wasi-sdk`, or `~/.local/toolchains/wasi-sdk-<ver>`
-  - or set `WASI_SDK_PATH` to wherever it lives. `mise run build-wasm` finds it
-  automatically (see `scripts/wasm/detect-wasi-sdk.sh`).
-- **brotli** (compresses the wasm artifact): `brew install brotli` (or your OS
-  package manager).
-
-Then install the JS workspaces and, once, the git hooks:
+### Static hosting
 
 ```bash
+mise run build-wasm-prod
 npm ci --prefix packages/rom-weaver-react
-npm install         # root: installs lefthook without running repository hooks
-npm run hooks:install
+npm --prefix packages/rom-weaver-react run build
 ```
 
-Run `mise tasks` to list available tasks, or `mise run ci` for the full local
-quality gate (matches CI).
+Upload `packages/rom-weaver-react/dist/` to an HTTPS host that can serve the
+required COOP/COEP/CORP headers. The [self-hosting guide](docs/self-hosting.md)
+covers reverse-proxy examples, subpath routing, service-worker scope, static
+hosts, and embedding RomWeaver into another application.
 
-## Build And Run
+## Develop
 
-```bash
-cargo build -p rom-weaver-cli
-cargo run -p rom-weaver-cli -- --help
-```
-
-WASM artifacts + JS wrappers (via [mise](https://mise.jdx.dev) tasks):
+Clone the repository with its submodules, then install the pinned toolchains
+and JavaScript dependencies:
 
 ```bash
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+mise install
+mise trust
+npm ci
+npm ci --prefix packages/rom-weaver-react
 mise run build-wasm
+npm run dev
 ```
 
-The WASM artifact keeps the `rom-weaver-app.wasm` package ABI, but the binary is
-only a CLI/argv/reporter shim over the shared `rom-weaver-app` command
-orchestration crate.
+The WASM build also needs WASI SDK and Brotli. See the
+[development guide](docs/development.md) for prerequisites, native CLI builds,
+browser tests, worktrees, and the full `mise run ci` quality gate.
 
-The threaded WASI toolchain wiring (WASI SDK discovery, `CC`/`CFLAGS`, the static
-rustflags in `.cargo/config.toml`) is supplied by `mise`'s environment, so ad-hoc
-target checks just work under `mise`:
+## Documentation
 
-```bash
-mise run wasm-check   # cargo check the threaded containers lib
-mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1
-```
+Start with the [documentation index](docs/README.md), or jump directly to:
 
-By default `build-wasm` writes artifacts to `packages/rom-weaver-react/src/wasm`
-(gitignored). Set `ROM_WEAVER_WASM_OUT_DIR` to write elsewhere; when the output
-directory differs from the package, the artifacts are synced into
-`packages/rom-weaver-react/src/wasm` automatically:
+- [CLI usage and supported formats](docs/cli.md)
+- [Self-hosting and Docker](docs/self-hosting.md)
+- [Development and testing](docs/development.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Runtime configuration](docs/env-vars.md)
 
-```bash
-ROM_WEAVER_WASM_OUT_DIR=/path/to/wasm-artifacts mise run build-wasm
-```
+Format specifications and reference implementations are collected in
+[`REFERENCES.md`](REFERENCES.md).
 
-See [`packages/rom-weaver-react/src/wasm/README.md`](packages/rom-weaver-react/src/wasm/README.md) for browser OPFS usage.
+## Contributing and support
 
-Browser compatibility checks:
-
-```bash
-cd packages/rom-weaver-react
-npm run lint:browser-compat
-npm run test:browser
-npm run test:browser:webkit:smoke
-```
-
-Tiered end-to-end checks:
-
-```bash
-mise run test-e2e-fast       # warm local/PR-equivalent gate
-mise run test-e2e-nightly    # exhaustive valid interactions + WebKit
-mise run test-e2e-ios        # generated archive corpus + HTTPS LAN server
-```
-
-See [`docs/mobile-safari-verification.md`](docs/mobile-safari-verification.md) for real iOS Safari,
-Xcode Simulator Safari, and WebKit verification steps.
-
-## WASM Package Surface
-
-The wasm layer (`packages/rom-weaver-react/src/wasm`) exposes:
-
-- Browser OPFS WASI runner (`run` and `runJson`)
-- single `/work` OPFS mount wiring for browser workers
-- dedicated browser worker client
-- TypeScript declarations
-
-Integration notes:
-
-- Browser OPFS runtime is Dedicated Worker only (not main-thread `window`).
-
-## CLI Commands
-
-- `probe`
-- `list`
-- `extract`
-- `checksum`
-- `compress`
-- `trim`
-- `patch apply`
-- `patch create`
-- `patch validate`
-
-Global flags:
-
-- `--json`
-- `--progress` / `--no-progress`
-- `--trace`
-
-Interactive selection fallback is enabled only for non-JSON TTY sessions (stdin and stderr are terminals).
-
-Probe behavior highlights:
-
-- `probe` auto-resolves payloads from archive containers (zip/7z/rar/tar) by default
-- `probe` reports disc-image codec containers (CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, …) directly instead of decompressing them
-- `probe --no-extract` probes source bytes directly
-- `probe --select` chooses payload(s)
-- `probe --no-ignore` disables default ignore filters (`.txt`, `.nfo`, `.sfv`, `.md5`, etc.)
-
-List behavior highlights:
-
-- `list` lists original container entries
-- `list --select` chooses a nested container before listing its entries
-- `list --no-ignore` disables default ignore filters during nested selection
-
-## Patch Format Support
-
-All listed formats support probe/parse (`probe`) and apply (`patch apply`).
-
-| Format         | Aliases                     | Extensions                     | `patch create` |
-| -------------- | --------------------------- | ------------------------------ | -------------- |
-| `IPS`          | none                        | `.ips`                         | yes            |
-| `IPS32`        | none                        | `.ips32`                       | yes            |
-| `SOLID`        | `solidpatch`, `solid-patch` | `.solid`                       | yes            |
-| `BPS`          | none                        | `.bps`                         | yes            |
-| `UPS`          | none                        | `.ups`                         | yes            |
-| `VCDIFF`       | `vcdiff`                    | `.vcdiff`                      | yes            |
-| `xdelta`       | `xdelta3`                   | `.xdelta`, `.delta`, `.dat`    | yes            |
-| `GDIFF`        | `gdiff`                     | `.gdiff`, `.gdf`               | yes            |
-| `APS` (N64)    | none                        | `.aps`                         | yes            |
-| `APSGBA`       | `aps-gba`                   | `.apsgba`                      | yes            |
-| `RUP`          | none                        | `.rup`                         | yes            |
-| `PPF`          | none                        | `.ppf`                         | yes            |
-| `PAT`          | `ffp`, `fireflower`         | `.pat`, `.ffp`                 | yes            |
-| `EBP`          | none                        | `.ebp`                         | yes            |
-| `BDF/BSDIFF40` | `bdf`, `bsdiff`, `bsdiff40` | `.bdf`, `.bsdiff`, `.bsdiff40` | yes            |
-| `BSP`          | none                        | `.bsp`                         | no             |
-| `MOD`          | `pmsr`                      | `.mod`, `.pmsr`                | yes            |
-| `DLDI`         | none                        | `.dldi`                        | yes            |
-| `DPS`          | none                        | `.dps`                         | yes            |
-
-Notes:
-
-- `patch apply` accepts repeated `--patch` and applies patches sequentially.
-- Patch checksum validation is strict by default for formats that embed checksums; use `--ignore-checksum-validation` to skip it.
-- RUP apply honors legacy Ninja2 console normalization for existing patches. RUP create emits generic single-file `rom_type = 0` patches rather than console-normalized RUP variants.
-
-## Container And Compression Format Support
-
-| Format    | Aliases                                  | Extensions                                   | Probe | Extract | Create |
-| --------- | ---------------------------------------- | -------------------------------------------- | ------- | ------- | ------ |
-| `zip`     | none                                     | `.zip`                                       | yes     | yes     | yes    |
-| `zipx`    | none                                     | `.zipx`                                      | yes     | yes     | no     |
-| `7z`      | `7zip`                                   | `.7z`                                        | yes     | yes     | yes    |
-| `rar`     | none                                     | `.rar`                                       | yes     | yes     | no     |
-| `tar`     | none                                     | `.tar`                                       | yes     | yes     | no     |
-| `tar.gz`  | `tgz`                                    | `.tar.gz`, `.tgz`                            | yes     | yes     | no     |
-| `tar.bz2` | `tbz2`                                   | `.tar.bz2`, `.tbz2`                          | yes     | yes     | no     |
-| `tar.xz`  | `txz`                                    | `.tar.xz`, `.txz`                            | yes     | yes     | no     |
-| `gz`      | `gzip`                                   | `.gz`                                        | yes     | yes     | no     |
-| `bz2`     | `bzip2`                                  | `.bz2`                                       | yes     | yes     | no     |
-| `xz`      | `lzma`, `lzma2`                          | `.xz`                                        | yes     | yes     | no     |
-| `zst`     | `zstd`, `zstandard`                      | `.zst`                                       | yes     | yes     | no     |
-| `cso`     | `ciso`                                   | `.cso`, `.ciso`                              | yes     | yes     | no     |
-| `pbp`     | none                                     | `.pbp`                                       | yes     | yes     | no     |
-| `chd`     | `chd-cd`, `chd-dvd`, `chd-raw`, `chd-hd` | `.chd`                                       | yes     | yes     | yes    |
-| `gcz`     | none                                     | `.gcz`                                       | yes     | yes     | no     |
-| `wia`     | none                                     | `.wia`                                       | yes     | yes     | no     |
-| `tgc`     | none                                     | `.tgc`                                       | yes     | yes     | no     |
-| `nfs`     | none                                     | `.nfs`                                       | yes     | yes     | no     |
-| `wbfs`    | none                                     | `.wbfs`                                      | yes     | yes     | no     |
-| `rvz`     | none                                     | `.rvz`                                       | yes     | yes     | yes    |
-| `z3ds`    | `3ds`                                    | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | yes     | yes     | yes    |
-| `xiso`    | none                                     | `.xiso`, `.xiso.iso`                         | no      | no      | no     |
-
-Notes:
-
-- `xiso` is intentionally trim-only (via `trim`).
-- `extract` ignores common sidecar/metadata files by default (`.txt`, `.nfo`, `.sfv`, `.md5`, `__MACOSX`, etc.), supports `--select` (exact/prefix/glob), and recursively extracts nested containers up to depth 8.
-- `extract --no-ignore` disables the default common-file filter.
-- `extract --split-bin` is CHD-only (ignored for non-CHD input).
-- CHD parent/differential workflows are supported when a parent CHD is supplied by the caller.
-- CHD create accepts full MAME-style codec lists; Rust-native encoding emits CHD-compatible payloads for `zstd`, `zlib`, `lzma`, `huff`, `flac`, `cdzs`, `cdzl`, `cdlz`, `cdfl`, and `avhuff` (aliases `huffman` and `avhu` are accepted).
-- `zipx` and `zst` are probe/extract inputs only. `compress --format zip --codec zstd` writes ZIP-compatible `.zip` output.
-
-## Create-Time Codec Support
-
-| Output format(s) | Supported `--codec` values                                                                   |
-| ---------------- | -------------------------------------------------------------------------------------------- |
-| `zip`            | `store`, `deflate`, `zstd`                                                                   |
-| `7z`             | `lzma2` only                                                                                 |
-| `rvz`            | `zstd` only                                                                                  |
-| `z3ds`           | `zstd` only                                                                                  |
-| `chd`            | `store`, `zlib`, `zstd`, `lzma`, `huff` (`huffman` alias), `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` (`avhu` alias) |
-
-## Compression Level Profiles
-
-`compress --level` and `patch apply --compress-level` share these named profiles:
-
-- `min`
-- `very-low`
-- `low`
-- `medium`
-- `high`
-- `very-high`
-- `max`
-
-Profile-to-numeric mapping is codec-aware (standard vs zstd), with explicit `codec:level` overrides taking priority.
-
-## Checksum Support
-
-Supported algorithms:
-
-- `crc32`
-- `md5`
-- `sha1`
-- `sha256`
-- `blake3`
-- `crc32c`
-- `crc16`
-- `adler32`
-
-Behavior highlights:
-
-- checksums can auto-resolve payloads from containers by default
-- `--no-extract` disables auto-extract
-- `--select` chooses payload(s)
-- `--no-ignore` disables default ignore filters (`.txt`, `.nfo`, `.sfv`, `.md5`, etc.)
-- `--no-trim-fix` disables automatic trim-boundary checksum fixes
-- header/checksum compatibility transforms surface as `checksum_variants` (raw, remove-header, fix-header, n64 byte order)
-
-## Trim Support
-
-`trim` supports:
-
-- NDS family (`.nds`, `.dsi`, `.srl`)
-- GBA (`.gba`)
-- 3DS (`.3ds`)
-- XISO images (`.xiso`, `.xiso.iso`, and probed `.iso` XDVDFS)
-- RVZ-scrub candidates (detected via format recommendation)
-
-Notes:
-
-- `--revert` is supported for NDS/GBA/3DS, but not for XISO or RVZ-scrub paths.
-- XISO trim warns that original padding cannot be reconstructed.
-
-## Header Detection And Repair
-
-Known header detection is built into probe/checksum/patch apply flows, including:
-
-- A78
-- LNX
-- NES / FDS
-- SNES copier + SMC variants
-- PCE copier
-- Game Boy / GBA
-- Mega Drive / Genesis
-- SMS/GG
-- N64 (all byte orders)
-- NDS
-- Neo Geo Pocket
-- MSX
-
-## Patch-Apply Workflow Features
-
-- input and patch paths both support auto-extract payload resolution
-- input pre-validation via `--validate-with-checksum ALGO=HEX`
-- trusted checksum hints via `--checksum-cache ALGO=HEX`
-- header operations: `--strip-header`, `--add-header`
-- post-apply repair: `--repair-checksum`
-- default-on output compression
-  - disable with `--no-compress`
-  - override with `--compress-format`, `--compress-codec`, `--compress-level`
-  - auto mode prefers outer input container when possible, then falls back through built-in heuristics
-  - extension is appended automatically when missing
-
-## JSON Output
-
-With `--json`, operations emit structured progress/status lines and include emitted file metadata where relevant.
-
-## References
-
-See [`REFERENCES.md`](REFERENCES.md) for format specs and reference implementations.
+Bug reports and contributions are welcome in the
+[issue tracker](https://github.com/brandonocasey/rom-weaver/issues). Read the
+[contribution guide](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md)
+before submitting a change, and report
+suspected vulnerabilities through the private channel in the
+[security policy](SECURITY.md). If RomWeaver has been useful to you, you can
+support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 
 ## License
 
 Copyright (C) Brandon O'Casey
 
-rom-weaver is free and open-source software under the
-[GNU Affero General Public License](LICENSE.md), version 3 or (at your
-option) any later version (`AGPL-3.0-or-later`): use,
-modify, and redistribute it freely - including commercially - provided that
-works based on it, including those offered as network services, publish their
-source under the same license. Separate commercial license terms are
-available from the author for uses the AGPL doesn't fit. Bundled third-party
-components remain under their own licenses - see [`NOTICE`](NOTICE) and
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+RomWeaver is licensed under the
+[GNU Affero General Public License](LICENSE.md), version 3 or later. Modified
+versions offered over a network must make their corresponding source available
+under the same license. Separate commercial terms are available from the
+author. Bundled third-party components retain their own licenses; see
+[`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

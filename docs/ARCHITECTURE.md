@@ -448,5 +448,4 @@ checks pre-commit, scoped by changed paths.
 - `docs/mobile-safari-verification.md` - iOS Safari/WebKit verification steps
 - `docs/chd-native-rust-migration.md` - history of the native CHD backend
 - `docs/trim-revert-footer.md` - trim revert footer format
-- `TODO.md` - delivery board / known gaps
 - `REFERENCES.md` - format specs and reference implementations
