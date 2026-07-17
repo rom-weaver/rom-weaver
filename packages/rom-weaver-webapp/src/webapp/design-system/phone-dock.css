@@ -1,28 +1,17 @@
-/* ═══ phone dock layout ═══
-   On a phone the workflow rail becomes a persistent thumb-reachable shuttle
-   dock and the masthead re-grids. The workflow components themselves stay
-   untouched, so Apply/Make Patch/Trim/Tools keep the same state and behavior as
-   desktop. */
+/* ═══ phone layout ═══ */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  :root:has(.rw-app) {
-    scroll-padding-block-end: calc(var(--rw-dock-h, calc(56px + env(safe-area-inset-bottom))) + 8px);
-  }
-
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    --mobile-shuttle-h: 56px;
-    /* dock total height: the JS-measured --rw-dock-h when available (tracks
-       larger text sizes), else the design-time estimate */
-    --dock-total: var(--rw-dock-h, calc(var(--mobile-shuttle-h) + env(safe-area-inset-bottom)));
-    --hero-chrome: calc(var(--mobile-input-head-h) + 116px);
-    padding-block-end: var(--dock-total);
+    --hero-chrome: calc(var(--mobile-input-head-h) + 172px);
   }
 
   .rw-app .masthead {
     display: grid;
     grid-template-columns: minmax(112px, 1fr) auto;
-    grid-template-areas: "brand tools";
+    grid-template-areas:
+      "brand tools"
+      "modes modes";
     align-items: center;
     gap: var(--sp-s);
     padding-block: 5px 6px;
@@ -97,48 +86,23 @@
   }
 
   .rw-app .modes {
-    position: fixed;
-    z-index: 45;
-    inset: auto 0 0;
-    order: initial;
+    grid-area: modes;
     width: 100%;
     margin: 0;
-    padding: 4px max(10px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-    background: color-mix(in srgb, var(--chassis) 82%, transparent);
-    border-block-start: 1px solid var(--seam-strong);
-    box-shadow: 0 -12px 28px -22px rgb(0 0 0 / .8);
-    backdrop-filter: blur(14px);
-  }
-
-  .rw-app .mode-rail {
-    display: flex;
-    width: min(100%, 520px);
-    min-height: 40px;
-    margin-inline: auto;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .rw-app .mode-thumb {
-    inset-block: 0;
-    border-radius: var(--r-m);
   }
 
   .rw-app .mode {
     min-width: 0;
     min-height: 40px;
-    padding: 3px 4px;
+    padding: 3px 5px;
     flex: 1 1 0;
-    flex-direction: column;
     justify-content: center;
     gap: var(--sp-2xs);
+    font-size: .66rem;
     line-height: 1;
   }
 
-  .rw-app .mode svg { width: 17px; height: 17px; }
-  .rw-app .mode span:not(.mode-thumb) { font-size: .66rem; letter-spacing: .04em; }
+  .rw-app .mode svg { width: 15px; height: 15px; }
 
   /* the whole empty hero is the tap target - flash it on touch so taps
      anywhere in the panel visibly register */

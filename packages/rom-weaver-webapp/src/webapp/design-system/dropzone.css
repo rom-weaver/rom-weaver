@@ -222,7 +222,7 @@
    claims a healthy share of the viewport, capped so the thesis + ghost steps
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
-  min-height: clamp(360px, calc(100svh - var(--dock-total) - var(--hero-chrome)), 920px);
+  min-height: clamp(360px, calc(100svh - var(--hero-chrome)), 920px);
   padding-block: 0;
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }

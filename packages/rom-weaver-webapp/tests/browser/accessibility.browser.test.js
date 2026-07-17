@@ -66,7 +66,7 @@ const THEMES = ["light", "dark"];
 // defines (viewport seams in design-system/responsive.css: 720/860/1100px; everything
 // else rides fluid tokens or container queries), plus a short-height
 // landscape-phone case for `(max-width: 860px) and (max-height: 520px)`.
-// Every axe scan runs at each, so responsive layouts - the phone dock, the
+// Every axe scan runs at each, so responsive layouts - the phone masthead, the
 // masthead-wrap seam, the ≥1100px two-column split, coarse-pointer targets -
 // are all exercised, not just the default width.
 const VIEWPORTS = [
@@ -989,5 +989,54 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement).toBe(tabAt("trim"));
 
     expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
+  });
+});
+
+describe("webapp responsive navigation", () => {
+  test("phone keeps the workflow rail in the masthead second row", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderNode(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings: {} },
+        createElement(
+          "div",
+          { className: "rw-app" },
+          createElement(Masthead, {
+            currentTab: "patcher",
+            logoSrc: "./logo.svg",
+            onOpenLog: noop,
+            onOpenSettings: noop,
+            onReset: noop,
+            onSelectTab: noop,
+            tabs: [
+              ...PAGE_TABS,
+              { icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+            ],
+          }),
+        ),
+      ),
+      "light",
+    );
+
+    const masthead = host.querySelector(".masthead");
+    const brand = host.querySelector(".brand");
+    const tools = host.querySelector(".masthead-tools");
+    const modes = host.querySelector(".modes");
+    const rail = host.querySelector(".mode-rail");
+    const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
+    const modesRect = modes.getBoundingClientRect();
+
+    expect(getComputedStyle(modes).position).toBe("static");
+    expect(modesRect.top).toBeGreaterThanOrEqual(firstRowBottom);
+    expect(modesRect.bottom).toBeLessThanOrEqual(masthead.getBoundingClientRect().bottom);
+    expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
+  });
+
+  test("phone hero gives back the in-flow navigation height", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderPage(emptyApplyPage(), "light");
+
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("530px");
   });
 });
