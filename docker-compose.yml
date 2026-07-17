@@ -12,7 +12,7 @@ services:
   webapp:
     build:
       context: .
-      dockerfile: packages/rom-weaver-react/Dockerfile
+      dockerfile: packages/rom-weaver-webapp/Dockerfile
     image: rom-weaver-webapp
     ports:
       - "${PORT:-8080}:8080"

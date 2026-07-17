@@ -10,7 +10,7 @@ import { createWasmEnvImports } from './rom-weaver-runtime-utils.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
-const DEFAULT_WASM_MODULE = resolve(REPO_ROOT, 'packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm');
+const DEFAULT_WASM_MODULE = resolve(REPO_ROOT, 'packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm');
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 // 65536 pages * 64 KiB = 4 GiB. Must be <= the threaded wasm's imported memory maximum
 // (--max-memory in .cargo/config.toml, also 4 GiB). Browser LZMA2 workers can need more than

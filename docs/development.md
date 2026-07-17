@@ -48,7 +48,7 @@ sets, and install the repository hooks:
 mise install
 mise trust
 npm ci
-npm ci --prefix packages/rom-weaver-react
+npm ci --prefix packages/rom-weaver-webapp
 npm run hooks:install
 ```
 
@@ -96,7 +96,7 @@ mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
 ```
 
 By default, build artifacts are written to
-`packages/rom-weaver-react/src/wasm/`, which is gitignored. To keep a separate
+`packages/rom-weaver-webapp/src/wasm/`, which is gitignored. To keep a separate
 artifact directory:
 
 ```bash
@@ -112,7 +112,7 @@ for ad hoc target commands:
 mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1
 ```
 
-See the [WASM runtime notes](../packages/rom-weaver-react/src/wasm/README.md)
+See the [WASM runtime notes](../packages/rom-weaver-webapp/src/wasm/README.md)
 for the browser OPFS and worker API.
 
 ## Test and lint
@@ -137,9 +137,9 @@ mise run test-rust
 mise run typegen-check
 mise run manpages-check
 
-npm --prefix packages/rom-weaver-react run lint
-npm --prefix packages/rom-weaver-react run test:unit
-npm --prefix packages/rom-weaver-react run test:browser:parallel
+npm --prefix packages/rom-weaver-webapp run lint
+npm --prefix packages/rom-weaver-webapp run test:unit
+npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 ```
 
 Use the repository's browser-test runner instead of invoking browser Vitest
@@ -181,7 +181,7 @@ mise run manpages-check
 ```
 
 Do not edit files under
-`packages/rom-weaver-react/src/wasm/generated/` or `docs/man/` manually.
+`packages/rom-weaver-webapp/src/wasm/generated/` or `docs/man/` manually.
 
 ## Linked worktrees
 
@@ -208,7 +208,7 @@ scripts/remove-worktree.sh .worktrees/<name>
 
 - `crates/` contains the Rust format libraries, shared app orchestration, and
   native CLI.
-- `packages/rom-weaver-react/` contains the React app, browser workers, OPFS
+- `packages/rom-weaver-webapp/` contains the React app, browser workers, OPFS
   adapters, PWA shell, and WASM package surface.
 - `scripts/` contains build, test, release, and license automation.
 - `docs/` contains deployment, runtime, verification, and architecture guides.

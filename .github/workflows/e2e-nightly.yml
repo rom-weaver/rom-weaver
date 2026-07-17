@@ -50,8 +50,8 @@ jobs:
 
       - name: Install web dependencies
         run: |
-          npm ci --prefix packages/rom-weaver-react
-          npm --prefix packages/rom-weaver-react exec playwright install --with-deps chromium webkit
+          npm ci --prefix packages/rom-weaver-webapp
+          npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium webkit
 
       - name: Run exhaustive E2E matrix
         run: mise run test-e2e-nightly
@@ -62,6 +62,6 @@ jobs:
         with:
           name: e2e-failure-evidence
           path: |
-            packages/rom-weaver-react/tests/wasm/__screenshots__/**
+            packages/rom-weaver-webapp/tests/wasm/__screenshots__/**
             test-results/**
           if-no-files-found: ignore

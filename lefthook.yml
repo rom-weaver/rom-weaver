@@ -25,14 +25,14 @@ pre-commit:
       glob: "*.{toml,lock}"
       run: mise run licenses-check
     react-lint:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run lint:code
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:code
     react-format:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run format:check
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run format:check
     react-types:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run lint:types
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:types
     # knip, browser-compat, the i18n catalog compile and the legacy-string audit
     # are all part of CI's `npm run lint`; running them here too keeps a dead
     # export, a browser-compat regression, a stale/incomplete message catalog, or
@@ -40,17 +40,17 @@ pre-commit:
     # failing in CI. All are static analyses (no build), on par with the tsc run
     # above.
     react-knip:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run lint:knip
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:knip
     react-browser-compat:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run lint:browser-compat
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:browser-compat
     react-i18n:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run lint:i18n
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:i18n
     react-audit-strings:
-      glob: "packages/rom-weaver-react/**"
-      run: npm --prefix packages/rom-weaver-react run audit:strings
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run audit:strings
     whitespace:
       run: git diff --cached --check
     thread-guard-regressions:

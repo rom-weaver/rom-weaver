@@ -17,15 +17,15 @@
           "path": "package-lock.json",
           "jsonpath": "$.packages[''].optionalDependencies.*"
         },
-        "packages/rom-weaver-react/package.json",
+        "packages/rom-weaver-webapp/package.json",
         {
           "type": "json",
-          "path": "packages/rom-weaver-react/package-lock.json",
+          "path": "packages/rom-weaver-webapp/package-lock.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/rom-weaver-react/package-lock.json",
+          "path": "packages/rom-weaver-webapp/package-lock.json",
           "jsonpath": "$.packages[''].version"
         },
         "packages/rom-weaver-cli-platforms/darwin-arm64/package.json",

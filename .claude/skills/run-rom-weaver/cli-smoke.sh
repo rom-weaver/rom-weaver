@@ -14,7 +14,7 @@ BIN="${RW_BIN:-$REPO/target/release/rom-weaver}"
 [ -x "$BIN" ] || { echo "no rom-weaver binary; run: cargo build -p rom-weaver-cli --release"; exit 1; }
 
 FIX="$REPO/tests/fixtures"
-ARC="$REPO/packages/rom-weaver-react/tests/fixtures/archives"
+ARC="$REPO/packages/rom-weaver-webapp/tests/fixtures/archives"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "bin: $BIN"

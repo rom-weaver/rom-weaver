@@ -178,24 +178,24 @@ description = "Fail on threaded-WASM suppression regressions"
 run = "{{ config_root }}/scripts/check-thread-guards.sh"
 
 [tasks.dev]
-description = "Run the React dev server"
-run = "npm --prefix packages/rom-weaver-react run dev --"
+description = "Run the webapp dev server"
+run = "npm --prefix packages/rom-weaver-webapp run dev --"
 
 [tasks.preview]
-description = "Preview the built React webapp"
-run = "npm --prefix packages/rom-weaver-react run preview --"
+description = "Preview the built webapp"
+run = "npm --prefix packages/rom-weaver-webapp run preview --"
 
 [tasks.test-e2e-fast]
 description = "Run CLI, WASM, browser, and real webapp E2E checks in parallel"
-run = "npm --prefix packages/rom-weaver-react run test:e2e:fast"
+run = "npm --prefix packages/rom-weaver-webapp run test:e2e:fast"
 
 [tasks.test-e2e-nightly]
 description = "Run exhaustive CLI/WASM interaction matrices plus WebKit and webapp E2E"
-run = "npm --prefix packages/rom-weaver-react run test:e2e:nightly"
+run = "npm --prefix packages/rom-weaver-webapp run test:e2e:nightly"
 
 [tasks.test-e2e-ios]
 description = "Generate the archive corpus and serve the iOS matrix over HTTPS on the LAN"
-run = "npm --prefix packages/rom-weaver-react run test:e2e:ios --"
+run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
@@ -203,11 +203,11 @@ depends = ["fmt", "clippy", "typegen-check", "manpages-check", "wasm-check", "th
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-npm --prefix packages/rom-weaver-react run lint
+npm --prefix packages/rom-weaver-webapp run lint
 npm test
-npm --prefix packages/rom-weaver-react run test:unit
-npm --prefix packages/rom-weaver-react run test:browser:wasm
-npm --prefix packages/rom-weaver-react run test:browser:parallel
-npm --prefix packages/rom-weaver-react run test:e2e:webapp
-npm --prefix packages/rom-weaver-react run build
+npm --prefix packages/rom-weaver-webapp run test:unit
+npm --prefix packages/rom-weaver-webapp run test:browser:wasm
+npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+npm --prefix packages/rom-weaver-webapp run build
 '''

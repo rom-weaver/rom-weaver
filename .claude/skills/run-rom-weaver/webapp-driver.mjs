@@ -4,10 +4,10 @@
 // click "Apply & download", capture the produced file), and screenshots.
 //
 // Playwright + chromium are ALREADY installed as deps of this package, so this
-// script MUST be run from packages/rom-weaver-react (node resolves "playwright"
+// script MUST be run from packages/rom-weaver-webapp (node resolves "playwright"
 // from there). The dev server uses a self-signed cert → ignoreHTTPSErrors.
 //
-// Usage (from packages/rom-weaver-react):
+// Usage (from packages/rom-weaver-webapp):
 //   node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs load        # just boot + screenshot
 //   node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs apply       # full apply flow + screenshot
 //
@@ -23,9 +23,9 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
-// playwright is a dep of the React package, not of the repo root - resolve it
+// playwright is a dep of the webapp package, not of the repo root - resolve it
 // from there regardless of where this script lives or runs.
-const require = createRequire(path.join(REPO, "packages/rom-weaver-react/package.json"));
+const require = createRequire(path.join(REPO, "packages/rom-weaver-webapp/package.json"));
 const { chromium } = require("playwright");
 const URL = process.env.RW_URL || "https://localhost:5191/";
 const OUT = process.env.RW_OUT || "/tmp/rw-driver";

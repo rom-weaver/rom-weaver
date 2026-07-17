@@ -21,7 +21,7 @@ the WASM build over a JSON event protocol.
                                    │    (browser-only)    │ thread pool, worker client
                                    └──────────┬───────────┘
                                    ┌──────────▼───────────┐
-                                   │  rom-weaver-react    │ workflows, forms, PWA
+                                   │  rom-weaver-webapp    │ workflows, forms, PWA
                                    └──────────────────────┘
 ```
 
@@ -42,9 +42,9 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
 | `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows. |
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
-| `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-react/src/wasm/generated/`. |
-| `packages/rom-weaver-react/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
-| `packages/rom-weaver-react` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
+| `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-webapp/src/wasm/generated/`. |
+| `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
+| `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
 | `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `qbsdiff`, `akv`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
@@ -107,7 +107,7 @@ Patterns that matter when touching this code:
   read-on-main: RVZ *create* in the vendored `nod` fork.) See **Browser I/O
   paths** below for the full picture.
 - **Browser thread budgets.** "auto" is resolved on the JS side
-  (`packages/rom-weaver-react/src/wasm/workers/browser-thread-budget.ts` and the
+  (`packages/rom-weaver-webapp/src/wasm/workers/browser-thread-budget.ts` and the
   React `toThreadBudget` path) before it reaches wasm - the wasm fallback is a
   fixed 4 threads, so passing "auto" through literally caps throughput.
 - **Byte-identical parity.** Compression outputs are validated against
@@ -182,7 +182,7 @@ proxy) - there is no read-on-main on native.
 
 **Constraints that shape all of this:** `SharedArrayBuffer` needs
 crossOriginIsolation (COOP/COEP headers from
-`packages/rom-weaver-react/scripts/dev-server.mjs` / the prod
+`packages/rom-weaver-webapp/scripts/dev-server.mjs` / the prod
 service worker) - no SAB means no proxy and no threads; OPFS is dedicated-worker
 only (no main-thread `window`); WebKit allows **one `SyncAccessHandle` per file**
 (the proxy refcounts to one) and serializes concurrent `FileReaderSync` of one
@@ -344,7 +344,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
 - **Type generation.** `cargo run -p rom-weaver-typegen -- --write` (or
   `npm run typegen`) emits `rom-weaver-rust-types.d.ts`,
   `rom-weaver-format-metadata.ts`, and `rom-weaver-command-types.ts` into
-  `packages/rom-weaver-react/src/wasm/generated/`. CI runs `--check`; any change to
+  `packages/rom-weaver-webapp/src/wasm/generated/`. CI runs `--check`; any change to
   a `#[derive(TS)]` type or format registry metadata requires regenerating and
   committing. The generated format metadata is the single source for codec
   pickers and format tables in the webapp - do not hand-maintain duplicates.
@@ -367,7 +367,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
   cli_smoke family (`crates/rom-weaver-cli/tests/cli_smoke/ingest.rs`).
 - **Workers only.** The OPFS runtime requires a Dedicated Worker (sync OPFS
   access handles and SharedArrayBuffer are unavailable on the main thread).
-  `rom-weaver-react/src/workers/` hosts the worker entrypoints; the protocol
+  `rom-weaver-webapp/src/workers/` hosts the worker entrypoints; the protocol
   types live in `src/workers/protocol/`.
 
 ## Build graph
@@ -376,13 +376,13 @@ entry checks-only. Create re-parses before writing, so it can never emit
 cargo build (workspace)                     # native CLI
 cargo run -p rom-weaver-typegen -- --write  # regen TS types when Rust types change
 mise run build-wasm-prod                    # WASI SDK build → wasm-opt → brotli
-                                            #   → sync into packages/rom-weaver-react/src/wasm
-npm --prefix packages/rom-weaver-react run dev|build
+                                            #   → sync into packages/rom-weaver-webapp/src/wasm
+npm --prefix packages/rom-weaver-webapp run dev|build
 ```
 
 The WASM build needs a WASI SDK (v33+, auto-detected; see
 `scripts/wasm/detect-wasi-sdk.sh` and the `build-wasm` task in `.mise.toml`). Generated wasm artifacts in
-`packages/rom-weaver-react/src/wasm` are gitignored; the generated *TypeScript*
+`packages/rom-weaver-webapp/src/wasm` are gitignored; the generated *TypeScript*
 files are
 committed and drift-checked.
 
@@ -393,7 +393,7 @@ language (charcoal chassis, cartridge-orange thread accent, cream hash
 readouts, sage verification).
 
 - **Stylesheet.** One hand-written semantic sheet,
-  `packages/rom-weaver-react/src/webapp/design-system.css`: design tokens on
+  `packages/rom-weaver-webapp/src/webapp/design-system.css`: design tokens on
   `:root[data-theme="dark"|"light"]` (`--thread`, `--plate`, `--seam`,
   `--ink-*`, …), component rules scoped under `.rw-app`, webapp-only
   adaptations (React modal framework, codec combobox, platform ergonomics) at

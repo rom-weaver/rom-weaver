@@ -40,7 +40,7 @@ jobs:
           - name: webapp
             image: rom-weaver-webapp
             context: .
-            file: packages/rom-weaver-react/Dockerfile
+            file: packages/rom-weaver-webapp/Dockerfile
     steps:
       - uses: actions/checkout@v6
         with:

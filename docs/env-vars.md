@@ -5,7 +5,7 @@ knobs parse through `rom_weaver_core::env` (`env_bool`/`env_u64`/`env_u64_opt`),
 which logs a `warn!` on an unparseable value instead of silently using the
 default.
 
-> **Not an env var:** the generated `packages/rom-weaver-react/src/wasm/generated/rom-weaver-format-metadata.ts`
+> **Not an env var:** the generated `packages/rom-weaver-webapp/src/wasm/generated/rom-weaver-format-metadata.ts`
 > exports compile-time data tables named `ROM_WEAVER_CONTAINER_FORMATS`,
 > `ROM_WEAVER_FORMAT_METADATA`, etc. Despite the `ROM_WEAVER_` prefix these are
 > TypeScript `export const`s, **not** environment variables - a `grep ROM_WEAVER_`
@@ -60,7 +60,7 @@ They do **not** affect the native CLI or the browser runtime.
 > webapp at runtime (page-level config and diagnostic handles), **not** process
 > environment variables - same caveat as the TypeScript `export const`s above.
 > A `grep ROM_WEAVER_` surfaces them under
-> `packages/rom-weaver-react/src/webapp` alongside the real knobs.
+> `packages/rom-weaver-webapp/src/webapp` alongside the real knobs.
 
 | Global | Direction | Set/read at | Purpose |
 | --- | --- | --- | --- |

@@ -86,15 +86,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-react/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
           restore-keys: |
             npm-${{ runner.os }}-
 
       - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-react
+        run: npm ci --prefix packages/rom-weaver-webapp
 
       - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-react exec playwright install --with-deps chromium
+        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
 
       - name: Rust format
         run: mise run fmt
@@ -134,15 +134,15 @@ jobs:
       - name: WASM build
         run: mise run build-wasm-prod
 
-      - name: rom-weaver-react checks
+      - name: rom-weaver-webapp checks
         run: |
           npm test
-          npm --prefix packages/rom-weaver-react run lint
-          npm --prefix packages/rom-weaver-react run test:unit
-          npm --prefix packages/rom-weaver-react run test:browser:wasm
-          npm --prefix packages/rom-weaver-react run test:browser:parallel
-          npm --prefix packages/rom-weaver-react run test:e2e:webapp
-          npm --prefix packages/rom-weaver-react run build
+          npm --prefix packages/rom-weaver-webapp run lint
+          npm --prefix packages/rom-weaver-webapp run test:unit
+          npm --prefix packages/rom-weaver-webapp run test:browser:wasm
+          npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+          npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+          npm --prefix packages/rom-weaver-webapp run build
 
   # Report-only coverage. Runs in parallel with `quality`, has no thresholds,
   # and is not wired into branch protection - the test steps use
@@ -198,15 +198,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-react/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
           restore-keys: |
             npm-${{ runner.os }}-
 
       - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-react
+        run: npm ci --prefix packages/rom-weaver-webapp
 
       - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-react exec playwright install --with-deps chromium
+        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
 
       - name: Rust coverage
         continue-on-error: true
@@ -217,11 +217,11 @@ jobs:
 
       - name: React UI coverage
         continue-on-error: true
-        run: npm --prefix packages/rom-weaver-react run test:browser:coverage
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:coverage
 
       - name: React wasm coverage
         continue-on-error: true
-        run: npm --prefix packages/rom-weaver-react run test:browser:wasm:coverage
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm:coverage
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4

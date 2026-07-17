@@ -82,20 +82,20 @@ ENV PATH="/root/.cargo/bin:/opt/binaryen/bin:${PATH}" \
     CARGO_INCREMENTAL=0 \
     ROM_WEAVER_COMMIT_HASH=docker
 
-WORKDIR /app/packages/rom-weaver-react
-COPY packages/rom-weaver-react/package.json packages/rom-weaver-react/package-lock.json ./
+WORKDIR /app/packages/rom-weaver-webapp
+COPY packages/rom-weaver-webapp/package.json packages/rom-weaver-webapp/package-lock.json ./
 RUN npm ci
 
 WORKDIR /app
 COPY . .
 RUN bash scripts/wasm/build-app.sh prod \
-    && npm --prefix packages/rom-weaver-react run build -- --mode docker
+    && npm --prefix packages/rom-weaver-webapp run build -- --mode docker
 
 # static-web-server serves the generated SPA as a non-root user. HTTPS is
 # terminated by the reverse proxy described in docs/self-hosting.md.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
-COPY packages/rom-weaver-react/sws.toml /etc/sws.toml
-COPY --from=builder /app/packages/rom-weaver-react/dist /srv
+COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
+COPY --from=builder /app/packages/rom-weaver-webapp/dist /srv
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/health || exit 1

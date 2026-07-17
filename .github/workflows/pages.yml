@@ -79,17 +79,17 @@ jobs:
           echo "$BIN/bin" >> "$GITHUB_PATH"
 
       - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-react
+        run: npm ci --prefix packages/rom-weaver-webapp
 
       - name: Build WASM
         run: mise run build-wasm-prod
 
       - name: Build webapp
-        run: npm --prefix packages/rom-weaver-react run build
+        run: npm --prefix packages/rom-weaver-webapp run build
 
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: packages/rom-weaver-react/dist
+          path: packages/rom-weaver-webapp/dist
 
   deploy:
     needs: build

@@ -63,11 +63,11 @@ Build a portable static directory:
 
 ```bash
 mise run build-wasm-prod
-npm ci --prefix packages/rom-weaver-react
-npm --prefix packages/rom-weaver-react run build
+npm ci --prefix packages/rom-weaver-webapp
+npm --prefix packages/rom-weaver-webapp run build
 ```
 
-Upload the contents of `packages/rom-weaver-react/dist/`, preserving its
+Upload the contents of `packages/rom-weaver-webapp/dist/`, preserving its
 directory structure. The normal build does not include precompressed `.br`
 siblings because generic static hosts do not automatically serve them. Enable
 dynamic Brotli or gzip compression in the host when available, especially for
@@ -120,7 +120,7 @@ when using one; it does not need a separate option.
 Applications importing the package can call `ingest`:
 
 ```js
-import { ingest } from "rom-weaver-react";
+import { ingest } from "rom-weaver-webapp";
 
 ingest([
   "/work/rom-weaver-imports/rom-weaver-bundle.json",

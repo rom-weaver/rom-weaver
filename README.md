@@ -1,12 +1,12 @@
 <p align="center">
   <img
-    src="packages/rom-weaver-react/design/webapp.png"
+    src="packages/rom-weaver-webapp/design/webapp.png"
     alt="rom-weaver web app showing the Weave workflow"
     width="960"
   >
 </p>
 
-<h1 align="center"><img src="packages/rom-weaver-react/src/assets/app/root/logo.svg" alt="rom-weaver logo" width="64" height="64" align="middle"> rom-weaver</h1>
+<h1 align="center"><img src="packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="rom-weaver logo" width="64" height="64" align="middle"> rom-weaver</h1>
 
 <p align="center">
   A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal.
@@ -188,12 +188,12 @@ git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 mise install
 mise trust
-npm ci --prefix packages/rom-weaver-react
+npm ci --prefix packages/rom-weaver-webapp
 mise run build-wasm-prod
-npm --prefix packages/rom-weaver-react run build
+npm --prefix packages/rom-weaver-webapp run build
 ```
 
-Upload `packages/rom-weaver-react/dist/` to an HTTPS static host that supports
+Upload `packages/rom-weaver-webapp/dist/` to an HTTPS static host that supports
 SPA fallback and the required COOP/COEP/CORP headers. The [self-hosting guide](docs/self-hosting.md)
 covers reverse proxies, subpath routing, service-worker scope, and static-host
 configuration.
@@ -223,7 +223,7 @@ cd rom-weaver
 mise install
 mise trust
 npm ci
-npm ci --prefix packages/rom-weaver-react
+npm ci --prefix packages/rom-weaver-webapp
 mise run build-wasm
 npm run dev
 ```

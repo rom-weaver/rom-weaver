@@ -19,8 +19,8 @@
 
 # Coverage reports
 /dist/coverage/
-/packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm
-/packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm.br
-/packages/rom-weaver-react/src/wasm/rom-weaver-app-threaded.wasm
-/packages/rom-weaver-react/src/wasm/rom-weaver-app-threaded.wasm.br
-/packages/rom-weaver-react/tests/wasm/__screenshots__/
+/packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
+/packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
+/packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm
+/packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm.br
+/packages/rom-weaver-webapp/tests/wasm/__screenshots__/

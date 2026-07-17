@@ -11,9 +11,9 @@ cargo build -p rom-weaver-cli                      # native CLI
 cargo test --workspace                             # full Rust suite
 cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED after Rust type/metadata changes)
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
-npm --prefix packages/rom-weaver-react run dev     # webapp dev server
-npm --prefix packages/rom-weaver-react run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
-npm --prefix packages/rom-weaver-react run test:browser:wasm  # wasm-layer browser tests
+npm --prefix packages/rom-weaver-webapp run dev     # webapp dev server
+npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
+npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests
 ```
 
 Pre-commit hooks (lefthook) run oxfmt/clippy/typegen/oxlint/biome/tsc scoped to changed
@@ -45,8 +45,8 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - Format handler registries: `crates/rom-weaver-containers`,
   `crates/rom-weaver-patches`
 - Browser wasm runtime (OPFS, thread pool, worker client):
-  `packages/rom-weaver-react/src/wasm`
-- Webapp workflows/forms: `packages/rom-weaver-react/src`
+  `packages/rom-weaver-webapp/src/wasm`
+- Webapp workflows/forms: `packages/rom-weaver-webapp/src`
 - Vendored forks: `vendor/` (`nod` and `libarchive` are submodules; push `nod`
   changes to the fork remote, not upstream). Never run stable `cargo fmt`
   inside `vendor/nod` - its rustfmt config needs nightly (`cargo +nightly fmt`)
@@ -65,5 +65,5 @@ browser mode hangs on `+` in test paths).
 
 - Rust: `crates/*/tests/unit/`, CLI end-to-end in
   `crates/rom-weaver-cli/tests/cli_smoke/`
-- Browser: `packages/rom-weaver-react/tests/browser/` (Playwright + vitest)
+- Browser: `packages/rom-weaver-webapp/tests/browser/` (Playwright + vitest)
 - Never skip/remove/modify tests to make a change pass.

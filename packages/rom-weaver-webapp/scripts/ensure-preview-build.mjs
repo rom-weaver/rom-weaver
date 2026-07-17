@@ -57,7 +57,7 @@ if (String(process.env.ROM_WEAVER_PREVIEW_SKIP_BUILD || "") === "1") {
 
   if (viteReason) {
     log("info", `vite rebuild needed: ${viteReason}`);
-    run("npm", ["--prefix", "packages/rom-weaver-react", "run", "build"], { label: "vite build", log });
+    run("npm", ["--prefix", "packages/rom-weaver-webapp", "run", "build"], { label: "vite build", log });
   } else {
     log("debug", "dist up to date; skipping vite build");
   }

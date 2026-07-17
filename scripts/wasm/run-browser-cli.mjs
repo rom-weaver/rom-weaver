@@ -18,7 +18,7 @@ import { createInterface } from 'node:readline';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
-const WASM_PACKAGE_DIR = resolve(REPO_ROOT, 'packages/rom-weaver-react');
+const WASM_PACKAGE_DIR = resolve(REPO_ROOT, 'packages/rom-weaver-webapp');
 const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'src/wasm/rom-weaver-app.wasm');
 const WORK_GUEST_PATH = '/work';
 const STAGE_INPUT_CHUNK_BYTES = 2 * 1024 * 1024;
@@ -476,7 +476,7 @@ async function loadPlaywrightApi() {
 }
 
 function browserWorkerModuleUrl(baseUrl) {
-  return new URL('/packages/rom-weaver-react/src/wasm/workers/browser-worker-client.ts', baseUrl).toString();
+  return new URL('/packages/rom-weaver-webapp/src/wasm/workers/browser-worker-client.ts', baseUrl).toString();
 }
 
 function wasmModuleUrl(baseUrl, wasmModulePath) {

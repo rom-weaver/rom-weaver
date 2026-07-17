@@ -1,7 +1,7 @@
 # src/wasm (browser wasm runtime)
 
 JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution. Formerly the standalone
-`rom-weaver-wasm` package; now merged into `rom-weaver-react` and consumed via relative imports.
+`rom-weaver-wasm` package; now merged into `rom-weaver-webapp` and consumed via relative imports.
 
 ## What You Get
 
@@ -103,7 +103,7 @@ mise run build-wasm
 
 If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm`
 syncs them in automatically. To sync a pre-built directory manually (run from
-`packages/rom-weaver-react`):
+`packages/rom-weaver-webapp`):
 
 ```bash
 ARTIFACT_DIR="/path/to/wasm-artifacts"
@@ -112,7 +112,7 @@ npm run prepare:dist -- "$ARTIFACT_DIR"
 
 ## Browser Benchmarks
 
-Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-react`):
+Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-webapp`):
 
 ```bash
 npm run test:browser:wasm:bench

@@ -20,14 +20,14 @@ Use these checks from cheapest to most faithful:
 1. Static compatibility:
 
    ```bash
-   cd packages/rom-weaver-react
+   cd packages/rom-weaver-webapp
    npm run lint:browser-compat
    ```
 
 2. Chromium browser suite, the default local gate:
 
    ```bash
-   cd packages/rom-weaver-react
+   cd packages/rom-weaver-webapp
    npm run test:browser
    ```
 
@@ -35,21 +35,21 @@ Use these checks from cheapest to most faithful:
    so treat it as an early warning only:
 
    ```bash
-   cd packages/rom-weaver-react
+   cd packages/rom-weaver-webapp
    npm run test:browser:webkit:smoke
    ```
 
    If Playwright reports a missing WebKit executable, install it once:
 
    ```bash
-   cd packages/rom-weaver-react
+   cd packages/rom-weaver-webapp
    npx playwright install webkit
    ```
 
 4. Optional full WebKit suite:
 
    ```bash
-   cd packages/rom-weaver-react
+   cd packages/rom-weaver-webapp
    npm run test:browser:webkit
    ```
 

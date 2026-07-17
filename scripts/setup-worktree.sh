@@ -6,11 +6,11 @@
 # That mirror silently stalls vitest browser mode - the node-side module
 # runner never dispatches test files, with no error - so worktrees needed a
 # manual `npm ci` before browser tests anyway. With the wasm package merged
-# into rom-weaver-react there is a single package install, and npm's cache
+# into rom-weaver-webapp there is a single package install, and npm's cache
 # makes a real `npm ci` take seconds, so the mirror is gone.
 #
 # This script:
-#   - runs `npm ci` at the repo root and in packages/rom-weaver-react
+#   - runs `npm ci` at the repo root and in packages/rom-weaver-webapp
 #   - copies the built wasm artifacts from the main checkout (if present) so
 #     browser tests and the dev server work without a local wasm build
 #   - links vendor/* submodules (nod, libarchive) from the main checkout so the
@@ -33,11 +33,11 @@ fi
 echo "setup-worktree: npm ci (root)"
 npm ci --no-audit --no-fund --prefix "$worktree_dir"
 
-echo "setup-worktree: npm ci (packages/rom-weaver-react)"
-npm ci --no-audit --no-fund --prefix "$worktree_dir/packages/rom-weaver-react"
+echo "setup-worktree: npm ci (packages/rom-weaver-webapp)"
+npm ci --no-audit --no-fund --prefix "$worktree_dir/packages/rom-weaver-webapp"
 
-wasm_src="$main_dir/packages/rom-weaver-react/src/wasm"
-wasm_dst="$worktree_dir/packages/rom-weaver-react/src/wasm"
+wasm_src="$main_dir/packages/rom-weaver-webapp/src/wasm"
+wasm_dst="$worktree_dir/packages/rom-weaver-webapp/src/wasm"
 for artifact in rom-weaver-app.wasm rom-weaver-app.wasm.br; do
   if [ -f "$wasm_src/$artifact" ]; then
     cp "$wasm_src/$artifact" "$wasm_dst/$artifact"

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createWasmEnvImports } from './rom-weaver-runtime-utils.mjs';
 
 const WASM_PATH = fileURLToPath(
-  new URL('../../packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm', import.meta.url),
+  new URL('../../packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm', import.meta.url),
 );
 
 test('provides every env function imported by the built wasm module', () => {

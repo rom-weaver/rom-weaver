@@ -228,7 +228,7 @@ const getLanAddresses = () => {
 
 const getCertificatePaths = () => {
   const certId = crypto.createHash("sha1").update(ROOT_DIR).digest("hex").slice(0, 12);
-  const certDirectory = path.join(os.tmpdir(), `rom-weaver-react-dev-cert-${certId}`);
+  const certDirectory = path.join(os.tmpdir(), `rom-weaver-webapp-dev-cert-${certId}`);
   return {
     cert: path.join(certDirectory, "localhost.crt"),
     config: path.join(certDirectory, "openssl.cnf"),

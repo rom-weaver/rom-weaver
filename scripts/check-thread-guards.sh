@@ -13,7 +13,7 @@ if rg -n 'wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver
   failed=1
 fi
 
-if rg -n 'workerThreads:\s*1|toThreadArg\([^)]*,\s*["'\'']1["'\'']\)' packages/rom-weaver-react/src; then
+if rg -n 'workerThreads:\s*1|toThreadArg\([^)]*,\s*["'\'']1["'\'']\)' packages/rom-weaver-webapp/src; then
   echo "browser runtime should not force single-threaded execution" >&2
   failed=1
 fi
