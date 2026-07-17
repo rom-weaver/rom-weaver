@@ -89,6 +89,12 @@ version = "0.6.0"
 optional = true
 default-features = false
 
+[dev-dependencies.futures]
+version = "0.3.28"
+
+[dev-dependencies.rand]
+version = "0.8.5"
+
 [features]
 checksum = ["sha3"]
 ciso_support = [

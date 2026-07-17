@@ -91,7 +91,11 @@ under `third_party/licenses/<name>-<version>/`.
 | `flacenc` | `0.5.1` | `Apache-2.0` | `crates.io` |
 | `flate2` | `1.1.9` | `MIT OR Apache-2.0` | `crates.io` |
 | `foldhash` | `0.2.0` | `Zlib` | `crates.io` |
+| `futures-channel` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
 | `futures-core` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
+| `futures-io` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
+| `futures-macro` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
+| `futures-sink` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
 | `futures-task` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
 | `futures-util` | `0.3.32` | `MIT OR Apache-2.0` | `crates.io` |
 | `generic-array` | `0.14.7` | `MIT` | `crates.io` |
