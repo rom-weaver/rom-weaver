@@ -20,16 +20,74 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/">Open the webapp</a>
-  · <a href="docs/README.md">Documentation</a>
-  · <a href="https://github.com/brandonocasey/rom-weaver/issues">Issues</a>
-  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
+ <a href="https://rom-weaver.com/">Open the webapp</a>
+ · <a href="docs/README.md">Documentation</a>
+ · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
 rom-weaver can inspect, extract, checksum, compress, trim, patch, and create
 patches for many cartridge and disc formats. The browser app processes files
 locally with WebAssembly; the native CLI exposes the same command core for
 scripts and terminal workflows.
+
+## Install
+
+### Prerequisites
+
+The hosted webapp needs only a supported browser. The CLI needs Node.js 22+
+for npm or `npx`, or Rust 1.95+, CMake, Clang, and a native compiler
+toolchain for Cargo.
+
+Building the webapp from source additionally needs `mise`, the WASI SDK,
+Brotli, and `sccache`. `mise` installs the pinned Rust, Node.js, Binaryen,
+and ripgrep versions used by the repository; it does not install the WASI SDK
+or system packages. On macOS with Homebrew:
+
+```bash
+brew install mise cmake llvm brotli sccache
+```
+
+On other systems, install [mise](https://mise.jdx.dev/) with your package
+manager or its installer, then run `mise install` and `mise trust`. See the
+[development prerequisites](docs/development.md#prerequisites) for WASI SDK
+locations and platform-specific setup. Docker users need Docker with Compose;
+the webapp image contains the build toolchains.
+
+### Webapp
+
+Use the [rom-weaver webapp](https://rom-weaver.com/) in a browser. No
+installation or account is required. To run it on your own infrastructure, see
+[Start here](#start-here) below.
+
+### CLI
+
+Choose the installation or execution method that fits your workflow:
+
+```bash
+# One-off use with Node.js 22+
+npx --yes rom-weaver --help
+
+# Install the native platform package with npm
+npm install --global rom-weaver
+rom-weaver --help
+
+# Install the published Rust crate
+cargo install rom-weaver-cli
+rom-weaver --help
+
+# Run from a source checkout
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+cargo run --release -p rom-weaver-cli -- --help
+
+# Run the published CLI container
+docker run --rm ghcr.io/brandonocasey/rom-weaver-cli:latest --help
+```
+
+The npm packages provide macOS arm64/x64, Linux x64 glibc, and Windows x64
+binaries. Cargo builds for other supported Rust targets. The [CLI guide](docs/cli.md)
+covers command behavior, supported formats, compression codecs, checksums, and
+JSON output.
 
 ## Start here
 
@@ -92,6 +150,54 @@ rom-weaver checksum game.sfc --algo sha256
 See the [CLI guide](docs/cli.md) for installation alternatives, command
 behavior, supported formats, compression codecs, checksums, and JSON output.
 
+### Self-host with Docker
+
+Run the published webapp image:
+
+```bash
+docker run --rm --publish 8080:8080 ghcr.io/brandonocasey/rom-weaver-webapp:latest
+curl --fail --silent --show-error http://localhost:8080/health
+```
+
+Or build the webapp from a checkout with Docker Compose:
+
+```bash
+docker compose up --build --detach
+curl --fail --silent --show-error http://localhost:8080/health
+```
+
+Open `http://localhost:8080/`. The container includes the WASM build,
+cross-origin isolation headers, SPA fallback, and precompressed Brotli assets.
+For production, put it behind an HTTPS reverse proxy. Set `PORT` to use a
+different local port, for example `PORT=3000 docker compose up --build --detach`.
+
+### Static hosting
+
+Build the static directory from a checkout. This requires `mise`, a WASI SDK,
+and Brotli; the [development guide](docs/development.md) lists platform
+prerequisites. If `mise` is not installed, its upstream installer is:
+
+```bash
+curl https://mise.run | sh
+```
+
+Then build:
+
+```bash
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+mise install
+mise trust
+npm ci --prefix packages/rom-weaver-react
+mise run build-wasm-prod
+npm --prefix packages/rom-weaver-react run build
+```
+
+Upload `packages/rom-weaver-react/dist/` to an HTTPS static host that supports
+SPA fallback and the required COOP/COEP/CORP headers. The [self-hosting guide](docs/self-hosting.md)
+covers reverse proxies, subpath routing, service-worker scope, and static-host
+configuration.
+
 ## What it supports
 
 - Patch apply and creation for IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
@@ -105,39 +211,6 @@ behavior, supported formats, compression codecs, checksums, and JSON output.
 
 The complete compatibility tables are maintained in the
 [CLI guide](docs/cli.md#supported-formats).
-
-## Self-host the webapp
-
-rom-weaver is a static webapp and can run on a dedicated HTTPS subdomain or
-under a path such as `/rom-weaver/`.
-
-### Docker
-
-Build and start the complete webapp with Docker Compose:
-
-```bash
-docker compose up --build --detach
-```
-
-No local Rust, Node.js, WASI SDK, or mise installation is required. The first
-image build downloads the build toolchains and compiles the WASM module, so it
-takes longer than later cached builds. The container is available at
-`http://localhost:8080`. In production, put it behind an HTTPS reverse proxy.
-The image supplies the required cross-origin isolation headers, SPA fallback,
-and precompressed Brotli assets.
-
-### Static hosting
-
-```bash
-mise run build-wasm-prod
-npm ci --prefix packages/rom-weaver-react
-npm --prefix packages/rom-weaver-react run build
-```
-
-Upload `packages/rom-weaver-react/dist/` to an HTTPS host that can serve the
-required COOP/COEP/CORP headers. The [self-hosting guide](docs/self-hosting.md)
-covers reverse-proxy examples, subpath routing, service-worker scope, static
-hosts, and embedding rom-weaver into another application.
 
 ## Develop
 
@@ -165,6 +238,8 @@ Start with the [documentation index](docs/README.md), or jump directly to:
 
 - [CLI usage and supported formats](docs/cli.md)
 - [Self-hosting and Docker](docs/self-hosting.md)
+- [Webapp integration API](docs/self-hosting.md#ingesting-existing-opfs-files)
+- [Webapp URL API](docs/ARCHITECTURE.md#rom-weaver-bundlejson-bundles)
 - [Development and testing](docs/development.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Runtime configuration](docs/env-vars.md)
@@ -174,8 +249,7 @@ Format specifications and reference implementations are collected in
 
 ## Contributing and support
 
-Bug reports and contributions are welcome in the
-[issue tracker](https://github.com/brandonocasey/rom-weaver/issues). Read the
+Bug reports and contributions are welcome. Read the
 [contribution guide](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md)
 before submitting a change, and report
 suspected vulnerabilities through the private channel in the
@@ -184,11 +258,8 @@ support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 
 ## License
 
-Copyright (C) Brandon O'Casey
+Copyright (C) Brandon Casey
 
-rom-weaver is licensed under the
-[GNU Affero General Public License](LICENSE.md), version 3 or later. Modified
-versions offered over a network must make their corresponding source available
-under the same license. Separate commercial terms are available from the
-author. Bundled third-party components retain their own licenses; see
-[`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+See [LICENSE.md](LICENSE.md) for the license terms. Bundled third-party
+components retain their own licenses; see [`NOTICE`](NOTICE) and
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
