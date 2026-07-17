@@ -59,7 +59,7 @@ libc = "0.2.137"
 libz-sys = { version = "1.1.28", default-features = false }
 liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"
-nod = { package = "rom-weaver-nod", path = "crates/rom-weaver-nod", version = "0.5.0", default-features = false, features = ["extract-bzip2-vendored", "extract-lzma-vendored", "extract-zlib-vendored", "extract-zstd-vendored", "compress-zstd-vendored", "threading"] }
+nod = { package = "rom-weaver-nod", path = "crates/rom-weaver-nod", version = "0.5.0", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
 qbsdiff = { package = "rom-weaver-qbsdiff", path = "vendor/qbsdiff-1.4.4", version = "0.5.0" }
 rayon = "1.11.0"
 serde = { version = "1.0.228", features = ["derive"] }

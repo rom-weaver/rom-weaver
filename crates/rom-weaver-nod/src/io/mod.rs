@@ -2,7 +2,7 @@
 
 pub(crate) mod block;
 pub(crate) mod ciso;
-#[cfg(any(feature = "extract-zlib", feature = "compress-zlib"))]
+#[cfg(feature = "compress-zlib")]
 pub(crate) mod gcz;
 pub(crate) mod iso;
 pub(crate) mod nfs;

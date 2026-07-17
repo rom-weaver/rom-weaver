@@ -49,7 +49,7 @@ impl Format {
     pub fn default_block_size(self) -> u32 {
         match self {
             Format::Ciso => crate::io::ciso::DEFAULT_BLOCK_SIZE,
-            #[cfg(any(feature = "extract-zlib", feature = "compress-zlib"))]
+            #[cfg(feature = "compress-zlib")]
             Format::Gcz => crate::io::gcz::DEFAULT_BLOCK_SIZE,
             Format::Rvz => crate::io::wia::RVZ_DEFAULT_CHUNK_SIZE,
             Format::Wbfs => crate::io::wbfs::DEFAULT_BLOCK_SIZE,

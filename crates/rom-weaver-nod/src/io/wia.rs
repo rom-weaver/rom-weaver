@@ -1968,13 +1968,9 @@ impl DiscWriter for DiscWriterWIA {
 fn compression_to_wia(compression: Compression) -> Option<(WIACompression, i32)> {
     match compression {
         Compression::None => Some((WIACompression::None, 0)),
-        #[cfg(feature = "compress-bzip2")]
         Compression::Bzip2(level) => Some((WIACompression::Bzip2, level as i32)),
-        #[cfg(feature = "compress-lzma")]
         Compression::Lzma(level) => Some((WIACompression::Lzma, level as i32)),
-        #[cfg(feature = "compress-lzma")]
         Compression::Lzma2(level) => Some((WIACompression::Lzma2, level as i32)),
-        #[cfg(feature = "compress-zstd")]
         Compression::Zstandard(level) => Some((WIACompression::Zstandard, level as i32)),
         _ => None,
     }
@@ -1997,17 +1993,14 @@ fn compr_data(compression: Compression) -> io::Result<Box<[u8]>> {
 fn compress_bound(compression: Compression, size: usize) -> usize {
     match compression {
         Compression::None => size,
-        #[cfg(feature = "compress-bzip2")]
         Compression::Bzip2(_) => {
             // 1.25 * size
             size.div_ceil(4) + size
         }
-        #[cfg(feature = "compress-lzma")]
         Compression::Lzma(_) => {
             // 1.1 * size + 64 KiB
             size.div_ceil(10) + size + 64000
         }
-        #[cfg(feature = "compress-lzma")]
         Compression::Lzma2(_) => {
             // 1.001 * size + 1 KiB
             size.div_ceil(1000) + size + 1000

@@ -18,48 +18,24 @@ name = "nod"
 
 [features]
 default = [
-    "extract-bzip2-vendored",
     "compress-bzip2-vendored",
-    "extract-lzma-vendored",
     "compress-lzma-vendored",
-    "extract-zlib-vendored",
     "compress-zlib-vendored",
-    "extract-zstd-vendored",
     "compress-zstd-vendored",
     "threading",
 ]
 compress-bzip2 = []
-extract-bzip2 = []
-bzip2-vendored = ["dep:bzip2-sys"]
-bzip2-static = ["bzip2-vendored", "bzip2-sys/static"]
-extract-bzip2-vendored = ["extract-bzip2", "bzip2-vendored"]
-extract-bzip2-static = ["extract-bzip2", "bzip2-static"]
-compress-bzip2-vendored = ["compress-bzip2", "bzip2-vendored"]
-compress-bzip2-static = ["compress-bzip2", "bzip2-static"]
+compress-bzip2-vendored = ["compress-bzip2", "dep:bzip2-sys"]
+compress-bzip2-static = ["compress-bzip2-vendored", "bzip2-sys/static"]
 compress-lzma = []
-extract-lzma = []
-lzma-vendored = ["dep:liblzma-sys"]
-lzma-static = ["lzma-vendored", "liblzma-sys/static"]
-extract-lzma-vendored = ["extract-lzma", "lzma-vendored"]
-extract-lzma-static = ["extract-lzma", "lzma-static"]
-compress-lzma-vendored = ["compress-lzma", "lzma-vendored"]
-compress-lzma-static = ["compress-lzma", "lzma-static"]
+compress-lzma-vendored = ["compress-lzma", "dep:liblzma-sys"]
+compress-lzma-static = ["compress-lzma-vendored", "liblzma-sys/static"]
 compress-zlib = ["dep:adler2"]
-extract-zlib = ["dep:adler2"]
-zlib-vendored = ["dep:libz-sys"]
-zlib-static = ["zlib-vendored", "libz-sys/static"]
-extract-zlib-vendored = ["extract-zlib", "zlib-vendored"]
-extract-zlib-static = ["extract-zlib", "zlib-static"]
-compress-zlib-vendored = ["compress-zlib", "zlib-vendored"]
-compress-zlib-static = ["compress-zlib", "zlib-static"]
+compress-zlib-vendored = ["compress-zlib", "dep:libz-sys"]
+compress-zlib-static = ["compress-zlib-vendored", "libz-sys/static"]
 compress-zstd = []
-extract-zstd = []
-zstd-vendored = ["dep:zstd-sys"]
-zstd-static = ["zstd-vendored"]
-extract-zstd-vendored = ["extract-zstd", "zstd-vendored"]
-extract-zstd-static = ["extract-zstd", "zstd-static"]
-compress-zstd-vendored = ["compress-zstd", "zstd-vendored"]
-compress-zstd-static = ["compress-zstd", "zstd-static"]
+compress-zstd-vendored = ["compress-zstd", "dep:zstd-sys"]
+compress-zstd-static = ["compress-zstd-vendored"]
 openssl = ["dep:openssl"]
 openssl-vendored = ["openssl", "openssl/vendored"]
 python = ["dep:pyo3", "compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"]

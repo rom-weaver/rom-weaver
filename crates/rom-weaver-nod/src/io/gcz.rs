@@ -1,38 +1,31 @@
-#[cfg(feature = "compress-zlib")]
-use std::io::{Seek, SeekFrom};
-#[cfg(feature = "extract-zlib")]
-use std::sync::Arc;
-use std::{io, mem::size_of};
+use std::{
+    io,
+    io::{Seek, SeekFrom},
+    mem::size_of,
+    sync::Arc,
+};
 
 use adler2::adler32_slice;
-#[cfg(feature = "compress-zlib")]
 use bytes::{BufMut, Bytes, BytesMut};
 use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, little_endian::*};
 
 use crate::{
     Error, Result, ResultContext,
     common::{Compression, Format, MagicBytes},
-    disc::SECTOR_SIZE,
-    io::block::GCZ_MAGIC,
-    util::static_assert,
-};
-#[cfg(feature = "compress-zlib")]
-use crate::{
     disc::{
+        SECTOR_SIZE,
         reader::DiscReader,
         writer::{BlockProcessor, BlockResult, DiscWriter, par_process, read_block},
     },
-    util::{compress::Compressor, digest::DigestManager},
-    write::{DataCallback, DiscFinalization, DiscWriterWeight, FormatOptions, ProcessOptions},
-};
-#[cfg(feature = "extract-zlib")]
-use crate::{
-    io::block::{Block, BlockKind, BlockReader},
+    io::block::{Block, BlockKind, BlockReader, GCZ_MAGIC},
     read::{DiscMeta, DiscStream},
     util::{
-        compress::DecompressionKind,
+        compress::{Compressor, DecompressionKind},
+        digest::DigestManager,
         read::{read_arc_slice_at, read_at},
+        static_assert,
     },
+    write::{DataCallback, DiscFinalization, DiscWriterWeight, FormatOptions, ProcessOptions},
 };
 
 /// GCZ header (little endian)
@@ -49,7 +42,6 @@ struct GCZHeader {
 
 static_assert!(size_of::<GCZHeader>() == 32);
 
-#[cfg(feature = "extract-zlib")]
 pub struct BlockReaderGCZ {
     inner: Box<dyn DiscStream>,
     header: GCZHeader,
@@ -59,7 +51,6 @@ pub struct BlockReaderGCZ {
     data_offset: u64,
 }
 
-#[cfg(feature = "extract-zlib")]
 impl Clone for BlockReaderGCZ {
     fn clone(&self) -> Self {
         Self {
@@ -73,7 +64,6 @@ impl Clone for BlockReaderGCZ {
     }
 }
 
-#[cfg(feature = "extract-zlib")]
 impl BlockReaderGCZ {
     pub fn new(mut inner: Box<dyn DiscStream>) -> Result<Box<Self>> {
         // Read header
@@ -101,7 +91,6 @@ impl BlockReaderGCZ {
     }
 }
 
-#[cfg(feature = "extract-zlib")]
 impl BlockReader for BlockReaderGCZ {
     fn read_block(&mut self, out: &mut [u8], sector: u32) -> io::Result<Block> {
         let block_size = self.header.block_size.get();
@@ -197,14 +186,12 @@ impl BlockReader for BlockReaderGCZ {
     }
 }
 
-#[cfg(feature = "compress-zlib")]
 struct BlockProcessorGCZ {
     inner: DiscReader,
     header: GCZHeader,
     compressor: Compressor,
 }
 
-#[cfg(feature = "compress-zlib")]
 impl Clone for BlockProcessorGCZ {
     fn clone(&self) -> Self {
         Self {
@@ -215,13 +202,11 @@ impl Clone for BlockProcessorGCZ {
     }
 }
 
-#[cfg(feature = "compress-zlib")]
 struct BlockMetaGCZ {
     is_compressed: bool,
     block_hash: u32,
 }
 
-#[cfg(feature = "compress-zlib")]
 impl BlockProcessor for BlockProcessorGCZ {
     type BlockMeta = BlockMetaGCZ;
 
@@ -250,7 +235,6 @@ impl BlockProcessor for BlockProcessorGCZ {
 }
 
 #[derive(Clone)]
-#[cfg(feature = "compress-zlib")]
 pub struct DiscWriterGCZ {
     inner: DiscReader,
     header: GCZHeader,
@@ -260,10 +244,8 @@ pub struct DiscWriterGCZ {
 pub const DEFAULT_BLOCK_SIZE: u32 = 0x8000; // 32 KiB
 
 // Level 0 will be converted to the default level in [`Compression::validate_level`]
-#[cfg(feature = "compress-zlib")]
 pub const DEFAULT_COMPRESSION: Compression = Compression::Deflate(0);
 
-#[cfg(feature = "compress-zlib")]
 impl DiscWriterGCZ {
     pub fn new(inner: DiscReader, options: &FormatOptions) -> Result<Box<dyn DiscWriter>> {
         if options.format != Format::Gcz {
@@ -299,7 +281,6 @@ impl DiscWriterGCZ {
     }
 }
 
-#[cfg(feature = "compress-zlib")]
 impl DiscWriter for DiscWriterGCZ {
     fn process(
         &self,
