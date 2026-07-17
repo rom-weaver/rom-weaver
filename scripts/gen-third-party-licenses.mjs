@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Regenerate THIRD_PARTY_LICENSES.md and third_party/licenses/* from the
-// resolved Cargo dependency graph.
+// Generate a build-time third-party attribution bundle from the resolved Cargo
+// dependency graph.
 //
 // Scope: every non-workspace package reachable from the workspace members over
 // normal + build dependency edges (dev-only edges are excluded). This mirrors
@@ -9,34 +9,45 @@
 // Uses ONLY Node built-ins + `cargo metadata`. No npm or cargo plugins, no
 // network. Output is fully deterministic (sorted, no timestamps).
 
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
-const INVENTORY_FILE = path.join(REPO_ROOT, 'THIRD_PARTY_LICENSES.md');
-const LICENSES_DIR = path.join(REPO_ROOT, 'third_party', 'licenses');
-
-const CRATES_IO_SOURCE = 'registry+https://github.com/rust-lang/crates.io-index';
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
+const CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index";
 const VENDORED_WORKSPACE_PACKAGES = new Set([
-  'rom-weaver-akv',
-  'rom-weaver-chd-core',
-  'rom-weaver-nod',
-  'rom-weaver-qbsdiff',
-  'rom-weaver-xdvdfs',
+  "rom-weaver-akv",
+  "rom-weaver-chd-core",
+  "rom-weaver-nod",
+  "rom-weaver-qbsdiff",
+  "rom-weaver-xdvdfs",
 ]);
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;
+const NO_ATTRIBUTION_FILE_RE = /(0bsd|cc0|mit[-_ ]?0|unlicense|wtfpl|public[-_ ]?domain)/i;
+// These licenses do not require retaining copyright or attribution notices.
+// Expressions containing any other identifier are kept conservatively.
+const NO_ATTRIBUTION_LICENSES = new Set(["0BSD", "CC0-1.0", "MIT-0", "Unlicense", "WTFPL"]);
+
+const [outputDirInput] = process.argv.slice(2);
+if (!outputDirInput) {
+  throw new Error("usage: node scripts/gen-third-party-licenses.mjs <output-dir>");
+}
+
+const OUTPUT_DIR = path.resolve(process.cwd(), outputDirInput);
+const NOTICE_FILE = path.join(OUTPUT_DIR, "NOTICE");
+const INVENTORY_FILE = path.join(OUTPUT_DIR, "THIRD_PARTY_LICENSES.md");
+const LICENSES_DIR = path.join(OUTPUT_DIR, "third_party", "licenses");
 
 /** Run `cargo metadata` and parse the JSON document. */
 function loadCargoMetadata() {
-  const raw = execFileSync(
-    'cargo',
-    ['metadata', '--format-version', '1', '--offline'],
-    { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
-  );
+  const raw = execFileSync("cargo", ["metadata", "--format-version", "1", "--offline"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  });
   return JSON.parse(raw);
 }
 
@@ -64,7 +75,7 @@ function resolveThirdPartyIds(metadata) {
     for (const dep of node.deps ?? []) {
       const kinds = (dep.dep_kinds ?? []).map((k) => k.kind);
       // Keep an edge if it is a normal (kind === null) or build dependency.
-      const isNonDev = kinds.some((kind) => kind === null || kind === 'build');
+      const isNonDev = kinds.some((kind) => kind === null || kind === "build");
       if (!isNonDev) {
         continue;
       }
@@ -89,18 +100,29 @@ function resolveThirdPartyIds(metadata) {
 /** Human-facing Source column value for a package. */
 function sourceLabel(pkg) {
   if (!pkg.source) {
-    return 'local';
+    return "local";
   }
   if (pkg.source === CRATES_IO_SOURCE) {
-    return 'crates.io';
+    return "crates.io";
   }
-  if (pkg.source.startsWith('git+')) {
-    return pkg.source.slice('git+'.length);
+  if (pkg.source.startsWith("git+")) {
+    return pkg.source.slice("git+".length);
   }
-  if (pkg.source.startsWith('registry+')) {
-    return pkg.source.slice('registry+'.length);
+  if (pkg.source.startsWith("registry+")) {
+    return pkg.source.slice("registry+".length);
   }
   return pkg.source;
+}
+
+function licenseIds(expression) {
+  return (expression ?? "UNKNOWN")
+    .split(/\s+(?:OR|AND)\s+/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function requiresAttribution(expression) {
+  return licenseIds(expression).some((id) => !NO_ATTRIBUTION_LICENSES.has(id));
 }
 
 /** Candidate directories to scan for a package's license text files. */
@@ -130,7 +152,11 @@ function findLicenseFiles(pkg) {
       continue;
     }
     for (const entry of entries) {
-      if (!entry.isFile() || !LICENSE_FILE_RE.test(entry.name)) {
+      if (
+        !entry.isFile() ||
+        !LICENSE_FILE_RE.test(entry.name) ||
+        NO_ATTRIBUTION_FILE_RE.test(entry.name)
+      ) {
         continue;
       }
       if (seenNames.has(entry.name)) {
@@ -157,60 +183,48 @@ function removeDir(dir) {
 /** Build the Markdown inventory document. */
 function renderInventory(rows) {
   const lines = [];
-  lines.push('# Third-Party Licenses');
-  lines.push('');
-  lines.push(
-    'This file is generated by `scripts/gen-third-party-licenses.mjs` from the',
-  );
-  lines.push(
-    'resolved Cargo dependency graph for `rom-weaver`, covering every',
-  );
-  lines.push(
-    'third-party package reachable from the workspace members over normal and',
-  );
-  lines.push(
-    'build dependency edges (equivalent to',
-  );
-  lines.push('`cargo tree --workspace --edges normal,build`). Dev-only');
-  lines.push('dependencies are excluded.');
-  lines.push('');
-  lines.push(
-    'License texts for each crate (when published with the crate source) live',
-  );
-  lines.push('under `third_party/licenses/<name>-<version>/`.');
-  lines.push('');
-  lines.push('## Inventory');
-  lines.push('');
-  lines.push('| Crate | Version | License Expression | Source |');
-  lines.push('|---|---|---|---|');
+  lines.push("# Third-Party Licenses");
+  lines.push("");
+  lines.push("This file is generated during the build from the resolved Cargo");
+  lines.push("dependency graph. It is not maintained as a source file.");
+  lines.push("Only dependencies whose declared SPDX expression includes a license that");
+  lines.push("requires retaining attribution or license notices are listed.");
+  lines.push("Public-domain and no-attribution-only expressions are omitted.");
+  lines.push("");
+  lines.push("License texts live under `third_party/licenses/<name>-<version>/`.");
+  lines.push("");
+  lines.push("## Inventory");
+  lines.push("");
+  lines.push("| Crate | Version | License Expression | Source |");
+  lines.push("|---|---|---|---|");
   for (const row of rows) {
-    const license = row.license ?? 'UNKNOWN';
-    lines.push(
-      `| \`${row.name}\` | \`${row.version}\` | \`${license}\` | \`${row.source}\` |`,
-    );
+    const license = row.license ?? "UNKNOWN";
+    lines.push(`| \`${row.name}\` | \`${row.version}\` | \`${license}\` | \`${row.source}\` |`);
   }
-  lines.push('');
-  lines.push('## Notes');
-  lines.push('');
-  lines.push(
-    '- This list excludes first-party workspace crates and includes vendored',
-  );
-  lines.push('  third-party forks published under `rom-weaver-*` names.');
-  lines.push(
-    '- The License Expression column is the SPDX expression declared in each',
-  );
+  lines.push("");
+  lines.push("## Notes");
+  lines.push("");
+  lines.push("- First-party workspace crates are excluded. Vendored third-party");
+  lines.push("  forks published under `rom-weaver-*` names are included.");
+  lines.push("- The License Expression column is the SPDX expression declared in each");
   lines.push("  crate's `Cargo.toml`.");
-  lines.push(
-    '- Some crates do not ship a flat license text file with their published',
-  );
-  lines.push(
-    '  source; those rows still record the SPDX license expression above.',
-  );
-  lines.push(
-    '- Regenerate with `mise run licenses` after any dependency change.',
-  );
-  lines.push('');
-  return lines.join('\n');
+  lines.push("- Some crates do not ship a flat license text file with their published");
+  lines.push("  source; those rows include a generated SPDX metadata notice instead.");
+  lines.push("");
+  return lines.join("\n");
+}
+
+function renderNotice() {
+  return [
+    "rom-weaver Third-Party Attribution",
+    "",
+    "This build includes third-party Rust crates whose declared licenses",
+    "require retaining attribution or license notices.",
+    "",
+    "See THIRD_PARTY_LICENSES.md for the inventory and",
+    "third_party/licenses/ for the corresponding license texts or SPDX metadata.",
+    "",
+  ].join("\n");
 }
 
 function main() {
@@ -222,19 +236,25 @@ function main() {
   const expectedDirs = new Set();
   const missingLicense = [];
   let copiedDirCount = 0;
+  let omittedCount = 0;
 
   for (const id of thirdPartyIds) {
     const pkg = packagesById.get(id);
     if (pkg === undefined) {
       continue;
     }
-    rows.push({
+    const row = {
       name: pkg.name,
       version: pkg.version,
       license: pkg.license,
       source: sourceLabel(pkg),
       pkg,
-    });
+    };
+    if (requiresAttribution(row.license)) {
+      rows.push(row);
+    } else {
+      omittedCount += 1;
+    }
   }
 
   rows.sort((a, b) => {
@@ -251,8 +271,22 @@ function main() {
     const licenseFiles = findLicenseFiles(row.pkg);
     if (licenseFiles.length === 0) {
       missingLicense.push(dirName);
-      // Drop any stale dir for a crate that no longer ships license files.
       removeDir(targetDir);
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(targetDir, "LICENSE-SPDX-NOTICE.txt"),
+        [
+          `Package: ${row.name}`,
+          `Version: ${row.version}`,
+          `License expression: ${row.license ?? "UNKNOWN"}`,
+          `Source: ${row.source}`,
+          "",
+          "The published package did not include a top-level license file.",
+          "The SPDX expression above is retained as the package license metadata.",
+          "",
+        ].join("\n"),
+      );
+      copiedDirCount += 1;
       continue;
     }
 
@@ -287,6 +321,8 @@ function main() {
     fs.mkdirSync(LICENSES_DIR, { recursive: true });
   }
 
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(NOTICE_FILE, renderNotice());
   fs.writeFileSync(INVENTORY_FILE, renderInventory(rows));
 
   pruned.sort();
@@ -294,14 +330,15 @@ function main() {
   process.stdout.write(
     [
       `Inventory crates: ${rows.length}`,
+      `Omitted no-attribution crates: ${omittedCount}`,
       `License dirs written: ${copiedDirCount}`,
       `Crates without a findable license file: ${missingLicense.length}`,
-      missingLicense.length > 0 ? `  ${missingLicense.join(', ')}` : '',
+      missingLicense.length > 0 ? `  ${missingLicense.join(", ")}` : "",
       `Pruned stale dirs: ${pruned.length}`,
-      pruned.length > 0 ? `  ${pruned.join(', ')}` : '',
+      pruned.length > 0 ? `  ${pruned.join(", ")}` : "",
     ]
-      .filter((line) => line !== '')
-      .join('\n') + '\n',
+      .filter((line) => line !== "")
+      .join("\n") + "\n",
   );
 }
 

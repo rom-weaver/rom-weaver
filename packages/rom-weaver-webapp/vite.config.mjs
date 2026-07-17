@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -11,6 +12,7 @@ import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 
 const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
+const licenseGeneratorPath = path.join(repoRoot, "scripts", "gen-third-party-licenses.mjs");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const packagedWasmPath = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
@@ -23,6 +25,10 @@ const rootStaticAssetSources = {
   "/icon-maskable-512.png": path.join(rootDir, "src", "assets", "app", "root", "icon-maskable-512.png"),
   "/logo.svg": path.join(rootDir, "src", "assets", "app", "root", "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+};
+const generatedLicenseAssetSources = {
+  "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
+  "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
 };
 const brotliAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
 const securityHeaders = {
@@ -85,12 +91,15 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
+  else if (requestPath.endsWith(".md") || requestPath.endsWith("/NOTICE")) {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  }
 };
 
 const applyRootStaticAssetMiddleware = (middlewares) => {
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
-    const sourcePath = rootStaticAssetSources[requestPath];
+    const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
     if (!sourcePath) {
       next();
       return;
@@ -193,6 +202,10 @@ const writeWebappStaticAssets = () => {
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
       }
+      execFileSync(process.execPath, [licenseGeneratorPath, distDir], {
+        cwd: repoRoot,
+        stdio: "inherit",
+      });
     },
     configResolved(config) {
       outDir = config.build.outDir;

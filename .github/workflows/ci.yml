@@ -128,7 +128,7 @@ jobs:
       - name: Rust tests
         run: mise run test-rust
 
-      - name: Third-party license inventory
+      - name: Third-party attribution bundle
         run: mise run licenses-check
 
       - name: WASM build

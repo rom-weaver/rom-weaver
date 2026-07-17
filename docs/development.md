@@ -165,10 +165,11 @@ mise run typegen
 mise run typegen-check
 ```
 
-When dependency licenses change:
+The build generates third-party attribution files from the resolved Cargo
+dependency graph. Public-domain and no-attribution-only licenses are omitted.
+To check that generation still works:
 
 ```bash
-mise run licenses
 mise run licenses-check
 ```
 

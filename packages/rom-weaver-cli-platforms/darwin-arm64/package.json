@@ -8,6 +8,6 @@
   "os": ["darwin"],
   "cpu": ["arm64"],
   "bin": {"rom-weaver": "bin/rom-weaver"},
-  "files": ["bin/rom-weaver", "LICENSE.md"],
+  "files": ["bin/rom-weaver", "LICENSE.md", "NOTICE", "THIRD_PARTY_LICENSES.md", "third_party/licenses/**"],
   "publishConfig": {"access": "public", "provenance": true}
 }

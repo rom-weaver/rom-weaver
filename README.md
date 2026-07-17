@@ -261,5 +261,5 @@ support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 Copyright (C) Brandon Casey
 
 See [LICENSE.md](LICENSE.md) for the license terms. Bundled third-party
-components retain their own licenses; see [`NOTICE`](NOTICE) and
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+components retain their own licenses. Release builds include a generated
+`NOTICE`, `THIRD_PARTY_LICENSES.md`, and corresponding license texts.

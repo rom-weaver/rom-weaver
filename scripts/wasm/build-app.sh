@@ -76,6 +76,11 @@ else
   "$WASI_STRIP" "$artifact"
 fi
 
+# Generate the attribution bundle beside every build artifact. The webapp build
+# emits the same bundle into its final dist root, and native package preparation
+# does the equivalent for CLI packages.
+node "$MISE_PROJECT_ROOT/scripts/gen-third-party-licenses.mjs" "$out_dir"
+
 # Sync into the npm package only when built to a separate output directory.
 if [[ "$out_dir" != "$pkg_dir" ]]; then
   node "$MISE_PROJECT_ROOT/packages/rom-weaver-webapp/scripts/sync-dist.mjs" "$out_dir"

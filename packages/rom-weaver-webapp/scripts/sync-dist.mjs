@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-// Destination for synced wasm artifacts inside the merged react package.
+// Destination for synced wasm artifacts inside the merged webapp package.
 const PACKAGE_DIR = resolve(SCRIPT_DIR, "..", "src", "wasm");
 const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..", "..");
 const ARTIFACTS_DIR_INPUT = process.argv[2] ?? process.env.ROM_WEAVER_WASM_ARTIFACT_DIR;
@@ -20,8 +20,7 @@ const REQUIRED_DIST_COPIES = [
   { src: "rom-weaver-app.wasm", dst: "rom-weaver-app.wasm" },
   { src: "rom-weaver-app.wasm.br", dst: "rom-weaver-app.wasm.br" },
 ];
-
-const OPTIONAL_ROOT_FILES = ["NOTICE", "THIRD_PARTY_LICENSES.md"];
+const REQUIRED_LICENSE_FILES = ["NOTICE", "THIRD_PARTY_LICENSES.md"];
 
 function main() {
   mkdirSync(PACKAGE_DIR, { recursive: true });
@@ -43,16 +42,23 @@ function main() {
     log(`copied ${relativeFromRepo(src)} -> ${relativeFromRepo(dst)}`);
   }
 
-  for (const filename of OPTIONAL_ROOT_FILES) {
-    const src = resolve(REPO_ROOT, filename);
+  for (const filename of REQUIRED_LICENSE_FILES) {
+    const src = resolve(DIST_WASM_DIR, filename);
     const dst = resolve(PACKAGE_DIR, filename);
     if (!existsSync(src)) {
-      continue;
+      fail(`Missing generated attribution file: ${src}. Run the WASM build first.`);
     }
-
     copyFileSync(src, dst);
     log(`copied ${relativeFromRepo(src)} -> ${relativeFromRepo(dst)}`);
   }
+
+  const licenseDir = resolve(DIST_WASM_DIR, "third_party", "licenses");
+  if (!existsSync(licenseDir)) {
+    fail(`Missing generated attribution directory: ${licenseDir}. Run the WASM build first.`);
+  }
+  const packageLicenseDir = resolve(PACKAGE_DIR, "third_party", "licenses");
+  rmSync(packageLicenseDir, { force: true, recursive: true });
+  cpSync(licenseDir, packageLicenseDir, { recursive: true });
 
   log("package sync complete");
 }

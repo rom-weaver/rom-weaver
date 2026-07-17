@@ -8,6 +8,6 @@
   "os": ["win32"],
   "cpu": ["x64"],
   "bin": {"rom-weaver": "bin/rom-weaver.exe"},
-  "files": ["bin/rom-weaver.exe", "LICENSE.md"],
+  "files": ["bin/rom-weaver.exe", "LICENSE.md", "NOTICE", "THIRD_PARTY_LICENSES.md", "third_party/licenses/**"],
   "publishConfig": {"access": "public", "provenance": true}
 }
