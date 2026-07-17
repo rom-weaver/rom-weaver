@@ -396,7 +396,7 @@ svg { display: block; }
   .lrow.stack .cell.out { grid-column: 2 / -1; grid-row: 2; border-block-start: 1px dashed var(--seam-soft); }
   /* the subtrahend covers the label column + side tag + provenance/verdict
      marks so a 40-char sha-1 with a full mark set still holds one line */
-  .lrow.stack .cv { font-size: clamp(.44rem, calc((100cqi - 150px) / 25.2), .82rem); }
+  .lrow.stack .cv { font-size: clamp(.44rem, calc((100cqi - 168px) / 25.2), .82rem); }
   /* fully-undeclared rows don't spend a line on dashes - they fold into one
      "not declared" add-row (JS-built .ladd); tapping a field reveals its row */
   .lrow.empty:not(.revealed) { display: none; }
@@ -426,7 +426,9 @@ svg { display: block; }
   .chip { font-size: .58rem; padding: 1px 7px; }
   .verdict { font-size: .72rem; }
   .pby { display: inline; }
-  .pid > .pby::before { content: "·"; margin-inline: 0 6px; color: var(--ink-4); }
+  /* the middot joins byline to a visible filename on the name run; ROM cards
+     (no filename element) skip it so a wrapped byline never leads with a dot */
+  .pfile:not([hidden]) + .pby::before { content: "·"; margin-inline: 0 6px; color: var(--ink-4); }
   .pdesc { font-size: .78rem; margin-block-start: 2px; }
   .psrc { font-size: .72rem; }
   .ledger { padding-inline: 8px; }
