@@ -1282,16 +1282,26 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Run the deferred deep dry-run validation for every patch that is staged, targeted, and not yet
    * verified against its current target. Readiness only computes the cheap checksum preflight; this
    * heavier pass runs afterward (driven by the form once the card is already showing) so a slow
-   * full-ROM validation does not make a freshly-dropped patch look like it is stuck. */
-  async validatePatches(): Promise<void> {
+   * full-ROM validation does not make a freshly-dropped patch look like it is stuck.
+   *
+   * `disabledIndexes` (index-aligned with the staged patch list) marks patches the user toggled off:
+   * they are excluded from the run, so their dry-run is skipped too - it runs when (and if) the
+   * patch is toggled back on, via the form's enablement-change revalidation pass. */
+  async validatePatches(options?: { disabledIndexes?: ReadonlySet<number> }): Promise<void> {
     return this.mutate("validatePatches", async () => {
       const assets = this.getPatchableInputAssets();
+      const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{
         preflight: InternalPatchChecksumPreflight;
         stage: StagedSource<TSource>;
         target: InputAsset;
       }> = [];
-      for (const stage of this.patches) {
+      let skippedDisabled = 0;
+      for (const [index, stage] of this.patches.entries()) {
+        if (disabledIndexes?.has(index)) {
+          skippedDisabled += 1;
+          continue;
+        }
         const preflight = stage.state.checksumPreflight;
         if (!(stage.state.status === "ready" && stage.state.targetInputId && preflight)) continue;
         if (!(stage.parsedPatch && stage.preparedPatchFile)) continue;
@@ -1300,6 +1310,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         );
         if (!target) continue;
         pending.push({ preflight, stage, target });
+      }
+      if (skippedDisabled > 0) {
+        this.trace("patch.validate.skip-disabled", {
+          pendingCount: pending.length,
+          skippedCount: skippedDisabled,
+        });
       }
       const adapters: PatchTargetValidationAdapters = {
         emitProgress: (event) => this.emitProgress(event),

@@ -192,6 +192,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const {
     disabledPatchIds,
     filterEnabledPatchRun,
+    getDisabledPatchIndexes,
     getPatchIds,
     seedPatchEnablement,
     syncPatchTracking,
@@ -1017,12 +1018,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             });
           };
           onVerifying?.(buildInfos());
-          await workflow.validatePatches();
+          // Toggled-off patches are excluded from the run, so skip their deep dry-run too; the
+          // enablement-change pass revalidates a patch when it is toggled back on.
+          await workflow.validatePatches({ disabledIndexes: getDisabledPatchIndexes(input.patches) });
           return buildInfos();
         },
       );
     },
-    [withPreparedWorkflow],
+    [getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const setPatchTarget = useCallback(
@@ -1097,7 +1100,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           // unchanged short-circuit, the affected one re-verifies. Programmatic
           // seeding (bundle sessions) skips this; the staging-completion pass
           // validates those on its own schedule.
-          if (revalidate) await workflow.validatePatches();
+          if (revalidate) {
+            await workflow.validatePatches({ disabledIndexes: getDisabledPatchIndexes(input.patches) });
+          }
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
           const inputLabelById = new Map(
@@ -1121,7 +1126,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [withPreparedWorkflow],
+    [getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const { localUiController, localStackController, localOutputController, localNoticeController } =

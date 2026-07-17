@@ -608,7 +608,7 @@ const useInputStaging = (context: InputStagingContext) => {
         });
     };
 
-    return { syncPatchFiles, syncRomInput };
+    return { syncPatchFiles, syncRomInput, validatePatchesDeferred };
   }, [contextRef]);
 };
 

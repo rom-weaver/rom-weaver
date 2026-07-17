@@ -75,9 +75,23 @@ const useApplyPatchEnablement = () => {
 
   const getPatchIds = useCallback(() => getBinarySourceListStableIds(currentPatchesRef.current), []);
 
+  /** Index-aligned disabled set for `patches` (reads the live toggle state, so it is safe to call
+   * from stable callbacks): feeds the deep dry-run validation so toggled-off patches are skipped. */
+  const getDisabledPatchIndexes = useCallback((patches: BinarySource[]): ReadonlySet<number> => {
+    const disabled = disabledPatchIdsRef.current;
+    const indexes = new Set<number>();
+    if (!disabled.size) return indexes;
+    const ids = getBinarySourceListStableIds(patches);
+    ids.forEach((id, index) => {
+      if (id !== undefined && disabled.has(id)) indexes.add(index);
+    });
+    return indexes;
+  }, []);
+
   return {
     disabledPatchIds,
     filterEnabledPatchRun,
+    getDisabledPatchIndexes,
     getPatchIds,
     seedPatchEnablement,
     syncPatchTracking,

@@ -855,7 +855,7 @@ const useLocalApplyPatchFormSession = ({
     },
     [activePatches, effectiveInputs, emitSessionTrace, getInputKey, getPatchKey, updateInputs, updatePatches],
   );
-  const { syncPatchFiles, syncRomInput } = useInputStaging({
+  const { syncPatchFiles, syncRomInput, validatePatchesDeferred } = useInputStaging({
     machines: { inputStageMachine, patchStageMachine },
     refs: { busyRef, disabledRef },
     report: { emitSessionTrace, onError, setSectionErrorMessage },
@@ -870,6 +870,31 @@ const useLocalApplyPatchFormSession = ({
     },
     stage: { stageInput, stagePatches, validatePatches },
   });
+
+  // A disabled patch is excluded from the deep dry-run pass, so a patch toggled back ON has no
+  // verdict yet: rerun the deferred validation when an id leaves the disabled set. Patches already
+  // verified short-circuit inside the controller, so the pass only validates the re-enabled ones.
+  const previousDisabledPatchIdsRef = useRef<ReadonlySet<string>>(disabledPatchIds ?? new Set());
+  useEffect(() => {
+    const previous = previousDisabledPatchIdsRef.current;
+    const current = disabledPatchIds ?? new Set<string>();
+    previousDisabledPatchIdsRef.current = current;
+    if (!(validatePatches && activePatches.length)) return;
+    const reenabled = [...previous].filter((id) => !current.has(id));
+    if (!reenabled.length) return;
+    // An id also leaves the set when its patch is removed; only a still-present patch revalidates.
+    const currentIds = new Set(getBinarySourceListStableIds(activePatches));
+    if (!reenabled.some((id) => currentIds.has(id))) return;
+    emitSessionTrace("patch re-enabled; running deferred validation", { reenabledCount: reenabled.length });
+    validatePatchesDeferred(createStageSnapshot());
+  }, [
+    activePatches,
+    createStageSnapshot,
+    disabledPatchIds,
+    emitSessionTrace,
+    validatePatches,
+    validatePatchesDeferred,
+  ]);
 
   // One coalescing window drives BOTH buckets. The ROM and patch staging decisions are the same
   // independent choreographies as before, but a short debounce defers them by a tick so a ROM and
