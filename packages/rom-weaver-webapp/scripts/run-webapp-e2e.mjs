@@ -12,7 +12,10 @@ import { chromium } from "playwright";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
+const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.min.js");
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
+const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
+const A11Y_ONLY = process.argv.includes("--a11y");
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -53,6 +56,74 @@ const requestStatus = (url) =>
     });
     request.on("error", reject);
   });
+
+const scanLiveApp = async (page, label) => {
+  const violations = await page.evaluate(async (tags) => {
+    const results = await window.axe.run(document, {
+      resultTypes: ["violations"],
+      runOnly: { type: "tag", values: tags },
+    });
+    return results.violations.map((violation) => ({
+      help: violation.help,
+      id: violation.id,
+      nodes: violation.nodes.map((node) => node.target.join(" ")),
+    }));
+  }, A11Y_TAGS);
+  if (violations.length) throw new Error(`${label} accessibility violations:\n${JSON.stringify(violations, null, 2)}`);
+  process.stdout.write(`PASS accessibility ${label}\n`);
+};
+
+const runAccessibilityAudit = async (browser, baseUrl) => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  const setTheme = async (theme) => {
+    if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
+      await page.locator('button[aria-label^="Switch to "]').click();
+      await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
+    }
+  };
+
+  try {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+    await page.addScriptTag({ path: AXE_SCRIPT_PATH });
+    await page.addStyleTag({
+      content:
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
+    });
+
+    for (const theme of ["light", "dark"]) {
+      await setTheme(theme);
+      await scanLiveApp(page, `empty Apply (${theme})`);
+    }
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await scanLiveApp(page, "Settings (dark)");
+    const betaTools = page.locator("#settings-beta-tools-enabled");
+    if (!(await betaTools.isChecked())) await betaTools.check();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await setTheme("light");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await scanLiveApp(page, "Settings (light)");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    for (const tab of ["patcher", "creator", "trim"]) {
+      await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
+      await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
+      for (const theme of ["light", "dark"]) {
+        await setTheme(theme);
+        await scanLiveApp(page, `${tab} (${theme})`);
+      }
+    }
+    if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
+  } finally {
+    await context.close();
+  }
+};
 
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
@@ -168,6 +239,8 @@ const main = async () => {
     }
     const browser = await chromium.launch({ headless: true });
     try {
+      await runAccessibilityAudit(browser, baseUrl);
+      if (A11Y_ONLY) return;
       await runApplyJourney(browser, baseUrl, "raw apply/download", [
         "archive_sources/game.bin",
         "archive_sources/change.ips",

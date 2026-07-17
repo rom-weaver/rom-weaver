@@ -25,9 +25,9 @@
  * Forms render inert: Apply via controllers-as-stores, Make Patch/Trim via their
  * presentational views (CreatePatchFormView/TrimPatchFormView) fed a staged model, the empty
  * benches via the real forms (wasm only boots on a file action). No wasm/OPFS/
- * worker boot. Runs in-browser via axe-core (same engine as prototype/a11y.js)
- * rather than @axe-core/playwright, because vitest browser mode's `page` is not
- * a Playwright Page.
+ * worker boot. Runs in-browser via axe-core rather than @axe-core/playwright,
+ * because vitest browser mode's `page` is not a Playwright Page. The live-app
+ * audit lives in scripts/run-webapp-e2e.mjs.
  */
 
 import axeModule from "axe-core";
@@ -90,7 +90,7 @@ let host = null;
 let noMotion = null;
 
 // Kill entrance/expand animation + transition timing so colours are sampled at
-// their settled values, never a mid-fade frame (mirrors prototype/a11y.js).
+// their settled values, never a mid-fade frame (matching the live-app audit).
 beforeAll(() => {
   noMotion = document.createElement("style");
   noMotion.textContent =

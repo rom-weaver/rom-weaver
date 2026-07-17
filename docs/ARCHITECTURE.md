@@ -388,9 +388,9 @@ committed and drift-checked.
 
 ## Webapp UI - the loom workbench
 
-The React webapp's presentation layer is the "loom workbench" design ported
-from `prototype/` (charcoal chassis, cartridge-orange thread accent, cream
-hash readouts, sage verification).
+The React webapp's presentation layer uses the "loom workbench" design
+language (charcoal chassis, cartridge-orange thread accent, cream hash
+readouts, sage verification).
 
 - **Stylesheet.** One hand-written semantic sheet,
   `packages/rom-weaver-react/src/webapp/design-system.css`: design tokens on
@@ -423,18 +423,19 @@ hash readouts, sage verification).
   `.meter`/`.track`, `.outopts .cks-head`, `.rw-modal.select-modal .seltree`);
   keep them when touching the markup.
 
-The static prototype under `prototype/` remains the design reference (and the
-axe-core a11y sweep harness); the app no longer shares code with it.
-
 ## Testing
 
 | Layer | Where | What |
 | --- | --- | --- |
 | Rust unit | `crates/*/tests/unit/`, inline `#[test]` | Per-format parsers, registry, I/O, threads (~800 tests). |
 | CLI smoke | `crates/rom-weaver-cli/tests/cli_smoke/` | End-to-end CLI runs against synthesized fixtures, per command family. Shared helpers in `shared.rs`. |
-| React unit | `packages/rom-weaver-react/tests/unit/` | Patcher state layer plus the loom UI contract (DS primitives, shell, stores, apply-view markup) - vitest, node/happy-dom. |
-| WASM node | `packages/rom-weaver-react/tests/wasm/` | Worker client, OPFS protocols, format metadata (vitest, node). |
-| Browser | `packages/rom-weaver-react/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
+| React unit | `packages/rom-weaver-webapp/tests/unit/` | Patcher state layer plus the loom UI contract (DS primitives, shell, stores, apply-view markup) - vitest, node/happy-dom. |
+| WASM node | `packages/rom-weaver-webapp/tests/wasm/` | Worker client, OPFS protocols, format metadata (vitest, node). |
+| Browser | `packages/rom-weaver-webapp/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
+
+The live app's axe-core audit runs from `packages/rom-weaver-webapp/scripts/run-webapp-e2e.mjs`
+against the actual dev-server entrypoint and covers the workflow tabs and
+Settings in both themes.
 
 CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`,
 typegen drift check, wasm-target checks, the full Rust test suite, the wasm

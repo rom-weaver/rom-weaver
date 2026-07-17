@@ -59,6 +59,7 @@
     "test:browser:webkit": "ROM_WEAVER_BROWSER=webkit node scripts/run-browser-tests.mjs",
     "test:browser:webkit:smoke": "ROM_WEAVER_BROWSER=webkit vitest --config ./vitest.browser.config.mjs run tests/browser/mobile-safari-runtime-smoke.browser.test.js",
     "test:e2e:fast": "node scripts/run-fast-e2e.mjs",
+    "test:e2e:a11y": "node scripts/run-webapp-e2e.mjs --a11y",
     "test:e2e:nightly": "node scripts/run-nightly-e2e.mjs",
     "test:e2e:ios": "node scripts/start-ios-e2e.mjs",
     "test:e2e:webapp": "node scripts/run-webapp-e2e.mjs",

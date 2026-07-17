@@ -1,7 +1,7 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { join } from "./cx.ts";
 
@@ -34,12 +34,14 @@ const ModalShell = ({
   onBackdrop,
   variant,
   card,
+  labelledBy,
   children,
 }: {
   open: boolean;
   onBackdrop?: () => void;
   variant?: string;
   card?: string;
+  labelledBy?: string;
   children: ReactNode;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -55,7 +57,14 @@ const ModalShell = ({
   }, [open]);
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div aria-modal="true" className={join("rw-modal", variant)} ref={dialogRef} role="dialog" tabIndex={-1}>
+    <div
+      aria-labelledby={labelledBy}
+      aria-modal="true"
+      className={join("rw-modal", variant)}
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
+    >
       <button aria-label="Close" className="rw-modal-backdrop" onClick={onBackdrop} tabIndex={-1} type="button" />
       <div className={join("rw-modal-card", card)}>{children}</div>
     </div>,
@@ -82,26 +91,31 @@ const Modal = ({
   showCloseButton?: boolean;
   variant?: string;
   children: ReactNode;
-}) => (
-  <ModalShell onBackdrop={onClose} open={open} variant={variant}>
-    {title ? (
-      <div className="modal-head">
-        <div>
-          <div className="modal-title">{title}</div>
-          {subtitle ? <div className="modal-sub">{subtitle}</div> : null}
+}) => {
+  const titleId = useId();
+  return (
+    <ModalShell labelledBy={title ? titleId : undefined} onBackdrop={onClose} open={open} variant={variant}>
+      {title ? (
+        <div className="modal-head">
+          <div>
+            <div className="modal-title" id={titleId}>
+              {title}
+            </div>
+            {subtitle ? <div className="modal-sub">{subtitle}</div> : null}
+          </div>
+          {headerActions ? <span className="mh-sp" /> : null}
+          {headerActions}
+          {showCloseButton ? (
+            <button aria-label="Close" className="dlg-x" onClick={onClose} type="button">
+              <X aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
-        {headerActions ? <span className="mh-sp" /> : null}
-        {headerActions}
-        {showCloseButton ? (
-          <button aria-label="Close" className="dlg-x" onClick={onClose} type="button">
-            <X aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
-    ) : null}
-    <div className="modal-body">{children}</div>
-  </ModalShell>
-);
+      ) : null}
+      <div className="modal-body">{children}</div>
+    </ModalShell>
+  );
+};
 
 /** Confirmation dialog with a warning title, body copy, and cancel/confirm actions. */
 const ConfirmDialog = ({
@@ -122,24 +136,27 @@ const ConfirmDialog = ({
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}) => (
-  <ModalShell card="confirm-card" onBackdrop={onCancel} open={open}>
-    <div className="c-title">
-      <TriangleAlert aria-hidden="true" />
-      {title}
-    </div>
-    <div className="c-body">{body}</div>
-    <div className="c-actions">
-      <button className="btn ghost" onClick={onCancel} type="button">
-        <X aria-hidden="true" />
-        {cancelLabel}
-      </button>
-      <button className={join("btn", danger ? "danger" : "primary")} onClick={onConfirm} type="button">
-        <Check aria-hidden="true" />
-        {confirmLabel}
-      </button>
-    </div>
-  </ModalShell>
-);
+}) => {
+  const titleId = useId();
+  return (
+    <ModalShell card="confirm-card" labelledBy={titleId} onBackdrop={onCancel} open={open}>
+      <div className="c-title" id={titleId}>
+        <TriangleAlert aria-hidden="true" />
+        {title}
+      </div>
+      <div className="c-body">{body}</div>
+      <div className="c-actions">
+        <button className="btn ghost" onClick={onCancel} type="button">
+          <X aria-hidden="true" />
+          {cancelLabel}
+        </button>
+        <button className={join("btn", danger ? "danger" : "primary")} onClick={onConfirm} type="button">
+          <Check aria-hidden="true" />
+          {confirmLabel}
+        </button>
+      </div>
+    </ModalShell>
+  );
+};
 
 export { ConfirmDialog, Modal };
