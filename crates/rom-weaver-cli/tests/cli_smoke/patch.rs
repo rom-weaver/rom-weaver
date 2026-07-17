@@ -5592,6 +5592,229 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
 }
 
 #[test]
+fn patch_validate_plan_resolves_same_base_patches() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // Two BPS patches authored against the SAME source: both resolve to the
+    // base, verify against it once, and neither is falsely chained.
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello cool world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(input.path(), temp.child("mod-b.bin").path(), patch_b.path());
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_patch_envelope(&json, "patch-validate", "BPS", "succeeded");
+    let validation = &json["details"]["patch_validation"];
+    assert_eq!(validation["plan"], true);
+    assert_eq!(validation["status"], "passed");
+    assert_eq!(validation["patch_count"], 2);
+    assert_eq!(validation["passed_count"], 2);
+    assert_eq!(validation["failed_count"], 0);
+    assert!(validation["suggested_order"].is_null());
+    let per_patch = validation["per_patch"].as_array().expect("per_patch array");
+    assert_eq!(per_patch.len(), 2);
+    for entry in per_patch {
+        assert_eq!(entry["basis"], "base");
+        assert_eq!(entry["input_verdict"], "passed");
+        assert_eq!(entry["matched"]["kind"], "base");
+        assert_eq!(entry["matched"]["variant"], "raw");
+    }
+    assert_eq!(per_patch[1]["basis_source"], "inferred_base");
+    // The last patch's embedded target describes patch(base), not the
+    // combined result of both patches.
+    let outputs = validation["output_verification"]
+        .as_array()
+        .expect("output_verification array");
+    let embedded = outputs
+        .iter()
+        .find(|entry| entry["source"] == "embedded target checks")
+        .expect("embedded target entry");
+    assert_eq!(embedded["enforceable"], false);
+}
+
+#[test]
+fn patch_validate_plan_defers_mid_chain_patch() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // A true chain: b was authored against a's output. b must be deferred,
+    // never dry-run against the original input (the false "invalid" the
+    // independent mode reports today).
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello newer world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(
+        temp.child("mod-a.bin").path(),
+        temp.child("mod-b.bin").path(),
+        patch_b.path(),
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_patch_envelope(&json, "patch-validate", "BPS", "succeeded");
+    let validation = &json["details"]["patch_validation"];
+    assert_eq!(validation["status"], "passed");
+    assert_eq!(validation["passed_count"], 1);
+    assert_eq!(validation["failed_count"], 0);
+    let per_patch = validation["per_patch"].as_array().expect("per_patch array");
+    assert_eq!(per_patch[0]["basis"], "base");
+    assert_eq!(per_patch[0]["input_verdict"], "passed");
+    assert_eq!(per_patch[1]["basis"], "previous");
+    assert_eq!(per_patch[1]["basis_source"], "inferred_chain");
+    assert_eq!(per_patch[1]["input_verdict"], "chain_deferred");
+    assert_eq!(per_patch[1]["matched"]["kind"], "patch_output");
+    assert_eq!(per_patch[1]["matched"]["index"], 0);
+    // An unbroken statically-proven chain makes the last embedded target
+    // enforceable for the final output.
+    let outputs = validation["output_verification"]
+        .as_array()
+        .expect("output_verification array");
+    let embedded = outputs
+        .iter()
+        .find(|entry| entry["source"] == "embedded target checks")
+        .expect("embedded target entry");
+    assert_eq!(embedded["enforceable"], true);
+}
+
+#[test]
+fn patch_validate_plan_suggests_reorder_for_out_of_order_chain() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // p1: base -> m1, p2: m1 -> m2, p3: m2 -> m3, passed as [p1, p3, p2].
+    fs::write(temp.child("m1.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("m2.bin").path(), b"hello newer world").expect("fixture");
+    fs::write(temp.child("m3.bin").path(), b"hello newest world").expect("fixture");
+    let patch_1 = temp.child("p1.bps");
+    let patch_2 = temp.child("p2.bps");
+    let patch_3 = temp.child("p3.bps");
+    create_bps_patch(input.path(), temp.child("m1.bin").path(), patch_1.path());
+    create_bps_patch(
+        temp.child("m1.bin").path(),
+        temp.child("m2.bin").path(),
+        patch_2.path(),
+    );
+    create_bps_patch(
+        temp.child("m2.bin").path(),
+        temp.child("m3.bin").path(),
+        patch_3.path(),
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_1.path().to_str().expect("path"),
+            "--patch",
+            patch_3.path().to_str().expect("path"),
+            "--patch",
+            patch_2.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    let validation = &json["details"]["patch_validation"];
+    let per_patch = validation["per_patch"].as_array().expect("per_patch array");
+    // p3 (at position 1) expects p2's output (at position 2).
+    assert_eq!(per_patch[1]["expected_predecessor"], 2);
+    assert_eq!(per_patch[1]["input_verdict"], "chain_deferred");
+    assert_eq!(validation["suggested_order"], serde_json::json!([0, 2, 1]));
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("suggested patch order: 1, 3, 2")
+    );
+}
+
+#[test]
+fn patch_validate_plan_honors_declared_basis_flag() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // Both patches were authored against the base; forcing the second to
+    // `previous` overrides the base inference and defers it.
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello cool world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(input.path(), temp.child("mod-b.bin").path(), patch_b.path());
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--patch-basis",
+            "previous",
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    let validation = &json["details"]["patch_validation"];
+    let per_patch = validation["per_patch"].as_array().expect("per_patch array");
+    assert_eq!(per_patch[0]["basis"], "base");
+    assert_eq!(per_patch[1]["basis"], "previous");
+    assert_eq!(per_patch[1]["basis_source"], "declared");
+    assert_eq!(per_patch[1]["input_verdict"], "chain_deferred");
+}
+
+#[test]
 fn patch_apply_uses_parallel_threads_for_large_ips_patch() {
     let temp = setup_temp_dir();
     fs::write(temp.child("input.bin").path(), []).expect("fixture");

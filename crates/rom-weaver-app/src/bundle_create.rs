@@ -532,7 +532,11 @@ fn checks_implied_by(checks: &BundleChecks, baseline: Option<&BundleChecks>) -> 
     checksums_covered && size_covered
 }
 
-fn aligned_metadata<T: Clone>(values: &[T], count: usize, flag: &str) -> Result<Vec<Option<T>>> {
+pub(crate) fn aligned_metadata<T: Clone>(
+    values: &[T],
+    count: usize,
+    flag: &str,
+) -> Result<Vec<Option<T>>> {
     if values.is_empty() {
         return Ok(vec![None; count]);
     }

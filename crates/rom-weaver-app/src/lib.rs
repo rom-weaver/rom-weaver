@@ -1102,6 +1102,12 @@ pub use bundle_schema::{
     BUNDLE_VERSION, BundleChecks, BundleOutput, BundlePatchEntry, BundleRom, RomWeaverBundle,
 };
 
+mod patch_plan;
+pub use patch_plan::{
+    OutputEnforceableEntry, PatchBasisMode, PatchBasisSource, PatchInputBasis, PatchInputMatch,
+    PatchInputVerdict, PatchPlanVerdict, PatchValidationPlan,
+};
+
 mod bundle_parse;
 
 mod bundle_load;

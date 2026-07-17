@@ -122,6 +122,12 @@ pub fn main_entry() -> ExitCode {
     {
         command.align_bundle_patch_metadata(create_matches);
     }
+    if let Commands::Patch(PatchCommands::Validate(command)) = &mut cli.command
+        && let Some((_, patch_matches)) = matches.subcommand()
+        && let Some((_, validate_matches)) = patch_matches.subcommand()
+    {
+        command.align_plan_flags(validate_matches);
+    }
     let stdout_is_tty = io::stdout().is_terminal();
     // Interactive prompting needs a terminal on both stdin (to read) and stderr (to draw), and is
     // meaningless when emitting JSON.

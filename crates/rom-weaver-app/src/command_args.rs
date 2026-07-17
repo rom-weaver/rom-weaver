@@ -1127,6 +1127,49 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
+            help = "Resolve every patch's input basis and chain order statically and report a typed verification plan; dry-runs only the patches that consume the original input"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub plan: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-basis",
+            value_enum,
+            help = "What the preceding --patch's input checks were authored against: auto (infer from checksums), base (the original ROM), or previous (the prior patch's output); binds to the most recent --patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-input-check",
+            value_name = "ALGO=HEX",
+            help = "Declared input checks for the preceding --patch (comma-separable ALGO=HEX tokens; empty skips); binds to the most recent --patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_input_check: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-output-check",
+            value_name = "ALGO=HEX",
+            help = "Declared output checks for the preceding --patch (comma-separable ALGO=HEX tokens; empty skips); binds to the most recent --patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_output_check: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
             default_value = "auto",
             value_name = "auto|N",
             help = "Thread budget: auto or a positive integer"
@@ -1135,6 +1178,88 @@ pub struct PatchValidateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl PatchValidateCommand {
+    /// Bind each per-patch plan flag occurrence to the most recent preceding
+    /// `--patch` and rewrite the vectors index-aligned with `patches` (the
+    /// wasm path sends them index-aligned already). Clap's parsed `Vec`s lose
+    /// the interleave order, so this re-derives it from raw argv indices.
+    pub fn align_plan_flags(&mut self, matches: &clap::ArgMatches) {
+        if self.patch_basis.is_empty()
+            && self.patch_input_check.is_empty()
+            && self.patch_output_check.is_empty()
+        {
+            return;
+        }
+        let patch_indices: Vec<usize> = matches
+            .indices_of("patches")
+            .map(Iterator::collect)
+            .unwrap_or_default();
+        if patch_indices.is_empty() {
+            return;
+        }
+        let count = patch_indices.len();
+        let patch_position = |value_index: usize| -> usize {
+            patch_indices
+                .partition_point(|patch_index| *patch_index < value_index)
+                .saturating_sub(1)
+        };
+        fn bind_per_patch<T: Clone>(
+            values: Vec<T>,
+            indices: Vec<usize>,
+            count: usize,
+            default: T,
+            patch_position: &impl Fn(usize) -> usize,
+        ) -> Vec<T> {
+            let mut aligned = vec![default; count];
+            if indices.len() == values.len() {
+                for (occurrence, value_index) in indices.into_iter().enumerate() {
+                    aligned[patch_position(value_index)] = values[occurrence].clone();
+                }
+            }
+            aligned
+        }
+        if !self.patch_basis.is_empty() {
+            let values = std::mem::take(&mut self.patch_basis);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_basis")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_basis = bind_per_patch(
+                values,
+                indices,
+                count,
+                PatchBasisMode::Auto,
+                &patch_position,
+            );
+        }
+        if !self.patch_input_check.is_empty() {
+            let values = std::mem::take(&mut self.patch_input_check);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_input_check")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_input_check =
+                bind_per_patch(values, indices, count, String::new(), &patch_position);
+        }
+        if !self.patch_output_check.is_empty() {
+            let values = std::mem::take(&mut self.patch_output_check);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_output_check")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_output_check =
+                bind_per_patch(values, indices, count, String::new(), &patch_position);
+        }
+        trace!(
+            basis = ?self.patch_basis,
+            input_checks = ?self.patch_input_check,
+            output_checks = ?self.patch_output_check,
+            "aligned positional plan flags per patch"
+        );
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

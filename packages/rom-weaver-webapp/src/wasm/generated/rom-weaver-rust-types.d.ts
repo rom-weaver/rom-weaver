@@ -266,6 +266,27 @@ export type PatchApplyHeaderMode = "keep" | "strip" | "auto";
 
 export type PatchApplyOutputHeaderMode = "keep" | "strip" | "auto";
 
+export type PatchInputBasis = "base" | "previous";
+
+export type PatchBasisMode = "auto" | "base" | "previous";
+
+export type PatchBasisSource = "declared" | "inferred_base" | "inferred_chain" | "default";
+
+export type PatchInputMatch = { "kind": "base", variant: string, } | { "kind": "patch_output", index: number, } | { "kind": "none" };
+
+export type PatchInputVerdict = "passed" | "failed" | "chain_deferred" | "unknown";
+
+export type PatchPlanVerdict = { index: number, patch: string, format?: string, basis: PatchInputBasis, basis_source: PatchBasisSource, matched: PatchInputMatch, input_verdict: PatchInputVerdict, message: string,
+/**
+ * Set when this patch's input matches a patch it does not directly
+ * follow - the order diagnosis behind `suggested_order`.
+ */
+expected_predecessor?: number, };
+
+export type OutputEnforceableEntry = { patch_index: number, source: string, checks: BundleChecks, enforceable: boolean, standdown_reason?: string, };
+
+export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
+
 export type ProbeCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, };
 
 export type ExtractCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
@@ -285,7 +306,7 @@ export type TrimCommand = { source: Array<string>, output?: string, extension?: 
 
 export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, validate_with_output_checksums?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, };
 
-export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, threads?: ThreadBudget, };
+export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
 export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, source_crc32?: string, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, xdelta_secondary?: string, };
 
