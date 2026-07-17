@@ -232,7 +232,9 @@
    text row that didn't look actionable) - a plus glyph leading the select. */
 .rw-app .ck-add {
   display: inline-flex; align-items: center; gap: 6px; width: fit-content;
-  margin-block-start: 7px; padding: 4px 10px 4px 8px;
+  /* the rows around it bleed to the drawer frame; this one is a bordered box,
+     so it starts at the rows' 9px text inset instead of on the frame's line */
+  margin-block-start: 7px; margin-inline-start: 9px; padding: 4px 10px 4px 8px;
   border: 1px dashed var(--seam-strong); border-radius: var(--r-s);
   background: color-mix(in oklab, var(--well) 55%, transparent);
   color: var(--ink-3); cursor: pointer;
@@ -250,6 +252,9 @@
   color: var(--ink); border-color: var(--thread);
   background: color-mix(in oklab, var(--thread) 9%, var(--well));
 }
+/* the checks-body hint trails the last group; the rows bleed to the drawer
+   frame, so the prose is inset to their 9px text edge and wraps at it */
+.rw-app .ckrows .patch-off-note { margin-block-start: 7px; margin-inline: 9px; }
 
 .rw-app .bundle-rom-expectation { margin-block: 13px 10px; }
 .rw-app .bundle-rom-expectation .card {
