@@ -17,6 +17,10 @@
     "bin/rom-weaver.mjs",
     "LICENSE.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22"
   },
@@ -32,7 +36,7 @@
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
-    "test": "node --test scripts/wasm/*.test.mjs",
+    "test": "node --test scripts/check-conventional-commits.test.mjs scripts/wasm/*.test.mjs",
     "typegen": "mise run typegen",
     "typegen:check": "mise run typegen-check",
     "version": "node scripts/sync-version.mjs"

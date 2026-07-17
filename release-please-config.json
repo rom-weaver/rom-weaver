@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "packages": {
+    ".": {
+      "package-name": "rom-weaver",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "package.json",
+          "jsonpath": "$.optionalDependencies.*"
+        },
+        {
+          "type": "json",
+          "path": "package-lock.json",
+          "jsonpath": "$.packages[''].optionalDependencies.*"
+        },
+        "packages/rom-weaver-react/package.json",
+        {
+          "type": "json",
+          "path": "packages/rom-weaver-react/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/rom-weaver-react/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        },
+        "packages/rom-weaver-cli-platforms/darwin-arm64/package.json",
+        "packages/rom-weaver-cli-platforms/darwin-x64/package.json",
+        "packages/rom-weaver-cli-platforms/linux-x64-gnu/package.json",
+        "packages/rom-weaver-cli-platforms/win32-x64-msvc/package.json",
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$..[?(@.path && @.version)].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/*/Cargo.toml",
+          "glob": true,
+          "jsonpath": "$..[?(@.path && @.version)].version"
+        },
+        {
+          "type": "toml",
+          "path": "tools/*/Cargo.toml",
+          "glob": true,
+          "jsonpath": "$..[?(@.path && @.version)].version"
+        },
+        {
+          "type": "toml",
+          "path": "vendor/*/Cargo.toml",
+          "glob": true,
+          "jsonpath": "$..[?(@.path && @.version)].version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(!@.source)].version"
+        }
+      ]
+    }
+  }
+}
