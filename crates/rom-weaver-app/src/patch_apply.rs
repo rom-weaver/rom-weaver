@@ -206,6 +206,7 @@ impl CliApp {
             checksum_cache,
             validate_with_checksums,
             patch_header,
+            patch_basis,
             output_header,
             repair_checksum,
             n64_byte_order,
@@ -804,6 +805,32 @@ impl CliApp {
                 output.clone()
             };
 
+            // Resolve every step's input basis (CLI flag > bundle declaration >
+            // inference against the prepared input) and verify declared
+            // base-basis steps against the base once, before the chain runs.
+            let step_verifications = match self.resolve_apply_step_verifications(
+                &resolved_patches,
+                usize::from(!codes.is_empty()),
+                bundle_resolution
+                    .as_ref()
+                    .map(|resolution| resolution.step_verifications.clone())
+                    .unwrap_or_default(),
+                &patch_basis,
+                &apply_input,
+                &context,
+            ) {
+                Ok(steps) => steps,
+                Err(error) => {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    );
+                }
+            };
+
             let PatchApplyLoopOutcome {
                 mut report,
                 applied_formats,
@@ -812,6 +839,7 @@ impl CliApp {
                 apply_input,
                 &staged_output,
                 &chain_header_modes,
+                &step_verifications,
                 &mut header_state,
                 &chain_n64_modes,
                 &mut n64_order,
@@ -1769,6 +1797,7 @@ impl CliApp {
         apply_input: PathBuf,
         staged_output: &Path,
         chain_header_modes: &[PatchApplyHeaderMode],
+        step_verifications: &[patch_plan::PatchStepVerification],
         header_state: &mut ChainHeaderState,
         chain_n64_modes: &[PatchN64ByteOrderMode],
         n64_order: &mut Option<N64ByteOrderTransform>,
@@ -1896,13 +1925,42 @@ impl CliApp {
                 None,
             );
 
+            let step = step_verifications.get(index);
+            let step_is_base = index > 0
+                && step.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
+            // A previous-basis step with declared mid-chain input checks
+            // verifies them against the real intermediate before it runs.
+            if context.strict_patch_checksums()
+                && !step_is_base
+                && index > 0
+                && let Some(declared) = step.and_then(|step| step.declared_input.as_ref())
+                && let Err(error) = Self::verify_chain_step_state(&current_input, declared, context)
+            {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("patch.chain.input_mismatch")
+                            .with_message(
+                                "chain step input does not match the patch's declared input checks",
+                            )
+                            .with_field("patch_index", index as u64)
+                            .with_field("patch", patch_path.display().to_string())
+                            .with_field("detail", error.to_string()),
+                    )
+                    .to_string(),
+                    context.single_thread_execution(),
+                )));
+            }
+
             let request = PatchApplyRequest {
                 input: current_input,
                 patches: vec![resolved_patch_path.clone()],
                 output: apply_output.clone(),
             };
             let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
-            let patch_context =
+            let mut patch_context =
                 context
                     .clone()
                     .with_progress_sink(Arc::new(PatchApplyProgressSink::new(
@@ -1911,6 +1969,32 @@ impl CliApp {
                         patch_count,
                         progress_tracker.clone(),
                     )));
+            if step_is_base {
+                // Both the embedded source and target checks describe the
+                // base ROM (verified before the chain), not the running
+                // intermediate - nothing at this step is enforceable. The
+                // patch file's own integrity checksum still is.
+                patch_context = patch_context.with_patch_check_scopes(PatchCheckScopes {
+                    patch_integrity: context.strict_patch_checksums(),
+                    source: false,
+                    target: false,
+                });
+                self.emit_running(
+                    OperationLabel {
+                        command: "patch-apply",
+                        family: OperationFamily::Patch,
+                        format: Some(handler.descriptor().name),
+                    },
+                    "apply",
+                    format!(
+                        "patch {}/{} input checks describe the base ROM (verified before the chain); embedded checks skipped for this step",
+                        index + 1,
+                        patch_count
+                    ),
+                    Some(patch_start_percent),
+                    None,
+                );
+            }
             report = match handler.apply(&request, &patch_context) {
                 Ok(report) => report,
                 Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
@@ -1964,6 +2048,35 @@ impl CliApp {
                 );
             }
 
+            // A declared mid-chain output (bundle entry outputChecks) verifies
+            // against the real intermediate when this step ends an exact
+            // authored chain prefix. The final step keeps the existing
+            // finalized-output gate instead (intermediates are raw bytes).
+            if context.strict_patch_checksums()
+                && !is_last
+                && let Some(step) = step
+                && step.is_chain_prefix
+                && let Some(declared) = step.declared_output.as_ref()
+                && let Err(error) = Self::verify_chain_step_state(&apply_output, declared, context)
+            {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("patch.chain.output_mismatch")
+                            .with_message(
+                                "chain step output does not match the patch's declared output checks",
+                            )
+                            .with_field("patch_index", index as u64)
+                            .with_field("patch", patch_path.display().to_string())
+                            .with_field("detail", error.to_string()),
+                    )
+                    .to_string(),
+                    context.single_thread_execution(),
+                )));
+            }
+
             current_input = apply_output;
         }
 
@@ -1971,6 +2084,160 @@ impl CliApp {
             report,
             applied_formats,
         })
+    }
+
+    /// Verify a chain intermediate against declared checks: every declared
+    /// digest plus the exact size when pinned. A fresh read of the temp file -
+    /// only runs at declared boundaries, which bundles rarely carry.
+    fn verify_chain_step_state(
+        state_path: &Path,
+        declared: &patch_plan::PlanState,
+        context: &OperationContext,
+    ) -> Result<()> {
+        if let Some(expected_size) = declared.size {
+            Self::validate_patch_input_size(state_path, Some(expected_size), None)?;
+        }
+        if !declared.checksums.is_empty() {
+            Self::validate_patch_apply_expected_checksums(
+                state_path,
+                &declared.checksums,
+                &BTreeMap::new(),
+                "chain step",
+                context,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Resolve each chain step's verification spec with precedence CLI
+    /// `--patch-basis` > bundle `basis` > inference (the patch's embedded
+    /// source CRC32 matching the prepared input). Declared base-basis
+    /// mid-chain steps verify against the base here, once, before the chain
+    /// runs. The synthetic cheat step (resolved index 0 when codes are
+    /// present) consumes the base by construction and carries no declaration.
+    /// With checksum validation ignored the whole resolution is skipped.
+    fn resolve_apply_step_verifications(
+        &self,
+        resolved_patches: &[(PathBuf, PathBuf)],
+        cheat_steps: usize,
+        bundle_steps: Vec<patch_plan::PatchStepVerification>,
+        cli_basis: &[PatchBasisMode],
+        apply_input: &Path,
+        context: &OperationContext,
+    ) -> Result<Vec<patch_plan::PatchStepVerification>> {
+        let step_count = resolved_patches.len();
+        let mut steps: Vec<patch_plan::PatchStepVerification> =
+            vec![patch_plan::PatchStepVerification::default(); step_count];
+        if !context.strict_patch_checksums() || step_count <= 1 {
+            return Ok(steps);
+        }
+        let user_count = step_count.saturating_sub(cheat_steps);
+        // Declared sources align with the user-visible patch list; discovery
+        // or archive expansion can change the resolved count, in which case
+        // declarations cannot be attributed and only inference applies.
+        let aligned = |declared_len: usize| declared_len == user_count;
+        if !bundle_steps.is_empty() && aligned(bundle_steps.len()) {
+            for (user_index, bundle_step) in bundle_steps.into_iter().enumerate() {
+                steps[cheat_steps + user_index] = bundle_step;
+            }
+        }
+        if !cli_basis.is_empty() {
+            if !aligned(cli_basis.len()) {
+                return Err(RomWeaverError::Validation(format!(
+                    "--patch-basis must be given once per --patch (or not at all); got {} value(s) for {user_count} patch(es)",
+                    cli_basis.len()
+                )));
+            }
+            for (user_index, mode) in cli_basis.iter().enumerate() {
+                if let Some(basis) = mode.declared() {
+                    let step = &mut steps[cheat_steps + user_index];
+                    step.basis = Some(basis);
+                    step.basis_source = Some(PatchBasisSource::Declared);
+                }
+            }
+        }
+
+        // Lazy base identity: the CRC32 of the exact bytes the chain consumes.
+        let mut cached_base_crc32: Option<Option<String>> = None;
+        let mut resolve_base_crc32 = |context: &OperationContext| -> Option<String> {
+            if cached_base_crc32.is_none() {
+                let computed = context.seeded_checksum(apply_input, "crc32").or_else(|| {
+                    File::open(apply_input)
+                        .ok()
+                        .and_then(|file| {
+                            Self::crc32_of_reader(&mut BufReader::new(file), context).ok()
+                        })
+                        .flatten()
+                });
+                trace!(base_crc32 = ?computed, "resolved base identity for basis inference");
+                cached_base_crc32 = Some(computed);
+            }
+            cached_base_crc32.clone().expect("just seeded")
+        };
+
+        for index in 1..step_count {
+            let (patch_path, resolved_patch_path) = &resolved_patches[index];
+            let step_basis = steps[index].basis;
+            match step_basis {
+                None => {
+                    // Inference: a mid-chain patch whose embedded source CRC32
+                    // equals the base consumes the base, not the previous
+                    // patch's output.
+                    let Some(embedded) =
+                        self.embedded_patch_source_crc32(resolved_patch_path, context)
+                    else {
+                        continue;
+                    };
+                    if resolve_base_crc32(context).is_some_and(|base| base == embedded) {
+                        debug!(
+                            index,
+                            patch = %patch_path.display(),
+                            "patch input checks match the base ROM; resolved basis to base"
+                        );
+                        steps[index].basis = Some(patch_plan::PatchInputBasis::Base);
+                        steps[index].basis_source =
+                            Some(patch_plan::PatchBasisSource::InferredBase);
+                    }
+                }
+                Some(patch_plan::PatchInputBasis::Base) => {
+                    // A declared base step verifies against the base once, up
+                    // front: its declared checks when present, else its
+                    // embedded source CRC32.
+                    if let Some(declared) = steps[index].declared_input.clone() {
+                        Self::verify_chain_step_state(apply_input, &declared, context).map_err(
+                            |error| {
+                                RomWeaverError::ValidationCode(
+                                    ValidationCodeError::new("patch.base.input_mismatch")
+                                        .with_message(
+                                            "patch declares basis base but its input checks do not match the ROM",
+                                        )
+                                        .with_field("patch_index", index as u64)
+                                        .with_field("patch", patch_path.display().to_string())
+                                        .with_field("detail", error.to_string()),
+                                )
+                            },
+                        )?;
+                    } else if let Some(embedded) =
+                        self.embedded_patch_source_crc32(resolved_patch_path, context)
+                        && let Some(base) = resolve_base_crc32(context)
+                        && base != embedded
+                    {
+                        return Err(RomWeaverError::ValidationCode(
+                            ValidationCodeError::new("patch.base.input_mismatch")
+                                .with_message(
+                                    "patch declares basis base but its embedded source checksum does not match the ROM",
+                                )
+                                .with_field("patch_index", index as u64)
+                                .with_field("patch", patch_path.display().to_string())
+                                .with_field("expected", embedded)
+                                .with_field("actual", base),
+                        ));
+                    }
+                }
+                Some(patch_plan::PatchInputBasis::Previous) => {}
+            }
+        }
+        Ok(steps)
     }
 
     /// Shared compress-and-emit core for `patch apply` output compression, used

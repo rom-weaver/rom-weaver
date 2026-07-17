@@ -115,6 +115,7 @@ pub fn main_entry() -> ExitCode {
         && let Some((_, apply_matches)) = patch_matches.subcommand()
     {
         command.align_patch_header_modes(apply_matches);
+        command.align_patch_basis(apply_matches);
     }
     if let Commands::Bundle(BundleCommands::Create(command)) = &mut cli.command
         && let Some((_, bundle_matches)) = matches.subcommand()

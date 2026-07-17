@@ -22,6 +22,9 @@ pub(super) struct BundleApplyResolution {
     /// patch's `outputChecks`, or the bundle's `output.checks` when the
     /// selection ends the full chain.
     pub output_checks: Option<(String, FilenameRequirements)>,
+    /// Per selected patch (apply order): declared basis and mid-chain
+    /// declared checks, consumed by the apply chain loop.
+    pub step_verifications: Vec<patch_plan::PatchStepVerification>,
 }
 
 enum BundleApplySource {
@@ -202,6 +205,7 @@ impl CliApp {
         // Explicit --patch flags replace the bundle patch list wholesale;
         // the bundle still contributes rom checks and output defaults.
         let mut output_checks: Option<(String, FilenameRequirements)> = None;
+        let mut step_verifications: Vec<patch_plan::PatchStepVerification> = Vec::new();
         if args.patches.is_empty() {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
@@ -259,10 +263,28 @@ impl CliApp {
                     );
                 }
                 header_modes.push(entry.header.unwrap_or_default());
+                // Position k consumes exactly the authored chain prefix when
+                // every earlier bundle patch is selected too.
+                let is_chain_prefix = *index == position;
+                step_verifications.push(patch_plan::PatchStepVerification {
+                    basis: entry.basis,
+                    basis_source: entry.basis.map(|_| PatchBasisSource::Declared),
+                    declared_input: entry
+                        .input_checks
+                        .as_ref()
+                        .map(patch_plan::PlanState::from_bundle_checks),
+                    declared_output: entry
+                        .output_checks
+                        .as_ref()
+                        .map(patch_plan::PlanState::from_bundle_checks),
+                    is_chain_prefix,
+                });
                 trace!(
                     patch = %resolved.display(),
                     optional = entry.optional,
                     header = ?entry.header,
+                    basis = ?entry.basis,
+                    is_chain_prefix,
                     "selected bundle patch"
                 );
                 args.patches.push(resolved);
@@ -349,6 +371,7 @@ impl CliApp {
         Ok(Some(BundleApplyResolution {
             checks,
             output_checks,
+            step_verifications,
         }))
     }
 

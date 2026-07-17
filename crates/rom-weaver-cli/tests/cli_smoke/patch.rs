@@ -5773,6 +5773,164 @@ fn patch_validate_plan_suggests_reorder_for_out_of_order_chain() {
 }
 
 #[test]
+fn patch_apply_same_base_bps_chain_succeeds_in_strict_mode() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // Two BPS patches authored against the SAME base stacked in one strict
+    // chain: the second's embedded source CRC matches the base, so its basis
+    // resolves to base and its base-relative embedded checks skip for the
+    // mid-chain step (they used to hard-fail against the intermediate).
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello cool world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(input.path(), temp.child("mod-b.bin").path(), patch_b.path());
+
+    let strict_output = temp.child("output-strict.bin");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--output",
+            strict_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+
+    // Byte parity: the strict run produces exactly what the checks-ignored
+    // run always produced.
+    let ignore_output = temp.child("output-ignore.bin");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--output",
+            ignore_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(strict_output.path()).expect("strict output"),
+        fs::read(ignore_output.path()).expect("ignore output")
+    );
+}
+
+#[test]
+fn patch_apply_declared_basis_previous_overrides_base_inference() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello cool world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(input.path(), temp.child("mod-b.bin").path(), patch_b.path());
+
+    // Forcing the second patch to previous re-enables its embedded source
+    // check against the intermediate, which cannot match a base-authored
+    // patch - the declaration wins over the base inference.
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--patch-basis",
+            "previous",
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("Input checksum invalid")
+    );
+}
+
+#[test]
+fn patch_apply_declared_basis_base_rejects_non_base_patch() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+
+    // b was authored against a's output; declaring it base must fail the
+    // up-front base verification, before anything is written.
+    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"hello newer world").expect("fixture");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
+    create_bps_patch(
+        temp.child("mod-a.bin").path(),
+        temp.child("mod-b.bin").path(),
+        patch_b.path(),
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.input_mismatch")
+    );
+}
+
+#[test]
 fn patch_validate_plan_honors_declared_basis_flag() {
     let temp = setup_temp_dir();
     let input = temp.child("input.bin");

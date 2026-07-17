@@ -1190,6 +1190,128 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
 }
 
 #[test]
+fn bundle_apply_enforces_mid_chain_declared_input_checks() {
+    let temp = setup_temp_dir();
+    write_bundle_rom(&temp, "game.bin");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    write_offset_ips(&temp, "extra.ips", 1, 0xBB);
+    let bundle = temp.child("rom-weaver-bundle.json");
+    // The second entry declares an impossible mid-chain input state: strict
+    // apply must verify it against the real intermediate and stop the chain.
+    fs::write(
+        bundle.path(),
+        r#"{
+            "version": 2,
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "path": "main.ips" },
+                { "path": "extra.ips", "inputChecks": { "checksums": { "crc32": "00000000" } } }
+            ],
+            "output": { "name": "out.bin" }
+        }"#,
+    )
+    .expect("bundle fixture");
+
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            temp.child("out.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.chain.input_mismatch")
+    );
+}
+
+#[test]
+fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
+    let temp = setup_temp_dir();
+    write_bundle_rom(&temp, "game.bin");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    write_offset_ips(&temp, "extra.ips", 1, 0xBB);
+    let rom_crc = crc32_hex(BUNDLE_ROM_BYTES);
+    let out = temp.child("out.bin");
+
+    // The second entry's declared input state IS the base ROM. Left to the
+    // default previous basis, that check runs against the intermediate and
+    // fails; declared as base it verifies against the ROM once and the chain
+    // succeeds with the step's state checks stood down.
+    let write_bundle = |basis_field: &str| {
+        fs::write(
+            temp.child("rom-weaver-bundle.json").path(),
+            format!(
+                r#"{{
+                    "version": 2,
+                    "rom": {{ "path": "game.bin" }},
+                    "patches": [
+                        {{ "path": "main.ips" }},
+                        {{ "path": "extra.ips"{basis_field}, "inputChecks": {{ "checksums": {{ "crc32": "{rom_crc}" }} }} }}
+                    ],
+                    "output": {{ "name": "out.bin" }}
+                }}"#
+            ),
+        )
+        .expect("bundle fixture");
+    };
+
+    write_bundle("");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            out.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        events.last().expect("terminal")["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.chain.input_mismatch")
+    );
+
+    write_bundle(r#", "basis": "base""#);
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            out.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(out.path()).expect("output"),
+        patched_rom_bytes(&[(0, 0xAA), (1, 0xBB)])
+    );
+}
+
+#[test]
 fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
     let temp = setup_temp_dir();
     let rom = write_bundle_rom(&temp, "game.bin");

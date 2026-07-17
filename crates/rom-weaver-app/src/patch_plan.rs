@@ -143,6 +143,13 @@ pub(crate) struct PlanState {
 }
 
 impl PlanState {
+    pub(crate) fn from_bundle_checks(checks: &BundleChecks) -> Self {
+        Self {
+            checksums: checks.checksums.clone(),
+            size: checks.size,
+        }
+    }
+
     pub(crate) fn has_checksum_evidence(&self) -> bool {
         !self.checksums.is_empty()
     }
@@ -205,6 +212,27 @@ impl PlanPatchInput {
 pub(crate) struct BaseVariant {
     pub name: String,
     pub state: PlanState,
+}
+
+/// Per-step verification spec threaded into the apply chain loop. An empty
+/// slice (or all-default entries) reproduces today's behavior exactly.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PatchStepVerification {
+    /// Resolved basis for this step; `None` behaves as previous (default).
+    pub basis: Option<PatchInputBasis>,
+    /// Where the basis came from (labels/tracing only).
+    pub basis_source: Option<PatchBasisSource>,
+    /// Declared (bundle/CLI) checks for the state this step consumes,
+    /// verified against the real intermediate before the step runs (strict
+    /// mode, previous basis, mid-chain).
+    pub declared_input: Option<PlanState>,
+    /// Declared checks for the state after this step, verified against the
+    /// real intermediate when the step ends an exact chain prefix (strict
+    /// mode, not the final step - the final output keeps its own gate).
+    pub declared_output: Option<PlanState>,
+    /// Whether the selection up to and including this step is exactly the
+    /// bundle's chain prefix ending here.
+    pub is_chain_prefix: bool,
 }
 
 /// The planner's resolution before dry-run results are merged in.

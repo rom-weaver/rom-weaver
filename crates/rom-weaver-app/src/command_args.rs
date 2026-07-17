@@ -820,6 +820,18 @@ pub struct PatchApplyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "patch-basis",
+            value_enum,
+            action = ArgAction::Append,
+            help = "What the preceding --patch's input checks were authored against: auto (default; infer from checksums), base (the original ROM - verified up front, embedded checks skipped mid-chain), or previous (the prior patch's output). Binds to the most recent --patch; index-aligned on the wasm path."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long = "output-header",
             value_enum,
             overrides_with = "output_header",
@@ -966,6 +978,40 @@ impl PatchApplyCommand {
         }
         trace!(modes = ?resolved, "aligned positional --patch-header occurrences per patch");
         self.patch_header = resolved;
+    }
+
+    /// Bind each `--patch-basis` occurrence to the most recent preceding
+    /// `--patch` and rewrite the vector index-aligned with `patches` (the
+    /// wasm path sends it index-aligned already).
+    pub fn align_patch_basis(&mut self, matches: &clap::ArgMatches) {
+        if self.patch_basis.is_empty() {
+            return;
+        }
+        let patch_indices: Vec<usize> = matches
+            .indices_of("patches")
+            .map(Iterator::collect)
+            .unwrap_or_default();
+        if patch_indices.is_empty() {
+            return;
+        }
+        let patch_position = |value_index: usize| -> usize {
+            patch_indices
+                .partition_point(|patch_index| *patch_index < value_index)
+                .saturating_sub(1)
+        };
+        let values = std::mem::take(&mut self.patch_basis);
+        let indices: Vec<usize> = matches
+            .indices_of("patch_basis")
+            .map(Iterator::collect)
+            .unwrap_or_default();
+        self.patch_basis = bind_per_patch(
+            values,
+            indices,
+            patch_indices.len(),
+            PatchBasisMode::Auto,
+            &patch_position,
+        );
+        trace!(basis = ?self.patch_basis, "aligned positional --patch-basis occurrences per patch");
     }
 }
 
@@ -1180,6 +1226,26 @@ pub struct PatchValidateCommand {
     pub threads: ThreadBudget,
 }
 
+/// Bind positional flag occurrences to their patch positions, producing an
+/// index-aligned vector (`default` fills unbound positions). Shared by the
+/// per-patch flag aligners.
+#[cfg(not(target_arch = "wasm32"))]
+fn bind_per_patch<T: Clone>(
+    values: Vec<T>,
+    indices: Vec<usize>,
+    count: usize,
+    default: T,
+    patch_position: &impl Fn(usize) -> usize,
+) -> Vec<T> {
+    let mut aligned = vec![default; count];
+    if indices.len() == values.len() {
+        for (occurrence, value_index) in indices.into_iter().enumerate() {
+            aligned[patch_position(value_index)] = values[occurrence].clone();
+        }
+    }
+    aligned
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl PatchValidateCommand {
     /// Bind each per-patch plan flag occurrence to the most recent preceding
@@ -1206,21 +1272,6 @@ impl PatchValidateCommand {
                 .partition_point(|patch_index| *patch_index < value_index)
                 .saturating_sub(1)
         };
-        fn bind_per_patch<T: Clone>(
-            values: Vec<T>,
-            indices: Vec<usize>,
-            count: usize,
-            default: T,
-            patch_position: &impl Fn(usize) -> usize,
-        ) -> Vec<T> {
-            let mut aligned = vec![default; count];
-            if indices.len() == values.len() {
-                for (occurrence, value_index) in indices.into_iter().enumerate() {
-                    aligned[patch_position(value_index)] = values[occurrence].clone();
-                }
-            }
-            aligned
-        }
         if !self.patch_basis.is_empty() {
             let values = std::mem::take(&mut self.patch_basis);
             let indices: Vec<usize> = matches
