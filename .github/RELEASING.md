@@ -24,10 +24,8 @@ release.
    Issues, and Pull requests read/write access to this repository. Release
    Please needs a non-`GITHUB_TOKEN` credential so its release pull requests
    trigger the required CI checks.
-3. Publish each Cargo crate once with a crates.io token, then configure a
-   crates.io trusted publisher for every published crate. Select this repository
-   and `.github/workflows/cargo-publish.yml`; the workflow then uses short-lived
-   OIDC credentials and needs no stored Cargo token.
+3. Sign in to crates.io and create an API token for the first-release bootstrap
+   described below.
 4. Add `NPM_TOKEN` as an Actions secret. It must be allowed to publish the five
    npm packages; GitHub's OIDC token is used to attach npm provenance.
 5. Require the `Conventional commits` and normal CI checks in the `main` branch
@@ -35,10 +33,78 @@ release.
    the commit subject that lands on `main`.
 6. Ensure the existing `v0.5.0` tag is present on GitHub before the first run.
 
+Push the baseline tag and current branch to start Release Please:
+
+```bash
+git push origin v0.5.0
+git push origin main
+```
+
+## First Cargo release
+
+crates.io requires each crate to be published manually once before trusted
+publishing can be configured. Wait for Release Please to open its release pull
+request and for that pull request to pass CI. From a clean checkout of its final
+commit, publish the workspace:
+
+```bash
+cargo login
+cargo publish --workspace --exclude rom-weaver-typegen --locked
+```
+
+Do not change the release pull request after this publish. Configure a trusted
+publisher for every new crate on crates.io using:
+
+- repository: `brandonocasey/rom-weaver`;
+- workflow: `cargo-publish.yml`;
+- environment: empty.
+
+Merge the release pull request. The automated Cargo job will see that the
+bootstrap versions already exist and skip them. Later releases use short-lived
+OIDC credentials and do not need a stored Cargo token.
+
+## Normal release flow
+
+Commit and push changes using Conventional Commits:
+
+```bash
+git commit -m "feat(cli): describe the feature"
+git push origin main
+```
+
 Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
 `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other
 allowed types do not trigger a release by themselves.
 
-To retry a partially completed release, rerun its failed jobs. The standalone
-publisher workflows also accept a version without the `v` prefix and check out
-that release tag before publishing.
+Release Please opens or updates a release pull request. Merging it creates the
+tag and GitHub Release and runs every publisher. Follow progress under GitHub's
+**Actions → Release** page.
+
+## Retry a failed publication
+
+Rerun the failed jobs in the Release workflow. Alternatively, manually run one
+of these workflows with the version without a `v` prefix, such as `0.6.0`:
+
+- Publish Cargo crates;
+- Publish npm CLI;
+- Publish Docker images.
+
+Each workflow checks out the matching release tag. Registry checks make Cargo
+and npm retries safe when a previous attempt published only some packages.
+
+## Run the containers locally
+
+Build and run the CLI image:
+
+```bash
+docker build -t rom-weaver-cli .
+docker run --rm rom-weaver-cli --help
+```
+
+Build and serve the webapp:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8080`.
