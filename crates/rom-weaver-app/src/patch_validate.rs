@@ -158,7 +158,7 @@ impl CliApp {
             cleanup_paths,
         } = resolved_input;
         // Reuse the host-provided input checksums (the CRC32 the webapp already computed during
-        // staging) for the handler's source-checksum verification - the dry-run apply otherwise
+        // staging) for the handler's source-checksum verification - preflight otherwise
         // re-reads the whole input just to re-derive a CRC32 we already have.
         context.seed_checksums(&resolved_input, &cached_input_checksums);
         let mut temp_paths = cleanup_paths;
@@ -414,7 +414,7 @@ impl CliApp {
                         Some(handler.descriptor().name.to_string()),
                         "validate",
                         format!(
-                            "{} does not support dry-run validation",
+                            "{} does not support patch preflight",
                             handler.descriptor().name
                         ),
                         context.single_thread_execution(),
@@ -629,7 +629,7 @@ impl CliApp {
             );
             report.details = Some(json!({
                 "patch_validation": {
-                    "dry_run": true,
+                    "preflight": true,
                     "format": final_format,
                     "formats": formats,
                     "patch_count": patch_count,
@@ -669,7 +669,7 @@ impl CliApp {
         );
 
         // Probe each patch's handler sequentially (cheap header sniffing). Patches whose handler
-        // cannot be resolved - or that cannot dry-run apply - become already-decided "failed"
+        // cannot be resolved - or that cannot run preflight - become already-decided "failed"
         // verdicts rather than aborting the batch.
         let mut ready_jobs: Vec<IndependentReadyJob> = Vec::new();
         let mut decided: Vec<PerPatchVerdict> = Vec::new();
@@ -693,7 +693,7 @@ impl CliApp {
                             handler,
                         });
                     } else {
-                        let message = format!("{format} does not support dry-run validation");
+                        let message = format!("{format} does not support patch preflight");
                         trace!(
                             index,
                             patch_count, format, "independent patch verdict: failed (unsupported)"
@@ -723,7 +723,7 @@ impl CliApp {
             }
         }
 
-        let (computed, planned) = match self.dry_run_ready_jobs(
+        let (computed, planned) = match self.validate_ready_jobs(
             &ready_jobs,
             validate_input,
             context,
@@ -804,7 +804,7 @@ impl CliApp {
         );
         report.details = Some(json!({
             "patch_validation": {
-                "dry_run": true,
+                "preflight": true,
                 "independent": true,
                 "status": status,
                 "patch_count": patch_count,
@@ -823,12 +823,12 @@ impl CliApp {
         report
     }
 
-    /// Fan dry-run validations across the op's thread budget (capped at the
+    /// Fan patch preflight validations across the op's thread budget (capped at the
     /// number of runnable patches; serial on the non-threaded wasm build). A
     /// per-patch `Cancelled` is the only error that aborts the whole batch -
     /// every other handler error is captured as that patch's "failed"
     /// verdict. `Err` carries the whole-batch abort report.
-    fn dry_run_ready_jobs(
+    fn validate_ready_jobs(
         &self,
         ready_jobs: &[IndependentReadyJob],
         validate_input: &Path,
@@ -878,7 +878,7 @@ impl CliApp {
                     patch_count,
                     format = job.format,
                     passed = verdict.passed,
-                    "dry-run patch verdict"
+                    "patch preflight verdict"
                 );
                 Ok(verdict)
             };
@@ -914,7 +914,7 @@ impl CliApp {
                     used_parallelism = execution.used_parallelism,
                     threads = execution.effective_threads,
                     jobs = ready_jobs.len(),
-                    "patch validation dry-run fan-out (parallel)"
+                    "patch preflight fan-out (parallel)"
                 );
                 pool.install(|| {
                     ready_jobs
@@ -926,7 +926,7 @@ impl CliApp {
                 trace!(
                     used_parallelism = false,
                     jobs = ready_jobs.len(),
-                    "patch validation dry-run fan-out (serial)"
+                    "patch preflight fan-out (serial)"
                 );
                 ready_jobs
                     .iter()
@@ -942,7 +942,7 @@ impl CliApp {
             // A genuine cancellation aborts the whole batch as a hard failure so the webapp maps the
             // call to a retryable "unknown" rather than reading partial per-patch verdicts.
             Err(error) => {
-                debug!("patch validation dry-run cancelled");
+                debug!("patch preflight cancelled");
                 Err(Box::new(OperationReport::failed(
                     OperationFamily::Patch,
                     None,
@@ -1008,8 +1008,8 @@ impl CliApp {
             Err(error) => return fail(error.to_string()),
         };
 
-        // Probe handlers; a failed probe (or a format without dry-run apply)
-        // still plans, it just cannot contribute embedded checks or dry-run.
+        // Probe handlers; a failed probe (or a format without preflight support)
+        // still plans, it just cannot contribute embedded checks or a preflight verdict.
         let mut handlers: Vec<Option<Arc<dyn rom_weaver_core::PatchHandler>>> =
             Vec::with_capacity(patch_count);
         let mut probe_failures: Vec<Option<String>> = vec![None; patch_count];
@@ -1106,27 +1106,27 @@ impl CliApp {
                 })
             })
             .collect();
-        let dry_run_count = ready_jobs.len();
-        let (dry_verdicts, planned) = match self.dry_run_ready_jobs(
+        let preflight_count = ready_jobs.len();
+        let (preflight_verdicts, planned) = match self.validate_ready_jobs(
             &ready_jobs,
             validate_input,
             context,
             patch_count,
-            &format!("dry-running {dry_run_count} of {patch_count} patch(es) against the input"),
+            &format!("validating {preflight_count} of {patch_count} patch(es) against the input"),
         ) {
             Ok(result) => result,
             Err(report) => return *report,
         };
-        for dry in dry_verdicts {
-            let entry = &mut per_patch[dry.index];
-            if dry.passed {
+        for preflight in preflight_verdicts {
+            let entry = &mut per_patch[preflight.index];
+            if preflight.passed {
                 if entry.input_verdict == PatchInputVerdict::Unknown {
                     entry.input_verdict = PatchInputVerdict::Passed;
-                    entry.message = dry.message;
+                    entry.message = preflight.message;
                 }
             } else {
                 entry.input_verdict = PatchInputVerdict::Failed;
-                entry.message = dry.message;
+                entry.message = preflight.message;
             }
         }
 
@@ -1202,7 +1202,7 @@ impl CliApp {
             .as_object()
             .cloned()
             .expect("verification plan is a JSON object");
-        payload.insert("dry_run".to_string(), json!(true));
+        payload.insert("preflight".to_string(), json!(true));
         payload.insert(
             "source_values".to_string(),
             json!({
@@ -1346,7 +1346,7 @@ struct IndependentValidationSummary {
     expected_input_checksums: BTreeMap<String, String>,
 }
 
-/// A patch whose handler resolved and supports dry-run apply, queued for the
+/// A patch whose handler resolved and supports preflight, queued for the
 /// parallel independent validation fan-out.
 struct IndependentReadyJob {
     index: usize,

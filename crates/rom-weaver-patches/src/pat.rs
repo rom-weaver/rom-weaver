@@ -11,7 +11,8 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
+    SharedThreadPool,
 };
 
 use crate::shared::threading::{
@@ -138,20 +139,7 @@ impl PatPatchHandler {
             (execution, writes)
         };
 
-        let mut forward_applied = 0usize;
-        let mut reverse_applied = 0usize;
-        let mut skipped = 0usize;
-        for write in &writes {
-            forward_applied = forward_applied
-                .checked_add(write.forward_applied)
-                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
-            reverse_applied = reverse_applied
-                .checked_add(write.reverse_applied)
-                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
-            skipped = skipped
-                .checked_add(write.skipped)
-                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
-        }
+        let (forward_applied, reverse_applied, skipped) = summarize_pat_writes(&writes)?;
 
         let ignored_suffix = if parsed.ignored_lines > 0 {
             format!("; ignored {} non-record line(s)", parsed.ignored_lines)
@@ -194,6 +182,41 @@ impl PatchHandler for PatPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         self.apply_report(request, context)
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let parsed = parse_pat_file(patch_path)?;
+        let groups = group_pat_records_by_offset(&parsed.records);
+        let input_len = fs::metadata(&request.input)?.len();
+        validate_pat_record_offsets(&groups, input_len)?;
+        let input_bytes = read_pat_group_input_bytes(&groups, &request.input, context)?;
+        let writes = groups
+            .iter()
+            .zip(input_bytes)
+            .map(|(group, byte)| prepare_pat_offset_write(group, byte, context))
+            .collect::<Result<Vec<_>>>()?;
+        let (forward, reverse, skipped) = summarize_pat_writes(&writes)?;
+        let skipped_suffix = if skipped > 0 {
+            format!("; {skipped} record(s) would be skipped due to unexpected input byte")
+        } else {
+            String::new()
+        };
+
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} record(s): {forward} forward / {reverse} reverse{skipped_suffix}",
+                self.descriptor.name,
+                parsed.records.len()
+            ),
+            context.single_thread_execution(),
+        ))
     }
 
     fn create(
@@ -350,6 +373,24 @@ fn prepare_pat_offset_write(
         reverse_applied,
         skipped,
     })
+}
+
+fn summarize_pat_writes(writes: &[PreparedPatWrite]) -> Result<(usize, usize, usize)> {
+    let mut forward = 0usize;
+    let mut reverse = 0usize;
+    let mut skipped = 0usize;
+    for write in writes {
+        forward = forward
+            .checked_add(write.forward_applied)
+            .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+        reverse = reverse
+            .checked_add(write.reverse_applied)
+            .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+        skipped = skipped
+            .checked_add(write.skipped)
+            .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+    }
+    Ok((forward, reverse, skipped))
 }
 
 fn read_pat_group_input_bytes(

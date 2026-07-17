@@ -352,6 +352,14 @@ impl PatchHandler for VcdiffPatchHandler {
         ))
     }
 
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.validate_via_apply(request, context)
+    }
+
     fn create(
         &self,
         request: &PatchCreateRequest,

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-validate \- Validate one or more ROM patch files against an input without writing output
 .SH SYNOPSIS
-\fBrom\-weaver patch validate\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] <\fB\-\-patch\fR> [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-validate\-with\-size\fR] [\fB\-\-validate\-with\-min\-size\fR] [\fB\-\-strip\-header\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-independent\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch validate\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] <\fB\-\-patch\fR> [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-validate\-with\-size\fR] [\fB\-\-validate\-with\-min\-size\fR] [\fB\-\-strip\-header\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-independent\fR] [\fB\-\-plan\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Validate one or more ROM patch files against an input without writing output.
 .PP
@@ -48,13 +48,13 @@ Patch file(s) to validate in order; repeat \-\-patch for each step
 Provide trusted effective patch input checksum values for validation without recomputing; repeat for multiple algorithms (for example: \-\-checksum\-cache crc32=1234abcd)
 .TP
 \fB\-\-validate\-with\-checksum\fR \fI<ALGO=HEX>\fR
-Validate effective patch input checksum before dry\-run apply; repeat for multiple algorithms (for example: \-\-validate\-with\-checksum crc32=1234abcd)
+Validate effective patch input checksum before patch preflight; repeat for multiple algorithms (for example: \-\-validate\-with\-checksum crc32=1234abcd)
 .TP
 \fB\-\-validate\-with\-size\fR \fI<BYTES>\fR
-Validate exact effective patch input size before dry\-run apply
+Validate exact effective patch input size before patch preflight
 .TP
 \fB\-\-validate\-with\-min\-size\fR \fI<BYTES>\fR
-Validate minimum effective patch input size before dry\-run apply
+Validate minimum effective patch input size before patch preflight
 .TP
 \fB\-\-strip\-header\fR
 Remove a detected ROM header before patch validation (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier\-size rules)
@@ -83,6 +83,30 @@ Skip patch\-provided checksum validation during patch validation and permit reco
 .TP
 \fB\-\-independent\fR
 Validate each \-\-patch independently against the original input (no sequential chaining); report a per\-patch verdict and never abort the batch on a single failing patch
+.TP
+\fB\-\-plan\fR
+Resolve every patch\*(Aqs input basis and chain order statically and report a typed verification plan; runs preflight only for patches that consume the original input
+.TP
+\fB\-\-patch\-basis\fR \fI<PATCH_BASIS>\fR
+What the preceding \-\-patch\*(Aqs input checks were authored against: auto (infer from checksums), base (the original ROM), or previous (the prior patch\*(Aqs output); binds to the most recent \-\-patch
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+auto
+.IP \(bu 2
+base
+.IP \(bu 2
+previous
+.RE
+.TP
+\fB\-\-patch\-input\-check\fR \fI<ALGO=HEX>\fR
+Declared input checks for the preceding \-\-patch (comma\-separable ALGO=HEX tokens; empty skips); binds to the most recent \-\-patch
+.TP
+\fB\-\-patch\-output\-check\fR \fI<ALGO=HEX>\fR
+Declared output checks for the preceding \-\-patch (comma\-separable ALGO=HEX tokens; empty skips); binds to the most recent \-\-patch
 .TP
 \fB\-\-threads\fR \fI<auto|N>\fR [default: auto]
 Thread budget: auto or a positive integer

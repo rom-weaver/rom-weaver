@@ -156,7 +156,7 @@ pub enum PatchCommands {
             long_about = "Validate one or more ROM patch files against an input without writing output.\n\nValidation performs the same patch-format checksum checks as patch apply when the handler supports them, including VCDIFF/xdelta target-window checksums. It also accepts optional input checksum and size values for source preflight."
         )
     )]
-    Validate(PatchValidateCommand),
+    Validate(Box<PatchValidateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(about = "Create a patch from original and modified ROM data")

@@ -1,6 +1,6 @@
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, Result,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, Result,
 };
 use std::path::Path;
 
@@ -39,6 +39,14 @@ impl PatchHandler for Ninja1PatchHandler {
         _context: &OperationContext,
     ) -> Result<OperationReport> {
         Ok(self.unsupported_report("apply"))
+    }
+
+    fn validate(
+        &self,
+        _request: &PatchValidateRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Ok(self.unsupported_report("validate"))
     }
 
     fn create(

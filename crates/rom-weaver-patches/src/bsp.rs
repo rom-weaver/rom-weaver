@@ -8,8 +8,8 @@ use std::{
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
-    UnsupportedOp,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
+    SharedThreadPool, ThreadCapability, UnsupportedOp,
 };
 use tracing::{debug, trace};
 
@@ -128,6 +128,14 @@ impl PatchHandler for BspPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         self.apply_report(request, context)
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.validate_via_apply(request, context)
     }
 
     fn create(

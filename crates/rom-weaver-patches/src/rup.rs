@@ -14,8 +14,8 @@ use rom_weaver_checksum::md5_bytes;
 use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, UnsupportedOp,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    Result, RomWeaverError, SharedThreadPool, UnsupportedOp,
 };
 
 use crate::checksum_validation_suffix;
@@ -245,6 +245,35 @@ impl PatchHandler for RupPatchHandler {
                 checksum_suffix
             ),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_rup_file(patch_path)?;
+        let scopes = context.patch_check_scopes();
+        let selected =
+            select_matching_file_for_input(&patch, &request.input, scopes.source, context)?;
+        let output_size = if selected.undo {
+            selected.file.source_file_size
+        } else {
+            selected.file.target_file_size
+        };
+        validate_rup_ranges(selected.file, selected.undo, output_size)?;
+
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source and {} record(s); output would be {output_size} byte(s), target checksum deferred to apply",
+                self.descriptor.name,
+                selected.file.records.len()
+            ),
+            context.single_thread_execution(),
         ))
     }
 
@@ -1301,6 +1330,46 @@ fn build_rup_prepared_tasks(record_count: usize) -> Vec<RupPreparedTask> {
     (0..record_count)
         .map(|index| RupPreparedTask { index })
         .collect()
+}
+
+fn validate_rup_ranges(file: &RupFile, undo: bool, output_size: u64) -> Result<()> {
+    let output_len = usize_from_u64(output_size, "RUP output size")?;
+    for record in &file.records {
+        let start = usize_from_u64(record.offset, "RUP record offset")?;
+        let end = start
+            .checked_add(record.xor.len())
+            .ok_or_else(|| RomWeaverError::Validation("RUP record length overflowed".into()))?;
+        if end > output_len {
+            return Err(RomWeaverError::Validation(
+                "RUP record exceeded declared output size".into(),
+            ));
+        }
+    }
+
+    let Some(mode) = file.overflow_mode else {
+        return Ok(());
+    };
+    let should_apply = match mode {
+        RupOverflowMode::Append => !undo,
+        RupOverflowMode::Minify => undo,
+    };
+    if !should_apply {
+        return Ok(());
+    }
+    let start_offset = match mode {
+        RupOverflowMode::Append => file.source_file_size,
+        RupOverflowMode::Minify => file.target_file_size,
+    };
+    let start = usize_from_u64(start_offset, "RUP overflow start offset")?;
+    let end = start
+        .checked_add(file.overflow_data.len())
+        .ok_or_else(|| RomWeaverError::Validation("RUP overflow length overflowed".into()))?;
+    if end > output_len {
+        return Err(RomWeaverError::Validation(
+            "RUP overflow data exceeded declared output size".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn prepare_rup_write_task(

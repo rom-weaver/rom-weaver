@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-apply \- Apply one or more ROM patch files to an input in sequence
 .SH SYNOPSIS
-\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Apply one or more ROM patch files to an input in sequence.
 .PP
@@ -123,6 +123,21 @@ keep
 strip
 .IP \(bu 2
 auto
+.RE
+.TP
+\fB\-\-patch\-basis\fR \fI<PATCH_BASIS>\fR
+What the preceding \-\-patch\*(Aqs input checks were authored against: auto (default; infer from checksums), base (the original ROM \- verified up front, embedded checks skipped mid\-chain), or previous (the prior patch\*(Aqs output). Binds to the most recent \-\-patch; index\-aligned on the wasm path.
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+auto
+.IP \(bu 2
+base
+.IP \(bu 2
+previous
 .RE
 .TP
 \fB\-\-output\-header\fR \fI<OUTPUT_HEADER>\fR

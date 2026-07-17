@@ -1103,7 +1103,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "validate-with-checksum",
             value_name = "ALGO=HEX",
-            help = "Validate effective patch input checksum before dry-run apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
+            help = "Validate effective patch input checksum before patch preflight; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
         )
     )]
     #[serde(default)]
@@ -1114,7 +1114,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "validate-with-size",
             value_name = "BYTES",
-            help = "Validate exact effective patch input size before dry-run apply"
+            help = "Validate exact effective patch input size before patch preflight"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -1124,7 +1124,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "validate-with-min-size",
             value_name = "BYTES",
-            help = "Validate minimum effective patch input size before dry-run apply"
+            help = "Validate minimum effective patch input size before patch preflight"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -1173,7 +1173,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Resolve every patch's input basis and chain order statically and report a typed verification plan; dry-runs only the patches that consume the original input"
+            help = "Resolve every patch's input basis and chain order statically and report a typed verification plan; runs preflight only for patches that consume the original input"
         )
     )]
     #[serde(default)]

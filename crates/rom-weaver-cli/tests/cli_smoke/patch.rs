@@ -5347,7 +5347,7 @@ fn patch_validate_succeeds_with_source_values() {
 
     let json = parse_single_json_line(&output);
     assert_patch_envelope(&json, "patch-validate", "BPS", "succeeded");
-    assert_eq!(json["details"]["patch_validation"]["dry_run"], true);
+    assert_eq!(json["details"]["patch_validation"]["preflight"], true);
     assert_eq!(json["details"]["patch_validation"]["status"], "passed");
     let label = json["label"].as_str().expect("label");
     assert!(label.contains("patch validation passed"));

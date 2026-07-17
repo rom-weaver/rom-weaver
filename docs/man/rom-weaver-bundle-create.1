@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-bundle\-create \- Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files
 .SH SYNOPSIS
-\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-url\fR] [\fB\-\-trace\fR] [\fB\-\-rom\-name\fR] [\fB\-\-patch\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-url\fR] [\fB\-\-trace\fR] [\fB\-\-rom\-name\fR] [\fB\-\-patch\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files.
 .PP
@@ -73,6 +73,21 @@ keep
 strip
 .IP \(bu 2
 auto
+.RE
+.TP
+\fB\-\-patch\-basis\fR \fI<PATCH_BASIS>\fR
+What the preceding \-\-patch\*(Aqs input checks were authored against: base (the bundle\*(Aqs rom) or previous (the prior patch\*(Aqs output, the default); auto omits the field for inference
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+auto
+.IP \(bu 2
+base
+.IP \(bu 2
+previous
 .RE
 .TP
 \fB\-\-patch\-input\-check\fR \fI<PATCH_INPUT_CHECK>\fR

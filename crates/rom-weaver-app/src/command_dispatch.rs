@@ -30,7 +30,7 @@ impl CliApp {
             Commands::Trim(args) => self.run_trim(args),
             Commands::Patch(command) => match command {
                 PatchCommands::Apply(args) => self.run_patch_apply(*args),
-                PatchCommands::Validate(args) => self.run_patch_validate(args),
+                PatchCommands::Validate(args) => self.run_patch_validate(*args),
                 PatchCommands::Create(args) => self.run_patch_create(*args),
             },
             Commands::Bundle(command) => match command {

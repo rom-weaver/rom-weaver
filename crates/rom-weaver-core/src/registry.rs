@@ -455,6 +455,14 @@ pub trait PatchHandler: Send + Sync {
         &self,
         request: &PatchValidateRequest,
         context: &OperationContext,
+    ) -> Result<OperationReport>;
+    /// Opt-in validation for formats whose decoder or VM must execute to prove
+    /// that a patch applies. Most handlers should implement a cheaper native
+    /// validator instead.
+    fn validate_via_apply(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
     ) -> Result<OperationReport> {
         let output = context
             .temp_paths()

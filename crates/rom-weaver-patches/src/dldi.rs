@@ -10,8 +10,8 @@ use tracing::{debug, trace};
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    Result, RomWeaverError, ThreadCapability,
 };
 
 use crate::shared::labels::append_warning_labels;
@@ -157,6 +157,53 @@ impl PatchHandler for DldiPatchHandler {
         ))
     }
 
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch", true)?;
+        let patch_file_len = fs::metadata(patch_path)?.len();
+        let patch_read_len = usize::try_from(
+            patch_file_len.min(u64::try_from(patch_header.driver_size_bytes).unwrap_or(u64::MAX)),
+        )
+        .map_err(|_| RomWeaverError::Validation("DLDI patch length exceeded usize".into()))?;
+        let patch = read_dldi_range_from_path(patch_path, 0, patch_read_len)?;
+        let input_len = fs::metadata(&request.input)?.len();
+        let prepared = match prepare_dldi_patch(&request.input, &patch, input_len) {
+            Ok(prepared) => prepared,
+            Err(RomWeaverError::ValidationCode(code))
+                if code.code() == DLDI_NO_PATCHABLE_SLOT_CODE =>
+            {
+                return Ok(OperationReport::unsupported(
+                    OperationFamily::Patch,
+                    Some(self.descriptor.name.to_string()),
+                    "validate",
+                    INPUT_NO_DLDI_SLOT_MESSAGE,
+                    context.single_thread_execution(),
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+        let label = append_warning_labels(
+            format!(
+                "validated {} driver `{}` for `{}` at 0x{:08X}",
+                self.descriptor.name,
+                prepared.result.new_driver,
+                prepared.result.old_driver,
+                prepared.result.patch_offset
+            ),
+            &prepared.result.warnings,
+        );
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            label,
+            context.single_thread_execution(),
+        ))
+    }
+
     fn create(
         &self,
         request: &PatchCreateRequest,
@@ -292,12 +339,40 @@ struct DldiApplyOutput {
     warnings: Vec<String>,
 }
 
+struct PreparedDldiPatch {
+    result: DldiApplyOutput,
+    patch_offset: u64,
+    output_len: u64,
+    slot: Vec<u8>,
+}
+
 fn apply_dldi_patch_to_file(
     input_path: &Path,
     output_path: &Path,
     patch: &[u8],
     input_len: u64,
 ) -> Result<DldiApplyOutput> {
+    let prepared = prepare_dldi_patch(input_path, patch, input_len)?;
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(input_path, output_path)?;
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    output.set_len(prepared.output_len)?;
+    output.seek(SeekFrom::Start(prepared.patch_offset))?;
+    output.write_all(&prepared.slot)?;
+    output.flush()?;
+    Ok(prepared.result)
+}
+
+fn prepare_dldi_patch(
+    input_path: &Path,
+    patch: &[u8],
+    input_len: u64,
+) -> Result<PreparedDldiPatch> {
     let patch_header = parse_dldi_bytes_for_apply(patch, "DLDI patch")?;
     let mut input_reader = BlockCacheReader::open(
         input_path,
@@ -368,16 +443,6 @@ fn apply_dldi_patch_to_file(
     if existing_slot_len > 0 {
         input_reader.read_exact_at(patch_offset_u64, &mut slot[..existing_slot_len])?;
     }
-
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::copy(input_path, output_path)?;
-    let mut output = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(output_path)?;
-    output.set_len(patch_end.max(input_len))?;
 
     let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
     slot[..patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);
@@ -453,15 +518,16 @@ fn apply_dldi_patch_to_file(
         clear_bss(&mut slot, patch, ddmem_start)?;
     }
 
-    output.seek(SeekFrom::Start(patch_offset_u64))?;
-    output.write_all(&slot)?;
-    output.flush()?;
-
-    Ok(DldiApplyOutput {
-        patch_offset,
-        old_driver: existing_header.friendly_name,
-        new_driver: patch_header.friendly_name,
-        warnings,
+    Ok(PreparedDldiPatch {
+        result: DldiApplyOutput {
+            patch_offset,
+            old_driver: existing_header.friendly_name,
+            new_driver: patch_header.friendly_name,
+            warnings,
+        },
+        patch_offset: patch_offset_u64,
+        output_len: patch_end.max(input_len),
+        slot,
     })
 }
 

@@ -26,9 +26,9 @@ use rayon::prelude::*;
 use rom_weaver_checksum::adler32_checksum as adler32;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    ProgressEvent, Result, RomWeaverError, SharedThreadPool, ThreadBudget, ThreadCapability,
-    ThreadExecution, XdeltaSecondaryMode,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, ProgressEvent, Result, RomWeaverError, SharedThreadPool, ThreadBudget,
+    ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
 use serde_json::json;
 use tracing::{debug, trace};

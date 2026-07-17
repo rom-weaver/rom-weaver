@@ -2,7 +2,7 @@ use std::{fs, sync::Arc};
 
 use rom_weaver_core::{
     CancellationToken, OperationContext, PatchApplyRequest, PatchChecksumValidation,
-    PatchCreateRequest, PatchHandler, RecordingProgressSink, ThreadBudget,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, RecordingProgressSink, ThreadBudget,
 };
 
 use super::{
@@ -856,6 +856,21 @@ fn apply_fails_when_output_checksum_mismatches() {
     .expect("fixture");
 
     let handler = BpsPatchHandler::new(&BPS);
+    let validation = handler
+        .validate(
+            &PatchValidateRequest {
+                input: input_path.clone(),
+                patches: vec![patch_path.clone()],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("preflight should defer target checksum validation");
+    assert!(
+        validation
+            .label
+            .contains("target checksum deferred to apply")
+    );
+
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -867,6 +882,41 @@ fn apply_fails_when_output_checksum_mismatches() {
         )
         .expect_err("output checksum mismatch should fail");
     assert!(error.to_string().contains("Output checksum invalid"));
+}
+
+#[test]
+fn validate_rejects_invalid_action_ranges_without_rendering_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    fs::write(&input_path, []).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            b"",
+            b"A",
+            vec![TestAction::TargetCopy {
+                length: 1,
+                relative_offset: 0,
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("invalid TargetCopy should fail preflight");
+    assert!(
+        error
+            .to_string()
+            .contains("target relative offset exceeded available data")
+    );
 }
 
 #[test]

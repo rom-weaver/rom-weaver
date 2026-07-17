@@ -10,8 +10,8 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest,
-    PatchHandler, ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
-    format_human_bytes,
+    PatchHandler, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability, format_human_bytes,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use tracing::{debug, trace};
@@ -217,6 +217,29 @@ impl PatchHandler for IpsPatchHandler {
                 &warnings,
             ),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
+        let input_len = fs::metadata(&request.input)?.len();
+        let output_size = patch.resolved_output_size(input_len);
+        let _ = max_parallel_chunks(output_size)?;
+
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch structure with {} record(s); output would be {output_size} byte(s)",
+                self.descriptor.name,
+                patch.records.len()
+            ),
+            context.single_thread_execution(),
         ))
     }
 

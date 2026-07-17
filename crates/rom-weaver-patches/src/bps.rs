@@ -13,8 +13,9 @@ use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, ProgressEvent, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
+    ThreadCapability,
 };
 use suffix_array::SuffixArray;
 use tracing::{debug, trace};
@@ -226,6 +227,35 @@ impl PatchHandler for BpsPatchHandler {
         ))
     }
 
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let scopes = context.patch_check_scopes();
+        let patch = parse_bps_file_with_checksum_validation(patch_path, scopes.patch_integrity)?;
+        let mut source = File::open(&request.input)?;
+        validate_input_file(
+            &request.input,
+            &mut source,
+            patch.source_size,
+            patch.source_checksum,
+            scopes.source,
+            context,
+        )?;
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source and {} action(s); target checksum deferred to apply",
+                self.descriptor.name,
+                patch.actions.len()
+            ),
+            context.single_thread_execution(),
+        ))
+    }
+
     fn create(
         &self,
         request: &PatchCreateRequest,
@@ -427,18 +457,28 @@ fn parse_bps_file_with_checksum_validation(
 
     let mut actions = Vec::new();
     let mut output_size = 0u64;
+    let mut source_relative_offset = 0i128;
+    let mut target_relative_offset = 0i128;
     while !parser.is_at_end() {
         let raw = parser.read_varint()?;
         let command = raw & 0x03;
         let length = (raw >> 2)
             .checked_add(1)
             .ok_or_else(|| RomWeaverError::Validation("BPS action length overflowed".into()))?;
+        let output_offset = output_size;
         output_size = output_size
             .checked_add(length)
             .ok_or_else(|| RomWeaverError::Validation("BPS target size overflowed".into()))?;
 
         let action = match command {
-            0 => BpsAction::SourceRead { length },
+            0 => {
+                if output_size > source_size {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceRead exceeded input size at output offset {output_offset}"
+                    )));
+                }
+                BpsAction::SourceRead { length }
+            }
             1 => {
                 let data = parser.read_exact(usize::try_from(length).map_err(|_| {
                     RomWeaverError::Validation(
@@ -447,14 +487,45 @@ fn parse_bps_file_with_checksum_validation(
                 })?)?;
                 BpsAction::TargetRead { data }
             }
-            2 => BpsAction::SourceCopy {
-                length,
-                relative_offset: decode_signed_offset(parser.read_varint()?),
-            },
-            3 => BpsAction::TargetCopy {
-                length,
-                relative_offset: decode_signed_offset(parser.read_varint()?),
-            },
+            2 => {
+                let relative_offset = decode_signed_offset(parser.read_varint()?);
+                let start = adjust_relative_offset(
+                    source_relative_offset,
+                    relative_offset,
+                    source_size,
+                    "source",
+                )?;
+                source_relative_offset =
+                    i128::from(start.checked_add(length).ok_or_else(|| {
+                        RomWeaverError::Validation("BPS source-copy length overflowed".into())
+                    })?);
+                if source_relative_offset > i128::from(source_size) {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceCopy exceeded input size at source offset {start}"
+                    )));
+                }
+                BpsAction::SourceCopy {
+                    length,
+                    relative_offset,
+                }
+            }
+            3 => {
+                let relative_offset = decode_signed_offset(parser.read_varint()?);
+                let start = adjust_relative_offset(
+                    target_relative_offset,
+                    relative_offset,
+                    output_offset,
+                    "target",
+                )?;
+                target_relative_offset =
+                    i128::from(start.checked_add(length).ok_or_else(|| {
+                        RomWeaverError::Validation("BPS target-copy length overflowed".into())
+                    })?);
+                BpsAction::TargetCopy {
+                    length,
+                    relative_offset,
+                }
+            }
             _ => unreachable!(),
         };
         actions.push(action);

@@ -22,8 +22,8 @@ use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
-    PatchHandler, ProbeConfidence, Result, RomWeaverError, SharedBlockCacheReader,
-    SharedThreadPool,
+    PatchHandler, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError,
+    SharedBlockCacheReader, SharedThreadPool,
 };
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
@@ -156,6 +156,32 @@ impl PatchHandler for UpsPatchHandler {
                 checksum_suffix
             ),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let scopes = context.patch_check_scopes();
+        let patch = parse_ups_file_with_checksum_validation(patch_path, scopes.patch_integrity)?;
+        let input_len = fs::metadata(&request.input)?.len();
+        let input_checksum = crc32_path_cached(&request.input, context)?;
+        let (output_size, _) =
+            resolve_apply_target(&patch, input_len, input_checksum, scopes.source)?;
+        validate_ups_change_ranges(&patch)?;
+
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source and {} record(s); output would be {output_size} byte(s), target checksum deferred to apply",
+                self.descriptor.name,
+                patch.changes.len()
+            ),
+            context.single_thread_execution(),
         ))
     }
 
@@ -432,6 +458,22 @@ fn resolve_apply_target(
         input_len,
         input_checksum
     )))
+}
+
+fn validate_ups_change_ranges(patch: &ParsedUpsPatch) -> Result<()> {
+    let working_size = max(patch.source_size, patch.target_size);
+    for change in &patch.changes {
+        let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
+            RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
+        })?;
+        let change_end = checked_add(change.offset, change_len, "UPS change end")?;
+        if change_end > working_size {
+            return Err(RomWeaverError::Validation(
+                "UPS change exceeds declared patch file bounds".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn apply_changes_from_input(
