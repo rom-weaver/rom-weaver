@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
-  <title>rom-weaver</title>
+  <title>rom-weaver social preview</title>
   <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#181e25"/>
-      <stop offset="1" stop-color="#252d36"/>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#151a20"/>
+      <stop offset="1" stop-color="#0c0f13"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="45%" r="60%">
       <stop offset="0" stop-color="#d9690f" stop-opacity=".24"/>
@@ -20,7 +20,9 @@
 
   <rect width="1280" height="640" fill="url(#background)"/>
   <rect width="1280" height="640" fill="url(#weave)"/>
-  <circle cx="275" cy="300" r="330" fill="url(#glow)"/>
+  <circle cx="300" cy="220" r="390" fill="url(#glow)" opacity=".6"/>
+  <rect x="40" y="30" width="1200" height="580" rx="18" fill="#161b21" stroke="#39414e" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="72" y="30" width="1136" height="2" rx="1" fill="#d9690f" opacity=".8"/>
 
   <g filter="url(#shadow)">
     <rect x="64" y="64" width="430" height="512" rx="42" fill="#2c323b" stroke="#43505f" stroke-width="2"/>
@@ -35,18 +37,22 @@
   </g>
 
   <g font-family="Helvetica">
-    <rect x="558" y="116" width="214" height="42" rx="21" fill="#d9690f"/>
-    <text x="665" y="144" fill="#181e25" font-size="18" font-weight="700" letter-spacing="2" text-anchor="middle">ROM TOOLKIT</text>
+    <text x="520" y="160" fill="#edf0f5" font-size="58" font-weight="760" letter-spacing="-1.5">rom<tspan fill="#939cab" font-weight="400">-</tspan><tspan fill="#ef8534">weaver</tspan></text>
+    <rect x="522" y="186" width="98" height="7" rx="3.5" fill="#d9690f"/>
+    <rect x="632" y="186" width="58" height="7" rx="3.5" fill="#4a6d63"/>
 
-    <text x="554" y="290" fill="#f6ecda" font-size="72" font-weight="800" letter-spacing="3">rom-weaver</text>
-    <rect x="558" y="325" width="90" height="8" rx="4" fill="#d9690f"/>
-    <rect x="660" y="325" width="54" height="8" rx="4" fill="#4a6d63"/>
+    <text x="520" y="260" fill="#edf0f5" font-size="24" font-weight="700">A local-first offline toolkit for ROMs and ROM hack patches.</text>
+    <text x="520" y="318" fill="#b3bbc8" font-size="20" font-weight="600">Inspect, extract, checksum, compress, trim, apply patches,</text>
+    <text x="520" y="350" fill="#b3bbc8" font-size="20" font-weight="600">create patches, or bundle shareable patch manifests at native speed.</text>
+    <text x="520" y="382" fill="#ef8534" font-size="20" font-weight="650">In your browser or terminal.</text>
 
-    <text x="558" y="430" fill="#fccb90" font-size="28" font-weight="600">Inspect, patch, transform, and preserve</text>
-    <text x="558" y="470" fill="#f6ecda" font-size="28">video game ROMs and disc images.</text>
-
-    <text x="558" y="545" fill="#f6ecda" font-size="24" font-weight="700" letter-spacing="1">rom-weaver.com</text>
-    <circle cx="875" cy="537" r="5" fill="#d9690f"/>
-    <text x="897" y="545" fill="#aeb7c2" font-size="21">Browser + CLI</text>
+    <g font-family="monospace" font-size="14" text-anchor="middle">
+      <rect x="520" y="515" width="140" height="38" rx="19" fill="#0f1318" stroke="#39414e"/>
+      <rect x="670" y="515" width="210" height="38" rx="19" fill="#0f1318" stroke="#d9690f" stroke-opacity=".7"/>
+      <rect x="890" y="515" width="318" height="38" rx="19" fill="#0f1318" stroke="#39414e"/>
+      <text x="590" y="540" fill="#edf0f5">rom-weaver.com</text>
+      <text x="775" y="540" fill="#ef8534">npx rom-weaver --help</text>
+      <text x="1049" y="540" fill="#b3bbc8">github.com/brandonocasey/rom-weaver</text>
+    </g>
   </g>
 </svg>

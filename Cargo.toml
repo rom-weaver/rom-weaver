@@ -26,7 +26,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Brandon O'Casey"]
-description = "A local-first toolkit for inspecting, patching, transforming, and preserving video game ROMs and disc images—in your browser or terminal."
+description = "A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal."
 edition = "2024"
 homepage = "https://rom-weaver.com"
 license = "AGPL-3.0-or-later"

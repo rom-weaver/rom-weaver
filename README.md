@@ -1,15 +1,15 @@
 <p align="center">
   <img
-    src="packages/rom-weaver-react/design/github-social-preview.svg"
-    alt="rom-weaver: inspect, patch, transform, and preserve video game ROMs and disc images"
+    src="packages/rom-weaver-react/design/webapp.png"
+    alt="rom-weaver web app showing the Weave workflow"
     width="960"
   >
 </p>
 
-<h1 align="center">rom-weaver</h1>
+<h1 align="center"><img src="packages/rom-weaver-react/src/assets/app/root/logo.svg" alt="rom-weaver logo" width="64" height="64" align="middle"> rom-weaver</h1>
 
 <p align="center">
-  A local-first toolkit for working with video game ROMs and disc images in your browser or terminal.
+  A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal.
 </p>
 
 <p align="center">
@@ -48,7 +48,13 @@ webapp settings.
 
 ### Use the CLI
 
-Install the current tagged CLI from source:
+Get started without installing:
+
+```bash
+npx rom-weaver --help
+```
+
+Or install the current tagged native CLI from source:
 
 ```bash
 cargo install \
