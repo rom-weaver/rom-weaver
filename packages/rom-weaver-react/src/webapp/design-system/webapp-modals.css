@@ -110,6 +110,13 @@
     .rw-app .input, .rw-app .select,
     .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
     .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
+    /* Only the <input> arm above actually outweighs per-context sizing (its
+       :not() chain carries the specificity); `.select`/`select`/`textarea` lose
+       to rules like `.ofld .select`, so a row of controls rendered three sizes.
+       Re-assert the bump for the controls that share a row - these must stay at
+       or above the specificity of their fields.css/responsive.css sizing. */
+    .rw-app .ofld .select,
+    .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
   }
 }
 /* visually-small copy controls keep their icon size and extend an invisible

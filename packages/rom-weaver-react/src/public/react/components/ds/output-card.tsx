@@ -133,7 +133,7 @@ const OutputCard = ({
             <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
               <select
                 aria-label={compress.formatLabel || "Type"}
-                className="select mono"
+                className="select"
                 disabled={disabled}
                 id={compress.formatId}
                 onChange={(event) => compress.onFormatChange?.(event.currentTarget.value)}
