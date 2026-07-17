@@ -252,6 +252,13 @@
   color: var(--ink); border-color: var(--thread);
   background: color-mix(in oklab, var(--thread) 9%, var(--well));
 }
+/* the author's input-basis select rides the Input group head; readable weight
+   against the head's heavy uppercase scrap */
+.rw-app .ck-basis-select {
+  margin-inline-start: var(--sp-s);
+  font-size: .66rem; font-weight: 600; letter-spacing: .02em; text-transform: none;
+  color: var(--ink-2);
+}
 /* the checks-body hint trails the last group; the rows bleed to the drawer
    frame, so the prose is inset to their 9px text edge and wraps at it */
 .rw-app .ckrows .patch-off-note { margin-block-start: 7px; margin-inline: 9px; }

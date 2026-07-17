@@ -40,6 +40,11 @@ type BundleExportRow = {
   outputChecks: string;
   label?: string;
   header?: BundleHeaderMode;
+  /** Declared input basis, frozen at export: a user pin verbatim, or "base"
+   * when the chain plan inferred it - so the applying side never has to
+   * re-infer with possibly different evidence. Previous stays unwritten
+   * (it is the schema default). */
+  basis?: "base" | "previous";
 };
 
 type BundleExportSources = ApplyWorkflowBundleSources;
@@ -213,6 +218,12 @@ const useBundleExport = ({
         .filter(([, value]) => value.trim())
         .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
         .join(",");
+      const chainVerdict = item?.chainVerdict;
+      const basis =
+        meta?.basis ??
+        (chainVerdict?.basis === "base" && chainVerdict.basisSource === "inferred_base"
+          ? ("base" as const)
+          : undefined);
       return {
         fileName,
         ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
@@ -223,6 +234,7 @@ const useBundleExport = ({
         outputChecks,
         ...(meta?.label ? { label: meta.label } : {}),
         ...(headerChoice === "keep" || headerChoice === "strip" ? { header: headerChoice } : {}),
+        ...(basis ? { basis } : {}),
       };
     });
     const stepProgress = (label: string) =>
@@ -330,6 +342,7 @@ const useBundleExport = ({
             ...(row?.outputChecks.trim() ? { outputChecks: row.outputChecks.trim() } : {}),
             ...(row?.label ? { label: row.label } : {}),
             ...(row?.header ? { header: row.header } : {}),
+            ...(row?.basis ? { basis: row.basis } : {}),
           };
         }),
         rom: { fileName: rom.fileName, source: rom.source },

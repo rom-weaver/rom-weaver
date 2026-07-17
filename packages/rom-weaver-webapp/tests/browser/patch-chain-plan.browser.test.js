@@ -1,7 +1,14 @@
 import { createElement } from "react";
 import { expect, test } from "vitest";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { installPatcherTestHooks, loadFixtureFile, mount, RAW_ROM, selectFileInput } from "./patcher-test-shared.js";
+import {
+  installPatcherTestHooks,
+  loadFixtureFile,
+  mount,
+  RAW_ROM,
+  selectFileInput,
+  setFormControlValue,
+} from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
 
@@ -62,6 +69,28 @@ test("same-base patches all match the ROM and feed the Expected group without co
   expect(expectedGroup()?.querySelector(".ck-mark.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-expected-conflict")).toBeNull();
 }, 120000);
+
+test("the basis select names the inferred basis and a pin re-plans the chain", async () => {
+  mount(createElement(ApplyPatchForm, {}));
+  await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
+
+  // The select's auto option names what inference resolved.
+  const basisSelect = document.getElementById("rom-weaver-patch-basis-1");
+  expect(basisSelect).toBeInstanceOf(HTMLSelectElement);
+  expect(basisSelect.value).toBe("");
+  expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
+
+  // Pinning "previous output" overrides the inference: the re-plan stops
+  // verifying this patch against the ROM and defers it to the weave (where the
+  // real intermediate decides).
+  setFormControlValue(basisSelect, "previous");
+  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during the weave");
+
+  // Back to auto: inference decides again and the chip recovers.
+  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "");
+  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("matches your ROM");
+}, 180000);
 
 test("an out-of-order chain names its predecessor and Fix order repairs it", async () => {
   mount(createElement(ApplyPatchForm, {}));

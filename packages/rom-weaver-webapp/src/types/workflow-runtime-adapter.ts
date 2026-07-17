@@ -485,6 +485,8 @@ type WorkflowRuntimeBundle = {
       /** Optional patches start deselected at apply time; absent/false = applied by default. */
       optional?: boolean;
       header?: BundleHeaderMode;
+      /** Declared input basis frozen at export ("base" = authored against the base ROM). */
+      basis?: "base" | "previous";
       /** Expected pre-apply ROM checksums for this entry ("algo=hex", comma-separable). */
       inputChecks?: string;
       /** Expected post-apply ROM checksums ("algo=hex", comma-separable). */

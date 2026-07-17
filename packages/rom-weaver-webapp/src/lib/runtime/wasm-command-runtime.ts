@@ -984,6 +984,8 @@ const invokeRomWeaverBundleCreateWorker = async (
     romSize?: number;
     outputName?: string;
     outputPath: string;
+    /** Index-aligned declared input basis per patch ("auto" entries stay unwritten). */
+    patchBases?: Array<"auto" | "base" | "previous">;
     patchDescriptions?: string[];
     patchHeaders?: BundleHeaderMode[];
     /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
@@ -1028,6 +1030,10 @@ const invokeRomWeaverBundleCreateWorker = async (
     input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
       ? patchPaths.map((_, index) => input.patchHeaders?.[index] || "auto")
       : undefined;
+  const patchBases =
+    input.patchBases?.length && input.patchBases.some((mode) => mode !== "auto")
+      ? patchPaths.map((_, index) => input.patchBases?.[index] || "auto")
+      : undefined;
   const command = createRomWeaverCommand("bundle-create", {
     output: outputPath,
     patch: patchPaths,
@@ -1044,6 +1050,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(patchLabels ? { patch_label: patchLabels } : {}),
     ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
     ...(patchHeaders ? { patch_header: patchHeaders } : {}),
+    ...(patchBases ? { patch_basis: patchBases } : {}),
     ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
     ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),

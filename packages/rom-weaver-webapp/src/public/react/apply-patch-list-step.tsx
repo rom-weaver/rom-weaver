@@ -466,7 +466,16 @@ const chainChipText = (
   return null;
 };
 
+/** The auto option names what inference resolved so pinning is a conscious
+ * override; with a pin active (or no plan yet) it stays a plain "auto". */
+const autoBasisLabel = (item: PatchStackItemState, meta?: BundlePatchMeta): string => {
+  const verdict = item.chainVerdict;
+  if (meta?.basis || !verdict || verdict.basisSource === "declared") return "auto";
+  return verdict.basis === "base" ? "auto (base ROM)" : "auto (previous)";
+};
+
 const PatchChecksDrawer = ({
+  basisSelectVisible,
   chainChip,
   disabled,
   index,
@@ -479,6 +488,9 @@ const PatchChecksDrawer = ({
   patchStack,
   romActuals,
 }: {
+  /** Show the author's input-basis select in the Input group head (a stack of
+   * two or more enabled patches, or an existing pin to surface). */
+  basisSelectVisible?: boolean;
   /** Plain-language chain verdict rendered in the drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
   /** The patch is toggled out of the run: verification state is not part of the
@@ -610,6 +622,30 @@ const PatchChecksDrawer = ({
         <div className="ck-group" key={side}>
           <div className="ck-group-head">
             <span>{side === "input" ? "Input" : "Output"}</span>
+            {side === "input" && onMetaChange && basisSelectVisible ? (
+              <>
+                <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
+                  Which ROM the input checks describe
+                </label>
+                <select
+                  className="meta-target-select mono ck-basis-select"
+                  id={`rom-weaver-patch-basis-${index}`}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    // Auto clears the pin - checksum inference decides again. The basis
+                    // feeds the chain plan, so re-resolve the verdicts either way.
+                    onMetaChange({ basis: next === "base" || next === "previous" ? next : undefined });
+                    void setOption?.(index, { revalidate: true });
+                  }}
+                  title="Which ROM this patch's input checks describe: the base ROM (verified once up front) or the previous patch's output."
+                  value={meta?.basis || ""}
+                >
+                  <option value="">{autoBasisLabel(item, meta)}</option>
+                  <option value="base">base ROM</option>
+                  <option value="previous">previous output</option>
+                </select>
+              </>
+            ) : null}
           </div>
           {builtInRows.map((row) => (
             <ChecksumRow key={`${side}:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -872,6 +908,7 @@ const PatchMetaEditToggle = ({
  * the Extract drawer, and the unified Checks drawer (which owns the dry-run
  * verdict). */
 const PatchCard = ({
+  basisSelectVisible,
   canReorder,
   chainChip,
   handleProps,
@@ -893,6 +930,8 @@ const PatchCard = ({
   rowProps,
   total,
 }: {
+  /** Show the input-basis select in the card's Checks drawer. */
+  basisSelectVisible?: boolean;
   canReorder: boolean;
   /** Plain-language chain verdict for the Checks drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
@@ -1061,6 +1100,7 @@ const PatchCard = ({
               metadata) keep their drawer through staging. */}
           {staging && !hasKnownChecks ? null : (
             <PatchChecksDrawer
+              basisSelectVisible={basisSelectVisible}
               chainChip={chainChip}
               disabled={isDisabled}
               index={index}
@@ -1183,6 +1223,7 @@ const ApplyPatchListStep = ({
       >
         {patches.map((item, index) => (
           <PatchCard
+            basisSelectVisible={enabledIndexes.length >= 2 || !!bundleMeta?.[index]?.basis}
             canReorder={canReorder}
             chainChip={chainChipText(item, enabledIndexes)}
             handleProps={reorderList.handleProps(index)}
