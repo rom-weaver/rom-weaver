@@ -1,11 +1,11 @@
 # Self-hosting the webapp
 
-RomWeaver is a static webapp. Host it on its own HTTPS subdomain or under a
+rom-weaver is a static webapp. Host it on its own HTTPS subdomain or under a
 dedicated path such as `https://example.com/rom-weaver/`. A subdomain is the
 safest choice; a subpath is also supported because the build uses relative
 asset URLs and registers its service worker with a relative scope.
 
-Do not mount RomWeaver at the root of an origin that also serves other apps.
+Do not mount rom-weaver at the root of an origin that also serves other apps.
 At the root, its service worker can control every path on that origin. Under
 `/rom-weaver/`, it controls only that path.
 
@@ -59,11 +59,17 @@ docker compose down
 
 ## Static files
 
-Build a portable static directory:
+Building from source requires `mise`, the WASI SDK, and Brotli; the
+[development guide](development.md#prerequisites) lists the platform-specific
+setup. Build a portable static directory:
 
 ```bash
-mise run build-wasm-prod
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+mise install
+mise trust
 npm ci --prefix packages/rom-weaver-webapp
+mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
@@ -74,7 +80,7 @@ dynamic Brotli or gzip compression in the host when available, especially for
 the WASM file.
 
 The server should fall back to `index.html` for navigation requests within the
-RomWeaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so
+rom-weaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so
 relative assets and the service-worker scope resolve consistently.
 
 ## Cross-origin isolation
@@ -82,7 +88,7 @@ relative assets and the service-worker scope resolve consistently.
 The threaded WASM runtime requires `SharedArrayBuffer` and
 `crossOriginIsolated`. HTTPS is required outside localhost.
 
-Prefer adding these response headers to every RomWeaver response, scoped only
+Prefer adding these response headers to every rom-weaver response, scoped only
 to its subdomain or path:
 
 ```text
@@ -96,7 +102,7 @@ to use those policies. Under `Cross-Origin-Embedder-Policy: require-corp`, any
 cross-origin resource loaded by the app must opt in through CORS or a compatible
 `Cross-Origin-Resource-Policy` header.
 
-When a static host cannot set these headers, RomWeaver's service worker can add
+When a static host cannot set these headers, rom-weaver's service worker can add
 them for responses within its scope. The first visit may reload once after the
 worker takes control. This fallback still requires HTTPS and service-worker
 support.
@@ -145,7 +151,7 @@ document.dispatchEvent(
 ```
 
 The mounted `/work/rom-weaver-imports/example.bin` path refers to
-`rom-weaver-imports/example.bin` below the origin's OPFS root. RomWeaver
+`rom-weaver-imports/example.bin` below the origin's OPFS root. rom-weaver
 preserves that directory during startup cleanup and does not delete supplied
 files. OPFS is origin-private, so another origin cannot populate or ingest
 these paths.
