@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "patches/wasm";
+const BUNDLED_LIBARCHIVE: &str = "vendor/libarchive.tar.gz";
 const WASM_PATCH_FILES: &[&str] = &[
     "archive_write_set_format_wasm_shim.c",
     "archive_util_tempdir.original.txt",
@@ -177,19 +178,20 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let libarchive_dir = manifest_dir.join("../../vendor/libarchive");
-    if !libarchive_dir.exists() {
-        panic!(
-            "libarchive submodule is missing at {}. Run `git submodule update --init --recursive vendor/libarchive`.",
-            libarchive_dir.display()
-        );
-    }
+    let bundled_libarchive = manifest_dir.join(BUNDLED_LIBARCHIVE);
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
+    println!("cargo:rerun-if-changed={}", bundled_libarchive.display());
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_WRITE_ARCHIVES");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_WRITE_EXTRA");
     emit_wasm_patch_rerun_if_changed(&manifest_dir);
 
-    let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
+    let source_dir = prepare_source_tree(
+        &manifest_dir,
+        &libarchive_dir,
+        &bundled_libarchive,
+        &out_dir,
+    );
 
     build_libarchive(&source_dir);
     generate_bindings(&source_dir);
@@ -265,7 +267,12 @@ fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
     }
 }
 
-fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
+fn prepare_source_tree(
+    manifest_dir: &Path,
+    libarchive_dir: &Path,
+    bundled_libarchive: &Path,
+    out_dir: &Path,
+) -> PathBuf {
     let wasm_target = is_wasm32_target();
     let staged = out_dir.join(if wasm_target {
         "libarchive-wasm-src"
@@ -275,7 +282,22 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     if staged.exists() {
         fs::remove_dir_all(&staged).expect("failed to clear staged libarchive source tree");
     }
-    copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
+    if libarchive_dir.is_dir() {
+        copy_dir_recursive(libarchive_dir, &staged)
+            .expect("failed to stage libarchive source tree");
+    } else {
+        let archive = fs::File::open(bundled_libarchive).unwrap_or_else(|error| {
+            panic!(
+                "libarchive source is unavailable (expected {} or {}): {error}",
+                libarchive_dir.display(),
+                bundled_libarchive.display()
+            )
+        });
+        fs::create_dir_all(&staged).expect("failed to create bundled libarchive staging directory");
+        tar::Archive::new(flate2::read::GzDecoder::new(archive))
+            .unpack(&staged)
+            .expect("failed to unpack bundled libarchive source");
+    }
     let write_archives = write_archives_enabled();
     let write_extra = write_extra_enabled();
     if write_archives {

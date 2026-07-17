@@ -1,9 +1,12 @@
 [package]
 name = "rom-weaver-libarchive"
 authors.workspace = true
+description.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
+publish.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -14,7 +17,7 @@ write-archives = ["rom-weaver-libarchive-sys/write-archives"]
 write-extra = ["write-archives", "rom-weaver-libarchive-sys/write-extra"]
 
 [dependencies]
-akv = "0.1.0"
-rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-akv.workspace = true
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-libarchive-sys = { workspace = true, default-features = false }
 tracing = { workspace = true }

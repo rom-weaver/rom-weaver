@@ -1,9 +1,12 @@
 [package]
 name = "rom-weaver-containers"
 authors.workspace = true
+description.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
+publish.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -12,10 +15,10 @@ version.workspace = true
 ciso.workspace = true
 nod.workspace = true
 rayon.workspace = true
-rom-weaver-codecs = { path = "../rom-weaver-codecs" }
-rom-weaver-checksum = { path = "../rom-weaver-checksum" }
-rom-weaver-chd = { path = "../rom-weaver-chd" }
-rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
+rom-weaver-chd = { path = "../rom-weaver-chd", version = "0.5.0" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-libarchive = { workspace = true, default-features = false, features = ["write-archives"] }
 serde_json.workspace = true
 tracing.workspace = true
@@ -28,5 +31,5 @@ chd.workspace = true
 claxon.workspace = true
 flate2.workspace = true
 nod = { workspace = true, features = ["compress-lzma"] }
-rom-weaver-chd = { path = "../rom-weaver-chd", features = ["test-utils"] }
+rom-weaver-chd = { path = "../rom-weaver-chd", version = "0.5.0", features = ["test-utils"] }
 tar.workspace = true

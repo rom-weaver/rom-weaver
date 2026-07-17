@@ -1,9 +1,12 @@
 [package]
 name = "rom-weaver-patches"
 authors.workspace = true
+description.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
+publish.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -13,10 +16,10 @@ bzip2.workspace = true
 crc32fast.workspace = true
 md-5.workspace = true
 qbsdiff.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum" }
-rom-weaver-codecs = { path = "../rom-weaver-codecs" }
-rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-xdelta = { path = "../rom-weaver-xdelta" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
+rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
+rom-weaver-xdelta = { path = "../rom-weaver-xdelta", version = "0.5.0" }
 rayon.workspace = true
 serde_json.workspace = true
 sha1.workspace = true

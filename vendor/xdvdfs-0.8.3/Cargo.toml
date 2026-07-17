@@ -11,8 +11,8 @@
 
 [package]
 edition = "2021"
-name = "xdvdfs"
-version = "0.8.3"
+name = "rom-weaver-xdvdfs"
+version.workspace = true
 build = false
 exclude = [
     "**/*.iso",
@@ -23,7 +23,7 @@ autoexamples = false
 autotests = false
 autobenches = false
 description = "Library for interacting with XISO/XDVDFS images"
-homepage = "https://github.com/antangelo/xdvdfs"
+homepage.workspace = true
 readme = "README.md"
 keywords = [
     "no_std",
@@ -31,7 +31,9 @@ keywords = [
     "xdvdfs",
 ]
 license = "MIT"
-repository = "https://github.com/antangelo/xdvdfs"
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "xdvdfs"
@@ -86,12 +88,6 @@ default-features = false
 version = "0.6.0"
 optional = true
 default-features = false
-
-[dev-dependencies.futures]
-version = "0.3.28"
-
-[dev-dependencies.rand]
-version = "0.8.5"
 
 [features]
 checksum = ["sha3"]

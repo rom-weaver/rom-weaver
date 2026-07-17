@@ -10,7 +10,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use akv::reader::ArchiveReader as RegularArchiveReader;
+use rom_weaver_akv::reader::ArchiveReader as RegularArchiveReader;
 use rom_weaver_core::{Result, RomWeaverError};
 
 pub use rom_weaver_libarchive_sys as sys;

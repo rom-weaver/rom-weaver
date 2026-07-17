@@ -1,6 +1,6 @@
 # rom-weaver
 
-`rom-weaver` is a source-available toolkit by [Brandon O'Casey](https://github.com/brandonocasey)
+`rom-weaver` is an open-source toolkit by [Brandon O'Casey](https://github.com/brandonocasey)
 for inspecting, patching, transforming, and preserving video game ROMs and
 disc images. It combines a native CLI, WebAssembly runtime, and browser webapp
 for working with files locally in your browser or terminal.
@@ -31,9 +31,16 @@ npm install --global rom-weaver
 rom-weaver --help
 ```
 
-The package requires Node.js 22 or newer. The browser webapp continues to use
-the separate WASM build described below. Native npm packages currently target
-macOS arm64/x64, Linux x64 glibc, and Windows x64.
+To build and install the CLI from source through Cargo instead:
+
+```bash
+cargo install rom-weaver-cli
+```
+
+The npm package requires Node.js 22 or newer. The Cargo install requires Rust
+1.95 and a native build toolchain with CMake and Clang. The browser webapp
+continues to use the separate WASM build described below. Native npm packages
+currently target macOS arm64/x64, Linux x64 glibc, and Windows x64.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the workspace layout,
 crate graph, threading model, and the Rust⇄TypeScript boundary.
@@ -346,8 +353,14 @@ See [`REFERENCES.md`](REFERENCES.md) for format specs and reference implementati
 
 ## License
 
-rom-weaver is source-available under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md): free for personal and
-other noncommercial use; commercial use requires a separate license from the
-author. Bundled third-party components remain under their own licenses - see
-[`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+Copyright (C) Brandon O'Casey
+
+rom-weaver is free and open-source software under the
+[GNU Affero General Public License](LICENSE.md), version 3 or (at your
+option) any later version (`AGPL-3.0-or-later`): use,
+modify, and redistribute it freely - including commercially - provided that
+works based on it, including those offered as network services, publish their
+source under the same license. Separate commercial license terms are
+available from the author for uses the AGPL doesn't fit. Bundled third-party
+components remain under their own licenses - see [`NOTICE`](NOTICE) and
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

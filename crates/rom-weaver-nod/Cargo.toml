@@ -1,0 +1,97 @@
+[package]
+name = "rom-weaver-nod"
+authors = ["Luke Street <luke@street.dev>"]
+categories = ["command-line-utilities", "parser-implementations"]
+description = "GameCube and Wii disc image support used by rom-weaver"
+edition.workspace = true
+include = ["src/**/*.rs", "LICENSE-*"]
+keywords = ["gamecube", "wii", "iso", "wbfs", "rvz"]
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+name = "nod"
+
+[features]
+default = [
+    "extract-bzip2-vendored",
+    "compress-bzip2-vendored",
+    "extract-lzma-vendored",
+    "compress-lzma-vendored",
+    "extract-zlib-vendored",
+    "compress-zlib-vendored",
+    "extract-zstd-vendored",
+    "compress-zstd-vendored",
+    "threading",
+]
+compress-bzip2 = []
+extract-bzip2 = []
+bzip2-vendored = ["dep:bzip2-sys"]
+bzip2-static = ["bzip2-vendored", "bzip2-sys/static"]
+extract-bzip2-vendored = ["extract-bzip2", "bzip2-vendored"]
+extract-bzip2-static = ["extract-bzip2", "bzip2-static"]
+compress-bzip2-vendored = ["compress-bzip2", "bzip2-vendored"]
+compress-bzip2-static = ["compress-bzip2", "bzip2-static"]
+compress-lzma = []
+extract-lzma = []
+lzma-vendored = ["dep:liblzma-sys"]
+lzma-static = ["lzma-vendored", "liblzma-sys/static"]
+extract-lzma-vendored = ["extract-lzma", "lzma-vendored"]
+extract-lzma-static = ["extract-lzma", "lzma-static"]
+compress-lzma-vendored = ["compress-lzma", "lzma-vendored"]
+compress-lzma-static = ["compress-lzma", "lzma-static"]
+compress-zlib = ["dep:adler2"]
+extract-zlib = ["dep:adler2"]
+zlib-vendored = ["dep:libz-sys"]
+zlib-static = ["zlib-vendored", "libz-sys/static"]
+extract-zlib-vendored = ["extract-zlib", "zlib-vendored"]
+extract-zlib-static = ["extract-zlib", "zlib-static"]
+compress-zlib-vendored = ["compress-zlib", "zlib-vendored"]
+compress-zlib-static = ["compress-zlib", "zlib-static"]
+compress-zstd = []
+extract-zstd = []
+zstd-vendored = ["dep:zstd-sys"]
+zstd-static = ["zstd-vendored"]
+extract-zstd-vendored = ["extract-zstd", "zstd-vendored"]
+extract-zstd-static = ["extract-zstd", "zstd-static"]
+compress-zstd-vendored = ["compress-zstd", "zstd-vendored"]
+compress-zstd-static = ["compress-zstd", "zstd-static"]
+openssl = ["dep:openssl"]
+openssl-vendored = ["openssl", "openssl/vendored"]
+python = ["dep:pyo3", "compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"]
+threading = ["dep:crossbeam-channel", "dep:crossbeam-utils"]
+
+[dependencies]
+adler2 = { workspace = true, optional = true }
+aes = "0.9.1"
+base16ct = "1.0"
+block-padding = "0.4"
+bytes = "1.11"
+bzip2-sys = { version = "0.1.13", optional = true }
+cbc = "0.2.0-rc.3"
+crc32fast.workspace = true
+crossbeam-channel = { version = "0.5", optional = true }
+crossbeam-utils = { version = "0.8", optional = true }
+crypto-common = "0.2"
+digest.workspace = true
+dyn-clone = "1.0"
+encoding_rs = "0.8"
+itertools = "0.14"
+liblzma-sys = { workspace = true, optional = true }
+libz-sys = { version = "1.1", optional = true }
+lru = "0.16"
+md-5.workspace = true
+openssl = { version = "0.10", optional = true }
+polonius-the-crab = "0.5"
+pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"], optional = true }
+sha1.workspace = true
+simple_moving_average = "1.0"
+thiserror.workspace = true
+tracing.workspace = true
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+zerocopy.workspace = true
+zstd-sys = { workspace = true, optional = true }

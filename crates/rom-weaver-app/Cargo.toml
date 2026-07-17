@@ -1,9 +1,12 @@
 [package]
 name = "rom-weaver-app"
 authors.workspace = true
+description.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
+publish.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -13,15 +16,15 @@ typescript-types = ["dep:ts-rs", "rom-weaver-core/typescript-types"]
 
 [dependencies]
 flate2.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum" }
-rom-weaver-cheats = { path = "../rom-weaver-cheats" }
-rom-weaver-codecs = { path = "../rom-weaver-codecs" }
-rom-weaver-containers = { path = "../rom-weaver-containers" }
-rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-dcp = { path = "../rom-weaver-dcp" }
-rom-weaver-gdrom = { path = "../rom-weaver-gdrom" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
+rom-weaver-cheats = { path = "../rom-weaver-cheats", version = "0.5.0" }
+rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
+rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.5.0" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
+rom-weaver-dcp = { path = "../rom-weaver-dcp", version = "0.5.0" }
+rom-weaver-gdrom = { path = "../rom-weaver-gdrom", version = "0.5.0" }
 rom-weaver-libarchive = { workspace = true, default-features = false }
-rom-weaver-patches = { path = "../rom-weaver-patches" }
+rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.5.0" }
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true

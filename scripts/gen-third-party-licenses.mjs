@@ -20,6 +20,13 @@ const INVENTORY_FILE = path.join(REPO_ROOT, 'THIRD_PARTY_LICENSES.md');
 const LICENSES_DIR = path.join(REPO_ROOT, 'third_party', 'licenses');
 
 const CRATES_IO_SOURCE = 'registry+https://github.com/rust-lang/crates.io-index';
+const VENDORED_WORKSPACE_PACKAGES = new Set([
+  'rom-weaver-akv',
+  'rom-weaver-chd-core',
+  'rom-weaver-nod',
+  'rom-weaver-qbsdiff',
+  'rom-weaver-xdvdfs',
+]);
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;
 
@@ -36,10 +43,11 @@ function loadCargoMetadata() {
 /**
  * Walk the resolve graph from the workspace members over normal + build edges,
  * skipping dev-only edges. Returns the set of reachable package ids, excluding
- * the workspace members themselves.
+ * first-party workspace members but retaining vendored third-party forks.
  */
 function resolveThirdPartyIds(metadata) {
   const workspaceIds = new Set(metadata.workspace_members);
+  const packagesById = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
   const nodesById = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
 
   const reached = new Set();
@@ -68,7 +76,12 @@ function resolveThirdPartyIds(metadata) {
   }
 
   for (const id of workspaceIds) {
-    reached.delete(id);
+    const pkg = packagesById.get(id);
+    if (pkg !== undefined && VENDORED_WORKSPACE_PACKAGES.has(pkg.name)) {
+      reached.add(id);
+    } else {
+      reached.delete(id);
+    }
   }
   return reached;
 }
@@ -153,7 +166,7 @@ function renderInventory(rows) {
     'resolved Cargo dependency graph for `rom-weaver`, covering every',
   );
   lines.push(
-    'non-workspace package reachable from the workspace members over normal and',
+    'third-party package reachable from the workspace members over normal and',
   );
   lines.push(
     'build dependency edges (equivalent to',
@@ -179,7 +192,10 @@ function renderInventory(rows) {
   lines.push('');
   lines.push('## Notes');
   lines.push('');
-  lines.push('- This list excludes local workspace crates (`rom-weaver-*`).');
+  lines.push(
+    '- This list excludes first-party workspace crates and includes vendored',
+  );
+  lines.push('  third-party forks published under `rom-weaver-*` names.');
   lines.push(
     '- The License Expression column is the SPDX expression declared in each',
   );

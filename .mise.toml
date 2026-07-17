@@ -122,7 +122,7 @@ run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"
-run = "cargo clippy --workspace --all-targets -- -D warnings"
+run = "cargo clippy --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs --all-targets --no-deps -- -D warnings"
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"
@@ -147,7 +147,7 @@ git -C "{{ config_root }}" diff --exit-code -- THIRD_PARTY_LICENSES.md third_par
 
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
-run = "cargo test --workspace"
+run = "cargo test --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
@@ -160,7 +160,7 @@ run = '''
 set -euo pipefail
 out_dir="{{ config_root }}/dist/coverage/rust"
 mkdir -p "$out_dir"
-cargo llvm-cov --workspace --no-report
+cargo llvm-cov --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs --no-report
 cargo llvm-cov report --html --output-dir "$out_dir"
 cargo llvm-cov report --lcov --output-path "$out_dir/lcov.info"
 '''

@@ -11,8 +11,8 @@
 
 [package]
 edition = "2021"
-name = "qbsdiff"
-version = "1.4.4"
+name = "rom-weaver-qbsdiff"
+version.workspace = true
 authors = ["hucsmn <hucsmn@hotmail.com>"]
 build = false
 exclude = ["/assets"]
@@ -22,14 +22,16 @@ autoexamples = false
 autotests = false
 autobenches = false
 description = "Fast and memory saving bsdiff 4.x compatible delta compressor and patcher."
-homepage = "https://github.com/hucsmn/qbsdiff"
+homepage.workspace = true
 readme = "README.md"
 keywords = [
     "bsdiff",
     "delta",
 ]
 license = "MIT"
-repository = "https://github.com/hucsmn/qbsdiff"
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [features]
 cmd = ["dep:clap"]
@@ -49,27 +51,6 @@ name = "qbspatch"
 path = "cmd/qbspatch.rs"
 required-features = ["cmd"]
 
-[[test]]
-name = "compatible"
-path = "tests/compatible.rs"
-
-[[test]]
-name = "invertible"
-path = "tests/invertible.rs"
-
-[[test]]
-name = "parallel_compatible"
-path = "tests/parallel_compatible.rs"
-
-[[test]]
-name = "parallel_invertible"
-path = "tests/parallel_invertible.rs"
-
-[[bench]]
-name = "invoke"
-path = "benches/invoke.rs"
-harness = false
-
 [dependencies.byteorder]
 version = "1.5"
 
@@ -88,10 +69,3 @@ version = "1.10"
 
 [dependencies.suffix_array]
 version = "0.5"
-
-[dev-dependencies.criterion]
-version = "0.7"
-features = ["html_reports"]
-
-[dev-dependencies.qbsdiff_test_bench_utils]
-version = "0.1"

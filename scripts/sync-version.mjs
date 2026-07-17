@@ -72,7 +72,7 @@ async function updateWorkspacePackageVersion(version) {
 }
 
 async function updateInternalCargoDependencyVersions(cargoTomlPaths, version) {
-  const dependencyRegex = /^(\s*rom-weaver-[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bversion\s*=\s*")([^"]+)("[^}\n]*\}\s*)$/gm;
+  const dependencyRegex = /^(?=\s*(?:rom-weaver-[A-Za-z0-9_-]+\s*=|[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bpackage\s*=\s*"rom-weaver-[^"]+"))(\s*[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bversion\s*=\s*")([^"]+)("[^}\n]*\}\s*)$/gm;
   let changed = false;
 
   for (const cargoTomlPath of cargoTomlPaths) {
