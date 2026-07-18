@@ -8,7 +8,7 @@ const rootWithCores = (hardwareConcurrency: number | undefined): typeof globalTh
   ({ navigator: { hardwareConcurrency } }) as unknown as typeof globalThis;
 
 const checksumCommand = (threads: unknown): RomWeaverRunInput =>
-  ({ args: { source: "rom.bin", threads }, type: "checksum" }) as unknown as RomWeaverRunInput;
+  ({ args: { input: "rom.bin", threads }, type: "checksum" }) as unknown as RomWeaverRunInput;
 
 describe("resolveBrowserDefaultThreads", () => {
   it("scales the implicit default to the reported core count (floor 4, ceiling 64)", () => {
