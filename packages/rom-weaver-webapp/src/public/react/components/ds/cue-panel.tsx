@@ -2,40 +2,43 @@ import Check from "lucide-react/dist/esm/icons/check.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
 import Disc3 from "lucide-react/dist/esm/icons/disc-3.js";
 import { join } from "./cx.ts";
-import { Drawer, DrawerReadout } from "./drawer.tsx";
+import { Drawer } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
 /**
  * Read-only collapsible section showing the CUE/GDI sheet(s) that describe a
- * bin/track ROM, rendered as the loom code block: a title bar with the copy
- * button over a monospace listing on a recessed surface. The sheets are never
+ * bin/track ROM, rendered as the loom code block with a copy button over a
+ * monospace listing on a recessed surface. The sheets are never
  * patched or checksummed, so they ride alongside the ROM rather than appearing
  * as their own input.
  */
 
-const CUE_FILE_ENTRY_REGEX = /^\s*FILE\s+"([^"]+)"/im;
-
-const getCueSublabel = (cueText: string): string => CUE_FILE_ENTRY_REGEX.exec(cueText)?.[1] || "cue sheet";
-
-/** A single sheet's title bar (with its own copy button) over the listing. When
+/** A single sheet's copy control over the listing. When
  * a disc carries both a cue and a gdi, each renders as one of these sub-blocks
  * inside the shared sheets drawer, so the label is shown to tell them apart. */
 const SheetBlock = ({ label, showLabel, text }: { label: string; showLabel: boolean; text: string }) => {
   const { copied, copy } = useClipboardCopy(text);
+  const copyButton = (
+    <button
+      aria-label={`Copy ${label} sheet`}
+      className={join("copy cue-copy rw-cue-copy", copied && "copied")}
+      onClick={copy}
+      title={`Copy ${label}`}
+      type="button"
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    </button>
+  );
   return (
-    <div className="cue-sub">
-      <div className="cue-sub-head">
-        {showLabel ? <span className="cue-sub-lab">{label}</span> : null}
-        <button
-          aria-label={`Copy ${label} sheet`}
-          className={join("copy cue-copy rw-cue-copy", copied && "copied")}
-          onClick={copy}
-          title={`Copy ${label}`}
-          type="button"
-        >
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-        </button>
-      </div>
+    <div className={join("cue-sub", !showLabel && "cue-sub-single")}>
+      {showLabel ? (
+        <div className="cue-sub-head">
+          <span className="cue-sub-lab">{label}</span>
+          {copyButton}
+        </div>
+      ) : (
+        copyButton
+      )}
       <pre className="cue-text mono">{text}</pre>
     </div>
   );
@@ -65,15 +68,12 @@ const DiscSheetsPanel = ({
   if (!first) return null;
   const both = sheets.length > 1;
   const label = both ? "CUE / GDI" : first.label;
-  const singleSublabel = first.label === "GDI" ? "gd-rom sheet" : getCueSublabel(first.text);
-  const sublabel = both ? "disc index" : singleSublabel;
   return (
     <Drawer
       className="cue rw-cue-section"
       defaultOpen={defaultOpen}
       label={label}
       labelIcon={<Disc3 aria-hidden="true" />}
-      readouts={<DrawerReadout muted>{sublabel}</DrawerReadout>}
     >
       {sheets.map((sheet) => (
         <SheetBlock key={sheet.label} label={sheet.label} showLabel={both} text={sheet.text} />
