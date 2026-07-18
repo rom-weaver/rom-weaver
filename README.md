@@ -26,6 +26,14 @@
  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
+## Beta status
+
+rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
+breaking changes may still happen between minor releases. Patching,
+compressing, extracting, and bundling have all been tested extensively. If you
+rely on the APIs or CLI flags, expect things to be a bit tougher: those
+interfaces may still change as the project heads toward v1.0.
+
 ## Features
 
 - **Apply and create patches.** IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
