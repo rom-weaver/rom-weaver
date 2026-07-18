@@ -28,8 +28,12 @@ type ParsedBundleRom = {
 };
 
 type ParsedBundlePatchEntry = {
+  /** Stable patch-slot identity retained across source replacements (schema v3). */
   id?: string;
+  /** Author-controlled release version; distinct from the bundle schema version (schema v3). */
   version?: string;
+  /** Patch author credit (schema v3). */
+  author?: string;
   name?: string;
   description?: string;
   /** An optional patch starts deselected; absent/false means applied by default. */

@@ -13,6 +13,8 @@ type BundlePatchMeta = {
   id?: string;
   /** Author-controlled patch release version; distinct from the schema version. */
   version?: string;
+  /** Patch author credit. */
+  author?: string;
   name?: string;
   label?: string;
   description?: string;
@@ -94,6 +96,8 @@ const useBundleApplySession = ({
           ...(entry.name ? { name: entry.name } : {}),
           ...(entry.label ? { label: entry.label } : {}),
           ...(entry.description ? { description: entry.description } : {}),
+          ...(entry.version ? { version: entry.version } : {}),
+          ...(entry.author ? { author: entry.author } : {}),
           ...(entry.inputChecks ? { inputChecks: entry.inputChecks } : {}),
           ...(entry.outputChecks ? { outputChecks: entry.outputChecks } : {}),
           ...(entry.basis ? { basis: entry.basis } : {}),

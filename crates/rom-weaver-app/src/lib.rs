@@ -176,7 +176,7 @@ pub enum BundleCommands {
         not(target_arch = "wasm32"),
         command(
             about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files",
-            long_about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header) bind to the most recent preceding --patch. --output accepts rom-weaver-bundle.json, rom-weaver-bundle.json.gz, or rom-weaver-bundle.json.zst; --bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names."
+            long_about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-id, --patch-version, --patch-author, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header) bind to the most recent preceding --patch. --output accepts rom-weaver-bundle.json, rom-weaver-bundle.json.gz, or rom-weaver-bundle.json.zst; --bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names."
         )
     )]
     Create(Box<BundleCreateCommand>),

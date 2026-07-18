@@ -185,50 +185,68 @@ type PatchMetaFieldProps = {
   onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
 };
 
-/** Pencil-editing a card: the title IS the patch's display name, edited in
- * place (placeholder = the file name it falls back to). A textarea only so a
- * long name can wrap and grow - names never contain newlines, Enter commits. */
-const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
-  <textarea
-    aria-label="Patch name"
-    className="nm-input"
-    defaultValue={meta?.name || ""}
-    id={`rom-weaver-patch-name-${index}`}
-    key={`patch-name:${item.key ?? index}:${meta?.name || ""}`}
-    onBlur={(event) => onMetaChange({ name: event.currentTarget.value.trim() || undefined })}
-    onInput={(event) => autosizeTextarea(event.currentTarget)}
-    onKeyDown={(event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.currentTarget.blur();
-      }
-    }}
-    placeholder={item.fileName.replace(/\.[^.]+$/, "")}
-    ref={autosizeTextarea}
-    rows={1}
-    spellCheck={false}
-  />
+/** A single-line commit input for the meta form: trims on blur, Enter commits. */
+const PatchMetaTextField = ({
+  field,
+  index,
+  item,
+  label,
+  meta,
+  onMetaChange,
+  onSubmit,
+  placeholder,
+}: PatchMetaFieldProps & {
+  field: "name" | "version" | "author";
+  label: string;
+  onSubmit: () => void;
+  placeholder: string;
+}) => (
+  <div className={`ofld patch-meta-field patch-${field}-meta-field`}>
+    <label className="ofld-l" htmlFor={`rom-weaver-patch-${field}-${index}`}>
+      {label}
+    </label>
+    <input
+      className="input popt-input"
+      defaultValue={meta?.[field] || ""}
+      id={`rom-weaver-patch-${field}-${index}`}
+      key={`patch-${field}:${item.key ?? index}:${meta?.[field] || ""}`}
+      onBlur={(event) => onMetaChange({ [field]: event.currentTarget.value.trim() || undefined })}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+          onSubmit();
+        }
+      }}
+      placeholder={placeholder}
+      spellCheck={false}
+      type="text"
+    />
+  </div>
 );
 
-/** Pencil-editing a card: the description editor sits inline, in place of the
- * static description line. */
-const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
+/** Pencil-editing a card: ONE form holding every editable patch field - name,
+ * description, version, author - in place of the static description line.
+ * Each field commits on blur; Enter commits and closes the form (Shift+Enter
+ * keeps a newline in the description). */
+const PatchMetaFields = ({
+  index,
+  item,
+  meta,
+  onMetaChange,
+  onSubmit,
+}: PatchMetaFieldProps & { onSubmit: () => void }) => (
   <div className="patch-meta-inline">
-    <div className="ofld patch-version-field">
-      <label className="ofld-l" htmlFor={`rom-weaver-patch-version-${index}`}>
-        Version
-      </label>
-      <input
-        className="input mono popt-input"
-        defaultValue={meta?.version || ""}
-        id={`rom-weaver-patch-version-${index}`}
-        key={`patch-version:${item.key ?? index}:${meta?.version || ""}`}
-        onBlur={(event) => onMetaChange({ version: event.currentTarget.value.trim() || undefined })}
-        placeholder="1.0.0"
-        spellCheck={false}
-        type="text"
-      />
-    </div>
+    <PatchMetaTextField
+      field="name"
+      index={index}
+      item={item}
+      label="Name"
+      meta={meta}
+      onMetaChange={onMetaChange}
+      onSubmit={onSubmit}
+      placeholder={item.fileName.replace(/\.[^.]+$/, "")}
+    />
     <div className="ofld patch-description-field">
       <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
         Description
@@ -240,9 +258,38 @@ const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
         key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
         onBlur={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
         onInput={(event) => autosizeTextarea(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.blur();
+            onSubmit();
+          }
+        }}
         placeholder="What this patch changes"
         ref={autosizeTextarea}
         rows={1}
+      />
+    </div>
+    <div className="patch-meta-cols">
+      <PatchMetaTextField
+        field="version"
+        index={index}
+        item={item}
+        label="Version"
+        meta={meta}
+        onMetaChange={onMetaChange}
+        onSubmit={onSubmit}
+        placeholder="1.0"
+      />
+      <PatchMetaTextField
+        field="author"
+        index={index}
+        item={item}
+        label="Author"
+        meta={meta}
+        onMetaChange={onMetaChange}
+        onSubmit={onSubmit}
+        placeholder="Who made it"
       />
     </div>
   </div>
@@ -938,29 +985,25 @@ const PatchReplaceButton = ({
   );
 };
 
-/** The pencil that opens the card's inline name + description editors. Shows a
- * check while editing (commit happens on each field's blur; the toggle just
- * closes the editors). Two of them can ride a card: one on the name line, one on
- * the description line (only when a description exists) - both drive the same
- * editor, so they carry distinct ids/labels but identical behaviour. */
+/** The pencil on the name line that opens the card's single patch-details
+ * form (name, description, version, author). Shows a check while editing
+ * (commit happens on each field's blur; the toggle just closes the form). */
 const PatchMetaEditToggle = ({
   editing,
   index,
   onToggle,
-  variant = "name",
 }: {
   editing: boolean;
   index: number;
   onToggle: () => void;
-  variant?: "name" | "desc";
 }) => (
   <button
     aria-expanded={editing}
-    aria-label={editing ? "Done editing patch name and description" : "Edit patch name and description"}
+    aria-label={editing ? "Done editing patch details" : "Edit patch details"}
     className={editing ? "nm-edit is-editing" : "nm-edit"}
-    id={`rom-weaver-patch-meta-edit-${variant === "desc" ? "desc-" : ""}${index}`}
+    id={`rom-weaver-patch-meta-edit-${index}`}
     onClick={onToggle}
-    title={editing ? "Done" : "Edit name & description"}
+    title={editing ? "Done" : "Edit patch details"}
     type="button"
   >
     {editing ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
@@ -1060,23 +1103,18 @@ const PatchCard = ({
       description={
         editing && onMetaChange ? (
           <div className="patch-desc-line is-editing">
-            <PatchMetaFields index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
-            <PatchMetaEditToggle editing index={index} onToggle={() => setMetaEditing(!metaEditing)} variant="desc" />
+            <PatchMetaFields
+              index={index}
+              item={item}
+              meta={meta}
+              onMetaChange={onMetaChange}
+              onSubmit={() => setMetaEditing(false)}
+            />
           </div>
         ) : description ? (
-          <div className="patch-desc-line">
-            <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
-              {description}
-            </p>
-            {onMetaChange && !staging ? (
-              <PatchMetaEditToggle
-                editing={editing}
-                index={index}
-                onToggle={() => setMetaEditing(!metaEditing)}
-                variant="desc"
-              />
-            ) : null}
-          </div>
+          <p className="patch-desc" id={`rom-weaver-patch-card-description-${index}`}>
+            {description}
+          </p>
         ) : undefined
       }
       handle={
@@ -1097,6 +1135,16 @@ const PatchCard = ({
           {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
           {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
           {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}
+          {meta?.version ? (
+            <span className="meta-fmt mono" id={`rom-weaver-patch-card-version-${index}`}>
+              {meta.version}
+            </span>
+          ) : null}
+          {meta?.author ? (
+            <span className="meta-fmt" id={`rom-weaver-patch-card-author-${index}`}>
+              {meta.author}
+            </span>
+          ) : null}
           {/* The patch's single contextual control (target OR header OR byte
               order - never more than one applies) closes the meta line, in
               the same slot after size and format. */}
@@ -1120,22 +1168,20 @@ const PatchCard = ({
           // The first archive-path entry is the source archive itself (shown
           // in the Extract drawer / picker); the rest is the folder path
           // within it, surfaced inline on the name.
+          // A custom display name replaces the whole title, folder prefix included.
           folderPath={
-            (item.archivePathEntries || [])
-              .slice(1)
-              .map((entry) => entry.fileName)
-              .filter(Boolean)
-              .join(" › ") || undefined
+            meta?.name
+              ? undefined
+              : (item.archivePathEntries || [])
+                  .slice(1)
+                  .map((entry) => entry.fileName)
+                  .filter(Boolean)
+                  .join(" › ") || undefined
           }
           legacyFileClassName="rom-weaver-patch-stack-file"
           nameActions={
             onMetaChange && !staging ? (
               <PatchMetaEditToggle editing={editing} index={index} onToggle={() => setMetaEditing(!metaEditing)} />
-            ) : undefined
-          }
-          nameEditor={
-            editing && onMetaChange ? (
-              <PatchNameInline index={index} item={item} meta={meta} onMetaChange={onMetaChange} />
             ) : undefined
           }
           parentCompressions={item.archivePathEntries}

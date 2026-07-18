@@ -481,6 +481,7 @@ type WorkflowRuntimeBundle = {
       fileName?: string;
       id?: string;
       version?: string;
+      author?: string;
       name?: string;
       description?: string;
       label?: string;

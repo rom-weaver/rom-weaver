@@ -236,6 +236,7 @@ impl CliApp {
             patches.push(BundlePatchEntry {
                 id: spec.id.clone(),
                 version: spec.version.clone(),
+                author: spec.author.clone(),
                 name: spec.name.clone(),
                 description: spec.description.clone(),
                 optional: spec.optional.unwrap_or(false),
@@ -464,6 +465,7 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
     let versions = aligned_metadata(&args.patch_version, count, "--patch-version")?;
     let names = aligned_metadata(&args.patch_name, count, "--patch-name")?;
     let descriptions = aligned_metadata(&args.patch_description, count, "--patch-description")?;
+    let authors = aligned_metadata(&args.patch_author, count, "--patch-author")?;
     let labels = aligned_metadata(&args.patch_label, count, "--patch-label")?;
     let optionals = aligned_metadata(&args.patch_optional, count, "--patch-optional")?;
     let source_urls = aligned_metadata(&args.patch_source_url, count, "--patch-source-url")?;
@@ -479,6 +481,7 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
             path: path.clone(),
             id: ids[index].clone(),
             version: versions[index].clone(),
+            author: authors[index].clone(),
             name: names[index].clone(),
             description: descriptions[index].clone(),
             label: labels[index].clone(),

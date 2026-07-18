@@ -833,6 +833,10 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
             main.to_str().expect("path"),
             "--patch-name",
             "Main hack",
+            "--patch-version",
+            "1.2",
+            "--patch-author",
+            "Weaver",
             "--patch-optional",
             "false",
             "--patch-label",
@@ -884,6 +888,8 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
     );
     let first = &parsed["patches"][0];
     assert_eq!(first["name"], "Main hack");
+    assert_eq!(first["version"], "1.2");
+    assert_eq!(first["author"], "Weaver");
     assert!(
         first.get("optional").is_none(),
         "explicit --patch-optional false emits nothing"
@@ -896,6 +902,8 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
     );
     let second = &parsed["patches"][1];
     assert_eq!(second["optional"], true);
+    assert!(second["version"].is_null());
+    assert!(second["author"].is_null());
     assert_eq!(second["description"], "extra maps");
     assert!(second["name"].is_null());
     assert_eq!(parsed["output"]["name"], "patched.bin");

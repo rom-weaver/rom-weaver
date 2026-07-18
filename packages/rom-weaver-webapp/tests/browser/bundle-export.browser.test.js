@@ -92,10 +92,19 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // The committed description remounts the keyed inline field (the static card
   // line stays hidden while editing) - wait for that render before exporting.
   await expect.poll(() => document.getElementById("rom-weaver-patch-description-0") !== descriptionInput).toBe(true);
+  // Version + author ride the same form and export with the entry.
   const versionInput = document.getElementById("rom-weaver-patch-version-0");
   expect(versionInput).not.toBeNull();
   setFormControlValue(versionInput, "1.4.0");
   versionInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  const authorInput = document.getElementById("rom-weaver-patch-author-0");
+  expect(authorInput).not.toBeNull();
+  setFormControlValue(authorInput, "Weaver");
+  authorInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  // Committed values remount the keyed fields - wait for both renders so the
+  // export click reads the updated metadata.
+  await expect.poll(() => document.getElementById("rom-weaver-patch-version-0") !== versionInput).toBe(true);
+  await expect.poll(() => document.getElementById("rom-weaver-patch-author-0") !== authorInput).toBe(true);
 
   // Replacing the source keeps this slot's inline metadata and version edits.
   const replacementFile = new File([await patchFile.arrayBuffer()], "replacement.ips", {
@@ -109,7 +118,6 @@ test("export bundle bundles the session from main-page options with a checks-onl
     )
     .toBe("replacement.ips");
   await waitForApplyButtonEnabled();
-
   // Expected input checks live in the Checks drawer: open it and add a CRC32.
   document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
   const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"));
@@ -149,6 +157,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(patchEntry.path).toBe("change.ips");
   expect(patchEntry.optional).toBeUndefined();
   expect(patchEntry.name).toBe("Core change");
+  expect(patchEntry.author).toBe("Weaver");
   expect(patchEntry.description).toBe("Adds the change");
   // The hand-typed crc32 differs from the rom checks, so the entry keeps its
   // own inputChecks instead of relying on rom.checks.

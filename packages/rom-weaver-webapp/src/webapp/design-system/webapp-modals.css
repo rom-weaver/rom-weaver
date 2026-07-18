@@ -226,16 +226,6 @@
   width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
-/* The inline name textarea is a replaced box that cannot wrap around a
-   float - keep it beside the buttons by giving up their width explicitly.
-   inline-block (not block) so the confirm/save check rides on the same line
-   rather than dropping beneath it; the width leaves room for the check + the
-   floated position/remove buttons. */
-.rw-app #rom-weaver-list-patch-stack > .card.patch .nmline > .nm-input {
-  display: inline-block; vertical-align: middle;
-  width: calc(100% - 2 * var(--ctrl-h) - 22px - var(--sp-s) - var(--sp-xs) - var(--sp-m));
-}
-
 /* ── wide-bench layout ──
    Desktops get real use out of the width: the app column widens and the two
    parallel input stages sit side by side - ROM | Patches on apply, Original |

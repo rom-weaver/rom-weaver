@@ -105,6 +105,8 @@ const parseBundlePatchEntry = (value: unknown): ParsedBundlePatchEntry => {
   if (name !== undefined) entry.name = name;
   const description = toStringValue(record.description);
   if (description !== undefined) entry.description = description;
+  const author = toStringValue(record.author);
+  if (author !== undefined) entry.author = author;
   const label = toStringValue(record.label);
   if (label !== undefined) entry.label = label;
   const url = toStringValue(record.url);

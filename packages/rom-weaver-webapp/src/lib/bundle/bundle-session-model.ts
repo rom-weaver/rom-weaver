@@ -16,6 +16,7 @@ type BundlePlanEntry = {
   acquisition: BundleAcquisition;
   id?: string;
   version?: string;
+  author?: string;
   name?: string;
   description?: string;
   label?: string;
@@ -136,6 +137,7 @@ const buildBundleApplySessionPlan = (parsed: ParsedBundleParseResult, bundleUrl:
       acquisition: toAcquisition(patchSource.source, bundleUrl, `patch ${index + 1}`),
       ...(patch.id ? { id: patch.id } : {}),
       ...(patch.version ? { version: patch.version } : {}),
+      ...(patch.author ? { author: patch.author } : {}),
       ...(patch.name ? { name: patch.name } : {}),
       ...(patch.description ? { description: patch.description } : {}),
       ...(patch.label ? { label: patch.label } : {}),

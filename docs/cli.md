@@ -220,11 +220,12 @@ rom-weaver bundle create \
   --output rom-weaver-bundle.json
 ```
 
-Per-patch metadata flags (`--patch-id`, `--patch-version`, `--patch-name`,
-`--patch-description`, `--patch-optional`, `--patch-label`, `--patch-header`,
-and the chain-state checks) bind to the preceding `--patch`. Stable patch IDs
-let authors replace a patch in the webapp without losing its metadata; bump
-the patch version when publishing the replacement. `--bundle <archive>` packages the
+Per-patch metadata flags (`--patch-id`, `--patch-version`, `--patch-author`,
+`--patch-name`, `--patch-description`, `--patch-optional`, `--patch-label`,
+`--patch-header`, and the chain-state checks) bind to the preceding
+`--patch`. Stable patch IDs let authors replace a patch in the webapp without
+losing its metadata; bump the patch version when publishing the replacement.
+`--bundle <archive>` packages the
 bundle together with its sources into one shareable archive;
 `--no-bundle-rom` keeps the ROM out and records its checks only, which is
 the usual shape for distributing patches.

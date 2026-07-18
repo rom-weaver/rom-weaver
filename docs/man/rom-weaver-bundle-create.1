@@ -4,11 +4,11 @@
 .SH NAME
 rom\-weaver\-bundle\-create \- Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files
 .SH SYNOPSIS
-\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-\-rom\-url\fR] [\fB\-\-rom\-name\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-patch\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-patch\-id\fR] [\fB\-\-patch\-version\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-\-rom\-url\fR] [\fB\-\-rom\-name\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-patch\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-patch\-id\fR] [\fB\-\-patch\-version\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-author\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files.
 .PP
-ROM checks are computed from the actual file (crc32/md5/sha1 by default). Per\-patch metadata flags (\-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header) bind to the most recent preceding \-\-patch. \-\-output accepts rom\-weaver\-bundle.json, rom\-weaver\-bundle.json.gz, or rom\-weaver\-bundle.json.zst; \-\-bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names.
+ROM checks are computed from the actual file (crc32/md5/sha1 by default). Per\-patch metadata flags (\-\-patch\-id, \-\-patch\-version, \-\-patch\-author, \-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header) bind to the most recent preceding \-\-patch. \-\-output accepts rom\-weaver\-bundle.json, rom\-weaver\-bundle.json.gz, or rom\-weaver\-bundle.json.zst; \-\-bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names.
 .SH OPTIONS
 .TP
 \fB\-\-json\fR
@@ -54,7 +54,7 @@ Display/output\-naming file name for the rom entry
 Increase application log verbosity; repeat for debug and trace
 .TP
 \fB\-\-patch\fR \fI<PATCH>\fR
-Patch file to include, in apply order; repeat \-\-patch for each entry. \-\-patch\-id, \-\-patch\-version, \-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header bind to the preceding \-\-patch
+Patch file to include, in apply order; repeat \-\-patch for each entry. \-\-patch\-id, \-\-patch\-version, \-\-patch\-author, \-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header bind to the preceding \-\-patch
 .TP
 \fB\-q\fR, \fB\-\-quiet\fR
 Show only application errors
@@ -73,6 +73,9 @@ Display name for the preceding \-\-patch
 .TP
 \fB\-\-patch\-description\fR \fI<PATCH_DESCRIPTION>\fR
 Description for the preceding \-\-patch
+.TP
+\fB\-\-patch\-author\fR \fI<PATCH_AUTHOR>\fR
+Author credit for the preceding \-\-patch
 .TP
 \fB\-\-patch\-label\fR \fI<PATCH_LABEL>\fR
 Free\-form maturity or status label for the preceding \-\-patch

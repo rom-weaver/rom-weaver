@@ -8,7 +8,7 @@
   "required": ["version", "patches"],
   "properties": {
     "version": {
-      "description": "Bundle schema version. This build writes version 3 (which added stable patch identities and author-controlled patch versions) and reads versions 1-3.",
+      "description": "Bundle schema version. This build writes version 3 (version 2 added the per-patch `basis` field; version 3 added stable patch identities and the author-controlled `version`/`author` fields) and reads versions 1-3.",
       "type": "integer",
       "enum": [1, 2, 3]
     },
@@ -56,16 +56,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": {
-          "description": "Stable patch-slot identity retained when the source file is replaced.",
-          "type": "string",
-          "minLength": 1
-        },
-        "version": {
-          "description": "Author-controlled release version for this patch; distinct from the bundle schema version.",
-          "type": "string",
-          "minLength": 1
-        },
         "name": {
           "description": "Display / output-naming file name (defaults to the source's base name).",
           "type": "string"
@@ -90,6 +80,21 @@
       "additionalProperties": false,
       "oneOf": [{ "required": ["url"] }, { "required": ["path"] }],
       "properties": {
+        "id": {
+          "description": "Stable patch-slot identity retained when the source file is replaced.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "Author-controlled release version for this patch; distinct from the bundle schema version.",
+          "type": "string",
+          "minLength": 1
+        },
+        "author": {
+          "description": "Patch author credit. Added in version 3.",
+          "type": "string",
+          "minLength": 1
+        },
         "name": {
           "description": "Display name for the patch card.",
           "type": "string"

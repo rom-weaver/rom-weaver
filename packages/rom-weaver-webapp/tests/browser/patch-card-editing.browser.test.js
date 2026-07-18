@@ -97,6 +97,8 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).not.toBeNull();
   expect(document.getElementById("rom-weaver-patch-description-0")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-patch-version-0")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-patch-author-0")).not.toBeNull();
   expect(window.location.hash).toBe("");
   document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).toBeNull();

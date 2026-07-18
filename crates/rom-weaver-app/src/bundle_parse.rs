@@ -258,12 +258,13 @@ mod tests {
     #[test]
     fn parses_v3_patch_slot_metadata() {
         let bundle = parse_bundle_bytes(
-            br#"{ "version": 3, "patches": [ { "id": "main", "version": "1.4.0", "path": "main.bps" } ] }"#,
+            br#"{ "version": 3, "patches": [ { "id": "main", "version": "1.4.0", "author": "Weaver", "path": "main.bps" } ] }"#,
         )
         .expect("v3 bundle parses");
         assert_eq!(bundle.version, BUNDLE_VERSION);
         assert_eq!(bundle.patches[0].id.as_deref(), Some("main"));
         assert_eq!(bundle.patches[0].version.as_deref(), Some("1.4.0"));
+        assert_eq!(bundle.patches[0].author.as_deref(), Some("Weaver"));
     }
 
     #[test]
@@ -447,6 +448,7 @@ mod tests {
             patches: vec![BundlePatchEntry {
                 id: Some("main".to_owned()),
                 version: Some("1.0.0".to_owned()),
+                author: Some("Weaver".to_owned()),
                 name: Some("Main hack".to_owned()),
                 description: Some("The main event".to_owned()),
                 optional: true,

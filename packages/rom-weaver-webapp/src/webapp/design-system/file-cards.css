@@ -85,19 +85,10 @@
 /* patch description rides under the name (some patch types provide one) */
 /* the description is a full-width row below the header, at the card content edge */
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
-/* the description carries its own pencil (only when a description exists): the
-   text flows and the pencil trails it, aligned to the first line via the shared
-   .nm-edit vertical-align */
-.rw-app .patch-desc-line { min-width: 0; }
-.rw-app .patch-desc-line .patch-desc { display: inline; }
-.rw-app .patch-desc-line .nm-edit { width: 20px; height: 20px; }
-.rw-app .patch-desc-line .nm-edit svg { width: 12px; height: 12px; }
-/* Editing: the description field group flows in the row and its confirm/save
-   check trails it, aligned to the textarea's baseline row (bottom) so it sits
-   beside the field the way the name-row check sits beside the name input. */
-.rw-app .patch-desc-line.is-editing { display: flex; align-items: flex-end; gap: var(--sp-xs); }
-.rw-app .patch-desc-line.is-editing .patch-meta-inline { flex: 1 1 auto; min-width: 0; margin-block-start: 0; }
-.rw-app .patch-desc-line.is-editing .nm-edit { margin-block-end: 6px; }
+/* Editing: the patch-details form replaces the description row; the name-line
+   pencil (now a check) is the single open/close control. */
+.rw-app .patch-desc-line.is-editing { min-width: 0; }
+.rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; }
 /* weak-verification note under the name - explains the yellow card border */
 .rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
 .rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }

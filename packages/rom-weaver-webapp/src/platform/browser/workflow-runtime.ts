@@ -269,6 +269,7 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
           ...(outputName ? { outputName } : {}),
           outputPath,
           patchBases: patches.map((patch) => patch.basis || "auto"),
+          patchAuthors: patches.map((patch) => patch.author || ""),
           patchDescriptions: patches.map((patch) => patch.description || ""),
           patchHeaders: patches.map((patch) => patch.header || "auto"),
           patchInputChecks: patches.map((patch) => patch.inputChecks || ""),

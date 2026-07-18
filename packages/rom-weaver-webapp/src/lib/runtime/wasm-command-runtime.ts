@@ -984,6 +984,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     outputPath: string;
     /** Index-aligned declared input basis per patch ("auto" entries stay unwritten). */
     patchBases?: Array<"auto" | "base" | "previous">;
+    patchAuthors?: string[];
     patchDescriptions?: string[];
     patchHeaders?: BundleHeaderMode[];
     patchIds?: string[];
@@ -1019,8 +1020,9 @@ const invokeRomWeaverBundleCreateWorker = async (
   const patchNames = alignedStrings(input.patchNames);
   const patchIds = alignedStrings(input.patchIds);
   const patchDescriptions = alignedStrings(input.patchDescriptions);
-  const patchLabels = alignedStrings(input.patchLabels);
   const patchVersions = alignedStrings(input.patchVersions);
+  const patchAuthors = alignedStrings(input.patchAuthors);
+  const patchLabels = alignedStrings(input.patchLabels);
   const patchInputChecks = alignedStrings(input.patchInputChecks);
   const patchOutputChecks = alignedStrings(input.patchOutputChecks);
   const outputCheck = String(input.outputCheck || "").trim();
@@ -1050,13 +1052,14 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(patchNames ? { patch_name: patchNames } : {}),
     ...(patchIds ? { patch_id: patchIds } : {}),
     ...(patchDescriptions ? { patch_description: patchDescriptions } : {}),
+    ...(patchVersions ? { patch_version: patchVersions } : {}),
+    ...(patchAuthors ? { patch_author: patchAuthors } : {}),
     ...(patchLabels ? { patch_label: patchLabels } : {}),
     ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
     ...(patchHeaders ? { patch_header: patchHeaders } : {}),
     ...(patchBases ? { patch_basis: patchBases } : {}),
     ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
     ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
-    ...(patchVersions ? { patch_version: patchVersions } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {

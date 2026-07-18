@@ -128,23 +128,12 @@
 .rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
 .rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
 @container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
-/* Inline description editor on the patch card: a touch of air below the
-   toggle/meta row so the field group doesn't crowd it. */
-.rw-app .patch-meta-inline { margin-block-start: 2px; }
-/* Pencil editing: the card title is the patch name, edited in place. The field
-   wears the standard filled-input look (solid seam + well) at title size and
-   matches the handle/remove button height; long names wrap and the textarea
-   grows (autosizeTextarea) - it never scrolls or resizes by hand. */
-.rw-app .nm-input {
-  display: block; width: 100%; min-width: 0; box-sizing: border-box;
-  height: var(--ctrl-h); min-height: var(--ctrl-h);
-  font: inherit; line-height: 1.35; color: var(--ink);
-  background: var(--well); border: 1px solid var(--seam); border-radius: var(--r-s);
-  padding: calc((var(--ctrl-h) - 1.35em - 2px) / 2) 8px; resize: none; overflow: hidden;
-}
-.rw-app .nm-input:hover { border-color: color-mix(in oklab, var(--thread) 45%, var(--seam)); }
-.rw-app .nm-input:focus-visible { outline: none; border-color: var(--thread); }
-.rw-app .nm-input::placeholder { color: var(--ink-3); opacity: 1; }
+/* Inline patch-details form on the card (name, description, version, author):
+   a touch of air below the toggle/meta row so the field group doesn't crowd
+   it; fields stack, with version + author sharing one row. */
+.rw-app .patch-meta-inline { display: flex; flex-direction: column; gap: var(--sp-s); margin-block-start: 2px; }
+.rw-app .patch-meta-cols { display: flex; gap: var(--sp-s); }
+.rw-app .patch-meta-cols .patch-meta-field { flex: 1 1 0; min-width: 0; }
 /* The pencil beside the patch name: a quiet inline icon that opens the
    name/description editors; it wears the thread color while editing. */
 .rw-app .nm-edit {

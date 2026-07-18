@@ -192,6 +192,8 @@ async function loadLocalBundleSession(
         optional: patch.optional === true,
         ...(patch.name ? { name: patch.name } : {}),
         ...(patch.description ? { description: patch.description } : {}),
+        ...(patch.version ? { version: patch.version } : {}),
+        ...(patch.author ? { author: patch.author } : {}),
         ...(patch.label ? { label: patch.label } : {}),
         ...(patch.header ? { header: patch.header } : {}),
         ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),

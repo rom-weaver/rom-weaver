@@ -34,6 +34,7 @@ type BundleExportRow = {
   default: boolean;
   id?: string;
   version?: string;
+  author?: string;
   name?: string;
   description: string;
   /** Expected pre-apply ROM checksums ("algo=hex", comma-separable). */
@@ -234,6 +235,7 @@ const useBundleExport = ({
         default: !disabledPatchIds.has(id),
         id: meta?.id || id,
         ...(meta?.version ? { version: meta.version } : {}),
+        ...(meta?.author ? { author: meta.author } : {}),
         ...(meta?.name ? { name: meta.name } : {}),
         checks,
         description: meta?.description || "",
@@ -342,7 +344,8 @@ const useBundleExport = ({
             fileName: patch.fileName,
             source: patch.source,
             ...(row?.id ? { id: row.id } : {}),
-            ...(row?.version ? { version: row.version } : {}),
+            ...(row?.version?.trim() ? { version: row.version.trim() } : {}),
+            ...(row?.author?.trim() ? { author: row.author.trim() } : {}),
             ...(row?.default === false ? { optional: true } : {}),
             ...(row?.name ? { name: row.name } : {}),
             ...(row?.description.trim() ? { description: row.description.trim() } : {}),

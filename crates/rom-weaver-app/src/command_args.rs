@@ -1560,6 +1560,7 @@ pub struct BundleCreatePatchSpec {
     pub path: PathBuf,
     pub id: Option<String>,
     pub version: Option<String>,
+    pub author: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub label: Option<String>,
@@ -1627,7 +1628,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch file to include, in apply order; repeat --patch for each entry. --patch-id, --patch-version, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header bind to the preceding --patch"
+            help = "Patch file to include, in apply order; repeat --patch for each entry. --patch-id, --patch-version, --patch-author, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header bind to the preceding --patch"
         )
     )]
     #[serde(default)]
@@ -1667,6 +1668,16 @@ pub struct BundleCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_description: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-author",
+            help = "Author credit for the preceding --patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_author: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1906,6 +1917,15 @@ impl BundleCreateCommand {
             descriptions.len(),
             &mut |spec, index| {
                 spec.description = Some(descriptions[index].clone());
+            },
+        );
+        let authors = self.patch_author.clone();
+        bind(
+            &mut specs,
+            "patch_author",
+            authors.len(),
+            &mut |spec, index| {
+                spec.author = Some(authors[index].clone());
             },
         );
         let labels = self.patch_label.clone();

@@ -2,7 +2,8 @@ use super::*;
 
 /// Version of the `rom-weaver-bundle.json` bundle schema this build writes.
 /// Version 2 added the per-patch `basis` field; version 3 added stable
-/// patch identities and author-controlled patch versions. Readers accept
+/// patch identities and the author-controlled `version`/`author` fields.
+/// Readers accept
 /// [`BUNDLE_MIN_VERSION`]..=[`BUNDLE_VERSION`].
 pub const BUNDLE_VERSION: u32 = 3;
 /// Oldest bundle schema version this build still reads.
@@ -68,6 +69,10 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub version: Option<String>,
+    /// Patch author credit. (v3)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub author: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub name: Option<String>,
