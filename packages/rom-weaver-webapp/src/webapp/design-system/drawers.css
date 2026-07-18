@@ -431,6 +431,8 @@
 .rw-app .cue-sub-head { display: flex; align-items: center; gap: var(--sp-s); min-height: 27px; padding: 2px 7px 2px 11px; background: var(--well); border-block-end: 1px solid var(--seam); }
 .rw-app .cue-sub-lab { font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .cue-sub-head .cue-copy { margin-inline-start: auto; }
+.rw-app .cue-sub-single { position: relative; }
+.rw-app .cue-sub-single > .cue-copy { position: absolute; z-index: 1; inset-block-start: 4px; inset-inline-end: 20px; }
 .rw-app .cue-copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-3); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; transition: transform .12s, color .15s; }
 .rw-app .cue-copy:hover { color: var(--thread-text); }
 .rw-app .cue-copy:active { transform: scale(.85); }

@@ -65,7 +65,16 @@ test("direct CUE plus BIN upload shows the cue sheet on the bin row", async () =
   const cueSection = binRow?.querySelector(".rw-cue-section");
   expect(cueSection).not.toBeNull();
   expect(cueSection?.textContent || "").toContain('FILE "direct-disc.bin" BINARY');
+  expect(cueSection?.querySelector(".cue-sub-head")).toBeNull();
   expect(binRow?.querySelector(".rw-cue-copy")).not.toBeNull();
+
+  const filesDrawer = binRow?.querySelector(".extract-d");
+  expect(filesDrawer?.querySelector(".lab")?.textContent).toBe("Files");
+  expect(filesDrawer?.querySelector(".rb:not(.time)")?.textContent || "").toContain("B");
+  filesDrawer?.querySelector(".cks-head")?.click();
+  await expect
+    .poll(() => Array.from(filesDrawer?.querySelectorAll(".tree-name") || []).map((entry) => entry.textContent?.trim()))
+    .toEqual(["direct-disc.cue", "direct-disc.bin"]);
 });
 
 test("direct CUE plus BIN upload can output CHD from the CUE source", async () => {

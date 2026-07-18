@@ -518,7 +518,7 @@ const doneApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ip
 
 // A single disc ROM row wired to surface EVERY drawer the apply card can render:
 // checksums (open) with a headerless variant sub-group + a trim readout + a lead
-// blurb, a cue-sheet drawer, and an Extract drawer (it came from an archive).
+// blurb, a cue-sheet drawer, and a Files drawer (it came from an archive).
 const richRomRow = (fileName) => {
   const base = createEmptyPatcherUiState();
   return {

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { ExtractionTree } from "../../src/public/react/components/ds/extraction-tree.tsx";
+import { ExtractDrawer, ExtractionTree } from "../../src/public/react/components/ds/extraction-tree.tsx";
 
 let mountedRoot = null;
 
@@ -67,9 +67,9 @@ test("extraction tree keeps extract metadata for prepared single-level inputs", 
     }),
   );
 
-  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Extract");
+  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
   expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
-  expect(document.querySelector(".extract-d .rb.time")?.textContent || "").toContain("1.2 s");
+  expect(document.querySelector(".extract-d .rb.time")?.textContent || "").toBe("Extract 1.2 s");
   expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
 
@@ -82,4 +82,35 @@ test("extraction tree stays compact for raw single-file inputs", async () => {
 
   await expect.poll(() => document.querySelector(".nmline .nm")?.textContent || "").toBe("game.bin");
   expect(document.querySelector(".extract-d")).toBeNull();
+});
+
+test("files drawer lists sibling disc files below archive provenance", async () => {
+  mount(
+    createElement(ExtractDrawer, {
+      always: true,
+      fileEntries: [
+        { fileName: "game.cue", fileSize: 64 },
+        { fileName: "game.bin", fileSize: 4096 },
+        { fileName: "game (Track 2).bin", fileSize: 2048 },
+      ],
+      fileSize: 6208,
+      fileName: "game.bin",
+      parentCompressions: [{ fileName: "disc.7z", sourceSize: 8192, outputSize: 6208 }],
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
+  expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toContain("→");
+  document.querySelector(".extract-d .cks-head")?.click();
+  await expect
+    .poll(() =>
+      Array.from(document.querySelectorAll(".extract-d .tree-name")).map((entry) => entry.textContent?.trim()),
+    )
+    .toEqual(["disc.7z", "game.cue", "game.bin", "game (Track 2).bin"]);
+  expect(Array.from(document.querySelectorAll(".extract-d .tree-row")).map((row) => row.className)).toEqual([
+    "tree-row d0",
+    "tree-row d1",
+    "tree-row d1",
+    "tree-row d1",
+  ]);
 });

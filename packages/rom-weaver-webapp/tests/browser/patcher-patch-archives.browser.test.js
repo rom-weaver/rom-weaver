@@ -65,6 +65,13 @@ test("patch row shows extraction progress and extracted patch naming", async () 
   expect(
     document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-archive strong")?.textContent || "",
   ).toContain("change.ips");
+
+  const filesDrawer = document.querySelector("#rom-weaver-list-patch-stack .extract-d");
+  expect(filesDrawer?.querySelector(".lab")?.textContent || "").toBe("Files");
+  filesDrawer?.querySelector(".cks-head")?.click();
+  await expect
+    .poll(() => Array.from(filesDrawer?.querySelectorAll(".tree-name") || []).map((entry) => entry.textContent?.trim()))
+    .toEqual(expect.arrayContaining(["one-patch.7z", "change.ips"]));
 });
 
 test("deleting a selected patch archive requires selection again when re-added", async () => {

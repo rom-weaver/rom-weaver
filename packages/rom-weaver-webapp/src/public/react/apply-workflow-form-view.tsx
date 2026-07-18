@@ -117,7 +117,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
       <Drawer
         bodyClassName="taskbody"
         className="extract-d"
-        label="Extract"
+        label="Files"
         labelIcon={<Archive aria-hidden="true" />}
         readouts={
           drop.entryCount === undefined ? undefined : (
@@ -480,6 +480,30 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   const stageLabel = stageStatusLabel("Checksumming", romInput.info.validationPhase === "extract");
   const romBytes = romInput.size ?? romInput.sourceSize;
   const romTypeTag = formatRomTypeTag(romInput.info.romType);
+  const hasDiscSheet = romInput.kind === "track";
+  const fileEntries =
+    hasDiscSheet && (romInput.cueText || romInput.gdiText)
+      ? [
+          ...(romInput.cueText
+            ? [
+                {
+                  decompressionTimeMs: romInput.decompressionTimeMs,
+                  fileName: romInput.info.fileName.replace(/\.[^.]+$/, ".cue"),
+                  fileSize: new TextEncoder().encode(romInput.cueText).byteLength,
+                },
+              ]
+            : []),
+          ...(romInput.gdiText
+            ? [
+                {
+                  fileName: romInput.info.fileName.replace(/\.[^.]+$/, ".gdi"),
+                  fileSize: new TextEncoder().encode(romInput.gdiText).byteLength,
+                },
+              ]
+            : []),
+          { fileName: romInput.info.fileName, fileSize: romBytes },
+        ]
+      : undefined;
   // Phase A reserves the always-present base group; the streamed variant plan will
   // extend this to the exact group set. No group label → bare rows, matching the
   // no-variant resolved layout.
@@ -497,7 +521,8 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   return {
     card: {
       extract: {
-        always: staging && romInput.info.validationPhase === "extract",
+        always: true,
+        fileEntries,
         fileName: romInput.info.fileName,
         fileSize: romBytes,
         legacyFileClassName: "rom-weaver-input-stack-file",
@@ -533,7 +558,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           timing: staging ? undefined : CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
           trim: staging ? undefined : romInput.info.romProbe?.trim,
         },
-        ...(romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
+        ...(hasDiscSheet && romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
       removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",
       stageBar: stageBarValue(staging, percent),
@@ -582,6 +607,7 @@ const renderDiscGroup = (
   const { romInputs, verificationStates, ui } = deps;
   const groupRows = rows.map((entry) => entry.row);
   const cueRow = groupRows.find((row) => row.kind === "cue");
+  const gdiRow = groupRows.find((row) => row.kind === "gdi");
   const trackRows = groupRows.filter((row) => row.kind !== "cue" && row.kind !== "gdi");
   const groupId = groupRows[0]?.groupId || cueRow?.id || "disc";
   const cueText = groupRows.find((row) => Boolean(row.cueText))?.cueText;
@@ -591,6 +617,34 @@ const renderDiscGroup = (
   const discRomTypeTag = formatRomTypeTag(discRomType);
   const firstTrackName = trackRows[0]?.info.fileName;
   const discName = discGroupDisplayName(groupRows, cueRow, firstTrackName);
+  const sheetEntries: Array<{ fileName: string; fileSize?: number; decompressionTimeMs?: number }> = [
+    ...(cueText && !cueRow
+      ? [
+          {
+            decompressionTimeMs: trackRows[0]?.decompressionTimeMs,
+            fileName: firstTrackName?.replace(/\.[^.]+$/, ".cue") || `${discName}.cue`,
+            fileSize: new TextEncoder().encode(cueText).byteLength,
+          },
+        ]
+      : []),
+    ...(gdiText && !gdiRow
+      ? [
+          {
+            fileName: firstTrackName?.replace(/\.[^.]+$/, ".gdi") || `${discName}.gdi`,
+            fileSize: new TextEncoder().encode(gdiText).byteLength,
+          },
+        ]
+      : []),
+  ];
+  const fileEntries = [
+    ...sheetEntries,
+    ...groupRows.map((row) => ({
+      decompressionTimeMs: row.decompressionTimeMs,
+      fileName: row.info.fileName,
+      fileSize: row.size ?? row.sourceSize,
+    })),
+  ];
+  const totalFileBytes = fileEntries.reduce((sum, entry) => sum + (entry.fileSize ?? 0), 0);
   // Any verified-bad track marks the disc bad; otherwise ok once any track verifies.
   let state: "bad" | "ok" | undefined;
   for (const row of groupRows) {
@@ -620,8 +674,11 @@ const renderDiscGroup = (
     card: {
       extract: {
         fileName: discName,
-        fileSize: totalBytes || undefined,
+        fileEntries,
+        fileSize: totalFileBytes || totalBytes || undefined,
         legacyFileClassName: "rom-weaver-input-stack-file",
+        parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
+        always: true,
       },
       meta:
         totalBytes || discRomTypeTag ? (

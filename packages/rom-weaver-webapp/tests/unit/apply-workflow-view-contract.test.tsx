@@ -121,7 +121,7 @@ describe("apply workflow view - empty bench", () => {
     const card = container.querySelector(".rw-pending .card.pending-card");
     expect(card?.textContent).toContain("bundle");
     expect(card?.textContent).toContain("Identifying");
-    expect(card?.textContent).toContain("Extract");
+    expect(card?.textContent).toContain("Files");
     // A still-identifying archive has no parsed requirements, so the skeleton
     // reserves no Options/Checks drawer that would then vanish or move.
     expect(card?.textContent).not.toContain("Options");
@@ -134,7 +134,7 @@ describe("apply workflow view - empty bench", () => {
       ui: createEmptyPatcherUiState(),
     });
     const labels = Array.from(container.querySelectorAll(".rw-pending .cks-head .lab")).map((el) => el.textContent);
-    expect(labels).toEqual(["Extract", "CUE", "Checks"]);
+    expect(labels).toEqual(["Files", "CUE", "Checks"]);
   });
 });
 
@@ -151,14 +151,14 @@ describe("apply workflow view - staged bench", () => {
     const romLabels = Array.from(container.querySelectorAll("#rom-weaver-list-input-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
-    expect(romLabels).toEqual(["Extract", "Checks"]);
+    expect(romLabels).toEqual(["Files", "Checks"]);
 
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
     // No Options drawer: a staging patch offers no header choice yet, and
     // empty drawers stay off the plain apply view.
-    expect(patchLabels).toEqual(["Extract"]);
+    expect(patchLabels).toEqual(["Files"]);
   });
 
   it("keeps Checks on a staging patch once real requirements are known", () => {
@@ -184,6 +184,8 @@ describe("apply workflow view - staged bench", () => {
     const nm = romCard?.querySelector(".card-name .nmline .nm");
     expect(nm?.textContent).toBe("game");
     expect(nm?.getAttribute("title")).toBe("game.bin");
+    expect(romCard?.querySelector(".extract-d .lab")?.textContent).toBe("Files");
+    expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
     // checksum rows use the .ck/.ck-k/.ck-v readout structure
     const checksumLabels = Array.from(romCard?.querySelectorAll(".ck .ck-k") || []).map((el) => el.textContent);
     expect(checksumLabels).toContain("CRC32");
@@ -201,6 +203,34 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
+  });
+
+  it("does not show embedded sheet text as a separate file for a lone ROM", () => {
+    const rom = romRow("game.bin");
+    rom.cueText = 'FILE "game.bin" BINARY\n  TRACK 01 MODE1/2352';
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
+    expect(romCard?.querySelector(".rw-cue-section")).toBeNull();
+  });
+
+  it("shows size and extraction time for synthesized CUE files", () => {
+    const rom = romRow("game.bin");
+    rom.kind = "track";
+    rom.cueText = 'FILE "game.bin" BINARY\n  TRACK 01 MODE1/2352';
+    rom.gdiText = "1\n";
+    rom.decompressionTimeMs = 5190;
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const cueRow = container.querySelector(".extract-d .tree-row");
+
+    expect(cueRow?.querySelector(".tree-name")?.textContent).toBe("game.cue");
+    expect(cueRow?.querySelector(".tree-size")?.textContent).toBe("44 B");
+    expect(cueRow?.querySelector(".tree-time")?.textContent).toBe("5.19s");
+    expect(container.querySelector(".extract-d .tree-row:nth-child(2) .tree-name")?.textContent).toBe("game.gdi");
+    expect(container.querySelector(".extract-d .tree-row:nth-child(2) .tree-size")?.textContent).toBe("2 B");
   });
 });
 

@@ -1246,7 +1246,7 @@ const PatchCard = ({
           fileName={item.fileName}
           fileSize={item.fileSize}
           // The first archive-path entry is the source archive itself (shown
-          // in the Extract drawer / picker); the rest is the folder path
+          // in the Files drawer / picker); the rest is the folder path
           // within it, surfaced inline on the name.
           // A custom display name replaces the whole title, folder prefix included.
           folderPath={

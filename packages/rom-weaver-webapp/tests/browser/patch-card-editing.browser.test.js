@@ -120,6 +120,27 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   await expect.poll(() => document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });
 
+test("bundle-renamed patch keeps its source file in the Files drawer", async () => {
+  const [romFile, bundleArchive] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    buildWithoutRomBundle({ romCrc32: ROM_CRC32 }),
+  ]);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  await waitForApplyButtonEnabled();
+
+  const filesDrawer = await waitForState(() => {
+    const drawer = document.querySelector("#rom-weaver-list-patch-stack .extract-d");
+    return drawer?.querySelector(".lab")?.textContent === "Files" ? drawer : null;
+  });
+  expect(filesDrawer).not.toBeNull();
+  expect(document.querySelector("#rom-weaver-list-patch-stack .nm")?.textContent || "").toContain("Core");
+
+  filesDrawer.querySelector(".cks-head")?.click();
+  await expect
+    .poll(() => Array.from(filesDrawer.querySelectorAll(".tree-name")).map((entry) => entry.textContent?.trim()))
+    .toContain("change.ips");
+});
+
 test("bundle-expected ROM checks fold into the staged ROM card with match marks", async () => {
   const [romFile, bundleArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),

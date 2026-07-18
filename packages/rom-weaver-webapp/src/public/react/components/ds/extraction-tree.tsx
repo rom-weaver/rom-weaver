@@ -9,11 +9,12 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
 /**
  * Nested-extraction view. The extracted file leads as the card's name line;
  * when it came out of one or more archives, the full chain (sizes + timings)
- * lives in a collapsible Extract drawer rendered as the loom tree. Shared by
+ * lives in a collapsible Files drawer rendered as the loom tree. Shared by
  * every workflow's file card.
  */
 
 type ExtractionLevel = {
+  depth?: number;
   name: string;
   sizeLabel?: string;
   sizeBytes?: number;
@@ -28,6 +29,12 @@ type ExtractionParentLevel = {
   decompressionTimeMs?: number;
 };
 
+type ExtractionFileEntry = {
+  fileName: string;
+  fileSize?: number;
+  decompressionTimeMs?: number;
+};
+
 type ExtractPanelProps = {
   decompressionTimeMs?: number;
   fileName: string;
@@ -37,6 +44,7 @@ type ExtractPanelProps = {
   folderPath?: string;
   legacyArchiveClassName?: string;
   legacyFileClassName?: string;
+  fileEntries?: ExtractionFileEntry[];
   parentCompressions?: ExtractionParentLevel[];
   timing?: string;
 };
@@ -51,12 +59,15 @@ const getDisplayName = (fileName: string) => {
 const formatExtractionElapsedMs = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : undefined;
 
+const formatExtractionTimingLabel = (timing?: string) => (timing ? `Extract ${timing}` : undefined);
+
 const formatRawByteLabel = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? `${Math.floor(value)} B` : undefined;
 
 const buildExtractionLevels = (
   fileName: string,
   fileSize: number | undefined,
+  fileEntries: ExtractionFileEntry[] | undefined,
   parentCompressions: ExtractionParentLevel[] | undefined,
 ): ExtractionLevel[] => {
   const levels: ExtractionLevel[] = (parentCompressions || []).map((entry) => {
@@ -68,6 +79,19 @@ const buildExtractionLevels = (
       timing: formatExtractionElapsedMs(entry.decompressionTimeMs),
     };
   });
+  if (fileEntries?.length) {
+    const depth = levels.length;
+    levels.push(
+      ...fileEntries.map((entry) => ({
+        depth,
+        name: entry.fileName,
+        sizeBytes: entry.fileSize,
+        sizeLabel: typeof entry.fileSize === "number" ? formatByteSize(entry.fileSize) : undefined,
+        timing: formatExtractionElapsedMs(entry.decompressionTimeMs),
+      })),
+    );
+    return levels;
+  }
   // Compare by basename: when the chain already ends with the extracted leaf (whose name may carry
   // its full in-archive path), don't append a duplicate bare-basename level for the same file.
   const last = levels.at(-1);
@@ -132,18 +156,22 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
       <Drawer
         bodyClassName="taskbody"
         className="extract-d"
-        label="Extract"
+        label="Files"
         labelIcon={<Archive aria-hidden="true" />}
         readouts={
           <>
             {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
-            {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+            {timing ? <DrawerReadout time>{formatExtractionTimingLabel(timing)}</DrawerReadout> : null}
           </>
         }
       >
         <div className="tree mono">
           {levels.map((level, index) => (
-            <TreeRow depth={index} key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`} level={level} />
+            <TreeRow
+              depth={level.depth ?? index}
+              key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`}
+              level={level}
+            />
           ))}
         </div>
       </Drawer>
@@ -234,25 +262,33 @@ const ExtractName = ({
   </>
 );
 
-/** Just the Extract drawer (no name line) - for cards that render the name separately. */
+/** Just the Files drawer (no name line) - for cards that render the name separately. */
 const ExtractDrawer = ({
   always = false,
   decompressionTimeMs,
   fileName,
   fileSize,
+  fileEntries,
   parentCompressions,
   timing,
 }: ExtractPanelProps & { always?: boolean }) => {
-  const levels = buildExtractionLevels(fileName, fileSize, parentCompressions);
+  const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
+  const timingLabel = formatExtractionTimingLabel(resolvedTiming);
   // Bundle sessions and in-flight extraction placeholders force the drawer so
   // the card keeps the same structure when extraction metadata lands.
   if (!always && levels.length <= 1 && !resolvedTiming) return null;
   const first = levels[0];
   const last = levels.at(-1);
   if (!last) return null;
-  const sizeText =
-    levels.length === 1
+  const hasFileEntries = !!fileEntries?.length;
+  const sizeText = hasFileEntries
+    ? typeof fileSize === "number"
+      ? first?.sizeLabel && first.sizeBytes && fileSize > 0
+        ? `${first.sizeLabel} → ${formatByteSize(fileSize)} (${Math.round((first.sizeBytes / fileSize) * 100)}%)`
+        : formatByteSize(fileSize)
+      : ""
+    : levels.length === 1
       ? (last.sizeLabel ?? "")
       : first?.sizeLabel && last.sizeLabel
         ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}`
@@ -261,18 +297,22 @@ const ExtractDrawer = ({
     <Drawer
       bodyClassName="taskbody"
       className="extract-d"
-      label="Extract"
+      label="Files"
       labelIcon={<Archive aria-hidden="true" />}
       readouts={
         <>
           {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
-          {resolvedTiming ? <DrawerReadout time>{resolvedTiming}</DrawerReadout> : null}
+          {timingLabel ? <DrawerReadout time>{timingLabel}</DrawerReadout> : null}
         </>
       }
     >
       <div className="tree mono">
         {levels.map((level, index) => (
-          <TreeRow depth={index} key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`} level={level} />
+          <TreeRow
+            depth={level.depth ?? index}
+            key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`}
+            level={level}
+          />
         ))}
       </div>
     </Drawer>
