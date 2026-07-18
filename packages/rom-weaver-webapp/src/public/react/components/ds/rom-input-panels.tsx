@@ -47,12 +47,12 @@ type RomInputPanelsProps = {
 const RomInputPanels = ({ info = {}, tracks, cue, gdi, showInfo = true, showCue = true }: RomInputPanelsProps) => {
   const isDisc = Array.isArray(tracks) && tracks.length > 0;
   const renderInfo = () => {
-    if (isDisc) return <DiscTracksPanel tracks={tracks} />;
+    if (isDisc) return <DiscTracksPanel timing={info.timing} tracks={tracks} />;
     if (showInfo) return <SourceInfoList {...info} />;
     return null;
   };
   // Shared card drawer order: the disc index sheets, then the single Checks
-  // panel. The Extract drawer leads above these, rendered by the card row.
+  // panel. The Files drawer leads above these, rendered by the card row.
   return (
     <>
       {showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}

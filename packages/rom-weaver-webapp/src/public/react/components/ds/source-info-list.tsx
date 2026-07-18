@@ -309,7 +309,6 @@ type ChecksumGroupData = {
   byteValue?: string;
   checksums?: SourceInfoChecksums | null;
   progress?: SourceInfoProgress | null;
-  timing?: ReactNode;
 };
 
 /* Every labeled checksum set uses this same group anatomy. Transform variants
@@ -319,10 +318,7 @@ const ChecksumGroup = ({ group }: { group: ChecksumGroupData }) => {
   const { byteValue = "", checksums } = group;
   return (
     <div className="ck-group">
-      <div className="ck-group-head">
-        {group.label}
-        {group.timing ? <span className="t"> {group.timing}</span> : null}
-      </div>
+      <div className="ck-group-head">{group.label}</div>
       {group.progress ? <FileProgress {...group.progress} /> : null}
       {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
         const value = checksums?.[algorithm] || "";
@@ -489,7 +485,6 @@ type DiscTrackPanelInfo = {
   label: string;
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
-  timing?: ReactNode;
   progress?: SourceInfoProgress | null;
 };
 
@@ -499,14 +494,16 @@ const DiscTracksPanel = ({
   tracks,
   open,
   onToggle,
+  timing,
 }: {
   tracks: DiscTrackPanelInfo[];
   open?: boolean;
   onToggle?: (open: boolean) => void;
+  timing?: ReactNode;
 }) => {
   if (!tracks.length) return null;
   return (
-    <ChecksumList defaultOpen={false} label="Checks" onToggle={onToggle} open={open}>
+    <ChecksumList defaultOpen={false} label="Checks" onToggle={onToggle} open={open} timing={timing}>
       {tracks.map((track) => {
         const hasBytes = typeof track.bytes === "number" && Number.isFinite(track.bytes);
         return (
@@ -517,7 +514,6 @@ const DiscTracksPanel = ({
               id: track.id,
               label: track.label,
               progress: track.progress,
-              timing: track.timing,
             }}
             key={track.id}
           />

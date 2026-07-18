@@ -447,6 +447,16 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
     wasDecompressed: input.wasDecompressed,
   };
   const resolvedInputs = input.resolvedInputs?.length ? input.resolvedInputs : [fallbackResolvedInput];
+  const checksumTimeByGroup = new Map<string, number>();
+  for (const resolved of resolvedInputs) {
+    if (!resolved.groupId || typeof resolved.checksumTimeMs !== "number" || !Number.isFinite(resolved.checksumTimeMs)) {
+      continue;
+    }
+    checksumTimeByGroup.set(
+      resolved.groupId,
+      (checksumTimeByGroup.get(resolved.groupId) ?? 0) + resolved.checksumTimeMs,
+    );
+  }
   return resolvedInputs.map((resolved, index) => {
     const selectedCandidatePath = getSelectedFileCandidatePath(input.candidates, resolved.selectedCandidateId);
     const resolvedFileName =
@@ -460,7 +470,11 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
       chdMode: resolved.chdMode ?? input.chdMode,
       checksums: resolved.checksums || undefined,
-      checksumTiming: formatChecksumTiming(resolved.checksumTimeMs ?? input.checksumTimeMs),
+      checksumTiming: formatChecksumTiming(
+        (resolved.groupId ? checksumTimeByGroup.get(resolved.groupId) : undefined) ??
+          resolved.checksumTimeMs ??
+          input.checksumTimeMs,
+      ),
       checksumVariants: resolved.checksumVariants || input.checksumVariants,
       cueText: resolved.cueText,
       decompressionTimeMs: resolved.decompressionTimeMs,

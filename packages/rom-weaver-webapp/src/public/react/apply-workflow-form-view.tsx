@@ -667,7 +667,6 @@ const renderDiscGroup = (
       id: row.id,
       label: row.info.fileName,
       progress: toWorkflowChecksumProgressProps(checksumProgress),
-      timing: CHECKSUM_TIMING_LABEL(row.info.checksumTiming),
     };
   });
   return {
@@ -689,6 +688,7 @@ const renderDiscGroup = (
         ) : undefined,
       onRemove: removeDisc,
       panels: {
+        info: { timing: CHECKSUM_TIMING_LABEL(trackRows[0]?.info.checksumTiming) },
         tracks,
         ...(cueText ? { cue: { cueText } } : {}),
         ...(gdiText ? { gdi: { gdiText } } : {}),

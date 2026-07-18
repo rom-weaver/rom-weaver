@@ -144,6 +144,7 @@ test("disc tracks use the Checks drawer's variant-group presentation", async () 
   mount(
     createElement(DiscTracksPanel, {
       open: true,
+      timing: "Checksum 204ms",
       tracks: [
         {
           bytes: 12_345,
@@ -163,6 +164,7 @@ test("disc tracks use the Checks drawer's variant-group presentation", async () 
 
   await expect.poll(() => document.body.textContent || "").toContain("Checks");
   expect(document.body.textContent).not.toContain("Checks & Tracks");
+  expect(document.querySelector(".cks-head .rb.time")?.textContent).toBe("Checksum 204ms");
   expect([...document.querySelectorAll(".ck-group-head")].map((head) => head.textContent?.trim())).toEqual([
     "Game (Track 1).bin",
     "Game (Track 2).bin",
