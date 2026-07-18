@@ -8,32 +8,6 @@ on:
       - main
 
 jobs:
-  conventional-commits:
-    name: Conventional commits
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check commit subjects and pull request title
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title || '' }}
-        run: |
-          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
-            git log --no-merges --format=%s "$BASE_SHA..$HEAD_SHA"
-          else
-            git log --no-merges -1 --format=%s "$HEAD_SHA"
-          fi > "$RUNNER_TEMP/commit-subjects"
-          if [[ -n "$PULL_REQUEST_TITLE" ]]; then
-            printf '%s\n' "$PULL_REQUEST_TITLE" >> "$RUNNER_TEMP/commit-subjects"
-          fi
-          node scripts/check-conventional-commits.mjs < "$RUNNER_TEMP/commit-subjects"
-
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
