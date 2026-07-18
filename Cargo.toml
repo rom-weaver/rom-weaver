@@ -25,7 +25,7 @@ exclude = ["vendor/nod"]
 resolver = "2"
 
 [workspace.package]
-authors = ["Brandon O'Casey"]
+authors = ["Brandon Casey"]
 description = "A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal."
 edition = "2024"
 homepage = "https://rom-weaver.com"

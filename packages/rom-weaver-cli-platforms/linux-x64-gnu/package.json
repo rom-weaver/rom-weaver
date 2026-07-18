@@ -2,7 +2,7 @@
   "name": "@brandonocasey/rom-weaver-linux-x64-gnu",
   "version": "0.5.0",
   "description": "Linux x64 glibc binary for rom-weaver",
-  "author": "Brandon O'Casey",
+  "author": "Brandon Casey",
   "repository": {"type": "git", "url": "https://github.com/brandonocasey/rom-weaver.git", "directory": "packages/rom-weaver-cli-platforms/linux-x64-gnu"},
   "license": "AGPL-3.0-or-later",
   "os": ["linux"],

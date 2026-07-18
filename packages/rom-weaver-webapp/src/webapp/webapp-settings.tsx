@@ -341,7 +341,7 @@ const AboutSection = () => (
       rom-weaver{RESOLVED_APP_BUILD_VERSION ? ` ${RESOLVED_APP_BUILD_VERSION}` : ""}
     </div>
     <div className="about-line">
-      © Brandon O'Casey. Free and open-source software under the{" "}
+      © Brandon Casey. Free and open-source software under the{" "}
       <a href={LICENSE_URL} rel="noreferrer" target="_blank">
         GNU AGPL v3 (or later) license
       </a>
