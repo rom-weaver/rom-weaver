@@ -3,11 +3,11 @@
 //! Compare the concurrent batch executor against the serial baseline on real inputs:
 //!
 //! ```text
-//! cargo run --release --example concurrent_extract -- --out-dir /tmp/out a.zip b.7z c.chd
-//! cargo run --release --example concurrent_extract -- --sequential --out-dir /tmp/out a.zip b.7z c.chd
+//! cargo run --release --example concurrent_extract -- --output /tmp/out a.zip b.7z c.chd
+//! cargo run --release --example concurrent_extract -- --sequential --output /tmp/out a.zip b.7z c.chd
 //! ```
 //!
-//! Each input extracts into its own `<out-dir>/<stem>/` subdir, so the jobs never collide. The
+//! Each input extracts into its own `<output>/<stem>/` subdir, so the jobs never collide. The
 //! harness prints the planner's chosen waves and the total wall-clock, so the two modes can be
 //! compared directly on your own large ROMs.
 
@@ -28,7 +28,7 @@ fn main() {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--out-dir" => out_dir = PathBuf::from(args.next().expect("--out-dir needs a path")),
+            "--output" => out_dir = PathBuf::from(args.next().expect("--output needs a path")),
             "--threads" => {
                 let value = args.next().expect("--threads needs a value");
                 threads = if value == "auto" {
@@ -48,7 +48,7 @@ fn main() {
 
     if sources.is_empty() {
         eprintln!(
-            "usage: concurrent_extract [--out-dir DIR] [--threads auto|N] [--sequential] <source>..."
+            "usage: concurrent_extract [--output DIR] [--threads auto|N] [--sequential] <source>..."
         );
         std::process::exit(2);
     }
