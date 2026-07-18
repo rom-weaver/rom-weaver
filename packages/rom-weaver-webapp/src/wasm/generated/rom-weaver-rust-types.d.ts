@@ -266,6 +266,8 @@ export type PatchApplyHeaderMode = "keep" | "strip" | "auto";
 
 export type PatchApplyOutputHeaderMode = "keep" | "strip" | "auto";
 
+export type FilterKind = "rom" | "patch";
+
 export type LogLevel = "off" | "error" | "warn" | "info" | "debug" | "trace";
 
 export type PatchInputBasis = "base" | "previous";
@@ -289,13 +291,13 @@ export type OutputEnforceableEntry = { patch_index: number, source: string, chec
 
 export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
 
-export type ProbeCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, };
+export type ProbeCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
 
-export type ExtractCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
+export type ExtractCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, output: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, force?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
-export type ChecksumCommand = { source: string, algo: Array<string>, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
+export type ChecksumCommand = { input: string, algo: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
 
-export type IngestCommand = { source: string, out_dir: string, select?: Array<string>,
+export type IngestCommand = { input: string, output: string, select?: Array<string>,
 /**
  * Optional loose patch names to match against `source` without ingesting it. This keeps the
  * browser's sibling-sidecar lookup on the ingest command surface while reusing Rust's matcher.
@@ -304,13 +306,13 @@ sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_n
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, threads?: ThreadBudget, };
 
-export type TrimCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, };
+export type TrimCommand = { input: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, validate_with_output_checksums?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, };
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, };
 
-export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
+export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
-export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, source_crc32?: string, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, xdelta_secondary?: string, };
+export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, xdelta_secondary?: string, };
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create", "args": PatchCreateCommand };
 
@@ -452,18 +454,15 @@ patch_sources: Array<BundlePatchSource>,
  */
 warnings: Array<string>, };
 
-export type BundleParseCommand = { source: string, extract_dir?: string, threads?: ThreadBudget, };
+export type BundleParseCommand = { input: string, output?: string, threads?: ThreadBudget, };
 
 export type BundleCreateCommand = { rom?: string,
 /**
- * Cached ROM checksum values from a prior staging pass. The webapp uses
- * this to avoid hashing the same prepared leaf during bundle export.
+ * Trusted ROM checksum/size values from a prior staging pass, so bundle
+ * export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
+ * the emitted rom checks; a `size=N` token supplies the prepared size.
  */
-rom_checksums?: Array<string>,
-/**
- * Cached prepared ROM size from a prior staging pass.
- */
-rom_size?: number | null, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */

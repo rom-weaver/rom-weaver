@@ -147,8 +147,8 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
       const result = await worker.runJson(
         createRomWeaverCommand("extract", {
           checksum: ["sha256"],
-          out_dir: outDir,
-          source: sourcePath,
+          output: outDir,
+          input: sourcePath,
           threads: "auto",
         }),
         {

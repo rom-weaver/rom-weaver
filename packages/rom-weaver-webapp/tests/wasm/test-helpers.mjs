@@ -163,10 +163,9 @@ function commandArgsToRunRequest(args) {
   switch (command === "patch" ? `patch-${subcommand}` : command) {
     case "probe":
       Object.assign(commandArgs, {
-        source: requirePositional(parsed, 0, "probe source"),
+        input: requirePositional(parsed, 0, "probe source"),
         ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
+        ...filterFlags(parsed),
         ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
       });
@@ -182,25 +181,25 @@ function commandArgsToRunRequest(args) {
       break;
     case "extract":
       Object.assign(commandArgs, {
-        out_dir: requireOptionValue(parsed, "out-dir"),
-        source: requirePositional(parsed, 0, "extract source"),
+        output: requireOptionValue(parsed, "out-dir"),
+        input: requirePositional(parsed, 0, "extract source"),
         ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
+        ...filterFlags(parsed),
         ...(readOptionValues(parsed, "checksum").length ? { checksum: readOptionValues(parsed, "checksum") } : {}),
         ...(parsed.flags.has("split-bin") ? { split_bin: true } : {}),
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
         ...(parsed.flags.has("no-nested-extract") ? { no_nested_extract: true } : {}),
-        ...(parsed.flags.has("no-overwrite") ? { no_overwrite: true } : {}),
+        // Old default allowed overwrite; `--no-overwrite` opted into failing.
+        // The new wire field inverts that: force overwrite unless opted out.
+        force: !parsed.flags.has("no-overwrite"),
       });
       break;
     case "checksum":
       Object.assign(commandArgs, {
         algo: readOptionValues(parsed, "algo"),
-        source: requirePositional(parsed, 0, "checksum source"),
+        input: requirePositional(parsed, 0, "checksum source"),
         ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
+        ...filterFlags(parsed),
         ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
         ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
@@ -227,8 +226,7 @@ function commandArgsToRunRequest(args) {
         output: requireOptionValue(parsed, "output"),
         patches: readOptionValues(parsed, "patch"),
         ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
+        ...filterFlags(parsed),
         ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
         ...(parsed.flags.has("no-compress") ? { no_compress: true } : {}),
@@ -242,10 +240,13 @@ function commandArgsToRunRequest(args) {
           ? { compress_level: readOptionalValue(parsed, "compress-level") }
           : {}),
         ...(readOptionValues(parsed, "checksum-cache").length
-          ? { checksum_cache: readOptionValues(parsed, "checksum-cache") }
+          ? { assume_in: readOptionValues(parsed, "checksum-cache") }
           : {}),
         ...(readOptionValues(parsed, "validate-with-checksum").length
-          ? { validate_with_checksums: readOptionValues(parsed, "validate-with-checksum") }
+          ? { expect_in: readOptionValues(parsed, "validate-with-checksum") }
+          : {}),
+        ...(readOptionValues(parsed, "validate-output-checksum").length
+          ? { expect_out: readOptionValues(parsed, "validate-output-checksum") }
           : {}),
         ...(readOptionValues(parsed, "patch-header").length
           ? { patch_header: readOptionValues(parsed, "patch-header") }
@@ -265,22 +266,13 @@ function commandArgsToRunRequest(args) {
         input: requireOptionValue(parsed, "input"),
         patches: readOptionValues(parsed, "patch"),
         ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...(parsed.flags.has("rom-filter") ? { rom_filter: true } : {}),
-        ...(parsed.flags.has("patch-filter") ? { patch_filter: true } : {}),
+        ...filterFlags(parsed),
         ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
         ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
         ...(readOptionValues(parsed, "checksum-cache").length
-          ? { checksum_cache: readOptionValues(parsed, "checksum-cache") }
+          ? { assume_in: readOptionValues(parsed, "checksum-cache") }
           : {}),
-        ...(readOptionValues(parsed, "validate-with-checksum").length
-          ? { validate_with_checksums: readOptionValues(parsed, "validate-with-checksum") }
-          : {}),
-        ...(readOptionalNumber(parsed, "validate-with-size") === null
-          ? {}
-          : { validate_with_size: readOptionalNumber(parsed, "validate-with-size") }),
-        ...(readOptionalNumber(parsed, "validate-with-min-size") === null
-          ? {}
-          : { validate_with_min_size: readOptionalNumber(parsed, "validate-with-min-size") }),
+        ...(expectInTokens(parsed).length ? { expect_in: expectInTokens(parsed) } : {}),
         ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
         ...(readOptionalValue(parsed, "n64-byte-order")
           ? { n64_byte_order: readOptionalValue(parsed, "n64-byte-order") }
@@ -296,6 +288,26 @@ function commandArgsToRunRequest(args) {
   if (threads !== null) commandArgs.threads = threads;
 
   return Object.keys(output).length > 0 ? { command: commandRequest, output } : commandRequest;
+}
+
+// Map the legacy `--rom-filter`/`--patch-filter` DSL flags to the wire
+// `filter: FilterKind[]` field. Returns {} when neither is set.
+function filterFlags(parsed) {
+  const filter = [];
+  if (parsed.flags.has("rom-filter")) filter.push("rom");
+  if (parsed.flags.has("patch-filter")) filter.push("patch");
+  return filter.length > 0 ? { filter } : {};
+}
+
+// Fold `--validate-with-checksum`/`--validate-with-size`/`--validate-with-min-size`
+// DSL flags into the wire `expect_in` token list.
+function expectInTokens(parsed) {
+  const tokens = [...readOptionValues(parsed, "validate-with-checksum")];
+  const size = readOptionalNumber(parsed, "validate-with-size");
+  if (size !== null) tokens.push(`size=${size}`);
+  const minSize = readOptionalNumber(parsed, "validate-with-min-size");
+  if (minSize !== null) tokens.push(`min-size=${minSize}`);
+  return tokens;
 }
 
 function locateCommand(args) {

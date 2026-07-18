@@ -222,9 +222,7 @@ type RuntimePatchValidationRequirement = {
   source_size?: string | number | null;
 };
 
-type RuntimeChecksumCacheInput =
-  | PatchValidateCommand["checksum_cache"]
-  | Record<string, string | number | null | undefined>;
+type RuntimeChecksumCacheInput = PatchValidateCommand["assume_in"] | Record<string, string | number | null | undefined>;
 
 type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "output" | "patches" | "threads">> & {
   addHeader?: boolean;
@@ -241,8 +239,8 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   outputName?: string | null | undefined;
   removeHeader?: boolean;
   requireInputChecksumMatch?: boolean;
-  validateWithChecksums?: PatchApplyCommand["validate_with_checksums"];
-  validateWithOutputChecksums?: PatchApplyCommand["validate_with_output_checksums"];
+  validateWithChecksums?: PatchApplyCommand["expect_in"];
+  validateWithOutputChecksums?: PatchApplyCommand["expect_out"];
   threads?: RuntimeThreadBudgetInput;
 };
 
@@ -264,7 +262,7 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
    * report `chain_deferred` instead of a false failure. Supersedes `independent`. */
   plan?: boolean;
   removeHeader?: PatchValidateCommand["strip_header"];
-  validateWithChecksums?: PatchValidateCommand["validate_with_checksums"];
+  validateWithChecksums?: PatchValidateCommand["expect_in"];
   validationRequirements?: RuntimePatchValidationRequirement | RuntimePatchValidationRequirement[];
   threads?: RuntimeThreadBudgetInput;
 };
@@ -321,7 +319,7 @@ type RuntimePatchCreateWorkerInput = {
   originalFilePath: PatchCreateCommand["original"];
   outputName: NonNullable<PatchCreateCommand["output"]>;
   signal?: AbortSignal;
-  sourceCrc32?: PatchCreateCommand["source_crc32"];
+  sourceCrc32?: string;
   threads?: RuntimeThreadBudgetInput;
 };
 
@@ -406,7 +404,7 @@ type WorkflowRuntimePatch = {
     metadata: JsonObject;
     outputName: NonNullable<PatchCreateCommand["output"]>;
     checksumName?: PatchCreateCommand["checksum_name"];
-    sourceCrc32?: PatchCreateCommand["source_crc32"];
+    sourceCrc32?: string;
     threads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;

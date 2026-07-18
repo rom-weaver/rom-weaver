@@ -66,6 +66,24 @@ import {
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
+// Build the `--filter rom|patch` payload field from the two legacy booleans.
+// Returns an empty object when neither is set so it spreads to nothing.
+const filterSpread = (romFilter?: boolean, patchFilter?: boolean): { filter?: ("rom" | "patch")[] } => {
+  const filter: ("rom" | "patch")[] = [];
+  if (romFilter) filter.push("rom");
+  if (patchFilter) filter.push("patch");
+  return filter.length > 0 ? { filter } : {};
+};
+
+// Fold expected-input checksum tokens plus optional exact/minimum size gates
+// into the `--expect-in` token list (`algo=hex`, `size=N`, `min-size=N`).
+const expectInTokens = (checksums: readonly string[], size?: number, minSize?: number): string[] => {
+  const tokens = [...checksums];
+  if (size !== undefined) tokens.push(`size=${size}`);
+  if (minSize !== undefined) tokens.push(`min-size=${minSize}`);
+  return tokens;
+};
+
 const appendBrowserStorageContext = async (message: string, operationLabel: string) => {
   const contextualized = await withBrowserOutputStorageFailureContext(new Error(message), { operationLabel });
   if (!(contextualized instanceof Error) || contextualized.name !== "OutputStorageError") return message;
@@ -192,10 +210,9 @@ const runRomWeaverProbeWorker = async (
   const sourcePath = String(input.sourcePath || "").trim();
   if (!sourcePath) throw new Error("Container probe source path is required");
   const command = createRomWeaverCommand("probe", {
-    ...(input.romFilter ? { rom_filter: true } : {}),
-    ...(input.patchFilter ? { patch_filter: true } : {}),
+    ...filterSpread(input.romFilter, input.patchFilter),
     no_extract: true,
-    source: sourcePath,
+    input: sourcePath,
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe dispatch", {
     command,
@@ -249,10 +266,10 @@ const runRomWeaverIngestSidecarsWorker = async (
   const romName = String(input.romName || "").trim();
   if (!(romName && input.patchNames.length)) return [];
   const command = createRomWeaverCommand("ingest", {
-    out_dir: "/work/sidecar-match",
+    output: "/work/sidecar-match",
     sidecar_names: input.patchNames,
     sidecar_only: true,
-    source: romName,
+    input: romName,
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson ingest sidecar dispatch", {
     patchCount: input.patchNames.length,
@@ -376,8 +393,9 @@ const invokeRomWeaverPatchValidateWorker = async (
   const disableDefaultThreadArgInjection = noWorkerPool || (hasBpsPatch && !effectiveThreadArg);
   const virtualOnlyMounts = hasBpsPatch;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
+  const expectIn = expectInTokens(validateWithChecksums, validateWithSize, validateWithMinSize);
   const command = createRomWeaverCommand("patch-validate", {
-    ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
+    ...(checksumCache.length ? { assume_in: checksumCache } : {}),
     ...(independent ? { independent: true } : {}),
     ...(plan ? { plan: true } : {}),
     ...(patchBasis.length ? { patch_basis: patchBasis } : {}),
@@ -387,14 +405,11 @@ const invokeRomWeaverPatchValidateWorker = async (
     input: input.romFilePath,
     ...(n64ByteOrder ? { n64_byte_order: n64ByteOrder } : {}),
     no_extract: true,
-    patch_filter: true,
+    filter: ["rom", "patch"],
     patches: input.patchFiles.map((patch) => patch.patchFilePath),
-    rom_filter: true,
     strip_header: removeHeader,
     ...(effectiveThreadArg ? { threads: effectiveThreadArg } : {}),
-    ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
-    ...(validateWithMinSize === undefined ? {} : { validate_with_min_size: BigInt(validateWithMinSize) }),
-    ...(validateWithSize === undefined ? {} : { validate_with_size: BigInt(validateWithSize) }),
+    ...(expectIn.length ? { expect_in: expectIn } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-validate dispatch", {
     command,
@@ -531,13 +546,12 @@ const invokeRomWeaverPatchApplyWorker = async (
         ...(n64ByteOrders.length ? { n64_byte_order: n64ByteOrders } : {}),
         no_compress: true,
         output: outputPath,
-        patch_filter: true,
+        filter: ["rom", "patch"],
         patches: input.patchFiles.map((patch) => patch.patchFilePath),
         repair_checksum: repairChecksum,
-        rom_filter: true,
         ...(threadArg ? { threads: threadArg } : {}),
-        ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
-        ...(validateWithOutputChecksums.length ? { validate_with_output_checksums: validateWithOutputChecksums } : {}),
+        ...(validateWithChecksums.length ? { expect_in: validateWithChecksums } : {}),
+        ...(validateWithOutputChecksums.length ? { expect_out: validateWithOutputChecksums } : {}),
       });
       emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-apply dispatch", {
         command,
@@ -686,7 +700,7 @@ const invokeRomWeaverCreatePatchWorker = async (
         original: input.originalFilePath,
         output: outputPath,
         ...(input.checksumName ? { checksum_name: true } : {}),
-        ...(input.sourceCrc32 ? { source_crc32: input.sourceCrc32 } : {}),
+        ...(input.sourceCrc32 ? { assume_in: [`crc32=${input.sourceCrc32}`] } : {}),
         ...(threadArg ? { threads: threadArg } : {}),
       });
       emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create dispatch", {
@@ -743,7 +757,7 @@ const invokeRomWeaverTrimWorker = async (
       in_place: false,
       output: outputPath,
       revert: false,
-      source: [sourceFilePath],
+      input: [sourceFilePath],
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),
       ...(threadArg ? { threads: threadArg } : {}),
     });
@@ -865,8 +879,8 @@ const invokeRomWeaverIngestWorker = async (
   }
   const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
-    out_dir: outDirPath,
-    source: sourcePath,
+    output: outDirPath,
+    input: sourcePath,
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
     ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
@@ -933,8 +947,8 @@ const invokeRomWeaverBundleParseWorker = async (
   if (!sourcePath) throw new Error("Bundle parse source path is required");
   const extractDirPath = String(input.extractDirPath || "").trim();
   const command = createRomWeaverCommand("bundle-parse", {
-    source: sourcePath,
-    ...(extractDirPath ? { extract_dir: extractDirPath } : {}),
+    input: sourcePath,
+    ...(extractDirPath ? { output: extractDirPath } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-parse dispatch", {
     command,
@@ -1046,8 +1060,19 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
     ...(input.outputName ? { output_name: input.outputName } : {}),
     ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
-    ...(input.romChecksums ? { rom_checksums: [input.romChecksums] } : {}),
-    ...(typeof input.romSize === "number" ? { rom_size: input.romSize } : {}),
+    ...(input.romChecksums || typeof input.romSize === "number"
+      ? {
+          assume_in: [
+            ...(input.romChecksums
+              ? input.romChecksums
+                  .split(",")
+                  .map((token) => token.trim())
+                  .filter(Boolean)
+              : []),
+            ...(typeof input.romSize === "number" ? [`size=${input.romSize}`] : []),
+          ],
+        }
+      : {}),
     ...(outputCheck ? { output_check: [outputCheck] } : {}),
     ...(patchNames ? { patch_name: patchNames } : {}),
     ...(patchIds ? { patch_id: patchIds } : {}),

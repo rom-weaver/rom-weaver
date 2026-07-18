@@ -219,14 +219,14 @@ export function collectRomWeaverRunInputPaths(
     case "checksum":
     case "ingest":
       if (command.type !== "ingest" || !command.args.sidecar_only) {
-        pushPathValue(paths, command.args.source);
+        pushPathValue(paths, command.args.input);
       }
       break;
     case "compress":
       pushPathValues(paths, command.args.input);
       break;
     case "trim":
-      pushPathValues(paths, command.args.source);
+      pushPathValues(paths, command.args.input);
       break;
     case "patch":
       collectRomWeaverPatchInputPaths(paths, command.args);
@@ -431,7 +431,7 @@ function readRomWeaverToolsCommandBranch(command: RomWeaverToolsCommand): RomWea
 function collectRomWeaverBundleInputPaths(paths: Set<string>, command: RomWeaverBundleCommand) {
   switch (command.type) {
     case "parse":
-      pushPathValue(paths, command.args.source);
+      pushPathValue(paths, command.args.input);
       return;
     case "create":
       pushPathValue(paths, command.args.rom);

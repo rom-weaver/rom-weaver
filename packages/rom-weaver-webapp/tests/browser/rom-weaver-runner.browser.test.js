@@ -147,9 +147,9 @@ test("rom-weaver runner lazily creates selected archive extract outputs", async 
       {
         args: {
           no_nested_extract: true,
-          out_dir: WORKER_OPFS_MOUNTPOINT,
+          output: WORKER_OPFS_MOUNTPOINT,
           select: ["game.bin"],
-          source: archive.filePath,
+          input: archive.filePath,
         },
         type: "extract",
       },

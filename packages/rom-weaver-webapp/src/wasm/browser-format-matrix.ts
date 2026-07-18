@@ -301,8 +301,8 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
         await runCommand(
           `ingest ${format} threads=${threads}`,
           createRomWeaverCommand("ingest", {
-            out_dir: extractDir,
-            source: archivePath,
+            output: extractDir,
+            input: archivePath,
             threads,
           }),
           { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
@@ -337,8 +337,8 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
         await runCommand(
           `ingest options ${token}`,
           createRomWeaverCommand("ingest", {
-            out_dir: joinGuestPath(dir, `options-${token}-extract`),
-            source: archivePath,
+            output: joinGuestPath(dir, `options-${token}-extract`),
+            input: archivePath,
             threads: matrixCase.threads,
           }),
           { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
@@ -385,8 +385,8 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
     const extractResult = await runCommand(
       `ingest invalid ${format}`,
       createRomWeaverCommand("ingest", {
-        out_dir: outDir,
-        source: badSourcePath,
+        output: outDir,
+        input: badSourcePath,
         threads: 1,
       }),
     );
