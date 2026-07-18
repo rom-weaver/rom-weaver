@@ -1,7 +1,7 @@
 [submodule "vendor/libarchive"]
 	path = vendor/libarchive
-	url = git@github.com:brandonocasey/libarchive.git
+	url = https://github.com/brandonocasey/libarchive.git
 [submodule "vendor/nod"]
 	path = vendor/nod
-	url = git@github.com:encounter/nod.git
+	url = https://github.com/encounter/nod.git
 	branch = main
