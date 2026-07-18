@@ -73,7 +73,6 @@
 .rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
 .rw-app .tracelog .ln.copied { background: color-mix(in oklab, var(--verified) 16%, transparent); }
 .rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
-.rw-app .tracelog .ln-no { color: var(--ink-4); flex: none; min-width: 5ch; text-align: end; font-variant-numeric: tabular-nums; user-select: none; }
 .rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
 .rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
 :root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }

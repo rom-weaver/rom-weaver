@@ -93,10 +93,11 @@
   .rw-app .log-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
   .rw-app .log-dlg .dlg-frame { max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; }
   .rw-app .picker-dlg .dlg-frame { border-radius: 0; border-inline: 0; }
-  /* log header: title + close on the first line, the filter/level/copy strip
-     wraps to a full-width second line instead of squeezing beside the title */
+  /* Keep the view/export controls in the mobile header; the action group can
+     wrap internally when the sheet is narrower than its controls. */
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
-  .rw-app .log-actions { order: 1; flex-basis: 100%; margin-inline-start: 0; }
+  .rw-app .log-actions { order: 0; flex-basis: auto; margin-inline-start: 0; }
+  .rw-app .log-actions .logview { flex: 0 1 auto; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
      on a phone - drop the group indent, trim row padding, shrink the copy

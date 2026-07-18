@@ -119,9 +119,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),
   "ui.log.filterLabel": msg({ id: "ui.log.filterLabel", message: "Filter log" }),
-  "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "Current" }),
-  "ui.log.viewLabel": msg({ id: "ui.log.viewLabel", message: "Shown log" }),
-  "ui.log.viewPrevious": msg({ id: "ui.log.viewPrevious", message: "Previous" }),
+  "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "Now" }),
+  "ui.log.viewLabel": msg({ id: "ui.log.viewLabel", message: "Page Logs" }),
+  "ui.log.viewPrevious": msg({ id: "ui.log.viewPrevious", message: "Last" }),
   "ui.output.bundleDiverged": msg({
     id: "ui.output.bundleDiverged",
     message: "Output won't be verified - the patch chain differs from the bundle.",

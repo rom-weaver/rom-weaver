@@ -146,7 +146,7 @@ msgstr "Create {format} ROM Bundle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
-msgstr "Current"
+msgstr "Now"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -346,7 +346,7 @@ msgstr "Patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewPrevious"
-msgstr "Previous"
+msgstr "Last"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -446,7 +446,7 @@ msgstr "Shared session download failed"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
-msgstr "Shown log"
+msgstr "Page Logs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

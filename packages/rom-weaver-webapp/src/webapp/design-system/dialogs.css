@@ -23,30 +23,30 @@
 .dlg-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .dlg-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; }
 .dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
-.dlg-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
-.dlg-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
+.dlg-x {
+  appearance: none; cursor: pointer; width: 30px; height: 30px; padding: 0; display: grid; place-items: center;
+  border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: transparent; color: var(--ink-3);
+  transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease), box-shadow .18s;
+}
+.dlg-x:hover { color: var(--ink); border-color: var(--ink-4); background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px); }
+.dlg-x:active { transform: translateY(0) scale(.99); }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
 /* log dialog: a tall, readable trace with a level filter + copy in the header */
 /* the log is tall - fill the available dialog height so more lines are visible */
-.rw-app .log-dlg { max-width: min(960px, calc(100vw - 32px)); }
+.rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-/* Actions sit on their own full-width row below the title (wrap on every viewport) and the controls
-   share the width evenly; the level select is last, so it lands at the far right. */
+/* Keep view and export actions beside the title; they wrap only when the header runs out of room. */
 .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
-.rw-app .log-actions { display: flex; flex-wrap: wrap; gap: var(--sp-s); align-items: center; order: 1; flex-basis: 100%; }
-/* copy / download / level grow to share the row, but never shrink below their
-   own label - on a narrow sheet they wrap to a new line instead of overlapping */
-.rw-app .log-actions > * { flex: 1 1 auto; min-inline-size: max-content; }
+.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; min-inline-size: 0; }
+.rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
+.rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
 .rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
-.rw-app .log-actions .loglevel { display: flex; }
-.rw-app .log-actions .loglevel .select { flex: 1 1 0; width: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
-/* Current/Previous switch: a segmented control on its own full-width row so the
-   active view is unmistakable - the selected segment is filled with the accent,
-   the other stays muted. aria-pressed drives the visual state. */
+/* View-source switch: the selected segment is filled with the accent, the other
+   stays muted. aria-pressed drives the visual state. */
 .rw-app .log-actions .logview {
-  flex: 1 1 100%; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
+  flex: 0 1 auto; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
   border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well);
 }
 .rw-app .log-actions .logview .seg-btn {
@@ -65,12 +65,18 @@
 }
 .rw-app .log-actions .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 .rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
-.rw-app .log-filter-bar .log-filter { height: 30px; width: 100%; font-size: .76rem; padding-block: 0; }
+.rw-app .log-filter-bar { display: flex; align-items: center; gap: var(--sp-s); }
+.rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
+.rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
+.rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: .76rem; padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
   border: 0; border-radius: 0; background: var(--well); padding: var(--sp-m) var(--sp-l); font-size: .74rem;
 }
+.rw-app .log-dlg .tracelog-virtual-content { position: relative; flex: none; }
+.rw-app .log-dlg .tracelog-virtual-window { position: absolute; inset-inline: 0; width: max-content; min-width: 100%; }
+.rw-app .log-dlg .tracelog .ln { box-sizing: border-box; height: 25px; }
 .rw-app .tracelog-empty { color: var(--ink-4); font-size: .78rem; padding: 4px 2px; }
 
 /* archive candidate picker */

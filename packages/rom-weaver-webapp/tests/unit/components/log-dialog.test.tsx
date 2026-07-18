@@ -5,7 +5,7 @@ import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-co
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
 
 describe("LogDialog", () => {
-  it("renders the log dialog shell with a titled trace inspector", () => {
+  it("renders the page logs dialog shell with an accessible name", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <LogDialog onClose={() => undefined} onLevelChange={() => undefined} open={false} />
@@ -14,7 +14,8 @@ describe("LogDialog", () => {
 
     const dialog = container.querySelector<HTMLDialogElement>("dialog.log-dlg");
     expect(dialog).not.toBeNull();
-    expect(container.querySelector("#log-title")).not.toBeNull();
+    expect(dialog?.getAttribute("aria-labelledby")).toBe("log-title");
+    expect(container.querySelector("#log-title")?.textContent).toBe("Page Logs");
     expect(container.querySelector(".tracelog")).not.toBeNull();
   });
 

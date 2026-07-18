@@ -1,3 +1,6 @@
+import Check from "lucide-react/dist/esm/icons/check.js";
+import Copy from "lucide-react/dist/esm/icons/copy.js";
+import Download from "lucide-react/dist/esm/icons/download.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
@@ -32,11 +35,10 @@ const formatTimestamp = (iso: string) => {
 // serialized length well past anything useful to read inline.
 const MAX_DETAILS_CHARS = 4096;
 
-// Cap how many lines render at once. A trace-level session fills the ring with thousands of entries,
-// and rendering them all as buttons spikes DOM/memory enough to OOM-reload a memory-constrained tab
-// (iOS Safari especially, mid-run). Render only the newest N; the filter narrows to find older lines
-// and Copy/Download still cover the full filtered set.
-const MAX_RENDERED_LINES = 500;
+// Keep the scroll range for every matching line while mounting only the rows near the viewport.
+// The row height is fixed in CSS so the native scrollbar stays exact without a heavyweight list library.
+const TRACE_ROW_HEIGHT = 25;
+const VIRTUAL_OVERSCAN_ROWS = 12;
 
 const formatDetails = (details: LogStoreEntry["details"]) => {
   if (!details || Object.keys(details).length === 0) return "";
@@ -48,10 +50,10 @@ const formatDetails = (details: LogStoreEntry["details"]) => {
   }
 };
 
-// The line number (`id`) is a UI-only column (see TraceLine) - copy/download text omits it so the output
-// is clean, paste-ready log lines. A gap in the on-screen numbers still shows where the ring dropped lines.
-// Lines use the short time column shown on screen and a fixed-width level so pasted/downloaded logs stay
-// aligned in a monospace view. `formatLine` (capped details) feeds the filter - capping keeps a giant
+// Copy/download text omits the UI-only columns so the output is clean, paste-ready log lines. The dialog
+// uses the short timestamp column shown on screen, while copy/download keeps the original ISO timestamps.
+// Lines use a fixed-width level so pasted/downloaded logs stay aligned in a monospace view. `formatLine`
+// (capped details) feeds the filter - capping keeps a giant
 // payload from being re-serialized on every keystroke; `formatCopyLine` (full details) feeds copy/download,
 // where the on-screen cap and its "…(N chars)" marker would just corrupt a saved log.
 const renderLine = (entry: LogStoreEntry, detailsText: string) =>
@@ -106,7 +108,6 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
       }}
       type="button"
     >
-      <span className="ln-no">{entry.id}</span>
       <span className="ts">{formatTimestamp(entry.timestamp)}</span>
       <span className={`lv ${entry.level}`}>{entry.level}</span>
       <span className="caller">{entry.namespace}</span>
@@ -134,6 +135,8 @@ const LogDialog = ({
   const traceRef = useRef<HTMLDivElement | null>(null);
   const currentLevel = normalizeLevel(level);
   const [filter, setFilter] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [view, setView] = useState<"current" | "previous">("current");
@@ -164,16 +167,32 @@ const LogDialog = ({
     return entries.filter((entry) => formatLine(entry).toLowerCase().includes(query));
   }, [entries, filter]);
 
-  // Only the newest MAX_RENDERED_LINES are mounted; copy/download below still use the full `visible`
-  // set, so capping the DOM never drops data from a saved log.
-  const rendered = visible.length > MAX_RENDERED_LINES ? visible.slice(-MAX_RENDERED_LINES) : visible;
-  const hiddenLineCount = visible.length - rendered.length;
+  const virtualStart = Math.max(0, Math.floor(scrollTop / TRACE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
+  const virtualEnd = Math.min(
+    visible.length,
+    Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
+  );
+  const rendered = visible.slice(virtualStart, virtualEnd);
+  const totalHeight = visible.length * TRACE_ROW_HEIGHT;
+
+  useEffect(() => {
+    if (!open) return;
+    const trace = traceRef.current;
+    if (!trace) return;
+    const updateViewport = () => setViewportHeight(trace.clientHeight);
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, [open]);
 
   // Keep the newest lines in view while the dialog is open.
   useEffect(() => {
     const trace = traceRef.current;
-    if (open && trace) trace.scrollTop = trace.scrollHeight;
-  }, [open]);
+    if (open && trace && viewportHeight > 0) {
+      trace.scrollTop = trace.scrollHeight;
+      setScrollTop(trace.scrollTop);
+    }
+  }, [open, viewportHeight]);
 
   return (
     <dialog
@@ -194,7 +213,7 @@ const LogDialog = ({
       <div className="dlg-frame">
         <header className="dlg-head">
           <h2 className="dlg-title" id="log-title">
-            {localizer.message("ui.tools.log")}
+            {localizer.message("ui.log.viewLabel")}
           </h2>
           <div className="dlg-actions log-actions">
             {hasPrevious ? (
@@ -219,7 +238,8 @@ const LogDialog = ({
               </fieldset>
             ) : null}
             <button
-              className={`btn slim ghost${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
+              aria-label={localizer.message("ui.common.copy")}
+              className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
               onClick={() => {
                 copyToClipboard(visible.map(formatCopyLine).join("\n"))
                   .then(() => {
@@ -234,38 +254,33 @@ const LogDialog = ({
                     window.setTimeout(() => setCopyFailed(false), 1600);
                   });
               }}
+              title={localizer.message("ui.common.copy")}
               type="button"
             >
-              {localizer.message("ui.common.copy")}
+              {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
             </button>
             <button
-              className="btn slim ghost"
+              aria-label={localizer.message("ui.result.download")}
+              className="btn slim ghost log-icon-btn"
               onClick={() => {
                 void triggerBrowserDownload(
                   visible.map(formatCopyLine).join("\n"),
                   showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt",
                 );
               }}
+              title={localizer.message("ui.result.download")}
               type="button"
             >
-              {localizer.message("ui.result.download")}
+              <Download aria-hidden="true" />
             </button>
-            <label className="loglevel">
-              <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-              <select
-                className="select mono"
-                onChange={(event) => onLevelChange(event.currentTarget.value)}
-                value={currentLevel}
-              >
-                {LOG_LEVELS.map((value) => (
-                  <option key={value} value={value}>
-                    {`level: ${value}`}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
-          <button aria-label={localizer.message("ui.common.close")} className="dlg-x" onClick={onClose} type="button">
+          <button
+            aria-label={localizer.message("ui.common.close")}
+            className="dlg-x"
+            onClick={onClose}
+            title={localizer.message("ui.common.close")}
+            type="button"
+          >
             <X aria-hidden="true" />
           </button>
         </header>
@@ -273,29 +288,50 @@ const LogDialog = ({
           <input
             aria-label={localizer.message("ui.log.filterLabel")}
             className="input mono log-filter"
-            onChange={(event) => setFilter(event.currentTarget.value)}
+            onChange={(event) => {
+              setFilter(event.currentTarget.value);
+              if (traceRef.current) traceRef.current.scrollTop = 0;
+              setScrollTop(0);
+            }}
             placeholder={localizer.message("ui.log.filter")}
             type="search"
             value={filter}
           />
+          <label className="loglevel">
+            <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+            <select
+              className="select mono"
+              onChange={(event) => onLevelChange(event.currentTarget.value)}
+              value={currentLevel}
+            >
+              {LOG_LEVELS.map((value) => (
+                <option key={value} value={value}>
+                  {`level: ${value}`}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="dlg-body log-body">
-          <div aria-atomic="false" aria-live="polite" className="tracelog mono" ref={traceRef}>
+          <div
+            aria-atomic="false"
+            aria-live="polite"
+            className="tracelog mono"
+            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+            ref={traceRef}
+          >
             {visible.length === 0 ? (
               <div className="tracelog-empty">
                 {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
               </div>
             ) : (
-              <>
-                {hiddenLineCount > 0 ? (
-                  <div className="tracelog-truncated">
-                    {`${hiddenLineCount} earlier line(s) hidden - filter to narrow, or Download for the full log`}
-                  </div>
-                ) : null}
-                {rendered.map((entry) => (
-                  <TraceLine entry={entry} key={entry.id} />
-                ))}
-              </>
+              <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
+                <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
+                  {rendered.map((entry) => (
+                    <TraceLine entry={entry} key={entry.id} />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
