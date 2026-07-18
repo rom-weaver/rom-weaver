@@ -53,7 +53,7 @@ describe("getDefaultSettings", () => {
     expect(settings.bundlePackage).toBe("");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
-    expect(settings.workerThreads).toBe("auto");
+    expect(settings.threads).toBe("auto");
   });
 
   it("returns a fresh object each call (no shared mutable defaults)", () => {
@@ -118,16 +118,16 @@ describe("validateSettingsDraft", () => {
   });
 
   it("keeps `auto` worker threads and never flags them", () => {
-    const result = validateSettingsDraft(validDraft({ workerThreads: "auto" }));
-    expect(result.settings.workerThreads).toBe("auto");
-    expect(result.invalidFields).not.toContain(getSettingsFieldId("workerThreads"));
+    const result = validateSettingsDraft(validDraft({ threads: "auto" }));
+    expect(result.settings.threads).toBe("auto");
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("threads"));
   });
 
   it("flags an out-of-range worker thread count and retains the current value", () => {
-    const result = validateSettingsDraft(validDraft({ workerThreads: "999" }));
-    expect(result.invalidFields).toContain(getSettingsFieldId("workerThreads"));
+    const result = validateSettingsDraft(validDraft({ threads: "999" }));
+    expect(result.invalidFields).toContain(getSettingsFieldId("threads"));
     expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.settings.workerThreads).toBe("auto");
+    expect(result.settings.threads).toBe("auto");
   });
 
   it("treats only an explicit false as opting out of checksum-match requirements", () => {
@@ -189,6 +189,14 @@ describe("loadSettings", () => {
     expect(loaded.fixChecksum).toBe(true);
     expect(loaded.language).toBe("fr");
     expect(storage.removedKeys).toEqual([]);
+  });
+
+  it("loads a legacy stored workerThreads key into threads", () => {
+    const storeThreads = (compression: Record<string, unknown>) =>
+      makeStorage(JSON.stringify({ create: { compression }, version: SETTINGS_STORAGE_VERSION }));
+    const legacy = loadSettings(storeThreads({ workerThreads: 3 }));
+    expect(legacy.threads).not.toBe(getDefaultSettings().threads);
+    expect(legacy.threads).toBe(loadSettings(storeThreads({ threads: 3 })).threads);
   });
 
   it("resets and returns defaults on corrupt JSON", () => {

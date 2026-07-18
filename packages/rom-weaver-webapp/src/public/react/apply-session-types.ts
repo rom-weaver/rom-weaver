@@ -84,7 +84,7 @@ type ApplyWorkflowStageSnapshot = {
     output: NonNullable<ApplyPatchFormSettings["output"]> & {
       compression: "auto" | CompressionFormat;
     };
-    workerThreads?: number | string;
+    threads?: number | string;
     containerInputsEnabled?: boolean;
   };
 };
@@ -126,7 +126,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "defaultPatches"
   | "defaultSettings"
   | "disabled"
-  | "workerThreads"
+  | "threads"
   | "containerInputsEnabled"
   | "compressionOptions"
   | "onInputsChange"
@@ -152,7 +152,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
         compression: "auto" | CompressionFormat;
       };
       signal?: AbortSignal;
-      workerThreads?: number | string;
+      threads?: number | string;
       containerInputsEnabled?: boolean;
       onProgress: (event: ProgressEvent) => void;
     };

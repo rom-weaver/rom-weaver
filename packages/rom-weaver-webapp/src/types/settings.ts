@@ -70,14 +70,13 @@ type CompressionSettings = {
   rvzScrub?: boolean | string | number;
   sevenZipCodec?: SevenZipCodec;
   sevenZipLevel?: StringNumber;
-  workerThreads?: StringNumber;
   z3dsCompressionLevel?: StringNumber | "default";
   zipCodec?: ZipCodec;
   zipLevel?: StringNumber;
 };
 
 type OutputSettings = {
-  container?: Omit<CompressionSettings, "format" | "workerThreads">;
+  container?: Omit<CompressionSettings, "format">;
   compression?: "auto" | CompressionFormat;
   extension?: string;
   /** ROM copier-header handling on the patched output: auto (re-add emulator-required

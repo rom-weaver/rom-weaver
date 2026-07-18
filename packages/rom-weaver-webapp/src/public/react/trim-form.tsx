@@ -322,9 +322,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         input: settings.input,
         loggingLevel: settings.logging?.level,
         workers: settings.workers,
-        workerThreads: props.workerThreads,
+        threads: props.threads,
       }),
-    [props.workerThreads, settings],
+    [props.threads, settings],
   );
   const stagingSettings = useMemo(
     () =>
@@ -336,9 +336,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           workers: settings.workers,
         } as CreateSettings,
         "",
-        props.workerThreads,
+        props.threads,
       ),
-    [props.workerThreads, settings.input, settings.logging, settings.workers],
+    [props.threads, settings.input, settings.logging, settings.workers],
   );
   const stagingSettingsRef = useRef(stagingSettings);
   useEffect(() => {
@@ -572,7 +572,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           settings: toCreateWorkflowSettings(
             { ...settings, output: { ...settings.output, compression: outputCompression } } as CreateSettings,
             executionOutputName,
-            props.workerThreads,
+            props.threads,
           ),
           signal: abortController.signal,
         });

@@ -89,8 +89,8 @@ const isInsideLocalDropZone = (target: EventTarget | null) =>
 
 type WorkflowView = WebappRootProps["state"]["currentView"];
 
-const resolveWorkerThreads = (workerThreads: unknown): number => {
-  const numeric = typeof workerThreads === "number" ? workerThreads : Number.parseInt(String(workerThreads || ""), 10);
+const resolveThreads = (threads: unknown): number => {
+  const numeric = typeof threads === "number" ? threads : Number.parseInt(String(threads || ""), 10);
   if (Number.isFinite(numeric) && numeric >= 1) return numeric;
   return typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 0;
 };
@@ -176,10 +176,10 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
-  const workerThreads = state.settings.workerThreads;
+  const threads = state.settings.threads;
   useEffect(() => {
-    void preloadBrowserRuntime({ workerThreads });
-  }, [workerThreads]);
+    void preloadBrowserRuntime({ threads });
+  }, [threads]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -321,7 +321,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
                 ? WORKFLOW_TABS
                 : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
             }
-            threads={resolveWorkerThreads(workerThreads)}
+            threads={resolveThreads(threads)}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
           />
@@ -430,4 +430,4 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   );
 }
 
-export { resolveWorkerThreads, selectViewWithTransition, WebappRoot };
+export { resolveThreads, selectViewWithTransition, WebappRoot };

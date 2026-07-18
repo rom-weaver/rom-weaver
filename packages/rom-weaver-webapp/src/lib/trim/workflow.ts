@@ -34,7 +34,7 @@ type TrimWorkflowDeps = CreateWorkflowDeps;
 type OutputCompressionSource = Parameters<typeof OutputCompressionManager.resolveOutputCompression>[0];
 
 const getTrimLogLevel = (options: TrimWorkflowOptions | undefined) => options?.logging?.level;
-const getTrimWorkerThreads = (options: TrimWorkflowOptions | undefined) => options?.workers?.threads;
+const getTrimThreads = (options: TrimWorkflowOptions | undefined) => options?.workers?.threads;
 const getTrimCompression = (options: TrimWorkflowOptions | undefined) => options?.output?.compression;
 const getTrimOutputName = (options: TrimWorkflowOptions | undefined) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("trim");
@@ -202,7 +202,7 @@ const runTrimWorkflow = async (
         outputName: rawTrimFileName,
         signal: options.signal,
         source: source as SourceRef,
-        workerThreads: getTrimWorkerThreads(options),
+        threads: getTrimThreads(options),
       }),
     () => ({ worker: true }),
   );

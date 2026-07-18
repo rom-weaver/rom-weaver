@@ -8,7 +8,7 @@ import { InfoToggle } from "./components/info-toggle.tsx";
 import { LICENSE_URL, NOTICE_URL, THIRD_PARTY_LICENSES_URL } from "./project-links.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
-  getDefaultWorkerThreads,
+  getDefaultThreads,
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,
@@ -48,7 +48,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
     fields: ["language", "logLevel", "bundlePackage", "betaToolsEnabled", "fixChecksum", "requireInputChecksumMatch"],
     title: "General",
   },
-  { fields: ["defaultCompression", "compressionProfile", "workerThreads"], title: "Compression" },
+  { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
   {
     fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],
     title: "Codecs",
@@ -78,7 +78,7 @@ const cleanDefaultOptionLabel = (label: string): string => label.replace(/\s*\([
 const formatDefaultLabel = (label: string): string => `${cleanDefaultOptionLabel(label) || label} (Default)`;
 
 const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey): string => {
-  if (fieldKey === "workerThreads") return `auto (${getDefaultWorkerThreads()})`;
+  if (fieldKey === "threads") return `auto (${getDefaultThreads()})`;
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const defaultValue = getDefaultValueString(fieldKey);
   const optionLabel = field.options?.find((option) => option.value === defaultValue)?.label;
@@ -190,7 +190,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
       </select>
     );
   }
-  const inputType = field.kind === "number" && fieldKey !== "workerThreads" ? "number" : "text";
+  const inputType = field.kind === "number" && fieldKey !== "threads" ? "number" : "text";
   const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
   const value = getFieldValue(fieldKey, draftSettings);
   if (field.kind === "text" && isCompressionCodecFieldKey(fieldKey)) {

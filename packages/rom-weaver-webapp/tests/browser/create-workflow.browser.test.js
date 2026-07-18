@@ -44,7 +44,7 @@ const createZipFile = async (entryName, bytes, outputName) => {
     format: "zip",
     options: {
       outputName,
-      workerThreads: 1,
+      threads: 1,
     },
   });
   const output = result?.output;
@@ -57,7 +57,7 @@ const createZipFile = async (entryName, bytes, outputName) => {
   }
 };
 
-const createTraceWorkflow = (output, workerThreads = 1) => {
+const createTraceWorkflow = (output, threads = 1) => {
   const logs = [];
   const workflow = new CreateWorkflow({
     settings: {
@@ -68,7 +68,7 @@ const createTraceWorkflow = (output, workerThreads = 1) => {
       },
       output,
       workers: {
-        threads: workerThreads,
+        threads,
       },
     },
   });

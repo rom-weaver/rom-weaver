@@ -63,7 +63,7 @@ const getOutputCompression = (options: OutputWorkflowOptions | undefined, source
 };
 const getCompressionProfile = (options: OutputWorkflowOptions | undefined) =>
   options?.output?.container?.profile || "max";
-const getWorkerThreads = (options: OutputWorkflowOptions | undefined) => options?.workers?.threads;
+const getThreads = (options: OutputWorkflowOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: OutputWorkflowOptions | undefined) => options?.logging?.level;
 const getContainerSettings = (options: OutputWorkflowOptions | undefined): OutputContainerSettings =>
   options?.output?.container || {};
@@ -189,7 +189,7 @@ const createRuntimeRomSpecificOutputFiles = async (
         }),
       }),
     signal: options?.signal,
-    workerThreads: getWorkerThreads(options),
+    threads: getThreads(options),
   };
   let request: RuntimeCompressionCreateRequest;
   if (compression === "chd") {
@@ -571,7 +571,7 @@ const buildSessionOutputFiles = async (
             stage: "output",
           }),
         signal: options?.signal,
-        workerThreads: getWorkerThreads(options),
+        threads: getThreads(options),
       },
       outputName: `${baseName}.chd`,
       romSpecific: {

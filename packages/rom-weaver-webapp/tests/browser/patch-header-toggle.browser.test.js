@@ -77,7 +77,7 @@ test("strip-header toggle settles inside an everything archive bundle session", 
 const buildZip = async (entries, outputName) => {
   const create = browserRuntime.compression.create;
   if (!create) throw new Error("Runtime compression create capability is unavailable");
-  const result = await create({ entries, format: "zip", options: { outputName, workerThreads: 1 } });
+  const result = await create({ entries, format: "zip", options: { outputName, threads: 1 } });
   const output = result?.output;
   if (!output) throw new Error("Zip compression did not return output");
   try {

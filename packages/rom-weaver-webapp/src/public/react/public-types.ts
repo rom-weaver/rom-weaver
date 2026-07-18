@@ -47,7 +47,7 @@ type CreatePatchFormProps = {
   patchType?: string;
   defaultPatchType?: string;
   disabled?: boolean;
-  workerThreads?: number | string;
+  threads?: number | string;
   onOriginalChange?: (file: BinarySource | null) => void;
   onModifiedChange?: (file: BinarySource | null) => void;
   onSettingsChange?: (settings: CreatePatchFormSettings) => void;
@@ -69,7 +69,7 @@ type TrimPatchFormProps = {
   outputFormat?: string;
   defaultOutputFormat?: string;
   disabled?: boolean;
-  workerThreads?: number | string;
+  threads?: number | string;
   onSourceChange?: (file: BinarySource | null) => void;
   onSettingsChange?: (settings: TrimPatchFormSettings) => void;
   onOutputFormatChange?: (format: string) => void;

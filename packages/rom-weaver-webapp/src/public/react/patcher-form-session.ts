@@ -26,7 +26,7 @@ import {
   sumStagedInfoSize,
 } from "./apply-session-inputs.ts";
 import { getTraceSourceSummaries, logUiError } from "./apply-session-logging.ts";
-import { createStageSettingsKey, getLegacyCompressionWorkerThreads } from "./apply-session-settings.ts";
+import { createStageSettingsKey, getLegacyCompressionThreads } from "./apply-session-settings.ts";
 import {
   hasSameRecordValues,
   useStableSourceKeys,
@@ -90,7 +90,7 @@ const useLocalApplyPatchFormSession = ({
   defaultPatches = [],
   defaultSettings = {},
   disabled = false,
-  workerThreads,
+  threads,
   containerInputsEnabled = true,
   compressionOptions = DEFAULT_COMPRESSION_OPTIONS,
   onInputsChange,
@@ -300,17 +300,16 @@ const useLocalApplyPatchFormSession = ({
   const automaticResolvedOutputName = effectiveInputs.length
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
-  const resolvedWorkerThreads =
-    activeSettings.workers?.threads ?? getLegacyCompressionWorkerThreads(activeSettings) ?? workerThreads;
+  const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
   const effectiveResolvedOutputName = requestedOutputName || automaticResolvedOutputName;
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({
         containerInputsEnabled,
         settings: activeSettings,
-        workerThreads: resolvedWorkerThreads,
+        threads: resolvedThreads,
       }),
-    [activeSettings, containerInputsEnabled, resolvedWorkerThreads],
+    [activeSettings, containerInputsEnabled, resolvedThreads],
   );
   const createStageSnapshot = useCallback(
     (): ApplyWorkflowStageSnapshot => ({
@@ -326,7 +325,7 @@ const useLocalApplyPatchFormSession = ({
           compression: requestedCompression,
           outputName: requestedOutputName,
         },
-        workerThreads: resolvedWorkerThreads,
+        threads: resolvedThreads,
       },
       patches: activePatches,
     }),
@@ -337,7 +336,7 @@ const useLocalApplyPatchFormSession = ({
       effectiveInputs,
       requestedOutputName,
       requestedCompression,
-      resolvedWorkerThreads,
+      resolvedThreads,
     ],
   );
   const fallbackInputCompressedBytes =
@@ -1164,7 +1163,7 @@ const useLocalApplyPatchFormSession = ({
       pendingDownloadFileName,
       requestedCompression,
       requestedOutputName,
-      resolvedWorkerThreads,
+      resolvedThreads,
     },
     session,
     workflow: { applyPatches, downloadOutput, onApplyComplete, onError, onProgress },

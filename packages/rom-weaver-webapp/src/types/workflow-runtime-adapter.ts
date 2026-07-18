@@ -226,7 +226,7 @@ type RuntimeChecksumCacheInput =
   | PatchValidateCommand["checksum_cache"]
   | Record<string, string | number | null | undefined>;
 
-type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "output" | "patches">> & {
+type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "output" | "patches" | "threads">> & {
   addHeader?: boolean;
   appendOutputSuffix?: boolean;
   fixChecksum?: PatchApplyCommand["repair_checksum"];
@@ -243,10 +243,10 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   requireInputChecksumMatch?: boolean;
   validateWithChecksums?: PatchApplyCommand["validate_with_checksums"];
   validateWithOutputChecksums?: PatchApplyCommand["validate_with_output_checksums"];
-  workerThreads?: RuntimeThreadBudgetInput;
+  threads?: RuntimeThreadBudgetInput;
 };
 
-type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | "patches">> & {
+type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | "patches" | "threads">> & {
   checksumCache?: RuntimeChecksumCacheInput;
   ignoreChecksumValidation?: PatchValidateCommand["ignore_checksum_validation"];
   /** Validate every patch independently against the original input (no chaining) and return a
@@ -266,7 +266,7 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
   removeHeader?: PatchValidateCommand["strip_header"];
   validateWithChecksums?: PatchValidateCommand["validate_with_checksums"];
   validationRequirements?: RuntimePatchValidationRequirement | RuntimePatchValidationRequirement[];
-  workerThreads?: RuntimeThreadBudgetInput;
+  threads?: RuntimeThreadBudgetInput;
 };
 
 /** One patch's verdict from an independent-mode `patch-validate` call, index-aligned to the patches
@@ -322,7 +322,7 @@ type RuntimePatchCreateWorkerInput = {
   outputName: NonNullable<PatchCreateCommand["output"]>;
   signal?: AbortSignal;
   sourceCrc32?: PatchCreateCommand["source_crc32"];
-  workerThreads?: RuntimeThreadBudgetInput;
+  threads?: RuntimeThreadBudgetInput;
 };
 
 type RuntimePatchCreateCandidatesWorkerInput = {
@@ -332,7 +332,7 @@ type RuntimePatchCreateCandidatesWorkerInput = {
   originalFileName: string;
   originalFilePath: PatchCreateCommand["original"];
   signal?: AbortSignal;
-  workerThreads?: RuntimeThreadBudgetInput;
+  threads?: RuntimeThreadBudgetInput;
 };
 
 type RuntimePatchCreateFormatCandidates = {
@@ -349,7 +349,7 @@ type RuntimeTrimWorkerInput = {
   signal?: AbortSignal;
   sourceFileName: string;
   sourceFilePath: string;
-  workerThreads?: RuntimeThreadBudgetInput;
+  threads?: RuntimeThreadBudgetInput;
 };
 
 type WorkflowRuntimeOutput = {
@@ -407,7 +407,7 @@ type WorkflowRuntimePatch = {
     outputName: NonNullable<PatchCreateCommand["output"]>;
     checksumName?: PatchCreateCommand["checksum_name"];
     sourceCrc32?: PatchCreateCommand["source_crc32"];
-    workerThreads?: RuntimeThreadBudgetInput;
+    threads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -416,7 +416,7 @@ type WorkflowRuntimePatch = {
   createPatchCandidates?: (input: {
     original: SourceRef;
     modified: SourceRef;
-    workerThreads?: RuntimeThreadBudgetInput;
+    threads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -522,7 +522,7 @@ type WorkflowRuntimeTrim = {
     source: SourceRef;
     extension?: string;
     outputName: string;
-    workerThreads?: RuntimeThreadBudgetInput;
+    threads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -572,7 +572,7 @@ type WorkflowRuntimePreload = {
   preloadCapability?: (
     capability: WorkflowCapability,
     emit: (event: WorkflowRuntimePreloadEvent) => void,
-    options?: { workerThreads?: RuntimeThreadBudgetInput },
+    options?: { threads?: RuntimeThreadBudgetInput },
   ) => Promise<void>;
 };
 

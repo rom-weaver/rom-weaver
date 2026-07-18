@@ -41,7 +41,7 @@ const createZcciFixtureFile = async () => {
     fileName: source.name,
     format: "z3ds",
     options: {
-      workerThreads: 1,
+      threads: 1,
     },
     outputName: "game.zcci",
     source: {

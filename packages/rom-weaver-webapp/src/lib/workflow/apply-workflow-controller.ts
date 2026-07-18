@@ -784,10 +784,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     if (!preload) return;
     this.trace("runtime.preload.start", {
       capability,
-      workerThreads: this.settings.workers?.threads,
+      threads: this.settings.workers?.threads,
     });
     void preload(capability, () => undefined, {
-      workerThreads: this.settings.workers?.threads,
+      threads: this.settings.workers?.threads,
     })
       .then(() => {
         this.trace("runtime.preload.finish", {

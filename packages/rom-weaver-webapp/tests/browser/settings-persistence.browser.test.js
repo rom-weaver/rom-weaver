@@ -47,7 +47,7 @@ test("settings persistence round-trips every visible settings field", () => {
     rvzCompressionLevel: 7,
     sevenZipCodec: "lzma2:8",
     sevenZipLevel: 8,
-    workerThreads: 2,
+    threads: 2,
     z3dsCompressionLevel: 12,
     zipCodec: "zstd:13",
     zipLevel: 13,

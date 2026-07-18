@@ -266,7 +266,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       try {
         await this.releaseRoleSession(role);
         await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
-          workerThreads: this.settings.workers?.threads,
+          threads: this.settings.workers?.threads,
         });
         const session = (await this.sourceStages.stageSession(role, sources)) as SourceSession<TSource>;
         if (role === "original") this.originalSession = session;

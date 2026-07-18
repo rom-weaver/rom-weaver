@@ -84,7 +84,7 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
       entries: ["game.iso"],
       format: "rvz",
       options: {
-        workerThreads: 8,
+        threads: 8,
       },
       outputName: "game.iso",
       source,
@@ -120,7 +120,7 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
       entries: ["game.iso"],
       format: "rvz",
       options: {
-        workerThreads: 1,
+        threads: 1,
       },
       outputName: "game.iso",
       source,
@@ -134,7 +134,7 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
       format: "rvz",
       options: {
         onProgress: (event) => createProgress.push(event),
-        workerThreads: 10,
+        threads: 10,
       },
       outputName: "created-from-output.rvz",
       romSpecific: {

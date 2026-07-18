@@ -60,7 +60,7 @@ const getCompressionProfile = (options: ArchiveOutputOptions | undefined) =>
   options?.output?.container?.profile || "max";
 const getContainerSettings = (options: ArchiveOutputOptions | undefined): ArchiveOutputContainerSettings =>
   options?.output?.container || {};
-const getWorkerThreads = (options: ArchiveOutputOptions | undefined) => options?.workers?.threads;
+const getThreads = (options: ArchiveOutputOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: ArchiveOutputOptions | undefined) => options?.logging?.level;
 const getArchiveProgressReporter =
   (compression: ArchiveCreateCompression, options: ArchiveOutputOptions | undefined) =>
@@ -196,7 +196,7 @@ const createArchiveOutput = async ({
     sevenZipCodec: levels.sevenZipCodec as SevenZipZstdCompressionOptions["sevenZipCodec"],
     sevenZipLevel: levels.sevenZipLevel,
     signal: options?.signal,
-    workerThreads: getWorkerThreads(options),
+    threads: getThreads(options),
     zipCodec: zipCodec as SevenZipZstdCompressionOptions["zipCodec"],
     zipLevel,
   };

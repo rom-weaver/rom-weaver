@@ -535,7 +535,7 @@ msgstr "threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.workerThreads"
+msgid "settings.threads"
 msgstr "Threads"
 
 #. js-lingui-explicit-id

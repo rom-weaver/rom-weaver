@@ -44,7 +44,7 @@ type ApplyWorkflowSessionInput = {
       compression: "auto" | CompressionFormat;
     };
     signal?: AbortSignal;
-    workerThreads?: number | string;
+    threads?: number | string;
     containerInputsEnabled?: boolean;
     onProgress?: (event: ProgressEvent) => void;
   };
@@ -313,15 +313,12 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
   } as ApplyWorkflowResult;
 };
 
-const createBaseApplyWorkflowSettings = (
-  options: ApplyWorkflowSessionInput["options"],
-  workerThreads?: number | string,
-) => {
+const createBaseApplyWorkflowSettings = (options: ApplyWorkflowSessionInput["options"], threads?: number | string) => {
   const {
     containerInputsEnabled,
     onProgress: _onProgress,
     signal: _signal,
-    workerThreads: optionWorkerThreads,
+    threads: optionThreads,
     ...settingsInput
   } = options;
   const settings = toApplyWorkflowSettings(
@@ -332,7 +329,7 @@ const createBaseApplyWorkflowSettings = (
         containerInputsEnabled,
       },
     },
-    optionWorkerThreads || workerThreads,
+    optionThreads || threads,
   );
   return {
     ...settings,
@@ -351,7 +348,7 @@ const createWorkflowPreparationSettingsKey = (settings: ApplyPatchFormSettings) 
   createStageSettingsKey({
     containerInputsEnabled: settings.input?.containerInputsEnabled,
     settings,
-    workerThreads: settings.workers?.threads,
+    threads: settings.workers?.threads,
   });
 
 const createWorkflowOutputOverridesKey = (snapshot: ApplyWorkflowSessionInput) =>

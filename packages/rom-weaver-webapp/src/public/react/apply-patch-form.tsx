@@ -83,7 +83,7 @@ const buildEagerPatchStageInfo = (
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
-  const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, workerThreads } = props;
+  const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -486,7 +486,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const handleProgress = (event: WorkflowProgress) => handlers.onProgress?.(event);
       workflow.on("progress", handleProgress);
       try {
-        const baseSettings = createBaseApplyWorkflowSettings(snapshot.options, props.workerThreads);
+        const baseSettings = createBaseApplyWorkflowSettings(snapshot.options, props.threads);
         const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
         const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
@@ -681,13 +681,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         workflow.off("progress", handleProgress);
       }
     },
-    [
-      getWorkflow,
-      props.workerThreads,
-      setResolvedOutputNameForSnapshot,
-      syncSelectionRefs,
-      syncWorkflowOutputOverrides,
-    ],
+    [getWorkflow, props.threads, setResolvedOutputNameForSnapshot, syncSelectionRefs, syncWorkflowOutputOverrides],
   );
 
   const withPreparedWorkflow = useCallback(
@@ -835,7 +829,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
       return queueMutation(async () => {
         syncSelectionRefs(input);
-        const baseSettings = createBaseApplyWorkflowSettings(input.options, workerThreads);
+        const baseSettings = createBaseApplyWorkflowSettings(input.options, threads);
         const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
         const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
@@ -888,7 +882,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [
       emitWorkflowProgress,
       onApplyComplete,
-      workerThreads,
+      threads,
       queueMutation,
       syncSelectionRefs,
       syncWorkflowOutputOverrides,

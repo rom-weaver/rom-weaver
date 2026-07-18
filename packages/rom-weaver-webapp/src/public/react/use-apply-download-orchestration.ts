@@ -90,7 +90,7 @@ interface ApplyRunRequest {
   pendingDownloadFileName: string | null;
   requestedCompression: "auto" | CompressionFormat;
   requestedOutputName: string | undefined;
-  resolvedWorkerThreads: number | string | undefined;
+  resolvedThreads: number | string | undefined;
 }
 
 // Side-effecting collaborators the orchestration drives back in the parent session.
@@ -175,7 +175,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           pendingDownloadFileName,
           requestedCompression,
           requestedOutputName,
-          resolvedWorkerThreads,
+          resolvedThreads,
         } = request;
         const {
           cancelActiveOperation,
@@ -320,7 +320,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               validation: runtimeValidationSettings,
               workers: {
                 ...activeSettings.workers,
-                threads: resolvedWorkerThreads,
+                threads: resolvedThreads,
               },
             },
             patches: activePatches,

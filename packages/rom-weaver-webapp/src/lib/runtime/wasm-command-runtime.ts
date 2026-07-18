@@ -99,7 +99,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     signal?: AbortSignal;
     totalBytes?: number | null;
     virtualFiles?: RuntimeValue[];
-    workerThreads?: RuntimeThreadBudgetInput;
+    threads?: RuntimeThreadBudgetInput;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -127,7 +127,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     // (zip.rs create_thread_capability -> plan_threads negotiates the requested
     // count down to achievable.min(memory_cap)); forward the requested budget and
     // let the engine cap it. See docs/ts-rust-unification-plan.md (Task C).
-    const threadArg = toThreadBudget(input.workerThreads);
+    const threadArg = toThreadBudget(input.threads);
     const command = createRomWeaverCommand("compress", {
       codec: codecs,
       format: format || undefined,
@@ -361,7 +361,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
       ?.ignore_checksum_validation,
   );
-  const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
+  const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
   // Some validates fan worker threads across the source: bps block-check CRCs, xdelta's per-window
@@ -511,9 +511,7 @@ const invokeRomWeaverPatchApplyWorker = async (
         : outputHeaderRaw === "keep" || outputHeaderRaw === "strip"
           ? outputHeaderRaw
           : ("auto" as const);
-      const requestedThreadArg = toThreadBudget(
-        (input.options as { workerThreads?: unknown } | undefined)?.workerThreads,
-      );
+      const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
       const {
         forceSingleThreadReason,
         forcedSingleThread,
@@ -636,7 +634,7 @@ const invokeRomWeaverCreatePatchCandidatesWorker = async (
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
 ): Promise<RuntimePatchCreateFormatCandidates> => {
-  const threadArg = toThreadBudget(input.workerThreads);
+  const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("patch-create", {
     modified: input.modifiedFilePath,
     original: input.originalFilePath,
@@ -681,7 +679,7 @@ const invokeRomWeaverCreatePatchWorker = async (
     outputFileName,
     [input.originalFilePath, input.modifiedFilePath],
     async (outputPath) => {
-      const threadArg = toThreadBudget(input.workerThreads);
+      const threadArg = toThreadBudget(input.threads);
       const command = createRomWeaverCommand("patch-create", {
         format: input.format,
         modified: input.modifiedFilePath,
@@ -735,7 +733,7 @@ const invokeRomWeaverTrimWorker = async (
   const outputFileName = getTrimOutputFileName(sourceFilePath, input.outputName);
   return runWithRomWeaverOutputScope(sourceFilePath, outputFileName, [sourceFilePath], async (outputPath) => {
     const normalizedExtension = typeof input.extension === "string" ? input.extension.trim() : "";
-    const threadArg = toThreadBudget(input.workerThreads);
+    const threadArg = toThreadBudget(input.threads);
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
     // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), never
@@ -844,7 +842,7 @@ const invokeRomWeaverIngestWorker = async (
     // For a multi-track CHD CD: force per-track split BIN (true) or a single merged BIN (false).
     // Omit to let the ingest command ask the host interactively when the disc offers the choice.
     splitBin?: boolean;
-    workerThreads?: RuntimeThreadBudgetInput;
+    threads?: RuntimeThreadBudgetInput;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -865,7 +863,7 @@ const invokeRomWeaverIngestWorker = async (
       .toLowerCase();
     if (value) checksum.push(value);
   }
-  const threadArg = toThreadBudget(input.workerThreads);
+  const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
     out_dir: outDirPath,
     source: sourcePath,

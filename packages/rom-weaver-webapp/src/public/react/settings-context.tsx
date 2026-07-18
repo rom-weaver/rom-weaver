@@ -165,7 +165,7 @@ const normalizeApplyOutputCompression = (
 
 const getNormalizedWorkflowSettings = (
   settings: ApplyPatchFormSettings | CreatePatchFormSettings,
-  workerThreads?: RuntimeValue,
+  threads?: RuntimeValue,
 ) => {
   const source = toRecord(settings as RuntimeValue);
   const output = toRecord(source.output);
@@ -254,16 +254,13 @@ const getNormalizedWorkflowSettings = (
     },
     workers: {
       ...workers,
-      threads: readFirstDefined(workers.threads, source.workerThreads, workerThreads),
+      threads: readFirstDefined(workers.threads, source.threads, source.workerThreads, threads),
     },
   };
 };
 
-const toApplyWorkflowSettings = (
-  settings: ApplyPatchFormSettings,
-  workerThreads?: RuntimeValue,
-): ApplyWorkflowSettings => {
-  const normalized = getNormalizedWorkflowSettings(settings, workerThreads);
+const toApplyWorkflowSettings = (settings: ApplyPatchFormSettings, threads?: RuntimeValue): ApplyWorkflowSettings => {
+  const normalized = getNormalizedWorkflowSettings(settings, threads);
   const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
   return {
     ...settings,
@@ -282,9 +279,9 @@ const toApplyWorkflowSettings = (
 const toCreateWorkflowSettings = (
   settings: CreatePatchFormSettings,
   outputName: string,
-  workerThreads?: RuntimeValue,
+  threads?: RuntimeValue,
 ): CreateWorkflowSettings => {
-  const normalized = getNormalizedWorkflowSettings(settings, workerThreads);
+  const normalized = getNormalizedWorkflowSettings(settings, threads);
   const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
   return {
     ...settings,

@@ -31,7 +31,7 @@ const CRC32_HEX_REGEX = /^[0-9a-f]{8}$/;
 
 const getCreateFormat = (options: CreatePatchInput["options"]) => options?.format || "bps";
 const getCreateLogLevel = (options: CreatePatchInput["options"]) => options?.logging?.level;
-const getCreateWorkerThreads = (options: CreatePatchInput["options"]) => options?.workers?.threads;
+const getCreateThreads = (options: CreatePatchInput["options"]) => options?.workers?.threads;
 const getCreateMetadata = (options: CreatePatchInput["options"]): JsonObject =>
   (options?.patch?.metadata || {}) as JsonObject;
 const getCreateCompression = (options: CreatePatchInput["options"]) => options?.output?.compression;
@@ -153,7 +153,7 @@ const runCreateWorkflow = async (
           outputName: basePatchFileName,
           signal: options.signal,
           sourceCrc32,
-          workerThreads: getCreateWorkerThreads(options),
+          threads: getCreateThreads(options),
         }),
       () => ({ patchType: format, worker: true }),
     );

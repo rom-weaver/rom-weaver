@@ -1,6 +1,6 @@
 import type { ApplyPatchFormSettings } from "./patcher-form.ts";
 
-const getLegacyCompressionWorkerThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
+const getLegacyCompressionThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
   const legacyThreads = (settings as { compression?: { workerThreads?: unknown } }).compression?.workerThreads;
   if (typeof legacyThreads === "number" || typeof legacyThreads === "string") return legacyThreads;
   return undefined;
@@ -9,11 +9,11 @@ const getLegacyCompressionWorkerThreads = (settings: ApplyPatchFormSettings): nu
 const createStageSettingsKey = ({
   containerInputsEnabled,
   settings,
-  workerThreads,
+  threads,
 }: {
   containerInputsEnabled?: boolean;
   settings: ApplyPatchFormSettings;
-  workerThreads?: number | string;
+  threads?: number | string;
 }) => {
   const input = { ...settings.input };
   if (containerInputsEnabled !== undefined) input.containerInputsEnabled = containerInputsEnabled;
@@ -22,11 +22,11 @@ const createStageSettingsKey = ({
       input,
       workers: {
         ...settings.workers,
-        threads: settings.workers?.threads ?? getLegacyCompressionWorkerThreads(settings) ?? workerThreads,
+        threads: settings.workers?.threads ?? getLegacyCompressionThreads(settings) ?? threads,
       },
     },
     (_key, value) => (typeof value === "function" ? "[function]" : value),
   );
 };
 
-export { createStageSettingsKey, getLegacyCompressionWorkerThreads };
+export { createStageSettingsKey, getLegacyCompressionThreads };

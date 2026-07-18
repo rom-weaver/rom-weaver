@@ -75,7 +75,7 @@ const createMultiTrackChdOutput = async (runId) => {
     const result = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: `${stem}.chd`,
       romSpecific: {
@@ -198,7 +198,7 @@ test("rom-weaver runtime honors split-bin extraction for multi-track CD CHDs", a
       format: "chd",
       options: {
         chdSplitBin: false,
-        workerThreads: 2,
+        threads: 2,
       },
       source: chdSource,
     });
@@ -217,7 +217,7 @@ test("rom-weaver runtime honors split-bin extraction for multi-track CD CHDs", a
       format: "chd",
       options: {
         chdSplitBin: true,
-        workerThreads: 2,
+        threads: 2,
       },
       source: chdSource,
     });
@@ -256,7 +256,7 @@ test("rom-weaver runtime descends DVD CHDs without split-bin", async () => {
     const createResult = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "Ape Escape 2 (USA).chd",
       romSpecific: {
@@ -280,7 +280,7 @@ test("rom-weaver runtime descends DVD CHDs without split-bin", async () => {
       format: "chd",
       options: {
         chdSplitBin: true,
-        workerThreads: 2,
+        threads: 2,
       },
       source: chdOutput,
     });
@@ -310,7 +310,7 @@ test("rom-weaver runtime descends CD CHDs with merged default and base primary s
       entries: [],
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       source: chdSource,
     });
@@ -331,7 +331,7 @@ test("rom-weaver runtime descends CD CHDs with merged default and base primary s
       format: "chd",
       options: {
         chdSplitBin: true,
-        workerThreads: 2,
+        threads: 2,
       },
       source: chdSource,
     });
@@ -418,7 +418,7 @@ test("rom-weaver runtime extracts a single-bin CD CHD from an OPFS path", async 
     const createResult = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "recompressed-cue-path.chd",
       romSpecific: {
@@ -458,7 +458,7 @@ test("rom-weaver runtime creates a CD CHD from a plain 2352-byte-sector input", 
     const result = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "created-cd.chd",
       romSpecific: {
@@ -507,7 +507,7 @@ test("rom-weaver runtime creates a CD CHD from a plain 2048-byte-sector input", 
     const result = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "created-cd-2048.chd",
       romSpecific: {
@@ -560,7 +560,7 @@ test("rom-weaver runtime creates a CD CHD when input lives directly under /work"
     const result = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "Crash Bandicoot (USA) - Quality of Life.chd",
       romSpecific: {
@@ -611,7 +611,7 @@ test("rom-weaver runtime creates a CD CHD from a cue source that references a si
     const result = await browserRuntime.compression.create?.({
       format: "chd",
       options: {
-        workerThreads: 2,
+        threads: 2,
       },
       outputName: "Crash Bandicoot (USA) - Quality of Life.chd",
       romSpecific: {

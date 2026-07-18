@@ -2,7 +2,7 @@ export type { SettingsDraftState, SettingsFieldKey, SettingsState, SettingsUiSta
 export {
   copySettings,
   getCompressionProfileFromIndex,
-  getDefaultWorkerThreads,
+  getDefaultThreads,
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,

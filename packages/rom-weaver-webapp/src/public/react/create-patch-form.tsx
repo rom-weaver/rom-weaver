@@ -145,11 +145,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     () => (modified ? getBinarySourceListStableIds([modified])[0] || "" : ""),
     [modified],
   );
-  const candidateWorkerThreads = props.workerThreads ?? settings.workers?.threads;
+  const candidateThreads = props.threads ?? settings.workers?.threads;
   // Canonical (order-independent) key: the available patch formats for a pair of
   // ROMs do not depend on which is original vs modified, so swapping must not
   // invalidate the resolved candidates (which would re-extract to re-measure).
-  const patchFormatCandidateKey = `${[originalSourceKey, modifiedSourceKey].sort().join("\n")}\n${String(candidateWorkerThreads ?? "")}`;
+  const patchFormatCandidateKey = `${[originalSourceKey, modifiedSourceKey].sort().join("\n")}\n${String(candidateThreads ?? "")}`;
   const activePatchFormatCandidates =
     createPatchFormatCandidates?.key === patchFormatCandidateKey ? createPatchFormatCandidates : null;
   const requestedPatchType = props.patchType || internalPatchType;
@@ -258,9 +258,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         language: settingsLanguage,
         loggingLevel: settings.logging?.level,
         workers: settings.workers,
-        workerThreads: props.workerThreads,
+        threads: props.threads,
       }),
-    [props.workerThreads, settings.input, settings.logging?.level, settings.workers, settingsLanguage],
+    [props.threads, settings.input, settings.logging?.level, settings.workers, settingsLanguage],
   );
   const stagingSettings = useMemo(
     () =>
@@ -272,9 +272,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           workers: settings.workers,
         } as never,
         "",
-        props.workerThreads,
+        props.threads,
       ),
-    [props.workerThreads, settings.input, settings.logging, settings.workers],
+    [props.threads, settings.input, settings.logging, settings.workers],
   );
   const stagingSettingsRef = useRef(stagingSettings);
   useEffect(() => {
@@ -318,7 +318,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         logging: settings.logging,
         workers: settings.workers,
       },
-      workerThreads: props.workerThreads,
+      threads: props.threads,
     })
       .then((candidates) => {
         if (cancelled) return;
@@ -338,7 +338,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     original,
     originalSourceKey,
     patchFormatCandidateKey,
-    props.workerThreads,
+    props.threads,
     resolvedAssetBaseUrl,
     resolveCreatePatchFormatCandidates,
     settings.logging,
@@ -635,7 +635,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           id: workflowIdRef.current,
           selectFile: async (request) =>
             createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
-          settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
+          settings: toCreateWorkflowSettings(settings, executionOutputName, props.threads),
           signal: abortController.signal,
         });
       const usingStagedWorkflow = stagedCreateWorkflowRef.current === createWorkflow;
@@ -653,7 +653,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         if (!usingStagedWorkflow) await createWorkflow.dispose();
       });
       if (usingStagedWorkflow) {
-        await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads));
+        await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.threads));
       } else {
         await createWorkflow.setOriginal(stagedOriginal);
         await createWorkflow.setModified(stagedModified);

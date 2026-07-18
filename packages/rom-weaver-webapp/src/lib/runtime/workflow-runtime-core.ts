@@ -256,7 +256,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     outputName,
     checksumName,
     sourceCrc32,
-    workerThreads,
+    threads,
     logLevel,
     onLog,
     onProgress,
@@ -297,7 +297,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           outputName,
           signal,
           sourceCrc32,
-          workerThreads: workerThreads ?? undefined,
+          threads: threads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
@@ -312,7 +312,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       await cleanupWorkerSources(workerSources);
     }
   },
-  createPatchCandidates: async ({ original, modified, workerThreads, logLevel, onLog, onProgress, signal }) => {
+  createPatchCandidates: async ({ original, modified, threads, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSources = await adapter.workerIo.stageSources([
       {
@@ -343,7 +343,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           originalFileName: originalSource.fileName,
           originalFilePath: originalSource.filePath,
           signal,
-          workerThreads: workerThreads ?? undefined,
+          threads: threads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
@@ -419,7 +419,7 @@ type TrimRuntimeAdapter = {
 };
 
 const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
-  trim: async ({ source, extension, outputName, workerThreads, logLevel, onLog, onProgress, signal }) => {
+  trim: async ({ source, extension, outputName, threads, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSource = await adapter.workerIo.stageSource({
       fallbackFileName: "input.bin",
@@ -438,7 +438,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           signal,
           sourceFileName: workerSource.fileName,
           sourceFilePath: workerSource.filePath,
-          workerThreads: workerThreads ?? undefined,
+          threads: threads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
@@ -502,7 +502,7 @@ const createSharedCompressionRuntime = (
       outputName: request.outputName,
       source: request.source,
       sourceMode: request.romSpecific?.chd?.sourceMode,
-      threads: request.options?.workerThreads,
+      threads: request.options?.threads,
     }),
     rvz: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateRvzInput => ({
       blockSize: request.romSpecific?.rvz?.blockSize,
@@ -521,7 +521,7 @@ const createSharedCompressionRuntime = (
       scrub: request.romSpecific?.rvz?.scrub,
       source: request.source,
       sourceFileName: request.romSpecific?.rvz?.sourceFileName,
-      threads: request.options?.workerThreads,
+      threads: request.options?.threads,
     }),
     z3ds: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateZ3dsInput => ({
       compressionLevel: request.romSpecific?.z3ds?.compressionLevel,
@@ -540,7 +540,7 @@ const createSharedCompressionRuntime = (
       outputName: request.outputName,
       source: request.source,
       sourceFileName: request.romSpecific?.z3ds?.sourceFileName,
-      threads: request.options?.workerThreads,
+      threads: request.options?.threads,
       underlyingMagic: request.romSpecific?.z3ds?.underlyingMagic,
     }),
   } satisfies Record<RomSpecificCompressionFormat, (request: RomSpecificCreateRequest) => RomSpecificCreateInput>;
@@ -579,7 +579,7 @@ const createSharedCompressionRuntime = (
         outputName: trackEntryName || request.outputName,
         source: request.source,
         splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
-        threads: request.options?.workerThreads,
+        threads: request.options?.threads,
       })) as CompressionExtractResult | undefined,
       `${registration.label} compression extraction is unavailable`,
     );
@@ -635,7 +635,7 @@ const createSharedCompressionRuntime = (
           ),
           outputName: request.entries[0] || request.outputName,
           source: request.source,
-          threads: request.options?.workerThreads,
+          threads: request.options?.threads,
         })) as RomSpecificCreateOutput | undefined,
         `${registration.label} compression extraction is unavailable`,
       ),
@@ -703,7 +703,7 @@ const createRuntimePreload = (): WorkflowRuntimePreload => ({
       emit({ data: { capability, status: "loading", workerKind }, kind: "worker" });
       emit({ data: { capability, status: "loading", tool }, kind: "wasm" });
       emit({ data: { capability, status: "busy", workerKind }, kind: "worker" });
-      await warmupRomWeaverRunner(options?.workerThreads);
+      await warmupRomWeaverRunner(options?.threads);
       emit({ data: { capability, status: "loaded", tool }, kind: "wasm" });
       emit({ data: { capability, status: "instantiated", tool }, kind: "wasm" });
       emit({ data: { capability, status: "ready", workerKind }, kind: "worker" });

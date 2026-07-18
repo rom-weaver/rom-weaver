@@ -167,7 +167,7 @@ const getCompressionRuntimeOptions = (
   logLevel: options?.logging?.level,
   onLog: options?.onLog,
   onProgress: options?.onProgress,
-  workerThreads: options?.workers?.threads,
+  threads: options?.workers?.threads,
 });
 
 // A multi-track CHD cue can be extracted as split bins; the split-bin affordance rides on the

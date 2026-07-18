@@ -193,7 +193,7 @@ const groupKeyFor = <TSource>(prepared: PreparedValidation<TSource>, settings: P
     n64ByteOrder: prepared.n64ByteOrder,
     sourcePath: (prepared.entry.target.file as { filePath?: string } | undefined)?.filePath,
     targetId: prepared.entry.target.id,
-    workerThreads: settings.workers?.threads ?? null,
+    threads: settings.workers?.threads ?? null,
   });
 
 const validatePreparedGroup = async <TSource>(
@@ -271,7 +271,7 @@ const validatePreparedGroup = async <TSource>(
           : {}),
         plan: true,
         removeHeader: first.headerRemoved,
-        workerThreads: adapters.settings.workers?.threads,
+        threads: adapters.settings.workers?.threads,
       },
       patches: prepared.map(({ entry, patchFile, patchSource }) => ({
         patchFile: patchSource as never,

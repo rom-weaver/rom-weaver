@@ -38,7 +38,7 @@ type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
 };
 
 const getApplyLogLevel = (options: PatchInput["options"]) => options?.logging?.level;
-const getApplyWorkerThreads = (options: PatchInput["options"]) => options?.workers?.threads;
+const getApplyThreads = (options: PatchInput["options"]) => options?.workers?.threads;
 const getApplyPatchTargets = (options: PatchInput["options"]) => options?.patchTargets;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("apply");
 
@@ -144,7 +144,7 @@ const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: s
     typeof options?.validation?.requireInputChecksumMatch === "boolean"
       ? options.validation.requireInputChecksumMatch
       : false,
-  workerThreads: getApplyWorkerThreads(options),
+  threads: getApplyThreads(options),
 });
 
 const runApplyWorkflow = async (

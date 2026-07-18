@@ -66,7 +66,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.rvzBlockSize": msg({ id: "settings.rvzBlockSize", message: "RVZ block size" }),
   "settings.rvzCodec": msg({ id: "settings.rvzCodec", message: "RVZ codec" }),
   "settings.sevenZipCodec": msg({ id: "settings.sevenZipCodec", message: "7z codec" }),
-  "settings.workerThreads": msg({ id: "settings.workerThreads", message: "Threads" }),
+  "settings.threads": msg({ id: "settings.threads", message: "Threads" }),
   "settings.zipCodec": msg({ id: "settings.zipCodec", message: "ZIP codec" }),
   "ui.basis.auto": msg({ id: "ui.basis.auto", message: "auto" }),
   "ui.basis.autoBase": msg({ id: "ui.basis.autoBase", message: "auto (base ROM)" }),

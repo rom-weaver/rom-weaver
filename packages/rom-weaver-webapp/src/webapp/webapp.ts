@@ -21,7 +21,7 @@ import {
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readWorkflowViewFromHash } from "./webapp-controller.ts";
-import { resolveWorkerThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
+import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
@@ -186,7 +186,7 @@ const applySettingsToRuntime = (settings: RuntimeSettings) => {
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
   logger.debug("Applying runtime settings", {
     logLevel: settings.logLevel,
-    workerThreads: settings.workerThreads,
+    threads: settings.threads,
   });
 };
 
@@ -420,7 +420,7 @@ const initializeWebapp = () => {
     dirty: !!DIRTY_HASH,
     dirtyHash: DIRTY_HASH || undefined,
     version: APP_VERSION,
-    workerThreads: resolveWorkerThreads(webappController.getState().settings.workerThreads),
+    threads: resolveThreads(webappController.getState().settings.threads),
   });
 
   serviceWorkerClient.refreshCacheVersion();

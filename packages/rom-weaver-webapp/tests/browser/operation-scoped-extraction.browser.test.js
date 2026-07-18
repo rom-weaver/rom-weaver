@@ -19,7 +19,7 @@ const createZcciFixtureFile = async () => {
   const result = await browserRuntime.compression.create?.({
     fileName: source.name,
     format: "z3ds",
-    options: { workerThreads: 1 },
+    options: { threads: 1 },
     outputName: "game.zcci",
     source: { fileName: source.name, source },
   });
@@ -136,7 +136,7 @@ test("Z3DS extraction owns and removes its operation scope", async () => {
     const result = await extract({
       entries: ["game.cci"],
       format: "z3ds",
-      options: { workerThreads: 1 },
+      options: { threads: 1 },
       outputName: "game.cci",
       source: await createZcciFixtureFile(),
     });

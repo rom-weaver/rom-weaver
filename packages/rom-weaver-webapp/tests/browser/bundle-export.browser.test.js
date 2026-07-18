@@ -24,7 +24,7 @@ const buildZip = async (entries, outputName) => {
   const result = await create({
     entries,
     format: "zip",
-    options: { outputName, workerThreads: 1 },
+    options: { outputName, threads: 1 },
   });
   const output = result?.output;
   if (!output) throw new Error("Zip compression did not return output");

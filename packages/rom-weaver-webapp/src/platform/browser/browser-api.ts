@@ -17,13 +17,13 @@ const assertPublicSources = createPublicSourcesValidator<BrowserSourceRef>(
   createPublicSourceValidator({ environmentLabel: "browser" }),
 );
 type BrowserRuntimePreloadOptions = {
-  workerThreads?: WorkerSettings["threads"] | null;
+  threads?: WorkerSettings["threads"] | null;
 };
 type BrowserCreatePatchFormatCandidatesInput = {
   assetBaseUrl?: string;
   original: BrowserSourceRef;
   modified: BrowserSourceRef;
-  workerThreads?: WorkerSettings["threads"] | null;
+  threads?: WorkerSettings["threads"] | null;
   settings?: Partial<CreateSettings>;
 };
 type BrowserPpfUndoInput = {
@@ -35,17 +35,17 @@ type BrowserPpfUndoInput = {
 };
 
 const runtimePreloadKeys = new Set<string>();
-const getRuntimePreloadKey = (workerThreads: BrowserRuntimePreloadOptions["workerThreads"]) => {
-  const normalized = String(workerThreads ?? "").trim();
+const getRuntimePreloadKey = (threads: BrowserRuntimePreloadOptions["threads"]) => {
+  const normalized = String(threads ?? "").trim();
   if (normalized === "auto") return "default";
   return normalized ? `threads:${normalized}` : "default";
 };
 
 const preloadBrowserRuntime = (options: BrowserRuntimePreloadOptions = {}) => {
-  const preloadKey = getRuntimePreloadKey(options.workerThreads);
+  const preloadKey = getRuntimePreloadKey(options.threads);
   if (runtimePreloadKeys.has(preloadKey)) return Promise.resolve();
   runtimePreloadKeys.add(preloadKey);
-  const preloadOptions = preloadKey === "default" ? undefined : { workerThreads: options.workerThreads };
+  const preloadOptions = preloadKey === "default" ? undefined : { threads: options.threads };
   return Promise.all([
     browserRuntime.preload?.preloadCapability?.("compression", () => undefined, preloadOptions),
     browserRuntime.preload?.preloadCapability?.("checksum", () => undefined, preloadOptions),
@@ -67,7 +67,7 @@ const getCreatePatchFormatCandidates = async ({
   modified,
   original,
   settings,
-  workerThreads,
+  threads,
 }: BrowserCreatePatchFormatCandidatesInput): Promise<RuntimePatchCreateFormatCandidates> => {
   configureBrowserAssetBaseUrl(assetBaseUrl);
   assertPublicSources([original, modified]);
@@ -76,7 +76,7 @@ const getCreatePatchFormatCandidates = async ({
     modified,
     onLog: settings?.logging?.sink,
     original,
-    workerThreads: workerThreads ?? settings?.workers?.threads,
+    threads: threads ?? settings?.workers?.threads,
   });
   if (!candidates) throw new Error("Create patch candidate selection is unavailable");
   return candidates;
@@ -126,7 +126,7 @@ class CreateWorkflow extends CreateWorkflowController<BrowserSourceRef, BrowserS
   constructor(options: WorkflowOptions<CreateSettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
+    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 
@@ -142,7 +142,7 @@ class ApplyWorkflow extends ApplyWorkflowController<BrowserSourceRef, BrowserSav
   constructor(options: WorkflowOptions<ApplySettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
+    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 
@@ -150,7 +150,7 @@ class TrimWorkflow extends TrimWorkflowController<BrowserSourceRef, BrowserSaveD
   constructor(options: WorkflowOptions<CreateSettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
+    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 

@@ -42,7 +42,7 @@ const buildEverythingArchive = async () => {
       { file: patchFile, fileName: "change.ips" },
     ],
     format: "zip",
-    options: { outputName: "bundle.zip", workerThreads: 1 },
+    options: { outputName: "bundle.zip", threads: 1 },
   });
   const output = result?.output;
   if (!output) throw new Error("Bundle compression did not return output");

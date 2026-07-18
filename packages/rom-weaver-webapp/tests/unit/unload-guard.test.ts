@@ -3,13 +3,13 @@ import { shouldConfirmDiscardSettings, shouldWarnBeforeUnload } from "../../src/
 
 describe("settingsDraftHasChanges (numeric-aware equality)", () => {
   it("does not flag a retyped-identical numeric draft", () => {
-    const webappState = { draftSettings: { workerThreads: "8" }, settings: { workerThreads: 8 } };
+    const webappState = { draftSettings: { threads: "8" }, settings: { threads: 8 } };
     expect(shouldConfirmDiscardSettings(webappState)).toBe(false);
     expect(shouldWarnBeforeUnload({ webappState })).toBe(false);
   });
 
   it("flags a genuine numeric change", () => {
-    const webappState = { draftSettings: { workerThreads: "6" }, settings: { workerThreads: 8 } };
+    const webappState = { draftSettings: { threads: "6" }, settings: { threads: 8 } };
     expect(shouldConfirmDiscardSettings(webappState)).toBe(true);
   });
 

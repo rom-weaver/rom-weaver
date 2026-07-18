@@ -47,21 +47,21 @@ type SettingsState = {
   sevenZipLevel: number | "";
   zipCodec: string;
   zipLevel: number | "";
-  workerThreads: number | "auto";
+  threads: number | "auto";
 };
 
 type NumericDraftValue = number | "" | string;
 
 type SettingsDraftState = Omit<
   SettingsState,
-  "rvzCompressionLevel" | "rvzBlockSize" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel" | "workerThreads"
+  "rvzCompressionLevel" | "rvzBlockSize" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel" | "threads"
 > & {
   rvzCompressionLevel: NumericDraftValue;
   rvzBlockSize: number | string;
   z3dsCompressionLevel: NumericDraftValue;
   sevenZipLevel: NumericDraftValue;
   zipLevel: NumericDraftValue;
-  workerThreads: number | string;
+  threads: number | string;
 };
 
 type SettingsDraft = Partial<SettingsDraftState> & Record<string, unknown>;
@@ -87,7 +87,7 @@ type SettingsUiState = {
   rvzEnabled: boolean;
   sevenZipEnabled: boolean;
   zipEnabled: boolean;
-  workerThreadsEnabled: boolean;
+  threadsEnabled: boolean;
   compressionProfileLabel: string;
   compressionProfileIndex: number;
 };
@@ -137,7 +137,7 @@ function normalizeChoiceSetting(
   return validValues.indexOf(normalized) === -1 ? fallback : normalized;
 }
 
-function getDefaultWorkerThreads(): number {
+function getDefaultThreads(): number {
   return getDefaultBrowserThreadCount(typeof globalThis === "undefined" ? undefined : globalThis);
 }
 
@@ -167,7 +167,7 @@ const SETTINGS_FIELD_ORDER = [
   "sevenZipLevel",
   "zipCodec",
   "zipLevel",
-  "workerThreads",
+  "threads",
 ] as const satisfies readonly SettingsFieldKey[];
 
 const SETTINGS_LEVEL_OVERRIDE_FIELDS = [
@@ -489,20 +489,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     )}.`,
     validationLabel: "7z compression level override",
   },
-  workerThreads: {
+  threads: {
     defaultValue: "auto",
-    disabled: ({ uiState }) => !uiState.workerThreadsEnabled,
+    disabled: ({ uiState }) => !uiState.threadsEnabled,
     id: "settings-worker-threads",
-    key: "workerThreads",
+    key: "threads",
     kind: "number",
-    label: getSettingsLabel("workerThreads"),
+    label: getSettingsLabel("threads"),
     labelDataLocalize: "Threads",
     max: 64,
     min: 0,
     placeholder: "auto",
     step: 1,
     suggestion: ({ uiState }) =>
-      uiState.workerThreadsEnabled
+      uiState.threadsEnabled
         ? "Valid values: auto, 0-64. Use 0 to disable threaded bundles."
         : "Valid values: auto or 1.",
     validationLabel: "Threads",
@@ -670,7 +670,7 @@ const getSettingsUiState = (source: SettingsDraftState): SettingsUiState => {
     compressionProfileLabel: getCompressionProfileLabel(source.compressionProfile),
     rvzEnabled: specialEnabled,
     sevenZipEnabled: defaultCompression === "7z/special" || defaultCompression === "7z only",
-    workerThreadsEnabled: canUseThreadedWasm(),
+    threadsEnabled: canUseThreadedWasm(),
     zipEnabled: defaultCompression === "zip/special" || defaultCompression === "zip only",
   };
 };
@@ -736,7 +736,7 @@ export {
   copySettings,
   getCompressionProfileFromIndex,
   getDefaultSettings,
-  getDefaultWorkerThreads,
+  getDefaultThreads,
   getSettingsChoiceValues,
   getSettingsFieldDefaultValue,
   getSettingsFieldId,

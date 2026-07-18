@@ -134,7 +134,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       try {
         await this.releaseInputStage();
         await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
-          workerThreads: this.settings.workers?.threads,
+          threads: this.settings.workers?.threads,
         });
         const stage = (await this.inputStages.stageSource(
           this.inputStages.createInitialSource(TRIM_INPUT_ROLE, first, 0),

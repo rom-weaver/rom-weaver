@@ -21,7 +21,7 @@ import type {
 } from "./settings-metadata.ts";
 import {
   getDefaultSettings,
-  getDefaultWorkerThreads,
+  getDefaultThreads,
   getSettingsChoiceValues,
   getSettingsFieldDefaultValue,
   getSettingsFieldId,
@@ -194,16 +194,16 @@ const normalizePositiveIntegerField = (
   return Math.min(max, parsed);
 };
 
-const normalizeStoredWorkerThreads = (
+const normalizeStoredThreads = (
   value: string | number | null | undefined,
-  fallback = getDefaultWorkerThreads(),
-): SettingsState["workerThreads"] => {
+  fallback = getDefaultThreads(),
+): SettingsState["threads"] => {
   if (typeof value === "string" && value.trim().toLowerCase() === "auto") return "auto";
   return normalizeBrowserThreadCount(value, undefined, fallback);
 };
 
-const resolveWorkerThreadsNumericFallback = (value: SettingsState["workerThreads"]): number =>
-  typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : getDefaultWorkerThreads();
+const resolveThreadsNumericFallback = (value: SettingsState["threads"]): number =>
+  typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : getDefaultThreads();
 
 const assignSetting = <K extends SettingsFieldKey>(settings: SettingsState, fieldKey: K, value: SettingsState[K]) => {
   settings[fieldKey] = value;
@@ -317,29 +317,29 @@ const normalizeIntegerSetting = (
   }
 };
 
-const normalizeWorkerThreadsSetting = (
+const normalizeThreadsSetting = (
   value: string | number | null | undefined,
   validation: SettingsValidation,
   settings: SettingsState = validation.settings,
-): SettingsState["workerThreads"] => {
+): SettingsState["threads"] => {
   const parsedValue = v.safeParse(storedStringOrNumberSchema, value);
   const normalizedRaw = String(parsedValue.success ? parsedValue.output : (value ?? ""))
     .trim()
     .toLowerCase();
   if (normalizedRaw === "auto") return "auto";
-  const { max, min } = getNumericFieldRange("workerThreads", settings);
+  const { max, min } = getNumericFieldRange("threads", settings);
   try {
     const parsed = parseIntegerInRange(parsedValue.success ? parsedValue.output : value, {
-      failureMessage: getFieldValidationMessage("workerThreads", `valid values: auto, ${min}-${max}.`),
+      failureMessage: getFieldValidationMessage("threads", `valid values: auto, ${min}-${max}.`),
       max,
       min,
       requireExactString: true,
     }) as number;
-    return normalizeStoredWorkerThreads(parsed, resolveWorkerThreadsNumericFallback(settings.workerThreads));
+    return normalizeStoredThreads(parsed, resolveThreadsNumericFallback(settings.threads));
   } catch {
-    validation.messages.push(getFieldValidationMessage("workerThreads", `valid values: auto, ${min}-${max}.`));
-    validation.invalidFields.push(getSettingsFieldId("workerThreads"));
-    return settings.workerThreads;
+    validation.messages.push(getFieldValidationMessage("threads", `valid values: auto, ${min}-${max}.`));
+    validation.invalidFields.push(getSettingsFieldId("threads"));
+    return settings.threads;
   }
 };
 
@@ -397,7 +397,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     rvzCompressionLevel: compression.rvzCompressionLevel,
     sevenZipCodec: compression.sevenZipCodec,
     sevenZipLevel: compression.sevenZipLevel,
-    workerThreads: compression.workerThreads,
+    threads: compression.threads ?? compression.workerThreads,
     z3dsCompressionLevel: compression.z3dsCompressionLevel,
     zipCodec: compression.zipCodec,
     zipLevel: compression.zipLevel,
@@ -512,12 +512,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     if (zipCodec !== undefined)
       settings.zipCodec = normalizeStoredCodecSetting("zipCodec", zipCodec, settings.zipCodec, true);
 
-    const workerThreads = readStoredField(storedStringOrNumberSchema, loadedSettings.workerThreads);
-    if (workerThreads !== undefined)
-      settings.workerThreads = normalizeStoredWorkerThreads(
-        workerThreads,
-        resolveWorkerThreadsNumericFallback(settings.workerThreads),
-      );
+    const threads = readStoredField(storedStringOrNumberSchema, loadedSettings.threads);
+    if (threads !== undefined)
+      settings.threads = normalizeStoredThreads(threads, resolveThreadsNumericFallback(settings.threads));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     resetStoredSettings(storageObject, message);
@@ -633,7 +630,7 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
     validation,
     settings,
   );
-  validation.settings.workerThreads = normalizeWorkerThreadsSetting(rawDraft.workerThreads, validation);
+  validation.settings.threads = normalizeThreadsSetting(rawDraft.threads, validation);
 
   return validation;
 };
@@ -657,7 +654,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       rvzCompressionLevel: compressionLevels.rvzCompressionLevel,
       sevenZipCodec: compressionLevels.sevenZipCodec,
       sevenZipLevel: compressionLevels.sevenZipLevel,
-      workerThreads: settings.workerThreads,
+      threads: settings.threads,
       z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel,
       zipCodec: compressionLevels.zipCodec,
       zipLevel: compressionLevels.zipLevel,

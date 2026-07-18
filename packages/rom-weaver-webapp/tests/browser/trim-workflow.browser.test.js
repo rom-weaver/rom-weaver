@@ -58,7 +58,7 @@ const createZipFile = async (entryName, bytes, outputName) => {
     format: "zip",
     options: {
       outputName,
-      workerThreads: 1,
+      threads: 1,
     },
   });
   const output = result?.output;

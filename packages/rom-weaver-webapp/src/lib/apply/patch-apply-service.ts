@@ -140,7 +140,7 @@ const normalizePatchOptions = (options?: ApplyWorkflowOptions) => {
       typeof options?.validation?.requireInputChecksumMatch === "boolean"
         ? options.validation.requireInputChecksumMatch
         : false,
-    workerThreads: options?.workers?.threads,
+    threads: options?.workers?.threads,
   };
 };
 

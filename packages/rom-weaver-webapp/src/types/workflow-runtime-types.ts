@@ -165,7 +165,7 @@ type CompressionEntryInfo = {
 type CompressionEntryInput = RuntimeCompressionEntryInput;
 
 type CompressionWorkflowOptions = {
-  workerThreads?: number | string;
+  threads?: number | string;
   chdSplitBin?: boolean;
   romFilter?: boolean;
   patchFilter?: boolean;

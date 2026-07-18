@@ -26,7 +26,7 @@ const createMultiTrackChdFixtureFile = async () => {
   const result = await browserRuntime.compression.create?.({
     format: "chd",
     options: {
-      workerThreads: 2,
+      threads: 2,
     },
     outputName: `${stem}.chd`,
     romSpecific: {

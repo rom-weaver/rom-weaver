@@ -73,7 +73,7 @@ test("createArchiveOutput builds runtime archive create requests and reports pro
   expect(calls[0].options).toMatchObject({
     compression: "zip",
     outputName: "bundle.zip",
-    workerThreads: 2,
+    threads: 2,
     zipCodec: "store",
     zipLevel: undefined,
   });

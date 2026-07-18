@@ -94,7 +94,7 @@ type ApplyPatchFormProps = {
   defaultSettings?: ApplyPatchFormSettings;
   pageDrop?: PageFileDrop | null;
   disabled?: boolean;
-  workerThreads?: number | string;
+  threads?: number | string;
   containerInputsEnabled?: boolean;
   compressionOptions?: string[];
   startup?: StartupState;
