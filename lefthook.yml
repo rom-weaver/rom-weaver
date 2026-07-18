@@ -62,3 +62,8 @@ pre-commit:
     thread-guard-regressions:
       glob: "*.rs"
       run: mise run thread-guards
+
+commit-msg:
+  commands:
+    strip-ai-attribution:
+      run: ./scripts/strip-ai-attribution.sh {1}
