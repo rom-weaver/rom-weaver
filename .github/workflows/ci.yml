@@ -105,9 +105,6 @@ jobs:
       - name: Rust typegen
         run: mise run typegen-check
 
-      - name: CLI man pages
-        run: mise run manpages-check
-
       - name: WASM threaded check
         run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 

@@ -238,8 +238,8 @@ Start with the [documentation index](docs/README.md).
 - [CLI guide](docs/cli.md) — install alternatives, common workflows, command
   reference, supported formats, compression codecs, checksums, and JSON
   output.
-- [Man pages](docs/man/) — `rom-weaver(1)` and one page per command, generated
-  from the CLI definitions.
+- Man pages — `rom-weaver(1)` and one page per command, generated from the CLI
+  definitions with `mise run manpages` (not checked in).
 - [Bundle schema](docs/rom-weaver-bundle.schema.json) — the machine-readable
   `rom-weaver-bundle.json` workflow format.
 

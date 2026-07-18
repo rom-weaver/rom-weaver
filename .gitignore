@@ -12,6 +12,9 @@
 /.tokensave/
 /dist/
 
+# Generated CLI man pages (produced from Clap definitions via `mise run manpages`)
+/docs/man/
+
 # Generated wasm artifacts
 /dist/wasm/
 /packages/rom-weaver-cli-platforms/*/bin/

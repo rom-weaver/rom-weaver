@@ -55,6 +55,7 @@
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
+    "prepack": "mise run manpages",
     "test": "node --test scripts/check-conventional-commits.test.mjs scripts/wasm/*.test.mjs",
     "typegen": "mise run typegen",
     "typegen:check": "mise run typegen-check",

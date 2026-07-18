@@ -135,7 +135,6 @@ mise run fmt
 mise run clippy
 mise run test-rust
 mise run typegen-check
-mise run manpages-check
 
 npm --prefix packages/rom-weaver-webapp run lint
 npm --prefix packages/rom-weaver-webapp run test:unit
@@ -173,12 +172,11 @@ To check that generation still works:
 mise run licenses-check
 ```
 
-When Clap commands or argument help changes, regenerate the checked-in man
-pages from those definitions:
+When Clap commands or argument help changes, regenerate the man pages from
+those definitions (they are generated artifacts, not checked in):
 
 ```bash
 mise run manpages
-mise run manpages-check
 ```
 
 Do not edit files under

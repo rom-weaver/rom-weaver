@@ -15,9 +15,6 @@ pre-commit:
     rust-typegen:
       glob: "*.rs"
       run: mise run typegen-check
-    rust-manpages:
-      glob: "*.{rs,toml,lock}"
-      run: mise run manpages-check
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
       run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check'

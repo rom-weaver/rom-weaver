@@ -378,12 +378,12 @@ For format specifications and upstream implementations, see
 
 ## Man pages
 
-The checked-in pages under [`docs/man`](man/) are generated directly from the
-same Clap command definitions as `--help`:
+The pages under `docs/man` are generated directly from the same Clap command
+definitions as `--help`. They are not checked in — run the generator to produce
+them (the npm `prepack` step does this automatically before publishing):
 
 ```bash
 mise run manpages
-mise run manpages-check
 ```
 
 Use `man ./docs/man/rom-weaver.1` from a source checkout when they are not
