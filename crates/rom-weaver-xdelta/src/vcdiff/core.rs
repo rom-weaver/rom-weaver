@@ -1021,14 +1021,17 @@ pub(super) fn decode_window_task(
     })
 }
 
-pub(super) fn apply_windows_with_xdelta_lzma_sections(
+fn apply_windows_serial<F>(
     patch: &ParsedPatch,
     patch_path: &Path,
     input_path: &Path,
     output_path: &Path,
     input_len: u64,
-    validate_checksums: bool,
-) -> Result<()> {
+    mut decode_window: F,
+) -> Result<()>
+where
+    F: FnMut(&mut BufReader<File>, &WindowIndex, &[u8]) -> Result<Vec<u8>>,
+{
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -1045,7 +1048,6 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
             .open(output_path)?,
     );
     let mut assembled_output_size = 0u64;
-    let mut lzma_decoders = XdeltaLzmaSectionDecoders::new();
 
     for window in &patch.windows {
         if window.output_offset != assembled_output_size {
@@ -1083,13 +1085,7 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
             }
         };
 
-        let target = decode_window_with_xdelta_lzma_sections(
-            &mut patch_reader,
-            window,
-            &mut lzma_decoders,
-            &source,
-            validate_checksums,
-        )?;
+        let target = decode_window(&mut patch_reader, window, &source)?;
         output.write_all(&target)?;
         assembled_output_size = checked_add(
             assembled_output_size,
@@ -1102,6 +1098,33 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
     Ok(())
 }
 
+pub(super) fn apply_windows_with_xdelta_lzma_sections(
+    patch: &ParsedPatch,
+    patch_path: &Path,
+    input_path: &Path,
+    output_path: &Path,
+    input_len: u64,
+    validate_checksums: bool,
+) -> Result<()> {
+    let mut lzma_decoders = XdeltaLzmaSectionDecoders::new();
+    apply_windows_serial(
+        patch,
+        patch_path,
+        input_path,
+        output_path,
+        input_len,
+        |patch_reader, window, source| {
+            decode_window_with_xdelta_lzma_sections(
+                patch_reader,
+                window,
+                &mut lzma_decoders,
+                source,
+                validate_checksums,
+            )
+        },
+    )
+}
+
 pub(super) fn apply_windows_with_target_sources(
     patch: &ParsedPatch,
     patch_path: &Path,
@@ -1110,78 +1133,22 @@ pub(super) fn apply_windows_with_target_sources(
     input_len: u64,
     validate_checksums: bool,
 ) -> Result<()> {
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let mut input_reader = BufReader::new(File::open(input_path)?);
-    // The window decoder seeks to each window's absolute patch offsets, so one
-    // reader can serve every window - no need to reopen the patch file per window.
-    let mut patch_reader = BufReader::new(File::open(patch_path)?);
-    let mut output = BufWriter::with_capacity(
-        APPLY_OUTPUT_BUFFER_BYTES,
-        OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .read(true)
-            .write(true)
-            .open(output_path)?,
-    );
-    let mut assembled_output_size = 0u64;
-
-    for window in &patch.windows {
-        if window.output_offset != assembled_output_size {
-            return Err(RomWeaverError::Validation(format!(
-                "window output offset mismatch: expected {assembled_output_size}, got {}",
-                window.output_offset
-            )));
-        }
-
-        let source = match window.source_kind {
-            None => Vec::new(),
-            Some(WindowSourceKind::Source) => read_source_segment(
-                &mut input_reader,
-                window.source_segment_position,
-                window.source_segment_size,
-                input_len,
-                "source",
-            )?,
-            Some(WindowSourceKind::Target) => {
-                // The output file doubles as a copy source for target-referencing windows. Flush
-                // buffered writes so the requested span is on disk, read it, then restore the
-                // append cursor for the next write.
-                output.flush()?;
-                let segment = read_source_segment(
-                    output.get_mut(),
-                    window.source_segment_position,
-                    window.source_segment_size,
-                    assembled_output_size,
-                    "target",
-                )?;
-                output
-                    .get_mut()
-                    .seek(SeekFrom::Start(assembled_output_size))?;
-                segment
-            }
-        };
-
-        let target = decode_window_with_native_engine(
-            &mut patch_reader,
-            window,
-            patch.secondary_compressor_id,
-            &source,
-            validate_checksums,
-        )?;
-        output.write_all(&target)?;
-        assembled_output_size = checked_add(
-            assembled_output_size,
-            target.len() as u64,
-            "assembled output size",
-        )?;
-    }
-
-    output.flush()?;
-    Ok(())
+    apply_windows_serial(
+        patch,
+        patch_path,
+        input_path,
+        output_path,
+        input_len,
+        |patch_reader, window, source| {
+            decode_window_with_native_engine(
+                patch_reader,
+                window,
+                patch.secondary_compressor_id,
+                source,
+                validate_checksums,
+            )
+        },
+    )
 }
 
 /// Apply a VCDIFF/xdelta patch held entirely in memory against an in-memory
@@ -1260,6 +1227,13 @@ pub fn vcdiff_output_size(patch_bytes: &[u8]) -> Result<u64> {
 /// In-memory counterpart to [`patch_uses_xdelta_lzma_sections`]: detect whether
 /// any compressed window section carries an xdelta3 LZMA stream header.
 fn patch_bytes_use_xdelta_lzma_sections(patch: &ParsedPatch, patch_bytes: &[u8]) -> Result<bool> {
+    patch_reader_uses_xdelta_lzma_sections(patch, &mut std::io::Cursor::new(patch_bytes))
+}
+
+fn patch_reader_uses_xdelta_lzma_sections<R: Read + Seek>(
+    patch: &ParsedPatch,
+    patch_reader: &mut R,
+) -> Result<bool> {
     for window in &patch.windows {
         for (compressed, start, len) in [
             (
@@ -1281,7 +1255,7 @@ fn patch_bytes_use_xdelta_lzma_sections(patch: &ParsedPatch, patch_bytes: &[u8])
             if !compressed {
                 continue;
             }
-            let section = read_section(&mut std::io::Cursor::new(patch_bytes), start, len)?;
+            let section = read_section(patch_reader, start, len)?;
             return Ok(xdelta_lzma_section_has_stream_header(&section));
         }
     }
@@ -1297,32 +1271,7 @@ pub(super) fn patch_uses_xdelta_lzma_sections(
     patch_path: &Path,
 ) -> Result<bool> {
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
-    for window in &patch.windows {
-        for (compressed, start, len) in [
-            (
-                window.delta_indicator & DELTA_DATA_COMP != 0,
-                window.data_start,
-                window.data_len,
-            ),
-            (
-                window.delta_indicator & DELTA_INST_COMP != 0,
-                window.inst_start,
-                window.inst_len,
-            ),
-            (
-                window.delta_indicator & DELTA_ADDR_COMP != 0,
-                window.addr_start,
-                window.addr_len,
-            ),
-        ] {
-            if !compressed {
-                continue;
-            }
-            let section = read_section(&mut patch_reader, start, len)?;
-            return Ok(xdelta_lzma_section_has_stream_header(&section));
-        }
-    }
-    Ok(false)
+    patch_reader_uses_xdelta_lzma_sections(patch, &mut patch_reader)
 }
 
 pub(super) fn create_native_compress_options(

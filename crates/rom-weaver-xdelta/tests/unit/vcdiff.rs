@@ -1357,6 +1357,23 @@ fn apply_supports_stateful_xdelta_lzma_secondary_across_windows() {
 }
 
 #[test]
+fn apply_patch_bytes_rejects_xdelta_lzma_sections() {
+    let mut encoders = XdeltaLzmaSectionEncoders::new().expect("lzma encoders");
+    let data = b"abc".repeat(12);
+    let (compressed, compressed_flag) = encoders.encode_data(&data).expect("compress data");
+    assert!(compressed_flag);
+    let patch = build_secondary_data_add_windows_patch(
+        XDELTA_LZMA_SECONDARY_ID,
+        vec![(data.len() as u64, compressed.into_owned(), vec![4; 12])],
+    );
+
+    let error =
+        crate::apply_patch_bytes(b"", &patch).expect_err("in-memory apply must reject lzma");
+
+    assert!(error.to_string().contains("file-based handler"));
+}
+
+#[test]
 fn recode_supports_all_xdelta_secondary_encoders() {
     let (input, expected) = generated_secondary_source_and_target();
     let temp = create_temp_dir();
