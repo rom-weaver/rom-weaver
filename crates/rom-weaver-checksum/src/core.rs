@@ -87,7 +87,7 @@ pub struct StreamingChecksum {
 pub(super) enum StreamingChecksumInner {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     Async(Vec<AsyncStreamingChecksumWorker>),
-    Sync(Vec<(Algorithm, HasherState)>),
+    Sync(HasherBatch),
 }
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
@@ -167,12 +167,7 @@ impl StreamingChecksum {
 
     pub(super) fn from_algorithms_sync(algorithms: Vec<Algorithm>) -> Self {
         Self {
-            inner: StreamingChecksumInner::Sync(
-                algorithms
-                    .into_iter()
-                    .map(|algorithm| (algorithm, HasherState::new(algorithm)))
-                    .collect(),
-            ),
+            inner: StreamingChecksumInner::Sync(HasherBatch::new(algorithms)),
         }
     }
 
@@ -188,26 +183,17 @@ impl StreamingChecksum {
             let handle = match thread::Builder::new()
                 .name("rom-weaver-streaming-checksum".to_string())
                 .spawn(move || {
-                    let mut states = algorithms
-                        .into_iter()
-                        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
-                        .collect::<Vec<_>>();
+                    let mut batch = HasherBatch::new(algorithms);
                     // Accumulate only the wall time spent hashing (not the time blocked waiting on the
                     // next chunk), so the caller can tell how much of the checksum overlapped the
                     // producer versus ran on its own. `SystemTime` is the wasm-supported clock here.
                     let mut hash_busy = Duration::ZERO;
                     while let Ok(bytes) = receiver.recv() {
                         let hashed_at = SystemTime::now();
-                        for (_, state) in &mut states {
-                            state.update(&bytes);
-                        }
+                        batch.update(&bytes);
                         hash_busy += hashed_at.elapsed().unwrap_or_default();
                     }
-                    let values = states
-                        .into_iter()
-                        .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-                        .collect::<BTreeMap<String, String>>();
-                    (values, hash_busy.as_nanos())
+                    (batch.into_results(), hash_busy.as_nanos())
                 }) {
                 Ok(handle) => handle,
                 Err(_) => {
@@ -235,10 +221,8 @@ impl StreamingChecksum {
                 let chunk = Arc::<[u8]>::from(bytes.to_vec());
                 send_streaming_checksum_chunk(workers, chunk)
             }
-            StreamingChecksumInner::Sync(states) => {
-                for (_, state) in states {
-                    state.update(bytes);
-                }
+            StreamingChecksumInner::Sync(batch) => {
+                batch.update(bytes);
                 Ok(())
             }
         }
@@ -251,10 +235,8 @@ impl StreamingChecksum {
                 let chunk = Arc::<[u8]>::from(bytes.into_boxed_slice());
                 send_streaming_checksum_chunk(workers, chunk)
             }
-            StreamingChecksumInner::Sync(states) => {
-                for (_, state) in states {
-                    state.update(&bytes);
-                }
+            StreamingChecksumInner::Sync(batch) => {
+                batch.update(&bytes);
                 Ok(())
             }
         }
@@ -293,13 +275,9 @@ impl StreamingChecksum {
                     },
                 ))
             }
-            StreamingChecksumInner::Sync(states) => Ok((
-                states
-                    .into_iter()
-                    .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-                    .collect(),
-                StreamingChecksumTiming::default(),
-            )),
+            StreamingChecksumInner::Sync(batch) => {
+                Ok((batch.into_results(), StreamingChecksumTiming::default()))
+            }
         }
     }
 }
@@ -539,11 +517,7 @@ where
     let chunk_size =
         tuned_chunk_size(MAX_EAGER_MAP_RANGE_BYTES, execution.effective_threads).max(1);
     let mut buffer = vec![0u8; chunk_size];
-    let mut states = algorithms
-        .iter()
-        .copied()
-        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
-        .collect::<Vec<_>>();
+    let mut batch = HasherBatch::new(algorithms);
     let mut processed_bytes = 0u64;
 
     loop {
@@ -553,9 +527,7 @@ where
             break;
         }
         let chunk = &buffer[..bytes_read];
-        for (_, state) in &mut states {
-            state.update(chunk);
-        }
+        batch.update(chunk);
         processed_bytes = processed_bytes.saturating_add(bytes_read as u64);
     }
 
@@ -566,10 +538,7 @@ where
 
     Ok(ChecksumValues {
         execution,
-        values: states
-            .into_iter()
-            .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-            .collect(),
+        values: batch.into_results(),
     })
 }
 
@@ -705,12 +674,12 @@ impl HasherState {
     }
 }
 
-pub(super) struct WorkerBatch {
+pub(super) struct HasherBatch {
     states: Vec<(Algorithm, HasherState)>,
 }
 
-impl WorkerBatch {
-    pub(super) fn new(algorithms: Vec<Algorithm>) -> Self {
+impl HasherBatch {
+    pub(super) fn new(algorithms: impl IntoIterator<Item = Algorithm>) -> Self {
         Self {
             states: algorithms
                 .into_iter()

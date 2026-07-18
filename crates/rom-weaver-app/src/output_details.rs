@@ -128,10 +128,7 @@ impl CliApp {
         mut report: OperationReport,
         emitted: Vec<Value>,
     ) -> OperationReport {
-        let mut details = match report.details.take() {
-            Some(Value::Object(map)) => map,
-            _ => Map::new(),
-        };
+        let mut details = operation_report_details(&mut report);
         details.insert("emitted_files".to_string(), Value::Array(emitted));
         report.details = Some(Value::Object(details));
         report
@@ -157,20 +154,8 @@ impl CliApp {
         path: &Path,
         default_kind: Option<&str>,
     ) -> Option<Value> {
-        let metadata = fs::metadata(path).ok()?;
-        if !metadata.is_file() {
-            return None;
-        }
-
         let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        let file_name = canonical.file_name()?.to_string_lossy().into_owned();
-        let mut entry = Map::new();
-        entry.insert(
-            "path".to_string(),
-            json!(canonical.to_string_lossy().replace('\\', "/")),
-        );
-        entry.insert("file_name".to_string(), json!(file_name));
-        entry.insert("size_bytes".to_string(), json!(metadata.len()));
+        let mut entry = rom_weaver_core::build_emitted_file_detail(path)?;
         if let Some(kind) = Self::infer_emitted_file_kind(&canonical).or(default_kind) {
             entry.insert("kind".to_string(), json!(kind));
         }

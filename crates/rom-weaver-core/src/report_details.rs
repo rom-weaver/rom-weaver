@@ -78,7 +78,7 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
         })
         .collect::<Vec<_>>();
     for path in paths {
-        let Some(entry) = build_emitted_file_path_detail(path.as_ref()) else {
+        let Some(entry) = build_emitted_file_detail(path.as_ref()) else {
             continue;
         };
         let key = entry
@@ -90,7 +90,7 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
             continue;
         }
         seen.push(key);
-        emitted.push(entry);
+        emitted.push(Value::Object(entry));
     }
     if !emitted.is_empty() {
         details.insert("emitted_files".to_string(), Value::Array(emitted));
@@ -99,7 +99,9 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
     report
 }
 
-fn build_emitted_file_path_detail(path: &Path) -> Option<Value> {
+/// Build the common path, file-name, and size fields for an emitted file.
+/// Format-specific callers may append checksums, identity, timing, or kind.
+pub fn build_emitted_file_detail(path: &Path) -> Option<Map<String, Value>> {
     let metadata = fs::metadata(path).ok()?;
     if !metadata.is_file() {
         return None;
@@ -113,7 +115,7 @@ fn build_emitted_file_path_detail(path: &Path) -> Option<Value> {
     );
     entry.insert("file_name".to_string(), json!(file_name));
     entry.insert("size_bytes".to_string(), json!(metadata.len()));
-    Some(Value::Object(entry))
+    Some(entry)
 }
 
 /// Attach an `extraction` detail block (entry/file/byte counts + thread
@@ -134,4 +136,30 @@ pub fn attach_extraction_details(
     details.insert("extraction".to_string(), Value::Object(extraction));
     report.details = Some(Value::Object(details));
     report
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_fs::{TempDir, prelude::*};
+
+    use super::*;
+
+    #[test]
+    fn emitted_file_detail_has_the_shared_base_fields() {
+        let temp = TempDir::new().expect("temp dir");
+        let output = temp.child("output.bin");
+        output.write_binary(b"rom").expect("fixture");
+
+        let detail = build_emitted_file_detail(output.path()).expect("file detail");
+
+        assert_eq!(detail.get("file_name"), Some(&json!("output.bin")));
+        assert_eq!(detail.get("size_bytes"), Some(&json!(3)));
+        assert!(
+            detail
+                .get("path")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path.ends_with("/output.bin"))
+        );
+        assert!(build_emitted_file_detail(temp.path()).is_none());
+    }
 }

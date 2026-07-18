@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -18,10 +19,43 @@ use super::{
     CRC16_PARALLEL_MIN_BYTES_PER_THREAD, CRC16_PARALLEL_THRESHOLD,
     CRC32_PARALLEL_MIN_BYTES_PER_THREAD, CRC32_PARALLEL_THRESHOLD,
     CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode, Crc16State,
-    FANOUT_PARALLEL_THRESHOLD, NativeChecksumEngine, ResolvedRange, adler32_checksum,
-    combine_adler32_partials, combine_crc16_partials, combine_crc32c_partials, crc32c_append,
-    plan_checksum, supported_algorithms,
+    FANOUT_PARALLEL_THRESHOLD, NativeChecksumEngine, ResolvedRange, StreamingChecksum,
+    adler32_checksum, combine_adler32_partials, combine_crc16_partials, combine_crc32c_partials,
+    crc32c_append, plan_checksum, supported_algorithms,
 };
+
+#[test]
+fn streaming_checksum_batches_match_across_sync_and_worker_paths() {
+    let algorithms = vec!["crc32".into(), "md5".into(), "sha1".into()];
+    let expected = BTreeMap::from([
+        ("crc32".to_string(), "0d4a1185".to_string()),
+        (
+            "md5".to_string(),
+            "5eb63bbbe01eeed093cb22bb8f5acdc3".to_string(),
+        ),
+        (
+            "sha1".to_string(),
+            "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed".to_string(),
+        ),
+    ]);
+
+    let mut sync = StreamingChecksum::new(&algorithms)
+        .expect("sync checksum")
+        .expect("algorithms");
+    sync.update(b"hello ").expect("sync update");
+    sync.update_owned(b"world".to_vec())
+        .expect("sync owned update");
+    assert_eq!(sync.finalize().expect("sync finalize"), expected);
+
+    let mut parallel = StreamingChecksum::new_parallel(&algorithms, 2)
+        .expect("parallel checksum")
+        .expect("algorithms");
+    parallel.update(b"hello ").expect("parallel update");
+    parallel
+        .update_owned(b"world".to_vec())
+        .expect("parallel owned update");
+    assert_eq!(parallel.finalize().expect("parallel finalize"), expected);
+}
 
 static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 

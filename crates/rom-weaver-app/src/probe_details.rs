@@ -44,10 +44,7 @@ impl CliApp {
             return report;
         }
 
-        let mut details = match report.details.take() {
-            Some(Value::Object(map)) => map,
-            _ => Map::new(),
-        };
+        let mut details = operation_report_details(&mut report);
         let mut container = match details.remove("container") {
             Some(Value::Object(map)) => map,
             _ => Map::new(),
@@ -104,10 +101,7 @@ impl CliApp {
             return report;
         }
 
-        let mut details = match report.details.take() {
-            Some(Value::Object(map)) => map,
-            _ => Map::new(),
-        };
+        let mut details = operation_report_details(&mut report);
         let mut patch = match details.remove("patch") {
             Some(Value::Object(map)) => map,
             _ => Map::new(),

@@ -118,10 +118,7 @@ impl CliApp {
         mut report: OperationReport,
         checksums: BTreeMap<String, String>,
     ) -> OperationReport {
-        let mut details = match report.details.take() {
-            Some(Value::Object(map)) => map,
-            _ => Map::new(),
-        };
+        let mut details = operation_report_details(&mut report);
         details.insert("checksums".to_string(), json!(checksums.clone()));
         details.insert(
             "checksum_variants".to_string(),

@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs::{self, File},
+    fs::File,
     io::{BufWriter, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU8, AtomicU64, Ordering},
@@ -13,9 +13,10 @@ use rom_weaver_checksum::{
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
-    ThreadExecution, bounded_items_for_threads, create_extract_output_file, detect_disc_sheet,
-    emit_container_running_progress, is_rom_filter_candidate_name,
-    maybe_emit_container_byte_progress, ordered_streaming_compress,
+    ThreadExecution, bounded_items_for_threads, build_emitted_file_detail,
+    create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
+    is_rom_filter_candidate_name, maybe_emit_container_byte_progress, operation_report_details,
+    ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 
@@ -469,10 +470,7 @@ pub(crate) fn attach_extract_checksum_details(
         return report;
     }
 
-    let mut details = match report.details.take() {
-        Some(Value::Object(map)) => map,
-        _ => Map::new(),
-    };
+    let mut details = operation_report_details(&mut report);
     let emitted = checksums
         .into_iter()
         .filter_map(|entry| {
@@ -502,19 +500,7 @@ fn build_extract_checksum_emitted_file_detail(
     if checksums.is_empty() {
         return None;
     }
-    let metadata = fs::metadata(path).ok()?;
-    if !metadata.is_file() {
-        return None;
-    }
-    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let file_name = canonical.file_name()?.to_string_lossy().into_owned();
-    let mut entry = Map::new();
-    entry.insert(
-        "path".to_string(),
-        json!(canonical.to_string_lossy().replace('\\', "/")),
-    );
-    entry.insert("file_name".to_string(), json!(file_name));
-    entry.insert("size_bytes".to_string(), json!(metadata.len()));
+    let mut entry = build_emitted_file_detail(path)?;
     entry.insert("checksums".to_string(), json!(checksums));
     // Console + optical medium of this decoded entry (no exact-title lookup), detected
     // from the streamed output by the producing path - no extra read here.

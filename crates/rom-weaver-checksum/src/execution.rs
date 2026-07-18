@@ -23,24 +23,15 @@ pub(super) fn compute_sequential_mapped(
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = tuned_chunk_size(bytes.len() as u64, execution.effective_threads);
-    let mut states = algorithms
-        .iter()
-        .copied()
-        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
-        .collect::<Vec<_>>();
+    let mut batch = HasherBatch::new(algorithms.iter().copied());
 
     for chunk in bytes.chunks(chunk_size.max(1)) {
         cancel.check()?;
-        for (_, state) in &mut states {
-            state.update(chunk);
-        }
+        batch.update(chunk);
         progress.advance(chunk.len() as u64);
     }
 
-    Ok(states
-        .into_iter()
-        .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-        .collect())
+    Ok(batch.into_results())
 }
 
 pub(super) fn compute_sequential_stream(
@@ -57,11 +48,7 @@ pub(super) fn compute_sequential_stream(
     let mut remaining = range.len;
     let chunk_size = tuned_chunk_size(range.len, execution.effective_threads);
     let mut buffer = vec![0u8; chunk_size];
-    let mut states = algorithms
-        .iter()
-        .copied()
-        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
-        .collect::<Vec<_>>();
+    let mut batch = HasherBatch::new(algorithms.iter().copied());
 
     while remaining > 0 {
         cancel.check()?;
@@ -74,17 +61,12 @@ pub(super) fn compute_sequential_stream(
             )));
         }
         let chunk = &buffer[..bytes_read];
-        for (_, state) in &mut states {
-            state.update(chunk);
-        }
+        batch.update(chunk);
         remaining -= bytes_read as u64;
         progress.advance(bytes_read as u64);
     }
 
-    Ok(states
-        .into_iter()
-        .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
-        .collect())
+    Ok(batch.into_results())
 }
 
 #[derive(Clone, Copy)]
@@ -135,7 +117,7 @@ pub(super) fn compute_parallel_fanout_mapped(
     let worker_count = execution.effective_threads.min(algorithms.len()).max(1);
     let mut workers = partition_algorithms(algorithms, worker_count)
         .into_iter()
-        .map(WorkerBatch::new)
+        .map(HasherBatch::new)
         .collect::<Vec<_>>();
 
     let chunk_size = tuned_chunk_size(bytes.len() as u64, worker_count);
@@ -168,7 +150,7 @@ pub(super) fn compute_parallel_fanout_stream(
     let worker_count = execution.effective_threads.min(algorithms.len()).max(1);
     let mut workers = partition_algorithms(algorithms, worker_count)
         .into_iter()
-        .map(WorkerBatch::new)
+        .map(HasherBatch::new)
         .collect::<Vec<_>>();
 
     let mut file = File::open(source)?;

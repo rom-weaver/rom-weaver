@@ -20,9 +20,9 @@ use rom_weaver_core::{
     CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OperationStatus, OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError,
     SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, attach_emitted_file_paths,
-    attach_extraction_details, create_extract_output_file, file_starts_with,
-    insert_thread_execution_details, maybe_emit_container_byte_progress, operation_report_details,
-    ordered_streaming_compress,
+    attach_extraction_details, build_emitted_file_detail, create_extract_output_file,
+    file_starts_with, insert_thread_execution_details, maybe_emit_container_byte_progress,
+    operation_report_details, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};
@@ -120,19 +120,8 @@ fn build_extract_checksum_emitted_file_detail(
     if checksums.is_empty() {
         return None;
     }
-    let metadata = fs::metadata(path).ok()?;
-    if !metadata.is_file() {
-        return None;
-    }
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let file_name = canonical.file_name()?.to_string_lossy().into_owned();
-    let mut entry = Map::new();
-    entry.insert(
-        "path".to_string(),
-        json!(canonical.to_string_lossy().replace('\\', "/")),
-    );
-    entry.insert("file_name".to_string(), json!(file_name));
-    entry.insert("size_bytes".to_string(), json!(metadata.len()));
+    let mut entry = build_emitted_file_detail(path)?;
     entry.insert("checksums".to_string(), json!(checksums));
     // Detect the decoded disc's platform/medium from the extracted track (a bounded prefix read of
     // the just-written output - no re-decode of the CHD) so a CHD's emitted_files carry the same
@@ -148,10 +137,7 @@ fn attach_extract_checksum_details(
     if checksums.is_empty() || report.status != OperationStatus::Succeeded {
         return report;
     }
-    let mut details = match report.details.take() {
-        Some(Value::Object(map)) => map,
-        _ => Map::new(),
-    };
+    let mut details = operation_report_details(&mut report);
     let emitted = checksums
         .into_iter()
         .filter_map(|entry| build_extract_checksum_emitted_file_detail(&entry.path, entry.values))
