@@ -4,7 +4,7 @@ This folder contains ESM wrappers for browser execution of `rom-weaver-app.wasm`
 
 ## Files
 
-- `rom-weaver-runtime-utils.mjs`: shared wasm import and JSON/trace parsing helpers
+- `rom-weaver-runtime-utils.mjs`: shared WASM environment imports
 
 The browser OPFS + WASI `/work` runner and the WASI thread worker now live only as TypeScript
 in the webapp package's wasm layer (`packages/rom-weaver-webapp/src/wasm/rom-weaver-browser-opfs-api.ts`
