@@ -300,7 +300,7 @@ const PatchMetaFields = ({
 );
 
 /** The ROM-header handling select on the patch card's meta line (beside the
- * Included/Skipped switch): Auto (the engine's checksum-driven decision,
+ * On/Off switch): Auto (the engine's checksum-driven decision,
  * labeled with its outcome when it decided), or an explicit Keep/Strip pin.
  * Only rendered when the target ROM actually has a strippable header. */
 const PatchHeaderModeSelect = ({
@@ -946,8 +946,8 @@ const PatchEnableToggle = ({
       type="checkbox"
     />
     <span aria-hidden="true" className="switch-state">
-      <b className="on">Included</b>
-      <b className="off">Skipped</b>
+      <b className="on">On</b>
+      <b className="off">Off</b>
     </span>
   </label>
 );
