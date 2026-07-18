@@ -19,7 +19,7 @@
 #   - brotli: publishes no macOS/Linux release binaries (install via OS package).
 #   - sccache: install via OS package (brew install sccache / apt install sccache).
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
-node = "26.2.0"
+node = "24.18.0"
 rust = "1.95.0"
 "aqua:WebAssembly/binaryen" = "129"            # provides wasm-opt
 "aqua:BurntSushi/ripgrep" = "14.1.1"           # provides rg (thread-guard checks)

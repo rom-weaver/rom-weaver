@@ -54,7 +54,7 @@ jobs:
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
           echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
 
-      # Node comes from mise (.mise.toml [tools] node = "26.2.0"); cache npm downloads
+      # Node comes from mise (.mise.toml [tools] node); cache npm downloads
       # since we no longer use setup-node's built-in cache.
       - name: Cache npm downloads
         uses: actions/cache@v4
