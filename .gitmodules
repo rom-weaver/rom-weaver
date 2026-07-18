@@ -3,5 +3,5 @@
 	url = https://github.com/brandonocasey/libarchive.git
 [submodule "vendor/nod"]
 	path = vendor/nod
-	url = https://github.com/brandonocasey/nod.git
-	branch = local-changes
+	url = https://github.com/encounter/nod.git
+	branch = main
