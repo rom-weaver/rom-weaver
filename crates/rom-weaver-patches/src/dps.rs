@@ -389,6 +389,74 @@ enum DpsRecord {
     },
 }
 
+#[derive(Default)]
+struct DpsRecordBuilder {
+    records: Vec<DpsRecord>,
+    pending_copy_start: Option<u32>,
+    pending_copy_len: u32,
+    pending_data_start: Option<u32>,
+    pending_data: Vec<u8>,
+}
+
+impl DpsRecordBuilder {
+    fn push(&mut self, offset: u32, target_byte: u8, copy_from_source: bool) -> Result<()> {
+        if copy_from_source {
+            self.flush_data("internal DPS state error: pending data missing start offset")?;
+            if self.pending_copy_start.is_none() {
+                self.pending_copy_start = Some(offset);
+            }
+            self.pending_copy_len = self.pending_copy_len.checked_add(1).ok_or_else(|| {
+                RomWeaverError::Validation("DPS copy record length overflowed".into())
+            })?;
+        } else {
+            self.flush_copy("internal DPS state error: pending copy missing start offset")?;
+            if self.pending_data_start.is_none() {
+                self.pending_data_start = Some(offset);
+            }
+            self.pending_data.push(target_byte);
+        }
+        Ok(())
+    }
+
+    fn finish(mut self) -> Result<Vec<DpsRecord>> {
+        self.flush_copy("internal DPS state error: trailing pending copy missing start offset")?;
+        self.flush_data("internal DPS state error: trailing pending data missing start offset")?;
+        Ok(self.records)
+    }
+
+    fn flush_copy(&mut self, missing_start: &'static str) -> Result<()> {
+        if self.pending_copy_len == 0 {
+            return Ok(());
+        }
+        let start = self
+            .pending_copy_start
+            .ok_or_else(|| RomWeaverError::Validation(missing_start.into()))?;
+        self.records.push(DpsRecord::CopyFromSource {
+            output_offset: start,
+            source_offset: start,
+            length: self.pending_copy_len,
+        });
+        self.pending_copy_start = None;
+        self.pending_copy_len = 0;
+        Ok(())
+    }
+
+    fn flush_data(&mut self, missing_start: &'static str) -> Result<()> {
+        if self.pending_data.is_empty() {
+            return Ok(());
+        }
+        let start = self
+            .pending_data_start
+            .ok_or_else(|| RomWeaverError::Validation(missing_start.into()))?;
+        self.records.push(DpsRecord::EmbeddedData {
+            output_offset: start,
+            data: std::mem::take(&mut self.pending_data),
+        });
+        self.pending_data_start = None;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 enum ParsedDpsRecord {
     CopyFromSource {
@@ -789,13 +857,8 @@ fn create_dps_records_streaming(source_path: &Path, target_path: &Path) -> Resul
     let mut target_remaining = target_len;
     let mut source_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
     let mut target_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
-    let mut records = Vec::<DpsRecord>::new();
+    let mut records = DpsRecordBuilder::default();
     let mut offset = 0u64;
-
-    let mut pending_copy_start: Option<u32> = None;
-    let mut pending_copy_len = 0u32;
-    let mut pending_data_start: Option<u32> = None;
-    let mut pending_data = Vec::<u8>::new();
 
     while target_remaining > 0 {
         let chunk_len =
@@ -817,45 +880,7 @@ fn create_dps_records_streaming(source_path: &Path, target_path: &Path) -> Resul
                 RomWeaverError::Validation("DPS output offset exceeded 32-bit range".into())
             })?;
             let equal = index < source_chunk_len && source_buffer[index] == target_buffer[index];
-            if equal {
-                if !pending_data.is_empty() {
-                    let start = pending_data_start.ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "internal DPS state error: pending data missing start offset".into(),
-                        )
-                    })?;
-                    records.push(DpsRecord::EmbeddedData {
-                        output_offset: start,
-                        data: std::mem::take(&mut pending_data),
-                    });
-                    pending_data_start = None;
-                }
-                if pending_copy_start.is_none() {
-                    pending_copy_start = Some(current_offset);
-                }
-                pending_copy_len = pending_copy_len.checked_add(1).ok_or_else(|| {
-                    RomWeaverError::Validation("DPS copy record length overflowed".into())
-                })?;
-            } else {
-                if pending_copy_len > 0 {
-                    let start = pending_copy_start.ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "internal DPS state error: pending copy missing start offset".into(),
-                        )
-                    })?;
-                    records.push(DpsRecord::CopyFromSource {
-                        output_offset: start,
-                        source_offset: start,
-                        length: pending_copy_len,
-                    });
-                    pending_copy_start = None;
-                    pending_copy_len = 0;
-                }
-                if pending_data_start.is_none() {
-                    pending_data_start = Some(current_offset);
-                }
-                pending_data.push(target_buffer[index]);
-            }
+            records.push(current_offset, target_buffer[index], equal)?;
             offset = offset
                 .checked_add(1)
                 .ok_or_else(|| RomWeaverError::Validation("DPS output offset overflowed".into()))?;
@@ -867,30 +892,7 @@ fn create_dps_records_streaming(source_path: &Path, target_path: &Path) -> Resul
             .ok_or_else(|| RomWeaverError::Validation("DPS target remaining underflowed".into()))?;
     }
 
-    if pending_copy_len > 0 {
-        let start = pending_copy_start.ok_or_else(|| {
-            RomWeaverError::Validation(
-                "internal DPS state error: trailing pending copy missing start offset".into(),
-            )
-        })?;
-        records.push(DpsRecord::CopyFromSource {
-            output_offset: start,
-            source_offset: start,
-            length: pending_copy_len,
-        });
-    } else if !pending_data.is_empty() {
-        let start = pending_data_start.ok_or_else(|| {
-            RomWeaverError::Validation(
-                "internal DPS state error: trailing pending data missing start offset".into(),
-            )
-        })?;
-        records.push(DpsRecord::EmbeddedData {
-            output_offset: start,
-            data: pending_data,
-        });
-    }
-
-    Ok(records)
+    records.finish()
 }
 
 fn create_dps_records(
@@ -983,11 +985,7 @@ fn collect_dps_chunk_records(
     let mut source_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
     let mut target_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
 
-    let mut records = Vec::<DpsRecord>::new();
-    let mut pending_copy_start: Option<u32> = None;
-    let mut pending_copy_len = 0u32;
-    let mut pending_data_start: Option<u32> = None;
-    let mut pending_data = Vec::<u8>::new();
+    let mut records = DpsRecordBuilder::default();
     let mut absolute = start;
 
     while absolute < end {
@@ -1012,75 +1010,14 @@ fn collect_dps_chunk_records(
             let current_offset = u32::try_from(absolute).map_err(|_| {
                 RomWeaverError::Validation("DPS create offset exceeded 32-bit range".into())
             })?;
-            if equal {
-                if !pending_data.is_empty() {
-                    let start = pending_data_start.ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "internal DPS state error: pending data missing start offset".into(),
-                        )
-                    })?;
-                    records.push(DpsRecord::EmbeddedData {
-                        output_offset: start,
-                        data: std::mem::take(&mut pending_data),
-                    });
-                    pending_data_start = None;
-                }
-                if pending_copy_start.is_none() {
-                    pending_copy_start = Some(current_offset);
-                }
-                pending_copy_len = pending_copy_len.checked_add(1).ok_or_else(|| {
-                    RomWeaverError::Validation("DPS copy record length overflowed".into())
-                })?;
-            } else {
-                if pending_copy_len > 0 {
-                    let start = pending_copy_start.ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "internal DPS state error: pending copy missing start offset".into(),
-                        )
-                    })?;
-                    records.push(DpsRecord::CopyFromSource {
-                        output_offset: start,
-                        source_offset: start,
-                        length: pending_copy_len,
-                    });
-                    pending_copy_start = None;
-                    pending_copy_len = 0;
-                }
-                if pending_data_start.is_none() {
-                    pending_data_start = Some(current_offset);
-                }
-                pending_data.push(target_buffer[index]);
-            }
+            records.push(current_offset, target_buffer[index], equal)?;
             absolute = absolute
                 .checked_add(1)
                 .ok_or_else(|| RomWeaverError::Validation("DPS output offset overflowed".into()))?;
         }
     }
 
-    if pending_copy_len > 0 {
-        let start = pending_copy_start.ok_or_else(|| {
-            RomWeaverError::Validation(
-                "internal DPS state error: trailing pending copy missing start offset".into(),
-            )
-        })?;
-        records.push(DpsRecord::CopyFromSource {
-            output_offset: start,
-            source_offset: start,
-            length: pending_copy_len,
-        });
-    }
-    if !pending_data.is_empty() {
-        let start = pending_data_start.ok_or_else(|| {
-            RomWeaverError::Validation(
-                "internal DPS state error: trailing pending data missing start offset".into(),
-            )
-        })?;
-        records.push(DpsRecord::EmbeddedData {
-            output_offset: start,
-            data: pending_data,
-        });
-    }
-    Ok(records)
+    records.finish()
 }
 
 fn merge_dps_record(merged: &mut Vec<DpsRecord>, mut next: DpsRecord) -> Result<()> {
