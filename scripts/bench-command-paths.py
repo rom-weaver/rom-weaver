@@ -1117,6 +1117,7 @@ def rom_weaver_compress_args(
 ) -> list[str]:
     args = [
         "compress",
+        "--input",
         str(input_path),
         "--format",
         format_name,
@@ -1950,6 +1951,7 @@ def main() -> None:
         warmup = runner.run(
             args=[
                 "checksum",
+                "--input",
                 str(source_path),
                 "--algo",
                 "crc32",
@@ -2623,8 +2625,9 @@ def main() -> None:
                             args.bin,
                             [
                                 "extract",
+                                "--input",
                                 str(source_value.path),
-                                "--out-dir",
+                                "--output",
                                 str(out_dir),
                                 "--threads",
                                 str(args.threads),
@@ -2955,6 +2958,7 @@ def main() -> None:
                             args.bin,
                             [
                                 "checksum",
+                                "--input",
                                 str(source_path),
                                 "--algo",
                                 algo,
@@ -3043,6 +3047,7 @@ def main() -> None:
                             args.bin,
                             [
                                 "checksum",
+                                "--input",
                                 str(source_path),
                                 *algo_args,
                                 "--no-extract",
@@ -3178,6 +3183,7 @@ def main() -> None:
                                 args.bin,
                                 [
                                     "checksum",
+                                    "--input",
                                     str(source_value.path),
                                     "--algo",
                                     algo,
@@ -3418,6 +3424,7 @@ def main() -> None:
                                 args.bin,
                                 [
                                     "checksum",
+                                    "--input",
                                     str(source_value.path),
                                     "--algo",
                                     algo,
