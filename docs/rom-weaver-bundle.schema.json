@@ -8,9 +8,9 @@
   "required": ["version", "patches"],
   "properties": {
     "version": {
-      "description": "Bundle schema version. This build writes version 2 (which added the per-patch `basis` field) and reads versions 1-2.",
+      "description": "Bundle schema version. This build writes version 3 (which added stable patch identities and author-controlled patch versions) and reads versions 1-3.",
       "type": "integer",
-      "enum": [1, 2]
+      "enum": [1, 2, 3]
     },
     "rom": {
       "description": "The input ROM the patch chain applies to. Omit entirely for a ROM-agnostic bundle; include with only `checks` (no url/path) for a checks-only bundle where the applying user supplies the ROM.",
@@ -56,6 +56,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "description": "Stable patch-slot identity retained when the source file is replaced.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "Author-controlled release version for this patch; distinct from the bundle schema version.",
+          "type": "string",
+          "minLength": 1
+        },
         "name": {
           "description": "Display / output-naming file name (defaults to the source's base name).",
           "type": "string"

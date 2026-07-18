@@ -9,6 +9,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   setFormControlValue,
+  selectFileInput,
   waitForApplyButtonEnabled,
   waitForState,
 } from "./patcher-test-shared.js";
@@ -91,6 +92,24 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // The committed description remounts the keyed inline field (the static card
   // line stays hidden while editing) - wait for that render before exporting.
   await expect.poll(() => document.getElementById("rom-weaver-patch-description-0") !== descriptionInput).toBe(true);
+  const versionInput = document.getElementById("rom-weaver-patch-version-0");
+  expect(versionInput).not.toBeNull();
+  setFormControlValue(versionInput, "1.4.0");
+  versionInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+
+  // Replacing the source keeps this slot's inline metadata and version edits.
+  const replacementFile = new File([await patchFile.arrayBuffer()], "replacement.ips", {
+    type: "application/octet-stream",
+  });
+  document.getElementById("rom-weaver-patch-replace-0")?.click();
+  selectFileInput(document.getElementById("rom-weaver-patch-replace-input-0"), replacementFile);
+  await expect
+    .poll(
+      () => document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong")?.textContent,
+    )
+    .toBe("replacement.ips");
+  await waitForApplyButtonEnabled();
+
   // Expected input checks live in the Checks drawer: open it and add a CRC32.
   document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
   const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"));
@@ -112,7 +131,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // than intercepting the browser download.
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();
-  expect(result.bundle.version).toBe(2);
+  expect(result.bundle.version).toBe(3);
   // Bundles carry no display name; the export name feeds output naming only.
   expect(result.bundle.name).toBeUndefined();
   expect(result.bundle.output?.name).toBe("Exported Hack");
@@ -125,6 +144,8 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(Object.keys(result.bundle.rom?.checks?.checksums || {}).length).toBeGreaterThan(0);
   expect(result.bundle.patches).toHaveLength(1);
   const patchEntry = result.bundle.patches[0];
+  expect(patchEntry.id).toBeTruthy();
+  expect(patchEntry.version).toBe("1.4.0");
   expect(patchEntry.path).toBe("change.ips");
   expect(patchEntry.optional).toBeUndefined();
   expect(patchEntry.name).toBe("Core change");

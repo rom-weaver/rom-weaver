@@ -3,6 +3,7 @@ import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import Pencil from "lucide-react/dist/esm/icons/pencil.js";
 import Plus from "lucide-react/dist/esm/icons/plus.js";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
 import X from "lucide-react/dist/esm/icons/x.js";
@@ -29,7 +30,7 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
-import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
+import type { BinarySource, PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -213,6 +214,21 @@ const PatchNameInline = ({ index, item, meta, onMetaChange }: PatchMetaFieldProp
  * static description line. */
 const PatchMetaFields = ({ index, item, meta, onMetaChange }: PatchMetaFieldProps) => (
   <div className="patch-meta-inline">
+    <div className="ofld patch-version-field">
+      <label className="ofld-l" htmlFor={`rom-weaver-patch-version-${index}`}>
+        Version
+      </label>
+      <input
+        className="input mono popt-input"
+        defaultValue={meta?.version || ""}
+        id={`rom-weaver-patch-version-${index}`}
+        key={`patch-version:${item.key ?? index}:${meta?.version || ""}`}
+        onBlur={(event) => onMetaChange({ version: event.currentTarget.value.trim() || undefined })}
+        placeholder="1.0.0"
+        spellCheck={false}
+        type="text"
+      />
+    </div>
     <div className="ofld patch-description-field">
       <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
         Description
@@ -885,6 +901,43 @@ const PatchEnableToggle = ({
   </label>
 );
 
+/** Replace one patch source without removing its slot or its author metadata. */
+const PatchReplaceButton = ({
+  index,
+  onReplace,
+}: {
+  index: number;
+  onReplace: (index: number, source: BinarySource) => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <>
+      <button
+        aria-label="Replace patch"
+        className="rm replace"
+        id={`rom-weaver-patch-replace-${index}`}
+        onClick={() => inputRef.current?.click()}
+        title="Replace patch"
+        type="button"
+      >
+        <RefreshCw aria-hidden="true" />
+      </button>
+      <input
+        accept=".aps,.bps,.bsdiff,.dcp,.ebp,.gdiff,.hdiff,.hpatchz,.ips,.ips32,.ppf,.rup,.solid,.ups,.vcdiff,.xdelta"
+        className="sr-only"
+        id={`rom-weaver-patch-replace-input-${index}`}
+        onChange={(event) => {
+          const source = event.currentTarget.files?.[0];
+          if (source) onReplace(index, source);
+          event.currentTarget.value = "";
+        }}
+        ref={inputRef}
+        type="file"
+      />
+    </>
+  );
+};
+
 /** The pencil that opens the card's inline name + description editors. Shows a
  * check while editing (commit happens on each field's blur; the toggle just
  * closes the editors). Two of them can ride a card: one on the name line, one on
@@ -930,6 +983,7 @@ const PatchCard = ({
   item,
   meta,
   onMetaChange,
+  onReplace,
   onReorder,
   onTogglePatch,
   outputCheckHint,
@@ -955,6 +1009,7 @@ const PatchCard = ({
   item: PatchStackItemState;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  onReplace: (index: number, source: BinarySource) => void;
   onReorder: (from: number, to: number) => void;
   onTogglePatch?: (index: number) => void;
   outputCheckHint?: boolean;
@@ -1089,6 +1144,7 @@ const PatchCard = ({
       onRemove={() => patchStack.removeItem(index)}
       patch
       removeLabel="Remove patch"
+      replaceAction={!staging && onReplace ? <PatchReplaceButton index={index} onReplace={onReplace} /> : undefined}
       stageBar={stageBarValue(staging, percent)}
       state={staging ? undefined : verdict}
       verifyBar={verifying}
@@ -1250,6 +1306,7 @@ const ApplyPatchListStep = ({
             key={item.key ?? `${index}:${item.fileName}`}
             meta={bundleMeta?.[index]}
             onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+            onReplace={patchStack.replaceItem}
             onReorder={patchStack.reorder}
             onTogglePatch={onTogglePatch}
             outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}

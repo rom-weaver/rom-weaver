@@ -10,7 +10,6 @@ import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
@@ -33,6 +32,8 @@ type BundleExportRow = {
   fileSize?: number;
   format?: string;
   default: boolean;
+  id?: string;
+  version?: string;
   name?: string;
   description: string;
   /** Expected pre-apply ROM checksums ("algo=hex", comma-separable). */
@@ -101,6 +102,8 @@ type UseBundleExportOptions = {
   getSessionSources: () => BundleExportSources;
   /** Live per-patch stack items (index-aligned with patches) for leaf names + header round-trips. */
   getStackItems: () => PatchStackItemState[];
+  /** Stable patch-slot ids; unlike source signatures these survive replacement. */
+  getPatchIds: () => string[];
   getName?: () => string;
   /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the bundle's `output.header`. */
@@ -130,6 +133,7 @@ const slugFileName = (value: string): string =>
 
 const useBundleExport = ({
   getSessionSources,
+  getPatchIds,
   getStackItems,
   getName,
   getOutputHeader,
@@ -202,7 +206,7 @@ const useBundleExport = ({
       return;
     }
     const items = getStackItems();
-    const ids = getBinarySourceListStableIds(patches.map((patch) => patch.originalSource as BinarySource));
+    const ids = getPatchIds();
     const exportRows: BundleExportRow[] = patches.map((patch, index) => {
       const id = ids[index] || "";
       const meta = id ? bundleMetaById.get(id) : undefined;
@@ -228,6 +232,8 @@ const useBundleExport = ({
         fileName,
         ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
         default: !disabledPatchIds.has(id),
+        id: meta?.id || id,
+        ...(meta?.version ? { version: meta.version } : {}),
         ...(meta?.name ? { name: meta.name } : {}),
         checks,
         description: meta?.description || "",
@@ -335,6 +341,8 @@ const useBundleExport = ({
           return {
             fileName: patch.fileName,
             source: patch.source,
+            ...(row?.id ? { id: row.id } : {}),
+            ...(row?.version ? { version: row.version } : {}),
             ...(row?.default === false ? { optional: true } : {}),
             ...(row?.name ? { name: row.name } : {}),
             ...(row?.description.trim() ? { description: row.description.trim() } : {}),
@@ -387,6 +395,7 @@ const useBundleExport = ({
     bundleMetaById,
     onComplete,
     downloadExport,
+    getPatchIds,
   ]);
 
   const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);

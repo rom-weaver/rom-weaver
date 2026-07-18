@@ -479,6 +479,8 @@ type WorkflowRuntimeBundle = {
     patches: Array<{
       source: unknown;
       fileName?: string;
+      id?: string;
+      version?: string;
       name?: string;
       description?: string;
       label?: string;

@@ -234,6 +234,8 @@ impl CliApp {
                 bundle_entry_checks(&spec.output_checks, "--patch-output-check")?
                     .filter(|checks| !checks_implied_by(checks, output_checks.as_ref()));
             patches.push(BundlePatchEntry {
+                id: spec.id.clone(),
+                version: spec.version.clone(),
                 name: spec.name.clone(),
                 description: spec.description.clone(),
                 optional: spec.optional.unwrap_or(false),
@@ -458,6 +460,8 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
         return Ok(args.patch_specs.clone());
     }
     let count = args.patch.len();
+    let ids = aligned_metadata(&args.patch_id, count, "--patch-id")?;
+    let versions = aligned_metadata(&args.patch_version, count, "--patch-version")?;
     let names = aligned_metadata(&args.patch_name, count, "--patch-name")?;
     let descriptions = aligned_metadata(&args.patch_description, count, "--patch-description")?;
     let labels = aligned_metadata(&args.patch_label, count, "--patch-label")?;
@@ -473,6 +477,8 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
         .enumerate()
         .map(|(index, path)| BundleCreatePatchSpec {
             path: path.clone(),
+            id: ids[index].clone(),
+            version: versions[index].clone(),
             name: names[index].clone(),
             description: descriptions[index].clone(),
             label: labels[index].clone(),

@@ -988,6 +988,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     patchBases?: Array<"auto" | "base" | "previous">;
     patchDescriptions?: string[];
     patchHeaders?: BundleHeaderMode[];
+    patchIds?: string[];
     /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
     patchInputChecks?: string[];
     patchLabels?: string[];
@@ -995,6 +996,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     patchPaths: string[];
     patchOptionals?: boolean[];
     patchOutputChecks?: string[];
+    patchVersions?: string[];
     romPath?: string;
     signal?: AbortSignal;
   },
@@ -1017,8 +1019,10 @@ const invokeRomWeaverBundleCreateWorker = async (
     return normalized.slice(0, patchPaths.length);
   };
   const patchNames = alignedStrings(input.patchNames);
+  const patchIds = alignedStrings(input.patchIds);
   const patchDescriptions = alignedStrings(input.patchDescriptions);
   const patchLabels = alignedStrings(input.patchLabels);
+  const patchVersions = alignedStrings(input.patchVersions);
   const patchInputChecks = alignedStrings(input.patchInputChecks);
   const patchOutputChecks = alignedStrings(input.patchOutputChecks);
   const outputCheck = String(input.outputCheck || "").trim();
@@ -1046,6 +1050,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(typeof input.romSize === "number" ? { rom_size: input.romSize } : {}),
     ...(outputCheck ? { output_check: [outputCheck] } : {}),
     ...(patchNames ? { patch_name: patchNames } : {}),
+    ...(patchIds ? { patch_id: patchIds } : {}),
     ...(patchDescriptions ? { patch_description: patchDescriptions } : {}),
     ...(patchLabels ? { patch_label: patchLabels } : {}),
     ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
@@ -1053,6 +1058,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(patchBases ? { patch_basis: patchBases } : {}),
     ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
     ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
+    ...(patchVersions ? { patch_version: patchVersions } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {

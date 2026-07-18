@@ -2,7 +2,6 @@ import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
-import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
@@ -10,6 +9,10 @@ const logger = createLogger("bundle-apply-session");
 
 /** Per-patch bundle metadata kept for the cards (label/description) and export round-trips. */
 type BundlePatchMeta = {
+  /** Stable author-facing identity carried through bundle exports. */
+  id?: string;
+  /** Author-controlled patch release version; distinct from the schema version. */
+  version?: string;
   name?: string;
   label?: string;
   description?: string;
@@ -37,16 +40,18 @@ const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
  * the bundle's delivered files (ordered file names), it seeds enablement (optional → off,
  * everything else → on), applies per-patch header modes and the bundle's output defaults
  * through the same controller methods user edits use (so later user edits naturally win), and keeps
- * the per-patch label/description metadata for the patch cards, keyed by stable source id.
+ * the per-patch label/description metadata for the patch cards, keyed by stable patch-slot id.
  */
 const useBundleApplySession = ({
   bundleSession,
   controllersRef,
+  getPatchIds,
   seedPatchEnablement,
 }: {
   bundleSession: BundleApplySession | null;
   /** Latest-controller ref - the local controllers are recreated per render, so reads go through here. */
   controllersRef: MutableRefObject<BundleSessionControllers>;
+  getPatchIds: () => string[];
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
 }) => {
   const appliedKeyRef = useRef<string | null>(null);
@@ -70,7 +75,7 @@ const useBundleApplySession = ({
         key: session.key,
         patchCount: patches.length,
       });
-      const ids = getBinarySourceListStableIds(patches);
+      const ids = getPatchIds();
       seedPatchEnablement(
         session.entries
           .map((entry, index) => ({
@@ -84,6 +89,8 @@ const useBundleApplySession = ({
         const id = ids[index];
         if (!id) return;
         meta.set(id, {
+          ...(entry.id ? { id: entry.id } : {}),
+          ...(entry.version ? { version: entry.version } : {}),
           ...(entry.name ? { name: entry.name } : {}),
           ...(entry.label ? { label: entry.label } : {}),
           ...(entry.description ? { description: entry.description } : {}),
@@ -136,7 +143,7 @@ const useBundleApplySession = ({
         if (defaults.header) controllersRef.current.output?.setOutputHeader?.(defaults.header);
       })();
     },
-    [controllersRef, bundleSession, seedPatchEnablement],
+    [controllersRef, bundleSession, getPatchIds, seedPatchEnablement],
   );
 
   // Replay the match when the session lands AFTER its patches did (local

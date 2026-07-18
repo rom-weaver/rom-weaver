@@ -188,8 +188,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
 
   // Patch enable toggles (the loom On/Off switch): disabled patches stay on
-  // the bench but are excluded from the apply run. Keyed by stable source id
-  // so reorders/removals keep the right patches off.
+  // the bench but are excluded from the apply run. Keyed by stable patch-slot id
+  // so replacements/reorders/removals keep the right patches off.
   const {
     disabledPatchIds,
     filterEnabledPatchRun,
@@ -217,6 +217,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
     bundleSession: activeBundleSession,
     controllersRef: bundleControllersRef,
+    getPatchIds,
     seedPatchEnablement,
   });
 
@@ -225,29 +226,34 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // the apply run will enforce.
   const bundleMetaRef = useRef(bundleMetaById);
   bundleMetaRef.current = bundleMetaById;
-  const buildChainMeta = useCallback((patches: BinarySource[]) => {
-    const toTokens = (checks?: { checksums?: Record<string, string> }): string | undefined => {
-      const entries = Object.entries(checks?.checksums || {}).filter(([, hex]) => typeof hex === "string" && !!hex);
-      return entries.length ? entries.map(([algorithm, hex]) => `${algorithm}=${hex}`).join(",") : undefined;
-    };
-    const chainMeta = new Map<
-      number,
-      { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
-    >();
-    getBinarySourceListStableIds(patches).forEach((id, index) => {
-      const meta = bundleMetaRef.current.get(id || "");
-      if (!meta) return;
-      const inputChecks = toTokens(meta.inputChecks);
-      const outputChecks = toTokens(meta.outputChecks);
-      if (!(meta.basis || inputChecks || outputChecks)) return;
-      chainMeta.set(index, {
-        ...(meta.basis ? { basis: meta.basis } : {}),
-        ...(inputChecks ? { inputChecks } : {}),
-        ...(outputChecks ? { outputChecks } : {}),
-      });
-    });
-    return chainMeta;
-  }, []);
+  const buildChainMeta = useCallback(
+    (patches: BinarySource[]) => {
+      const toTokens = (checks?: { checksums?: Record<string, string> }): string | undefined => {
+        const entries = Object.entries(checks?.checksums || {}).filter(([, hex]) => typeof hex === "string" && !!hex);
+        return entries.length ? entries.map(([algorithm, hex]) => `${algorithm}=${hex}`).join(",") : undefined;
+      };
+      const chainMeta = new Map<
+        number,
+        { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
+      >();
+      getPatchIds()
+        .slice(0, patches.length)
+        .forEach((id, index) => {
+          const meta = bundleMetaRef.current.get(id || "");
+          if (!meta) return;
+          const inputChecks = toTokens(meta.inputChecks);
+          const outputChecks = toTokens(meta.outputChecks);
+          if (!(meta.basis || inputChecks || outputChecks)) return;
+          chainMeta.set(index, {
+            ...(meta.basis ? { basis: meta.basis } : {}),
+            ...(inputChecks ? { inputChecks } : {}),
+            ...(outputChecks ? { outputChecks } : {}),
+          });
+        });
+      return chainMeta;
+    },
+    [getPatchIds],
+  );
 
   // Latest patch list mirror for flows outside the staging pipeline (bundle export).
   const currentPatchesRef = useRef<BinarySource[]>([]);
@@ -1239,6 +1245,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const bundleExport = useBundleExport({
     bundleMetaById,
     disabledPatchIds,
+    getPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
     getSessionSources: (): ApplyWorkflowBundleSources => {

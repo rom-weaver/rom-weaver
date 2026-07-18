@@ -96,6 +96,10 @@ const parseBundleRom = (value: unknown): ParsedBundleRom | undefined => {
 const parseBundlePatchEntry = (value: unknown): ParsedBundlePatchEntry => {
   const record = (asRecord(value) || {}) as WireRecord<BundlePatchEntry>;
   const entry: ParsedBundlePatchEntry = {};
+  const id = toStringValue(record.id);
+  if (id !== undefined) entry.id = id;
+  const version = toStringValue(record.version);
+  if (version !== undefined) entry.version = version;
   if (record.optional === true) entry.optional = true;
   const name = toStringValue(record.name);
   if (name !== undefined) entry.name = name;

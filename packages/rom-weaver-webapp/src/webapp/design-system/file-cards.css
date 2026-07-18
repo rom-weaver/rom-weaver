@@ -116,6 +116,7 @@
   transition: color .15s, border-color .15s, background .15s;
 }
 .rw-app .rm:hover, .rw-app .rm:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
+.rw-app .rm.replace:hover, .rw-app .rm.replace:active { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
 /* icon buttons: drop the UA <button> padding so glyphs center exactly */
 .rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
 .rw-app .rm svg { width: calc(var(--ctrl-h) * .47); height: calc(var(--ctrl-h) * .47); }

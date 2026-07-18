@@ -341,7 +341,15 @@ path?: string,
  */
 checks?: BundleChecks, };
 
-export type BundlePatchEntry = { name?: string, description?: string,
+export type BundlePatchEntry = {
+/**
+ * Stable identity for this patch slot across source replacements.
+ */
+id?: string,
+/**
+ * Author-controlled release version; distinct from the bundle schema version.
+ */
+version?: string, name?: string, description?: string,
 /**
  * An optional patch starts deselected; omitted/false means the patch is
  * applied by default. Every patch remains toggleable.
@@ -449,7 +457,7 @@ rom_checksums?: Array<string>,
 /**
  * Cached prepared ROM size from a prior staging pass.
  */
-rom_size?: number | null, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+rom_size?: number | null, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */

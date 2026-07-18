@@ -42,6 +42,7 @@ type StackPatchItem = PatchStackItemState;
 type PatcherStackController = StoreController<PatchStackState> & {
   reorder: (from: number, to: number) => void;
   removeItem: (index: number) => void;
+  replaceItem: (index: number, source: BinarySource) => void;
   setPatchTarget?: (index: number, targetInputId: string) => void;
   setPatchOption?: (
     index: number,

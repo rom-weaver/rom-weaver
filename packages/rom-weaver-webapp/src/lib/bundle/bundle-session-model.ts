@@ -14,6 +14,8 @@ type BundleAcquisition = { kind: "url"; url: string } | { kind: "extracted"; ext
 
 type BundlePlanEntry = {
   acquisition: BundleAcquisition;
+  id?: string;
+  version?: string;
   name?: string;
   description?: string;
   label?: string;
@@ -132,6 +134,8 @@ const buildBundleApplySessionPlan = (parsed: ParsedBundleParseResult, bundleUrl:
     if (!patchSource) throw new Error(`Bundle patch ${index + 1} has no resolved source`);
     entries.push({
       acquisition: toAcquisition(patchSource.source, bundleUrl, `patch ${index + 1}`),
+      ...(patch.id ? { id: patch.id } : {}),
+      ...(patch.version ? { version: patch.version } : {}),
       ...(patch.name ? { name: patch.name } : {}),
       ...(patch.description ? { description: patch.description } : {}),
       ...(patch.label ? { label: patch.label } : {}),

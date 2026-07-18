@@ -266,7 +266,7 @@ require reproducing DiscUtils' exact ISO9660 layout and is deferred.
 ## rom-weaver-bundle.json bundles
 
 An `rom-weaver-bundle.json` bundle is a distributable patching-workflow definition: ordered
-`patches` (each with editable `name`/`description`, an `optional` flag
+`patches` (each with a stable `id`, author-controlled `version`, editable `name`/`description`, an `optional` flag
 (absent/false = applied by default), a free-form maturity `label`, and a
 per-patch `header` mode), an optional `rom` entry, and
 overridable `output` defaults (`name`/`header`). ROM state checks live on the

@@ -28,6 +28,8 @@ type ParsedBundleRom = {
 };
 
 type ParsedBundlePatchEntry = {
+  id?: string;
+  version?: string;
   name?: string;
   description?: string;
   /** An optional patch starts deselected; absent/false means applied by default. */

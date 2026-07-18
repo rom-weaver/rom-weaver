@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_current_version_with_basis() {
+    fn parses_v2_version_with_basis() {
         let bundle = parse_bundle_bytes(
             br#"{ "version": 2, "patches": [
                 { "path": "a.ips", "basis": "base" },
@@ -249,10 +249,21 @@ mod tests {
             ] }"#,
         )
         .expect("v2 bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 2);
         assert_eq!(bundle.patches[0].basis, Some(PatchInputBasis::Base));
         assert_eq!(bundle.patches[1].basis, Some(PatchInputBasis::Previous));
         assert_eq!(bundle.patches[2].basis, None);
+    }
+
+    #[test]
+    fn parses_v3_patch_slot_metadata() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 3, "patches": [ { "id": "main", "version": "1.4.0", "path": "main.bps" } ] }"#,
+        )
+        .expect("v3 bundle parses");
+        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.patches[0].id.as_deref(), Some("main"));
+        assert_eq!(bundle.patches[0].version.as_deref(), Some("1.4.0"));
     }
 
     #[test]
@@ -300,7 +311,7 @@ mod tests {
     #[test]
     fn rejects_unsupported_version() {
         assert_eq!(
-            parse_err(r#"{ "version": 3, "patches": [ { "path": "x.ips" } ] }"#),
+            parse_err(r#"{ "version": 4, "patches": [ { "path": "x.ips" } ] }"#),
             "bundle.version.unsupported"
         );
     }
@@ -434,6 +445,8 @@ mod tests {
                 }),
             }),
             patches: vec![BundlePatchEntry {
+                id: Some("main".to_owned()),
+                version: Some("1.0.0".to_owned()),
                 name: Some("Main hack".to_owned()),
                 description: Some("The main event".to_owned()),
                 optional: true,

@@ -211,6 +211,11 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
         const { actions, state } = contextRef.current;
         actions.updatePatches(state.activePatches.filter((_patch, patchIndex) => patchIndex !== index));
       },
+      replaceItem: (index: number, source: BinarySource) => {
+        const { actions, state } = contextRef.current;
+        if (index < 0 || index >= state.activePatches.length) return;
+        actions.updatePatches(state.activePatches.map((patch, patchIndex) => (patchIndex === index ? source : patch)));
+      },
       reorder: (from: number, to: number) => {
         const { actions, state } = contextRef.current;
         const count = state.activePatches.length;

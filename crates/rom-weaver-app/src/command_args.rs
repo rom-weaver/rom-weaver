@@ -1558,6 +1558,8 @@ pub struct BundleParseCommand {
 #[derive(Clone, Debug, Default)]
 pub struct BundleCreatePatchSpec {
     pub path: PathBuf,
+    pub id: Option<String>,
+    pub version: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub label: Option<String>,
@@ -1625,12 +1627,29 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch file to include, in apply order; repeat --patch for each entry. --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header bind to the preceding --patch"
+            help = "Patch file to include, in apply order; repeat --patch for each entry. --patch-id, --patch-version, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header bind to the preceding --patch"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long = "patch-id", help = "Stable identity for the preceding --patch")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_id: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-version",
+            help = "Author-controlled version for the preceding --patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_version: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(long = "patch-name", help = "Display name for the preceding --patch")
@@ -1863,6 +1882,19 @@ impl BundleCreateCommand {
                 assign(&mut specs[position], occurrence);
             }
         };
+        let ids = self.patch_id.clone();
+        bind(&mut specs, "patch_id", ids.len(), &mut |spec, index| {
+            spec.id = Some(ids[index].clone());
+        });
+        let versions = self.patch_version.clone();
+        bind(
+            &mut specs,
+            "patch_version",
+            versions.len(),
+            &mut |spec, index| {
+                spec.version = Some(versions[index].clone());
+            },
+        );
         let names = self.patch_name.clone();
         bind(&mut specs, "patch_name", names.len(), &mut |spec, index| {
             spec.name = Some(names[index].clone());
