@@ -56,7 +56,6 @@ const FileCard = ({
   name,
   description,
   meta,
-  target,
   stageBar,
   verifyBar = false,
   children,
@@ -79,7 +78,6 @@ const FileCard = ({
   description?: ReactNode;
   /** size · format sub-line under the name (`.card-meta` content). */
   meta?: ReactNode;
-  target?: ReactNode;
   /**
    * Progress bar on the card's top edge while staging: a determinate width
    * (0–100) when the percent is known, or `"indeterminate"` for an animated
@@ -142,12 +140,7 @@ const FileCard = ({
             {/* description sits directly under the name (read and edited there),
                 above the size/format meta line */}
             {description}
-            {meta || target ? (
-              <span className="card-meta">
-                {target}
-                {meta}
-              </span>
-            ) : null}
+            {meta ? <span className="card-meta">{meta}</span> : null}
           </div>
           {patch ? null : actions}
         </div>

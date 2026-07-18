@@ -1039,11 +1039,15 @@ const PatchCard = ({
           {onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
-          {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
-          {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
           {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
           {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
           {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}
+          {/* The patch's single contextual control (target OR header OR byte
+              order - never more than one applies) closes the meta line, in
+              the same slot after size and format. */}
+          {staging ? null : <PatchTarget index={index} item={item} patchStack={patchStack} />}
+          {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
+          {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
           {staging ? (
             <StageStatus
               id={`rom-weaver-progress-patch-${index}`}
@@ -1087,7 +1091,6 @@ const PatchCard = ({
       removeLabel="Remove patch"
       stageBar={stageBarValue(staging, percent)}
       state={staging ? undefined : verdict}
-      target={staging ? undefined : <PatchTarget index={index} item={item} patchStack={patchStack} />}
       verifyBar={verifying}
     >
       <div className="patch-body">

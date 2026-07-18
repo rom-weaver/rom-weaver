@@ -131,8 +131,9 @@
 .rw-app .patch-enable .switch-state b { grid-area: 1 / 1; font-weight: 600; }
 .rw-app .patch-enable .switch-state .on { color: var(--thread-text); }
 .rw-app .patch-enable input:checked ~ .switch-state .off, .rw-app .patch-enable input:not(:checked) ~ .switch-state .on { visibility: hidden; }
-/* the target leads the sub-line as plain inline text (no pill): the icon + its
-   track dropdown sit together, the icon's left edge lining up with the name above */
+/* the contextual control (target/header/byte order) closes the sub-line as
+   plain inline text (no pill): the icon + its dropdown sit together after the
+   size and format */
 .rw-app .target-grp { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft); white-space: nowrap; }
 .rw-app .target-grp > svg { width: .92rem; height: .92rem; color: var(--thread-text); flex: none; }
 .rw-app .target-grp.bad { color: var(--fault); }
@@ -156,8 +157,9 @@
    it below) */
 .rw-app .meta-fmt { font-size: calc(var(--badge-fs) * 0.92); font-stretch: 86%; letter-spacing: .04em; text-transform: uppercase; color: var(--thread-text); }
 .rw-app .card-meta .meta-fmt::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
-/* a matching middot separates the track selection from the size */
-.rw-app .card-meta .target-grp + .fsize::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
+/* a matching middot separates the contextual control from the size/format
+   before it (none when the toggle alone precedes it) */
+.rw-app .card-meta :is(.fsize, .meta-fmt) + .target-grp::before { content: "·"; color: var(--ink-4); }
 /* readout / size / type badges hug their text (height ≈ the text line) so they sit
    inline and vertically center against adjacent text rather than the taller buttons */
 .rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .ckgrp .tsz, .rw-app .meta-fmt {
