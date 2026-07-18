@@ -46,10 +46,10 @@
   .rw-app .card { gap: var(--sp-xs); border-radius: var(--r-s); padding: 7px; }
   .rw-app .card-name { gap: var(--sp-2xs); }
   .rw-app .card-actions, .rw-app .patch-body-inner { gap: var(--sp-xs); }
-  /* drawer heads keep one uniform height on phones - matching the output
-     card's Options drawer - instead of shrinking below a comfortable tap */
-  .rw-app .cks > .cks-head { min-height: 36px; padding-block: 1px; }
-  .rw-app .drawer-action { top: 15px; }
+  /* every drawer head tightens with the phone width while retaining a 30px
+     tap floor; independently positioned actions stay centred as it scales */
+  .rw-app .cks > .cks-head { min-height: clamp(30px, 5vw, 34px); padding-block: 1px; }
+  .rw-app .drawer-action { top: 50%; }
   .rw-app .cks > .cks-head .readouts { gap: var(--sp-xs); }
   .rw-app .cks .cks-inner > :last-child { margin-block-end: 6px; }
   .rw-app .optsbody { gap: var(--sp-s); padding-block: 6px 0; }
