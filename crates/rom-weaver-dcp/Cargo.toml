@@ -18,3 +18,6 @@ rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-gdrom = { path = "../rom-weaver-gdrom", version = "0.5.0" }
 rom-weaver-xdelta = { path = "../rom-weaver-xdelta", version = "0.5.0" }
 tracing.workspace = true
+
+[lints]
+workspace = true

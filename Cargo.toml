@@ -36,6 +36,16 @@ repository = "https://github.com/brandonocasey/rom-weaver"
 rust-version = "1.95"
 version = "0.5.0"
 
+# Lint policy in the manifest rather than only in the `mise run clippy` flags,
+# so a bare `cargo clippy` and rust-analyzer's in-editor diagnostics enforce the
+# same thing CI does. The mise task still adds `-D warnings`; that is what makes
+# these fail a build rather than just print. Only the first-party crates opt in
+# (via `[lints] workspace = true`) - the vendored forks under vendor/ and
+# crates/rom-weaver-nod are excluded from the clippy task and must stay
+# lint-clean against *their* upstream, not ours.
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
 [workspace.dependencies]
 adler2 = "2.0.1"
 assert_cmd = "2.1.1"

@@ -40,3 +40,6 @@ zstd.workspace = true
 [[bin]]
 name = "rom-weaver"
 path = "src/main.rs"
+
+[lints]
+workspace = true
