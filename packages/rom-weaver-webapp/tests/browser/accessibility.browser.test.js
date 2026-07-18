@@ -419,7 +419,7 @@ const stagedPatchItem = (fileName) => ({
 
 const PAGE_TABS = [
   { icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Weave" },
-  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Make Patch" },
+  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
 ];
 

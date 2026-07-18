@@ -68,7 +68,7 @@ in the [CLI guide](docs/cli.md#supported-formats).
 Open the hosted webapp at **[rom-weaver.com](https://rom-weaver.com/)**. There
 is nothing to install and no account: choose **Weave**, add a ROM and one or
 more patches, review the detected formats and checksums, then run the workflow
-and save the result. Use **Make Patch** to create a distributable patch from
+and save the result. Use **Create** to generate a distributable patch from
 an original and a modified file; optional Trim and Tools workflows can be
 enabled in the webapp settings. Your files are processed locally and never
 leave the device. Install it as a PWA from the browser menu to use it offline.

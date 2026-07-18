@@ -35,7 +35,7 @@ import { SettingsPanel } from "./webapp-settings";
 const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
   { icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
-  { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Make Patch" },
+  { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
