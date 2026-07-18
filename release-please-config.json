@@ -28,6 +28,12 @@
           "path": "packages/rom-weaver-webapp/package-lock.json",
           "jsonpath": "$.packages[''].version"
         },
+        "packages/rom-weaver-alias/package.json",
+        {
+          "type": "json",
+          "path": "packages/rom-weaver-alias/package.json",
+          "jsonpath": "$.dependencies.*"
+        },
         "packages/rom-weaver-cli-platforms/darwin-arm64/package.json",
         "packages/rom-weaver-cli-platforms/darwin-x64/package.json",
         "packages/rom-weaver-cli-platforms/linux-x64-gnu/package.json",

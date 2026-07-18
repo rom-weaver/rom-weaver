@@ -8,11 +8,16 @@ const packageJsonPath = join(rootDir, "package.json");
 const workspaceCargoTomlPath = join(rootDir, "Cargo.toml");
 const syncedPackageJsonPaths = [
   "packages/rom-weaver-webapp/package.json",
+  "packages/rom-weaver-alias/package.json",
   "packages/rom-weaver-cli-platforms/darwin-arm64/package.json",
   "packages/rom-weaver-cli-platforms/darwin-x64/package.json",
   "packages/rom-weaver-cli-platforms/linux-x64-gnu/package.json",
   "packages/rom-weaver-cli-platforms/win32-x64-msvc/package.json",
 ];
+// Manifests carrying exact-pinned @rom-weaver/* deps. These pins are separate
+// from the package's own version and would otherwise go stale on a bump,
+// shipping a launcher that resolves last release's binaries.
+const pinnedDependencyPackageJsonPaths = ["package.json", "packages/rom-weaver-alias/package.json"];
 const syncedPackageDirs = [".", "packages/rom-weaver-webapp"];
 
 async function fileExists(filePath) {
@@ -114,6 +119,35 @@ async function updatePackageJsonVersion(packageJsonRelativePath, version) {
   return true;
 }
 
+async function updatePinnedDependencyVersions(packageJsonRelativePath, version) {
+  const packageJsonFilePath = join(rootDir, packageJsonRelativePath);
+  if (!(await fileExists(packageJsonFilePath))) {
+    console.warn(`Skipped ${packageJsonRelativePath}: not found`);
+    return false;
+  }
+
+  const pkg = JSON.parse(await readFile(packageJsonFilePath, "utf8"));
+  let changed = false;
+
+  for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+    for (const name of Object.keys(pkg[field] ?? {})) {
+      if (!name.startsWith("@rom-weaver/")) continue;
+      const currentVersion = pkg[field][name];
+      if (currentVersion === version) continue;
+      pkg[field][name] = version;
+      changed = true;
+      console.log(
+        `Updated ${packageJsonFilePath}: ${field}.${name} ${currentVersion} -> ${version}`,
+      );
+    }
+  }
+
+  if (changed) {
+    await writeFile(packageJsonFilePath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+  }
+  return changed;
+}
+
 function updateCargoLock() {
   // `cargo metadata --no-deps` skips dependency resolution and never writes
   // Cargo.lock; only a resolving command syncs the lock to the bumped
@@ -181,6 +215,9 @@ async function main() {
   changed = (await updateInternalCargoDependencyVersions(cargoTomlPaths, version)) || changed;
   for (const packageJsonRelativePath of syncedPackageJsonPaths) {
     changed = (await updatePackageJsonVersion(packageJsonRelativePath, version)) || changed;
+  }
+  for (const packageJsonRelativePath of pinnedDependencyPackageJsonPaths) {
+    changed = (await updatePinnedDependencyVersions(packageJsonRelativePath, version)) || changed;
   }
 
   if (changed) {

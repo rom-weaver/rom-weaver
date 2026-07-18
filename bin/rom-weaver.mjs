@@ -40,6 +40,8 @@ try {
   });
 } catch (error) {
   console.error(`rom-weaver could not load ${platformPackage}: ${error.message}`);
-  console.error("Reinstall @rom-weaver/cli with optional dependencies enabled for this platform.");
+  console.error(
+    "Reinstall rom-weaver (@rom-weaver/cli) with optional dependencies enabled for this platform.",
+  );
   process.exitCode = 1;
 }

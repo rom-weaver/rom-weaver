@@ -110,3 +110,38 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # The unscoped `rom-weaver` name is a dependency-only alias for
+  # @rom-weaver/cli, so it must publish after the launcher it points at -
+  # otherwise installs resolve a version that is not on the registry yet.
+  alias:
+    needs: launcher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish alias package
+        shell: bash
+        run: |
+          package_path=packages/rom-weaver-alias
+          cp LICENSE.md "$package_path/LICENSE.md"
+          package_spec=$(node -p "const p = require('./$package_path/package.json'); p.name + '@' + p.version")
+          if npm view "$package_spec" version >/dev/null 2>&1; then
+            echo "$package_spec is already published"
+          elif npm publish "$package_path" --ignore-scripts --access public --provenance; then
+            true
+          elif npm view "$package_spec" version >/dev/null 2>&1; then
+            echo "$package_spec was published by another run"
+          else
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
