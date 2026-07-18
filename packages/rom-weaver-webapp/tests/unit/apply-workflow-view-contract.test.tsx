@@ -161,6 +161,29 @@ describe("apply workflow view - staged bench", () => {
     expect(patchLabels).toEqual(["Files"]);
   });
 
+  it("renders a staging disc as one card with byte-weighted overall progress", () => {
+    const first = romRow("track-01.bin");
+    first.groupId = "disc-1";
+    first.kind = "track";
+    first.order = 0;
+    first.size = 100;
+    const second = romRow("track-02.bin");
+    second.groupId = "disc-1";
+    second.kind = "track";
+    second.order = 1;
+    second.size = 300;
+    second.info = { ...second.info, crc32: "", md5: "", sha1: "", validationPhase: "checksum" };
+    second.progress = { label: "Calculating checksums...", percent: 50 } as RomInputRowState["progress"];
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [first, second] };
+    const { container } = renderView({ ui });
+
+    const cards = container.querySelectorAll("#rom-weaver-list-input-stack .card.file");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.querySelector(".stage-status")?.textContent).toContain("63%");
+    const stageBar = cards[0]?.querySelector(".stage-bar") as HTMLElement | null;
+    expect(stageBar?.style.width).toBe("62.5%");
+  });
+
   it("keeps Checks on a staging patch once real requirements are known", () => {
     const patch = patchItem("change.bps");
     patch.format = "BPS";

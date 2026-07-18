@@ -97,6 +97,53 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
 });
 
 describe("useLocalApplyPatchFormSession apply flow", () => {
+  it("replaces loose disc placeholders with grouped tracks before checksumming finishes", async () => {
+    let finishStaging = () => undefined;
+    const stagingBlocked = new Promise<void>((resolve) => {
+      finishStaging = resolve;
+    });
+    const prepared = [
+      {
+        cueText: 'FILE "track-01.bin" BINARY',
+        fileName: "track-01.bin",
+        groupId: "disc-1",
+        id: "disc-1-track-1",
+        kind: "track",
+        order: 0,
+        size: 100,
+      },
+      {
+        cueText: 'FILE "track-02.bin" BINARY',
+        fileName: "track-02.bin",
+        groupId: "disc-1",
+        id: "disc-1-track-2",
+        kind: "track",
+        order: 1,
+        size: 300,
+      },
+    ];
+    const stageInput = vi.fn<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>(
+      async (_snapshot, handlers) => {
+        handlers.onPrepared?.(prepared);
+        await stagingBlocked;
+        return prepared;
+      },
+    );
+    const { result } = renderSession({
+      inputs: [source("disc.cue"), source("track-01.bin"), source("track-02.bin")],
+      patches: [],
+      stageInput,
+    });
+
+    await waitFor(() => expect(stageInput).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.localUiController.getState().romInputs).toHaveLength(2));
+    const rows = result.current.localUiController.getState().romInputs;
+    expect(rows.map((row) => row.groupId)).toEqual(["disc-1", "disc-1"]);
+    expect(rows.every((row) => !!row.progress)).toBe(true);
+
+    await act(async () => finishStaging());
+  });
+
   it("validates once when input and patches finish staging together", async () => {
     const validatePatches = vi.fn(async () => []);
     const stageInput = vi.fn(async () => [{ fileName: "rom.bin", id: "rom", order: 0, size: 1024 }]);
