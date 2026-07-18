@@ -66,6 +66,13 @@ import {
   toSimpleProgress,
 } from "./run-result-parsing.ts";
 
+const relaySimpleProgress =
+  (onProgress?: (progress: NonNullable<ReturnType<typeof toSimpleProgress>>) => void) =>
+  (event: Parameters<typeof toSimpleProgress>[0]) => {
+    const progress = toSimpleProgress(event);
+    if (progress) onProgress?.(progress);
+  };
+
 // Build the `--filter rom|patch` payload field from the two legacy booleans.
 // Returns an empty object when neither is set so it spreads to nothing.
 const filterSpread = (romFilter?: boolean, patchFilter?: boolean): { filter?: ("rom" | "patch")[] } => {
@@ -168,19 +175,13 @@ const invokeRomWeaverCompressionCreateWorker = async (
         invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
         knownInputPaths: input.knownInputPaths,
         logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
+        onEvent: relaySimpleProgress(onProgress),
         onLog,
         signal: input.signal,
         virtualFiles: input.virtualFiles,
       }),
     );
-    if (!(result.ok && result.exitCode === 0)) {
-      const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
-      throw withRomWeaverFailureKind(new Error(failureMessage), result);
-    }
+    ensureRomWeaverSuccess(result, "Compression create failed");
 
     const emitted = getEmittedFiles(result)[0];
     return {
@@ -224,18 +225,12 @@ const runRomWeaverProbeWorker = async (
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
     }),
   );
-  if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Container probe failed");
-    throw withRomWeaverFailureKind(new Error(failureMessage), result);
-  }
+  ensureRomWeaverSuccess(result, "Container probe failed");
   return { entries: getContainerEntriesFromProbe(result) };
 };
 
@@ -279,9 +274,7 @@ const runRomWeaverIngestSidecarsWorker = async (
     command,
     toRomWeaverOptions({ logLevel: input.logLevel, onLog, signal: input.signal }),
   );
-  if (!(result.ok && result.exitCode === 0)) {
-    throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, "Sidecar match failed")), result);
-  }
+  ensureRomWeaverSuccess(result, "Sidecar match failed");
   return getSidecarMatchesFromResult(result);
 };
 
@@ -437,10 +430,7 @@ const invokeRomWeaverPatchValidateWorker = async (
       defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
       invalidateMountCacheBeforeRun: true,
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
       syncAccessMode,
@@ -581,10 +571,7 @@ const invokeRomWeaverPatchApplyWorker = async (
           defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
           invalidateMountCacheBeforeRun: true,
           logLevel: input.logLevel,
-          onEvent: (event) => {
-            const progress = toSimpleProgress(event);
-            if (progress) onProgress?.(progress);
-          },
+          onEvent: relaySimpleProgress(onProgress),
           onLog,
           signal: input.signal,
           syncAccessMode,
@@ -667,10 +654,7 @@ const invokeRomWeaverCreatePatchCandidatesWorker = async (
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
     }),
@@ -714,10 +698,7 @@ const invokeRomWeaverCreatePatchWorker = async (
         command,
         toRomWeaverOptions({
           logLevel: input.logLevel,
-          onEvent: (event) => {
-            const progress = toSimpleProgress(event);
-            if (progress) onProgress?.(progress);
-          },
+          onEvent: relaySimpleProgress(onProgress),
           onLog,
           signal: input.signal,
         }),
@@ -772,10 +753,7 @@ const invokeRomWeaverTrimWorker = async (
       command,
       toRomWeaverOptions({
         logLevel: input.logLevel,
-        onEvent: (event) => {
-          const progress = toSimpleProgress(event);
-          if (progress) onProgress?.(progress);
-        },
+        onEvent: relaySimpleProgress(onProgress),
         onLog,
         signal: input.signal,
       }),
@@ -905,10 +883,7 @@ const invokeRomWeaverIngestWorker = async (
       invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
       knownInputPaths: input.knownInputPaths,
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
     }),
@@ -960,10 +935,7 @@ const invokeRomWeaverBundleParseWorker = async (
     toRomWeaverOptions({
       knownInputPaths: input.knownInputPaths,
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
     }),
@@ -1100,10 +1072,7 @@ const invokeRomWeaverBundleCreateWorker = async (
       invalidateMountCacheBeforeRun: true,
       knownInputPaths: input.knownInputPaths,
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
+      onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
     }),
