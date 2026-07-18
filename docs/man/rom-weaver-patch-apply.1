@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-apply \- Apply one or more ROM patch files to an input in sequence
 .SH SYNOPSIS
-\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-log\-level\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-no\-extract\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Apply one or more ROM patch files to an input in sequence.
 .PP
@@ -42,20 +42,44 @@ Disable running progress events
 \fB\-\-target\fR \fI<TARGET>\fR
 For a disc\-sheet (.cue/.gdi) input, glob selecting which referenced track (.bin) receives the patch; must match exactly one track. Uses the same matching as \-\-select.
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-rom\-filter\fR
 Keep ROM\-like payload candidates while resolving the patch input archive
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-patch\-filter\fR
 Keep patch\-like payload candidates while resolving patch archives
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-no\-extract\fR
 Disable container auto\-extract and patch the raw input and patch bytes directly
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-ignore\fR
 Disable default ignore filtering during patch apply container payload resolution

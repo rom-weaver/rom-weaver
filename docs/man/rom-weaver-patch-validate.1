@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-validate \- Validate one or more ROM patch files against an input without writing output
 .SH SYNOPSIS
-\fBrom\-weaver patch validate\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] <\fB\-\-patch\fR> [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-validate\-with\-size\fR] [\fB\-\-validate\-with\-min\-size\fR] [\fB\-\-strip\-header\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-independent\fR] [\fB\-\-plan\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch validate\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-log\-level\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-no\-ignore\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] <\fB\-\-patch\fR> [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-validate\-with\-size\fR] [\fB\-\-validate\-with\-min\-size\fR] [\fB\-\-strip\-header\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-independent\fR] [\fB\-\-plan\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Validate one or more ROM patch files against an input without writing output.
 .PP
@@ -29,20 +29,44 @@ Disable running progress events
 \fB\-\-rom\-filter\fR
 Keep ROM\-like payload candidates while resolving the patch validation input archive
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-patch\-filter\fR
 Keep patch\-like payload candidates while resolving patch archives
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-extract\fR
 Disable container auto\-extract and validate the raw input and patch bytes directly
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-no\-ignore\fR
 Disable default ignore filtering during patch validate container payload resolution
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-patch\fR \fI<PATCHES>\fR
 Patch file(s) to validate in order; repeat \-\-patch for each step

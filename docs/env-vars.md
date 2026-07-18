@@ -15,7 +15,7 @@ default.
 
 | Variable | Type | Default | Read at | Purpose |
 | --- | --- | --- | --- | --- |
-| `ROM_WEAVER_LOG` | filter string | unset | `rom-weaver-app/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_cli=trace`); also honored via `RUST_LOG` and the `--trace` flag. |
+| `ROM_WEAVER_LOG` | filter string | unset | `rom-weaver-app/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_cli=trace`); also honored via `RUST_LOG` when no explicit CLI log level is selected. |
 | `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `rom-weaver-patches/src/lib.rs` | Cap below which patch apply/create buffers in memory; above it the streaming path is used. Set to `0` to force streaming for benchmarks. |
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `rom-weaver-app/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). Set to `0` to force the on-disk path for regression/parity runs. |
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1–2 GiB fallback) | `rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |

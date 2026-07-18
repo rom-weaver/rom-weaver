@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-probe \- Identify containers, patches, and known ROM headers
 .SH SYNOPSIS
-\fBrom\-weaver probe\fR [\fB\-\-json\fR] [\fB\-\-select\fR] [\fB\-\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-no\-progress\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-ignore\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver probe\fR [\fB\-\-json\fR] [\fB\-\-select\fR] [\fB\-\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-no\-progress\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-log\-level\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Identify containers, patches, and known ROM headers
 .SH OPTIONS
@@ -27,17 +27,41 @@ Disable running progress events
 \fB\-\-patch\-filter\fR
 Keep patch\-like payload candidates during automatic extraction
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-no\-extract\fR
 Disable container auto\-extract and probe the source bytes directly
 .TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+\fB\-\-no\-ignore\fR
+Disable default ignore filtering during probe container payload resolution
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
 .TP
 \fB\-\-dep\-trace\fR
 Enable trace logs from dependencies (for example nod)
-.TP
-\fB\-\-no\-ignore\fR
-Disable default ignore filtering during probe container payload resolution
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

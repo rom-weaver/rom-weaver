@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-bundle\-create \- Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files
 .SH SYNOPSIS
-\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-url\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-rom\-name\fR] [\fB\-\-patch\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-\-rom\-url\fR] [\fB\-\-rom\-name\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-patch\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-patch\-id\fR] [\fB\-\-patch\-version\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files.
 .PP
@@ -23,20 +23,50 @@ Force running progress events on
 \fB\-\-no\-progress\fR
 Disable running progress events
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-rom\-url\fR \fI<ROM_URL>\fR
 Emitted rom download url (combined with \-\-rom the local file still supplies checks; alone it emits a url\-only rom entry)
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-rom\-name\fR \fI<ROM_NAME>\fR
 Display/output\-naming file name for the rom entry
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-patch\fR \fI<PATCH>\fR
-Patch file to include, in apply order; repeat \-\-patch for each entry. \-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header bind to the preceding \-\-patch
+Patch file to include, in apply order; repeat \-\-patch for each entry. \-\-patch\-id, \-\-patch\-version, \-\-patch\-name, \-\-patch\-description, \-\-patch\-label, \-\-patch\-optional, \-\-patch\-source\-url, and \-\-patch\-header bind to the preceding \-\-patch
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
+.TP
+\fB\-\-patch\-id\fR \fI<PATCH_ID>\fR
+Stable identity for the preceding \-\-patch
+.TP
+\fB\-\-patch\-version\fR \fI<PATCH_VERSION>\fR
+Author\-controlled version for the preceding \-\-patch
 .TP
 \fB\-\-patch\-name\fR \fI<PATCH_NAME>\fR
 Display name for the preceding \-\-patch

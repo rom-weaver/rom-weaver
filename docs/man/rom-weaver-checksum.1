@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-checksum \- Compute checksums for files or selected container payloads
 .SH SYNOPSIS
-\fBrom\-weaver checksum\fR <\fB\-\-algo\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-trim\-fix\fR] [\fB\-\-start\fR] [\fB\-\-length\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver checksum\fR <\fB\-\-algo\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-log\-level\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-no\-ignore\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-trim\-fix\fR] [\fB\-\-start\fR] [\fB\-\-length\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Compute checksums for files or selected container payloads
 .SH OPTIONS
@@ -27,20 +27,44 @@ Disable running progress events
 \fB\-\-rom\-filter\fR
 Keep ROM\-like payload candidates during checksum auto\-extract
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-patch\-filter\fR
 Keep patch\-like payload candidates during checksum auto\-extract
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-extract\fR
 Disable container auto\-extract and checksum the source bytes directly
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-no\-ignore\fR
 Disable default ignore filtering during checksum container payload resolution
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-trim\-fix\fR
 Disable automatic trim\-boundary checksum fixes for trim\-eligible ROMs

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-create \- Create a patch from original and modified ROM data
 .SH SYNOPSIS
-\fBrom\-weaver patch create\fR [\fB\-\-json\fR] <\fB\-\-original\fR> [\fB\-\-modified\fR] [\fB\-\-progress\fR] [\fB\-\-format\fR] [\fB\-\-no\-progress\fR] [\fB\-\-output\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-plan\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-checksum\-name\fR] [\fB\-\-source\-crc32\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-\-xdelta\-secondary\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch create\fR [\fB\-\-json\fR] <\fB\-\-original\fR> [\fB\-\-modified\fR] [\fB\-\-progress\fR] [\fB\-\-format\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-\-output\fR] [\fB\-\-plan\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-checksum\-name\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-source\-crc32\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-\-xdelta\-secondary\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Create a patch from original and modified ROM data
 .SH OPTIONS
@@ -27,23 +27,47 @@ Patch format (derived from the output extension when omitted; required when the 
 \fB\-\-no\-progress\fR
 Disable running progress events
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-\-output\fR \fI<PATH>\fR
 Output patch path; optional only with \-\-plan
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-plan\fR
 Only return recommended formats; do not create a patch
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-ignore\-checksum\-validation\fR
 Skip strict patch validation during patch create when supported, including checksum emission and compatibility checks
 .TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
 \fB\-\-checksum\-name\fR
 Embed the original ROM crc32 into the output patch file name (as `[crc32:HEX]`) so patch apply can validate the input ROM; most useful for formats that carry no embedded checksum
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-source\-crc32\fR \fI<SOURCE_CRC32>\fR
 Precomputed crc32 (8 hex digits) of the original ROM; used with \-\-checksum\-name to embed the value without re\-reading the original

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-trim \- Trim or restore supported ROM and disc\-image formats
 .SH SYNOPSIS
-\fBrom\-weaver trim\fR [\fB\-\-json\fR] [\fB\-\-output\fR] [\fB\-e\fR|\fB\-\-extension\fR] [\fB\-\-progress\fR] [\fB\-i\fR|\fB\-\-in\-place\fR] [\fB\-\-no\-progress\fR] [\fB\-s\fR|\fB\-\-simulate\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-revert\fR] [\fB\-\-no\-recursive\fR] [\fB\-\-no\-rom\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-revert\-marker\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver trim\fR [\fB\-\-json\fR] [\fB\-\-output\fR] [\fB\-e\fR|\fB\-\-extension\fR] [\fB\-\-progress\fR] [\fB\-i\fR|\fB\-\-in\-place\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-s\fR|\fB\-\-simulate\fR] [\fB\-\-revert\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-\-no\-recursive\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-rom\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-revert\-marker\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Trim or restore supported ROM and disc\-image formats
 .SH OPTIONS
@@ -27,20 +27,44 @@ Trim the source file in place instead of writing a new file
 \fB\-\-no\-progress\fR
 Disable running progress events
 .TP
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
 \fB\-s\fR, \fB\-\-simulate\fR
 Simulate trim operations without writing output files
-.TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
-.TP
-\fB\-\-dep\-trace\fR
-Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-revert\fR
 Restore trimmed files using an embedded revert marker when present; otherwise use the format\*(Aqs header\-derived size (NDS/3DS) or next power of two (GBA). Not supported for xiso or rvz\-scrub
 .TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
 \fB\-\-no\-recursive\fR
 Do not recursively scan subdirectories when input sources include folders
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-rom\-filter\fR
 Disable the default ROM\-only filter applied to archive payloads before trimming

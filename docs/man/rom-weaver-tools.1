@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-tools \- Run specialized recovery and conversion tools
 .SH SYNOPSIS
-\fBrom\-weaver tools\fR [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBrom\-weaver tools\fR [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-log\-level\fR] [\fB\-v\fR|\fB\-\-verbose\fR]... [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-dep\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Run specialized recovery and conversion tools
 .SH OPTIONS
@@ -18,8 +18,32 @@ Force running progress events on
 \fB\-\-no\-progress\fR
 Disable running progress events
 .TP
-\fB\-\-trace\fR
-Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+\fB\-\-log\-level\fR \fI<LOG_LEVEL>\fR
+Set application log level (off, error, warn, info, debug, trace)
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+off
+.IP \(bu 2
+error
+.IP \(bu 2
+warn
+.IP \(bu 2
+info
+.IP \(bu 2
+debug
+.IP \(bu 2
+trace
+.RE
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase application log verbosity; repeat for debug and trace
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Show only application errors
 .TP
 \fB\-\-dep\-trace\fR
 Enable trace logs from dependencies (for example nod)
