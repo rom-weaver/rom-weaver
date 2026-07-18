@@ -303,38 +303,63 @@ const getVariantBytes = (variant: ChecksumVariant, sourceBytes: number | undefin
   return String(Math.max(0, Math.floor(sourceBytes) - stripped));
 };
 
+type ChecksumGroupData = {
+  id: string;
+  label: ReactNode;
+  byteValue?: string;
+  checksums?: SourceInfoChecksums | null;
+  progress?: SourceInfoProgress | null;
+  timing?: ReactNode;
+};
+
+/* Every labeled checksum set uses this same group anatomy. Transform variants
+   and disc tracks differ in where their values come from, not how they read in
+   the Checks drawer. */
+const ChecksumGroup = ({ group }: { group: ChecksumGroupData }) => {
+  const { byteValue = "", checksums } = group;
+  return (
+    <div className="ck-group">
+      <div className="ck-group-head">
+        {group.label}
+        {group.timing ? <span className="t"> {group.timing}</span> : null}
+      </div>
+      {group.progress ? <FileProgress {...group.progress} /> : null}
+      {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
+        const value = checksums?.[algorithm] || "";
+        if (!value) return null;
+        return (
+          <Fragment key={algorithm}>
+            <ChecksumRow label={algorithmLabel} value={value} />
+            {/* BYTES pairs with CRC32 on one wide-drawer grid row */}
+            {algorithm === "crc32" && byteValue ? (
+              <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
+            ) : null}
+          </Fragment>
+        );
+      })}
+      {!checksums?.crc32 && byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
+    </div>
+  );
+};
+
 /* Checksum variants (headerless, auto-trimmed…) render as labeled sub-groups
-   inside the same Checks drawer as the raw checksums - the prototype's single
-   "Checks" section, not a separate drawer. */
+   inside the same Checks drawer as the raw checksums. */
 const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: ChecksumVariant[] }) => {
   const rows = (variants || []).filter((variant) => variant.id !== "raw");
   if (!rows.length) return null;
   return (
     <>
-      {rows.map((variant) => {
-        const byteValue = getVariantBytes(variant, bytes);
-        return (
-          <div className="ck-group" key={variant.id}>
-            <div className="ck-group-head">{variant.label}</div>
-            {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
-              const value = variant.checksums?.[algorithm] || "";
-              if (!value) return null;
-              return (
-                <Fragment key={algorithm}>
-                  <ChecksumRow label={algorithmLabel} value={value} />
-                  {/* BYTES pairs with CRC32 on one wide-drawer grid row */}
-                  {algorithm === "crc32" && byteValue ? (
-                    <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
-                  ) : null}
-                </Fragment>
-              );
-            })}
-            {!variant.checksums?.crc32 && byteValue ? (
-              <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
-            ) : null}
-          </div>
-        );
-      })}
+      {rows.map((variant) => (
+        <ChecksumGroup
+          group={{
+            byteValue: getVariantBytes(variant, bytes),
+            checksums: variant.checksums,
+            id: variant.id,
+            label: variant.label,
+          }}
+          key={variant.id}
+        />
+      ))}
     </>
   );
 };
@@ -458,7 +483,7 @@ const SourceInfoList = ({
   );
 };
 
-/** One track's data inside a disc's unified "Tracks" section. */
+/** One track's data inside a disc's unified Checks section. */
 type DiscTrackPanelInfo = {
   id: string;
   label: string;
@@ -468,13 +493,8 @@ type DiscTrackPanelInfo = {
   progress?: SourceInfoProgress | null;
 };
 
-/**
- * A multi-track disc's per-bin checksums under a single collapsible
- * "Checks & Tracks" section - each track is a labeled sub-group rather than its
- * own top-level panel, so the tracks read as one unit. This is the disc form of
- * the single-file "Checks" panel: it carries the checksums, just grouped by
- * track, so a disc card has no separate Checks drawer.
- */
+/** A multi-track disc's per-bin checksums under the same Checks drawer used by
+ * single-file checksum variants. Each track is one labeled checksum group. */
 const DiscTracksPanel = ({
   tracks,
   open,
@@ -486,22 +506,21 @@ const DiscTracksPanel = ({
 }) => {
   if (!tracks.length) return null;
   return (
-    <ChecksumList defaultOpen={false} label="Checks & Tracks" onToggle={onToggle} open={open}>
+    <ChecksumList defaultOpen={false} label="Checks" onToggle={onToggle} open={open}>
       {tracks.map((track) => {
         const hasBytes = typeof track.bytes === "number" && Number.isFinite(track.bytes);
-        const byteValue = hasBytes ? String(Math.floor(track.bytes as number)) : "";
         return (
-          <div className="ck-group" key={track.id}>
-            <div className="ck-group-head">
-              {track.label}
-              {track.timing ? <span className="t"> {track.timing}</span> : null}
-            </div>
-            {track.progress ? <FileProgress {...track.progress} /> : null}
-            {track.checksums?.crc32 ? <ChecksumRow label="CRC32" value={track.checksums.crc32} /> : null}
-            {byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
-            {track.checksums?.md5 ? <ChecksumRow label="MD5" value={track.checksums.md5} /> : null}
-            {track.checksums?.sha1 ? <ChecksumRow label="SHA-1" value={track.checksums.sha1} /> : null}
-          </div>
+          <ChecksumGroup
+            group={{
+              byteValue: hasBytes ? String(Math.floor(track.bytes as number)) : "",
+              checksums: track.checksums,
+              id: track.id,
+              label: track.label,
+              progress: track.progress,
+              timing: track.timing,
+            }}
+            key={track.id}
+          />
         );
       })}
     </ChecksumList>

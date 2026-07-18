@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expect, test } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
+import { DiscTracksPanel } from "../../src/public/react/components/ds/source-info-list.tsx";
 import {
   inertDialogController,
   inertOutputController,
@@ -137,4 +138,36 @@ test("unified drop accepts additional parts for disc-style inputs", async () => 
 
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
   expect(document.getElementById("rom-weaver-input-file-unified")?.multiple).toBe(true);
+});
+
+test("disc tracks use the Checks drawer's variant-group presentation", async () => {
+  mount(
+    createElement(DiscTracksPanel, {
+      open: true,
+      tracks: [
+        {
+          bytes: 12_345,
+          checksums: { crc32: "AAAA1111", md5: "a".repeat(32), sha1: "b".repeat(40) },
+          id: "track-1",
+          label: "Game (Track 1).bin",
+        },
+        {
+          bytes: 67_890,
+          checksums: { crc32: "BBBB2222", md5: "c".repeat(32), sha1: "d".repeat(40) },
+          id: "track-2",
+          label: "Game (Track 2).bin",
+        },
+      ],
+    }),
+  );
+
+  await expect.poll(() => document.body.textContent || "").toContain("Checks");
+  expect(document.body.textContent).not.toContain("Checks & Tracks");
+  expect([...document.querySelectorAll(".ck-group-head")].map((head) => head.textContent?.trim())).toEqual([
+    "Game (Track 1).bin",
+    "Game (Track 2).bin",
+  ]);
+  expect(document.querySelectorAll(".cks .ck-group")).toHaveLength(2);
+  expect(document.body.textContent).toContain("AAAA1111");
+  expect(document.body.textContent).toContain("67890");
 });
