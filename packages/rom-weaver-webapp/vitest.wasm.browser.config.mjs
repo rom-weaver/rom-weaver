@@ -34,7 +34,7 @@ const PERSISTENT_CONTEXT = STRESS_1GB ? true : BENCH_MODE ? BENCH_PROFILE_DIR : 
 const stressLaunchArgs = STRESS_1GB || BENCH_MODE ? ["--unlimited-storage"] : [];
 
 export default defineConfig({
-  // The react package root contains index.html, so Vite's default SPA fallback would answer any
+  // The webapp package root contains index.html, so Vite's default SPA fallback would answer any
   // missing path (including absent wasm artifacts) with 200 text/html. The standalone wasm package
   // had no index.html and returned 404s; "mpa" restores that behavior for these tests.
   appType: "mpa",
