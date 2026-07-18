@@ -42,7 +42,7 @@ fn run_checksum_json(source: &Path, trace_mode: TraceMode) -> std::process::Outp
     if matches!(trace_mode, TraceMode::Flag) {
         args.extend(["--log-level", "trace"]);
     }
-    args.extend(["checksum", source, "--algo", "crc32", "--no-extract"]);
+    args.extend(["checksum", "--input", source, "--algo", "crc32", "--no-extract"]);
 
     command.args(args).assert().code(0).get_output().clone()
 }
@@ -68,6 +68,7 @@ fn json_trace_compress_logs_archive_write_bytes_to_stderr() {
             "--log-level",
             "trace",
             "compress",
+            "--input",
             input_dir.path().to_str().expect("path"),
             "--format",
             "zip",

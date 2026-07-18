@@ -206,6 +206,7 @@ pub(crate) fn checksum_value(path: &std::path::Path, algorithm: &str) -> String 
         .expect("binary")
         .args([
             "checksum",
+            "--input",
             path.to_str().expect("path"),
             "--algo",
             algorithm,
@@ -783,6 +784,7 @@ pub(crate) fn json_mode_emits_running_progress_before_terminal_status() {
         .expect("binary")
         .args([
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -820,6 +822,7 @@ pub(crate) fn non_json_default_suppresses_running_progress_without_tty() {
         .expect("binary")
         .args([
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -853,6 +856,7 @@ pub(crate) fn progress_flag_enables_running_progress_without_json() {
         .args([
             "--progress",
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -886,6 +890,7 @@ pub(crate) fn no_progress_flag_suppresses_running_progress_in_json_mode() {
         .args([
             "--no-progress",
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -926,6 +931,7 @@ pub(crate) fn terminal_progress_percent_uses_100_scale_for_core_commands() {
         .expect("binary")
         .args([
             "compress",
+            "--input",
             input.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -950,8 +956,9 @@ pub(crate) fn terminal_progress_percent_uses_100_scale_for_core_commands() {
         .expect("binary")
         .args([
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--json",
         ])

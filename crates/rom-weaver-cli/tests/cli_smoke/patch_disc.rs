@@ -107,6 +107,7 @@ fn patch_apply_disc_cue_target_patches_one_track_and_matches_manual_chd() {
     command_stdout(
         &[
             "compress",
+            "--input",
             expected_dir
                 .child("disc.cue")
                 .path()

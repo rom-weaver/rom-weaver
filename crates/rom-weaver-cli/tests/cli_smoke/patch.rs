@@ -631,6 +631,7 @@ fn run_probe_success(patch_name: &str, patch: &[u8], expect_format: &str) {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             patch_child.path().to_str().expect("path"),
             "--json",
         ],
@@ -902,9 +903,9 @@ fn patch_apply_validates_output_checksum() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--validate-output-checksum",
+            "--expect-out",
             "crc32=3fc13708",
-            "--validate-output-checksum",
+            "--expect-out",
             "sha1=10c54c25716315070c5c7336ae9fcd483991f6e7",
             "--json",
         ],
@@ -931,7 +932,7 @@ fn patch_apply_validates_output_checksum() {
             "--output",
             temp.child("bad-output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--validate-output-checksum",
+            "--expect-out",
             "crc32=deadbeef",
             "--json",
         ],
@@ -1173,8 +1174,9 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
     command_stdout(
         &[
             "extract",
+            "--input",
             compressed_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1283,6 +1285,7 @@ fn patch_apply_infers_zip_from_output_extension() {
     command_stdout(
         &[
             "compress",
+            "--input",
             original.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1321,8 +1324,9 @@ fn patch_apply_infers_zip_from_output_extension() {
     command_stdout(
         &[
             "extract",
+            "--input",
             compressed_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -3439,6 +3443,7 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
     command_stdout(
         &[
             "compress",
+            "--input",
             original.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3569,6 +3574,7 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
     command_stdout(
         &[
             "compress",
+            "--input",
             original.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3639,7 +3645,9 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
     command_stdout(
         &[
             "compress",
+            "--input",
             alpha.path().to_str().expect("path"),
+            "--input",
             beta.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3770,7 +3778,9 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
     command_stdout(
         &[
             "compress",
+            "--input",
             alpha.path().to_str().expect("path"),
+            "--input",
             beta.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3846,7 +3856,9 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
     command_stdout(
         &[
             "compress",
+            "--input",
             original.path().to_str().expect("path"),
+            "--input",
             patch.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3860,7 +3872,9 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.path().to_str().expect("path"),
+            "--input",
             temp.child("decoy.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -3879,8 +3893,10 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             input_archive.path().to_str().expect("path"),
             "--patch",
             patch_archive.path().to_str().expect("path"),
-            "--rom-filter",
-            "--patch-filter",
+            "--filter",
+            "rom",
+            "--filter",
+            "patch",
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -3951,7 +3967,9 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch_a.path().to_str().expect("path"),
+            "--input",
             patch_b.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -4040,7 +4058,9 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch_a.path().to_str().expect("path"),
+            "--input",
             patch_b.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -4118,8 +4138,11 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
     command_stdout(
         &[
             "compress",
+            "--input",
             original.path().to_str().expect("path"),
+            "--input",
             sidecar_txt.path().to_str().expect("path"),
+            "--input",
             sidecar_json.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -4217,9 +4240,9 @@ fn patch_apply_accepts_multiple_validate_with_checksum_values() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--validate-with-checksum",
+            "--expect-in",
             &format!("crc32={input_crc32}"),
-            "--validate-with-checksum",
+            "--expect-in",
             &format!("sha1={input_sha1}"),
             "--no-compress",
             "--json",
@@ -4276,7 +4299,7 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--validate-with-checksum",
+            "--expect-in",
             "crc32=00000000",
             "--no-compress",
             "--json",
@@ -4333,9 +4356,9 @@ fn patch_apply_uses_checksum_cache_hint_for_validation() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--checksum-cache",
+            "--assume-in",
             "sha1=0000000000000000000000000000000000000000",
-            "--validate-with-checksum",
+            "--expect-in",
             "sha1=0000000000000000000000000000000000000000",
             "--no-compress",
             "--json",
@@ -4381,7 +4404,7 @@ fn probe_patch_reports_expected_checksums_for_bps() {
     );
 
     let probe_output = command_stdout(
-        &["probe", patch.path().to_str().expect("path"), "--json"],
+        &["probe", "--input", patch.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -4423,7 +4446,7 @@ fn probe_patch_reports_structured_summary_for_ups() {
     );
 
     let probe_output = command_stdout(
-        &["probe", patch.path().to_str().expect("path"), "--json"],
+        &["probe", "--input", patch.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -5231,6 +5254,7 @@ fn probe_succeeds_for_valid_vcdiff_patch() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("update.vcdiff").path().to_str().expect("path"),
             "--json",
         ],
@@ -5336,9 +5360,9 @@ fn patch_validate_succeeds_with_source_values() {
             original.path().to_str().expect("path"),
             "--patch",
             patch.path().to_str().expect("path"),
-            "--validate-with-size",
-            &input_size,
-            "--validate-with-checksum",
+            "--expect-in",
+            &format!("size={input_size}"),
+            "--expect-in",
             &format!("crc32={input_crc32}"),
             "--json",
         ],
@@ -6222,6 +6246,7 @@ fn probe_reports_invalid_vcdiff_content_as_failed() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("broken.vcdiff").path().to_str().expect("path"),
             "--json",
         ],
@@ -6242,6 +6267,7 @@ fn probe_reports_unknown_formats_cleanly() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("unknown.bin").path().to_str().expect("path"),
             "--json",
         ],
@@ -6268,6 +6294,7 @@ fn probe_reports_pds_as_explicitly_unsupported() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("legacy.pds").path().to_str().expect("path"),
             "--json",
         ],

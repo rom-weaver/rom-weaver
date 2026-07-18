@@ -11,6 +11,7 @@ fn compress_routes_through_registered_container_format() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("file.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -57,6 +58,7 @@ fn assert_compress_extract_only_rejection(format: &str, output_name: &str) {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
             format,
@@ -102,8 +104,9 @@ fn compress_wbfs_rejects_create_but_extract_round_trips() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             wbfs_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -148,8 +151,9 @@ fn compress_wia_rejects_create_but_extract_round_trips() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             wia_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -193,8 +197,9 @@ fn extract_nfs_invalid_source_emits_running_progress() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.nfs").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -219,8 +224,9 @@ fn extract_tgc_invalid_source_emits_running_progress() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.tgc").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -245,8 +251,9 @@ fn extract_xiso_invalid_source_emits_running_progress() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.xiso").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -277,6 +284,7 @@ fn compress_rejects_unregistered_output_format() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             source.path().to_str().expect("path"),
             "--format",
             "not-a-format",
@@ -312,6 +320,7 @@ fn compress_without_format_infers_7z_from_output_extension() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             source_path.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -337,6 +346,7 @@ fn compress_without_format_infers_zip_from_output_extension() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -365,6 +375,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_iso_inputs() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.iso").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -393,6 +404,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wbfs_inputs() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             source_wbfs.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -421,6 +433,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wia_inputs() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             source_wia.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -447,6 +460,7 @@ fn compress_format_flag_overrides_mismatched_extension_with_warning() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
             "7z",
@@ -477,6 +491,7 @@ fn compress_without_format_rejects_extensionless_output() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -506,6 +521,7 @@ fn compress_without_format_rejects_extract_only_output_extension() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
@@ -540,6 +556,7 @@ fn compress_rejects_auto_format_keyword() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.iso").path().to_str().expect("path"),
             "--format",
             "auto",
@@ -571,6 +588,7 @@ fn compress_without_format_rejects_unsupported_output_extension() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source-a.bin").path().to_str().expect("path"),
             "--output",
             temp.child("out.auto").path().to_str().expect("path"),
@@ -596,6 +614,7 @@ fn compress_rejects_wua_output_format() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
             "wua",
@@ -629,6 +648,7 @@ fn compress_rejects_invalid_codec_level_value() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("file.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -674,6 +694,7 @@ fn compress_accepts_global_level_profiles_for_creatable_archives() {
             let output = command_stdout(
                 &[
                     "compress",
+                    "--input",
                     temp.child("payload.bin").path().to_str().expect("path"),
                     "--format",
                     format,
@@ -726,6 +747,7 @@ fn compress_defaults_to_max_global_level_profile() {
         command_stdout(
             &[
                 "compress",
+                "--input",
                 temp.child("payload.bin").path().to_str().expect("path"),
                 "--format",
                 format,
@@ -742,6 +764,7 @@ fn compress_defaults_to_max_global_level_profile() {
         command_stdout(
             &[
                 "compress",
+                "--input",
                 temp.child("payload.bin").path().to_str().expect("path"),
                 "--format",
                 format,
@@ -774,6 +797,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     let mut compress = Command::cargo_bin("rom-weaver").expect("binary");
     compress
         .arg("compress")
+        .arg("--input")
         .arg(temp.child("source.bin").path())
         .arg("--format")
         .arg(format)
@@ -796,6 +820,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -812,10 +837,11 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "source.bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -871,10 +897,11 @@ fn extract_zst_reports_parallel_decode_threads() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "source.bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -923,6 +950,7 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             input_dir.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -960,8 +988,9 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1009,6 +1038,7 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             input.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -1046,8 +1076,9 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
     command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "1",
@@ -1076,6 +1107,7 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             input_dir.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -1118,8 +1150,9 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1141,6 +1174,7 @@ fn extract_recursively_handles_nested_containers() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1157,6 +1191,7 @@ fn extract_recursively_handles_nested_containers() {
     command_stdout(
         &[
             "compress",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1171,6 +1206,7 @@ fn extract_recursively_handles_nested_containers() {
     command_stdout(
         &[
             "compress",
+            "--input",
             zip_path.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -1185,8 +1221,9 @@ fn extract_recursively_handles_nested_containers() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             seven_z_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1221,6 +1258,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("leaf.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1235,6 +1273,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner_zip.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -1249,8 +1288,9 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             outer_7z.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--checksum",
             "sha1",
@@ -1343,6 +1383,7 @@ fn extract_nested_scan_ignores_existing_output_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("fresh.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1358,6 +1399,7 @@ fn extract_nested_scan_ignores_existing_output_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("stale.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1371,8 +1413,9 @@ fn extract_nested_scan_ignores_existing_output_archives() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             fresh_archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],

@@ -181,10 +181,10 @@ impl ArchiveEntryKindFilter {
     pub fn flag_names(self) -> Vec<&'static str> {
         let mut flags = Vec::new();
         if self.rom {
-            flags.push("--rom-filter");
+            flags.push("--filter rom");
         }
         if self.patch {
-            flags.push("--patch-filter");
+            flags.push("--filter patch");
         }
         flags
     }

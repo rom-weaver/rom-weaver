@@ -7,7 +7,7 @@ fn old_inspect_command_is_removed() {
 
 #[test]
 fn probe_rejects_list_flag() {
-    command_stdout(&["probe", "input.bin", "--list", "--json"], 2);
+    command_stdout(&["probe", "--input", "input.bin", "--list", "--json"], 2);
 }
 
 #[test]
@@ -21,6 +21,7 @@ fn probe_reports_known_container_as_supported() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -34,6 +35,7 @@ fn probe_reports_known_container_as_supported() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -70,6 +72,7 @@ fn probe_lists_selectable_zip_entries() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -83,6 +86,7 @@ fn probe_lists_selectable_zip_entries() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -112,6 +116,7 @@ fn probe_auto_extracts_single_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -123,7 +128,12 @@ fn probe_auto_extracts_single_payload() {
     );
 
     let json = run_single_json_event(
-        &["probe", archive.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
         0,
     );
     assert_eq!(json["command"], "probe");
@@ -145,6 +155,7 @@ fn probe_auto_extracts_nested_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -159,6 +170,7 @@ fn probe_auto_extracts_nested_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -170,7 +182,12 @@ fn probe_auto_extracts_nested_payload() {
     );
 
     let json = run_single_json_event(
-        &["probe", outer.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ],
         0,
     );
     assert_eq!(json["command"], "probe");
@@ -191,6 +208,7 @@ fn probe_no_extract_reports_container_bytes() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -204,6 +222,7 @@ fn probe_no_extract_reports_container_bytes() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -232,7 +251,9 @@ fn probe_auto_extract_ambiguity_requires_select() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("alpha.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("beta.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -244,7 +265,12 @@ fn probe_auto_extract_ambiguity_requires_select() {
     );
 
     let json = run_single_json_event(
-        &["probe", archive.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
         1,
     );
     let label = json["label"].as_str().expect("label");
@@ -270,13 +296,18 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
+            "--input",
             temp.child("meta.json").path().to_str().expect("path"),
+            "--input",
             temp.child("maxcso-report.bin")
                 .path()
                 .to_str()
                 .expect("path"),
+            "--input",
             temp.child("__MACOSX").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -288,7 +319,12 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     );
 
     let json = run_single_json_event(
-        &["probe", archive.path().to_str().expect("path"), "--json"],
+        &[
+            "probe",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
         0,
     );
     assert_eq!(json["command"], "probe");
@@ -298,6 +334,7 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     let no_ignore_json = run_single_json_event(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
             "--no-ignore",
             "--json",
@@ -343,8 +380,11 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.path().to_str().expect("path"),
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -358,8 +398,10 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--patch-filter",
+            "--filter",
+            "patch",
             "--json",
         ],
         0,
@@ -390,6 +432,7 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -404,13 +447,18 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("._game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("maxcso-report.bin")
                 .path()
                 .to_str()
                 .expect("path"),
+            "--input",
             temp.child("__MACOSX").path().to_str().expect("path"),
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -424,8 +472,10 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             outer.path().to_str().expect("path"),
-            "--rom-filter",
+            "--filter",
+            "rom",
             "--json",
         ],
         0,
@@ -452,6 +502,7 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -466,13 +517,18 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("._game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("maxcso-report.bin")
                 .path()
                 .to_str()
                 .expect("path"),
+            "--input",
             temp.child("__MACOSX").path().to_str().expect("path"),
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -486,8 +542,10 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             outer.path().to_str().expect("path"),
-            "--rom-filter",
+            "--filter",
+            "rom",
             "--no-extract",
             "--json",
         ],
@@ -501,8 +559,10 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
     let no_ignore_json = run_single_json_event(
         &[
             "probe",
+            "--input",
             outer.path().to_str().expect("path"),
-            "--rom-filter",
+            "--filter",
+            "rom",
             "--no-ignore",
             "--no-extract",
             "--json",
@@ -532,6 +592,7 @@ fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -546,6 +607,7 @@ fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -559,8 +621,10 @@ fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             outer.path().to_str().expect("path"),
-            "--rom-filter",
+            "--filter",
+            "rom",
             "--no-extract",
             "--json",
         ],
@@ -584,6 +648,7 @@ fn extract_rom_filter_extracts_rom_entries_only() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("nested.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -598,9 +663,13 @@ fn extract_rom_filter_extracts_rom_entries_only() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("update.bps").path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -615,9 +684,11 @@ fn extract_rom_filter_extracts_rom_entries_only() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--rom-filter",
-            "--out-dir",
+            "--filter",
+            "rom",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -650,8 +721,11 @@ fn extract_multi_track_disc_is_one_rom_no_select_needed() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
+            "--input",
             temp.child("track01.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("track02.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -666,9 +740,11 @@ fn extract_multi_track_disc_is_one_rom_no_select_needed() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--rom-filter",
-            "--out-dir",
+            "--filter",
+            "rom",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -691,6 +767,7 @@ fn probe_reports_rar_container_as_supported() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             source.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -712,6 +789,7 @@ fn probe_reports_known_rom_header_as_supported() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             temp.child("headered.nes").path().to_str().expect("path"),
             "--json",
         ],
@@ -737,6 +815,7 @@ fn probe_reports_gba_header_profile() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             temp.child("test.gba").path().to_str().expect("path"),
             "--json",
         ],
@@ -766,6 +845,7 @@ fn probe_reports_pbp_multi_disc_selectable_outputs() {
     let json = run_single_json_event(
         &[
             "probe",
+            "--input",
             source.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -805,11 +885,17 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
+            "--input",
             temp.child("meta.json").path().to_str().expect("path"),
+            "--input",
             temp.child("cover.jpg").path().to_str().expect("path"),
+            "--input",
             temp.child("._game.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("__MACOSX").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -824,8 +910,9 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     let default_output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             default_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -851,8 +938,9 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             no_ignore_out.path().to_str().expect("path"),
             "--no-ignore",
             "--json",
@@ -881,7 +969,9 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("readme.txt").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -896,8 +986,9 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--no-ignore",
             "--checksum-rom",
@@ -931,7 +1022,9 @@ fn extract_emits_early_probe_manifest_for_rom_archive() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
+            "--input",
             temp.child("readme.txt").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -946,8 +1039,9 @@ fn extract_emits_early_probe_manifest_for_rom_archive() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1000,6 +1094,7 @@ fn extract_streams_payload_identity_before_completion() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1014,8 +1109,9 @@ fn extract_streams_payload_identity_before_completion() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--checksum-rom",
             "crc32",
@@ -1072,7 +1168,9 @@ fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1087,8 +1185,9 @@ fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1126,8 +1225,11 @@ fn extract_checksum_rom_skips_disc_sheet_but_hashes_tracks() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
+            "--input",
             temp.child("track01.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("track02.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1142,9 +1244,11 @@ fn extract_checksum_rom_skips_disc_sheet_but_hashes_tracks() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--rom-filter",
-            "--out-dir",
+            "--filter",
+            "rom",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--checksum-rom",
             "crc32",
@@ -1183,8 +1287,11 @@ fn extract_emits_disc_group_structure_in_emitted_files() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
+            "--input",
             temp.child("track01.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("track02.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1199,8 +1306,9 @@ fn extract_emits_disc_group_structure_in_emitted_files() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1239,8 +1347,9 @@ fn extract_pbp_without_select_emits_all_discs() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             source.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1280,6 +1389,7 @@ fn extract_reports_thread_fallback_in_json() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1295,10 +1405,11 @@ fn extract_reports_thread_fallback_in_json() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -1334,6 +1445,7 @@ fn extract_checksum_emits_requested_output_digests() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1348,10 +1460,11 @@ fn extract_checksum_emits_requested_output_digests() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--checksum",
             "crc32",
@@ -1398,6 +1511,7 @@ fn extract_select_supports_glob_patterns() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("content").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1412,10 +1526,11 @@ fn extract_select_supports_glob_patterns() {
     command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "content/*.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1439,6 +1554,7 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("first.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1453,6 +1569,7 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("second.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1467,6 +1584,7 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("decoy.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1481,8 +1599,11 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner_first.path().to_str().expect("path"),
+            "--input",
             inner_second.path().to_str().expect("path"),
+            "--input",
             inner_decoy.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1497,12 +1618,13 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             outer.path().to_str().expect("path"),
             "--select",
             "inner-first.zip",
             "--select",
             "inner-second.zip",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1558,6 +1680,7 @@ fn extract_select_glob_reports_missing_match() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("content").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1572,10 +1695,11 @@ fn extract_select_glob_reports_missing_match() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "content/*.cue",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1604,10 +1728,11 @@ fn extract_pbp_select_cue_emits_matching_bin_pair() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             source.path().to_str().expect("path"),
             "--select",
             "multi.disc02.cue",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1638,10 +1763,11 @@ fn extract_pbp_select_missing_target_reports_not_found() {
     let json = run_single_json_event(
         &[
             "extract",
+            "--input",
             source.path().to_str().expect("path"),
             "--select",
             "multi.disc09.bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1667,10 +1793,11 @@ fn extract_rar_reports_thread_fallback_in_json() {
     let events = run_json_events(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--select",
             "VERSION",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -1715,6 +1842,7 @@ fn extract_progress_text_reports_elapsed_and_files() {
     command_stdout(
         &[
             "compress",
+            "--input",
             input.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1729,8 +1857,9 @@ fn extract_progress_text_reports_elapsed_and_files() {
         .args([
             "--progress",
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--no-nested-extract",
         ])
@@ -1772,6 +1901,7 @@ fn extract_no_overwrite_fails_when_output_exists() {
     command_stdout(
         &[
             "compress",
+            "--input",
             input.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1788,10 +1918,10 @@ fn extract_no_overwrite_fails_when_output_exists() {
         .expect("binary")
         .args([
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
-            "--no-overwrite",
             "--no-nested-extract",
         ])
         .assert()

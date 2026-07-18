@@ -11,6 +11,7 @@ fn trim_reports_percent_100_in_json() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
@@ -38,7 +39,7 @@ fn trim_nds_preserves_download_play_certificate_boundary() {
     fs::write(source.path(), &rom).expect("fixture");
 
     let trim_output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -70,6 +71,7 @@ fn trim_dsi_uses_ntr_twl_size_boundary() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
@@ -110,6 +112,7 @@ fn assert_trim_fixture_parity_and_determinism(
     let first_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             output_a.path().to_str().expect("path"),
@@ -137,6 +140,7 @@ fn assert_trim_fixture_parity_and_determinism(
     let second_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             output_b.path().to_str().expect("path"),
@@ -175,7 +179,7 @@ fn trim_rejects_invalid_header_crc() {
     fs::write(source.path(), &rom).expect("fixture");
 
     let trim_output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         1,
     );
 
@@ -211,7 +215,9 @@ fn trim_supports_batch_inputs_with_custom_extension() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source_a.path().to_str().expect("path"),
+            "--input",
             source_b.path().to_str().expect("path"),
             "--extension",
             "tokyo.nds",
@@ -253,7 +259,7 @@ fn trim_recursively_scans_directories_by_default() {
     .expect("fixture");
     fs::write(root.child("readme.txt").path(), b"ignore me").expect("fixture");
 
-    let output = command_stdout(&["trim", root.path().to_str().expect("path"), "--json"], 0);
+    let output = command_stdout(&["trim", "--input", root.path().to_str().expect("path"), "--json"], 0);
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -287,6 +293,7 @@ fn trim_no_recursive_only_processes_top_level() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             root.path().to_str().expect("path"),
             "--no-recursive",
             "--json",
@@ -316,6 +323,7 @@ fn trim_dry_run_does_not_write_outputs() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--dry-run",
             "--json",
@@ -348,8 +356,9 @@ fn trim_simulate_alias_does_not_write_outputs() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
-            "--simulate",
+            "--dry-run",
             "--json",
         ],
         0,
@@ -389,8 +398,9 @@ fn trim_xiso_simulate_does_not_write_outputs() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
-            "--simulate",
+            "--dry-run",
             "--json",
         ],
         0,
@@ -437,8 +447,9 @@ fn trim_wbfs_simulate_does_not_write_outputs() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source_wbfs.path().to_str().expect("path"),
-            "--simulate",
+            "--dry-run",
             "--json",
         ],
         0,
@@ -465,8 +476,9 @@ fn trim_short_inplace_flag_trims_source_file() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
-            "-i",
+            "--in-place",
             "--json",
         ],
         0,
@@ -493,7 +505,7 @@ fn trim_gba_uses_zero_padding_boundary() {
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0x00)).expect("fixture");
 
     let output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -516,7 +528,7 @@ fn trim_gba_detects_ff_padding_boundary() {
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0xFF)).expect("fixture");
 
     let output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -537,7 +549,7 @@ fn trim_3ds_uses_ff_padding_boundary() {
     fs::write(source.path(), build_test_padded_rom(0x4567, 0x8000, 0xFF)).expect("fixture");
 
     let output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -576,6 +588,7 @@ fn trim_xiso_rebuilds_and_warns_irreversible() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
@@ -633,6 +646,7 @@ fn trim_xiso_revert_is_rejected() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--revert",
             "--json",
@@ -682,7 +696,7 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     output.flush().expect("flush wbfs");
 
     let trim_output = command_stdout(
-        &["trim", source_wbfs.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source_wbfs.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -704,8 +718,9 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             trimmed.to_str().expect("path"),
-            "--out-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -754,6 +769,7 @@ fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
     let trim_output = command_stdout(
         &[
             "trim",
+            "--input",
             source_wbfs.path().to_str().expect("path"),
             "--revert",
             "--json",
@@ -779,7 +795,7 @@ fn trim_revert_restores_gba_to_next_power_of_two() {
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0x00)).expect("fixture");
 
     let trim_output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
     let trim_terminal = parse_single_json_line(&trim_output);
@@ -791,6 +807,7 @@ fn trim_revert_restores_gba_to_next_power_of_two() {
     let revert_output = command_stdout(
         &[
             "trim",
+            "--input",
             trimmed.to_str().expect("path"),
             "--revert",
             "--json",
@@ -825,7 +842,7 @@ fn trim_revert_restores_3ds_to_next_power_of_two() {
     fs::write(source.path(), build_test_padded_rom(0x4567, 0x8000, 0xFF)).expect("fixture");
 
     command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -835,6 +852,7 @@ fn trim_revert_restores_3ds_to_next_power_of_two() {
     let revert_output = command_stdout(
         &[
             "trim",
+            "--input",
             trimmed.to_str().expect("path"),
             "--untrim",
             "--json",
@@ -872,8 +890,9 @@ fn trim_revert_restores_nds_to_power_of_two() {
     command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
-            "-i",
+            "--in-place",
             "--json",
         ],
         0,
@@ -884,9 +903,10 @@ fn trim_revert_restores_nds_to_power_of_two() {
     let output = command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--revert",
-            "-i",
+            "--in-place",
             "--json",
         ],
         0,
@@ -917,7 +937,7 @@ fn trim_skips_non_nds_inputs() {
     fs::write(source.path(), b"not an nds file").expect("fixture");
 
     let output = command_stdout(
-        &["trim", source.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", source.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -943,6 +963,7 @@ fn trim_extracts_rom_from_zip_and_writes_side_by_side() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom_path.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -956,7 +977,7 @@ fn trim_extracts_rom_from_zip_and_writes_side_by_side() {
     fs::remove_file(rom_path.path()).expect("remove loose rom");
 
     let output = command_stdout(
-        &["trim", archive.path().to_str().expect("path"), "--json"],
+        &["trim", "--input", archive.path().to_str().expect("path"), "--json"],
         0,
     );
 
@@ -990,7 +1011,9 @@ fn trim_in_place_archive_with_sidecar_fails_without_tty() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom_path.path().to_str().expect("path"),
+            "--input",
             note.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1007,6 +1030,7 @@ fn trim_in_place_archive_with_sidecar_fails_without_tty() {
         .args([
             "trim",
             "--in-place",
+            "--input",
             archive.path().to_str().expect("path"),
             "--json",
         ])
@@ -1040,6 +1064,7 @@ fn trim_in_place_rom_only_archive_repacks() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom_path.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -1054,6 +1079,7 @@ fn trim_in_place_rom_only_archive_repacks() {
         &[
             "trim",
             "--in-place",
+            "--input",
             archive.path().to_str().expect("path"),
             "--json",
         ],
@@ -1073,8 +1099,9 @@ fn trim_in_place_rom_only_archive_repacks() {
     command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--no-nested-extract",
         ],
@@ -1097,6 +1124,7 @@ fn trim_revert_marker_round_trips_byte_identical() {
     command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--revert-marker",
             "--output",
@@ -1115,6 +1143,7 @@ fn trim_revert_marker_round_trips_byte_identical() {
     command_stdout(
         &[
             "trim",
+            "--input",
             trimmed.path().to_str().expect("path"),
             "--revert",
             "--output",
@@ -1137,6 +1166,7 @@ fn trim_without_revert_marker_writes_no_footer() {
     command_stdout(
         &[
             "trim",
+            "--input",
             source.path().to_str().expect("path"),
             "--output",
             trimmed.path().to_str().expect("path"),

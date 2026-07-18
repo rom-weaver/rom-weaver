@@ -10,6 +10,7 @@ fn rvz_probe_reports_succeeded() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -41,6 +42,7 @@ fn rvz_compress_and_extract_round_trips() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "rvz",
@@ -94,8 +96,9 @@ fn rvz_compress_and_extract_round_trips() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             rvz_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -129,6 +132,7 @@ fn rvz_compress_rejects_non_zstd_codec() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "rvz",
@@ -167,8 +171,9 @@ fn rvz_extract_round_trips_to_iso() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -197,8 +202,9 @@ fn rvz_extract_probe_emits_platform_and_container_details() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--probe",
             "--json",
@@ -229,10 +235,11 @@ fn rvz_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -247,10 +254,11 @@ fn rvz_extract_supports_single_output_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--select",
             "missing.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -279,6 +287,7 @@ fn z3ds_compress_probe_and_extract_round_trip() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.3ds").path().to_str().expect("path"),
             "--format",
             "z3ds",
@@ -302,6 +311,7 @@ fn z3ds_compress_probe_and_extract_round_trip() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -324,8 +334,9 @@ fn z3ds_compress_probe_and_extract_round_trip() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -358,6 +369,7 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cci").path().to_str().expect("path"),
             "--format",
             "z3ds",
@@ -374,8 +386,9 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -406,6 +419,7 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("large.3ds").path().to_str().expect("path"),
             "--format",
             "z3ds",
@@ -422,8 +436,9 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
@@ -459,6 +474,7 @@ fn z3ds_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.3ds").path().to_str().expect("path"),
             "--format",
             "z3ds",
@@ -475,10 +491,11 @@ fn z3ds_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
             "--select",
             "disc.3ds",
-            "--out-dir",
+            "--output",
             selected_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -493,10 +510,11 @@ fn z3ds_extract_supports_single_output_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             z3ds_path.path().to_str().expect("path"),
             "--select",
             "missing.3ds",
-            "--out-dir",
+            "--output",
             selected_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -525,6 +543,7 @@ fn z3ds_compress_reports_parallel_threads_for_large_file() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("large.3ds").path().to_str().expect("path"),
             "--format",
             "z3ds",
@@ -562,8 +581,9 @@ fn z3ds_extract_rejects_invalid_header() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             invalid.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             temp.child("out").path().to_str().expect("path"),
             "--json",
         ],
@@ -628,6 +648,7 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "rvz",
@@ -648,8 +669,9 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
     command_stdout(
         &[
             "extract",
+            "--input",
             rvz_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],

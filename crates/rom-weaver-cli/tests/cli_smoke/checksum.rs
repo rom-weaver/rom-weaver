@@ -31,6 +31,7 @@ fn checksum_value_no_trim_fix(path: &std::path::Path, algorithm: &str) -> String
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             path.to_str().expect("path"),
             "--algo",
             algorithm,
@@ -111,6 +112,7 @@ fn checksum_reports_auto_thread_mode() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -165,6 +167,7 @@ fn checksum_supports_sha256_blake3_and_crc32c() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "sha256",
@@ -204,6 +207,7 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -218,6 +222,7 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -232,6 +237,7 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -261,6 +267,7 @@ fn checksum_no_extract_hashes_container_bytes() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -275,6 +282,7 @@ fn checksum_no_extract_hashes_container_bytes() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner.path().to_str().expect("path"),
             "--format",
             "7z",
@@ -290,6 +298,7 @@ fn checksum_no_extract_hashes_container_bytes() {
     let auto_output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -308,6 +317,7 @@ fn checksum_no_extract_hashes_container_bytes() {
     let raw_output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -343,6 +353,7 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             compressed.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -373,6 +384,7 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -390,6 +402,7 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -426,6 +439,7 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -466,10 +480,12 @@ fn checksum_tar_stream_rom_filter_selects_rom_payload() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
-            "--rom-filter",
+            "--filter",
+            "rom",
             "--json",
         ],
         0,
@@ -496,6 +512,7 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -513,6 +530,7 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -541,7 +559,9 @@ fn checksum_auto_extract_ambiguity_requires_select() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("alpha.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("beta.bin").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -555,6 +575,7 @@ fn checksum_auto_extract_ambiguity_requires_select() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -583,6 +604,7 @@ fn checksum_auto_extract_pbp_multi_disc_requires_select() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             source.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -618,13 +640,18 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("notes.txt").path().to_str().expect("path"),
+            "--input",
             temp.child("meta.json").path().to_str().expect("path"),
+            "--input",
             temp.child("maxcso-report.bin")
                 .path()
                 .to_str()
                 .expect("path"),
+            "--input",
             temp.child("__MACOSX").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -639,6 +666,7 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -658,6 +686,7 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     let no_ignore_output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -683,7 +712,9 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.bin").path().to_str().expect("path"),
+            "--input",
             temp.child("decoy.rom").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -699,7 +730,9 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
     command_stdout(
         &[
             "compress",
+            "--input",
             inner.path().to_str().expect("path"),
+            "--input",
             temp.child("note.txt").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -713,6 +746,7 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
     let failed_output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -731,6 +765,7 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
     let selected_output = command_stdout(
         &[
             "checksum",
+            "--input",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -759,6 +794,7 @@ fn checksum_xiso_does_not_auto_extract_payload() {
     let auto_output = command_stdout(
         &[
             "checksum",
+            "--input",
             xiso.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -777,6 +813,7 @@ fn checksum_xiso_does_not_auto_extract_payload() {
     let raw_output = command_stdout(
         &[
             "checksum",
+            "--input",
             xiso.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -806,6 +843,7 @@ fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -872,6 +910,7 @@ fn checksum_headered_roms_include_remove_header_variant() {
         let output = command_stdout(
             &[
                 "checksum",
+                "--input",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
@@ -913,7 +952,7 @@ fn checksum_legacy_range_skips_variants() {
     for extra_args in [vec!["--start", "1"], vec!["--length", "128"]] {
         let headered_path = temp.child("headered.nes");
         let headered_path = headered_path.path().to_str().expect("path");
-        let mut args = vec!["checksum", headered_path, "--algo", "sha1"];
+        let mut args = vec!["checksum", "--input", headered_path, "--algo", "sha1"];
         args.extend(extra_args);
         args.push("--json");
         let output = command_stdout(&args, 0);
@@ -939,6 +978,7 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -952,6 +992,7 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -1016,6 +1057,7 @@ fn checksum_broken_header_checksums_include_fix_header_variant() {
         let output = command_stdout(
             &[
                 "checksum",
+                "--input",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
@@ -1079,6 +1121,7 @@ fn extract_checksum_variants_match_checksum_command() {
         let checksum_output = command_stdout(
             &[
                 "checksum",
+                "--input",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "crc32",
@@ -1106,6 +1149,7 @@ fn extract_checksum_variants_match_checksum_command() {
         command_stdout(
             &[
                 "compress",
+                "--input",
                 temp.child(name).path().to_str().expect("path"),
                 "--format",
                 "zip",
@@ -1120,8 +1164,9 @@ fn extract_checksum_variants_match_checksum_command() {
         let events = run_json_events(
             &[
                 "extract",
+                "--input",
                 archive.path().to_str().expect("path"),
-                "--out-dir",
+                "--output",
                 out_dir.path().to_str().expect("path"),
                 "--checksum",
                 "crc32",
@@ -1166,6 +1211,7 @@ fn checksum_n64_byte_order_variants_cover_all_target_orders() {
         let output = command_stdout(
             &[
                 "checksum",
+                "--input",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
@@ -1213,6 +1259,7 @@ fn checksum_nds_hashes_full_file_and_includes_variants() {
     let full_output = command_stdout(
         &[
             "checksum",
+            "--input",
             source.path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1226,6 +1273,7 @@ fn checksum_nds_hashes_full_file_and_includes_variants() {
     let explicit_output = command_stdout(
         &[
             "checksum",
+            "--input",
             trimmed.path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1271,6 +1319,7 @@ fn checksum_nds_default_matches_no_trim_fix() {
     let auto_output = command_stdout(
         &[
             "checksum",
+            "--input",
             source.path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1282,6 +1331,7 @@ fn checksum_nds_default_matches_no_trim_fix() {
     let no_fix_output = command_stdout(
         &[
             "checksum",
+            "--input",
             source.path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1314,6 +1364,7 @@ fn checksum_auto_trim_fix_ignores_non_trim_eligible_extensions() {
     let auto_output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1325,6 +1376,7 @@ fn checksum_auto_trim_fix_ignores_non_trim_eligible_extensions() {
     let no_fix_output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1361,6 +1413,7 @@ fn checksum_game_boy_rom_has_only_raw_variant() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             temp.child("game.gb").path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -1387,6 +1440,7 @@ fn checksum_probe_emits_platform_for_known_rom() {
     let json = run_single_json_event(
         &[
             "checksum",
+            "--input",
             temp.child("game.nes").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1408,6 +1462,7 @@ fn checksum_probe_fails_unidentified_source() {
     let json = run_single_json_event(
         &[
             "checksum",
+            "--input",
             temp.child("blob.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
@@ -1435,6 +1490,7 @@ fn checksum_without_probe_succeeds_on_unidentified_source() {
     let json = run_single_json_event(
         &[
             "checksum",
+            "--input",
             temp.child("blob.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",

@@ -38,6 +38,7 @@ fn bundle_parse_plain_json_resolves_refs_verbatim() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle.path().to_str().expect("path"),
             "--json",
         ],
@@ -92,6 +93,7 @@ fn bundle_parse_reads_gzipped_bundle() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle.path().to_str().expect("path"),
             "--json",
         ],
@@ -135,8 +137,9 @@ fn bundle_parse_archive_extracts_referenced_members() {
         &[
             "bundle",
             "parse",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--extract-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -211,8 +214,9 @@ fn bundle_parse_archive_content_probes_noncanonical_member() {
         &[
             "bundle",
             "parse",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--extract-dir",
+            "--output",
             extract_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -245,6 +249,7 @@ fn bundle_parse_archive_without_bundle_fails() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle.path().to_str().expect("path"),
             "--json",
         ],
@@ -652,6 +657,7 @@ fn bundle_parse_rejects_output_compression() {
         &[
             "bundle",
             "parse",
+            "--input",
             temp.child("rom-weaver-bundle.json")
                 .path()
                 .to_str()
@@ -870,6 +876,7 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -926,10 +933,8 @@ fn bundle_create_uses_cached_rom_checks_and_size() {
             "create",
             "--rom",
             rom.to_str().expect("path"),
-            "--rom-checksums",
-            &format!("crc32={cached_crc},md5={cached_md5},sha1={cached_sha1}"),
-            "--rom-size",
-            "999",
+            "--assume-in",
+            &format!("crc32={cached_crc},md5={cached_md5},sha1={cached_sha1},size=999"),
             "--patch",
             patch.to_str().expect("path"),
             "--output",
@@ -943,6 +948,7 @@ fn bundle_create_uses_cached_rom_checks_and_size() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -978,6 +984,7 @@ fn bundle_create_gzip_output_parses_back() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1066,6 +1073,7 @@ fn bundle_create_patch_check_emits_checks_and_apply_enforces() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1126,6 +1134,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1360,6 +1369,7 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1597,6 +1607,7 @@ fn bundle_create_source_url_emits_url_entry() {
         &[
             "bundle",
             "parse",
+            "--input",
             bundle_out.path().to_str().expect("path"),
             "--json",
         ],

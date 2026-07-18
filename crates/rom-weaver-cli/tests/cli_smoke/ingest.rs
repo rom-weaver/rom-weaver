@@ -52,6 +52,7 @@ fn create_two_track_cd_chd(temp: &TempDir) -> PathBuf {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -93,8 +94,9 @@ fn ingest_sidecar_preflight_matches_loose_siblings() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         rom_path,
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("out dir"),
         "--sidecar-only",
         "--sidecar-name",
@@ -123,8 +125,9 @@ fn ingest_chd_split_bin_false_merges_to_single_bin() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         chd.to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--split-bin",
         "false",
@@ -146,8 +149,9 @@ fn ingest_chd_split_bin_true_fans_out_per_track() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         chd.to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--split-bin",
         "true",
@@ -170,8 +174,9 @@ fn ingest_chd_default_splits_per_track_without_a_host_prompt() {
     // No --split-bin and no interactive host: the eligible multi-track CD defaults to per-track split.
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         chd.to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -191,8 +196,9 @@ fn ingest_bare_rom_checksums_in_place() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         rom.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -250,8 +256,9 @@ fn ingest_gamecube_iso_recommends_rvz() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         rom.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -279,6 +286,7 @@ fn ingest_rom_archive_extracts_and_checksums() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -293,8 +301,9 @@ fn ingest_rom_archive_extracts_and_checksums() {
     let events = run_json_events(
         &[
             "ingest",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -338,6 +347,7 @@ fn ingest_nested_rom_archive_descends_to_leaf() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -353,8 +363,9 @@ fn ingest_nested_rom_archive_descends_to_leaf() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         outer.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -376,7 +387,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
     // A patch bundled inside a nested archive: the OUTER archive's only entry is the inner container,
     // so the top-level classify sees no patch name and defaults to `is_rom = true`. The rom-filtered
     // descent then finds no ROM in the inner archive - ingest must fall back to patch ingestion and
-    // route the whole bundle as a patch source instead of erroring with "no entries matched --rom-filter".
+    // route the whole bundle as a patch source instead of erroring with "no entries matched --filter rom".
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
     fs::write(
@@ -394,6 +405,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -409,8 +421,9 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         outer.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -456,6 +469,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.path().to_str().expect("path"),
             "--format",
             "zip",
@@ -471,8 +485,9 @@ fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         outer.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--select",
         "*.nes",
@@ -519,8 +534,9 @@ fn ingest_bare_ips_patch_describes_without_checksumming() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         patch.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -562,8 +578,9 @@ fn ingest_invalid_patch_extension_is_marked_not_valid() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         patch.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -588,8 +605,9 @@ fn ingest_bps_patch_surfaces_embedded_metadata() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         patch.to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -629,8 +647,9 @@ fn ingest_patch_parses_filename_requirements() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         patch.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -649,6 +668,7 @@ fn ingest_patch_archive_extracts_and_describes_leaves() {
     command_stdout(
         &[
             "compress",
+            "--input",
             patch.to_str().expect("path"),
             "--format",
             "zip",
@@ -662,8 +682,9 @@ fn ingest_patch_archive_extracts_and_describes_leaves() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         archive.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -694,7 +715,9 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom.path().to_str().expect("path"),
+            "--input",
             patch.to_str().expect("path"),
             "--format",
             "zip",
@@ -708,8 +731,9 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         archive.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);
@@ -746,8 +770,11 @@ fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom.path().to_str().expect("path"),
+            "--input",
             other.path().to_str().expect("path"),
+            "--input",
             patch.to_str().expect("path"),
             "--format",
             "zip",
@@ -761,8 +788,9 @@ fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         archive.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--select",
         "game.nes",
@@ -801,7 +829,9 @@ fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
     command_stdout(
         &[
             "compress",
+            "--input",
             rom.path().to_str().expect("path"),
+            "--input",
             patch.to_str().expect("path"),
             "--format",
             "zip",
@@ -816,8 +846,9 @@ fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
     let events = run_json_events(
         &[
             "ingest",
+            "--input",
             archive.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -858,8 +889,9 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
     let terminal = run_single_json_event(
         &[
             "ingest",
+            "--input",
             rom.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--checksum",
             "not-a-real-algo",
@@ -882,8 +914,9 @@ fn ingest_disc_asset_carries_engine_disc_format() {
 
     let terminal = ingest_terminal(&[
         "ingest",
+        "--input",
         iso.path().to_str().expect("path"),
-        "--out-dir",
+        "--output",
         out_dir.path().to_str().expect("path"),
         "--json",
     ]);

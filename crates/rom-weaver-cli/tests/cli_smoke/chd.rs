@@ -45,6 +45,7 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -61,6 +62,7 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -94,6 +96,7 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -110,6 +113,7 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
     let output = command_stdout(
         &[
             "checksum",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--algo",
             "sha1",
@@ -140,6 +144,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -166,8 +171,9 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -180,6 +186,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -224,6 +231,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     let alias_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -257,6 +265,7 @@ fn probe_chd_reports_container_without_extracting() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -270,7 +279,7 @@ fn probe_chd_reports_container_without_extracting() {
     );
 
     let json = run_single_json_event(
-        &["probe", chd_path.path().to_str().expect("path"), "--json"],
+        &["probe", "--input", chd_path.path().to_str().expect("path"), "--json"],
         0,
     );
     assert_eq!(json["command"], "probe");
@@ -301,6 +310,7 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -314,6 +324,7 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -332,8 +343,9 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -356,6 +368,7 @@ fn chd_av_and_ld_overrides_force_av_media() {
         command_stdout(
             &[
                 "compress",
+                "--input",
                 temp.child("video.bin").path().to_str().expect("path"),
                 "--format",
                 format,
@@ -369,6 +382,7 @@ fn chd_av_and_ld_overrides_force_av_media() {
         let probe_output = command_stdout(
             &[
                 "probe",
+                "--input",
                 chd_path.path().to_str().expect("path"),
                 "--no-extract",
                 "--json",
@@ -406,6 +420,7 @@ fn chd_compress_huffman_alias_emits_huff_label() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -425,6 +440,7 @@ fn chd_compress_huffman_alias_emits_huff_label() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -456,6 +472,7 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -478,8 +495,9 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -518,6 +536,7 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -534,8 +553,9 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -576,6 +596,7 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -592,6 +613,7 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -612,8 +634,9 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -644,6 +667,7 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -660,9 +684,10 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--split-bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -720,6 +745,7 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -736,11 +762,12 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--split-bin",
             "--select",
             "disc.cue",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -771,6 +798,7 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -787,9 +815,10 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--split-bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -821,6 +850,7 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -837,8 +867,9 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -863,6 +894,7 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
             "zip",
@@ -878,11 +910,12 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             archive.path().to_str().expect("path"),
             "--split-bin",
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -927,6 +960,7 @@ fn chd_compress_and_extract_gdi_round_trip() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.gdi").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -943,8 +977,9 @@ fn chd_compress_and_extract_gdi_round_trip() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -993,6 +1028,7 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1008,6 +1044,7 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1028,8 +1065,9 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1070,6 +1108,7 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1085,6 +1124,7 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1114,8 +1154,9 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1154,6 +1195,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("gd.cue").path().to_str().expect("path"),
             "--format",
             "chd-gd",
@@ -1166,6 +1208,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             gd_chd.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1186,6 +1229,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("cd.cue").path().to_str().expect("path"),
             "--format",
             "chd-gd",
@@ -1221,6 +1265,7 @@ fn chd_compress_accepts_cd_codec_aliases() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1236,6 +1281,7 @@ fn chd_compress_accepts_cd_codec_aliases() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1256,8 +1302,9 @@ fn chd_compress_accepts_cd_codec_aliases() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1286,6 +1333,7 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1302,8 +1350,9 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1332,6 +1381,7 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1355,6 +1405,7 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
     let probe_output = command_stdout(
         &[
             "probe",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1375,8 +1426,9 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1401,6 +1453,7 @@ fn chd_compress_rejects_level_for_huffman_codec() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1434,6 +1487,7 @@ fn chd_compress_rejects_level_for_avhuff_codec() {
     let output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("video.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1473,6 +1527,7 @@ fn chd_extract_selects_cd_outputs() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.cue").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1489,10 +1544,11 @@ fn chd_extract_selects_cd_outputs() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--select",
             "disc.bin",
-            "--out-dir",
+            "--output",
             selected_bin_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1509,10 +1565,11 @@ fn chd_extract_selects_cd_outputs() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--select",
             "disc.cue",
-            "--out-dir",
+            "--output",
             selected_cue_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1538,6 +1595,7 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.bin").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1554,10 +1612,11 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--select",
             "disc.bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1571,10 +1630,11 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--select",
             "missing.bin",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1610,6 +1670,7 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
     command_stdout(
         &[
             "compress",
+            "--input",
             temp.child("disc.gdi").path().to_str().expect("path"),
             "--format",
             "chd",
@@ -1626,10 +1687,11 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
     command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
             "--select",
             "disc.gdi",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1657,6 +1719,7 @@ fn gcz_probe_reports_succeeded() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1689,8 +1752,9 @@ fn gcz_extract_round_trips_to_iso() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.gcz").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1721,10 +1785,11 @@ fn gcz_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             selected_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1739,10 +1804,11 @@ fn gcz_extract_supports_single_output_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--select",
             "missing.iso",
-            "--out-dir",
+            "--output",
             selected_out.path().to_str().expect("path"),
             "--json",
         ],
@@ -1772,6 +1838,7 @@ fn wbfs_probe_reports_succeeded() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1807,8 +1874,9 @@ fn wbfs_extract_round_trips_to_iso() {
     let output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.wbfs").path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1840,10 +1908,11 @@ fn wbfs_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1858,10 +1927,11 @@ fn wbfs_extract_supports_single_output_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--select",
             "missing.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1888,6 +1958,7 @@ fn wia_probe_reports_succeeded() {
     let output = command_stdout(
         &[
             "probe",
+            "--input",
             temp.child("disc.wia").path().to_str().expect("path"),
             "--no-extract",
             "--json",
@@ -1920,10 +1991,11 @@ fn wia_extract_supports_single_output_selection() {
     command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.wia").path().to_str().expect("path"),
             "--select",
             "disc.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1938,10 +2010,11 @@ fn wia_extract_supports_single_output_selection() {
     let missing_output = command_stdout(
         &[
             "extract",
+            "--input",
             temp.child("disc.wia").path().to_str().expect("path"),
             "--select",
             "missing.iso",
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
@@ -1978,6 +2051,7 @@ fn run_chd_round_trip_with_format(
     let compress_output = command_stdout(
         &[
             "compress",
+            "--input",
             temp.child(input_name).path().to_str().expect("path"),
             "--format",
             format,
@@ -2002,8 +2076,9 @@ fn run_chd_round_trip_with_format(
     let extract_output = command_stdout(
         &[
             "extract",
+            "--input",
             chd_path.path().to_str().expect("path"),
-            "--out-dir",
+            "--output",
             out_dir.path().to_str().expect("path"),
             "--json",
         ],
