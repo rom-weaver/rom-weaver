@@ -313,7 +313,7 @@ impl CliApp {
             }
         }
         // Disc sheets from the full listing - a sheet anchors its disc even when the kind filter
-        // excludes it (e.g. a `--rom-filter` run drops the non-payload `.cue`).
+        // excludes it (e.g. a `--filter rom` run drops the non-payload `.cue`).
         let sheet_names: Vec<String> = entries
             .iter()
             .filter(|entry| {

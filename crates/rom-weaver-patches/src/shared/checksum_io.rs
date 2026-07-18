@@ -33,7 +33,7 @@ pub(crate) fn crc32_path_cached(path: &Path, context: &OperationContext) -> Resu
             ))
         })
     };
-    // Reuse a CRC32 the host already computed for this exact input (seeded from `--checksum-cache`)
+    // Reuse a CRC32 the host already computed for this exact input (seeded from `--assume-in`)
     // instead of re-reading the whole file just to re-derive the source checksum.
     if let Some(cached) = context.seeded_checksum(path, "crc32") {
         return parse_hex(&cached);

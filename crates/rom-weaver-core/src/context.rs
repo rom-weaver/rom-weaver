@@ -140,7 +140,7 @@ pub struct OperationContext {
     /// count bounded while still giving each (serially processed) extract the whole pool.
     operation_pool: Arc<Mutex<Option<(SharedThreadPool, ThreadExecution)>>>,
     /// Already-known checksums for input paths, keyed `path -> { algorithm -> hex }`. Seeded by the
-    /// patch apply/validate commands from the host's `--checksum-cache` (the input CRC32 the webapp
+    /// patch apply/validate commands from the host's `--assume-in` (the input CRC32 the webapp
     /// already computed during staging) so the format handlers' source-checksum verification reuses it
     /// instead of re-reading the whole input. Shared across context clones via the `Arc`.
     seeded_checksums: Arc<Mutex<HashMap<PathBuf, BTreeMap<String, String>>>>,

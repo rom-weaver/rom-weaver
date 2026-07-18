@@ -362,7 +362,7 @@ impl CliApp {
                 "patch-apply",
                 fail(
                     "validate",
-                    "disc patch apply (.cue/.gdi input) cannot be combined with --validate-output-checksum; the reassembled disc is emitted as multiple track files (or a CHD), not a single checksummable output".to_string(),
+                    "disc patch apply (.cue/.gdi input) cannot be combined with --expect-out; the reassembled disc is emitted as multiple track files (or a CHD), not a single checksummable output".to_string(),
                 ),
             );
         }

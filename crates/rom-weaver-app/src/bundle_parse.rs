@@ -183,7 +183,7 @@ fn validate_relative_path(path: &Option<String>, entry: &str) -> Result<()> {
 }
 
 /// Validate and normalize an `algorithm -> hex` map by routing each pair
-/// through the shared `--validate-with-checksum` parser, so algorithm support
+/// through the shared `--expect-in` parser, so algorithm support
 /// and hex-length rules stay single-sourced.
 fn normalize_checksum_map(checksums: &mut BTreeMap<String, String>, entry: &str) -> Result<()> {
     if checksums.is_empty() {

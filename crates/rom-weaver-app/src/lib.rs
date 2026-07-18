@@ -184,7 +184,7 @@ pub enum BundleCommands {
         not(target_arch = "wasm32"),
         command(
             about = "Parse and validate a rom-weaver-bundle.json bundle (plain, stream-codec compressed, or inside an archive) and resolve its ROM/patch entries",
-            long_about = "Parse and validate a rom-weaver-bundle.json bundle and resolve its ROM/patch entries.\n\nAccepted sources: a plain rom-weaver-bundle.json, a stream-codec-compressed rom-weaver-bundle.json.gz/.bz2/.xz/.zst, or an archive carrying rom-weaver-bundle.json at its root (an \"everything archive\" that also bundles the ROM and patches).\n\nBundle `path` entries refer to archive members (or files next to the bundle). With --extract-dir, members referenced by the bundle are extracted there and returned as resolved paths, and extracted patch entries include a full patch descriptor. URL entries are returned verbatim; relative URLs resolve against the bundle's own location on the caller's side."
+            long_about = "Parse and validate a rom-weaver-bundle.json bundle and resolve its ROM/patch entries.\n\nAccepted sources: a plain rom-weaver-bundle.json, a stream-codec-compressed rom-weaver-bundle.json.gz/.bz2/.xz/.zst, or an archive carrying rom-weaver-bundle.json at its root (an \"everything archive\" that also bundles the ROM and patches).\n\nBundle `path` entries refer to archive members (or files next to the bundle). With --output, members referenced by the bundle are extracted there and returned as resolved paths, and extracted patch entries include a full patch descriptor. URL entries are returned verbatim; relative URLs resolve against the bundle's own location on the caller's side."
         )
     )]
     Parse(BundleParseCommand),

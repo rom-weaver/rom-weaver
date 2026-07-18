@@ -26,7 +26,7 @@ pub(crate) fn ensure_extract_output_available(output_path: &Path, overwrite: boo
         return Ok(());
     }
     Err(RomWeaverError::Validation(format!(
-        "refusing to overwrite existing output `{}` (rerun without --no-overwrite to replace it)",
+        "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
         output_path.display()
     )))
 }

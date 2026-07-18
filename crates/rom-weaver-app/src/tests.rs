@@ -332,7 +332,7 @@ fn extract_payload_selection_prompts_for_disc_plus_loose_rom() {
 
 #[test]
 fn extract_payload_selection_patch_filter_keeps_multiple() {
-    // Patches are not ROMs: a `--patch-filter` extract stays MULTI-select so several patches can be
+    // Patches are not ROMs: a `--filter patch` extract stays MULTI-select so several patches can be
     // pulled at once (the prompter's full index list is honoured).
     let app = test_app_with_prompt(vec![0, 2]);
     let context = app.context(ThreadBudget::Fixed(1));
