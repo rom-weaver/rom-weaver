@@ -38,6 +38,41 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
 
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@cargo-semver-checks
+
+      - name: Check for accidental breaking API changes
+        shell: bash
+        # Runs per-crate rather than --workspace so a crate with no published
+        # baseline (first release, or a newly added crate) is skipped instead of
+        # failing the whole job. cargo-semver-checks compares the working tree
+        # against the latest release on crates.io; a major-version bump is the
+        # intended way to land a genuine break.
+        run: |
+          mapfile -t names < <(
+            cargo metadata --no-deps --format-version 1 |
+              jq --raw-output '
+                .workspace_members as $members
+                | .packages[]
+                | select(.id as $id | $members | index($id))
+                | select(.publish != [])
+                | .name
+              '
+          )
+
+          for name in "${names[@]}"; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --user-agent "$CRATES_IO_USER_AGENT" \
+              "https://crates.io/api/v1/crates/$name")
+            if [[ "$status" != 200 ]]; then
+              echo "::notice::$name has no published baseline yet - skipping semver check"
+              continue
+            fi
+            cargo semver-checks check-release --package "$name"
+          done
+        env:
+          CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
+
       - name: Publish workspace crates
         shell: bash
         run: |

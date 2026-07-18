@@ -28,5 +28,10 @@ tracing.workspace = true
 [dev-dependencies]
 proptest = "1.6.0"
 
+[package.metadata.cargo-machete]
+# cargo-machete matches the crate *name*; `md-5` is imported as `md5`
+# (src/core.rs), so it reads as unused. Same for the other md-5 users below.
+ignored = ["md-5"]
+
 [lints]
 workspace = true

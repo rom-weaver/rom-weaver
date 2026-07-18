@@ -46,5 +46,10 @@ flate2.workspace = true
 path-slash = "0.2.1"
 tar.workspace = true
 
+[package.metadata.cargo-machete]
+# `libc` is referenced only by the bindings build.rs emits (`raw_line`), which
+# cargo-machete cannot see, but the generated code needs the dep to compile.
+ignored = ["libc"]
+
 [lints]
 workspace = true

@@ -102,6 +102,17 @@ jobs:
       - name: Third-party attribution bundle
         run: mise run licenses-check
 
+      - name: Rust supply chain (advisories, licenses, sources)
+        run: mise run deny
+
+      - name: Unused Rust dependencies
+        run: mise run machete
+
+      - name: npm advisories
+        run: |
+          npm run audit:deps
+          npm --prefix packages/rom-weaver-webapp run audit:deps
+
       - name: WASM build
         run: mise run build-wasm-prod
 

@@ -1,0 +1,91 @@
+# Supply-chain policy for the Rust workspace (cargo-deny).
+#
+# Complements `mise run licenses-check`, which *generates* the shipped
+# attribution bundle. This file *gates* what is allowed into the tree in the
+# first place: known vulnerabilities, license compatibility, and dependency
+# sources. Both run in CI; neither subsumes the other.
+#
+# Run locally with `mise run deny`.
+
+[graph]
+# Check every target the project actually ships, including the threaded wasm
+# module. Without this, cargo-deny only resolves the host triple and would miss
+# advisories in wasm-only dependencies.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "wasm32-wasip1-threads",
+]
+# Deliberately NOT `all-features = true`: the vendored nod fork carries an
+# optional pyo3 binding feature that nothing in this workspace builds, and
+# enabling it drags advisories for code we never ship into the gate. Default
+# features across the shipped targets is the honest graph.
+
+[advisories]
+version = 2
+yanked = "deny"
+# Only fail on unmaintained crates we depend on *directly* - those we can
+# actually act on. Transitive unmaintained crates (currently `paste` via
+# polonius-the-crab, and `bincode` via the vendored chd fork) have no upgrade
+# path, so failing on them would mean a permanent blanket ignore that also
+# hides newly-introduced ones. Vulnerabilities are still denied at any depth.
+unmaintained = "workspace"
+ignore = [
+    # bincode 1.3.3 reached the end of its development permanently (the team
+    # considers 1.3.3 feature-complete, not abandoned mid-flight). It arrives
+    # through the vendored xdvdfs fork, which is a workspace member, so
+    # `unmaintained = "workspace"` still surfaces it. There is no successor with
+    # a compatible wire format, and swapping serializers in a vendored fork
+    # would break Xbox ISO parsing for no security benefit - this is a
+    # maintenance status, not a vulnerability. Revisit if xdvdfs upstream moves.
+    "RUSTSEC-2025-0141",
+]
+
+[licenses]
+version = 2
+# Every license present in the tree as of this writing. Adding a dependency
+# under a license not listed here fails the check by design - the shipped
+# attribution bundle and the AGPL-3.0-or-later distribution terms both depend
+# on knowing exactly what is linked in.
+#
+# `r-efi` also surfaces LGPL-2.1-or-later, but it is dual-licensed
+# (Apache-2.0 OR LGPL-2.1-or-later OR MIT), so SPDX evaluation picks a
+# permissive arm and no LGPL entry is needed here.
+allow = [
+    "0BSD",
+    "AGPL-3.0-or-later",       # this workspace's own crates
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",     # webpki-roots
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# LLVM-exception applies to the Rust core/wasi crates; the exception only
+# loosens Apache-2.0, so it is safe wherever Apache-2.0 is.
+exceptions = [
+    { name = "blake3", allow = ["Apache-2.0 WITH LLVM-exception"] },
+    { name = "linux-raw-sys", allow = ["Apache-2.0 WITH LLVM-exception"] },
+    { name = "rustix", allow = ["Apache-2.0 WITH LLVM-exception"] },
+    { name = "wasi", allow = ["Apache-2.0 WITH LLVM-exception"] },
+]
+
+[bans]
+# Duplicate versions are a size concern for the wasm bundle, not a correctness
+# one, and the vendored forks pull in their own pinned trees. Warn so the churn
+# is visible in CI logs without blocking.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

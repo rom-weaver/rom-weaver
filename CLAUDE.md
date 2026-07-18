@@ -10,6 +10,8 @@ threading model, and the Rust⇄TypeScript boundary.
 cargo build -p rom-weaver-cli                      # native CLI
 cargo test --workspace                             # full Rust suite
 cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED after Rust type/metadata changes)
+mise run deny                                      # dep advisories + licenses + sources (deny.toml)
+mise run machete                                   # unused Rust dependencies
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-webapp run dev     # webapp dev server
 npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
@@ -27,6 +29,11 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - **Typegen drift fails CI.** Any change to `#[derive(TS)]` types or format
   registry metadata needs `npm run typegen` and the regenerated files
   committed.
+- **Dependency policy is `deny.toml`.** New crates must land under an
+  already-allowed license, and vulnerabilities fail CI at any depth. Suppress
+  an advisory only via an `ignore` entry with a written reason - never by
+  loosening `unmaintained`/`yanked`. Unused-dep false positives go in the
+  owning crate's `[package.metadata.cargo-machete]`, also with a reason.
 - **One error type.** Add variants to `RomWeaverError`
   (`crates/rom-weaver-core/src/error.rs`); never introduce per-crate error
   enums.

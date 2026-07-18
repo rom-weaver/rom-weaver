@@ -71,3 +71,9 @@ tracing.workspace = true
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zerocopy.workspace = true
 zstd-sys = { workspace = true, optional = true }
+
+[package.metadata.cargo-machete]
+# Vendored fork - keep churn out of it. `md-5` is imported as `md5`
+# (src/util/digest.rs); `crypto-common` is pulled in for trait bounds upstream
+# relies on. Both are false positives, not cleanup candidates.
+ignored = ["md-5", "crypto-common"]

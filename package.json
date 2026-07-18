@@ -57,6 +57,7 @@
     "hooks:validate": "lefthook validate",
     "prepack": "mise run manpages",
     "test": "node --test scripts/*.test.mjs scripts/wasm/*.test.mjs",
+    "audit:deps": "npm audit --audit-level=high",
     "typegen": "mise run typegen",
     "typegen:check": "mise run typegen-check",
     "version": "node scripts/sync-version.mjs"

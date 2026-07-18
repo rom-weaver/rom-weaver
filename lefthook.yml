@@ -21,6 +21,15 @@ pre-commit:
     licenses-check:
       glob: "*.{toml,lock}"
       run: mise run licenses-check
+    # Both are manifest/lockfile-scoped: cargo-deny reads Cargo.lock, machete
+    # reads the Cargo.tomls. Neither compiles anything, so they cost little
+    # next to the clippy run already gated on the same glob.
+    cargo-deny:
+      glob: "*.{toml,lock}"
+      run: mise run deny
+    cargo-machete:
+      glob: "*.toml"
+      run: mise run machete
     react-lint:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:code

@@ -23,6 +23,9 @@ node = "26.2.0"
 rust = "1.95.0"
 "aqua:WebAssembly/binaryen" = "129"            # provides wasm-opt
 "aqua:BurntSushi/ripgrep" = "14.1.1"           # provides rg (thread-guard checks)
+"aqua:EmbarkStudios/cargo-deny" = "0.20.2"
+"ubi:bnjbvr/cargo-machete" = "0.9.1"
+"ubi:obi1kenobi/cargo-semver-checks" = "0.46.0"
 
 [env]
 # WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
@@ -159,6 +162,27 @@ test -s "$output_dir/THIRD_PARTY_LICENSES.md"
 test -d "$output_dir/third_party/licenses"
 '''
 
+[tasks.deny]
+description = "Check Rust dependencies for advisories, licenses, and unknown sources"
+# Policy lives in deny.toml. This gates what enters the tree; `licenses-check`
+# above generates the attribution bundle for what already did.
+run = "cargo deny check"
+
+[tasks.machete]
+description = "Find unused Rust dependencies"
+# Heuristic source scan, so confirmed false positives are recorded per-crate
+# under [package.metadata.cargo-machete] with a reason rather than suppressed
+# globally. --skip-target-dir keeps it off build artifacts.
+run = "cargo-machete --skip-target-dir"
+
+[tasks.semver-checks]
+description = "Check published crates for accidental breaking API changes"
+# No-op until the first crates.io publish - cargo-semver-checks diffs against
+# the released baseline, so unpublished crates have nothing to compare to. The
+# release workflow runs this per-crate and skips ones with no baseline; run it
+# by hand here when you want the whole workspace at once.
+run = "cargo semver-checks check-release --workspace"
+
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
 run = "cargo test --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
@@ -207,7 +231,7 @@ run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
-depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "test-rust", "build-wasm-prod"]
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "test-rust", "build-wasm-prod"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail

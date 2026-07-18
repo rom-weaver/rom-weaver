@@ -1,0 +1,67 @@
+# Dependency update automation.
+#
+# Everything in this repo is pinned to an exact version (see .mise.toml [tools]
+# and the package.json dependency blocks), which is deliberate - reproducible
+# wasm builds depend on it - but means nothing drives those pins forward. These
+# schedules do.
+#
+# Grouping is aggressive on purpose: one PR per ecosystem per week reviewed
+# properly beats twenty single-crate PRs that get rubber-stamped. Security
+# updates are exempt from grouping and open immediately.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # The vendored forks under vendor/ are tracked against their upstream
+      # fork remotes, not crates.io. Bumping them here would fight the
+      # submodule/vendoring workflow described in CLAUDE.md.
+      - dependency-name: rom-weaver-chd-core
+      - dependency-name: rom-weaver-akv
+      - dependency-name: rom-weaver-qbsdiff
+      - dependency-name: rom-weaver-xdvdfs
+
+  # Two npm manifests: the root wrapper (CLI shim + commitlint/lefthook) and
+  # the webapp itself. Dependabot needs one entry per lockfile.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      root-npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/rom-weaver-webapp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # React and the toolchain move together often enough that splitting them
+      # produces PRs that cannot be merged independently.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      build-toolchain:
+        patterns: ["vite", "vite-plugin-pwa", "@vitejs/*", "vitest", "@vitest/*", "typescript"]
+      linting:
+        patterns: ["oxlint", "oxfmt", "@biomejs/*", "knip"]
+      other-webapp:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
