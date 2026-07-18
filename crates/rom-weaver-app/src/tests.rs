@@ -15,8 +15,24 @@ use serde_json::json;
 use super::selection_resolution::SelectionResolutionOptions;
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, N64ByteOrder,
-    N64ByteOrderTransform, ParsedSelectionInput, RomWeaverBundle,
+    N64ByteOrderTransform, ParsedSelectionInput, RomWeaverBundle, trace_filter_spec,
 };
+
+#[test]
+fn dependency_trace_keeps_application_logging_at_warning() {
+    assert_eq!(
+        trace_filter_spec(false, true, None).as_deref(),
+        Some("warn,nod=trace")
+    );
+}
+
+#[test]
+fn dependency_trace_augments_configured_filter() {
+    assert_eq!(
+        trace_filter_spec(false, true, Some("rom_weaver_app=info".to_string())).as_deref(),
+        Some("rom_weaver_app=info,nod=trace")
+    );
+}
 
 static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,

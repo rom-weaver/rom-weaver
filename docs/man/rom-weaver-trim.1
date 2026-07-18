@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-trim \- Trim or restore supported ROM and disc\-image formats
 .SH SYNOPSIS
-\fBrom\-weaver trim\fR [\fB\-\-json\fR] [\fB\-\-output\fR] [\fB\-e\fR|\fB\-\-extension\fR] [\fB\-\-progress\fR] [\fB\-i\fR|\fB\-\-in\-place\fR] [\fB\-\-no\-progress\fR] [\fB\-s\fR|\fB\-\-simulate\fR] [\fB\-\-trace\fR] [\fB\-\-revert\fR] [\fB\-\-no\-recursive\fR] [\fB\-\-no\-rom\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-revert\-marker\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver trim\fR [\fB\-\-json\fR] [\fB\-\-output\fR] [\fB\-e\fR|\fB\-\-extension\fR] [\fB\-\-progress\fR] [\fB\-i\fR|\fB\-\-in\-place\fR] [\fB\-\-no\-progress\fR] [\fB\-s\fR|\fB\-\-simulate\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-revert\fR] [\fB\-\-no\-recursive\fR] [\fB\-\-no\-rom\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-revert\-marker\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Trim or restore supported ROM and disc\-image formats
 .SH OPTIONS
@@ -32,6 +32,9 @@ Simulate trim operations without writing output files
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-revert\fR
 Restore trimmed files using an embedded revert marker when present; otherwise use the format\*(Aqs header\-derived size (NDS/3DS) or next power of two (GBA). Not supported for xiso or rvz\-scrub

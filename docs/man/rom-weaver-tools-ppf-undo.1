@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-tools\-ppf\-undo \- Restore a ROM using undo data embedded in a PPF3 patch
 .SH SYNOPSIS
-\fBrom\-weaver tools ppf\-undo\fR [\fB\-\-json\fR] <\fB\-o\fR|\fB\-\-output\fR> [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIROM\fR> <\fIPPF\fR>
+\fBrom\-weaver tools ppf\-undo\fR [\fB\-\-json\fR] <\fB\-o\fR|\fB\-\-output\fR> [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIROM\fR> <\fIPPF\fR>
 .SH DESCRIPTION
 Restore a ROM using undo data embedded in a PPF3 patch
 .SH OPTIONS
@@ -23,6 +23,9 @@ Disable running progress events
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

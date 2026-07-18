@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-apply \- Apply one or more ROM patch files to an input in sequence
 .SH SYNOPSIS
-\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch apply\fR <\fB\-\-input\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-target\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-patch\fR] [\fB\-\-output\fR] [\fB\-\-bundle\fR] [\fB\-\-with\fR] [\fB\-\-without\fR] [\fB\-\-no\-compress\fR] [\fB\-\-compress\-format\fR] [\fB\-\-compress\-codec\fR] [\fB\-\-compress\-level\fR] [\fB\-\-checksum\-cache\fR] [\fB\-\-validate\-with\-checksum\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-output\-header\fR] [\fB\-\-repair\-checksum\fR] [\fB\-\-n64\-byte\-order\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-validate\-output\-checksum\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Apply one or more ROM patch files to an input in sequence.
 .PP
@@ -47,6 +47,9 @@ Keep ROM\-like payload candidates while resolving the patch input archive
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-patch\-filter\fR
 Keep patch\-like payload candidates while resolving patch archives

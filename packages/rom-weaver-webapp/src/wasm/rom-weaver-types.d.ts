@@ -74,6 +74,8 @@ export interface RomWeaverRunOptions {
   progress?: boolean;
   /** Emit trace events to stderr. */
   trace?: boolean;
+  /** Emit trace events from dependencies such as nod. */
+  dep_trace?: boolean;
   /** Enable interactive selection if a command can ask for one. */
   interactiveSelectionEnabled?: boolean;
   /** Rust-wire spelling for interactiveSelectionEnabled. */

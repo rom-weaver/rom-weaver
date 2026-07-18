@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-bundle\-create \- Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files
 .SH SYNOPSIS
-\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-url\fR] [\fB\-\-trace\fR] [\fB\-\-rom\-name\fR] [\fB\-\-patch\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver bundle create\fR [\fB\-\-json\fR] [\fB\-\-rom\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-url\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-rom\-name\fR] [\fB\-\-patch\fR] [\fB\-\-patch\-name\fR] [\fB\-\-patch\-description\fR] [\fB\-\-patch\-label\fR] [\fB\-\-patch\-optional\fR] [\fB\-\-patch\-source\-url\fR] [\fB\-\-patch\-header\fR] [\fB\-\-patch\-basis\fR] [\fB\-\-patch\-input\-check\fR] [\fB\-\-patch\-output\-check\fR] [\fB\-\-output\-check\fR] [\fB\-\-output\-name\fR] [\fB\-\-output\-header\fR] <\fB\-\-output\fR> [\fB\-\-bundle\fR] [\fB\-\-bundle\-rom\fR] [\fB\-\-no\-bundle\-rom\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Build, validate, and write a rom\-weaver\-bundle.json bundle from local ROM/patch files.
 .PP
@@ -28,6 +28,9 @@ Emitted rom download url (combined with \-\-rom the local file still supplies ch
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-rom\-name\fR \fI<ROM_NAME>\fR
 Display/output\-naming file name for the rom entry

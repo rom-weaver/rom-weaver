@@ -149,6 +149,7 @@ function commandArgsToRunRequest(args) {
   const output = {};
   if (parsed.flags.has("json")) output.json = true;
   if (parsed.flags.has("trace")) output.trace = true;
+  if (parsed.flags.has("dep-trace")) output.dep_trace = true;
   if (parsed.flags.has("progress")) output.progress = true;
   if (parsed.flags.has("no-progress")) output.progress = false;
 

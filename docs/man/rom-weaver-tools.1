@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-tools \- Run specialized recovery and conversion tools
 .SH SYNOPSIS
-\fBrom\-weaver tools\fR [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBrom\-weaver tools\fR [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Run specialized recovery and conversion tools
 .SH OPTIONS
@@ -20,6 +20,9 @@ Disable running progress events
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

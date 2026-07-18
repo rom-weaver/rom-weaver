@@ -68,6 +68,15 @@ struct Cli {
         )
     )]
     trace: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            global = true,
+            help = "Enable trace logs from dependencies (for example nod)"
+        )
+    )]
+    dep_trace: bool,
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     command: Commands,
 }
@@ -84,6 +93,7 @@ impl Cli {
             json: self.json,
             progress: progress_override(self.progress, self.no_progress),
             trace: self.trace,
+            dep_trace: self.dep_trace,
             interactive_selection_enabled: interactive,
         }
     }
@@ -161,7 +171,7 @@ pub fn main_entry() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::progress_override;
+    use super::{cli_command, progress_override};
     use rom_weaver_app::{RomWeaverRunOutputOptions, RunCommandOptions};
 
     fn output(json: bool, progress: Option<bool>) -> RomWeaverRunOutputOptions {
@@ -169,6 +179,7 @@ mod tests {
             json,
             progress,
             trace: false,
+            dep_trace: false,
             interactive_selection_enabled: false,
         }
     }
@@ -195,5 +206,18 @@ mod tests {
         assert_eq!(progress_override(false, false), None);
         assert_eq!(progress_override(true, false), Some(true));
         assert_eq!(progress_override(false, true), Some(false));
+    }
+
+    #[test]
+    fn dependency_trace_is_a_global_flag() {
+        let matches = cli_command().try_get_matches_from([
+            "rom-weaver",
+            "--dep-trace",
+            "checksum",
+            "input.bin",
+            "--algo",
+            "crc32",
+        ]);
+        assert!(matches.is_ok());
     }
 }

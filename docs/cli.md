@@ -134,6 +134,7 @@ Global flags:
 - `--json` emits structured progress and terminal status as JSON lines.
 - `--progress` and `--no-progress` override automatic progress display.
 - `--trace` enables trace logs.
+- `--dep-trace` enables trace logs from dependencies such as `nod` while keeping application logs at warning level unless `--trace` is also set.
 
 Most data-processing commands also accept `--threads auto|N`. `auto` uses the
 available platform parallelism; a positive integer supplies an upper thread

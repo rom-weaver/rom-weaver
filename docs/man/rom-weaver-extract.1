@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-extract \- Extract files and disc payloads from supported containers
 .SH SYNOPSIS
-\fBrom\-weaver extract\fR [\fB\-\-json\fR] [\fB\-\-select\fR] [\fB\-\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-no\-progress\fR] [\fB\-\-patch\-filter\fR] <\fB\-\-out\-dir\fR> [\fB\-\-trace\fR] [\fB\-\-split\-bin\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-nested\-extract\fR] [\fB\-\-no\-overwrite\fR] [\fB\-\-checksum\fR] [\fB\-\-checksum\-rom\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver extract\fR [\fB\-\-json\fR] [\fB\-\-select\fR] [\fB\-\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-no\-progress\fR] [\fB\-\-patch\-filter\fR] <\fB\-\-out\-dir\fR> [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-split\-bin\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-nested\-extract\fR] [\fB\-\-no\-overwrite\fR] [\fB\-\-checksum\fR] [\fB\-\-checksum\-rom\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Extract files and disc payloads from supported containers
 .SH OPTIONS
@@ -32,6 +32,9 @@ Directory for extracted files
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-split\-bin\fR
 For CHD CD extraction, force split CUE + per\-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible

@@ -247,6 +247,7 @@ function commandArgsToRunRequest(args) {
   const parsed = parseCommandTokens(args, commandIndex);
   const output = {};
   if (parsed.flags.has('trace')) output.trace = true;
+  if (parsed.flags.has('dep-trace')) output.dep_trace = true;
   if (parsed.flags.has('progress')) output.progress = true;
   if (parsed.flags.has('no-progress')) output.progress = false;
 

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-checksum \- Compute checksums for files or selected container payloads
 .SH SYNOPSIS
-\fBrom\-weaver checksum\fR <\fB\-\-algo\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-trim\-fix\fR] [\fB\-\-start\fR] [\fB\-\-length\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver checksum\fR <\fB\-\-algo\fR> [\fB\-\-json\fR] [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-rom\-filter\fR] [\fB\-\-patch\-filter\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-extract\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-trim\-fix\fR] [\fB\-\-start\fR] [\fB\-\-length\fR] [\fB\-\-probe\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Compute checksums for files or selected container payloads
 .SH OPTIONS
@@ -32,6 +32,9 @@ Keep patch\-like payload candidates during checksum auto\-extract
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-extract\fR
 Disable container auto\-extract and checksum the source bytes directly

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-ingest \- Classify a source as ROM or patch, extracting nested containers and checksumming ROMs
 .SH SYNOPSIS
-\fBrom\-weaver ingest\fR [\fB\-\-json\fR] <\fB\-\-out\-dir\fR> [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-nested\-extract\fR] [\fB\-\-split\-bin\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
+\fBrom\-weaver ingest\fR [\fB\-\-json\fR] <\fB\-\-out\-dir\fR> [\fB\-\-progress\fR] [\fB\-\-select\fR] [\fB\-\-no\-progress\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-no\-ignore\fR] [\fB\-\-no\-nested\-extract\fR] [\fB\-\-split\-bin\fR] [\fB\-\-checksum\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR>
 .SH DESCRIPTION
 Classify a source as ROM or patch, extracting nested containers and checksumming ROMs
 .SH OPTIONS
@@ -26,6 +26,9 @@ Disable running progress events
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-no\-ignore\fR
 Disable default common\-file ignore filtering during classification and extraction

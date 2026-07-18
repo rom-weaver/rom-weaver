@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-compress \- Create a supported archive or disc\-image container
 .SH SYNOPSIS
-\fBrom\-weaver compress\fR [\fB\-\-format\fR] [\fB\-\-json\fR] <\fB\-\-output\fR> [\fB\-\-progress\fR] [\fB\-\-codec\fR] [\fB\-\-no\-progress\fR] [\fB\-\-level\fR] [\fB\-\-trace\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIINPUT\fR>
+\fBrom\-weaver compress\fR [\fB\-\-format\fR] [\fB\-\-json\fR] <\fB\-\-output\fR> [\fB\-\-progress\fR] [\fB\-\-codec\fR] [\fB\-\-no\-progress\fR] [\fB\-\-level\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIINPUT\fR>
 .SH DESCRIPTION
 Create a supported archive or disc\-image container
 .SH OPTIONS
@@ -52,6 +52,9 @@ max
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-threads\fR \fI<auto|N>\fR [default: auto]
 Thread budget: auto or a positive integer

@@ -4,7 +4,7 @@
 .SH NAME
 rom\-weaver\-patch\-create \- Create a patch from original and modified ROM data
 .SH SYNOPSIS
-\fBrom\-weaver patch create\fR [\fB\-\-json\fR] <\fB\-\-original\fR> [\fB\-\-modified\fR] [\fB\-\-progress\fR] [\fB\-\-format\fR] [\fB\-\-no\-progress\fR] [\fB\-\-output\fR] [\fB\-\-trace\fR] [\fB\-\-plan\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-checksum\-name\fR] [\fB\-\-source\-crc32\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-\-xdelta\-secondary\fR] [\fB\-h\fR|\fB\-\-help\fR]
+\fBrom\-weaver patch create\fR [\fB\-\-json\fR] <\fB\-\-original\fR> [\fB\-\-modified\fR] [\fB\-\-progress\fR] [\fB\-\-format\fR] [\fB\-\-no\-progress\fR] [\fB\-\-output\fR] [\fB\-\-trace\fR] [\fB\-\-dep\-trace\fR] [\fB\-\-plan\fR] [\fB\-\-ignore\-checksum\-validation\fR] [\fB\-\-checksum\-name\fR] [\fB\-\-source\-crc32\fR] [\fB\-\-code\fR] [\fB\-\-code\-system\fR] [\fB\-\-code\-kind\fR] [\fB\-\-threads\fR] [\fB\-\-xdelta\-secondary\fR] [\fB\-h\fR|\fB\-\-help\fR]
 .SH DESCRIPTION
 Create a patch from original and modified ROM data
 .SH OPTIONS
@@ -32,6 +32,9 @@ Output patch path; optional only with \-\-plan
 .TP
 \fB\-\-trace\fR
 Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)
+.TP
+\fB\-\-dep\-trace\fR
+Enable trace logs from dependencies (for example nod)
 .TP
 \fB\-\-plan\fR
 Only return recommended formats; do not create a patch
