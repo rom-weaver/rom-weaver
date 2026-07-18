@@ -32,19 +32,36 @@ pub struct BundleCreateResult {
 }
 
 impl CliApp {
-    pub(super) fn run_bundle_create(&self, args: BundleCreateCommand) -> AppRunOutcome {
+    pub(super) fn run_bundle_create(&self, mut args: BundleCreateCommand) -> AppRunOutcome {
+        let context = self.context(args.threads);
+        let thread_execution = context.single_thread_execution();
+        // --from hydrates the command from a hand-authored spec before anything
+        // else, so explicit flags still override and the rest of create is
+        // unchanged.
+        if let Err(error) = self.apply_bundle_create_spec(&mut args) {
+            return self.finish(
+                "bundle-create",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("bundle-create".to_string()),
+                    "bundle-create",
+                    error.to_string(),
+                    thread_execution,
+                ),
+            );
+        }
         trace!(
+            from = ?args.from,
             rom = ?args.rom,
             rom_url = ?args.rom_url,
             patches = args.patch.len(),
+            patch_specs = args.patch_specs.len(),
             output = %args.output.display(),
             bundle = ?args.bundle,
             checksum_algorithms = args.checksum.len(),
             threads = %args.threads,
             "starting bundle create command"
         );
-        let context = self.context(args.threads);
-        let thread_execution = context.single_thread_execution();
         let report = match self.bundle_create_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(
@@ -95,7 +112,145 @@ impl CliApp {
         self.finish("bundle-create", report)
     }
 
-    fn bundle_create_inner(
+    /// Hydrate a `bundle create` command from a `--from` spec: read the file
+    /// (or stdin for `-`), parse it as a `RomWeaverBundle`, and fill any field
+    /// the CLI did not set. Local `path` entries resolve relative to the spec
+    /// file; create then hashes the ROM and normalizes as usual. Explicit flags
+    /// win over the spec. Native-only (reads a local file / stdin); on wasm the
+    /// webapp builds the command directly, so this is a no-op.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn apply_bundle_create_spec(&self, args: &mut BundleCreateCommand) -> Result<()> {
+        let Some(from) = args.from.clone() else {
+            return Ok(());
+        };
+        let is_stdin = from.as_os_str() == "-";
+        let bytes = if is_stdin {
+            let mut buf = Vec::new();
+            std::io::Read::read_to_end(&mut std::io::stdin().lock(), &mut buf).map_err(
+                |error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to read bundle spec from stdin: {error}"
+                    ))
+                },
+            )?;
+            buf
+        } else {
+            fs::read(&from).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to read bundle spec `{}`: {error}",
+                    from.display()
+                ))
+            })?
+        };
+        let spec = parse_bundle_bytes(&bytes)?;
+        let base_dir = if is_stdin {
+            PathBuf::new()
+        } else {
+            from.parent().map(Path::to_path_buf).unwrap_or_default()
+        };
+        let resolve = |relative: &str| -> PathBuf {
+            let path = Path::new(relative);
+            if path.is_absolute() || base_dir.as_os_str().is_empty() {
+                path.to_path_buf()
+            } else {
+                base_dir.join(path)
+            }
+        };
+
+        // Preserve the authored $schema unless --schema-ref overrides it.
+        if args.schema_ref.is_none() {
+            args.schema_ref = spec.schema.clone();
+        }
+
+        if let Some(rom) = &spec.rom {
+            match (rom.path.as_deref(), rom.url.as_deref()) {
+                (Some(path), _) => {
+                    if args.rom.is_none() {
+                        args.rom = Some(resolve(path));
+                    }
+                }
+                (None, Some(url)) => {
+                    if args.rom_url.is_none() {
+                        args.rom_url = Some(url.to_owned());
+                    }
+                }
+                (None, None) => {
+                    return Err(RomWeaverError::Validation(
+                        "--from: a checks-only rom (no `path`/`url`) can't be baked from a spec; give rom.path or drop the rom entry".to_string(),
+                    ));
+                }
+            }
+            if args.rom_name.is_none() {
+                args.rom_name = rom.name.clone();
+            }
+        }
+
+        if let Some(output) = &spec.output {
+            if args.output_name.is_none() {
+                args.output_name = output.name.clone();
+            }
+            if args.output_header.is_none() {
+                args.output_header = output.header;
+            }
+            if args.output_check.is_empty()
+                && let Some(checks) = &output.checks
+            {
+                args.output_check = checks_tokens(checks);
+            }
+        }
+
+        // Explicit --patch flags win wholesale over the spec's patch chain.
+        if args.patch_specs.is_empty() && args.patch.is_empty() {
+            let mut specs = Vec::with_capacity(spec.patches.len());
+            for (index, entry) in spec.patches.iter().enumerate() {
+                let (path, source_url) = match (entry.path.as_deref(), entry.url.as_deref()) {
+                    (Some(path), _) => (resolve(path), None),
+                    (None, Some(url)) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "--from: patches[{index}] is a url-only entry (`{url}`); bundle create bakes local files, so give it a local `path`"
+                        )));
+                    }
+                    (None, None) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "--from: patches[{index}] has neither `path` nor `url`"
+                        )));
+                    }
+                };
+                specs.push(BundleCreatePatchSpec {
+                    path,
+                    id: entry.id.clone(),
+                    version: entry.version.clone(),
+                    author: entry.author.clone(),
+                    name: entry.name.clone(),
+                    description: entry.description.clone(),
+                    label: entry.label.clone(),
+                    optional: entry.optional.then_some(true),
+                    source_url,
+                    header: entry.header,
+                    basis: entry.basis,
+                    input_checks: entry
+                        .input_checks
+                        .as_ref()
+                        .map(checks_tokens)
+                        .unwrap_or_default(),
+                    output_checks: entry
+                        .output_checks
+                        .as_ref()
+                        .map(checks_tokens)
+                        .unwrap_or_default(),
+                });
+            }
+            args.patch_specs = specs;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn apply_bundle_create_spec(&self, _args: &mut BundleCreateCommand) -> Result<()> {
+        Ok(())
+    }
+
+    pub(super) fn bundle_create_inner(
         &self,
         args: &BundleCreateCommand,
         context: &OperationContext,
@@ -217,7 +372,7 @@ impl CliApp {
             }),
         };
 
-        let output_checks = bundle_entry_checks(&args.output_check, "--output-check")?;
+        let output_checks = bundle_entry_checks(&args.output_check, "--expect-out")?;
 
         let mut patches = Vec::with_capacity(specs.len());
         for spec in &specs {
@@ -232,12 +387,12 @@ impl CliApp {
             // differ: an inputChecks equal to rom.checks (the chain start) or
             // an outputChecks equal to output.checks (the chain end) is
             // implied and stays out of the entry.
-            let entry_input_checks =
-                bundle_entry_checks(&spec.input_checks, "--patch-input-check")?.filter(|checks| {
+            let entry_input_checks = bundle_entry_checks(&spec.input_checks, "--patch-expect-in")?
+                .filter(|checks| {
                     !checks_implied_by(checks, rom.as_ref().and_then(|rom| rom.checks.as_ref()))
                 });
             let entry_output_checks =
-                bundle_entry_checks(&spec.output_checks, "--patch-output-check")?
+                bundle_entry_checks(&spec.output_checks, "--patch-expect-out")?
                     .filter(|checks| !checks_implied_by(checks, output_checks.as_ref()));
             patches.push(BundlePatchEntry {
                 id: spec.id.clone(),
@@ -280,6 +435,10 @@ impl CliApp {
                 });
 
         let bundle = RomWeaverBundle {
+            // Only stamped when explicitly requested (--schema-ref) or carried
+            // over from a --from spec; never auto-injected, so plain create
+            // stays byte-identical.
+            schema: args.schema_ref.clone(),
             version: BUNDLE_VERSION,
             rom,
             patches,
@@ -477,8 +636,8 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
     let source_urls = aligned_metadata(&args.patch_source_url, count, "--patch-source-url")?;
     let headers = aligned_metadata(&args.patch_header, count, "--patch-header")?;
     let bases = aligned_metadata(&args.patch_basis, count, "--patch-basis")?;
-    let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-input-check")?;
-    let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-output-check")?;
+    let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-expect-in")?;
+    let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-expect-out")?;
     Ok(args
         .patch
         .iter()
@@ -525,6 +684,18 @@ fn bundle_entry_checks(values: &[String], flag: &str) -> Result<Option<BundleChe
         checksums,
         size: None,
     }))
+}
+
+/// Render a `BundleChecks` back into `algo=hex` check-flag tokens for `--from`
+/// hydration. Size is dropped (per-patch/output check flags carry only
+/// checksums), matching the flag path.
+#[cfg(not(target_arch = "wasm32"))]
+fn checks_tokens(checks: &BundleChecks) -> Vec<String> {
+    checks
+        .checksums
+        .iter()
+        .map(|(algorithm, hex)| format!("{algorithm}={hex}"))
+        .collect()
 }
 
 /// Whether `checks` adds nothing over `baseline`: every checksum it pins has

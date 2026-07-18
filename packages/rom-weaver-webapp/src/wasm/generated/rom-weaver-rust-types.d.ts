@@ -414,7 +414,16 @@ name?: string, header?: PatchApplyOutputHeaderMode,
  */
 checks?: BundleChecks, };
 
-export type RomWeaverBundle = { version: number, rom?: BundleRom,
+export type RomWeaverBundle = {
+/**
+ * Optional JSON Schema reference so editors bind autocomplete/validation
+ * when a bundle is hand-authored. A named field satisfies
+ * `deny_unknown_fields` (an unknown `$schema` key would otherwise fail
+ * parse); the value is preserved verbatim through `bundle create --from`
+ * but never auto-injected by create (keeps emitted bytes stable). First
+ * field so it serializes at the top, the conventional position.
+ */
+$schema?: string, version: number, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
@@ -454,7 +463,7 @@ patch_sources: Array<BundlePatchSource>,
  */
 warnings: Array<string>, };
 
-export type BundleParseCommand = { input: string, output?: string, threads?: ThreadBudget, };
+export type BundleParseCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, output?: string, threads?: ThreadBudget, };
 
 export type BundleCreateCommand = { rom?: string,
 /**

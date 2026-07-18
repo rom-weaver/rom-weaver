@@ -66,21 +66,18 @@ impl CliApp {
         trace!(
             source = %args.input.display(),
             extract_dir = ?args.output,
+            select = args.select.len(),
+            no_extract = args.no_extract,
             threads = %args.threads,
             "starting bundle parse command"
         );
-        let BundleParseCommand {
-            input: source,
-            output: extract_dir,
-            threads,
-        } = args;
-        let context = self.context(threads);
+        let context = self.context(args.threads);
         let thread_execution = context.single_thread_execution();
-        let report = match self.bundle_parse_inner(&source, extract_dir.as_deref(), &context) {
+        let report = match self.bundle_parse_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(
                     "parsed bundle `{}` ({} patch entr{})",
-                    source.display(),
+                    args.input.display(),
                     result.bundle.patches.len(),
                     if result.bundle.patches.len() == 1 {
                         "y"
@@ -121,12 +118,29 @@ impl CliApp {
         self.finish("bundle-parse", report)
     }
 
+    pub(super) fn run_bundle_schema(&self) -> AppRunOutcome {
+        let context = self.context(ThreadBudget::default());
+        let thread_execution = context.single_thread_execution();
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("bundle-schema".to_string()),
+            "bundle-schema",
+            "rom-weaver-bundle.json schema".to_string(),
+            Some(100.0),
+            thread_execution,
+        );
+        // The CLI prints the raw schema to stdout; the details carry it for the
+        // wasm/JSON path.
+        report.details = Some(json!({ "schema": BUNDLE_JSON_SCHEMA }));
+        self.finish("bundle-schema", report)
+    }
+
     fn bundle_parse_inner(
         &self,
-        source: &Path,
-        extract_dir: Option<&Path>,
+        args: &BundleParseCommand,
         context: &OperationContext,
     ) -> Result<BundleParseResult> {
+        let source = args.input.as_path();
         if !source.exists() {
             return Err(RomWeaverError::Validation(format!(
                 "input path does not exist: `{}`",
@@ -135,16 +149,33 @@ impl CliApp {
         }
         let loaded = self.load_bundle_source(source)?;
         let bundle = parse_bundle_bytes(&loaded.bytes)?;
+        // Extraction targeting (mirrors extract/checksum): --no-extract
+        // suppresses all extraction, --filter limits it to the rom/patch
+        // class, --select limits it to matching file names. Entries that are
+        // not extracted still appear in the result (as unresolved paths / urls)
+        // so patch_sources stays index-aligned with bundle.patches.
+        let extract_dir = if args.no_extract {
+            None
+        } else {
+            args.output.as_deref()
+        };
+        let rom_extractable = args.filter.is_empty() || args.rom_filter();
+        let patch_extractable = args.filter.is_empty() || args.patch_filter();
+        let mut selector = SelectionMatcher::new(&args.select);
         // A sourceless (checks-only) rom entry resolves to no source at all:
         // the applying user supplies the ROM.
         let rom_source = match &bundle.rom {
             Some(rom) if rom.url.is_some() || rom.path.is_some() => {
+                let name = entry_basename(rom.path.as_deref(), rom.url.as_deref());
+                let entry_extract_dir = (rom_extractable && selector.matches(&name))
+                    .then_some(extract_dir)
+                    .flatten();
                 Some(self.resolve_bundle_entry_source(
                     rom.url.as_deref(),
                     rom.path.as_deref(),
                     source,
                     &loaded,
-                    extract_dir,
+                    entry_extract_dir,
                     "rom",
                 )?)
             }
@@ -153,12 +184,16 @@ impl CliApp {
         let mut patch_sources = Vec::with_capacity(bundle.patches.len());
         for (index, patch) in bundle.patches.iter().enumerate() {
             let entry_label = format!("patches[{index}]");
+            let name = entry_basename(patch.path.as_deref(), patch.url.as_deref());
+            let entry_extract_dir = (patch_extractable && selector.matches(&name))
+                .then_some(extract_dir)
+                .flatten();
             let source_ref = self.resolve_bundle_entry_source(
                 patch.url.as_deref(),
                 patch.path.as_deref(),
                 source,
                 &loaded,
-                extract_dir,
+                entry_extract_dir,
                 &entry_label,
             )?;
             let descriptor = match &source_ref {
@@ -229,4 +264,11 @@ impl CliApp {
             extracted_path: Self::normalize_emitted_path_string(&target.to_string_lossy()),
         })
     }
+}
+
+/// File name a `--select` pattern matches a bundle entry against: the base name
+/// of its `path` (or `url` when it is a URL-only entry).
+fn entry_basename(path: Option<&str>, url: Option<&str>) -> String {
+    let raw = path.or(url).map(str::trim).unwrap_or_default();
+    raw.rsplit(['/', '\\']).next().unwrap_or(raw).to_owned()
 }

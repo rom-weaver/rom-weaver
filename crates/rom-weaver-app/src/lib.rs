@@ -188,6 +188,18 @@ pub enum BundleCommands {
         )
     )]
     Parse(BundleParseCommand),
+    // CLI-only: the webapp never dispatches `bundle schema` (the CLI prints the
+    // schema before dispatch), so keep it out of the generated TS command union
+    // where a variant without `args` would break the command-branch types.
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            about = "Print the rom-weaver-bundle.json JSON Schema (for editor validation / direct authoring)",
+            long_about = "Print the rom-weaver-bundle.json JSON Schema to stdout.\n\nRedirect it to a file your editor can point at, or add its published URL as a `$schema` key in a hand-authored bundle so the editor validates and autocompletes it. `bundle create --from <file>` then bakes the authored file into a canonical, checksummed bundle."
+        )
+    )]
+    Schema,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -574,6 +586,18 @@ pub fn run_command(
     reporter: Arc<dyn ProgressSink>,
     prompter: Arc<dyn SelectionPrompter>,
 ) -> ExitCode {
+    ExitCode::from(run_command_outcome(command, options, reporter, prompter).exit_code)
+}
+
+/// Like [`run_command`] but returns the full [`AppRunOutcome`] so callers that
+/// chain commands (for example `apply --tui`, which applies then writes a
+/// bundle) can gate on success. Logging init is idempotent across calls.
+pub fn run_command_outcome(
+    command: Commands,
+    options: RunCommandOptions,
+    reporter: Arc<dyn ProgressSink>,
+    prompter: Arc<dyn SelectionPrompter>,
+) -> AppRunOutcome {
     init_logging(options.log_level, options.dep_trace, options.json);
     trace!(
         json = options.json,
@@ -582,7 +606,7 @@ pub fn run_command(
         command = ?command,
         "running rom-weaver command"
     );
-    let outcome = RomWeaverApp::run(
+    RomWeaverApp::run(
         command,
         AppRunOptions {
             emit_progress_events: options.emit_progress_events,
@@ -590,8 +614,7 @@ pub fn run_command(
         },
         reporter,
         prompter,
-    );
-    ExitCode::from(outcome.exit_code)
+    )
 }
 
 const APP_LOG_TARGETS: &str = "rom_weaver_app,rom_weaver_core,rom_weaver_containers,rom_weaver_patches,rom_weaver_checksum,rom_weaver_codecs";
@@ -1171,8 +1194,8 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 
 mod bundle_schema;
 pub use bundle_schema::{
-    BUNDLE_MIN_VERSION, BUNDLE_VERSION, BundleChecks, BundleOutput, BundlePatchEntry, BundleRom,
-    RomWeaverBundle,
+    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_MIN_VERSION, BUNDLE_VERSION, BundleChecks,
+    BundleOutput, BundlePatchEntry, BundleRom, RomWeaverBundle,
 };
 
 mod patch_plan;

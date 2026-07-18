@@ -45,6 +45,17 @@ fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
     false
 }
 
+/// Snapshot of a resolved apply, captured before `args` moves into the run, so
+/// `--emit-bundle` can describe exactly what was applied.
+struct EmitBundleInputs {
+    input: PathBuf,
+    patches: Vec<PathBuf>,
+    headers: Vec<PatchApplyHeaderMode>,
+    bases: Vec<PatchBasisMode>,
+    output: Option<PathBuf>,
+    threads: ThreadBudget,
+}
+
 impl CliApp {
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
@@ -104,7 +115,85 @@ impl CliApp {
                 );
             }
         };
-        self.run_patch_apply_resolved(args, bundle_resolution, original_input, local_bundle)
+        // Snapshot what --emit-bundle needs before `args` moves into the run:
+        // the resolved input rom, the ordered patches, and per-patch header/basis.
+        let emit_bundle = args.emit_bundle.clone();
+        let emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
+            input: args.input.clone(),
+            patches: args.patches.clone(),
+            headers: args.patch_header.clone(),
+            bases: args.patch_basis.clone(),
+            output: args.output.clone(),
+            threads: args.threads,
+        });
+        let outcome =
+            self.run_patch_apply_resolved(args, bundle_resolution, original_input, local_bundle);
+        // A successful apply optionally emits a bundle describing it. Failures
+        // here don't undo the apply (the output is already written), so warn
+        // rather than fail.
+        if let (Some(emit_path), Some(inputs)) = (emit_bundle, emit_inputs)
+            && outcome.status == OperationStatus::Succeeded
+            && let Err(error) = self.emit_apply_bundle(&emit_path, inputs)
+        {
+            tracing::warn!(
+                %error,
+                bundle = %emit_path.display(),
+                "apply succeeded but --emit-bundle failed",
+            );
+        }
+        outcome
+    }
+
+    /// Write a bundle describing a just-completed apply: the input ROM (checks
+    /// computed), the ordered patches (referenced by base name, header/basis
+    /// preserved), and the produced output's checks/name. Reuses
+    /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
+    /// `bundle create` would write for the same inputs.
+    fn emit_apply_bundle(&self, emit_path: &Path, inputs: EmitBundleInputs) -> Result<()> {
+        if inputs.patches.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "--emit-bundle needs at least one applied --patch".to_string(),
+            ));
+        }
+        let context = self.context(inputs.threads);
+        let patch_specs = inputs
+            .patches
+            .iter()
+            .enumerate()
+            .map(|(index, path)| BundleCreatePatchSpec {
+                path: path.clone(),
+                header: inputs.headers.get(index).copied(),
+                basis: inputs.bases.get(index).and_then(|mode| mode.declared()),
+                ..BundleCreatePatchSpec::default()
+            })
+            .collect();
+        let output = inputs.output.as_deref().filter(|path| path.is_file());
+        let output_check = match output {
+            Some(path) => {
+                let algorithms = ["crc32", "md5", "sha1"];
+                checksum_file_values(path, &algorithms, &context)?
+                    .into_iter()
+                    .map(|(algorithm, hex)| format!("{algorithm}={hex}"))
+                    .collect()
+            }
+            None => Vec::new(),
+        };
+        let output_name = output
+            .and_then(|path| path.file_name())
+            .and_then(|name| name.to_str())
+            .map(str::to_owned);
+        let create = BundleCreateCommand {
+            rom: Some(inputs.input),
+            output: emit_path.to_path_buf(),
+            output_name,
+            output_check,
+            threads: inputs.threads,
+            patch_specs,
+            ..BundleCreateCommand::default()
+        };
+        self.bundle_create_inner(&create, &context)?;
+        trace!(bundle = %emit_path.display(), "emitted bundle from apply");
+        Ok(())
     }
 
     /// The body of `patch apply` after bundle resolution: `args` is a plain,
@@ -218,6 +307,8 @@ impl CliApp {
             codes,
             code_system,
             code_kind,
+            emit_bundle: _,
+            tui: _,
             threads,
         } = args;
         let mut output = output.expect("output presence is validated above");

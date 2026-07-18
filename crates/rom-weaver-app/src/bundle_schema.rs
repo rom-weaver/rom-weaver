@@ -9,6 +9,16 @@ pub const BUNDLE_VERSION: u32 = 3;
 /// Oldest bundle schema version this build still reads.
 pub const BUNDLE_MIN_VERSION: u32 = 1;
 
+/// The JSON Schema for `rom-weaver-bundle.json`, embedded from the canonical
+/// docs copy so `bundle schema` and the docs stay a single source of truth.
+/// Editors can bind it via a `$schema` key (accepted on read) or the published
+/// URL in its `$id`.
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../../../docs/rom-weaver-bundle.schema.json");
+
+/// Published, resolvable location of [`BUNDLE_JSON_SCHEMA`] (matches its `$id`).
+pub const BUNDLE_JSON_SCHEMA_URL: &str =
+    "https://bcasey.forgejo-pages.koof.win/rom-weaver/rom-weaver-bundle.schema.json";
+
 /// A distributable patching workflow definition (`rom-weaver-bundle.json`): ordered patches
 /// with an optional/required selection seed and expected input/output ROM
 /// checks, optionally the ROM itself, and default output settings. Every
@@ -22,6 +32,15 @@ pub const BUNDLE_MIN_VERSION: u32 = 1;
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
 pub struct RomWeaverBundle {
+    /// Optional JSON Schema reference so editors bind autocomplete/validation
+    /// when a bundle is hand-authored. A named field satisfies
+    /// `deny_unknown_fields` (an unknown `$schema` key would otherwise fail
+    /// parse); the value is preserved verbatim through `bundle create --from`
+    /// but never auto-injected by create (keeps emitted bytes stable). First
+    /// field so it serializes at the top, the conventional position.
+    #[serde(default, rename = "$schema", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, rename = "$schema"))]
+    pub schema: Option<String>,
     pub version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -166,4 +185,51 @@ pub struct BundleOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub checks: Option<BundleChecks>,
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+
+    // Drift guard for the hand-maintained JSON Schema: it must stay valid JSON,
+    // its $id must match the published URL, and it must advertise every
+    // top-level property the Rust type (de)serializes - including the optional
+    // `$schema` editor-binding key.
+    #[test]
+    fn embedded_schema_is_valid_and_consistent() {
+        let value: serde_json::Value =
+            serde_json::from_str(BUNDLE_JSON_SCHEMA).expect("embedded bundle schema is valid JSON");
+        assert_eq!(
+            value.get("$id").and_then(serde_json::Value::as_str),
+            Some(BUNDLE_JSON_SCHEMA_URL),
+            "schema $id must match BUNDLE_JSON_SCHEMA_URL"
+        );
+        let properties = value
+            .get("properties")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema declares top-level properties");
+        for key in ["$schema", "version", "rom", "patches", "output"] {
+            assert!(
+                properties.contains_key(key),
+                "schema is missing top-level property `{key}`"
+            );
+        }
+    }
+
+    // The `$schema` key must be accepted on read despite deny_unknown_fields,
+    // and round-trip verbatim (so `bundle create --from` preserves it).
+    #[test]
+    fn parse_accepts_and_preserves_schema_key() {
+        let json = format!(
+            r#"{{ "$schema": "{BUNDLE_JSON_SCHEMA_URL}", "version": {BUNDLE_VERSION}, "patches": [ {{ "path": "a.ips" }} ] }}"#
+        );
+        let bundle = crate::bundle_parse::parse_bundle_bytes(json.as_bytes())
+            .expect("a bundle carrying $schema parses");
+        assert_eq!(bundle.schema.as_deref(), Some(BUNDLE_JSON_SCHEMA_URL));
+        let reserialized = serde_json::to_string(&bundle).expect("serializes");
+        assert!(
+            reserialized.contains("\"$schema\""),
+            "$schema must round-trip through serialization"
+        );
+    }
 }

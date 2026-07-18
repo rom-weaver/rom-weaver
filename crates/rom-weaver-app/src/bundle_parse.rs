@@ -435,6 +435,7 @@ mod tests {
     #[test]
     fn round_trips_serialized_bundle() {
         let bundle = RomWeaverBundle {
+            schema: None,
             version: BUNDLE_VERSION,
             rom: Some(BundleRom {
                 name: Some("Game (USA).sfc".to_owned()),

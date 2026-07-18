@@ -36,6 +36,7 @@ impl CliApp {
             Commands::Bundle(command) => match command {
                 BundleCommands::Create(args) => self.run_bundle_create(*args),
                 BundleCommands::Parse(args) => self.run_bundle_parse(args),
+                BundleCommands::Schema => self.run_bundle_schema(),
             },
             Commands::Tools(command) => self.run_tools(command),
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
@@ -55,6 +56,7 @@ impl CliApp {
             Commands::Patch(PatchCommands::Create(_)) => "patch-create",
             Commands::Bundle(BundleCommands::Create(_)) => "bundle-create",
             Commands::Bundle(BundleCommands::Parse(_)) => "bundle-parse",
+            Commands::Bundle(BundleCommands::Schema) => "bundle-schema",
             Commands::Tools(ToolsCommands::PpfUndo(_)) => "tools-ppf-undo",
             Commands::PlanExtractBatch(_) => "plan-extract-batch",
         }

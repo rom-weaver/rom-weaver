@@ -26,6 +26,7 @@ filter_accessors!(ExtractCommand);
 filter_accessors!(ChecksumCommand);
 filter_accessors!(PatchApplyCommand);
 filter_accessors!(PatchValidateCommand);
+filter_accessors!(BundleParseCommand);
 
 const fn default_true() -> bool {
     true
@@ -965,6 +966,29 @@ pub struct PatchApplyCommand {
     #[serde(default = "default_code_kind")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub code_kind: String,
+    // Native-only authoring conveniences (serde/ts skip keeps them off the
+    // wasm wire + generated TS; the webapp has its own bundle export).
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "emit-bundle",
+            value_name = "PATH",
+            help = "Also write a rom-weaver-bundle.json describing this apply (input rom + ordered patches + computed checks)"
+        )
+    )]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub emit_bundle: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "tui",
+            help = "Interactively fill in bundle metadata (needs a terminal), then apply and write rom-weaver-bundle.json"
+        )
+    )]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub tui: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1569,6 +1593,39 @@ pub struct BundleParseCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            short = 's',
+            long = "select",
+            help = "Resolve/extract only bundle entries whose file name matches this exact name, prefix, or glob (repeatable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "filter",
+            value_enum,
+            value_delimiter = ',',
+            help = "Resolve/extract only bundle entries of the given class: rom, patch, or both (repeatable, comma-separable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub filter: Vec<FilterKind>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Report the bundle structure without extracting archive members (path entries stay unresolved)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_extract: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             short = 'o',
             long = "output",
             value_name = "DIR",
@@ -1620,15 +1677,19 @@ pub struct BundleCreatePatchSpec {
     pub output_checks: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct BundleCreateCommand {
+    // Field/wire name stays `rom` (the bundle's rom entry); only the CLI flag
+    // mirrors apply's `-i/--input` so the webapp wasm wire is untouched.
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long,
-            help = "Local ROM file; its checksums/size become the bundle's rom checks"
+            short = 'i',
+            long = "input",
+            value_name = "INPUT",
+            help = "Local ROM file the patch chain applies to; its checksums/size become the bundle's rom checks"
         )
     )]
     #[serde(default)]
@@ -1779,7 +1840,8 @@ pub struct BundleCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-input-check",
+            long = "patch-expect-in",
+            value_name = "ALGO=HEX",
             help = "Expected pre-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as inputChecks only when it differs from the rom checks. On the wasm path this is index-aligned with --patch (one comma-separated value per entry, empty for none)"
         )
     )]
@@ -1789,7 +1851,8 @@ pub struct BundleCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-output-check",
+            long = "patch-expect-out",
+            value_name = "ALGO=HEX",
             help = "Expected post-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as outputChecks only when it differs from the final output checks"
         )
     )]
@@ -1799,7 +1862,8 @@ pub struct BundleCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "output-check",
+            long = "expect-out",
+            value_name = "ALGO=HEX",
             help = "Expected checksum of the final output once the full patch chain is applied (algo=hex; repeatable and comma-separable); emitted as output.checks"
         )
     )]
@@ -1877,6 +1941,35 @@ pub struct BundleCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksum: Vec<String>,
+    // Native-only authoring front door: read a hand-authored bundle spec (a
+    // RomWeaverBundle with local `path`s and optional/omitted checks) and bake
+    // it into the canonical checksummed bundle. `serde(skip)`/`ts(skip)` keep
+    // it off the wasm wire and out of the generated TS types (the webapp builds
+    // the command directly). `-` reads the spec from stdin.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "FILE",
+            help = "Author the bundle from a rom-weaver-bundle.json spec (local paths, checksums filled in for you); - reads the spec from stdin. Explicit flags override spec values"
+        )
+    )]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub from: Option<PathBuf>,
+    // Native-only: stamp a `$schema` reference into the emitted bundle so
+    // editors bind validation. Never auto-set (would change output bytes).
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "schema-ref",
+            value_name = "URL",
+            help = "Write this $schema URL into the emitted bundle for editor validation"
+        )
+    )]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub schema_ref: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

@@ -1,12 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://rom-weaver/schemas/rom-weaver-bundle.schema.json",
+  "$id": "https://bcasey.forgejo-pages.koof.win/rom-weaver/rom-weaver-bundle.schema.json",
   "title": "rom-weaver bundle",
   "description": "A distributable patching-workflow definition. Canonically named rom-weaver-bundle.json (plain, stream-codec compressed as rom-weaver-bundle.json.<gz|bz2|xz|zst>, or carried at the root of an archive alongside its patch/ROM members). rom-weaver also content-probes any *.json against this schema, so a differently named file that validates here is still recognized as a bundle. This schema mirrors the RomWeaverBundle Rust type; unknown fields are rejected.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "patches"],
   "properties": {
+    "$schema": {
+      "description": "Optional JSON Schema reference so editors bind autocomplete/validation when this bundle is hand-authored. Preserved verbatim by `bundle create --from`; never required.",
+      "type": "string"
+    },
     "version": {
       "description": "Bundle schema version. This build writes version 3 (version 2 added the per-patch `basis` field; version 3 added stable patch identities and the author-controlled `version`/`author` fields) and reads versions 1-3.",
       "type": "integer",

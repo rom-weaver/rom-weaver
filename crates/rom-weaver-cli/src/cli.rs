@@ -10,7 +10,7 @@ use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_app::{
     BundleCommands, Commands, JsonProgressSink, LogLevel, PatchCommands, RomWeaverRunOutputOptions,
-    RunCommandOptions, run_command,
+    RunCommandOptions, run_command, run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{NoninteractivePrompter, ProgressSink, SelectionPrompter};
@@ -221,6 +221,12 @@ pub fn main_entry() -> ExitCode {
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut io::stdout());
         return ExitCode::SUCCESS;
     }
+    // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
+    // file / point an editor at it), before any command runs.
+    if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
+        print!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA);
+        return ExitCode::SUCCESS;
+    }
     if let CliCommand::App(Commands::Patch(PatchCommands::Apply(command))) = &mut cli.command
         && let Some((_, patch_matches)) = matches.subcommand()
         && let Some((_, apply_matches)) = patch_matches.subcommand()
@@ -265,7 +271,61 @@ pub fn main_entry() -> ExitCode {
     let CliCommand::App(command) = cli.command else {
         unreachable!("completions handled and returned above");
     };
+    // `apply --tui` runs an interactive metadata wizard, then applies AND writes
+    // the bundle. It needs a terminal; scripted runs use `bundle create` /
+    // `apply --emit-bundle`.
+    let is_apply_tui =
+        matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
+    if is_apply_tui {
+        if !interactive {
+            eprintln!(
+                "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs"
+            );
+            return ExitCode::from(2);
+        }
+        return run_apply_tui(command, options, reporter, prompter);
+    }
     run_command(command, options, reporter, prompter)
+}
+
+/// Drive `apply --tui`: collect bundle metadata interactively, run the apply,
+/// then (on success) write the authored bundle.
+#[cfg(not(target_arch = "wasm32"))]
+fn run_apply_tui(
+    command: Commands,
+    options: RunCommandOptions,
+    reporter: Arc<dyn ProgressSink>,
+    prompter: Arc<dyn SelectionPrompter>,
+) -> ExitCode {
+    let Commands::Patch(PatchCommands::Apply(mut apply)) = command else {
+        unreachable!("run_apply_tui is only called for apply commands");
+    };
+    let bundle_command = match crate::interactive::run_bundle_tui(&apply) {
+        Ok(command) => command,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::from(2);
+        }
+    };
+    // Run the apply itself without the tui/emit hooks, then author the bundle.
+    apply.tui = false;
+    apply.emit_bundle = None;
+    let apply_outcome = run_command_outcome(
+        Commands::Patch(PatchCommands::Apply(apply)),
+        options,
+        Arc::clone(&reporter),
+        Arc::clone(&prompter),
+    );
+    if apply_outcome.exit_code != 0 {
+        return ExitCode::from(apply_outcome.exit_code);
+    }
+    let create_outcome = run_command_outcome(
+        Commands::Bundle(BundleCommands::Create(Box::new(bundle_command))),
+        options,
+        reporter,
+        prompter,
+    );
+    ExitCode::from(create_outcome.exit_code)
 }
 
 #[cfg(target_arch = "wasm32")]
