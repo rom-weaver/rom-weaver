@@ -215,28 +215,28 @@ const LogDialog = ({
           <h2 className="dlg-title" id="log-title">
             {localizer.message("ui.log.viewLabel")}
           </h2>
+          {hasPrevious ? (
+            <fieldset className="logview">
+              <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+              <button
+                aria-pressed={!showingPrevious}
+                className="seg-btn"
+                onClick={() => setView("current")}
+                type="button"
+              >
+                {localizer.message("ui.log.viewCurrent")}
+              </button>
+              <button
+                aria-pressed={showingPrevious}
+                className="seg-btn"
+                onClick={() => setView("previous")}
+                type="button"
+              >
+                {localizer.message("ui.log.viewPrevious")}
+              </button>
+            </fieldset>
+          ) : null}
           <div className="dlg-actions log-actions">
-            {hasPrevious ? (
-              <fieldset className="logview">
-                <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-                <button
-                  aria-pressed={!showingPrevious}
-                  className="seg-btn"
-                  onClick={() => setView("current")}
-                  type="button"
-                >
-                  {localizer.message("ui.log.viewCurrent")}
-                </button>
-                <button
-                  aria-pressed={showingPrevious}
-                  className="seg-btn"
-                  onClick={() => setView("previous")}
-                  type="button"
-                >
-                  {localizer.message("ui.log.viewPrevious")}
-                </button>
-              </fieldset>
-            ) : null}
             <button
               aria-label={localizer.message("ui.common.copy")}
               className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}

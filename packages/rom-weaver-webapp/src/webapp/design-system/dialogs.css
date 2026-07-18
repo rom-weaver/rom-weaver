@@ -38,18 +38,19 @@
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
 /* Keep view and export actions beside the title; they wrap only when the header runs out of room. */
 .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
-.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; min-inline-size: 0; }
+.rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
+.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; margin-inline-start: auto; min-inline-size: 0; }
 .rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
 .rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
 /* View-source switch: the selected segment is filled with the accent, the other
    stays muted. aria-pressed drives the visual state. */
-.rw-app .log-actions .logview {
+.rw-app .log-dlg .logview {
   flex: 0 1 auto; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
   border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well);
 }
-.rw-app .log-actions .logview .seg-btn {
+.rw-app .log-dlg .logview .seg-btn {
   flex: 1 1 0; min-inline-size: 0; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   appearance: none; cursor: pointer; border: 0; border-radius: calc(var(--r-s) - 3px);
@@ -58,12 +59,12 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background .18s, color .18s;
 }
-.rw-app .log-actions .logview .seg-btn:hover { color: var(--ink); }
-.rw-app .log-actions .logview .seg-btn[aria-pressed="true"] {
+.rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
+.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
   background: var(--thread); color: var(--thread-ink);
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
 }
-.rw-app .log-actions .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
+.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 .rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .rw-app .log-filter-bar { display: flex; align-items: center; gap: var(--sp-s); }
 .rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
