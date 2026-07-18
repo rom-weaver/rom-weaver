@@ -17,7 +17,7 @@ pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../../../docs/rom-weaver-bund
 
 /// Published, resolvable location of [`BUNDLE_JSON_SCHEMA`] (matches its `$id`).
 pub const BUNDLE_JSON_SCHEMA_URL: &str =
-    "https://bcasey.forgejo-pages.koof.win/rom-weaver/rom-weaver-bundle.schema.json";
+    "https://brandonocasey.github.io/rom-weaver/rom-weaver-bundle.schema.json";
 
 /// A distributable patching workflow definition (`rom-weaver-bundle.json`): ordered patches
 /// with an optional/required selection seed and expected input/output ROM

@@ -120,12 +120,17 @@ apex `A` records (`185.199.108-111.153`), the matching `AAAA` records
 enable **Enforce HTTPS** once the certificate is issued.
 
 The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so
-it works unchanged at an apex domain, a project subpath, or the existing Forgejo
-mirror. One value is **not** relative: the bundle schema's `$id` in
-`docs/rom-weaver-bundle.schema.json` is an absolute Forgejo URL. Changing it
-changes the schema's identity, so published bundles referencing the old `$id`
-keep resolving against the old host - decide deliberately rather than as part of
-a domain switch.
+it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
+
+One value is **not** relative: the bundle schema's `$id` in
+`docs/rom-weaver-bundle.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in
+`crates/rom-weaver-app/src/bundle_schema.rs` (a unit test asserts they match).
+It points at `brandonocasey.github.io`, which keeps resolving after a custom
+domain is added because Pages redirects the `github.io` origin to it - so the
+domain switch needs no second `$id` change. Treat any future edit as a change of
+the schema's identity rather than a URL update: `$schema` values are carried
+through bundles verbatim and never matched against this constant, so older
+bundles keep parsing, but they continue pointing at the previous host.
 
 ## Normal release flow
 
