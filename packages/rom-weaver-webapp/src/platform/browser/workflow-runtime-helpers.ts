@@ -1,4 +1,5 @@
 import { STANDARD_CHECKSUM_ALGORITHMS } from "../../lib/checksum-algorithms.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
 import {
   getFileNameWithoutExtension,
   getPathBaseName,
@@ -175,24 +176,22 @@ const findExtractedFile = (emittedFiles: ExtractedFileEntry[], entryName: string
   return null;
 };
 
-const isTraceLogLevel = (value: unknown) =>
-  String(value || "")
-    .trim()
-    .toLowerCase() === "trace";
-
 const emitBrowserWorkflowTrace = (
   input: { logLevel?: unknown; onLog?: (log: WorkflowRuntimeLog) => void },
   message: string,
   details?: Record<string, unknown>,
 ) => {
-  if (!isTraceLogLevel(input.logLevel)) return;
-  input.onLog?.({
-    details: details || {},
-    level: "trace",
+  if (
+    String(input.logLevel || "")
+      .trim()
+      .toLowerCase() !== "trace"
+  )
+    return;
+  emitTraceLog(
+    { logLevel: "trace", namespace: "runtime:browser-workflow", onLog: input.onLog },
     message,
-    namespace: "runtime:browser-workflow",
-    timestamp: new Date().toISOString(),
-  });
+    details || {},
+  );
 };
 
 export type { ExtractedFileEntry };

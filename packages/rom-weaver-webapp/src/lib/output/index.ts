@@ -1,6 +1,7 @@
 import type { LogLevel, LogRecord } from "../../types/logging.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PublicOutput as RuntimePublicOutput } from "../../types/workflow-runtime-types.ts";
+import { emitTraceLog } from "../logging.ts";
 
 type PublicOutput<TDestination> = {
   id: string;
@@ -39,8 +40,10 @@ const traceOutputStage = (
   details: Record<string, unknown>,
 ) => {
   if (options?.logLevel !== "trace") return;
-  options.onLog?.({
-    details: {
+  emitTraceLog(
+    { logLevel: "trace", namespace: `workflow:${options.workflow || "output"}`, onLog: options.onLog },
+    message,
+    {
       ...details,
       operation: "output",
       operationId: options.operationId,
@@ -49,11 +52,7 @@ const traceOutputStage = (
       workflow: options.workflow,
       workflowId: options.workflowId,
     },
-    level: "trace",
-    message,
-    namespace: `workflow:${options.workflow || "output"}`,
-    timestamp: new Date().toISOString(),
-  });
+  );
 };
 
 const wrapPublicOutput = <TDestination>(

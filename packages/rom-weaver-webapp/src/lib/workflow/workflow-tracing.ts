@@ -1,4 +1,5 @@
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import { emitTraceLog } from "../logging.ts";
 
 type WorkflowTraceOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type WorkflowTraceMessage = "stage.fail" | "stage.finish" | "stage.skip" | "stage.start";
@@ -20,20 +21,14 @@ const createWorkflowTracer = (workflow: WorkflowTraceName) => {
     details: Record<string, unknown> = {},
   ) => {
     if (options?.logging?.level !== "trace") return;
-    options.onLog?.({
-      details: {
-        ...details,
-        operation: "run",
-        operationId: options.trace?.operationId,
-        role,
-        stage,
-        workflow: options.trace?.workflow || workflow,
-        workflowId: options.trace?.workflowId,
-      },
-      level: "trace",
-      message,
-      namespace: `workflow:${workflow}`,
-      timestamp: new Date().toISOString(),
+    emitTraceLog({ logLevel: "trace", namespace: `workflow:${workflow}`, onLog: options.onLog }, message, {
+      ...details,
+      operation: "run",
+      operationId: options.trace?.operationId,
+      role,
+      stage,
+      workflow: options.trace?.workflow || workflow,
+      workflowId: options.trace?.workflowId,
     });
   };
 
@@ -72,16 +67,10 @@ const traceWorkflowControllerEvent = (
   details: Record<string, unknown> = {},
 ) => {
   if (context.logLevel !== "trace") return;
-  context.onLog?.({
-    details: {
-      ...details,
-      workflow: context.workflow,
-      workflowId: context.workflowId,
-    },
-    level: "trace",
-    message,
-    namespace: `workflow:${context.workflow}`,
-    timestamp: new Date().toISOString(),
+  emitTraceLog({ logLevel: "trace", namespace: `workflow:${context.workflow}`, onLog: context.onLog }, message, {
+    ...details,
+    workflow: context.workflow,
+    workflowId: context.workflowId,
   });
 };
 

@@ -8,6 +8,7 @@ import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../type
 import type { CompressionOptionValue } from "../../types/workflow-compression.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import { emitTraceLog } from "../logging.ts";
 import { COMPRESSION_DEFAULTS } from "../compression/compression-metadata.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import {
@@ -78,13 +79,7 @@ const traceOutputName = (
   details: Record<string, unknown>,
 ) => {
   if (getLogLevel(options) !== "trace") return;
-  options?.onLog?.({
-    details,
-    level: "trace",
-    message,
-    namespace: "workflow:apply",
-    timestamp: new Date().toISOString(),
-  });
+  emitTraceLog({ logLevel: "trace", namespace: "workflow:apply", onLog: options?.onLog }, message, details);
 };
 
 const getStringOption = (value: unknown, fallback: string): string =>

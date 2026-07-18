@@ -5,6 +5,7 @@ import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/wo
 import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { RomWeaverError } from "../errors.ts";
+import { emitTraceLog } from "../logging.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { romTypeFromEmittedFile } from "../runtime/run-result-parsing.ts";
 import { transferRetainedOutputOwnership } from "../runtime/workflow-runtime-worker-helpers.ts";
@@ -78,15 +79,9 @@ const traceArchivePreparation = (
   details: Record<string, unknown> = {},
 ) => {
   if (options?.logging?.level !== "trace") return;
-  options.onLog?.({
-    details: {
-      ...details,
-      operation: "input-archive",
-    },
-    level: "trace",
-    message,
-    namespace: "workflow:input-archive",
-    timestamp: new Date().toISOString(),
+  emitTraceLog({ logLevel: "trace", namespace: "workflow:input-archive", onLog: options.onLog }, message, {
+    ...details,
+    operation: "input-archive",
   });
 };
 

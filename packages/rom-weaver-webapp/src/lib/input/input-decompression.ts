@@ -2,6 +2,7 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { RomWeaverError } from "../errors.ts";
+import { emitTraceLog } from "../logging.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { isLazyExternalPatchFile } from "./binary-service.ts";
 import type { InputAsset, InputParentCompression, PreparedSidecarPatch } from "./input-assets.ts";
@@ -40,15 +41,9 @@ const traceInputDecompression = (
   details: Record<string, unknown> = {},
 ) => {
   if (options?.logging?.level !== "trace") return;
-  options.onLog?.({
-    details: {
-      ...details,
-      operation: "input-decompression",
-    },
-    level: "trace",
-    message,
-    namespace: "workflow:input-decompression",
-    timestamp: new Date().toISOString(),
+  emitTraceLog({ logLevel: "trace", namespace: "workflow:input-decompression", onLog: options.onLog }, message, {
+    ...details,
+    operation: "input-decompression",
   });
 };
 
