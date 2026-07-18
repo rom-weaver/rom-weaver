@@ -288,6 +288,53 @@ const useInputStaging = (context: InputStagingContext) => {
         label: "Preparing input...",
         message: "Preparing input...",
       };
+      const resolveRowInfo = (info: StagedInputInfo) => getStableInputInfo(info, snapshot.inputs);
+      const replaceRomInputs = (infos: StagedInputInfo[], finalized: boolean) => {
+        setRomInputs((current) => {
+          const byId = new Map(current.map((entry) => [entry.id, entry]));
+          return sortRomInputs(
+            infos.map((rawInfo, index) => {
+              const info = resolveRowInfo(rawInfo);
+              const id = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
+              const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
+              return createRomInputRow({
+                ...existing,
+                archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
+                chdMode: info.chdMode ?? existing?.chdMode,
+                cueText: info.cueText ?? existing?.cueText,
+                disabled: finalized ? disabledRef.current || busyRef.current : true,
+                gdiText: info.gdiText ?? existing?.gdiText,
+                groupId: info.groupId ?? existing?.groupId,
+                id,
+                info: {
+                  archiveName: info.archiveName || existing?.info.archiveName || "",
+                  checksumTiming: info.checksumTiming || existing?.info.checksumTiming || "",
+                  checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
+                  crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
+                  fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
+                  md5: info.checksums?.md5 || existing?.info.md5 || "",
+                  romProbe: info.romProbe ?? existing?.info.romProbe,
+                  romType: info.romType ?? existing?.info.romType,
+                  sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
+                  validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",
+                },
+                kind: info.kind ?? existing?.kind,
+                loading: !finalized,
+                order: info.order ?? index,
+                patchable: info.patchable ?? existing?.patchable,
+                progress: finalized
+                  ? null
+                  : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
+                size: info.size ?? existing?.size,
+                sourceSize: info.sourceSize ?? existing?.sourceSize,
+                splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
+                valid: finalized,
+                wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
+              });
+            }),
+          );
+        });
+      };
       setRomInputs((current) =>
         sortRomInputs(
           snapshot.inputs.map((input, index) => {
@@ -348,7 +395,7 @@ const useInputStaging = (context: InputStagingContext) => {
             size: info.size,
             sourceSize: info.sourceSize,
           });
-          mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
+          mergeRomInput(resolveRowInfo(info), {
             disabled: true,
             info: { validationPhase: "idle" },
             loading: false,
@@ -380,6 +427,11 @@ const useInputStaging = (context: InputStagingContext) => {
               ]),
             ),
           );
+        },
+        onPrepared: (infos) => {
+          if (inputStageGenerationRef.current !== generation) return;
+          emitSessionTrace("stageInput prepared", { generation, infoCount: infos.length });
+          replaceRomInputs(infos, false);
         },
         onProgress: (event) => {
           const details = getProgressDetails(event);
@@ -418,7 +470,7 @@ const useInputStaging = (context: InputStagingContext) => {
             });
             return;
           }
-          const info = getStableInputInfo(getProgressStagedInputInfo(event), snapshot.inputs);
+          const info = resolveRowInfo(getProgressStagedInputInfo(event));
           const source = typeof info.order === "number" ? snapshot.inputs[info.order] : undefined;
           // Rust's probe-manifest identified this archive as a patch-only container - move it to the
           // patch bucket instead of dead-ending the ROM extract. The move re-stages without this source
@@ -482,7 +534,7 @@ const useInputStaging = (context: InputStagingContext) => {
             size: info.size,
             sourceSize: info.sourceSize,
           });
-          mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
+          mergeRomInput(resolveRowInfo(info), {
             disabled: true,
             info: { validationPhase: "idle" },
             loading: false,
@@ -512,45 +564,7 @@ const useInputStaging = (context: InputStagingContext) => {
               wasDecompressed: info.wasDecompressed,
             })),
           });
-          setRomInputs((current) => {
-            const byId = new Map(current.map((entry) => [entry.id, entry]));
-            return sortRomInputs(
-              infos.map((rawInfo, index) => {
-                const info = getStableInputInfo(rawInfo, snapshot.inputs);
-                const stableId = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
-                return createRomInputRow({
-                  ...(stableId ? byId.get(stableId) : undefined),
-                  chdMode: info.chdMode ?? byId.get(stableId)?.chdMode,
-                  cueText: info.cueText,
-                  disabled: disabledRef.current || busyRef.current,
-                  gdiText: info.gdiText,
-                  groupId: info.groupId,
-                  id: stableId,
-                  info: {
-                    archiveName: info.archiveName || "",
-                    checksumTiming: info.checksumTiming || byId.get(stableId)?.info.checksumTiming || "",
-                    checksumVariants: info.checksumVariants,
-                    crc32: info.checksums?.crc32 || "",
-                    fileName: info.fileName || getBinarySourceFileName(snapshot.inputs[index], `Input ${index + 1}`),
-                    md5: info.checksums?.md5 || "",
-                    romProbe: info.romProbe || byId.get(stableId)?.info.romProbe,
-                    romType: info.romType || byId.get(stableId)?.info.romType,
-                    sha1: info.checksums?.sha1 || "",
-                    validationPhase: "idle",
-                  },
-                  kind: info.kind,
-                  loading: false,
-                  order: info.order ?? index,
-                  progress: null,
-                  size: info.size,
-                  sourceSize: info.sourceSize,
-                  splitBinAvailable: info.splitBinAvailable,
-                  valid: true,
-                  wasDecompressed: info.wasDecompressed,
-                });
-              }),
-            );
-          });
+          replaceRomInputs(infos, true);
           // The ROM is now staged and the controller has resolved each patch's target, so run the
           // deferred deep validation. This is the race-free trigger for a patch dropped BEFORE its
           // ROM: the card flips to "Verifying…" the moment the ROM lands, then shows the verdict.

@@ -52,6 +52,7 @@ type ApplyWorkflowSessionInput = {
 
 type ApplyWorkflowPrepareHandlers = {
   onChecksumReady?: (input: ApplyWorkflowInputState) => void;
+  onInputPrepared?: (input: ApplyWorkflowInputState | null) => void;
   onInputState?: (input: ApplyWorkflowInputState | null) => void;
   onPatchState?: (patches: ApplyWorkflowPatchState[]) => void;
   onProgress?: (event: WorkflowProgress) => void;
@@ -74,6 +75,7 @@ type PreparedApplyWorkflow = {
 // dropping the other bucket's progress events.
 type StageBatchHandlers = {
   onChecksumReady?: ApplyWorkflowPrepareHandlers["onChecksumReady"];
+  onInputPrepared?: ApplyWorkflowPrepareHandlers["onInputPrepared"];
   onInputProgress?: (event: ProgressEvent) => void;
   onInputState?: ApplyWorkflowPrepareHandlers["onInputState"];
   onPatchProgress?: (event: ProgressEvent) => void;

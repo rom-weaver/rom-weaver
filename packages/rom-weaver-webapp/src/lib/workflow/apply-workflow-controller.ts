@@ -218,7 +218,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   async setInput(
     input: TSource | TSource[],
-    options?: { onFinalized?: (input: ApplyWorkflowInputState | null) => void },
+    options?: {
+      onPrepared?: (input: ApplyWorkflowInputState | null) => void;
+      onFinalized?: (input: ApplyWorkflowInputState | null) => void;
+    },
   ): Promise<void> {
     return this.mutate("setInput", async () => {
       this.trace("input.set.start", {
@@ -263,6 +266,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           selectedCandidateId: this.inputSession.view.state.selectedCandidateId,
           status: this.inputSession.view.state.status,
         });
+        // Publish the resolved asset shape before checksumming. Loose CUE/GDI sets already have
+        // their shared disc group here, so hosts can collapse the raw drop rows into one live card
+        // instead of waiting for every track checksum to finish.
+        options?.onPrepared?.(this.getInput());
         const endFinalize = startStageSpan("setInput:finalizeStableState");
         await this.finalizeInputStableState();
         endFinalize();

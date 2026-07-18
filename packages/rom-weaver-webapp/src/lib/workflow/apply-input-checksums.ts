@@ -48,9 +48,12 @@ const finalizeApplyInputChecksums = async <TSource>(
     const stage = checksumStages[index];
     if (!(stage && stage.state.status === "ready" && stage.preparedInputAssets?.[0]?.file)) continue;
     const assets = stage.preparedInputAssets || [];
+    let resolvedOrder = 0;
     for (let assetIndex = 0; assetIndex < assets.length; assetIndex += 1) {
       const asset = assets[assetIndex];
       if (!(asset?.file && isChecksummableInputAsset(asset))) continue;
+      const order = resolvedOrder;
+      resolvedOrder += 1;
       if (asset.checksums) continue;
       const precomputed = getPatchFilePrecomputedChecksums(asset.file);
       if (precomputed) {
@@ -78,7 +81,7 @@ const finalizeApplyInputChecksums = async <TSource>(
           ...stage.state,
           decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
           fileName: checksumFileName,
-          order: assetIndex,
+          order,
           parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
           size: asset.size,
           sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),

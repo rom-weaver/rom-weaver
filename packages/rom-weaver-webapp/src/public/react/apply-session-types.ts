@@ -172,6 +172,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     handlers: {
       onChecksum: (info: StagedInputInfo) => void;
       onImplicitPatches?: (patches: BinarySource[], infos?: Array<StagedInputInfo | null | undefined>) => void;
+      onPrepared?: (infos: StagedInputInfo[]) => void;
       onProgress: (event: ProgressEvent) => void;
       onState: (info: StagedInputInfo) => void;
     },

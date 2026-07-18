@@ -546,6 +546,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             // the input is checksummed, before the patch (re)validation inside setInput runs - that
             // validation is a patch concern and reports only on the patch row.
             .setInput(snapshot.inputs, {
+              onPrepared: (state) => {
+                handlers.onInputPrepared?.(state);
+                emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input prepared", { input: state });
+              },
               onFinalized: (state) => {
                 handlers.onInputState?.(state);
                 if (state?.checksums) handlers.onChecksumReady?.(state);
@@ -722,6 +726,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     const mergedHandlers: ApplyWorkflowPrepareHandlers = {
       onChecksumReady: (state) => {
         for (const member of members) member.handlers.onChecksumReady?.(state);
+      },
+      onInputPrepared: (state) => {
+        for (const member of members) member.handlers.onInputPrepared?.(state);
       },
       onInputState: (state) => {
         for (const member of members) member.handlers.onInputState?.(state);
@@ -917,6 +924,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           wasDecompressed?: boolean;
         }) => void;
         onImplicitPatches?: (patches: BinarySource[], infos?: Array<StagedInputInfo | null | undefined>) => void;
+        onPrepared?: (infos: StagedInputInfo[]) => void;
         onProgress: (event: ProgressEvent) => void;
         onState: (info: {
           archiveName?: string;
@@ -942,6 +950,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             for (const info of toStagedInputInfos(state, input.inputs)) {
               if (info) handlers.onChecksum(info);
             }
+          },
+          onInputPrepared: (state) => {
+            handlers.onPrepared?.(toStagedInputInfos(state, input.inputs));
           },
           onInputProgress: handlers.onProgress,
           onInputState: (state) => {

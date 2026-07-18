@@ -669,6 +669,28 @@ const renderDiscGroup = (
       progress: toWorkflowChecksumProgressProps(checksumProgress),
     };
   });
+  const staging = trackRows.some((row) => !!row.progress);
+  let overallPercent: number | null = null;
+  if (staging && totalBytes > 0) {
+    let completedBytes = 0;
+    let determinate = true;
+    for (const [index, row] of trackRows.entries()) {
+      const bytes = row.size ?? row.sourceSize;
+      if (!(typeof bytes === "number" && Number.isFinite(bytes))) {
+        determinate = false;
+        break;
+      }
+      const progress = tracks[index]?.progress;
+      if (!row.progress && (row.info.crc32 || row.info.md5 || row.info.sha1)) completedBytes += bytes;
+      else if (row.progress?.value === "waiting") continue;
+      else if (typeof progress?.percent === "number") completedBytes += bytes * (progress.percent / 100);
+      else {
+        determinate = false;
+        break;
+      }
+    }
+    if (determinate) overallPercent = (completedBytes / totalBytes) * 100;
+  }
   return {
     card: {
       extract: {
@@ -680,10 +702,13 @@ const renderDiscGroup = (
         always: true,
       },
       meta:
-        totalBytes || discRomTypeTag ? (
+        totalBytes || discRomTypeTag || staging ? (
           <>
             {totalBytes ? <span className="fsize mono">{formatByteSize(totalBytes)}</span> : null}
             {discRomTypeTag ? <span className="meta-fmt mono">{discRomTypeTag}</span> : null}
+            {staging ? (
+              <StageStatus id={`rom-weaver-progress-disc-${groupId}`} label="Checksumming…" percent={overallPercent} />
+            ) : null}
           </>
         ) : undefined,
       onRemove: removeDisc,
@@ -694,6 +719,7 @@ const renderDiscGroup = (
         ...(gdiText ? { gdi: { gdiText } } : {}),
       },
       removeLabel: "Remove disc",
+      stageBar: stageBarValue(staging, overallPercent),
       state,
     },
     id: groupId,
