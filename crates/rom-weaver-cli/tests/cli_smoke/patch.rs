@@ -2538,6 +2538,79 @@ fn patch_apply_positional_patch_header_binds_to_preceding_patch() {
     );
 }
 
+/// `weave` and `patch weave` are aliases of `patch apply`. Top-level `weave`
+/// nests the apply args one level shallower, so cover the positional
+/// `--patch-header` alignment (which reads raw argv matches) on both spellings.
+#[test]
+fn weave_aliases_match_patch_apply() {
+    let temp = setup_temp_dir();
+    let base = b"hello old world".to_vec();
+    let headered = with_nes_header(&base);
+    fs::write(temp.child("input.nes").path(), &headered).expect("fixture");
+    fs::write(
+        temp.child("headered.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 16,
+                data: b"A".to_vec(),
+            }],
+            Some(headered.len() as u32),
+        ),
+    )
+    .expect("fixture");
+    fs::write(
+        temp.child("headerless-second.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 1,
+                data: b"B".to_vec(),
+            }],
+            Some(base.len() as u32),
+        ),
+    )
+    .expect("fixture");
+    let expected = with_nes_header(b"ABllo old world");
+
+    let input = temp.child("input.nes");
+    let input = input.path().to_str().expect("path").to_string();
+    let headered = temp.child("headered.ips");
+    let headered = headered.path().to_str().expect("path").to_string();
+    let second = temp.child("headerless-second.ips");
+    let second = second.path().to_str().expect("path").to_string();
+
+    for (index, spelling) in [vec!["weave"], vec!["patch", "weave"]].iter().enumerate() {
+        let output_name = format!("output-weave-{index}.nes");
+        let output_child = temp.child(&output_name);
+        let output_path = output_child.path().to_str().expect("path").to_string();
+        let mut args = spelling.clone();
+        args.extend_from_slice(&[
+            "--input",
+            &input,
+            "--patch",
+            &headered,
+            "--patch",
+            &second,
+            // Binds to the SECOND patch only - same argv-order semantics as apply.
+            "--patch-header",
+            "strip",
+            "--output",
+            &output_path,
+            "--no-compress",
+            "--json",
+        ]);
+
+        let output = command_stdout(&args, 0);
+        let json = parse_single_json_line(&output);
+        // The alias normalizes to the canonical command before dispatch.
+        assert_eq!(json["command"], "patch-apply");
+        assert_eq!(json["status"], "succeeded");
+        assert_eq!(
+            fs::read(temp.child(&output_name).path()).expect("output"),
+            expected
+        );
+    }
+}
+
 #[test]
 fn patch_apply_auto_header_strips_when_patch_targets_headerless_bytes() {
     let temp = setup_temp_dir();

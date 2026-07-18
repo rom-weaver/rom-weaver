@@ -9,8 +9,8 @@ use std::sync::Arc;
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_app::{
-    BundleCommands, Commands, JsonProgressSink, LogLevel, PatchCommands, RomWeaverRunOutputOptions,
-    RunCommandOptions, run_command, run_command_outcome,
+    BundleCommands, Commands, JsonProgressSink, LogLevel, PatchApplyCommand, PatchCommands,
+    RomWeaverRunOutputOptions, RunCommandOptions, run_command, run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{NoninteractivePrompter, ProgressSink, SelectionPrompter};
@@ -136,6 +136,12 @@ struct Cli {
 enum CliCommand {
     #[command(flatten)]
     App(Commands),
+    /// Top-level spelling of `patch apply`. Normalized away in [`main_entry`]
+    /// before dispatch, so it never reaches the shared `Commands` enum.
+    #[command(
+        about = "Apply one or more ROM patch files to an input in sequence (alias of `patch apply`)"
+    )]
+    Weave(Box<PatchApplyCommand>),
     #[command(about = "Generate a shell completion script (bash, zsh, fish, powershell, elvish)")]
     Completions {
         #[arg(value_name = "SHELL", help = "Shell to generate completions for")]
@@ -227,9 +233,21 @@ pub fn main_entry() -> ExitCode {
         print!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA);
         return ExitCode::SUCCESS;
     }
+    // `weave` is a top-level spelling of `patch apply`; fold it into the shared
+    // enum so everything downstream sees exactly one command shape.
+    cli.command = match cli.command {
+        CliCommand::Weave(command) => {
+            CliCommand::App(Commands::Patch(PatchCommands::Apply(command)))
+        }
+        other => other,
+    };
     if let CliCommand::App(Commands::Patch(PatchCommands::Apply(command))) = &mut cli.command
-        && let Some((_, patch_matches)) = matches.subcommand()
-        && let Some((_, apply_matches)) = patch_matches.subcommand()
+        && let Some(apply_matches) = match matches.subcommand() {
+            // Top-level `weave` puts the apply args one level shallower than `patch apply`.
+            Some(("weave", apply_matches)) => Some(apply_matches),
+            Some((_, patch_matches)) => patch_matches.subcommand().map(|(_, args)| args),
+            None => None,
+        }
     {
         command.align_patch_header_modes(apply_matches);
         command.align_patch_basis(apply_matches);
@@ -350,6 +368,32 @@ mod tests {
         assert_eq!(color_override(false, false), None);
         assert_eq!(color_override(true, false), Some(true));
         assert_eq!(color_override(false, true), Some(false));
+    }
+
+    /// `weave` is accepted as a spelling of `patch apply` on the CLI (both
+    /// top-level and under `patch`) and on the JSON wire the wasm layer uses.
+    #[test]
+    fn weave_is_accepted_everywhere() {
+        for argv in [
+            ["rom-weaver", "weave", "--input", "a.nes"].as_slice(),
+            ["rom-weaver", "patch", "weave", "--input", "a.nes"].as_slice(),
+        ] {
+            assert!(
+                cli_command().try_get_matches_from(argv).is_ok(),
+                "{argv:?} parses"
+            );
+        }
+
+        let weave: rom_weaver_app::PatchCommands =
+            serde_json::from_str(r#"{"type":"weave","args":{"input":"a.nes"}}"#)
+                .expect("weave tag deserializes");
+        assert!(matches!(weave, rom_weaver_app::PatchCommands::Apply(_)));
+        // Serialization stays canonical, so the generated TS union is unaffected.
+        assert!(
+            serde_json::to_string(&weave)
+                .expect("serialize")
+                .contains(r#""type":"apply""#)
+        );
     }
 
     #[test]
