@@ -96,7 +96,7 @@
   /* Keep the view/export controls in the mobile header; the action group can
      wrap internally when the sheet is narrower than its controls. */
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
-  .rw-app .log-actions { order: 0; flex-basis: auto; margin-inline-start: 0; }
+  .rw-app .log-actions { order: 0; flex-basis: auto; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   /* checksum rows: reclaim horizontal space so a full SHA-1 stays on one line
      on a phone - drop the group indent, trim row padding, shrink the copy
