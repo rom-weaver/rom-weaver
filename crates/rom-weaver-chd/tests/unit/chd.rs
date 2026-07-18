@@ -10,6 +10,13 @@
 
 use super::*;
 
+#[test]
+fn split_checksum_workers_share_the_operation_thread_budget() {
+    assert_eq!(disc_extract::split_checksum_thread_budget(10, 8), 1);
+    assert_eq!(disc_extract::split_checksum_thread_budget(10, 4), 2);
+    assert_eq!(disc_extract::split_checksum_thread_budget(10, 3), 3);
+}
+
 // --- CD sector ECC ---------------------------------------------------------
 
 /// MAME CD sync header that prefixes every reconstructable 2352-byte sector.

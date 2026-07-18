@@ -1,5 +1,11 @@
 use super::*;
 
+/// Split tracks retain their checksum workers concurrently, so divide rather than duplicate the
+/// operation budget. A one-thread share hashes inline and consumes no WASI worker slot.
+pub(super) fn split_checksum_thread_budget(operation_threads: usize, output_count: usize) -> usize {
+    (operation_threads / output_count.max(1)).max(1)
+}
+
 /// Cook a CD/GD data-frame payload for extraction: audio sectors are byte-swapped (CHD stores
 /// audio big-endian); data sectors pass through untouched.
 fn cook_disc_frame_payload<'d>(track: &DiscTrack, data: &'d [u8]) -> Cow<'d, [u8]> {
@@ -1355,13 +1361,23 @@ impl ChdContainerHandler {
 
         let mut track_writers = Vec::with_capacity(layout.tracks.len());
         let mut track_checksums = Vec::with_capacity(layout.tracks.len());
+        let checksum_threads = split_checksum_thread_budget(
+            execution.effective_threads,
+            write_split_tracks
+                .iter()
+                .filter(|selected| **selected)
+                .count(),
+        );
         for (track_index, track_name) in split_track_names.iter().enumerate() {
             if write_split_tracks[track_index] {
                 let track_path = request.out_dir.join(track_name);
                 let writer = sink.cleanup.create_output(&track_path, request.overwrite)?;
                 sink.produced_outputs.push(track_path.clone());
                 track_writers.push(Some(BufWriter::new(writer)));
-                track_checksums.push(create_extract_checksum(context)?);
+                track_checksums.push(StreamingChecksum::new_parallel(
+                    context.extract_checksum_algorithms(),
+                    checksum_threads,
+                )?);
             } else {
                 track_writers.push(None);
                 track_checksums.push(None);
