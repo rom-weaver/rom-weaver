@@ -2,9 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+  # Gated on CI rather than `push: main` so a red pipeline can never reach
+  # crates.io, npm, or ghcr - those publishes are irreversible.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: release
@@ -12,6 +15,9 @@ concurrency:
 
 jobs:
   release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
