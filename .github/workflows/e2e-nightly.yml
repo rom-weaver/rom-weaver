@@ -56,6 +56,9 @@ jobs:
       - name: Run exhaustive E2E matrix
         run: mise run test-e2e-nightly
 
+      - name: Verify production service worker and offline isolation
+        run: npm --prefix packages/rom-weaver-webapp run verify:sw:no-coop-coep
+
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

@@ -8,7 +8,7 @@ import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
@@ -16,6 +16,9 @@ const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 const A11Y_ONLY = process.argv.includes("--a11y");
+const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
+const browserType = { chromium, webkit }[browserName];
+if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -237,7 +240,7 @@ const main = async () => {
       const unlistedStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
       if (unlistedStatus !== 404) throw new Error(`unlisted corpus file returned ${unlistedStatus}, expected 404`);
     }
-    const browser = await chromium.launch({ headless: true });
+    const browser = await browserType.launch({ headless: true });
     try {
       await runAccessibilityAudit(browser, baseUrl);
       if (A11Y_ONLY) return;

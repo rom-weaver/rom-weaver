@@ -7,7 +7,9 @@ import { chromium } from "playwright";
 
 const ROOT_URL = process.env.ROM_WEAVER_VERIFY_URL || "https://localhost:4173/";
 const PORT = new URL(ROOT_URL).port || "4173";
-const STARTUP_TIMEOUT_MS = 15000;
+// `npm run preview` includes the production WASM + Vite build gate. A clean CI
+// runner can spend minutes there before the preview server prints its URL.
+const STARTUP_TIMEOUT_MS = Number(process.env.ROM_WEAVER_VERIFY_STARTUP_TIMEOUT_MS || 300000);
 const PAGE_TIMEOUT_MS = 20000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,14 +37,25 @@ const readIsolationHeaders = (headers) => ({
   crossOriginResourcePolicy: headers["cross-origin-resource-policy"] || null,
 });
 
+const signalPreview = (child, signal) => {
+  try {
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+};
+
 const startPreview = () =>
   new Promise((resolve, reject) => {
     const child = spawn("npm", ["run", "preview", "--", "--port", PORT, "--no-coop-coep"], {
       cwd: process.cwd(),
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
     const timer = setTimeout(() => {
+      signalPreview(child, "SIGINT");
       reject(new Error(`Preview did not start within ${STARTUP_TIMEOUT_MS}ms.\n${output}`));
     }, STARTUP_TIMEOUT_MS);
     const onData = (chunk) => {
@@ -67,9 +80,9 @@ const stopPreview = (child) =>
       return;
     }
     child.once("exit", () => resolve());
-    child.kill("SIGINT");
+    signalPreview(child, "SIGINT");
     setTimeout(() => {
-      if (child.exitCode === null) child.kill("SIGTERM");
+      if (child.exitCode === null) signalPreview(child, "SIGTERM");
     }, 2000);
   });
 

@@ -63,6 +63,7 @@
     "test:e2e:nightly": "node scripts/run-e2e.mjs nightly",
     "test:e2e:ios": "node scripts/start-ios-e2e.mjs",
     "test:e2e:webapp": "node scripts/run-webapp-e2e.mjs",
+    "test:e2e:webapp:webkit": "ROM_WEAVER_BROWSER=webkit node scripts/run-webapp-e2e.mjs",
     "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs",
     "audit:strings": "if rg --hidden --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi"
   },
