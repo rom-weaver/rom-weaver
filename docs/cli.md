@@ -47,7 +47,7 @@ process local files:
 ```bash
 docker run --rm --volume "$PWD:/data" \
   ghcr.io/brandonocasey/rom-weaver-cli:latest \
-  probe /data/game.sfc
+  probe --input /data/game.sfc
 ```
 
 ### Development checkout
@@ -61,8 +61,8 @@ Inspect an unknown file. Container payloads are resolved automatically unless
 `--no-extract` is supplied:
 
 ```bash
-rom-weaver probe unknown-file.bin
-rom-weaver probe archive.zip --select '*.sfc'
+rom-weaver probe --input unknown-file.bin
+rom-weaver probe --input archive.zip --select '*.sfc'
 ```
 
 Apply one patch or an ordered patch chain:
@@ -98,19 +98,22 @@ rom-weaver patch create \
 Extract a container and checksum a ROM:
 
 ```bash
-rom-weaver extract collection.7z --out-dir extracted
-rom-weaver checksum game.gba --algo sha256
+rom-weaver extract --input collection.7z --output extracted
+rom-weaver checksum --input game.gba --algo sha256
 ```
 
 Compress files or trim a supported ROM in place:
 
 ```bash
-rom-weaver compress track.cue track.bin --output disc.chd --format chd
-rom-weaver trim game.nds --in-place --revert-marker
-rom-weaver trim game.nds --in-place --revert
+rom-weaver compress --input track.cue --input track.bin --output disc.chd --format chd
+rom-weaver trim --input game.nds --in-place --revert-marker
+rom-weaver trim --input game.nds --in-place --revert
 ```
 
-Run `rom-weaver <command> --help` for every option and caveat on a command.
+Every command reads its inputs from `-i`/`--input` and writes to `-o`/`--output`;
+short flags exist for the common options (`-i` input, `-o` output, `-j` threads,
+`-f` format, `-s` select, `-a` algo, `-n` dry-run). Run
+`rom-weaver <command> --help` for every option and caveat on a command.
 
 ## Commands
 
@@ -137,10 +140,16 @@ Global flags:
 - `-v`, `-vv`, and `-vvv` (or `--verbose`) select info, debug, and trace logging.
 - `-q` or `--quiet` selects error-only application logging.
 - `--dep-trace` enables trace logs from dependencies such as `nod` while keeping application logs at warning level unless another log level is selected.
+- `--color` and `--no-color` override colored output. Precedence is flag, then the `NO_COLOR` environment variable, then a terminal-vs-piped default; `--color` forces color even when piped (the live progress bar stays terminal-only).
 
-Most data-processing commands also accept `--threads auto|N`. `auto` uses the
+Most data-processing commands also accept `-j`/`--threads auto|N`. `auto` uses the
 available platform parallelism; a positive integer supplies an upper thread
 budget, which each format may reduce when its implementation has a lower cap.
+
+List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
+`--expect-out`, `--assume-in`, and the compression codec flags) are repeatable
+and comma-separable: `--algo crc32,sha1` and `--algo crc32 --algo sha1` are
+equivalent.
 
 Interactive selection is available only in non-JSON sessions where stdin and
 stderr are terminals.
@@ -150,17 +159,18 @@ stderr are terminals.
 `probe`, `extract`, `checksum`, and patching commands can look through archive
 containers automatically.
 
-- `--select` chooses payloads by exact name, prefix, or glob.
-- `--rom-filter` keeps ROM-like candidates.
-- `--patch-filter` keeps patch-like candidates.
+- `-s`/`--select` chooses payloads by exact name, prefix, or glob.
+- `--filter rom` keeps ROM-like candidates; `--filter patch` keeps patch-like
+  candidates. The flag is repeatable and comma-separable (`--filter rom,patch`).
 - `--no-ignore` includes common sidecar files normally ignored by selection.
 - `--no-extract` operates on the source bytes directly.
 
 `extract` recursively handles nested containers up to depth 8 by default. Use
-`--no-nested-extract` to stop after the first layer. While extracting, it can
-also hash outputs (`--checksum ALGO`, or `--checksum-rom ALGO` to hash only
-ROM-like outputs), refuse to overwrite existing files (`--no-overwrite`), and
-fold container/platform probe metadata into the result (`--probe`).
+`--no-nested-extract` to stop after the first layer. It refuses to overwrite an
+existing destination by default and fails if one is present; pass `--force` to
+overwrite. While extracting, it can also hash outputs (`--checksum ALGO`, or
+`--checksum-rom ALGO` to hash only ROM-like outputs) and fold
+container/platform probe metadata into the result (`--probe`).
 
 ## Patch apply behavior
 
@@ -168,11 +178,10 @@ fold container/platform probe metadata into the result (`--probe`).
 - Patch checksum validation is strict by default for formats that embed
   checksums. `--ignore-checksum-validation` bypasses recoverable validation
   failures.
-- `--validate-with-checksum ALGO=HEX` validates the effective input before
-  patching.
-- `--validate-output-checksum ALGO=HEX` validates the final output.
-- `--checksum-cache ALGO=HEX` supplies a trusted input checksum without
-  recomputing it.
+- `--expect-in ALGO=HEX` validates the effective input before patching.
+- `--expect-out ALGO=HEX` validates the final output.
+- `--assume-in ALGO=HEX` supplies a trusted input checksum without recomputing
+  it.
 - `--patch-header auto|keep|strip` controls copier-header handling per patch.
 - `--output-header auto|keep|strip` controls the final ROM header.
 - `--repair-checksum` repairs supported ROM headers and checksums after apply.
@@ -194,8 +203,9 @@ header/checksum transforms.
 
 `patch validate` runs the same checks as `patch apply` without writing
 output: format parsing, embedded patch checksums, and optional input
-preflight (`--validate-with-checksum`, `--validate-with-size`,
-`--validate-with-min-size`). `--strip-header` and `--n64-byte-order` apply
+preflight via `--expect-in`, whose tokens accept a checksum (`ALGO=HEX`), an
+exact size (`size=N`), or a minimum size (`min-size=N`). `--strip-header` and
+`--n64-byte-order` apply
 the matching input transform before validation; N64 byte order defaults to
 checksum-driven auto detection. Patches validate as a
 sequential chain by default; `--independent` validates each `--patch`
@@ -230,8 +240,8 @@ bundle together with its sources into one shareable archive;
 `--no-bundle-rom` keeps the ROM out and records its checks only, which is
 the usual shape for distributing patches.
 
-`bundle parse <bundle>` validates a bundle and resolves its referenced
-entries (`--extract-dir` extracts archive members). To apply one, run
+`bundle parse --input <bundle>` validates a bundle and resolves its referenced
+entries (`--output <dir>` extracts archive members). To apply one, run
 `rom-weaver patch apply --bundle <path-or-url>`; `--with` and `--without`
 override which optional patches run.
 
@@ -350,7 +360,7 @@ orders. `--no-trim-fix` disables automatic trim-boundary variants.
 - RVZ scrub candidates detected by the format recommendation
 
 `--in-place` rewrites the source file; `--output` or `--extension` write the
-trimmed copy elsewhere instead, and `--simulate` reports what would change
+trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change
 without writing anything.
 
 `--revert` supports NDS, GBA, and 3DS. It does not support XISO or RVZ scrub
@@ -370,8 +380,26 @@ warnings, selected inputs, and emitted-file metadata where relevant. JSON mode
 disables interactive selection, making it the stable interface for scripts:
 
 ```bash
-rom-weaver --json probe game.sfc | jq
+rom-weaver --json probe --input game.sfc | jq
 ```
+
+### Exit codes
+
+`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an
+unsupported operation or a command-line usage error, and `130` when a run is
+cancelled.
+
+## Shell completions
+
+Generate a completion script for your shell and load it however that shell
+expects:
+
+```bash
+rom-weaver completions fish > ~/.config/fish/completions/rom-weaver.fish
+rom-weaver completions bash > /etc/bash_completion.d/rom-weaver
+```
+
+Supported shells are `bash`, `zsh`, `fish`, `powershell`, and `elvish`.
 
 For format specifications and upstream implementations, see
 [`references.md`](references.md).
