@@ -539,11 +539,22 @@ impl CliApp {
         if args.checksum_name {
             // Prefer a caller-supplied source crc32 (the browser already hashes the
             // original during input prep) to avoid re-reading the original here; fall
-            // back to computing it when the value is absent or malformed. clap has
-            // already validated the token grammar via the value parser.
-            let provided_crc32 = parse_expect_tokens(&args.assume_in, "--assume-in", false)
-                .ok()
-                .and_then(|spec| spec.checksums.get("crc32").cloned());
+            // back to computing it only when no crc32 assumption was supplied. A
+            // malformed or conflicting --assume-in is a hard error, not a silent
+            // recompute, so an invalid trusted value never passes unnoticed.
+            let provided_crc32 = match parse_expect_tokens(&args.assume_in, "--assume-in", false) {
+                Ok(spec) => spec.checksums.get("crc32").cloned(),
+                Err(error) => {
+                    return self.finish(
+                        "patch-create",
+                        fail(
+                            Some(handler.descriptor().name.to_string()),
+                            "validate",
+                            error.to_string(),
+                        ),
+                    );
+                }
+            };
             let crc32 = match provided_crc32 {
                 Some(crc32) => Some(crc32),
                 None => match checksum_file_values(&args.original, &["crc32"], &context) {

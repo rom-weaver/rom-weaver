@@ -137,7 +137,7 @@ rw_extract_one() {
   local src="$1" out_dir="$2"
   rm -rf "$out_dir"
   mkdir -p "$out_dir"
-  "$rom_weaver_bin" extract "$src" --out-dir "$out_dir" --json >/dev/null
+  "$rom_weaver_bin" extract --input "$src" --output "$out_dir" --json >/dev/null
 }
 
 failures=0
@@ -165,7 +165,7 @@ log "fixture disc.img sha1=$chd_src_sha1 ($(wc -c <"$chd_src") bytes)"
 #     compress_codec_by_format for chd).
 rw_chd="$chd_dir/rw.chd"
 log "rom-weaver compress disc.img -> rw.chd"
-"$rom_weaver_bin" compress "$chd_src" --format chd --output "$rw_chd" --threads 1 --json >/dev/null
+"$rom_weaver_bin" compress --input "$chd_src" --format chd --output "$rw_chd" --threads 1 --json >/dev/null
 
 # (2) chdman must VERIFY rom-weaver's CHD: Raw SHA1 (decompressed hunks) AND
 #     Overall SHA1 (hunks + metadata). A vendored-codec regression changes the
@@ -274,7 +274,7 @@ run_dolphin() {
 #     128 KiB block).
 rw_rvz="$rvz_dir/rw.rvz"
 log "rom-weaver compress disc.iso -> rw.rvz (zstd)"
-"$rom_weaver_bin" compress "$rvz_src" --format rvz --output "$rw_rvz" --codec zstd --threads 1 --json >/dev/null
+"$rom_weaver_bin" compress --input "$rvz_src" --format rvz --output "$rw_rvz" --codec zstd --threads 1 --json >/dev/null
 
 # (2) dolphin-tool extracts rom-weaver's RVZ back to an ISO; must equal source.
 rw_rvz_roundtrip="$rvz_dir/rw-roundtrip.iso"

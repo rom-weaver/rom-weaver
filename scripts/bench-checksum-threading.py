@@ -124,6 +124,8 @@ def run_once(
     cmd = [
         str(bin_path),
         "checksum",
+        "--input",
+        str(source_path),
         "--algo",
         algorithm,
         "--threads",
@@ -133,7 +135,6 @@ def run_once(
         str(start_bytes),
         "--length",
         str(size_bytes),
-        str(source_path),
     ]
     env = os.environ.copy()
     with tempfile.TemporaryDirectory(prefix="rw-checksum-bench-") as tmpdir:

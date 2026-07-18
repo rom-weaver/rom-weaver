@@ -846,7 +846,7 @@ pub struct PatchApplyCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Validate the effective patch input before apply; ALGO=HEX checksum and/or size=N / min-size=N tokens (repeatable, comma-separable, for example: --expect-in crc32=1234abcd,size=1048576)"
+            help = "Validate the effective patch input checksum before apply; ALGO=HEX tokens (repeatable, comma-separable, for example: --expect-in crc32=1234abcd). Size gates (size=N/min-size=N) are only supported on `patch validate`"
         )
     )]
     #[serde(default)]

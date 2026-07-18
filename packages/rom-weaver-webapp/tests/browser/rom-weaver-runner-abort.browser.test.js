@@ -121,7 +121,7 @@ test("terminates a newly-created client when runner initialization fails", async
   workerClientState.initError = new Error("init boom");
   await expect(
     runRomWeaverJson({
-      args: { source: "/work/input.bin" },
+      args: { input: "/work/input.bin" },
       type: "probe",
     }),
   ).rejects.toThrow("init boom");

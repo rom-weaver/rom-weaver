@@ -118,7 +118,7 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
     expect(outputStat?.size || 0).toBeGreaterThan(0);
 
     const checksumResult = await runRomWeaverJson({
-      args: { algo: ["crc32"], no_extract: true, source: outputPath },
+      args: { algo: ["crc32"], no_extract: true, input: outputPath },
       type: "checksum",
     });
     expectRunSucceeded(checksumResult);

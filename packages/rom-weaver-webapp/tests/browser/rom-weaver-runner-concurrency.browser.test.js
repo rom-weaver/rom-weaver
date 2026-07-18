@@ -69,8 +69,8 @@ test("runs two compress operations concurrently on separate pooled runners", asy
 
     // Both outputs are independently valid archives.
     const [aChecksum, bChecksum] = await Promise.all([
-      runRomWeaverJson({ args: { algo: ["crc32"], no_extract: true, source: aOut }, type: "checksum" }),
-      runRomWeaverJson({ args: { algo: ["crc32"], no_extract: true, source: bOut }, type: "checksum" }),
+      runRomWeaverJson({ args: { algo: ["crc32"], no_extract: true, input: aOut }, type: "checksum" }),
+      runRomWeaverJson({ args: { algo: ["crc32"], no_extract: true, input: bOut }, type: "checksum" }),
     ]);
     expectRunSucceeded(aChecksum);
     expectRunSucceeded(bChecksum);
