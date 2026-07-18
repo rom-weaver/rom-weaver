@@ -15,6 +15,7 @@ import {
   NESTED_CHAIN_ZIP,
   NESTED_ROOT_ZIP,
   ONE_PATCH_7Z,
+  RAW_PATCH,
   RAW_ROM,
   selectFileInput,
   selectPatchCandidates,
@@ -199,6 +200,68 @@ test("deeply nested single patch auto-selects without a selection dialog", async
   await expect.poll(() => getPatchStackFileNames().length, { timeout: 60000 }).toBe(1);
   expect(getPatchStackFileNames()[0]).toContain("levelA.ips");
   expect(getCandidateSelectionList()).toBeNull();
+  expect(getRuntimeErrorText()).toBeFalsy();
+});
+
+test("replacing a patch from an archive pre-selects the same-named patch in the picker", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  // A bare change.ips patch, then replace it from multi-patch.zip (which carries change.ips AND
+  // alternate.ips). The picker opens with the same-named change.ips pre-checked and tagged, but the
+  // user still confirms it - it is never auto-swapped.
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
+
+  const replaceInput = document.getElementById("rom-weaver-patch-replace-input-0");
+  if (!(replaceInput instanceof HTMLInputElement)) throw new Error("Missing patch replace input");
+  selectFileInput(replaceInput, await loadFixtureFile(MULTI_PATCH_ZIP, "application/zip"));
+
+  await expect.poll(() => !!getCandidateSelectionList(), { timeout: 30000 }).toBe(true);
+  const rows = () => Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck"));
+  await expect.poll(() => rows().length, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+  const changeRow = rows().find((row) => row.textContent?.includes("change.ips"));
+  const alternateRow = rows().find((row) => row.textContent?.includes("alternate.ips"));
+  // The same-named patch is pre-selected and tagged; the other candidate starts unchecked.
+  expect(changeRow?.querySelector("input[type='checkbox']")?.checked).toBe(true);
+  expect(alternateRow?.querySelector("input[type='checkbox']")?.checked).toBe(false);
+  expect(changeRow?.textContent).toContain("matches patch");
+
+  // Confirm the pre-selected default (still the user's choice). One pick replaces the slot in place.
+  document.querySelector(".rw-modal.select-modal .selconfirm")?.click();
+
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
+  expect(
+    document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-archive")?.textContent || "",
+  ).toContain("multi-patch.zip");
+  expect(getRuntimeErrorText()).toBeFalsy();
+});
+
+test("replacing a patch from an archive with no same-named entry shows the picker with no default", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  // A patch whose name is absent from multi-patch.zip (change.ips + alternate.ips).
+  const patchBytes = await (await fetch(`/${RAW_PATCH}`)).arrayBuffer();
+  const unmatchedPatch = new File([patchBytes], "unmatched.ips", { type: "application/octet-stream" });
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), unmatchedPatch);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["unmatched.ips"]);
+
+  const replaceInput = document.getElementById("rom-weaver-patch-replace-input-0");
+  if (!(replaceInput instanceof HTMLInputElement)) throw new Error("Missing patch replace input");
+  selectFileInput(replaceInput, await loadFixtureFile(MULTI_PATCH_ZIP, "application/zip"));
+
+  await expect.poll(() => !!getCandidateSelectionList(), { timeout: 30000 }).toBe(true);
+  // With no same-named leaf there is nothing to default to: the ordinary multi-select checklist
+  // (confirm button present) shows, and nothing is tagged as matching.
+  expect(document.querySelector(".rw-modal.select-modal .selconfirm")).not.toBeNull();
+  expect(document.querySelector(".rw-modal.select-modal")?.textContent || "").not.toContain("matches patch");
+
+  // The user picks alternate.ips; it replaces the slot in place - one row, not two.
+  await selectPatchCandidates(["alternate.ips"]);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["alternate.ips"]);
   expect(getRuntimeErrorText()).toBeFalsy();
 });
 

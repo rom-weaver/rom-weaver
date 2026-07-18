@@ -17,6 +17,9 @@ type SelectionItem = {
   /** Full source archive the entry came from, rendered as a sub-heading under the name. */
   subheading?: string;
   matches?: boolean;
+  /** Checked when the multi-select picker first opens. When at least one item sets it, only the
+   * flagged items start selected; otherwise every selectable item does. */
+  defaultSelected?: boolean;
   selectable: boolean;
 };
 
@@ -79,8 +82,14 @@ const SelectionCheckList = ({
 }) => {
   const selectableItems = useMemo(() => items.filter((item) => item.selectable), [items]);
   const selectableIds = useMemo(() => selectableItems.map((item) => item.id), [selectableItems]);
-  const [selectedIds, setSelectedIds] = useState<string[]>(selectableIds);
-  useEffect(() => setSelectedIds(selectableIds), [selectableIds]);
+  // A picker may nominate default picks (the same-named leaf for a "replace from archive"); when it
+  // does, only those start selected. Otherwise every selectable entry starts selected (add-all).
+  const initialSelectedIds = useMemo(() => {
+    const defaults = selectableItems.filter((item) => item.defaultSelected).map((item) => item.id);
+    return defaults.length ? defaults : selectableIds;
+  }, [selectableItems, selectableIds]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds);
+  useEffect(() => setSelectedIds(initialSelectedIds), [initialSelectedIds]);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
   const toggle = (id: string) =>
     setSelectedIds((previous) =>

@@ -7,6 +7,9 @@ type SelectionRole = "input" | "modified" | "original" | "patch";
 type SelectionFileCandidate = {
   type: "file";
   breadcrumbs?: string[];
+  /** Pre-select (and mark as "matches") this candidate when the multi-select picker opens - the
+   * same-named default for a "replace from archive" pick. The user can still change the selection. */
+  defaultSelected?: boolean;
   fileName: string;
   id: string;
   kind: CandidateKind;

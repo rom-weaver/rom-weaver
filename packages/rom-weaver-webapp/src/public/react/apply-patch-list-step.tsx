@@ -34,6 +34,7 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
+import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
@@ -1044,6 +1045,7 @@ const PatchActionsMenu = ({
             id={`rom-weaver-patch-replace-${index}`}
             onClick={() => fileRef.current?.click()}
             role="menuitem"
+            title="Swap in a patch file, or an archive to pull the same-named patch from"
             type="button"
           >
             <RefreshCw aria-hidden="true" />
@@ -1067,8 +1069,8 @@ const PatchActionsMenu = ({
       </div>
       {onReplace ? (
         <input
-          accept=".aps,.bps,.bsdiff,.dcp,.ebp,.gdiff,.hdiff,.hpatchz,.ips,.ips32,.ppf,.rup,.solid,.ups,.vcdiff,.xdelta"
-          aria-label="Replacement patch file"
+          accept={getFileInputAcceptAttributes().patchReplace}
+          aria-label="Replacement patch file or archive"
           className="sr-only"
           id={`rom-weaver-patch-replace-input-${index}`}
           onChange={(event) => {

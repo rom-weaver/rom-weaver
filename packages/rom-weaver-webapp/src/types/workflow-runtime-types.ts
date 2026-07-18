@@ -7,6 +7,7 @@ import type { VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
+import type { PatchArchiveReplacement } from "../lib/input/patch-archive-replacement.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
 import type { RuntimeTiming } from "./output.ts";
 import type { CandidateSelectionRequest } from "./selection.ts";
@@ -56,6 +57,11 @@ type WorkflowRuntimeHooks = {
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
   onProgress?: (event: ProgressEvent) => void;
   onCandidatesFound?: (request: CandidateSelectionRequest) => void;
+  /** Patch staging preference for a "replace from archive" pick: pre-select the
+   * same-named leaf in the selection picker (the user still confirms or changes
+   * it). Set by the controller from the source's replacement marker; ignored by
+   * every other source. */
+  patchLeafPreference?: PatchArchiveReplacement;
   signal?: AbortSignal;
   trace?: {
     operationId?: string | null;

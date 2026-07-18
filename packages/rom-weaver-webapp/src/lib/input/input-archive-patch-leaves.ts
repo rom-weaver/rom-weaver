@@ -46,6 +46,25 @@ const patchLeafFilesByRequest = new WeakMap<CandidateSelectionRequest, Map<strin
 
 const PATCH_LEAF_ROOT_SEGMENTS = DEFAULT_VFS_ROOT.split("/").filter(Boolean);
 
+const stripExtension = (name: string): string => name.replace(/\.[^.]+$/, "");
+
+/** Pick the leaf that best matches `preferredName` (a "replace from archive"
+ * default): an exact base-name match wins; failing that, a name that matches
+ * once the extension is stripped (so `hack.ips` still resolves `hack.bps`).
+ * Case-insensitive. Returns undefined when nothing matches. Structural in its
+ * leaf shape so it stays a pure, unit-testable helper. */
+const matchPreferredPatchLeaf = <TLeaf extends { candidate: { fileName: string } }>(
+  leaves: readonly TLeaf[],
+  preferredName: string | undefined,
+): TLeaf | undefined => {
+  const wanted = getBaseFileName(preferredName || "").toLowerCase();
+  if (!wanted) return undefined;
+  const exact = leaves.find((leaf) => getBaseFileName(leaf.candidate.fileName).toLowerCase() === wanted);
+  if (exact) return exact;
+  const wantedStem = stripExtension(wanted);
+  return leaves.find((leaf) => stripExtension(getBaseFileName(leaf.candidate.fileName).toLowerCase()) === wantedStem);
+};
+
 /** Compute a leaf's archive-nesting breadcrumbs by stripping the extraction root (`/work`): a direct
  * patch yields `[]`, a nested patch yields its chain of containing nested-archive directories (named
  * after each archive, e.g. `["B_disc1"]`, `["C_set", "C_sub"]`). Stripping the fixed root (rather
@@ -219,8 +238,23 @@ const resolvePatchArchiveLeaf = async (
   if (leaves.length === 0) return null;
   if (leaves.length === 1) return leaves[0]?.file ?? null;
   if (typeof options?.onCandidatesFound !== "function") return leaves[0]?.file ?? null;
+  // A "replace from archive" pick never auto-swaps: it always prompts. When the archive carries a
+  // same-named leaf (the patch being replaced), surface it first and PRE-SELECT it in the picker so
+  // confirming is one click - but the user still owns the choice and can pick a different one.
+  const replacement = options?.patchLeafPreference;
+  const preferred = replacement ? matchPreferredPatchLeaf(leaves, replacement.preferredName) : undefined;
+  const orderedLeaves = preferred ? [preferred, ...leaves.filter((entry) => entry !== preferred)] : leaves;
+  if (preferred) {
+    traceArchivePreparation(options, "input.archive.patch.replace.preselect", {
+      file: describeArchiveFileForTrace(archiveFile),
+      leafPath: preferred.candidate.path,
+      preferredName: replacement?.preferredName || "",
+    });
+  }
   const request: CandidateSelectionRequest = {
-    candidates: leaves.map((entry) => entry.candidate),
+    candidates: orderedLeaves.map((entry) =>
+      entry === preferred ? { ...entry.candidate, defaultSelected: true } : entry.candidate,
+    ),
     multiSelect: true,
     role: "patch",
     sourceIndex,
@@ -230,12 +264,16 @@ const resolvePatchArchiveLeaf = async (
   patchLeafFilesByRequest.set(
     request,
     new Map(
-      leaves.map((entry) => [entry.candidate.id, { file: entry.file, parentCompressions: entry.parentCompressions }]),
+      orderedLeaves.map((entry) => [
+        entry.candidate.id,
+        { file: entry.file, parentCompressions: entry.parentCompressions },
+      ]),
     ),
   );
   traceArchivePreparation(options, "input.archive.patch.register", {
-    candidateIds: leaves.map((entry) => entry.candidate.id),
-    count: leaves.length,
+    candidateIds: orderedLeaves.map((entry) => entry.candidate.id),
+    count: orderedLeaves.length,
+    preselected: preferred?.candidate.id,
     sourceName: request.sourceName,
   });
   options.onCandidatesFound(request);
@@ -262,5 +300,6 @@ export {
   buildPatchArchiveLeaves,
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
+  matchPreferredPatchLeaf,
   resolvePatchArchiveLeaf,
 };

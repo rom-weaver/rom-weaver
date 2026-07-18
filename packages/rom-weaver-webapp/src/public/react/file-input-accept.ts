@@ -37,6 +37,9 @@ const ROM_AND_PATCH_FILTER_ACCEPT = toAcceptList([
   ...PATCH_FILE_EXTENSION_VARIANTS,
   "json",
 ]);
+// The per-card "Replace file…" picker: a bare patch, or an archive to pull the
+// replacement patch out of (defaulting to the same-named leaf).
+const PATCH_REPLACE_ACCEPT = toAcceptList([...PATCH_FILE_EXTENSION_VARIANTS, ...ARCHIVE_FILE_EXTENSIONS]);
 
 const FILE_ONLY_MIME_TYPES = [
   "application/octet-stream",
@@ -76,12 +79,14 @@ const isMobileSafari = (environment: FileInputAcceptEnvironment) => {
 const getFileInputAcceptAttributes = (environment = getNavigatorAcceptEnvironment()) => {
   if (isMobileSafari(environment)) {
     return {
+      patchReplace: FILE_ONLY_ACCEPT,
       unifiedApply: FILE_ONLY_ACCEPT,
       unifiedRom: FILE_ONLY_ACCEPT,
     };
   }
 
   return {
+    patchReplace: PATCH_REPLACE_ACCEPT,
     unifiedApply: ROM_AND_PATCH_FILTER_ACCEPT,
     unifiedRom: ROM_FILTER_ACCEPT,
   };

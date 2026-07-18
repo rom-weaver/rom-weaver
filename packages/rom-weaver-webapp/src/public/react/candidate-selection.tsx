@@ -56,8 +56,13 @@ function CandidateSelectionDialog({
     );
     const [archiveLabel, ...folderSegments] = breadcrumbs;
     const nameWithFolder = folderSegments.length ? `${folderSegments.join(" › ")} › ${primaryLabel}` : primaryLabel;
+    // The same-named "replace from archive" default: pre-checked in the picker and tagged so the eye
+    // lands on it, while every candidate stays selectable.
+    const defaultSelected = candidate.type === "file" && candidate.defaultSelected;
     return {
+      defaultSelected: defaultSelected || undefined,
       id: candidate.id,
+      matches: defaultSelected || undefined,
       name: nameWithFolder,
       note: warningLabel || undefined,
       selectable: candidate.selectable,

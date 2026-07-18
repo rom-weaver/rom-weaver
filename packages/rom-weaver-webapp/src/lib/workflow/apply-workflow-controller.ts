@@ -19,6 +19,7 @@ import { isCompressionFormat } from "../compression/container-format-registry.ts
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPatchFileBlob, getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
 import type { InputAsset, InputParentCompression, PreparedSidecarPatch } from "../input/input-assets.ts";
+import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
@@ -870,6 +871,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       base: this.createExecutionOptions(),
       emitProgress: (event) => this.emitProgress(event),
       onCandidatesFound: (request) => requests.push(request),
+      patchLeafPreference: getPatchArchiveReplacement(stage.source),
       state: stage.state,
       workflowId: this.id,
     });
@@ -952,6 +954,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       base: this.createExecutionOptions(),
       emitProgress: (event) => this.emitProgress(event),
       onCandidatesFound: (request) => requests.push(request),
+      patchLeafPreference: getPatchArchiveReplacement(stage.source),
       state: stage.state,
       workflowId: this.id,
     });

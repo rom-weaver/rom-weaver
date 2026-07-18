@@ -23,3 +23,9 @@ test("rom+patch-filter accept list adds patch extensions", () => {
 
   expect(getFileInputAcceptAttributes({ userAgent: "Chrome" }).unifiedApply.split(",")).toEqual(expected);
 });
+
+test("patch-replace accept list covers patch and archive extensions", () => {
+  const expected = unique([...patchVariants, ...containerExtensions].map((extension) => `.${extension}`));
+
+  expect(getFileInputAcceptAttributes({ userAgent: "Chrome" }).patchReplace.split(",")).toEqual(expected);
+});

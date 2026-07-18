@@ -1,6 +1,8 @@
 import { type Dispatch, type SetStateAction, useMemo } from "react";
+import { markPatchArchiveReplacement } from "../../lib/input/patch-archive-replacement.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createRomInputRow } from "./apply-session-inputs.ts";
+import { isArchiveFileName } from "./file-classification.ts";
 import { getTraceSourceSummaries, getTraceSourceSummary, logUiError } from "./apply-session-logging.ts";
 import type { useLocalPatcherSessionState } from "./apply-session-state.ts";
 import type {
@@ -13,6 +15,7 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { toError } from "./patcher-form-session-utils.ts";
 import type { PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
+import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
 const logger = createLogger("patcher-controllers");
 
@@ -214,8 +217,20 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
       replaceItem: (index: number, source: BinarySource) => {
         const { actions, state } = contextRef.current;
         if (index < 0 || index >= state.activePatches.length) return;
-        logger.debug("patch replace", { fileName: (source as File).name, index });
-        actions.updatePatches(state.activePatches.map((patch, patchIndex) => (patchIndex === index ? source : patch)));
+        // Replacing from a patch archive: mark it with the replaced card's name so the selection
+        // picker pre-selects the same-named leaf (the user still confirms or picks a different one).
+        const replacedName = getReactBinarySourceFileName(state.activePatches[index] ?? null, "");
+        const isArchive = "name" in source && typeof source.name === "string" && isArchiveFileName(source.name);
+        const nextSource = isArchive ? markPatchArchiveReplacement(source, replacedName) : source;
+        logger.debug("patch replace", {
+          fileName: (source as File).name,
+          fromArchive: isArchive,
+          index,
+          replacedName,
+        });
+        actions.updatePatches(
+          state.activePatches.map((patch, patchIndex) => (patchIndex === index ? nextSource : patch)),
+        );
       },
       reorder: (from: number, to: number) => {
         const { actions, state } = contextRef.current;

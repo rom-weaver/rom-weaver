@@ -34,12 +34,14 @@ const createSourceStagingOptions = (config: {
   base: ApplyWorkflowOptions;
   emitProgress: SourceStagingProgressEmitter;
   onCandidatesFound: (request: CandidateSelectionRequest) => void;
+  patchLeafPreference?: ApplyWorkflowOptions["patchLeafPreference"];
   state: InternalSourceState;
   workflowId: string;
 }) =>
   ({
     ...config.base,
     onCandidatesFound: config.onCandidatesFound,
+    ...(config.patchLeafPreference ? { patchLeafPreference: config.patchLeafPreference } : {}),
     onProgress: (progress: {
       current?: number;
       details?: unknown;
