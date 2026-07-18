@@ -80,6 +80,21 @@ interface InputStagingContext {
 const useInputStaging = (context: InputStagingContext) => {
   const contextRef = useLatestRef(context);
   return useMemo(() => {
+    const failVerifyingPatches = (snapshot: ApplyWorkflowStageSnapshot, error: Error) => {
+      const { getPatchKey } = contextRef.current.rows;
+      contextRef.current.session.setPatchInfoByKey((current) => {
+        const next = { ...current };
+        for (const patch of snapshot.patches) {
+          const key = getPatchKey(patch, snapshot.patches);
+          const info = next[key];
+          if (info?.validationState === "verifying") {
+            next[key] = { ...info, validationMessage: error.message, validationState: "invalid" };
+          }
+        }
+        return next;
+      });
+    };
+
     // Run the deep dry-run patch validation that was deferred out of staging (so the card could show
     // its info + cheap preflight verdict instantly) and merge the refreshed verdicts back onto the
     // already-visible patch rows, showing a "Validating…" indicator per row while it runs.
@@ -113,6 +128,7 @@ const useInputStaging = (context: InputStagingContext) => {
           if (patchStageGenerationRef.current !== generation) return;
           const normalized = toError(error);
           if (isWorkflowDisposedError(normalized)) return;
+          failVerifyingPatches(snapshot, normalized);
           logUiError("Patch validation failed", normalized);
         });
     };
@@ -241,6 +257,7 @@ const useInputStaging = (context: InputStagingContext) => {
           if (patchStageGenerationRef.current !== generation) return;
           const normalizedError = toError(error);
           if (isWorkflowDisposedError(normalizedError)) return;
+          failVerifyingPatches(snapshot, normalizedError);
           logUiError("Patch staging failed", normalizedError);
           setSectionErrorMessage("patch", normalizedError);
           onError?.(normalizedError);
