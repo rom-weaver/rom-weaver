@@ -18,6 +18,7 @@ const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root"
 const packagedWasmPath = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
 const packagedWasmBrotliPath = `${packagedWasmPath}.br`;
 const rootStaticAssetSources = {
+  "/_redirects": path.join(rootDir, "src", "assets", "app", "root", "_redirects"),
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
   "/first-weave.zip": path.join(rootDir, "src", "assets", "app", "root", "first-weave.zip"),

@@ -1,0 +1,6 @@
+# Cloudflare Pages redirect rules. One canonical origin: the bare apex.
+#
+# www is a separate origin, so serving the app there would give it its own
+# OPFS store and service worker - a user landing on www would see different
+# saved state than on the apex. Redirect instead of serving.
+https://www.rom-weaver.com/* https://rom-weaver.com/:splat 301
