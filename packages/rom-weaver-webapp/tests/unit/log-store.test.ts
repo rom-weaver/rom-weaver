@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../../src/lib/logging.ts";
 import type { LogRecord } from "../../src/types/logging.ts";
 import {
@@ -46,6 +46,16 @@ describe("parseRustTraceRecord", () => {
  * cheap (no synchronous React notify per line) and bounded (capped ring).
  */
 describe("log store buffer", () => {
+  // installLogStore chains the real console sink, so the thousands of pushes
+  // below would otherwise land in CI output verbatim. Nothing here asserts on
+  // console.
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("coalesces notifications instead of firing one per push", () => {
     installLogStore();
     let notifications = 0;

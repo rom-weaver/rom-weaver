@@ -64,7 +64,14 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # are incompatible with it and would silently bypass the cache.
 # SCCACHE_CACHE_SIZE: default is 10 GiB which fills quickly across worktrees; 35 GiB keeps hit
 # rates high (the file-based config is not picked up by sccache 0.15.0 on macOS).
-RUSTC_WRAPPER = "sccache"
+#
+# Resolved rather than hardcoded: a bare "sccache" made every cargo call under
+# mise fail with "could not execute process `sccache`" wherever the binary was
+# absent, which is exactly what broke CI. Empty is ignored by cargo, so hosts
+# without sccache silently build unwrapped instead of failing. CI is one of
+# them - its rustc cache was never persisted, so sccache only ever added
+# overhead there while Swatinem/rust-cache does the real caching.
+RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "0"
 SCCACHE_CACHE_SIZE = "35G"
 
@@ -194,7 +201,9 @@ run = "cargo semver-checks check-release --workspace"
 
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
-run = "cargo test --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
+# --quiet collapses the ~1400 per-test `... ok` lines into progress dots; a
+# failing test still prints its full name and panic output.
+run = "cargo test --quiet --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"

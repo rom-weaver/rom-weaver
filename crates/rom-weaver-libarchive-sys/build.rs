@@ -685,10 +685,26 @@ fn generate_bindings(libarchive_dir: &Path) {
         }
     }
 
-    if let Ok(sysroot) = env::var("WASI_SYSROOT")
+    // WASI-only: the sysroot must not reach a host build. .mise.toml exports
+    // WASI_SYSROOT for every task, so an unguarded --sysroot points the host
+    // bindgen at the WASI tree and it fails on missing headers like sys/stat.h.
+    if wasm_target
+        && let Ok(sysroot) = env::var("WASI_SYSROOT")
         && !sysroot.trim().is_empty()
     {
         bindgen_builder = bindgen_builder.clang_arg(format!("--sysroot={sysroot}"));
+        // wasi-sdk >= 25 scopes headers per triple (include/<triple>/sys/stat.h)
+        // and ships no flat include/sys. bindgen parses with --target=<host>
+        // above, so clang derives <sysroot>/include and finds nothing; name the
+        // triple directory explicitly. Linux fails outright without this; macOS
+        // hides it by falling back to the host SDK headers.
+        if let Ok(target) = env::var("TARGET") {
+            let triple_include = PathBuf::from(&sysroot).join("include").join(&target);
+            if triple_include.is_dir() {
+                bindgen_builder =
+                    bindgen_builder.clang_arg(format!("-I{}", triple_include.display()));
+            }
+        }
     }
 
     let bindings = bindgen_builder

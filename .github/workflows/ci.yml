@@ -26,33 +26,64 @@ jobs:
         # brotli has no pinnable mise binary; cmake/ninja/pkg-config build the
         # vendored C deps. node, wasm-opt, and ripgrep come from mise; the WASI SDK
         # is downloaded below (pinning it via mise would shadow clang on PATH and
-        # break the libarchive-sys bindgen).
+        # break the libarchive-sys bindgen). clang/libclang-dev back bindgen in
+        # rom-weaver-libarchive-sys; without them it cannot resolve system
+        # headers ("'sys/stat.h' file not found").
+        #
+        # sccache is deliberately absent: .mise.toml resolves RUSTC_WRAPPER to
+        # whatever is on PATH and leaves it empty otherwise, and nothing here
+        # persists ~/.cache/sccache between runs. Installing it would reintroduce
+        # the wrapper overhead for a cache that starts empty every time;
+        # Swatinem/rust-cache does the caching that actually survives.
         run: |
           sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
+          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
+          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-          targets: wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install mise (node, wasm-opt, ripgrep)
+      - name: Install mise (rust, node, wasm-opt, ripgrep)
         uses: jdx/mise-action@v2
         with:
           install: true
 
+      # mise pins the toolchain (.mise.toml [tools] rust) and exports
+      # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
+      # than to whatever rustup defaults to - `mise exec` supplies the pin.
+      - name: Install Rust components and targets
+        run: |
+          mise exec -- rustup component add clippy rustfmt
+          mise exec -- rustup target add wasm32-wasip1-threads
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Default is false, so a failing job saves nothing - a red pipeline
+          # then rebuilds from cold every run, which is exactly when the cache
+          # is worth most. The key already covers rustc + Cargo.lock, so a
+          # cache written by a failed run is still valid for the next one.
+          cache-on-failure: true
+
+      # Keyed on the pinned version + its checksum, so a version bump misses the
+      # cache by construction and never serves a stale SDK.
+      - name: Cache WASI SDK
+        id: wasi-sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
+          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
+
       - name: Install WASI SDK
+        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
         run: |
           curl --fail --location --show-error \
             --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
             "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
           echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      # Runs on both paths - a cache hit restores the tree but sets no env.
+      - name: Export WASI SDK path
+        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
 
       # Node comes from mise (.mise.toml [tools] node); cache npm downloads
       # since we no longer use setup-node's built-in cache.
@@ -145,35 +176,58 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies
+        # See the quality job for why clang/libclang-dev are here and sccache is not.
         run: |
           sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
+          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
+          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt, llvm-tools-preview
-          targets: wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Install mise (node, wasm-opt, ripgrep)
+      - name: Install mise (rust, node, wasm-opt, ripgrep)
         uses: jdx/mise-action@v2
         with:
           install: true
 
+      # See the quality job: components belong to mise's pinned toolchain.
+      # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
+      - name: Install Rust components and targets
+        run: |
+          mise exec -- rustup component add clippy rustfmt llvm-tools-preview
+          mise exec -- rustup target add wasm32-wasip1-threads
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Default is false, so a failing job saves nothing - a red pipeline
+          # then rebuilds from cold every run, which is exactly when the cache
+          # is worth most. The key already covers rustc + Cargo.lock, so a
+          # cache written by a failed run is still valid for the next one.
+          cache-on-failure: true
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      # Keyed on the pinned version + its checksum, so a version bump misses the
+      # cache by construction and never serves a stale SDK.
+      - name: Cache WASI SDK
+        id: wasi-sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
+          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
+
       - name: Install WASI SDK
+        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
         run: |
           curl --fail --location --show-error \
             --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
             "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
           echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      # Runs on both paths - a cache hit restores the tree but sets no env.
+      - name: Export WASI SDK path
+        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
 
       - name: Cache npm downloads
         uses: actions/cache@v4
