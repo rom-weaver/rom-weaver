@@ -81,6 +81,13 @@ jobs:
 
       # No restore-keys: a prefix match would serve a module built from
       # different sources. This cache is all-or-nothing by design.
+      #
+      # Where the hits come from: a run reads caches written by its own branch
+      # and by the default branch, so the payoff arrives via main. Every push
+      # there writes an entry that any later pull request can restore, provided
+      # its wasm inputs are identical. A cache written on a pull request stays
+      # local to it - useful across that branch's own pushes, invisible to
+      # every other one.
       - name: Restore built wasm module
         id: wasm-cache
         uses: actions/cache@v6
