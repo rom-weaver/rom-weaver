@@ -41,9 +41,16 @@ const NOTICE_FILE = path.join(OUTPUT_DIR, "NOTICE");
 const INVENTORY_FILE = path.join(OUTPUT_DIR, "THIRD_PARTY_LICENSES.md");
 const LICENSES_DIR = path.join(OUTPUT_DIR, "third_party", "licenses");
 
-/** Run `cargo metadata` and parse the JSON document. */
+/**
+ * Run `cargo metadata` and parse the JSON document.
+ *
+ * Deliberately not `--offline`: metadata resolves the graph for every platform,
+ * so it needs manifests a single-target build never downloads (e.g. the
+ * `cfg(windows)`-gated `anstyle-wincon` when building wasm on Linux CI).
+ * `Cargo.lock` still pins versions, so this only permits the fetch.
+ */
 function loadCargoMetadata() {
-  const raw = execFileSync("cargo", ["metadata", "--format-version", "1", "--offline"], {
+  const raw = execFileSync("cargo", ["metadata", "--format-version", "1"], {
     cwd: REPO_ROOT,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
