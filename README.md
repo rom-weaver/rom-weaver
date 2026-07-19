@@ -27,6 +27,14 @@ compressing, extracting, and bundling have all been tested extensively. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0.
 
+## LLM-assisted development
+
+rom-weaver is built by a full-time software engineer in my spare time. Claude
+and ChatGPT are used during development for brainstorming, implementation,
+debugging, and review. I make the engineering decisions and review and test
+the resulting work myself; the goal is high-quality, dependable software, but
+AI-assisted code may still need extra scrutiny.
+
 ## Screenshots
 
 ### Desktop
