@@ -32,6 +32,48 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+      - name: Mark GitHub prerelease
+        if: >-
+          steps.release.outputs.release_created == 'true' &&
+          contains(steps.release.outputs.version, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v${{ steps.release.outputs.version }}" --prerelease
+
+      - name: Find release pull request
+        id: release-pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        shell: bash
+        run: |
+          read -r number branch < <(
+            gh pr list \
+              --base main \
+              --state open \
+              --label 'autorelease: pending' \
+              --json number,headRefName \
+              --jq '.[0] | [.number, .headRefName] | @tsv'
+          )
+          test -n "$number" && test -n "$branch"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release pull request
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release-pr.outputs.branch }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Aggregate prerelease changelog
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_PR: ${{ steps.release-pr.outputs.number }}
+          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+        run: node scripts/aggregate-release-changelog.mjs
+
   publish-cargo:
     needs: release
     if: needs.release.outputs.release_created == 'true'

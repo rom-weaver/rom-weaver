@@ -200,6 +200,12 @@ first `1.0.0` ships - see the unpinned pre-1.0 bump behavior noted in
 `CLAUDE.md`.
 | crates.io | published | published |
 
+When a stable release follows one or more prereleases, the release workflow
+folds all same-version prerelease entries into the stable `CHANGELOG.md`
+section and into the GitHub Release notes. The prerelease sections are removed
+from the canonical changelog to avoid listing the same changes twice; the
+individual prerelease GitHub Releases retain their own notes.
+
 The rule exists because a prerelease that takes `latest` is effectively a
 shipped regression: `npm i @rom-weaver/cli` and `docker pull rom-weaver` both
 resolve `latest` by default. Cargo needs no equivalent guard - crates.io has no
