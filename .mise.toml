@@ -201,7 +201,9 @@ run = "cargo semver-checks check-release --workspace"
 
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
-run = "cargo test --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
+# --quiet collapses the ~1400 per-test `... ok` lines into progress dots; a
+# failing test still prints its full name and panic output.
+run = "cargo test --quiet --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-qbsdiff --exclude rom-weaver-xdvdfs"
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
