@@ -22,7 +22,7 @@ jobs:
       WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
@@ -47,7 +47,7 @@ jobs:
           [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
 
       - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           install: true
 
@@ -72,7 +72,7 @@ jobs:
       # cache by construction and never serves a stale SDK.
       - name: Cache WASI SDK
         id: wasi-sdk-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
           key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
@@ -93,7 +93,7 @@ jobs:
       # Node comes from mise (.mise.toml [tools] node); cache npm downloads
       # since we no longer use setup-node's built-in cache.
       - name: Cache npm downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
@@ -175,7 +175,7 @@ jobs:
       ROM_WEAVER_COVERAGE: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
@@ -189,7 +189,7 @@ jobs:
           [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
 
       - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           install: true
 
@@ -216,7 +216,7 @@ jobs:
       # cache by construction and never serves a stale SDK.
       - name: Cache WASI SDK
         id: wasi-sdk-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
           key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
@@ -235,7 +235,7 @@ jobs:
         run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
 
       - name: Cache npm downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
@@ -267,7 +267,7 @@ jobs:
         run: node scripts/coverage-summary.mjs
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-reports
           path: dist/coverage/**
