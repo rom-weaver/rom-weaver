@@ -34,6 +34,11 @@ const COVERAGE_ROOT = path.resolve(ROOT_DIR, "..", "..", "dist", "coverage", "re
 // Vitest's summary line ("  Tests  1 failed | 9 passed (10)"), not the
 // "⎯ Failed Tests 2 ⎯" section banner - hence the line-start + digit anchors.
 const TESTS_LINE_REGEX = /^\s*Tests\s+(\d.*?)\s*$/gm;
+// Vitest colourises the summary when it detects CI, wrapping the line in escape
+// sequences that defeat the anchors above. Strip them before matching or every
+// passing file reports "no test summary". Built with RegExp rather than a
+// literal because no-control-regex rejects an escape character in the source.
+const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 const resolveConcurrency = () => {
   const raw = process.env.BROWSER_TEST_CONCURRENCY;
@@ -124,7 +129,7 @@ const runFile = (file, vitestArgs) =>
   });
 
 const summarizeOutput = (output) => {
-  const matches = [...output.matchAll(TESTS_LINE_REGEX)];
+  const matches = [...output.replace(ANSI_ESCAPE_REGEX, "").matchAll(TESTS_LINE_REGEX)];
   const last = matches.at(-1);
   return last ? last[1].replace(/\s+/g, " ").trim() : "no test summary";
 };
