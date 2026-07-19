@@ -30,7 +30,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+  statuses: write
 
 # Keyed by channel so a nightly build never cancels a production release.
 concurrency:
@@ -203,14 +203,19 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "deployed to $url"
 
-      - name: Comment preview URL on the pull request
+      # Surfaced as a commit status rather than a comment, so the link lives in
+      # the PR's checks list and updates in place instead of accreting comments.
+      - name: Publish preview URL as a status check
         if: steps.channel.outputs.channel == 'preview' && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALIAS: https://${{ steps.channel.outputs.branch }}.rom-weaver-preview.pages.dev
         run: |
-          gh pr comment "${{ github.event.number }}" --edit-last --create-if-none --body \
-            "Preview: ${ALIAS}
-          This build: ${{ steps.deploy.outputs.url }}
-
-          Separate origin from production, so its OPFS and service worker are isolated."
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${{ github.event.pull_request.head.sha }}" \
+            --method POST \
+            --field state=success \
+            --field context='preview/webapp' \
+            --field target_url="${ALIAS}" \
+            --field description='Preview deployment - click Details' \
+            --silent
+          echo "preview status -> ${ALIAS}"
