@@ -26,24 +26,27 @@ jobs:
         # brotli has no pinnable mise binary; cmake/ninja/pkg-config build the
         # vendored C deps. node, wasm-opt, and ripgrep come from mise; the WASI SDK
         # is downloaded below (pinning it via mise would shadow clang on PATH and
-        # break the libarchive-sys bindgen).
+        # break the libarchive-sys bindgen). sccache backs the RUSTC_WRAPPER set
+        # in .mise.toml [env] - without it every cargo call under mise fails.
         run: |
           sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config sccache
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-          targets: wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install mise (node, wasm-opt, ripgrep)
+      - name: Install mise (rust, node, wasm-opt, ripgrep)
         uses: jdx/mise-action@v2
         with:
           install: true
+
+      # mise pins the toolchain (.mise.toml [tools] rust) and exports
+      # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
+      # than to whatever rustup defaults to - `mise exec` supplies the pin.
+      - name: Install Rust components and targets
+        run: |
+          mise exec -- rustup component add clippy rustfmt
+          mise exec -- rustup target add wasm32-wasip1-threads
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install WASI SDK
         run: |
@@ -147,24 +150,25 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config sccache
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install mise (rust, node, wasm-opt, ripgrep)
+        uses: jdx/mise-action@v2
         with:
-          components: clippy, rustfmt, llvm-tools-preview
-          targets: wasm32-wasip1-threads
+          install: true
+
+      # See the quality job: components belong to mise's pinned toolchain.
+      # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
+      - name: Install Rust components and targets
+        run: |
+          mise exec -- rustup component add clippy rustfmt llvm-tools-preview
+          mise exec -- rustup target add wasm32-wasip1-threads
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Install mise (node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v2
-        with:
-          install: true
 
       - name: Install WASI SDK
         run: |
