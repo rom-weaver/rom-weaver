@@ -46,6 +46,34 @@ paths; CI runs all of it unconditionally plus the full test suites.
   trace output is the primary debugging tool for wasm/browser issues.
 - Relative imports only in TypeScript (no path aliases).
 
+## Releases
+
+Releases are release-please driven; the global `npm version` / `changelog:all`
+instructions do **not** apply here.
+
+- **Never hand-edit a version.** `release-please-config.json` owns every bump:
+  root + webapp + alias + 4 platform `package.json`s and their locks, the
+  `optionalDependencies` pins, `workspace.package.version`, ~43 path-dependency
+  pins across `crates/*`, `tools/*`, `vendor/*`, and `Cargo.lock`.
+- **Flow:** merge conventional commits to `main` → CI goes green → release-please
+  opens/updates a `chore(main): release X.Y.Z` PR → merging that PR tags
+  `vX.Y.Z` and sets `release_created=true`, which unlocks the cargo/npm/docker
+  publish jobs. Merging the release PR is the release decision; nothing
+  publishes before it.
+- **Prerelease:** `Release-As: X.Y.Z-alpha.N` commit footer for a one-off, or
+  `prerelease`/`prerelease-type` in the config for a sustained track. Routing is
+  automatic and keys off a hyphen in the version - no dist-tag step to remember:
+  npm gets `beta` instead of `latest`, docker gets `beta` and skips the series
+  tags, and the webapp deploys to `beta.rom-weaver.com`. Cargo needs no guard
+  (crates.io has no dist-tags).
+- `npm version` (→ `scripts/sync-version.mjs`) is the legacy manual path that
+  cut v0.2.0-v0.5.0. It overlaps release-please and will fight it. Keep it only
+  as a break-glass fallback.
+- Pre-1.0 bump behavior is **unpinned**: `bump-minor-pre-major` and
+  `bump-patch-for-minor-pre-major` are unset, so whether a breaking change
+  yields 0.6.0 or 1.0.0 is defaulted, not chosen. Settle this before landing
+  anything breaking.
+
 ## Layout pointers
 
 - CLI command orchestration: `crates/rom-weaver-app` (shared by native + wasm)
