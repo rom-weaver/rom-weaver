@@ -1,0 +1,50 @@
+name: CF Debug
+
+# TEMPORARY. Diagnoses Cloudflare Pages API access without rebuilding wasm.
+# Delete once the deploy pipeline is verified.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Token verify
+        run: |
+          curl -sS https://api.cloudflare.com/client/v4/user/tokens/verify \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | head -c 800; echo
+
+      - name: Account id shape
+        run: |
+          # Never prints the value; only whether it looks like a 32-char hex id.
+          n=${#CLOUDFLARE_ACCOUNT_ID}
+          echo "account id length=$n"
+          case "$CLOUDFLARE_ACCOUNT_ID" in
+            *[!0-9a-fA-F]*) echo "contains non-hex characters (likely wrong value)" ;;
+            *) echo "looks like hex" ;;
+          esac
+
+      - name: List accounts the token can see
+        run: |
+          curl -sS https://api.cloudflare.com/client/v4/accounts \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            | head -c 1200; echo
+
+      - name: List pages projects
+        run: |
+          curl -sS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | head -c 1200; echo
+
+      - name: Attempt project create
+        run: |
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"name":"rom-weaver-nightly","production_branch":"main"}' \
+            | head -c 1200; echo
