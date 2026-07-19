@@ -74,7 +74,7 @@ jobs:
           # platform package as a prerelease.
           package_version=$(node -p "require('./$package_path/package.json').version")
           npm_tag=latest
-          case "$package_version" in *-*) npm_tag=next ;; esac
+          case "$package_version" in *-*) npm_tag=beta ;; esac
           echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
@@ -108,7 +108,7 @@ jobs:
           package_spec=$(node -p "const p = require('./package.json'); p.name + '@' + p.version")
           package_version=$(node -p "require('./package.json').version")
           npm_tag=latest
-          case "$package_version" in *-*) npm_tag=next ;; esac
+          case "$package_version" in *-*) npm_tag=beta ;; esac
           echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
@@ -147,7 +147,7 @@ jobs:
           package_spec=$(node -p "const p = require('./$package_path/package.json'); p.name + '@' + p.version")
           package_version=$(node -p "require('./$package_path/package.json').version")
           npm_tag=latest
-          case "$package_version" in *-*) npm_tag=next ;; esac
+          case "$package_version" in *-*) npm_tag=beta ;; esac
           echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"

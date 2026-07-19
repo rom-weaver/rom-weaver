@@ -183,8 +183,8 @@ a `Release-As: X.Y.Z-alpha.N` footer is enough to route the whole pipeline.
 | Target | Release `0.6.0` | Prerelease `0.6.0-alpha.1` |
 | --- | --- | --- |
 | Webapp | `rom-weaver.com` | `beta.rom-weaver.com` |
-| npm dist-tag | `latest` | `next` |
-| Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `next` |
+| npm dist-tag | `latest` | `beta` |
+| Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `beta` |
 | crates.io | published | published |
 
 The rule exists because a prerelease that takes `latest` is effectively a
