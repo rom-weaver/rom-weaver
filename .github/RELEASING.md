@@ -174,6 +174,30 @@ Release Please opens or updates a release pull request. Merging it creates the
 tag and GitHub Release and runs every publisher. Follow progress under GitHub's
 **Actions → Release** page.
 
+### How a prerelease differs
+
+Every publisher keys off one thing: whether the version contains a hyphen
+(`0.6.0-alpha.1` is a prerelease, `0.6.0` is not). Nothing else needs setting -
+a `Release-As: X.Y.Z-alpha.N` footer is enough to route the whole pipeline.
+
+| Target | Release `0.6.0` | Prerelease `0.6.0-alpha.1` |
+| --- | --- | --- |
+| Webapp | `rom-weaver.com` | `beta.rom-weaver.com` |
+| npm dist-tag | `latest` | `next` |
+| Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `next` |
+| crates.io | published | published |
+
+The rule exists because a prerelease that takes `latest` is effectively a
+shipped regression: `npm i @rom-weaver/cli` and `docker pull rom-weaver` both
+resolve `latest` by default. Cargo needs no equivalent guard - crates.io has no
+dist-tags and Cargo will not resolve a prerelease unless a version request
+explicitly asks for one.
+
+Note the npm dist-tag is derived from the **version field**, never from the
+`name@version` spec: several package names contain hyphens (`darwin-arm64`,
+`linux-x64-gnu`), and matching the spec would tag every platform package as a
+prerelease.
+
 ## Retry a failed publication
 
 Rerun the failed jobs in the Release workflow. Alternatively, manually run one

@@ -69,9 +69,16 @@ jobs:
         run: |
           package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
           package_spec=$(node -p "const p = require('./$package_path/package.json'); p.name + '@' + p.version")
+          # Test the version, never the spec: package names contain hyphens
+          # (darwin-arm64, linux-x64-gnu), so a spec match would tag every
+          # platform package as a prerelease.
+          package_version=$(node -p "require('./$package_path/package.json').version")
+          npm_tag=latest
+          case "$package_version" in *-*) npm_tag=next ;; esac
+          echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
-          elif npm publish "$package_path" --ignore-scripts --access public --provenance; then
+          elif npm publish "$package_path" --ignore-scripts --access public --provenance --tag "$npm_tag"; then
             true
           elif npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec was published by another run"
@@ -99,9 +106,13 @@ jobs:
         shell: bash
         run: |
           package_spec=$(node -p "const p = require('./package.json'); p.name + '@' + p.version")
+          package_version=$(node -p "require('./package.json').version")
+          npm_tag=latest
+          case "$package_version" in *-*) npm_tag=next ;; esac
+          echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
-          elif npm publish --ignore-scripts --access public --provenance; then
+          elif npm publish --ignore-scripts --access public --provenance --tag "$npm_tag"; then
             true
           elif npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec was published by another run"
@@ -134,9 +145,13 @@ jobs:
           package_path=packages/rom-weaver-alias
           cp LICENSE.md "$package_path/LICENSE.md"
           package_spec=$(node -p "const p = require('./$package_path/package.json'); p.name + '@' + p.version")
+          package_version=$(node -p "require('./$package_path/package.json').version")
+          npm_tag=latest
+          case "$package_version" in *-*) npm_tag=next ;; esac
+          echo "publishing $package_spec with dist-tag $npm_tag"
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
-          elif npm publish "$package_path" --ignore-scripts --access public --provenance; then
+          elif npm publish "$package_path" --ignore-scripts --access public --provenance --tag "$npm_tag"; then
             true
           elif npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec was published by another run"
