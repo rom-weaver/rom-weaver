@@ -64,7 +64,14 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # are incompatible with it and would silently bypass the cache.
 # SCCACHE_CACHE_SIZE: default is 10 GiB which fills quickly across worktrees; 35 GiB keeps hit
 # rates high (the file-based config is not picked up by sccache 0.15.0 on macOS).
-RUSTC_WRAPPER = "sccache"
+#
+# Resolved rather than hardcoded: a bare "sccache" made every cargo call under
+# mise fail with "could not execute process `sccache`" wherever the binary was
+# absent, which is exactly what broke CI. Empty is ignored by cargo, so hosts
+# without sccache silently build unwrapped instead of failing. CI is one of
+# them - its rustc cache was never persisted, so sccache only ever added
+# overhead there while Swatinem/rust-cache does the real caching.
+RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "0"
 SCCACHE_CACHE_SIZE = "35G"
 
