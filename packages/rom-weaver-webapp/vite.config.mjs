@@ -269,6 +269,10 @@ const writePreviewCompressedAssets = () => {
   let outDir = "dist";
   return {
     apply: "build",
+    // Must stay `post`: vite-plugin-pwa emits cache-service-worker.js from its
+    // own closeBundle, so without this the walker runs first and the service
+    // worker is the one asset shipped uncompressed.
+    enforce: "post",
     closeBundle() {
       writeCompressedAssetsInDirectory(path.resolve(rootDir, outDir));
     },
