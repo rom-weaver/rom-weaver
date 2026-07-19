@@ -185,6 +185,13 @@ a `Release-As: X.Y.Z-alpha.N` footer is enough to route the whole pipeline.
 | Webapp | `rom-weaver.com` | `beta.rom-weaver.com` |
 | npm dist-tag | `latest` | `beta` |
 | Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `beta` |
+
+Docker also publishes a major series tag (`1`, `2`, ...), but **only from
+`1.0.0` on**. Pre-1.0 it is suppressed: a `0` tag would float across `0.5` ->
+`0.6`, and semver treats a pre-1.0 minor bump as breaking, so the tag would
+promise compatibility it cannot keep. It starts publishing itself once the
+first `1.0.0` ships - see the unpinned pre-1.0 bump behavior noted in
+`CLAUDE.md`.
 | crates.io | published | published |
 
 The rule exists because a prerelease that takes `latest` is effectively a

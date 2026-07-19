@@ -57,18 +57,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Normalizes the version (tags arrive as `v0.6.0`, workflow_dispatch as
+      # `0.6.0`) and decides which moving tags are safe for this version.
+      - name: Resolve tag policy
+        id: policy
+        run: |
+          version="${{ inputs.version || github.ref_name }}"
+          version="${version#v}"
+          case "$version" in *-*) release=false ;; *) release=true ;; esac
+          major="${version%%.*}"
+          # `0` would float across 0.5 -> 0.6, which semver treats as breaking,
+          # so the major series tag only starts at 1.0.0.
+          if [ "$release" = true ] && [ "$major" != 0 ]; then major_tag=true; else major_tag=false; fi
+          {
+            echo "version=$version"
+            echo "release=$release"
+            echo "major_tag=$major_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "version=$version release=$release major_tag=$major_tag"
+
       - id: metadata
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          # A prerelease must never move `latest` or the X.Y series tag, or
+          # A prerelease must never move `latest` or a series tag, or
           # `docker pull rom-weaver` serves an alpha. Prereleases get `beta`
           # instead, mirroring the npm dist-tag and the beta web channel.
           tags: |
-            type=semver,pattern={{version}},value=${{ inputs.version || github.ref_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version || github.ref_name }},enable=${{ !contains(inputs.version || github.ref_name, '-') }}
-            type=raw,value=latest,enable=${{ !contains(inputs.version || github.ref_name, '-') }}
-            type=raw,value=beta,enable=${{ contains(inputs.version || github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ steps.policy.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.policy.outputs.version }},enable=${{ steps.policy.outputs.release == 'true' }}
+            type=semver,pattern={{major}},value=${{ steps.policy.outputs.version }},enable=${{ steps.policy.outputs.major_tag == 'true' }}
+            type=raw,value=latest,enable=${{ steps.policy.outputs.release == 'true' }}
+            type=raw,value=beta,enable=${{ steps.policy.outputs.release != 'true' }}
 
       - name: Build and push image
         id: build
