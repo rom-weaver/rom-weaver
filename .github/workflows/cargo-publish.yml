@@ -38,8 +38,25 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
 
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-publish
+          cache-on-failure: true
+
       - name: Install cargo-semver-checks
         uses: taiki-e/install-action@cargo-semver-checks
+
+      # semver-checks builds rustdoc for each crate's published baseline before
+      # it can diff. Baselines only change when a version is released, so this
+      # survives across releases even though the current-tree half does not.
+      - name: Cache cargo-semver-checks baselines
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/cargo-semver-checks
+          key: semver-checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            semver-checks-${{ runner.os }}-
 
       - name: Check for accidental breaking API changes
         shell: bash
