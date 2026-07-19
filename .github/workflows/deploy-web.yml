@@ -157,7 +157,7 @@ jobs:
             --data "{\"name\":\"${project}\",\"production_branch\":\"main\"}")
           if [ "$(printf '%s' "$body" | jq -r '.success')" = "true" ]; then
             echo "created Pages project '$project'"
-          elif printf '%s' "$body" | jq -e '.errors[]? | select(.code == 8000007)' >/dev/null; then
+          elif printf '%s' "$body" | jq -e '.errors[]? | select(.code == 8000002 or (.message | test("already exists"; "i")))' >/dev/null; then
             echo "Pages project '$project' already exists"
           else
             echo "unexpected response creating '$project':" >&2
