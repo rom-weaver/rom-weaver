@@ -167,6 +167,9 @@ jobs:
     timeout-minutes: 60
     needs: wasm
     if: github.ref_type != 'tag'
+    env:
+      MISE_DISABLE_TOOLS: >-
+        rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -296,6 +299,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: wasm
+    # Deployment was a separate, non-gating workflow before it moved here to
+    # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
+    # not turn a green main build red and suppress release automation.
+    continue-on-error: true
     permissions:
       contents: read
       statuses: write
@@ -315,6 +322,9 @@ jobs:
         rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The deployed changelog is generated from the latest 50 commits.
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-build-env
         with:
