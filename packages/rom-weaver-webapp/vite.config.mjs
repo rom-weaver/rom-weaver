@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +10,6 @@ import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 
 const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
-const licenseGeneratorPath = path.join(repoRoot, "scripts", "gen-third-party-licenses.mjs");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const packagedWasmPath = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
@@ -209,9 +207,11 @@ const writeWebappStaticAssets = () => {
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
       }
-      execFileSync(process.execPath, [licenseGeneratorPath, distDir], {
-        cwd: repoRoot,
-        stdio: "inherit",
+      for (const [assetPath, sourcePath] of Object.entries(generatedLicenseAssetSources)) {
+        copyFile(sourcePath, path.join(distDir, assetPath));
+      }
+      fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), path.join(distDir, "third_party"), {
+        recursive: true,
       });
     },
     configResolved(config) {

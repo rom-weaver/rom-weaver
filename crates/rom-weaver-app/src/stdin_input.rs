@@ -6,6 +6,10 @@
 //! reaches it.
 
 /// Sentinel `--input` value meaning "read from stdin".
+///
+/// Gated like its only consumer below: on wasm the entry point never sees `-`,
+/// so an ungated constant is dead code there.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const STDIN_INPUT_SENTINEL: &str = "-";
 
 #[cfg(not(target_arch = "wasm32"))]

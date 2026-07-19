@@ -57,6 +57,11 @@ pre-commit:
     react-audit-strings:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run audit:strings
+    # Workflow mistakes are invisible until a push burns a runner minute, so
+    # they are worth catching at commit time. Covers the composite actions too.
+    actionlint:
+      glob: ".github/**/*.{yml,yaml}"
+      run: mise run actionlint
     whitespace:
       run: git diff --cached --check
     thread-guard-regressions:

@@ -26,6 +26,7 @@ rust = "1.95.0"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
 "ubi:obi1kenobi/cargo-semver-checks" = "0.46.0"
+"aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
 
 [env]
 # WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
@@ -222,6 +223,13 @@ cargo llvm-cov --workspace --exclude rom-weaver-akv --exclude rom-weaver-chd-cor
 cargo llvm-cov report --html --output-dir "$out_dir"
 cargo llvm-cov report --lcov --output-path "$out_dir/lcov.info"
 '''
+
+[tasks.actionlint]
+description = "Lint GitHub Actions workflows and composite actions"
+# Catches undefined action inputs, bad expressions, and (via shellcheck, when
+# present) issues in `run:` scripts. Workflow bugs otherwise only surface as a
+# failed run minutes after a push, so this belongs in the pre-commit hook.
+run = "actionlint"
 
 [tasks.thread-guards]
 description = "Fail on threaded-WASM suppression regressions"

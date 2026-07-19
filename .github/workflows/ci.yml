@@ -2,109 +2,106 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_channel:
+        description: Also deploy the webapp to this channel (none = test only)
+        required: false
+        default: none
+        type: choice
+        options: [none, nightly, beta, prod]
   pull_request:
   push:
     branches:
       - main
+    # Release tags deploy the webapp; the test jobs below skip them, since the
+    # commit being tagged already passed this same gate on main.
+    tags: ["v*"]
 
-# Least privilege: this workflow only reads the repo. Declared explicitly so it
-# does not inherit whatever the repository default happens to be.
+# Least privilege: most of this workflow only reads the repo. The deploy job
+# widens its own permissions rather than granting them workflow-wide.
 permissions:
   contents: read
 
+# Superseded pushes to a branch are pointless work; on main every commit is a
+# release candidate, so those runs are allowed to finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  quality:
+  # Built once and shared. This is the single most expensive step in the
+  # pipeline (~6.5 min), and it used to run identically in two jobs.
+  wasm:
+    name: WASM build
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: always
-      WASI_SDK_VERSION: "33"
-      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      # Never set RUSTFLAGS here. cargo's rustflags sources are mutually
+      # exclusive - an env override *replaces* the `[target.wasm32-wasip1-threads]`
+      # list in .cargo/config.toml rather than extending it - so even a
+      # lint-only `-D warnings` silently drops --max-memory=4294967296, the
+      # atomics/simd target features, linker-plugin-lto and the malloc/free
+      # exports. That produces a module that still builds and still passes
+      # wasm-opt, but declares a 1 GiB ceiling and fails to instantiate against
+      # the runtime's 4 GiB memory. Warnings are denied by the separate
+      # `cargo check` in the `rust` job, which does not link and so is immune.
+      - name: Build production WASM
+        run: mise run build-wasm-prod
+
+      # The wasm module and its brotli sibling are already compressed, so
+      # re-compressing them into the artifact only burns time.
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-prod
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-webapp/src/wasm/NOTICE
+            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-webapp/src/wasm/third_party
+
+  # Everything that needs a host-profile Rust build and nothing from wasm, so
+  # it runs concurrently with the wasm build instead of queueing behind it.
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    if: github.ref_type != 'tag'
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The whitespace check below diffs against the PR base.
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install system dependencies
-        # brotli has no pinnable mise binary; cmake/ninja/pkg-config build the
-        # vendored C deps. node, wasm-opt, and ripgrep come from mise; the WASI SDK
-        # is downloaded below (pinning it via mise would shadow clang on PATH and
-        # break the libarchive-sys bindgen). clang/libclang-dev back bindgen in
-        # rom-weaver-libarchive-sys; without them it cannot resolve system
-        # headers ("'sys/stat.h' file not found").
-        #
-        # sccache is deliberately absent: .mise.toml resolves RUSTC_WRAPPER to
-        # whatever is on PATH and leaves it empty otherwise, and nothing here
-        # persists ~/.cache/sccache between runs. Installing it would reintroduce
-        # the wrapper overhead for a cache that starts empty every time;
-        # Swatinem/rust-cache does the caching that actually survives.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
-          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
-          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
-
-      - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          install: true
-
-      # mise pins the toolchain (.mise.toml [tools] rust) and exports
-      # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
-      # than to whatever rustup defaults to - `mise exec` supplies the pin.
-      - name: Install Rust components and targets
-        run: |
-          mise exec -- rustup component add clippy rustfmt
-          mise exec -- rustup target add wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Default is false, so a failing job saves nothing - a red pipeline
-          # then rebuilds from cold every run, which is exactly when the cache
-          # is worth most. The key already covers rustc + Cargo.lock, so a
-          # cache written by a failed run is still valid for the next one.
-          cache-on-failure: true
-
-      # Keyed on the pinned version + its checksum, so a version bump misses the
-      # cache by construction and never serves a stale SDK.
-      - name: Cache WASI SDK
-        id: wasi-sdk-cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
-          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
-
-      - name: Install WASI SDK
-        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-
-      # Runs on both paths - a cache hit restores the tree but sets no env.
-      - name: Export WASI SDK path
-        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
-
-      # Node comes from mise (.mise.toml [tools] node); cache npm downloads
-      # since we no longer use setup-node's built-in cache.
-      - name: Cache npm downloads
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-webapp
-
-      - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-components: clippy rustfmt
+          # For the threaded-wasm type-check below. It is a `cargo check`, but
+          # libarchive-sys's build script still compiles C against the sysroot.
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
 
       - name: Rust format
         run: mise run fmt
@@ -115,6 +112,11 @@ jobs:
       - name: Rust typegen
         run: mise run typegen-check
 
+      # Safe to override RUSTFLAGS for a check: nothing is linked, so losing the
+      # config's link-args is inconsequential. Lives in this job rather than
+      # next to the wasm build so it stays off the critical path - the build
+      # cannot reuse these artifacts anyway, since the differing RUSTFLAGS give
+      # them a separate fingerprint.
       - name: WASM threaded check
         run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
@@ -150,115 +152,106 @@ jobs:
         # tarballs before release automation runs.
         run: cargo publish --workspace --exclude rom-weaver-typegen --locked --dry-run
 
+      # `npm audit` resolves straight from the lockfiles, so this needs node but
+      # no install - which is why it sits in this job rather than behind the
+      # webapp's `npm ci` on the critical path.
       - name: npm advisories
         run: |
           npm run audit:deps
           npm --prefix packages/rom-weaver-webapp run audit:deps
 
-      - name: WASM build
-        run: mise run build-wasm-prod
+  # Consumes the prebuilt wasm module; compiles no Rust of its own.
+  webapp:
+    name: Webapp
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: wasm
+    if: github.ref_type != 'tag'
+    env:
+      MISE_DISABLE_TOOLS: >-
+        rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - name: rom-weaver-webapp checks
-        run: |
-          npm test
-          npm --prefix packages/rom-weaver-webapp run lint
-          npm --prefix packages/rom-weaver-webapp run test:unit
-          npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-          npm --prefix packages/rom-weaver-webapp run test:browser:parallel
-          npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
-          npm --prefix packages/rom-weaver-webapp run build
+      - uses: ./.github/actions/setup-build-env
+        with:
+          cargo-cache: "false"
+          webapp-deps: "true"
+          playwright: "true"
 
-  # Coverage runs independently from `quality` and has no percentage threshold,
-  # but every contributing suite must pass and produce LCOV before the aggregate
-  # line-coverage number is published.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      # Lives here rather than in the `rust` job because
+      # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
+      # imports only env functions the runtime provides - it reads the real
+      # .wasm and needs the artifact downloaded above.
+      - name: Build script tests
+        run: npm test
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+      - name: Browser tests (wasm)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
+
+      - name: Browser tests (parallel)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+
+      - name: Webapp E2E
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+
+      - name: Build
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+  # Coverage has no percentage threshold - it is reported, not enforced - so it
+  # does not gate a merge and is kept off the pull-request critical path. It
+  # still runs on every push to main, so the release candidates that matter are
+  # covered, and on demand via workflow_dispatch. Tags are excluded: the commit
+  # under a release tag already produced this report on main.
   coverage:
+    name: Coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    needs: wasm
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
     env:
       CARGO_TERM_COLOR: always
-      WASI_SDK_VERSION: "33"
-      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
       ROM_WEAVER_COVERAGE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
           submodules: recursive
 
-      - name: Install system dependencies
-        # See the quality job for why clang/libclang-dev are here and sccache is not.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
-          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
-          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
-
-      - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          install: true
-
-      # See the quality job: components belong to mise's pinned toolchain.
-      # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
-      - name: Install Rust components and targets
-        run: |
-          mise exec -- rustup component add clippy rustfmt llvm-tools-preview
-          mise exec -- rustup target add wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Default is false, so a failing job saves nothing - a red pipeline
-          # then rebuilds from cold every run, which is exactly when the cache
-          # is worth most. The key already covers rustc + Cargo.lock, so a
-          # cache written by a failed run is still valid for the next one.
-          cache-on-failure: true
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
+          rust-components: llvm-tools-preview
+          webapp-deps: "true"
+          playwright: "true"
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      # Keyed on the pinned version + its checksum, so a version bump misses the
-      # cache by construction and never serves a stale SDK.
-      - name: Cache WASI SDK
-        id: wasi-sdk-cache
-        uses: actions/cache@v6
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
         with:
-          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
-          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
-
-      - name: Install WASI SDK
-        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-
-      # Runs on both paths - a cache hit restores the tree but sets no env.
-      - name: Export WASI SDK path
-        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
-
-      - name: Cache npm downloads
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-webapp
-
-      - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
 
       - name: Rust coverage
         run: mise run coverage-rust
-
-      - name: WASM build
-        run: mise run build-wasm-prod
 
       - name: React unit coverage
         run: npm --prefix packages/rom-weaver-webapp run test:unit:coverage
@@ -278,3 +271,184 @@ jobs:
           name: coverage-reports
           path: dist/coverage/**
           if-no-files-found: warn
+
+  # Publishes the webapp to Cloudflare Pages on three channels, each its own
+  # origin so OPFS / service-worker scope / Cache Storage stay isolated:
+  #
+  #   rom-weaver.com          <- release tags (vX.Y.Z)
+  #   beta.rom-weaver.com     <- prerelease tags (vX.Y.Z-alpha.N, -beta.N, ...)
+  #   nightly.rom-weaver.com  <- every push to main
+  #
+  # Pull requests additionally get a throwaway preview at
+  # pr-<n>.rom-weaver-preview.pages.dev. Previews are non-production deployments,
+  # so they never disturb a channel's live deployment.
+  #
+  # Artifacts are pushed with wrangler Direct Upload, so Cloudflare never needs
+  # the WASI SDK and no Cloudflare build minutes are used.
+  #
+  # This lives in ci.yml rather than its own workflow specifically so it can
+  # consume the `wasm` job's artifact. As a separate workflow it was a separate
+  # run, so it built the module a second time - and with a different toolchain
+  # (dtolnay stable plus a hand-installed binaryen) than the one CI tests. The
+  # deployed bytes are now exactly the bytes the suite validated.
+  #
+  # Gated on `wasm` alone rather than on the test jobs, matching the previous
+  # behaviour: a preview URL is most useful while the suite is still running.
+  deploy:
+    name: Deploy web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: wasm
+    # Deployment was a separate, non-gating workflow before it moved here to
+    # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
+    # not turn a green main build red and suppress release automation.
+    continue-on-error: true
+    permissions:
+      contents: read
+      statuses: write
+    # Secrets are withheld from fork and Dependabot pull requests, so those
+    # previews could only ever fail. Skip them instead of creating red checks.
+    # A manual run deploys nothing unless a channel is picked explicitly.
+    if: >-
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'))
+    env:
+      # This job compiles nothing - it runs vite and wrangler over a prebuilt
+      # module - so the Rust toolchain and the cargo-backed tools are dead
+      # weight here. node and ripgrep stay; the webapp build reaches for them.
+      MISE_DISABLE_TOOLS: >-
+        rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The deployed changelog is generated from the latest 50 commits.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      # A tag containing a hyphen after the version is a prerelease (v1.2.3-alpha.1)
+      # and goes to beta; a bare vX.Y.Z goes to production.
+      - name: Resolve channel
+        id: channel
+        env:
+          MANUAL: ${{ github.event.inputs.deploy_channel }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          if [ -n "$MANUAL" ] && [ "$MANUAL" != "none" ]; then
+            channel="$MANUAL"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            channel=preview
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              *-*) channel=beta ;;
+              *)   channel=prod ;;
+            esac
+          else
+            channel=nightly
+          fi
+          # `branch` is what makes a deployment production vs preview: wrangler
+          # treats the project's production branch (main) as a live deploy and
+          # anything else as a throwaway preview.
+          branch=main
+          case "$channel" in
+            prod)    project=rom-weaver ;;
+            beta)    project=rom-weaver-beta ;;
+            nightly) project=rom-weaver-nightly ;;
+            preview)
+              project=rom-weaver-preview
+              branch="pr-${PR_NUMBER}"
+              ;;
+            *) echo "::error::unknown channel '$channel'"; exit 1 ;;
+          esac
+          {
+            echo "channel=$channel"
+            echo "branch=$branch"
+            echo "project=$project"
+          } >> "$GITHUB_OUTPUT"
+          echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
+
+      - name: Build webapp
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+      # Publish the bundle JSON Schema next to the site so its $id URL
+      # (https://rom-weaver.com/rom-weaver-bundle.schema.json) resolves for editors.
+      # Only production owns that URL; the other channels are not canonical.
+      - name: Publish bundle JSON Schema
+        if: steps.channel.outputs.channel == 'prod'
+        run: cp docs/rom-weaver-bundle.schema.json packages/rom-weaver-webapp/dist/rom-weaver-bundle.schema.json
+
+      # Idempotent, so the first run on a channel bootstraps its own project and
+      # no local wrangler auth is ever needed.
+      #
+      # Uses the REST API rather than `wrangler pages project create`: wrangler
+      # enumerates accounts internally, which a token scoped to specific account
+      # resources cannot do, and it surfaces that as a bare "unknown error
+      # [code: 8000000]" against an endpoint that works fine directly.
+      - name: Ensure Cloudflare Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ steps.channel.outputs.project }}
+        run: |
+          set -o pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
+          body=$(curl -sS -X POST "$api" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"name\":\"${PROJECT}\",\"production_branch\":\"main\"}")
+          if [ "$(printf '%s' "$body" | jq -r '.success')" = "true" ]; then
+            echo "created Pages project '$PROJECT'"
+          elif printf '%s' "$body" | jq -e '.errors[]? | select(.code == 8000002 or (.message | test("already exists"; "i")))' >/dev/null; then
+            echo "Pages project '$PROJECT' already exists"
+          else
+            echo "unexpected response creating '$PROJECT':" >&2
+            printf '%s\n' "$body" | jq . >&2 || printf '%s\n' "$body" >&2
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ steps.channel.outputs.project }}
+          BRANCH: ${{ steps.channel.outputs.branch }}
+        run: |
+          set -o pipefail
+          npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
+            --project-name="$PROJECT" \
+            --branch="$BRANCH" \
+            --commit-hash="${GITHUB_SHA}" 2>&1 | tee /tmp/deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' /tmp/deploy.log | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "deployed to $url"
+
+      # Surfaced as a commit status rather than a comment, so the link lives in
+      # the PR's checks list and updates in place instead of accreting comments.
+      - name: Publish preview URL as a status check
+        if: steps.channel.outputs.channel == 'preview' && steps.deploy.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALIAS: https://${{ steps.channel.outputs.branch }}.rom-weaver-preview.pages.dev
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            --method POST \
+            --field state=success \
+            --field context='preview/webapp' \
+            --field target_url="${ALIAS}" \
+            --field description='Preview deployment - click Details' \
+            --silent
+          echo "preview status -> ${ALIAS}"
