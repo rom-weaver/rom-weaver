@@ -17,6 +17,11 @@ on:
     # 07:13 UTC nightly (off the top of the hour to dodge scheduler congestion).
     - cron: "13 7 * * *"
 
+# Least privilege: this workflow only reads the repo. Declared explicitly so it
+# does not inherit whatever the repository default happens to be.
+permissions:
+  contents: read
+
 jobs:
   parity:
     runs-on: ubuntu-24.04

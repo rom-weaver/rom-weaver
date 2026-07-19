@@ -7,6 +7,11 @@ on:
     branches:
       - main
 
+# Least privilege: this workflow only reads the repo. Declared explicitly so it
+# does not inherit whatever the repository default happens to be.
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-24.04
