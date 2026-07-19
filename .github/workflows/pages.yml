@@ -88,7 +88,7 @@ jobs:
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Publish the bundle JSON Schema next to the site so its $id URL
-      # (…/rom-weaver/rom-weaver-bundle.schema.json) resolves for editors.
+      # (https://rom-weaver.com/rom-weaver-bundle.schema.json) resolves for editors.
       - name: Publish bundle JSON Schema
         run: cp docs/rom-weaver-bundle.schema.json packages/rom-weaver-webapp/dist/rom-weaver-bundle.schema.json
 

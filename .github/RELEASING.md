@@ -110,14 +110,23 @@ flag is harmless when redundant.
 
 `pages.yml` builds the wasm bundle and webapp on every push to `main` and
 deploys through `actions/deploy-pages`, so **Settings - Pages - Source** must be
-**GitHub Actions**, not a branch. No `CNAME` file is committed; the domain
-configured in repository settings is authoritative for Actions-based deploys.
+**GitHub Actions**, not a branch. A `CNAME` file holding `rom-weaver.com` is
+committed at `packages/rom-weaver-webapp/src/assets/app/root/CNAME` and ships in
+the build output, so it travels with every deploy; the domain in repository
+settings must match it.
 
-To serve the site from `rom-weaver.com`, point DNS at GitHub Pages - the four
-apex `A` records (`185.199.108-111.153`), the matching `AAAA` records
+The site is served from `rom-weaver.com`, whose DNS is hosted at Cloudflare.
+Records must point at GitHub Pages - the four apex `A` records
+(`185.199.108-111.153`), the matching `AAAA` records
 (`2606:50c0:8000-8003::153`), and a `CNAME` on `www` to
-`brandonocasey.github.io.` - then set the domain under **Settings - Pages** and
-enable **Enforce HTTPS** once the certificate is issued.
+`brandonocasey.github.io.` - with the domain set under **Settings - Pages** and
+**Enforce HTTPS** enabled once the certificate is issued.
+
+Cloudflare caveat: GitHub issues the certificate through an ACME HTTP-01
+challenge, which the Cloudflare proxy can stall. Leave the records **DNS only**
+(grey cloud) until the certificate issues. If the proxy is re-enabled
+afterwards, Cloudflare's SSL/TLS mode must be **Full (strict)** - **Flexible**
+sends Pages into a redirect loop.
 
 The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so
 it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
@@ -125,11 +134,10 @@ it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
 One value is **not** relative: the bundle schema's `$id` in
 `docs/rom-weaver-bundle.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in
 `crates/rom-weaver-app/src/bundle_schema.rs` (a unit test asserts they match).
-It points at `brandonocasey.github.io`, which keeps resolving after a custom
-domain is added because Pages redirects the `github.io` origin to it - so the
-domain switch needs no second `$id` change. Treat any future edit as a change of
-the schema's identity rather than a URL update: `$schema` values are carried
-through bundles verbatim and never matched against this constant, so older
+It points at `rom-weaver.com`, matching the custom domain, and `pages.yml`
+copies the schema to the site root so that URL resolves. Treat any future edit
+as a change of the schema's identity rather than a URL update: `$schema` values
+are carried through bundles verbatim and never matched against this constant, so older
 bundles keep parsing, but they continue pointing at the previous host.
 
 ## Normal release flow

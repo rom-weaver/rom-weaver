@@ -253,7 +253,7 @@ workflow: ordered patches, expected input and output checksums, and output
 naming. The machine-readable schema is
 [`rom-weaver-bundle.schema.json`](rom-weaver-bundle.schema.json); its `$id`
 resolves to
-`https://brandonocasey.github.io/rom-weaver/rom-weaver-bundle.schema.json`.
+`https://rom-weaver.com/rom-weaver-bundle.schema.json`.
 Print the current schema to stdout with `bundle schema`, then redirect it to a
 file or point an editor at it:
 
@@ -296,7 +296,7 @@ and bake the canonical checksummed bundle:
 
 ```json
 {
-  "$schema": "https://brandonocasey.github.io/rom-weaver/rom-weaver-bundle.schema.json",
+  "$schema": "https://rom-weaver.com/rom-weaver-bundle.schema.json",
   "version": 3,
   "rom": { "path": "original.sfc" },
   "patches": [
