@@ -1,19 +1,37 @@
-name: Pages
+name: Deploy Web
 
+# Publishes the webapp to Cloudflare Pages on three channels, each its own
+# origin so OPFS / service-worker scope / Cache Storage stay isolated:
+#
+#   rom-weaver.com          <- release tags (vX.Y.Z)
+#   beta.rom-weaver.com     <- prerelease tags (vX.Y.Z-alpha.N, -beta.N, ...)
+#   nightly.rom-weaver.com  <- every push to main
+#
+# Artifacts are built here and pushed with wrangler Direct Upload, so
+# Cloudflare never needs the WASI SDK and no Cloudflare build minutes are used.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel to deploy (overrides the ref-derived default)
+        required: true
+        default: nightly
+        type: choice
+        options: [nightly, beta, prod]
 
 permissions:
   contents: read
 
+# Keyed by channel so a nightly build never cancels a production release.
 concurrency:
-  group: pages
+  group: deploy-web-${{ github.event.inputs.channel || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -27,7 +45,31 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - uses: actions/configure-pages@v5
+      # A tag containing a hyphen after the version is a prerelease (v1.2.3-alpha.1)
+      # and goes to beta; a bare vX.Y.Z goes to production.
+      - name: Resolve channel
+        id: channel
+        run: |
+          manual="${{ github.event.inputs.channel }}"
+          if [ -n "$manual" ]; then
+            channel="$manual"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              *-*) channel=beta ;;
+              *)   channel=prod ;;
+            esac
+          else
+            channel=nightly
+          fi
+          case "$channel" in
+            prod)    project=rom-weaver ;;
+            beta)    project=rom-weaver-beta ;;
+            nightly) project=rom-weaver-nightly ;;
+            *) echo "::error::unknown channel '$channel'"; exit 1 ;;
+          esac
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "project=$project" >> "$GITHUB_OUTPUT"
+          echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
 
       - name: Install system dependencies
         run: |
@@ -89,22 +131,17 @@ jobs:
 
       # Publish the bundle JSON Schema next to the site so its $id URL
       # (https://rom-weaver.com/rom-weaver-bundle.schema.json) resolves for editors.
+      # Only production owns that URL; the other channels are not canonical.
       - name: Publish bundle JSON Schema
+        if: steps.channel.outputs.channel == 'prod'
         run: cp docs/rom-weaver-bundle.schema.json packages/rom-weaver-webapp/dist/rom-weaver-bundle.schema.json
 
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: packages/rom-weaver-webapp/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-24.04
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
+            --project-name="${{ steps.channel.outputs.project }}" \
+            --branch=main \
+            --commit-hash="${GITHUB_SHA}"

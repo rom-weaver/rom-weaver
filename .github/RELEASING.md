@@ -106,27 +106,35 @@ Keep the explicit `--provenance` flag. npm documents provenance as automatic
 under trusted publishing, but it has been reported not to attach; passing the
 flag is harmless when redundant.
 
-## GitHub Pages and the custom domain
+## Webapp hosting and the channel domains
 
-`pages.yml` builds the wasm bundle and webapp on every push to `main` and
-deploys through `actions/deploy-pages`, so **Settings - Pages - Source** must be
-**GitHub Actions**, not a branch. A `CNAME` file holding `rom-weaver.com` is
-committed at `packages/rom-weaver-webapp/src/assets/app/root/CNAME` and ships in
-the build output, so it travels with every deploy; the domain in repository
-settings must match it.
+`deploy-web.yml` builds the wasm bundle and webapp, then publishes to
+**Cloudflare Pages** via `wrangler pages deploy` (Direct Upload). Cloudflare
+never builds anything - its build image has no WASI SDK - and no Cloudflare
+build minutes are consumed.
 
-The site is served from `rom-weaver.com`, whose DNS is hosted at Cloudflare.
-Records must point at GitHub Pages - the four apex `A` records
-(`185.199.108-111.153`), the matching `AAAA` records
-(`2606:50c0:8000-8003::153`), and a `CNAME` on `www` to
-`brandonocasey.github.io.` - with the domain set under **Settings - Pages** and
-**Enforce HTTPS** enabled once the certificate is issued.
+Three channels, each a separate Cloudflare Pages project. They are deliberately
+separate **origins**, not subpaths of one site, because OPFS, service-worker
+scope, and Cache Storage are all per-origin; a shared origin would let a nightly
+build read and corrupt production's OPFS state.
 
-Cloudflare caveat: GitHub issues the certificate through an ACME HTTP-01
-challenge, which the Cloudflare proxy can stall. Leave the records **DNS only**
-(grey cloud) until the certificate issues. If the proxy is re-enabled
-afterwards, Cloudflare's SSL/TLS mode must be **Full (strict)** - **Flexible**
-sends Pages into a redirect loop.
+| Channel | Domain | Trigger | Pages project |
+| --- | --- | --- | --- |
+| Production | `rom-weaver.com` | tag `vX.Y.Z` | `rom-weaver` |
+| Beta | `beta.rom-weaver.com` | prerelease tag `vX.Y.Z-*` | `rom-weaver-beta` |
+| Nightly | `nightly.rom-weaver.com` | every push to `main` | `rom-weaver-nightly` |
+
+Production is CI-gated by construction: release-please only tags after CI is
+green, so an unreviewed push can never reach `rom-weaver.com`. `workflow_dispatch`
+accepts a `channel` input to force any channel manually.
+
+Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
+Cloudflare Pages - Edit**) and `CLOUDFLARE_ACCOUNT_ID`.
+
+DNS lives in the same Cloudflare account, so adding a custom domain to a Pages
+project creates the record automatically. Unlike the previous GitHub Pages
+setup, records should stay **proxied** (orange) - Pages is Cloudflare-native, so
+there is no origin-certificate chicken-and-egg and TLS is issued automatically.
 
 The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so
 it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
@@ -134,11 +142,20 @@ it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
 One value is **not** relative: the bundle schema's `$id` in
 `docs/rom-weaver-bundle.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in
 `crates/rom-weaver-app/src/bundle_schema.rs` (a unit test asserts they match).
-It points at `rom-weaver.com`, matching the custom domain, and `pages.yml`
-copies the schema to the site root so that URL resolves. Treat any future edit
-as a change of the schema's identity rather than a URL update: `$schema` values
-are carried through bundles verbatim and never matched against this constant, so older
-bundles keep parsing, but they continue pointing at the previous host.
+It points at `rom-weaver.com`, and `deploy-web.yml` copies the schema to the site
+root **on the production channel only** - beta and nightly are not canonical and
+must not claim that URL. Treat any future edit as a change of the schema's
+identity rather than a URL update: `$schema` values are carried through bundles
+verbatim and never matched against this constant, so older bundles keep parsing,
+but they continue pointing at the previous host.
+
+Cross-origin isolation is still achieved by the service worker in
+`packages/rom-weaver-webapp/src/webapp/cache-service-worker.ts`, which injects
+COOP/COEP because GitHub Pages could not set headers. Cloudflare Pages *can*
+set them via a `_headers` file, which would be more robust - but that is a
+deliberate follow-up, not part of the migration: the COEP mode has to be
+`credentialless` vs `require-corp` per browser, and the service worker already
+negotiates that at runtime. Do not add `_headers` without testing Safari/iOS.
 
 ## Normal release flow
 
