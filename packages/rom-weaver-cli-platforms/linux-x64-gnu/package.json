@@ -5,6 +5,7 @@
   "author": "Brandon Casey",
   "repository": {"type": "git", "url": "https://github.com/brandonocasey/rom-weaver.git", "directory": "packages/rom-weaver-cli-platforms/linux-x64-gnu"},
   "license": "AGPL-3.0-or-later",
+  "funding": "https://ko-fi.com/brandonocasey",
   "os": ["linux"],
   "cpu": ["x64"],
   "libc": ["glibc"],
