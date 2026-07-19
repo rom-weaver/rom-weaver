@@ -31,8 +31,11 @@ inputs:
     description: Run `npm ci` for the webapp package.
     default: "false"
   playwright:
-    description: Install the Playwright Chromium browser and its system dependencies.
+    description: Install Playwright browsers and their system dependencies.
     default: "false"
+  playwright-browsers:
+    description: Space-separated Playwright browsers to install. Only the nightly matrix needs WebKit.
+    default: chromium
 
 runs:
   using: composite
@@ -135,4 +138,4 @@ runs:
     - name: Install browser test dependencies
       if: inputs.playwright == 'true'
       shell: bash
-      run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
+      run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps ${{ inputs.playwright-browsers }}

@@ -2,13 +2,23 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_channel:
+        description: Also deploy the webapp to this channel (none = test only)
+        required: false
+        default: none
+        type: choice
+        options: [none, nightly, beta, prod]
   pull_request:
   push:
     branches:
       - main
+    # Release tags deploy the webapp; the test jobs below skip them, since the
+    # commit being tagged already passed this same gate on main.
+    tags: ["v*"]
 
-# Least privilege: this workflow only reads the repo. Declared explicitly so it
-# does not inherit whatever the repository default happens to be.
+# Least privilege: most of this workflow only reads the repo. The deploy job
+# widens its own permissions rather than granting them workflow-wide.
 permissions:
   contents: read
 
@@ -71,6 +81,7 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    if: github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -109,11 +120,6 @@ jobs:
       - name: Thread guard regressions
         run: mise run thread-guards
 
-      # Node built-ins only - these cover scripts/, not the webapp, so they need
-      # neither the webapp's node_modules nor the wasm artifact.
-      - name: Build script tests
-        run: npm test
-
       - name: Rust tests
         run: mise run test-rust
 
@@ -142,6 +148,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
+    if: github.ref_type != 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -157,6 +164,13 @@ jobs:
         with:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
+
+      # Lives here rather than in the `rust` job because
+      # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
+      # imports only env functions the runtime provides - it reads the real
+      # .wasm and needs the artifact downloaded above.
+      - name: Build script tests
+        run: npm test
 
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
@@ -179,13 +193,16 @@ jobs:
   # Coverage has no percentage threshold - it is reported, not enforced - so it
   # does not gate a merge and is kept off the pull-request critical path. It
   # still runs on every push to main, so the release candidates that matter are
-  # covered, and on demand via workflow_dispatch.
+  # covered, and on demand via workflow_dispatch. Tags are excluded: the commit
+  # under a release tag already produced this report on main.
   coverage:
     name: Coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     needs: wasm
-    if: github.event_name != 'pull_request'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
     env:
       CARGO_TERM_COLOR: always
       ROM_WEAVER_COVERAGE: "1"
@@ -233,3 +250,177 @@ jobs:
           name: coverage-reports
           path: dist/coverage/**
           if-no-files-found: warn
+
+  # Publishes the webapp to Cloudflare Pages on three channels, each its own
+  # origin so OPFS / service-worker scope / Cache Storage stay isolated:
+  #
+  #   rom-weaver.com          <- release tags (vX.Y.Z)
+  #   beta.rom-weaver.com     <- prerelease tags (vX.Y.Z-alpha.N, -beta.N, ...)
+  #   nightly.rom-weaver.com  <- every push to main
+  #
+  # Pull requests additionally get a throwaway preview at
+  # pr-<n>.rom-weaver-preview.pages.dev. Previews are non-production deployments,
+  # so they never disturb a channel's live deployment.
+  #
+  # Artifacts are pushed with wrangler Direct Upload, so Cloudflare never needs
+  # the WASI SDK and no Cloudflare build minutes are used.
+  #
+  # This lives in ci.yml rather than its own workflow specifically so it can
+  # consume the `wasm` job's artifact. As a separate workflow it was a separate
+  # run, so it built the module a second time - and with a different toolchain
+  # (dtolnay stable plus a hand-installed binaryen) than the one CI tests. The
+  # deployed bytes are now exactly the bytes the suite validated.
+  #
+  # Gated on `wasm` alone rather than on the test jobs, matching the previous
+  # behaviour: a preview URL is most useful while the suite is still running.
+  deploy:
+    name: Deploy web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: wasm
+    permissions:
+      contents: read
+      statuses: write
+    # Secrets are withheld from fork and Dependabot pull requests, so those
+    # previews could only ever fail. Skip them instead of creating red checks.
+    # A manual run deploys nothing unless a channel is picked explicitly.
+    if: >-
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'))
+    env:
+      # This job compiles nothing - it runs vite and wrangler over a prebuilt
+      # module - so the Rust toolchain and the cargo-backed tools are dead
+      # weight here. node and ripgrep stay; the webapp build reaches for them.
+      MISE_DISABLE_TOOLS: >-
+        rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      # A tag containing a hyphen after the version is a prerelease (v1.2.3-alpha.1)
+      # and goes to beta; a bare vX.Y.Z goes to production.
+      - name: Resolve channel
+        id: channel
+        env:
+          MANUAL: ${{ github.event.inputs.deploy_channel }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          if [ -n "$MANUAL" ] && [ "$MANUAL" != "none" ]; then
+            channel="$MANUAL"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            channel=preview
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              *-*) channel=beta ;;
+              *)   channel=prod ;;
+            esac
+          else
+            channel=nightly
+          fi
+          # `branch` is what makes a deployment production vs preview: wrangler
+          # treats the project's production branch (main) as a live deploy and
+          # anything else as a throwaway preview.
+          branch=main
+          case "$channel" in
+            prod)    project=rom-weaver ;;
+            beta)    project=rom-weaver-beta ;;
+            nightly) project=rom-weaver-nightly ;;
+            preview)
+              project=rom-weaver-preview
+              branch="pr-${PR_NUMBER}"
+              ;;
+            *) echo "::error::unknown channel '$channel'"; exit 1 ;;
+          esac
+          {
+            echo "channel=$channel"
+            echo "branch=$branch"
+            echo "project=$project"
+          } >> "$GITHUB_OUTPUT"
+          echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
+
+      - name: Build webapp
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+      # Publish the bundle JSON Schema next to the site so its $id URL
+      # (https://rom-weaver.com/rom-weaver-bundle.schema.json) resolves for editors.
+      # Only production owns that URL; the other channels are not canonical.
+      - name: Publish bundle JSON Schema
+        if: steps.channel.outputs.channel == 'prod'
+        run: cp docs/rom-weaver-bundle.schema.json packages/rom-weaver-webapp/dist/rom-weaver-bundle.schema.json
+
+      # Idempotent, so the first run on a channel bootstraps its own project and
+      # no local wrangler auth is ever needed.
+      #
+      # Uses the REST API rather than `wrangler pages project create`: wrangler
+      # enumerates accounts internally, which a token scoped to specific account
+      # resources cannot do, and it surfaces that as a bare "unknown error
+      # [code: 8000000]" against an endpoint that works fine directly.
+      - name: Ensure Cloudflare Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ steps.channel.outputs.project }}
+        run: |
+          set -o pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
+          body=$(curl -sS -X POST "$api" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"name\":\"${PROJECT}\",\"production_branch\":\"main\"}")
+          if [ "$(printf '%s' "$body" | jq -r '.success')" = "true" ]; then
+            echo "created Pages project '$PROJECT'"
+          elif printf '%s' "$body" | jq -e '.errors[]? | select(.code == 8000002 or (.message | test("already exists"; "i")))' >/dev/null; then
+            echo "Pages project '$PROJECT' already exists"
+          else
+            echo "unexpected response creating '$PROJECT':" >&2
+            printf '%s\n' "$body" | jq . >&2 || printf '%s\n' "$body" >&2
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ steps.channel.outputs.project }}
+          BRANCH: ${{ steps.channel.outputs.branch }}
+        run: |
+          set -o pipefail
+          npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
+            --project-name="$PROJECT" \
+            --branch="$BRANCH" \
+            --commit-hash="${GITHUB_SHA}" 2>&1 | tee /tmp/deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' /tmp/deploy.log | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "deployed to $url"
+
+      # Surfaced as a commit status rather than a comment, so the link lives in
+      # the PR's checks list and updates in place instead of accreting comments.
+      - name: Publish preview URL as a status check
+        if: steps.channel.outputs.channel == 'preview' && steps.deploy.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALIAS: https://${{ steps.channel.outputs.branch }}.rom-weaver-preview.pages.dev
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            --method POST \
+            --field state=success \
+            --field context='preview/webapp' \
+            --field target_url="${ALIAS}" \
+            --field description='Preview deployment - click Details' \
+            --silent
+          echo "preview status -> ${ALIAS}"

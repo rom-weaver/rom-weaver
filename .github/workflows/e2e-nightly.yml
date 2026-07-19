@@ -16,8 +16,6 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: always
-      WASI_SDK_VERSION: "33"
-      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -25,38 +23,18 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # This is a scheduled run with no concurrent CI run to borrow an artifact
+      # from, and `run-e2e.mjs` drives the *dev* wasm build (no wasm-opt/brotli)
+      # rather than the production module CI publishes - so it keeps building
+      # its own. Only the setup boilerplate is shared.
+      - uses: ./.github/actions/setup-build-env
         with:
-          components: rustfmt
-          targets: wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install mise
-        uses: jdx/mise-action@v4
-        with:
-          install: true
-
-      - name: Install WASI SDK
-        run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
-
-      - name: Install web dependencies
-        run: |
-          npm ci --prefix packages/rom-weaver-webapp
-          npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium webkit
+          apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+          webapp-deps: "true"
+          playwright: "true"
+          playwright-browsers: chromium webkit
 
       - name: Run exhaustive E2E matrix
         run: mise run test-e2e-nightly
