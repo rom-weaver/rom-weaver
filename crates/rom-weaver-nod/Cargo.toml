@@ -63,7 +63,7 @@ lru = "0.16"
 md-5.workspace = true
 openssl = { version = "0.10", optional = true }
 polonius-the-crab = "0.5"
-pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"], optional = true }
+pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"], optional = true }
 sha1.workspace = true
 simple_moving_average = "1.0"
 thiserror.workspace = true
