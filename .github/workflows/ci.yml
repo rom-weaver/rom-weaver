@@ -12,99 +12,79 @@ on:
 permissions:
   contents: read
 
+# Superseded pushes to a branch are pointless work; on main every commit is a
+# release candidate, so those runs are allowed to finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  quality:
+  # Built once and shared. This is the single most expensive step in the
+  # pipeline (~6.5 min), and it used to run identically in two jobs.
+  wasm:
+    name: WASM build
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: always
-      WASI_SDK_VERSION: "33"
-      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      # -D warnings replaces the former standalone `wasm-check` step, which
+      # type-checked only rom-weaver-containers for this target and cost a full
+      # extra 4 min: its differing RUSTFLAGS gave it a separate fingerprint, so
+      # it recompiled the whole dependency chain just to collect warnings.
+      # Applying the flag to the build we already run covers a strict superset
+      # (the entire app, not one crate) for free. Lint levels do not affect
+      # codegen, so output bytes are unchanged.
+      - name: Build production WASM
+        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run build-wasm-prod
+
+      # The wasm module and its brotli sibling are already compressed, so
+      # re-compressing them into the artifact only burns time.
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-prod
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-webapp/src/wasm/NOTICE
+            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-webapp/src/wasm/third_party
+
+  # Everything that needs a host-profile Rust build and nothing from wasm, so
+  # it runs concurrently with the wasm build instead of queueing behind it.
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The whitespace check below diffs against the PR base.
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install system dependencies
-        # brotli has no pinnable mise binary; cmake/ninja/pkg-config build the
-        # vendored C deps. node, wasm-opt, and ripgrep come from mise; the WASI SDK
-        # is downloaded below (pinning it via mise would shadow clang on PATH and
-        # break the libarchive-sys bindgen). clang/libclang-dev back bindgen in
-        # rom-weaver-libarchive-sys; without them it cannot resolve system
-        # headers ("'sys/stat.h' file not found").
-        #
-        # sccache is deliberately absent: .mise.toml resolves RUSTC_WRAPPER to
-        # whatever is on PATH and leaves it empty otherwise, and nothing here
-        # persists ~/.cache/sccache between runs. Installing it would reintroduce
-        # the wrapper overhead for a cache that starts empty every time;
-        # Swatinem/rust-cache does the caching that actually survives.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
-          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
-          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
-
-      - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          install: true
-
-      # mise pins the toolchain (.mise.toml [tools] rust) and exports
-      # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
-      # than to whatever rustup defaults to - `mise exec` supplies the pin.
-      - name: Install Rust components and targets
-        run: |
-          mise exec -- rustup component add clippy rustfmt
-          mise exec -- rustup target add wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Default is false, so a failing job saves nothing - a red pipeline
-          # then rebuilds from cold every run, which is exactly when the cache
-          # is worth most. The key already covers rustc + Cargo.lock, so a
-          # cache written by a failed run is still valid for the next one.
-          cache-on-failure: true
-
-      # Keyed on the pinned version + its checksum, so a version bump misses the
-      # cache by construction and never serves a stale SDK.
-      - name: Cache WASI SDK
-        id: wasi-sdk-cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
-          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
-
-      - name: Install WASI SDK
-        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-
-      # Runs on both paths - a cache hit restores the tree but sets no env.
-      - name: Export WASI SDK path
-        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
-
-      # Node comes from mise (.mise.toml [tools] node); cache npm downloads
-      # since we no longer use setup-node's built-in cache.
-      - name: Cache npm downloads
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-webapp
-
-      - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-components: clippy rustfmt
 
       - name: Rust format
         run: mise run fmt
@@ -114,9 +94,6 @@ jobs:
 
       - name: Rust typegen
         run: mise run typegen-check
-
-      - name: WASM threaded check
-        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
       - name: Whitespace
         env:
@@ -131,6 +108,11 @@ jobs:
 
       - name: Thread guard regressions
         run: mise run thread-guards
+
+      # Node built-ins only - these cover scripts/, not the webapp, so they need
+      # neither the webapp's node_modules nor the wasm artifact.
+      - name: Build script tests
+        run: npm test
 
       - name: Rust tests
         run: mise run test-rust
@@ -149,116 +131,89 @@ jobs:
         # This catches missing direct dependencies and files absent from crates.io
         # tarballs before release automation runs.
         run: cargo publish --workspace --exclude rom-weaver-typegen --locked --dry-run
-
       - name: npm advisories
         run: |
           npm run audit:deps
           npm --prefix packages/rom-weaver-webapp run audit:deps
 
-      - name: WASM build
-        run: mise run build-wasm-prod
+  # Consumes the prebuilt wasm module; compiles no Rust of its own.
+  webapp:
+    name: Webapp
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: wasm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - name: rom-weaver-webapp checks
-        run: |
-          npm test
-          npm --prefix packages/rom-weaver-webapp run lint
-          npm --prefix packages/rom-weaver-webapp run test:unit
-          npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-          npm --prefix packages/rom-weaver-webapp run test:browser:parallel
-          npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
-          npm --prefix packages/rom-weaver-webapp run build
+      - uses: ./.github/actions/setup-build-env
+        with:
+          cargo-cache: "false"
+          webapp-deps: "true"
+          playwright: "true"
 
-  # Coverage runs independently from `quality` and has no percentage threshold,
-  # but every contributing suite must pass and produce LCOV before the aggregate
-  # line-coverage number is published.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+      - name: Browser tests (wasm)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
+
+      - name: Browser tests (parallel)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+
+      - name: Webapp E2E
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+
+      - name: Build
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+  # Coverage has no percentage threshold - it is reported, not enforced - so it
+  # does not gate a merge and is kept off the pull-request critical path. It
+  # still runs on every push to main, so the release candidates that matter are
+  # covered, and on demand via workflow_dispatch.
   coverage:
+    name: Coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    needs: wasm
+    if: github.event_name != 'pull_request'
     env:
       CARGO_TERM_COLOR: always
-      WASI_SDK_VERSION: "33"
-      WASI_SDK_SHA256: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
       ROM_WEAVER_COVERAGE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
           submodules: recursive
 
-      - name: Install system dependencies
-        # See the quality job for why clang/libclang-dev are here and sccache is not.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config clang libclang-dev
-          lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
-          [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
-
-      - name: Install mise (rust, node, wasm-opt, ripgrep)
-        uses: jdx/mise-action@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          install: true
-
-      # See the quality job: components belong to mise's pinned toolchain.
-      # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
-      - name: Install Rust components and targets
-        run: |
-          mise exec -- rustup component add clippy rustfmt llvm-tools-preview
-          mise exec -- rustup target add wasm32-wasip1-threads
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Default is false, so a failing job saves nothing - a red pipeline
-          # then rebuilds from cold every run, which is exactly when the cache
-          # is worth most. The key already covers rustc + Cargo.lock, so a
-          # cache written by a failed run is still valid for the next one.
-          cache-on-failure: true
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
+          rust-components: llvm-tools-preview
+          webapp-deps: "true"
+          playwright: "true"
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      # Keyed on the pinned version + its checksum, so a version bump misses the
-      # cache by construction and never serves a stale SDK.
-      - name: Cache WASI SDK
-        id: wasi-sdk-cache
-        uses: actions/cache@v6
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
         with:
-          path: ${{ runner.temp }}/wasi-sdk-${{ env.WASI_SDK_VERSION }}.0-x86_64-linux
-          key: wasi-sdk-${{ runner.os }}-${{ env.WASI_SDK_VERSION }}-${{ env.WASI_SDK_SHA256 }}
-
-      - name: Install WASI SDK
-        if: steps.wasi-sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl --fail --location --show-error \
-            --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-          echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
-
-      # Runs on both paths - a cache hit restores the tree but sets no env.
-      - name: Export WASI SDK path
-        run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
-
-      - name: Cache npm downloads
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Install package dependencies
-        run: npm ci --prefix packages/rom-weaver-webapp
-
-      - name: Install browser test dependencies
-        run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
 
       - name: Rust coverage
         run: mise run coverage-rust
-
-      - name: WASM build
-        run: mise run build-wasm-prod
 
       - name: React unit coverage
         run: npm --prefix packages/rom-weaver-webapp run test:unit:coverage

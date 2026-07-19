@@ -1,0 +1,138 @@
+name: Set up build environment
+description: >-
+  Shared toolchain setup for the CI jobs: apt packages, mise-pinned tools,
+  Rust components/targets, cargo cache, WASI SDK, webapp node_modules, and
+  Playwright browsers. Every piece is opt-in so a job installs only what it
+  actually runs - the whole point of splitting CI into narrow jobs.
+
+inputs:
+  apt-packages:
+    description: Space-separated apt packages to install (empty skips apt entirely).
+    default: ""
+  rust-components:
+    description: Space-separated rustup components to add to the mise-pinned toolchain.
+    default: ""
+  rust-targets:
+    description: Space-separated rustup targets to add to the mise-pinned toolchain.
+    default: ""
+  cargo-cache:
+    description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
+    default: "true"
+  wasi-sdk:
+    description: Download (or restore from cache) the WASI SDK and export WASI_SDK_PATH.
+    default: "false"
+  wasi-sdk-version:
+    description: WASI SDK major version. Single source of truth for every job.
+    default: "33"
+  wasi-sdk-sha256:
+    description: Checksum of the WASI SDK tarball. Part of the cache key, so a version bump can never serve a stale SDK.
+    default: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
+  webapp-deps:
+    description: Run `npm ci` for the webapp package.
+    default: "false"
+  playwright:
+    description: Install the Playwright Chromium browser and its system dependencies.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # clang/libclang-dev back bindgen in rom-weaver-libarchive-sys; without them
+    # it cannot resolve system headers ("'sys/stat.h' file not found").
+    # cmake/ninja/pkg-config build the vendored C deps, and brotli has no
+    # pinnable mise binary. Jobs that compile no Rust pass an empty list.
+    - name: Install system dependencies
+      if: inputs.apt-packages != ''
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes ${{ inputs.apt-packages }}
+        lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
+        [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
+
+    - name: Install mise (rust, node, wasm-opt, ripgrep)
+      uses: jdx/mise-action@v4
+      with:
+        install: true
+
+    # mise pins the toolchain (.mise.toml [tools] rust) and exports
+    # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
+    # than to whatever rustup defaults to - `mise exec` supplies the pin.
+    - name: Install Rust components
+      if: inputs.rust-components != ''
+      shell: bash
+      run: mise exec -- rustup component add ${{ inputs.rust-components }}
+
+    - name: Install Rust targets
+      if: inputs.rust-targets != ''
+      shell: bash
+      run: mise exec -- rustup target add ${{ inputs.rust-targets }}
+
+    # sccache is deliberately absent: .mise.toml resolves RUSTC_WRAPPER to
+    # whatever is on PATH and leaves it empty otherwise, and nothing here
+    # persists ~/.cache/sccache between runs. Installing it would reintroduce
+    # the wrapper overhead for a cache that starts empty every time;
+    # Swatinem/rust-cache does the caching that actually survives. The cache is
+    # keyed per job, so the wasm job's wasm-release artifacts and the rust
+    # job's host-profile artifacts no longer evict each other.
+    - name: Cache cargo artifacts
+      if: inputs.cargo-cache == 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        # Default is false, so a failing job saves nothing - a red pipeline
+        # then rebuilds from cold every run, which is exactly when the cache
+        # is worth most. The key already covers rustc + Cargo.lock, so a
+        # cache written by a failed run is still valid for the next one.
+        cache-on-failure: true
+
+    # Keyed on the pinned version + its checksum, so a version bump misses the
+    # cache by construction and never serves a stale SDK.
+    - name: Cache WASI SDK
+      if: inputs.wasi-sdk == 'true'
+      id: wasi-sdk-cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/wasi-sdk-${{ inputs.wasi-sdk-version }}.0-x86_64-linux
+        key: wasi-sdk-${{ runner.os }}-${{ inputs.wasi-sdk-version }}-${{ inputs.wasi-sdk-sha256 }}
+
+    - name: Install WASI SDK
+      if: inputs.wasi-sdk == 'true' && steps.wasi-sdk-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        WASI_SDK_VERSION: ${{ inputs.wasi-sdk-version }}
+        WASI_SDK_SHA256: ${{ inputs.wasi-sdk-sha256 }}
+      run: |
+        curl --fail --location --show-error \
+          --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
+          "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+        echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
+        tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
+
+    # Runs on both paths - a cache hit restores the tree but sets no env.
+    - name: Export WASI SDK path
+      if: inputs.wasi-sdk == 'true'
+      shell: bash
+      env:
+        WASI_SDK_VERSION: ${{ inputs.wasi-sdk-version }}
+      run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+    # Node comes from mise (.mise.toml [tools] node); cache npm downloads
+    # since we no longer use setup-node's built-in cache.
+    - name: Cache npm downloads
+      if: inputs.webapp-deps == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-webapp/package-lock.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
+    - name: Install package dependencies
+      if: inputs.webapp-deps == 'true'
+      shell: bash
+      run: npm ci --prefix packages/rom-weaver-webapp
+
+    - name: Install browser test dependencies
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps chromium
