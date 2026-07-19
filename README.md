@@ -1,11 +1,3 @@
-<p align="center">
-  <img
-    src="packages/rom-weaver-webapp/design/webapp.png"
-    alt="rom-weaver web app showing the Weave workflow"
-    width="960"
-  >
-</p>
-
 <h1 align="center"><img src="packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="rom-weaver logo" width="64" height="64" align="middle"> rom-weaver</h1>
 
 <p align="center">
@@ -21,6 +13,7 @@
 
 <p align="center">
  <a href="https://rom-weaver.com/">Open the webapp</a>
+ · <a href="#screenshots">Screenshots</a>
  · <a href="#install">Install</a>
  · <a href="docs/README.md">Documentation</a>
  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
@@ -33,6 +26,19 @@ breaking changes may still happen between minor releases. Patching,
 compressing, extracting, and bundling have all been tested extensively. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0.
+
+## Screenshots
+
+<table>
+  <tr>
+    <th>Apply patches (Weave)</th>
+    <th>Create a patch</th>
+  </tr>
+  <tr>
+    <td><img src="packages/rom-weaver-webapp/design/weave-mobile.png" alt="Filled Weave patch workflow on mobile"></td>
+    <td><img src="packages/rom-weaver-webapp/design/create-mobile.png" alt="Filled Create patch workflow on mobile"></td>
+  </tr>
+</table>
 
 ## Features
 
