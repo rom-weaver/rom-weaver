@@ -101,6 +101,21 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
             packages/rom-weaver-webapp/src/wasm/third_party
 
+      # Without this the only evidence the cache works is an unexplained swing
+      # in job duration, which is a poor thing to debug from months later.
+      - name: Report cache status
+        env:
+          HIT: ${{ steps.wasm-cache.outputs.cache-hit }}
+          KEY: ${{ steps.wasm-key.outputs.key }}
+        run: |
+          if [ "$HIT" = "true" ]; then
+            echo "**WASM cache hit** - restored, skipping the ~6.5 min build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**WASM cache miss** - building from source." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "key: \`${KEY}\`" >> "$GITHUB_STEP_SUMMARY"
+
       # Skipped entirely on a hit - the toolchain exists only to compile.
       - uses: ./.github/actions/setup-build-env
         if: steps.wasm-cache.outputs.cache-hit != 'true'
