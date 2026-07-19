@@ -2262,6 +2262,7 @@ name = "rom-weaver-xdvdfs"
 version = "0.5.0"
 dependencies = [
  "arrayvec",
+ "async-trait",
  "bincode",
  "ciso",
  "encoding_rs",

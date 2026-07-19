@@ -9,11 +9,12 @@ pub const BUNDLE_VERSION: u32 = 3;
 /// Oldest bundle schema version this build still reads.
 pub const BUNDLE_MIN_VERSION: u32 = 1;
 
-/// The JSON Schema for `rom-weaver-bundle.json`, embedded from the canonical
-/// docs copy so `bundle schema` and the docs stay a single source of truth.
+/// The JSON Schema for `rom-weaver-bundle.json`, embedded from the copy shipped
+/// with this crate. A workspace test below keeps it byte-for-byte aligned with
+/// the canonical docs copy.
 /// Editors can bind it via a `$schema` key (accepted on read) or the published
 /// URL in its `$id`.
-pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../../../docs/rom-weaver-bundle.schema.json");
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle.schema.json");
 
 /// Published, resolvable location of [`BUNDLE_JSON_SCHEMA`] (matches its `$id`).
 pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://rom-weaver.com/rom-weaver-bundle.schema.json";
@@ -189,6 +190,20 @@ pub struct BundleOutput {
 #[cfg(test)]
 mod schema_tests {
     use super::*;
+    use std::path::Path;
+
+    // The packaged crate cannot contain the repository's docs directory, so
+    // compare against it only when running from the workspace checkout.
+    #[test]
+    fn embedded_schema_matches_canonical_docs_copy() {
+        let docs_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/rom-weaver-bundle.schema.json");
+        if docs_path.exists() {
+            let canonical =
+                std::fs::read_to_string(docs_path).expect("read canonical docs bundle schema");
+            assert_eq!(canonical, BUNDLE_JSON_SCHEMA);
+        }
+    }
 
     // Drift guard for the hand-maintained JSON Schema: it must stay valid JSON,
     // its $id must match the published URL, and it must advertise every

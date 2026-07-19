@@ -144,6 +144,12 @@ jobs:
       - name: Unused Rust dependencies
         run: mise run machete
 
+      - name: Verify publishable Rust packages
+        # Package each crate exactly as cargo publish would, without uploading.
+        # This catches missing direct dependencies and files absent from crates.io
+        # tarballs before release automation runs.
+        run: cargo publish --workspace --exclude rom-weaver-typegen --locked --dry-run
+
       - name: npm advisories
         run: |
           npm run audit:deps

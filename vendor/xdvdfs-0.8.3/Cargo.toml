@@ -35,6 +35,10 @@ publish.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[package.metadata.cargo-machete]
+# maybe-async expands its async traits to async-trait at macro expansion time.
+ignored = ["async-trait"]
+
 [lib]
 name = "xdvdfs"
 path = "src/lib.rs"
@@ -61,6 +65,9 @@ optional = true
 
 [dependencies.maybe-async]
 version = "0.2.7"
+
+[dependencies.async-trait]
+version = "0.1"
 
 [dependencies.proc-bitfield]
 version = "0.2.2"
