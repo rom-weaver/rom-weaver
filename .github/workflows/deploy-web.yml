@@ -7,12 +7,18 @@ name: Deploy Web
 #   beta.rom-weaver.com     <- prerelease tags (vX.Y.Z-alpha.N, -beta.N, ...)
 #   nightly.rom-weaver.com  <- every push to main
 #
+# Pull requests additionally get a throwaway preview at
+# pr-<n>.rom-weaver-preview.pages.dev. Previews are non-production deployments,
+# so they never disturb a channel's live deployment.
+#
 # Artifacts are built here and pushed with wrangler Direct Upload, so
 # Cloudflare never needs the WASI SDK and no Cloudflare build minutes are used.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       channel:
@@ -24,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 # Keyed by channel so a nightly build never cancels a production release.
 concurrency:
@@ -34,6 +41,11 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # Secrets are withheld from fork pull requests by design, so a fork preview
+    # could only ever fail. Skip rather than fail noisily on every outside PR.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     env:
       CARGO_TERM_COLOR: always
       WASI_SDK_VERSION: "33"
@@ -53,6 +65,8 @@ jobs:
           manual="${{ github.event.inputs.channel }}"
           if [ -n "$manual" ]; then
             channel="$manual"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            channel=preview
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             case "${GITHUB_REF_NAME}" in
               *-*) channel=beta ;;
@@ -61,13 +75,22 @@ jobs:
           else
             channel=nightly
           fi
+          # `branch` is what makes a deployment production vs preview: wrangler
+          # treats the project's production branch (main) as a live deploy and
+          # anything else as a throwaway preview.
+          branch=main
           case "$channel" in
             prod)    project=rom-weaver ;;
             beta)    project=rom-weaver-beta ;;
             nightly) project=rom-weaver-nightly ;;
+            preview)
+              project=rom-weaver-preview
+              branch="pr-${{ github.event.number }}"
+              ;;
             *) echo "::error::unknown channel '$channel'"; exit 1 ;;
           esac
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "project=$project" >> "$GITHUB_OUTPUT"
           echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
 
@@ -166,11 +189,28 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
+        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          set -o pipefail
           npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
             --project-name="${{ steps.channel.outputs.project }}" \
-            --branch=main \
-            --commit-hash="${GITHUB_SHA}"
+            --branch="${{ steps.channel.outputs.branch }}" \
+            --commit-hash="${GITHUB_SHA}" 2>&1 | tee /tmp/deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' /tmp/deploy.log | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "deployed to $url"
+
+      - name: Comment preview URL on the pull request
+        if: steps.channel.outputs.channel == 'preview' && steps.deploy.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALIAS: https://${{ steps.channel.outputs.branch }}.rom-weaver-preview.pages.dev
+        run: |
+          gh pr comment "${{ github.event.number }}" --edit-last --create-if-none --body \
+            "Preview: ${ALIAS}
+          This build: ${{ steps.deploy.outputs.url }}
+
+          Separate origin from production, so its OPFS and service worker are isolated."
