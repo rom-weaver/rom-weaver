@@ -1,0 +1,62 @@
+name: CodeQL
+
+# Static analysis for the TypeScript webapp and the Rust workspace.
+#
+# Deliberately NOT wired into branch protection: CodeQL's Rust support is newer
+# than its JavaScript support, so a false positive or an extractor regression
+# should surface as an alert rather than block every merge. Treat the Security
+# tab as the signal, not the PR gate.
+#
+# build-mode: none analyses sources directly. The alternative for Rust would be
+# a full workspace build, which here means cmake-built C dependencies and the
+# WASI SDK - minutes of work that ci.yml already does.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # 05:27 UTC weekly, off the hour to dodge scheduler congestion.
+    - cron: "27 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # security-events: write is what lets the run upload SARIF to the Security
+      # tab; the rest stay read-only.
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+          - language: rust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
