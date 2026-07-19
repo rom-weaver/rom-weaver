@@ -30,7 +30,7 @@ const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
   "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
 };
-const brotliAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
+const compressibleAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
 const securityHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -150,33 +150,44 @@ const packagedBrotliPathForDistAsset = (filePath) => {
   }
 };
 
-const writeBrotliAsset = (filePath) => {
-  const brotliPath = `${filePath}.br`;
-  const precompressedPath = packagedBrotliPathForDistAsset(filePath);
-  if (precompressedPath) {
-    copyFile(precompressedPath, brotliPath);
-    return;
-  }
-
-  const source = fs.readFileSync(filePath);
-  const compressed = zlib.brotliCompressSync(source, {
-    params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
-  });
+// A sibling that did not actually shrink would cost a request its own bytes, so
+// only keep one that beats the original.
+const writeSiblingIfSmaller = (siblingPath, compressed, source) => {
   if (compressed.byteLength >= source.byteLength) return;
-  fs.writeFileSync(brotliPath, compressed);
+  fs.writeFileSync(siblingPath, compressed);
 };
 
-const writeBrotliAssetsInDirectory = (directory) => {
+// Both siblings are required: `compression-static` in sws.toml serves whichever
+// encoding the client asked for and falls back to the raw file, so shipping only
+// `.br` silently sends uncompressed bytes to any gzip-only client.
+const writeCompressedAssets = (filePath) => {
+  const source = fs.readFileSync(filePath);
+
+  const precompressedPath = packagedBrotliPathForDistAsset(filePath);
+  if (precompressedPath) {
+    copyFile(precompressedPath, `${filePath}.br`);
+  } else {
+    writeSiblingIfSmaller(
+      `${filePath}.br`,
+      zlib.brotliCompressSync(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
+      source,
+    );
+  }
+
+  writeSiblingIfSmaller(`${filePath}.gz`, zlib.gzipSync(source, { level: 9 }), source);
+};
+
+const writeCompressedAssetsInDirectory = (directory) => {
   if (!fs.existsSync(directory)) return;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const filePath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      writeBrotliAssetsInDirectory(filePath);
+      writeCompressedAssetsInDirectory(filePath);
       continue;
     }
-    if (entry.name.endsWith(".br")) continue;
-    if (!brotliAssetExtensions.has(path.extname(entry.name).toLowerCase())) continue;
-    writeBrotliAsset(filePath);
+    if (entry.name.endsWith(".br") || entry.name.endsWith(".gz")) continue;
+    if (!compressibleAssetExtensions.has(path.extname(entry.name).toLowerCase())) continue;
+    writeCompressedAssets(filePath);
   }
 };
 
@@ -254,17 +265,17 @@ const writeChangelogAsset = () => {
   };
 };
 
-const writePreviewBrotliAssets = () => {
+const writePreviewCompressedAssets = () => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
-      writeBrotliAssetsInDirectory(path.resolve(rootDir, outDir));
+      writeCompressedAssetsInDirectory(path.resolve(rootDir, outDir));
     },
     configResolved(config) {
       outDir = config.build.outDir;
     },
-    name: "rom-weaver-preview-brotli-assets",
+    name: "rom-weaver-preview-compressed-assets",
   };
 };
 
@@ -393,7 +404,7 @@ export default defineConfig(({ command, mode }) => {
         strategies: "injectManifest",
       }),
       preloadPrimaryFont(),
-      ...(mode === "docker" ? [writePreviewBrotliAssets()] : []),
+      ...(mode === "docker" ? [writePreviewCompressedAssets()] : []),
     ],
     preview: {
       headers: securityHeaders,
