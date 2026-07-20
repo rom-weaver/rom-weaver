@@ -20,11 +20,6 @@
     git submodule update --init --recursive vendor/nod
     ```
 
-- `vendor/chd-0.3.4`:
-  - Local patched copy of the `chd` crate.
-  - Manifest patch routes `flate2` through `libz-sys` instead of adding `zlib-rs`.
-  - Wired through root `Cargo.toml` `[patch.crates-io]`.
-
 - `vendor/xdvdfs-0.8.3`:
   - Local patched copy of the `xdvdfs` crate.
   - Wired through root `Cargo.toml` `[patch.crates-io]`.

@@ -14,7 +14,6 @@ members = [
     "crates/rom-weaver-nod",
     "crates/rom-weaver-patches",
     "crates/rom-weaver-xdelta",
-    "vendor/chd-0.3.4",
     "vendor/xdvdfs-0.8.3",
 ]
 exclude = ["vendor/nod"]
@@ -54,7 +53,7 @@ blake3 = "1.8.2"
 # swaps the bzip2 implementation underneath BDF patch output.
 bzip2 = { version = "0.6.1", default-features = false, features = ["bzip2-sys"] }
 ciso = { version = "0.2.1", default-features = false, features = ["sync"] }
-chd = { package = "rom-weaver-chd-core", path = "vendor/chd-0.3.4", version = "0.5.0", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
+chd = { version = "0.3.4", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
 clap = { version = "4.5.51", features = ["derive", "string"] }
 claxon = "0.4.3"
 crc = "3.4.0"
@@ -62,6 +61,11 @@ crc16 = "0.4.0"
 crc32c = "0.6.8"
 crc32fast = "1.5.0"
 digest = { version = "0.11.0", default-features = false }
+# Load-bearing for the same reason as the `bzip2` pin above: upstream `chd`
+# depends on `flate2` with the pure-Rust `zlib-rs` backend. Feature unification
+# means this pin is the only thing keeping `flate2` on the C backend, which
+# `flate2` selects whenever `any_c_zlib` is enabled. Dropping it silently swaps
+# the deflate implementation underneath CHD decode.
 flate2 = { version = "1.1.5", default-features = false, features = ["zlib"] }
 miniz_oxide = "0.9.1"
 flacenc = { version = "0.5.1", default-features = false }
