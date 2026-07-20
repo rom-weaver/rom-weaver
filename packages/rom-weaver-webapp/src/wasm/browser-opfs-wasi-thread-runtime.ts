@@ -61,7 +61,6 @@ export interface BrowserWasiThreadRunPayload {
   stderrLineHandler?: LineHandler;
   stdoutLineHandler?: LineHandler;
   threadIdState?: unknown;
-  threadWorkerUrl?: string | URL;
   tid?: number;
   wasiArgs?: unknown;
   wasmMemory?: WebAssembly.Memory;
@@ -71,6 +70,12 @@ export interface BrowserWasiThreadRunPayload {
 export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThreadRunPayload = {}) {
   assertDedicatedWorkerRuntime();
 
+  // A nested thread runs the same script this worker is already running, so its URL comes from our
+  // own location rather than from `payload.threadWorkerUrl`. Taking it from the message would mean
+  // spawning a worker at whatever URL the sender asked for, and that worker gets the shared wasm
+  // memory - so the payload field is deliberately ignored here.
+  const nestedThreadWorkerUrl = self.location.href;
+
   const {
     debugWasi,
     envList,
@@ -79,7 +84,6 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     stdoutLineHandler,
     startArg,
     threadIdState,
-    threadWorkerUrl,
     tid,
     wasiArgs,
     wasmMemory,
@@ -164,7 +168,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       streamRequestId: payload.__streamRequestId,
       threadIdState,
       threadWorkerPool: null,
-      threadWorkerUrl,
+      threadWorkerUrl: nestedThreadWorkerUrl,
       trace,
       wasiArgs,
       wasmMemory,
