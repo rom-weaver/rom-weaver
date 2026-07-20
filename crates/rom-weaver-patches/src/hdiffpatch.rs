@@ -6,7 +6,7 @@ use std::{
 };
 
 use rayon::prelude::*;
-use rom_weaver_codecs::{
+use rom_weaver_core::codecs::{
     decode_bzip2_exact, decode_deflate_exact, decode_lzma_with_props, decode_lzma2,
     decode_zlib_exact, decode_zstd_exact,
 };

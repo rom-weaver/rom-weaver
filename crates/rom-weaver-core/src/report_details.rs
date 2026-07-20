@@ -1,7 +1,7 @@
 //! Shared `OperationReport.details` JSON builders.
 //!
 //! Container extract/compression reporting in `rom-weaver-containers` and
-//! `rom-weaver-chd` emit the same `extraction`/thread-execution detail shapes;
+//! the CHD handler emit the same `extraction`/thread-execution detail shapes;
 //! these helpers are the single source so the JSON stays consistent across
 //! crates.
 

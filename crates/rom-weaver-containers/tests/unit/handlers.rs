@@ -31,7 +31,7 @@ mod tests {
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
     use flate2::{Compression as DeflateCompression, read::DeflateDecoder, write::DeflateEncoder};
-    use rom_weaver_codecs::encode_xz_preset;
+    use rom_weaver_core::codecs::encode_xz_preset;
     use rom_weaver_core::{
         CancellationToken, ContainerHandlerOperations, NoopProgressSink, OperationContext,
         RomWeaverError, ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp,

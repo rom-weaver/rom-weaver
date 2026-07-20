@@ -9,7 +9,7 @@
 //!   naming convention.
 //!
 //! The orchestration that reads source files (via [`crate::gdrom`]), applies
-//! deltas (via `rom-weaver-xdelta`), and rebuilds the disc lives in the app
+//! deltas (via `rom-weaver-patches`'s `xdelta` module), and rebuilds the disc lives in the app
 //! layer.
 
 pub mod apply;

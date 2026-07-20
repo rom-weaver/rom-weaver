@@ -1,4 +1,4 @@
-//! Unit coverage for `rom-weaver-chd` internals.
+//! Unit coverage for the CHD module internals.
 //!
 //! These exercise the `pub(super)` primitives that back CHD's byte-parity
 //! guarantees - the V5 compressed-map huffman/RLE/CRC machinery and the CD

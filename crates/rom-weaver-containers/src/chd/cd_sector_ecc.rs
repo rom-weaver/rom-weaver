@@ -123,7 +123,7 @@ impl ChdContainerHandler {
         (value1, value1 ^ value2)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn generate_cd_sector_ecc_for_tests(sector: &mut [u8]) {
         if sector.len() != Self::CD_SECTOR_DATA_BYTES {
             return;

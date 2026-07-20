@@ -1,9 +1,9 @@
 use std::io::{BufReader, Cursor, Read, Write};
 
+use crate::{Result, RomWeaverError};
 use bzip2::read::MultiBzDecoder;
 use flate2::{read::DeflateDecoder, read::ZlibDecoder};
 use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzWriter};
-use rom_weaver_core::{Result, RomWeaverError};
 use zstd::stream::Decoder as ZstdDecoder;
 
 #[path = "definitions.rs"]
@@ -21,5 +21,5 @@ pub use self::helpers::{
 };
 
 #[cfg(test)]
-#[path = "../tests/unit/registry.rs"]
+#[path = "../../tests/unit/codecs.rs"]
 mod tests;

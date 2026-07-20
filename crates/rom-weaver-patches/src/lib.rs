@@ -1,3 +1,5 @@
+pub mod xdelta;
+
 mod aps_n64;
 mod apsgba;
 mod bdf;
@@ -29,6 +31,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::xdelta::VcdiffPatchHandler;
 use aps_n64::ApsN64PatchHandler;
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
@@ -48,7 +51,6 @@ use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchCapabilities,
     PatchHandler, Result, RomWeaverError, ThreadExecution, ValidationCodeError,
 };
-use rom_weaver_xdelta::VcdiffPatchHandler;
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
 use tracing::trace;
@@ -289,7 +291,7 @@ pub(crate) fn coded_validation(code: &'static str, message: &'static str) -> Rom
 }
 
 // `require_single_patch_file` and `checksum_validation_suffix` are shared with
-// `rom-weaver-xdelta` and live in the foundation crate so the error/label wording
+// the `xdelta` module and live in the foundation crate so the error/label wording
 // stays identical across every patch format.
 pub(crate) use rom_weaver_core::{checksum_validation_suffix, require_single_patch_file};
 

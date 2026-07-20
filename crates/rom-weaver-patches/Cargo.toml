@@ -14,12 +14,13 @@ version.workspace = true
 [dependencies]
 bzip2.workspace = true
 crc32fast.workspace = true
+liblzma-sys.workspace = true
+lzma-rust2.workspace = true
 md-5.workspace = true
+oxidelta = { version = "0.1.4", default-features = false, features = ["adler32", "lzma-secondary"] }
 qbsdiff.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
-rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
 rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
-rom-weaver-xdelta = { path = "../rom-weaver-xdelta", version = "0.5.0" }
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true

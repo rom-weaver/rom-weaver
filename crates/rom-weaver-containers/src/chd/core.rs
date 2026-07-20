@@ -2,14 +2,14 @@ use super::*;
 
 impl ChdContainerHandler {
     pub(super) const DEFAULT_HUNK_BYTES: u32 = 4096;
-    pub(super) const DVD_SECTOR_BYTES: u32 = crate::CD_SECTOR_SIZES[1];
+    pub(super) const DVD_SECTOR_BYTES: u32 = crate::chd::CD_SECTOR_SIZES[1];
     pub(super) const HD_SECTOR_BYTES: u32 = 512;
     pub(super) const CD_FRAME_BYTES: u32 = CD_FRAME_SIZE;
     pub(super) const CD_HUNK_BYTES: u32 = CD_FRAME_SIZE * 8;
     pub(super) const FLAC_CHANNELS: usize = 2;
     pub(super) const FLAC_BITS_PER_SAMPLE: usize = 16;
     pub(super) const FLAC_SAMPLE_RATE_HZ: usize = 44_100;
-    pub(super) const CD_SECTOR_DATA_BYTES: usize = crate::CD_SECTOR_SIZES[0] as usize;
+    pub(super) const CD_SECTOR_DATA_BYTES: usize = crate::chd::CD_SECTOR_SIZES[0] as usize;
     pub(super) const CD_SUBCODE_BYTES: usize = 96;
     // A WAVE `fmt ` chunk is at most 40 bytes (WAVE_FORMAT_EXTENSIBLE). Track
     // files are untrusted, so reject a larger declared length before allocating
@@ -245,7 +245,7 @@ impl ChdContainerHandler {
         plan
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn default_cd_compression_plan_for_tests(
         &self,
     ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
@@ -257,7 +257,7 @@ impl ChdContainerHandler {
         Ok((plan.codecs, plan.primary_codec))
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn default_dvd_compression_plan_for_tests(
         &self,
     ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
@@ -265,7 +265,7 @@ impl ChdContainerHandler {
         Ok((plan.codecs, plan.primary_codec))
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn default_raw_compression_plan_for_tests(
         &self,
     ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
@@ -273,7 +273,7 @@ impl ChdContainerHandler {
         Ok((plan.codecs, plan.primary_codec))
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn explicit_compression_plan_for_tests(
         &self,
         codecs: &str,
@@ -282,13 +282,13 @@ impl ChdContainerHandler {
         Ok((plan.codecs, plan.primary_codec))
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn rust_backend_can_create_with_codec_list_for_tests(&self, codecs: &str) -> Result<bool> {
         let plan = self.resolve_compression_plan(Some(codecs), &ChdCreateKind::Raw)?;
         Ok(self.should_attempt_rust_create(&ChdCreateKind::Raw, plan.codecs, plan.primary_codec))
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn create_raw_store_with_rust_backend_for_tests(
         &self,
         source: &Path,
@@ -298,7 +298,7 @@ impl ChdContainerHandler {
         self.create_uncompressed_rust_raw(source, output, logical_bytes, &ChdCreateKind::Raw, None)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn create_raw_with_rust_backend_codec_for_tests(
         &self,
         source: &Path,
@@ -333,7 +333,7 @@ impl ChdContainerHandler {
         }
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn extract_raw_with_rust_backend_for_tests(
         &self,
         source: &Path,
@@ -364,12 +364,12 @@ impl ChdContainerHandler {
         })
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn encode_raw_flac_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
         self.compress_rust_hunk(&ChdCreateKind::Raw, ChdCodec::FLAC, 0, hunk)
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn encode_cd_flac_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
         self.compress_rust_cd_hunk(ChdCodec::CD_FLAC, 0, hunk)
     }

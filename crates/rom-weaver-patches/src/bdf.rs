@@ -7,7 +7,7 @@ use std::{
 
 use bzip2::read::MultiBzDecoder;
 use qbsdiff::ParallelScheme;
-use rom_weaver_codecs::decode_bzip2_exact;
+use rom_weaver_core::codecs::decode_bzip2_exact;
 use tracing::{debug, trace};
 
 use rom_weaver_core::{

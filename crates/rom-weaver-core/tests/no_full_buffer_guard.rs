@@ -157,7 +157,7 @@ fn migrated_payload_paths_avoid_full_buffer_reads() {
             allowlist_fragments: &[],
         },
         GuardTarget {
-            relative_path: "crates/rom-weaver-xdelta/src/vcdiff/core.rs",
+            relative_path: "crates/rom-weaver-patches/src/vcdiff/core.rs",
             forbidden: &["fs::read(", "read_to_end("],
             allowlist_fragments: &[],
         },

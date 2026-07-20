@@ -621,7 +621,8 @@ pub fn run_command_outcome(
     )
 }
 
-const APP_LOG_TARGETS: &str = "rom_weaver_app,rom_weaver_core,rom_weaver_containers,rom_weaver_patches,rom_weaver_checksum,rom_weaver_codecs";
+const APP_LOG_TARGETS: &str =
+    "rom_weaver_app,rom_weaver_core,rom_weaver_containers,rom_weaver_patches,rom_weaver_checksum";
 const DEP_TRACE_FILTER: &str = "nod=trace";
 
 fn log_filter_spec(

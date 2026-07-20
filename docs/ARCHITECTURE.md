@@ -47,15 +47,12 @@ the WASM build over a JSON event protocol.
 
 | Path | Role |
 | --- | --- |
-| `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`). Depends on nothing else in the workspace. |
+| `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`), and the standalone codec backends (zstd, deflate, lzma, … in `src/codecs`). Depends on nothing else in the workspace. |
 | `crates/rom-weaver-checksum` | Checksum engines (crc32/md5/sha*/blake3/crc32c/crc16/adler32) plus the streaming variant engine shared by `checksum` and extract flows. |
-| `crates/rom-weaver-codecs` | Standalone codec backends (zstd, deflate, lzma, …) behind `CodecBackend`. |
-| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, chd glue, rvz, z3ds, pbp, cso, …). |
-| `crates/rom-weaver-chd` | Native CHD implementation (read sessions, create pipeline, codecs, disc inference). Exposed as a `ContainerHandler` + `ChdCodec`. |
-| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,…}.rs`), one file per format. |
-| `crates/rom-weaver-xdelta` | VCDIFF/xdelta encode+decode, separate from `rom-weaver-patches` (parallel window encoding). Also exposes `apply_patch_bytes` for in-memory VCDIFF apply (used by `.dcp`). |
+| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, …) plus the native CHD implementation (`src/chd`: read sessions, create pipeline, codecs, disc inference) exposed as a `ContainerHandler` + `ChdCodec`. |
+| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,…}.rs`), one file per format, including VCDIFF/xdelta encode+decode (`src/xdelta`, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
 | `crates/rom-weaver-app/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
-| `crates/rom-weaver-app/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-xdelta`. |
+| `crates/rom-weaver-app/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-patches`'s `xdelta` module. |
 | `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
 | `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows, and cheat-code decoding/apply. Its `rom-weaver-typegen` binary generates the browser's Rust-derived TypeScript files. |
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
@@ -65,10 +62,10 @@ the WASM build over a JSON event protocol.
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
-(`checksum`/`codecs`/`containers`/`chd`/`patches`/`xdelta`/`gdrom`/`dcp`)
-← `app` ← `cli`. Format crates mostly do not depend on each other, with a few
-exceptions: `containers` consumes `chd`, `codecs`, and `libarchive` to assemble
-its registry; and `dcp` consumes `gdrom` (data-track filesystem) and `xdelta`
+(`checksum`/`containers`/`patches`) ← `app` ← `cli`. Format crates mostly do
+not depend on each other, with one exception: `containers` consumes
+`libarchive` to assemble its registry. The app's `dcp` module consumes the
+app's `gdrom` module (data-track filesystem) and `patches`' `xdelta` module
 (per-file VCDIFF apply).
 
 ## Core abstractions (`rom-weaver-core/src/registry.rs`)

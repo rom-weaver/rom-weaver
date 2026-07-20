@@ -588,7 +588,7 @@ impl ChdContainerHandler {
         }
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn infer_create_kind_label_for_tests(
         &self,
         format: &str,

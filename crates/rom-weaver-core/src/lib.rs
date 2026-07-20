@@ -1,3 +1,5 @@
+pub mod codecs;
+
 mod cancel;
 mod common_files;
 mod concurrency;

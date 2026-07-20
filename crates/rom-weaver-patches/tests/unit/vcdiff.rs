@@ -66,7 +66,7 @@ fn parse_and_apply_basic_source_patch() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let capabilities = handler.capabilities();
     assert!(capabilities.threaded_diff);
     assert!(capabilities.threaded_output);
@@ -107,7 +107,7 @@ fn apply_supports_overlapping_target_copy() {
     fs::write(&input_path, b"unused").expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     handler
         .apply(
             &PatchApplyRequest {
@@ -159,7 +159,7 @@ fn parse_supports_xdelta_app_header_and_checksum() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .parse(&patch_path, &test_context())
         .expect("probe patch");
@@ -210,7 +210,7 @@ fn parse_reports_source_requirements_without_adler_values() {
     let patch_path = temp.join("probe.xdelta");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .parse(&patch_path, &test_context())
         .expect("probe patch");
@@ -272,7 +272,7 @@ fn apply_supports_vcd_target_windows_with_thread_fallback() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let report = handler
         .apply(
             &PatchApplyRequest {
@@ -328,7 +328,7 @@ fn parse_accepts_custom_code_table_headers() {
     let temp = create_temp_dir();
     let patch_path = temp.join("custom-table.vcdiff");
     fs::write(&patch_path, &patch_bytes).expect("write patch");
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let report = handler
         .parse(&patch_path, &test_context())
         .expect("parse report");
@@ -377,7 +377,7 @@ fn apply_rejects_custom_code_table_headers() {
     fs::write(&input_path, b"abcd").expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -415,7 +415,7 @@ fn apply_fails_on_checksum_mismatch() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -453,7 +453,7 @@ fn apply_can_ignore_checksum_mismatch() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .apply(
             &PatchApplyRequest {
@@ -471,7 +471,7 @@ fn apply_can_ignore_checksum_mismatch() {
 
 #[test]
 fn apply_rejects_multiple_patch_files() {
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -522,7 +522,7 @@ fn multi_window_patch_round_trips() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let capabilities = handler.capabilities();
     assert!(capabilities.threaded_output);
     let probe = handler
@@ -584,7 +584,7 @@ fn multi_window_xdelta_patch_round_trips_with_parallel_decoder() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let capabilities = handler.capabilities();
     assert!(capabilities.threaded_diff);
     assert!(capabilities.threaded_output);
@@ -616,7 +616,7 @@ fn create_vcdiff_patch_round_trips() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&modified_path, expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -667,7 +667,7 @@ fn apply_patch_bytes_round_trips_in_memory() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&modified_path, expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     handler
         .create(
             &PatchCreateRequest {
@@ -681,11 +681,12 @@ fn apply_patch_bytes_round_trips_in_memory() {
         .expect("create vcdiff patch");
 
     let patch_bytes = fs::read(&patch_path).expect("read patch");
-    let target = crate::apply_patch_bytes(input, &patch_bytes).expect("apply in memory");
+    let target = crate::xdelta::apply_patch_bytes(input, &patch_bytes).expect("apply in memory");
     assert_eq!(target, expected);
 
     // A wrong source must not silently produce the target (source checksum).
-    let wrong = crate::apply_patch_bytes(b"completely different source bytes here", &patch_bytes);
+    let wrong =
+        crate::xdelta::apply_patch_bytes(b"completely different source bytes here", &patch_bytes);
     assert!(wrong.is_err() || wrong.unwrap() != expected);
 }
 
@@ -701,7 +702,7 @@ fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -730,7 +731,7 @@ fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
         &input_path,
         &modified_path,
         &baseline_probe,
-        create_native_compress_options(&crate::XDELTA, true),
+        create_native_compress_options(&crate::xdelta::XDELTA, true),
     )
     .expect("encode baseline xdelta patch");
     let baseline_with_header = recode_patch_with_xdelta_options(
@@ -791,7 +792,7 @@ fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -845,7 +846,7 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -883,7 +884,7 @@ fn create_xdelta_patch_mode_lzma_only_uses_lzma_secondary() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -934,7 +935,7 @@ fn create_xdelta_patch_supports_explicit_djw_and_fgk_secondary_modes() {
         fs::write(&input_path, &input).expect("write input");
         fs::write(&modified_path, &expected).expect("write modified");
 
-        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
         let report = handler
             .create(
                 &PatchCreateRequest {
@@ -981,7 +982,7 @@ fn create_vcdiff_patch_from_empty_source_round_trips() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -1031,7 +1032,7 @@ fn create_xdelta_large_streaming_patch_round_trips_with_stateful_lzma() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
             &PatchCreateRequest {
@@ -1086,7 +1087,7 @@ fn create_xdelta_parallel_window_encode_matches_sequential_bytes() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let request = |output: &Path| PatchCreateRequest {
         original: input_path.clone(),
         modified: modified_path.clone(),
@@ -1157,7 +1158,7 @@ fn create_xdelta_appheader_baseline_size_matches_materialized() {
         &input_path,
         &modified_path,
         &baseline_raw_path,
-        create_native_compress_options(&crate::XDELTA, true),
+        create_native_compress_options(&crate::xdelta::XDELTA, true),
     )
     .expect("encode baseline raw");
     let loaded = load_patch_for_xdelta_recode(&baseline_raw_path).expect("load baseline raw");
@@ -1194,7 +1195,7 @@ fn secondary_fixture_applies_with_parallel_fallback() {
     fs::copy(fixture_path("secondary-djw.xdelta"), &patch_path).expect("copy patch fixture");
     let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let probe = handler
         .parse(&patch_path, &test_context())
         .expect("probe secondary patch");
@@ -1228,7 +1229,7 @@ fn create_xdelta_patch_can_skip_checksums_via_context_toggle() {
     fs::write(&input_path, input).expect("write input");
     fs::write(&modified_path, expected).expect("write modified");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .create(
             &PatchCreateRequest {
@@ -1295,7 +1296,7 @@ fn apply_supports_oxidelta_style_lzma_secondary_patch() {
             .any(|window| window.delta_indicator != 0)
     );
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .apply(
             &PatchApplyRequest {
@@ -1342,7 +1343,7 @@ fn apply_supports_stateful_xdelta_lzma_secondary_across_windows() {
     fs::write(&input_path, b"").expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .apply(
             &PatchApplyRequest {
@@ -1367,8 +1368,8 @@ fn apply_patch_bytes_rejects_xdelta_lzma_sections() {
         vec![(data.len() as u64, compressed.into_owned(), vec![4; 12])],
     );
 
-    let error =
-        crate::apply_patch_bytes(b"", &patch).expect_err("in-memory apply must reject lzma");
+    let error = crate::xdelta::apply_patch_bytes(b"", &patch)
+        .expect_err("in-memory apply must reject lzma");
 
     assert!(error.to_string().contains("file-based handler"));
 }
@@ -1387,13 +1388,13 @@ fn recode_supports_all_xdelta_secondary_encoders() {
         &input_path,
         &modified_path,
         &baseline_path,
-        create_native_compress_options(&crate::XDELTA, true),
+        create_native_compress_options(&crate::xdelta::XDELTA, true),
     )
     .expect("encode baseline");
     assert!(baseline.size > 0);
 
     let app_header = build_default_xdelta_app_header(&input_path, &modified_path);
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
 
     for secondary_id in XDELTA_SECONDARY_CANDIDATES {
         let patch_path = temp.join(format!("secondary-{secondary_id}.xdelta"));
@@ -1451,7 +1452,7 @@ fn apply_fails_for_mismatched_djw_header_and_lzma_payload() {
     fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
     fs::write(&patch_path, patch).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1479,7 +1480,7 @@ fn apply_supports_legacy_djw_fixture() {
         .expect("copy legacy djw fixture");
     let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .apply(
             &PatchApplyRequest {
@@ -1518,7 +1519,7 @@ fn apply_fails_for_mismatched_fgk_header_and_lzma_payload() {
     fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
     fs::write(&patch_path, patch).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1546,7 +1547,7 @@ fn apply_supports_legacy_fgk_fixture() {
         .expect("copy legacy fgk fixture");
     let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .apply(
             &PatchApplyRequest {
@@ -1571,7 +1572,7 @@ fn apply_supports_legacy_lzma_fixture() {
         .expect("copy legacy lzma fixture");
     let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     handler
         .apply(
             &PatchApplyRequest {
@@ -1598,7 +1599,7 @@ fn apply_fails_for_unknown_secondary_compressor_id() {
     fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
     fs::write(&patch_path, patch).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1637,7 +1638,7 @@ fn apply_fails_for_unknown_secondary_id_without_compressed_sections() {
     fs::write(&input_path, b"abcd").expect("write input");
     fs::write(&patch_path, patch_bytes).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1675,7 +1676,7 @@ fn apply_fails_when_compressed_sections_lack_secondary_header() {
     fs::write(&input_path, b"abcd").expect("write input");
     fs::write(&patch_path, patch).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1704,7 +1705,7 @@ fn apply_fails_for_corrupted_secondary_stream() {
     fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
     fs::write(&patch_path, patch).expect("write patch");
 
-    let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let error = handler
         .apply(
             &PatchApplyRequest {
@@ -1750,7 +1751,7 @@ fn apply_fails_for_trailing_secondary_payload_bytes() {
         fs::write(&input_path, b"").expect("write input");
         fs::write(&patch_path, patch).expect("write patch");
 
-        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
         let error = handler
             .apply(
                 &PatchApplyRequest {

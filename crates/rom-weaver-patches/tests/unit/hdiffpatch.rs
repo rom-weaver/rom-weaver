@@ -101,7 +101,7 @@ fn apply_hdiff13_zero_cover_round_trip() {
 }
 
 fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
-    let compressed = rom_weaver_codecs::encode_zstd(new, 3).expect("zstd encode");
+    let compressed = rom_weaver_core::codecs::encode_zstd(new, 3).expect("zstd encode");
     assert!(
         compressed.len() < new.len(),
         "fixture should be compressible"

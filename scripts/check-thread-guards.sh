@@ -8,7 +8,10 @@ fi
 
 failed=0
 
-if rg -n 'wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver_wasi_threads' crates/rom-weaver-containers/src; then
+# src/chd (the folded rom-weaver-chd crate, never in this guard's scope) uses the
+# cfg pair for its decode heap-pregrow, which enables threaded wasm rather than
+# suppressing it.
+if rg -n 'wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver_wasi_threads' -g '!**/chd/**' crates/rom-weaver-containers/src; then
   echo "container handlers should not suppress threaded WASM execution" >&2
   failed=1
 fi

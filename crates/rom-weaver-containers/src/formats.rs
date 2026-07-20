@@ -357,7 +357,7 @@ impl ContainerHandlerKind {
     /// (their detection runs through libarchive, not a fixed prefix).
     fn magic_signature(self) -> &'static [u8] {
         match self {
-            Self::Chd => &rom_weaver_chd::CHD_SIGNATURE,
+            Self::Chd => &crate::chd::CHD_SIGNATURE,
             Self::Rvz => &crate::rvz::RVZ_MAGIC,
             Self::Z3ds => &crate::z3ds::Z3DS_MAGIC,
             _ => &[],
@@ -375,7 +375,7 @@ impl ContainerHandlerKind {
             }
             Self::Cso => Arc::new(CsoContainerHandler::new(descriptor)),
             Self::Pbp => Arc::new(PbpContainerHandler),
-            Self::Chd => Arc::new(rom_weaver_chd::ChdContainerHandler),
+            Self::Chd => Arc::new(crate::chd::ChdContainerHandler),
             Self::Gcz => Arc::new(GczContainerHandler),
             Self::Wia => Arc::new(WiaContainerHandler),
             Self::Tgc => Arc::new(TgcContainerHandler),
@@ -536,7 +536,7 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
         handler: ContainerHandlerKind::Pbp,
     },
     ContainerFormatRegistration {
-        descriptor: &rom_weaver_chd::CHD,
+        descriptor: &crate::chd::CHD,
         capabilities: CREATE_AND_EXTRACT_PARALLEL,
         default_output: Some(CHD_DEFAULT_OUTPUT),
         handler: ContainerHandlerKind::Chd,
@@ -621,7 +621,7 @@ pub struct DiscImagePolicyMetadata {
 
 pub fn disc_image_policy_metadata() -> DiscImagePolicyMetadata {
     DiscImagePolicyMetadata {
-        cd_sector_sizes: &rom_weaver_chd::CD_SECTOR_SIZES,
+        cd_sector_sizes: &crate::chd::CD_SECTOR_SIZES,
         ambiguous_disc_image_extensions: AMBIGUOUS_DISC_IMAGE_EXTENSIONS,
     }
 }
@@ -809,7 +809,7 @@ pub fn recommend_container_for_identity(
             reason: "n3ds",
         },
         _ if disc_format.is_some() => CompressFormatRecommendation {
-            format_name: rom_weaver_chd::CHD.name,
+            format_name: crate::chd::CHD.name,
             reason: "disc-chd",
         },
         _ => CompressFormatRecommendation {
@@ -834,7 +834,7 @@ pub fn is_likely_disc_image_size(size: Option<u64>) -> bool {
     let Some(size) = size.filter(|value| *value > 0) else {
         return true;
     };
-    rom_weaver_chd::CD_SECTOR_SIZES
+    crate::chd::CD_SECTOR_SIZES
         .iter()
         .any(|sector_size| size % u64::from(*sector_size) == 0)
 }

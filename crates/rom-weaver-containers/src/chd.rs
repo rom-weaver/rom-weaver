@@ -13,7 +13,7 @@ use std::{
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{Compression as GzipCompression, write::DeflateEncoder};
 use rom_weaver_checksum::{StreamingChecksum, detect_rom_identity_for_path};
-use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
+use rom_weaver_core::codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ChdMediaScope, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,

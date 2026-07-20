@@ -1,5 +1,5 @@
 //! Small helpers shared by the patch format crates (`rom-weaver-patches` and
-//! `rom-weaver-xdelta`). They live here, in the foundation crate both depend on,
+//! `rom-weaver-patches`'s `xdelta` module). They live here, in the foundation crate,
 //! so the wording of the errors/labels stays identical across formats.
 
 use std::path::PathBuf;

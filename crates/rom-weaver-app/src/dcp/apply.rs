@@ -79,8 +79,8 @@ where
                 })?;
                 let source = fs.read_file(&source_entry)?;
                 let delta = extract_entry(dcp, entry)?;
-                let patched =
-                    rom_weaver_xdelta::apply_patch_bytes(&source, &delta).map_err(|err| {
+                let patched = rom_weaver_patches::xdelta::apply_patch_bytes(&source, &delta)
+                    .map_err(|err| {
                         RomWeaverError::Validation(format!(
                             "failed to apply `.dcp` delta for `{target}`: {err}"
                         ))

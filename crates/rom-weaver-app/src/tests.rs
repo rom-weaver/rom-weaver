@@ -40,7 +40,7 @@ fn explicit_log_level_targets_application_crates() {
     assert_eq!(
         log_filter_spec(Some(LogLevel::Debug), false, None).as_deref(),
         Some(
-            "rom_weaver_app=debug,rom_weaver_core=debug,rom_weaver_containers=debug,rom_weaver_patches=debug,rom_weaver_checksum=debug,rom_weaver_codecs=debug"
+            "rom_weaver_app=debug,rom_weaver_core=debug,rom_weaver_containers=debug,rom_weaver_patches=debug,rom_weaver_checksum=debug"
         )
     );
 }

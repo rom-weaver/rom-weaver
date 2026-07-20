@@ -89,7 +89,10 @@ where
         let size = if let Some(delta_entry) = delta_by_key.get(&key) {
             consumed.insert(key.clone());
             let delta = extract_entry(dcp, delta_entry)?;
-            size_to_u32(rom_weaver_xdelta::vcdiff_output_size(&delta)?, &entry.path)?
+            size_to_u32(
+                rom_weaver_patches::xdelta::vcdiff_output_size(&delta)?,
+                &entry.path,
+            )?
         } else if let Some(verbatim_entry) = verbatim_by_key.get(&key) {
             consumed.insert(key.clone());
             verbatim_entry.uncompressed_size
@@ -151,14 +154,13 @@ where
                     RomWeaverError::Validation(format!("internal: lost delta source `{key}`"))
                 })?;
                 let source_bytes = source.read_file(source_entry)?;
-                return rom_weaver_xdelta::apply_patch_bytes(&source_bytes, &delta).map_err(
-                    |err| {
+                return rom_weaver_patches::xdelta::apply_patch_bytes(&source_bytes, &delta)
+                    .map_err(|err| {
                         RomWeaverError::Validation(format!(
                             "failed to apply `.dcp` delta for `{}`: {err}",
                             file.path
                         ))
-                    },
-                );
+                    });
             }
             if let Some(verbatim_entry) = verbatim_by_key.get(&key) {
                 return extract_entry(dcp, verbatim_entry);

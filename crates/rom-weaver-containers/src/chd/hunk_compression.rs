@@ -47,7 +47,7 @@ impl<'a> PreparedCdHunk<'a> {
 }
 
 impl ChdContainerHandler {
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn encode_cd_zlib_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
         self.compress_rust_cd_hunk(ChdCodec::CD_ZLIB, 0, hunk)
     }

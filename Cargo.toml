@@ -1,16 +1,13 @@
 [workspace]
 members = [
     "crates/rom-weaver-app",
-    "crates/rom-weaver-chd",
     "crates/rom-weaver-checksum",
     "crates/rom-weaver-cli",
-    "crates/rom-weaver-codecs",
     "crates/rom-weaver-containers",
     "crates/rom-weaver-core",
     "crates/rom-weaver-libarchive",
     "crates/rom-weaver-libarchive-sys",
     "crates/rom-weaver-patches",
-    "crates/rom-weaver-xdelta",
 ]
 exclude = ["vendor/nod"]
 resolver = "2"

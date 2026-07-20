@@ -15,6 +15,7 @@ use std::{
 
 mod archive_entries;
 mod archive_formats;
+pub mod chd;
 mod constants;
 mod extract_support;
 mod formats;
@@ -22,6 +23,10 @@ mod libarchive_support;
 pub mod nod;
 pub mod xdvdfs;
 
+#[cfg(test)]
+use self::chd::ChdCodec;
+#[cfg(test)]
+use self::chd::ChdContainerHandler;
 use crate::nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -34,12 +39,8 @@ use crate::xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
-#[cfg(test)]
-use rom_weaver_chd::ChdCodec;
-#[cfg(test)]
-use rom_weaver_chd::ChdContainerHandler;
 use rom_weaver_checksum::StreamingChecksum;
-use rom_weaver_codecs::{decode_deflate_into_buffer, normalize_codec_label};
+use rom_weaver_core::codecs::{decode_deflate_into_buffer, normalize_codec_label};
 use rom_weaver_core::{
     ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, FormatDescriptor,
