@@ -156,7 +156,7 @@ msgstr "Descartar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.footer.donate"
-msgstr "Donar"
+msgstr "Propina"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

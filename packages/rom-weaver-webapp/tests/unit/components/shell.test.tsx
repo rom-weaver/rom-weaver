@@ -50,7 +50,7 @@ describe("Masthead", () => {
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(tabs[1] as HTMLButtonElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // the external links (GitHub then Donate) lead the row; a separator fences
+    // the external links (GitHub then Tip) lead the row; a separator fences
     // them off from the app tools (Reset, Theme, Log, Settings) that trail
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".language-tool")).toBeNull();
@@ -58,7 +58,7 @@ describe("Masthead", () => {
     const github = getByRole("link", { name: "GitHub" });
     expect(github.getAttribute("href")).toBe("https://example.com/repo");
     expect(container.querySelector(".masthead-tools > .tool")).toBe(github);
-    const donate = getByRole("link", { name: "Donate" });
+    const donate = getByRole("link", { name: "Tip" });
     expect(container.querySelector(".masthead-tools > .tools-sep")?.previousElementSibling).toBe(donate);
     const settings = getByRole("button", { name: "Settings" });
     expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
@@ -67,7 +67,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
-    expect(getByRole("link", { name: "Donate" }).getAttribute("href")).toBe("https://example.com/donate");
+    expect(getByRole("link", { name: "Tip" }).getAttribute("href")).toBe("https://example.com/donate");
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
