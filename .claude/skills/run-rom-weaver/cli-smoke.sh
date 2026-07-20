@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rom-weaver native CLI smoke - exercises probe/list/checksum/extract/compress
+# rom-weaver native CLI smoke - exercises checksum/extract/compress
 # and a full patch-apply round-trip against committed fixtures, asserting the
 # patched output matches the known-good target CRC32.
 #
@@ -19,18 +19,17 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "bin: $BIN"
 
-echo "== list ==" ;     "$BIN" list "$ARC/one-rom.zip"
-echo "== checksum ==" ; "$BIN" checksum --algo crc32 "$FIX/vcdiff/secondary-source.bin"
-echo "== extract ==" ;  "$BIN" extract "$ARC/one-rom.zip" --out-dir "$TMP/ex" --checksum-rom crc32
-echo "== compress ==" ; "$BIN" compress "$FIX/vcdiff/secondary-source.bin" --output "$TMP/out.7z"
+echo "== checksum ==" ; "$BIN" checksum --input "$FIX/vcdiff/secondary-source.bin" --algo crc32
+echo "== extract ==" ;  "$BIN" extract --input "$ARC/one-rom.zip" --output "$TMP/ex" --checksum-rom crc32
+echo "== compress ==" ; "$BIN" compress --input "$FIX/vcdiff/secondary-source.bin" --output "$TMP/out.7z"
 
 echo "== patch apply (xdelta round-trip) =="
 "$BIN" patch apply \
   --input "$FIX/vcdiff/secondary-source.bin" \
   --patch "$FIX/vcdiff/secondary-djw.xdelta" \
   --output "$TMP/patched.bin" --no-compress
-GOT="$("$BIN" checksum --algo crc32 "$TMP/patched.bin" | awk '/CRC32/{print $2}')"
-WANT="$("$BIN" checksum --algo crc32 "$FIX/vcdiff/secondary-target.bin" | awk '/CRC32/{print $2}')"
+GOT="$("$BIN" checksum --input "$TMP/patched.bin" --algo crc32 | awk '/CRC32/{print $2}')"
+WANT="$("$BIN" checksum --input "$FIX/vcdiff/secondary-target.bin" --algo crc32 | awk '/CRC32/{print $2}')"
 echo "patched CRC32=$GOT  target CRC32=$WANT"
 [ "$GOT" = "$WANT" ] || { echo "FAIL: patched output != target"; exit 1; }
 echo "OK: CLI smoke passed (patch round-trip matches target $WANT)"

@@ -29,8 +29,11 @@
     "docs/man/rom-weaver-bundle.1",
     "docs/man/rom-weaver-bundle-create.1",
     "docs/man/rom-weaver-bundle-parse.1",
+    "docs/man/rom-weaver-bundle-schema.1",
     "docs/man/rom-weaver-tools.1",
-    "docs/man/rom-weaver-tools-ppf-undo.1"
+    "docs/man/rom-weaver-tools-ppf-undo.1",
+    "docs/man/rom-weaver-weave.1",
+    "docs/man/rom-weaver-completions.1"
   ],
   "files": [
     "bin/rom-weaver.mjs",
