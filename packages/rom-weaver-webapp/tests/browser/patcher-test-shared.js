@@ -383,6 +383,17 @@ export const listOpfsOutputFiles = async () => {
   return files.filter((entry) => entry.name === "game - change" || /^game - change\.(?:7z|bin|zip)$/i.test(entry.name));
 };
 
+const releaseRetainedSources = async () => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const retainedSources = getActiveBrowserVirtualFiles()
+      .map((entry) => entry.source)
+      .filter((source) => source !== undefined);
+    if (!retainedSources.length) return;
+    await browserRuntime.workerIo.releaseSources?.(retainedSources);
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+  }
+};
+
 export const installPatcherTestHooks = () => {
   beforeEach(async () => {
     mountedRoot?.unmount?.();
@@ -391,10 +402,7 @@ export const installPatcherTestHooks = () => {
     // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
     // A new test must release that cache explicitly or the old guest name can force an extracted
     // output to become `name-2.ext`.
-    const retainedSources = getActiveBrowserVirtualFiles()
-      .map((entry) => entry.source)
-      .filter((source) => source !== undefined);
-    await browserRuntime.workerIo.releaseSources?.(retainedSources);
+    await releaseRetainedSources();
     // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
     // on extracted files, and removals silently fail while those are open. Terminating first lets
     // the clear actually empty the directory.
@@ -423,10 +431,7 @@ export const installPatcherTestHooks = () => {
     // Form cleanup disposes its workflow asynchronously. Finish the worker and
     // OPFS teardown here so it cannot overlap the next test's staging pass.
     await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
-    const retainedSources = getActiveBrowserVirtualFiles()
-      .map((entry) => entry.source)
-      .filter((source) => source !== undefined);
-    await browserRuntime.workerIo.releaseSources?.(retainedSources);
+    await releaseRetainedSources();
     await resetRomWeaverRunner();
     await clearOpfsInputDirectory();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));

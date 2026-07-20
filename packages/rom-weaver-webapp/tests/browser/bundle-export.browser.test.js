@@ -183,6 +183,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(downloadButton.textContent).toContain("Download");
   downloadButton.click();
   await expect.poll(() => saveAs.mock.calls.length).toBe(2);
+  await expect.poll(() => downloadButton.disabled).toBe(false);
   saveAs.mockRestore();
 });
 
@@ -209,6 +210,11 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
   });
+  await expect
+    .poll(
+      () => document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong")?.textContent,
+    )
+    .toBe("change.ips");
   exportButton.click();
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();
