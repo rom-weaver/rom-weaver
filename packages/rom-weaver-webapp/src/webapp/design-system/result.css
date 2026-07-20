@@ -49,8 +49,11 @@
 .rw-app .step-meta .rb .t { color: var(--thread-text); }
 
 /* ═══ create: swap hinge ═══ */
-.rw-app .swap-row { display: flex; justify-content: center; height: 0; position: relative; z-index: 1; }
-.rw-app .swap-btn { translate: 0 -50%; height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
+/* the hinge reserves its own 30px band so it never sits on top of the card
+   above; the negative end margin pulls the next step up so its rope line runs
+   through the button's middle - straddling the seam without covering content */
+.rw-app .swap-row { display: flex; justify-content: center; height: 30px; margin-block: var(--sp-s) -15px; position: relative; z-index: 1; }
+.rw-app .swap-btn { height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
 .rw-app .swap-btn svg { transition: transform .4s var(--ease); }
 .rw-app .swap-btn:hover svg { transform: rotate(180deg); }
 

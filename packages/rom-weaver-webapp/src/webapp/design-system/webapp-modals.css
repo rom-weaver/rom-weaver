@@ -227,29 +227,19 @@
   display: flex; align-items: center; justify-content: center; padding: 2px;
 }
 /* ── wide-bench layout ──
-   Desktops get real use out of the width: the app column widens and the two
-   parallel input stages sit side by side - ROM | Patches on apply, Original |
-   Modified on create - split by a hairline seam. Steps that concern the whole
-   job (0x01 inputs, 0x04 output) keep the full width. Trim/tools keep the
+   Desktops get real use out of the width: the app column widens and the patch
+   stack pairs up two cards per row. The numbered stages themselves stay in one
+   column at every width - each step reads top to bottom. Trim/tools keep the
    familiar centered column. */
 @media (min-width: 1100px) {
   .rw-app .app { max-width: 1220px; }
   .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
-  .rw-app #rom-weaver-container, .rw-app #patch-builder-container {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .rw-app #rom-weaver-container > *, .rw-app #patch-builder-container > * { grid-column: 1 / -1; min-width: 0; }
-  .rw-app #rom-weaver-container { grid-template-columns: minmax(0, 1fr); }
+  .rw-app #rom-weaver-container > * { min-width: 0; }
   .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack { border-block-start: 1px solid var(--seam-soft); }
   .rw-app #rom-weaver-list-patch-stack.patch-cards {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start;
   }
   .rw-app #rom-weaver-list-patch-stack > .card.patch:only-child { grid-column: 1 / -1; }
-  .rw-app #patch-builder-container > #patch-builder-row-original { grid-column: 1; grid-row: 2; }
-  .rw-app #patch-builder-container > #patch-builder-row-modified { grid-column: 2; grid-row: 2; border-inline-start: 1px solid var(--seam-soft); }
-  /* the swap hinge floats centered on the seam between the two source columns */
-  .rw-app #patch-builder-container > .swap-row { grid-row: 2; grid-column: 1 / -1; align-self: center; justify-self: center; }
-  .rw-app #patch-builder-container > .swap-row .swap-btn { translate: 0 0; }
 }
 
 /* the workflow form owns no plate: filled or empty, the page IS the form
