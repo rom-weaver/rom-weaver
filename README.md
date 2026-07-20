@@ -137,6 +137,23 @@ installed when npm's global man directory is on `MANPATH`.
 </details>
 
 <details>
+<summary><strong>cargo binstall</strong> — install the prebuilt release binary</summary>
+
+Install [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) once,
+then download the matching native binary from the GitHub release:
+
+```bash
+cargo binstall --no-confirm rom-weaver-cli
+rom-weaver --help
+```
+
+This uses the release binary for macOS arm64/x64, Linux x64 glibc, and Windows
+x64 MSVC; it does not compile from source. Other targets should use the Cargo
+source install below.
+
+</details>
+
+<details>
 <summary><strong>Cargo</strong> — build from crates.io</summary>
 
 ```bash
@@ -236,24 +253,21 @@ toolchains. Set `PORT` to change the host port, for example
 </details>
 
 <details>
-<summary><strong>Static hosting</strong> — build and upload the static directory</summary>
+<summary><strong>Static hosting</strong> — download and upload the compiled webapp</summary>
 
-Building from source requires `mise`, the WASI SDK, and Brotli; the
-[development guide](docs/development.md#prerequisites) lists the
-platform-specific setup.
+Download the compiled static bundle from the most recent [GitHub
+release](https://github.com/brandonocasey/rom-weaver/releases/latest), then
+extract it into the directory your HTTPS static host serves:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
-cd rom-weaver
-mise install
-mise trust
-npm ci --prefix packages/rom-weaver-webapp
-mise run build-wasm-prod
-npm --prefix packages/rom-weaver-webapp run build
+mkdir -p /path/to/rom-weaver
+curl --fail --location --show-error \
+  https://github.com/brandonocasey/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz \
+  | tar --extract --gzip --directory /path/to/rom-weaver
 ```
 
-Upload `packages/rom-weaver-webapp/dist/` to an HTTPS static host that
-supports SPA fallback and the required COOP/COEP/CORP headers; see
+Replace `/path/to/rom-weaver` with your document root. The host must support
+SPA fallback and the required COOP/COEP/CORP headers; see
 [static files](docs/self-hosting.md#static-files) for host configuration.
 
 </details>

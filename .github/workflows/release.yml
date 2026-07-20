@@ -32,6 +32,42 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+      - name: Checkout release tag for static webapp
+        if: steps.release.outputs.release_created == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: v${{ steps.release.outputs.version }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up static webapp build
+        if: steps.release.outputs.release_created == 'true'
+        uses: ./.github/actions/setup-build-env
+        with:
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+          webapp-deps: "true"
+
+      - name: Package static webapp release asset
+        if: steps.release.outputs.release_created == 'true'
+        run: |
+          mise run build-wasm-prod
+          npm --prefix packages/rom-weaver-webapp run build
+          tar --create --gzip \
+            --file rom-weaver-webapp.tar.gz \
+            --directory packages/rom-weaver-webapp/dist .
+          sha256sum rom-weaver-webapp.tar.gz > rom-weaver-webapp.tar.gz.sha256
+
+      - name: Upload static webapp release asset
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ steps.release.outputs.version }}" \
+            rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
       - name: Mark GitHub prerelease
         if: >-
           steps.release.outputs.release_created == 'true' &&
@@ -92,7 +128,7 @@ jobs:
     needs: release
     if: needs.release.outputs.release_created == 'true'
     permissions:
-      contents: read
+      contents: write
       id-token: write
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

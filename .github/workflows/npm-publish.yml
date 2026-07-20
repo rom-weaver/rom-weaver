@@ -27,6 +27,9 @@ permissions:
 
 jobs:
   platform:
+    permissions:
+      contents: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -73,6 +76,22 @@ jobs:
 
       - name: Prepare platform package
         run: node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
+
+      - name: Upload platform binary to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
+          binary_path="$package_path/bin/rom-weaver"
+          asset_name="rom-weaver-${{ matrix.package }}"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            binary_path+=".exe"
+            asset_name+=".exe"
+          fi
+          cp "$binary_path" "$asset_name"
+          gh release upload "v${{ inputs.version }}" "$asset_name" \
+            --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish platform package
         shell: bash

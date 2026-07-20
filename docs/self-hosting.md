@@ -86,20 +86,22 @@ docker compose down
 
 ## Static files
 
-Follow the [development guide](development.md#clone-and-bootstrap) to prepare a
-checkout with `mise`, the WASI SDK, Brotli, and the package dependencies. Then
-build a portable static directory:
+Download the compiled static bundle from the most recent [GitHub
+release](https://github.com/brandonocasey/rom-weaver/releases/latest), then
+extract it into the directory served by your static host:
 
 ```bash
-mise run build-wasm-prod
-npm --prefix packages/rom-weaver-webapp run build
+mkdir -p /path/to/rom-weaver
+curl --fail --location --show-error \
+  https://github.com/brandonocasey/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz \
+  | tar --extract --gzip --directory /path/to/rom-weaver
 ```
 
-Upload the contents of `packages/rom-weaver-webapp/dist/`, preserving its
-directory structure. The normal build does not include precompressed `.br`
-siblings because generic static hosts do not automatically serve them. Enable
-dynamic Brotli or gzip compression in the host when available, especially for
-the WASM file.
+Replace `/path/to/rom-weaver` with your document root. Preserve the extracted
+directory structure. The release bundle includes precompressed `.br` siblings,
+but generic static hosts do not automatically serve them; enable dynamic
+Brotli or gzip compression in the host when available, especially for the WASM
+file.
 
 The server should fall back to `index.html` for navigation requests within the
 rom-weaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so
