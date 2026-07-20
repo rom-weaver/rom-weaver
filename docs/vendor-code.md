@@ -44,7 +44,6 @@ is inlined as a module inside a crate that is already published instead. See
 | Code | Form | Published as | Reason |
 | --- | --- | --- | --- |
 | `vendor/libarchive` | Git submodule | part of `rom-weaver-containers` | C sources built by `crates/rom-weaver-containers/libarchive/build.rs`; a tarball fallback ships in that package |
-| `vendor/nod` | Git submodule | — | Upstream `main` checkout used to refresh the inlined source; excluded from the workspace |
 | `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
@@ -62,11 +61,21 @@ GameCube and Wii disc support comes from [encounter/nod](https://github.com/enco
 `crates/rom-weaver-containers/src/nod/`, with both upstream license files beside
 it, and is exposed internally as `rom_weaver_containers::nod`.
 
-`vendor/nod` remains as the upstream `main` checkout for refreshing this copy;
-it is not a Cargo dependency. To update nod, copy `vendor/nod/nod/src/` into
-`crates/rom-weaver-containers/src/nod/`, keep the license files, rewrite its
-`crate::` paths to `crate::nod::`, and retain only the compression/threading
-features declared by `rom-weaver-containers`.
+The inlined copy is adapted from [encounter/nod](https://github.com/encounter/nod)
+and is intentionally self-contained; no nod checkout is required to build or
+publish rom-weaver. When a nod release lands with the needed API and feature
+support, replace the copy with the registry crate:
+
+1. Verify the release contains the required Rust disc reader/writer APIs and
+   compression/threading features.
+2. Add the released `nod` version to `[workspace.dependencies]` and make it a
+   dependency of `rom-weaver-containers`.
+3. Replace `pub mod nod;` with a re-export of the dependency so the public
+   `rom_weaver_containers::nod` path remains stable.
+4. Remove `crates/rom-weaver-containers/src/nod/` and its copied license files,
+   then remove any dependencies used only by the inlined implementation.
+5. Run `cargo test --workspace` and
+   `cargo publish --workspace --locked --dry-run` before deleting this section.
 
 The inlined module drops nod's Python bindings and OpenSSL backend because
 rom-weaver only uses the Rust disc reader/writer API. Keeping the source inside

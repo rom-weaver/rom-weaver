@@ -18,15 +18,6 @@ back to an upstream release. Not everything vendored lives here - the
     git submodule update --init --recursive vendor/libarchive
     ```
 
-- `vendor/nod`:
-  - Git submodule tracking upstream `main` at `https://github.com/encounter/nod`.
-  - The build uses the copied source at `crates/rom-weaver-containers/src/nod/`;
-    the submodule is only the refresh/contribution checkout.
-  - Initialize or refresh with:
-    ```bash
-    git submodule update --init --recursive vendor/nod
-    ```
-
 ## Validate after vendor updates
 
 ```bash

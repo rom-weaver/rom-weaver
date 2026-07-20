@@ -56,7 +56,7 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `vendor/` | Vendored source checkouts (`nod` for RVZ refreshes, `libarchive`). `nod` and `libarchive` are git submodules; the built nod source is inlined under `rom-weaver-containers`. |
+| `vendor/` | `libarchive` source checkout for native builds; the nod Rust source is inlined under `rom-weaver-containers`. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates

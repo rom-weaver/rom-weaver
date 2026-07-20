@@ -2,9 +2,9 @@
 
 ## Worktrees
 
-`vendor/nod` and `vendor/libarchive` are Git submodules. `scripts/setup-worktree.sh`
-links populated copies from the main checkout into linked worktrees, so Git may
-show those paths as expected gitlink-to-symlink typechanges.
+`vendor/libarchive` is a Git submodule. `scripts/setup-worktree.sh` links its
+populated copy from the main checkout into linked worktrees, so Git may show it
+as an expected gitlink-to-symlink typechange.
 
 Git refuses to remove any worktree containing submodules, even when it is clean.
 Before cleanup, verify the worktree has no real changes, then use the repository

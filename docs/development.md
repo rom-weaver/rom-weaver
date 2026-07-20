@@ -43,8 +43,7 @@ installed elsewhere.
 
 ## Clone and bootstrap
 
-The repository contains `vendor/nod` and `vendor/libarchive` submodules, so
-clone recursively:
+The repository contains the `vendor/libarchive` submodule, so clone recursively:
 
 ```bash
 git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
