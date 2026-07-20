@@ -120,7 +120,7 @@ jobs:
       - uses: ./.github/actions/setup-build-env
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         with:
-          apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
 

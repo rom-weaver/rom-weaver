@@ -42,7 +42,7 @@ jobs:
       # parity is measured with the same rustc the rest of CI uses.
       - uses: ./.github/actions/setup-build-env
         with:
-          apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
 
       # The reference tools are cross-platform npm packages (chdman from
       # emmercm/chdman-js, dolphin-tool). Each exposes a binary of the same name
