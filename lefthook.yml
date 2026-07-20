@@ -57,6 +57,12 @@ pre-commit:
     react-audit-strings:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run audit:strings
+    # The `@rom-weaver/*` platform packages are unpublished, so npm cannot
+    # resolve them and silently drops their lock entries on any `npm install`
+    # - which then breaks `npm ci` for every CI job. Fail here instead.
+    root-lock-sync:
+      glob: "package{,-lock}.json"
+      run: npm ci --ignore-scripts --dry-run
     # Workflow mistakes are invisible until a push burns a runner minute, so
     # they are worth catching at commit time. Covers the composite actions too.
     actionlint:

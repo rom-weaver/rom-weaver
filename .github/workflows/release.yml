@@ -38,7 +38,10 @@ jobs:
           contains(steps.release.outputs.version, '-')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "v${{ steps.release.outputs.version }}" --prerelease
+        run: |
+          gh release edit "v${{ steps.release.outputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease
 
       - name: Find release pull request
         id: release-pr
@@ -49,6 +52,7 @@ jobs:
         run: |
           read -r number branch < <(
             gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
               --base main \
               --state open \
               --label 'autorelease: pending' \
