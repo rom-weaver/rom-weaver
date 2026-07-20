@@ -14,6 +14,8 @@ tasks.
 - [Build and run the native CLI](#build-and-run-the-native-cli)
 - [Test and lint](#test-and-lint)
 - [Generated files](#generated-files)
+- [Dependencies](#dependencies)
+  - [bzip2 backend](#bzip2-backend)
 - [Linked worktrees](#linked-worktrees)
 - [Project map](#project-map)
 
@@ -192,6 +194,42 @@ mise run manpages
 
 Do not edit files under
 `packages/rom-weaver-webapp/src/wasm/generated/` or `docs/man/` manually.
+
+## Dependencies
+
+`deny.toml` owns the dependency policy - advisories, licenses, and sources.
+Check it with:
+
+```bash
+mise run deny      # advisories + licenses + sources
+mise run machete   # unused Rust dependencies
+```
+
+New crates must resolve to an already-allowed license. When one does not,
+prefer a per-crate entry in `exceptions` over widening the global `allow`
+list, and write down why - a scoped entry keeps the next crate carrying that
+license from landing unnoticed.
+
+### bzip2 backend
+
+`bzip2` exposes two backends and picks one with
+`#[cfg(feature = "bzip2-sys")]`: the C `bzip2-sys` library, or the pure-Rust
+`libbz2-rs-sys`. The workspace pins `bzip2` to `default-features = false,
+features = ["bzip2-sys"]`, which keeps every build on the C backend.
+
+**That pin is load-bearing.** Cargo unions features across the graph, and
+upstream `qbsdiff` depends on `bzip2` with default features on, so
+`libbz2-rs-sys` is present in the dependency graph regardless. The workspace
+pin is the only thing keeping `bzip2-sys` selected; drop it and the bzip2
+implementation underneath BDF patch output silently swaps.
+
+`libbz2-rs-sys` therefore compiles but is never linked. It costs roughly
+64 bytes in the WASM module and one scoped `deny.toml` exception for its
+`bzip2-1.0.6` license. `qbsdiff` was vendored under `vendor/` until 2026-07-20
+purely to avoid it; the vendored sources were byte-identical to upstream, so
+the fork was retired in favour of the crates.io release plus the pin above.
+Upstream exposes no feature to opt out of its default `bzip2` backend - if
+that changes, this exception can go away.
 
 ## Linked worktrees
 

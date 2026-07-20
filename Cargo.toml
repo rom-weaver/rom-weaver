@@ -18,7 +18,6 @@ members = [
     "tools/rom-weaver-typegen",
     "vendor/akv-0.1.0",
     "vendor/chd-0.3.4",
-    "vendor/qbsdiff-1.4.4",
     "vendor/xdvdfs-0.8.3",
 ]
 exclude = ["vendor/nod"]
@@ -51,6 +50,11 @@ adler2 = "2.0.1"
 assert_cmd = "2.1.1"
 assert_fs = "1.1.3"
 blake3 = "1.8.2"
+# Load-bearing for BDF byte-parity: upstream `qbsdiff` depends on `bzip2` with
+# default features, which pulls in the pure-Rust `libbz2-rs-sys` backend. Feature
+# unification means this pin is the only thing keeping `bzip2` on the C backend
+# (`bzip2` selects via `#[cfg(feature = "bzip2-sys")]`). Dropping it silently
+# swaps the bzip2 implementation underneath BDF patch output.
 bzip2 = { version = "0.6.1", default-features = false, features = ["bzip2-sys"] }
 ciso = { version = "0.2.1", default-features = false, features = ["sync"] }
 chd = { package = "rom-weaver-chd-core", path = "vendor/chd-0.3.4", version = "0.5.0", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
@@ -70,7 +74,7 @@ libz-sys = { version = "1.1.28", default-features = false }
 liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"
 nod = { package = "rom-weaver-nod", path = "crates/rom-weaver-nod", version = "0.5.0", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
-qbsdiff = { package = "rom-weaver-qbsdiff", path = "vendor/qbsdiff-1.4.4", version = "0.5.0" }
+qbsdiff = "1.4.4"
 rayon = "1.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

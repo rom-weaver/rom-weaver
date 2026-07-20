@@ -321,6 +321,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
 dependencies = [
  "bzip2-sys",
+ "libbz2-rs-sys",
 ]
 
 [[package]]
@@ -1227,6 +1228,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libbz2-rs-sys"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34b357333733e8260735ba5894eb928c02ecc69c78715f01a8019e7fa7f2db4c"
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1785,6 +1792,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "qbsdiff"
+version = "1.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdc7f24528be166f08f2c7becaca5618865499b6ded2565d5afcd795cc0d7596"
+dependencies = [
+ "byteorder",
+ "bzip2",
+ "rayon",
+ "suffix_array",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2207,28 +2226,17 @@ dependencies = [
  "bzip2",
  "crc32fast",
  "md-5 0.11.0",
+ "qbsdiff",
  "rayon",
  "rom-weaver-checksum",
  "rom-weaver-codecs",
  "rom-weaver-core",
- "rom-weaver-qbsdiff",
  "rom-weaver-xdelta",
  "serde",
  "serde_json",
  "sha1",
  "suffix_array",
  "tracing",
-]
-
-[[package]]
-name = "rom-weaver-qbsdiff"
-version = "0.5.0"
-dependencies = [
- "byteorder",
- "bzip2",
- "clap",
- "rayon",
- "suffix_array",
 ]
 
 [[package]]

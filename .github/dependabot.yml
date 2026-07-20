@@ -25,7 +25,6 @@ updates:
       # submodule/vendoring workflow described in CLAUDE.md.
       - dependency-name: rom-weaver-chd-core
       - dependency-name: rom-weaver-akv
-      - dependency-name: rom-weaver-qbsdiff
       - dependency-name: rom-weaver-xdvdfs
 
   # Two npm manifests: the root wrapper (CLI shim + commitlint/lefthook) and

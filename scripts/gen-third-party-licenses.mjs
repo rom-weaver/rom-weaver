@@ -21,7 +21,6 @@ const VENDORED_WORKSPACE_PACKAGES = new Set([
   "rom-weaver-akv",
   "rom-weaver-chd-core",
   "rom-weaver-nod",
-  "rom-weaver-qbsdiff",
   "rom-weaver-xdvdfs",
 ]);
 // License text file name prefixes (matched case-insensitively, files only).
