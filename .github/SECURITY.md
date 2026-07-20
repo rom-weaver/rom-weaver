@@ -10,16 +10,19 @@
 
 ## Supported versions
 
-Security fixes are made on the default branch and included in the next release.
-Only the latest tagged release is supported; older releases may not receive
-backported fixes.
+Security fixes are made on the default branch. No GitHub Release has been
+published yet. After releases begin, fixes will be included in the next
+release, and only the latest release will be supported.
 
 ## Report a vulnerability
 
-[Open an issue](https://github.com/brandonocasey/rom-weaver/issues/new/choose)
-with the affected version, impact, safe reproduction details, and any suggested
-mitigation. Do not include exploit details, credentials, personal information,
-or other sensitive material in the public report.
+[Report the vulnerability privately through GitHub](https://github.com/brandonocasey/rom-weaver/security/advisories/new).
+Include the affected version, impact, safe reproduction details, and any
+suggested mitigation. GitHub keeps this report private while it is reviewed.
+
+If the private form is unavailable, [open a public issue](https://github.com/brandonocasey/rom-weaver/issues/new/choose)
+without exploit details, credentials, personal information, or other sensitive
+material.
 
 Do not attach copyrighted ROMs or disc images, firmware, encryption keys,
 credentials, or personal files. Use a minimal synthetic input when possible,
