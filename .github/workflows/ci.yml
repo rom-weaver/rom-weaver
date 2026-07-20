@@ -43,7 +43,82 @@ jobs:
         with:
           submodules: recursive
 
+      # Keyed on the committed content of everything that can change the emitted
+      # module, so a webapp/docs/CI-only pull request reuses it instead of paying
+      # a 6.5 min compile.
+      #
+      # `git ls-tree` rather than hashFiles(): it yields one hash per path,
+      # records the vendor/ submodules as gitlink SHAs (hashFiles cannot see
+      # into a submodule), and reflects the tree actually checked out - on a
+      # pull request that is the merge commit, which is what gets built.
+      #
+      # Inputs, and why each is here:
+      #   crates, tools, vendor  - the sources themselves
+      #   Cargo.lock, Cargo.toml - resolved dependency versions
+      #   .cargo                 - target rustflags, incl. --max-memory and LTO
+      #   scripts/wasm           - the build script and its post-processing
+      #   .mise.toml             - the rust and binaryen (wasm-opt) pins
+      #   .github/actions/...    - the WASI SDK version and checksum
+      #
+      # Deliberately over-broad: a needless miss costs one rebuild, while a
+      # false hit silently ships a stale module. Bump CACHE_EPOCH to invalidate
+      # by hand.
+      - name: Compute wasm cache key
+        id: wasm-key
+        env:
+          CACHE_EPOCH: "1"
+        run: |
+          basis=$(git ls-tree HEAD -- \
+            crates tools vendor Cargo.lock Cargo.toml .cargo scripts/wasm \
+            .mise.toml .github/actions/setup-build-env)
+          if [ -z "$basis" ]; then
+            echo "::error::wasm cache basis resolved to nothing - refusing to key a cache on an empty tree"
+            exit 1
+          fi
+          hash=$(printf '%s\n' "$basis" | sha256sum | cut -d' ' -f1)
+          echo "key=wasm-prod-${{ runner.os }}-e${CACHE_EPOCH}-${hash}" >> "$GITHUB_OUTPUT"
+          printf 'cache basis:\n%s\n' "$basis"
+
+      # No restore-keys: a prefix match would serve a module built from
+      # different sources. This cache is all-or-nothing by design.
+      #
+      # Where the hits come from: a run reads caches written by its own branch
+      # and by the default branch, so the payoff arrives via main. Every push
+      # there writes an entry that any later pull request can restore, provided
+      # its wasm inputs are identical. A cache written on a pull request stays
+      # local to it - useful across that branch's own pushes, invisible to
+      # every other one.
+      - name: Restore built wasm module
+        id: wasm-cache
+        uses: actions/cache@v6
+        with:
+          key: ${{ steps.wasm-key.outputs.key }}
+          path: |
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-webapp/src/wasm/NOTICE
+            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-webapp/src/wasm/third_party
+
+      # Without this the only evidence the cache works is an unexplained swing
+      # in job duration, which is a poor thing to debug from months later.
+      - name: Report cache status
+        env:
+          HIT: ${{ steps.wasm-cache.outputs.cache-hit }}
+          KEY: ${{ steps.wasm-key.outputs.key }}
+        run: |
+          if [ "$HIT" = "true" ]; then
+            echo "**WASM cache hit** - restored, skipping the ~6.5 min build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**WASM cache miss** - building from source." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "key: \`${KEY}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Skipped entirely on a hit - the toolchain exists only to compile.
       - uses: ./.github/actions/setup-build-env
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         with:
           apt-packages: brotli cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
@@ -59,7 +134,16 @@ jobs:
       # the runtime's 4 GiB memory. Warnings are denied by the separate
       # `cargo check` in the `rust` job, which does not link and so is immune.
       - name: Build production WASM
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
+
+      # Runs on both paths. On a hit it is the only thing standing between a
+      # partial cache restore and a confusing failure in the browser suite; on a
+      # miss it asserts the 4 GiB memory ceiling, whose loss to a RUSTFLAGS
+      # override is what broke this branch earlier. Uses the runner's node, not
+      # mise's, since setup is skipped on a hit.
+      - name: Verify wasm artifact
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
       # The wasm module and its brotli sibling are already compressed, so
       # re-compressing them into the artifact only burns time.
