@@ -1134,16 +1134,8 @@ impl JunkInfo {
 impl BlockProcessor for BlockProcessorWIA {
     type BlockMeta = BlockMetaWIA;
 
-    fn supports_read_on_main(&self) -> bool { true }
-
     #[instrument(name = "BlockProcessorWIA::process_block", skip_all)]
     fn process_block(&mut self, group_idx: u32) -> io::Result<BlockResult<Self::BlockMeta>> {
-        let disc_data = self.read_block_data(group_idx)?;
-        self.process_block_data(group_idx, disc_data)
-    }
-
-    #[instrument(name = "BlockProcessorWIA::read_block_data", skip_all)]
-    fn read_block_data(&mut self, group_idx: u32) -> io::Result<Bytes> {
         let info = find_group_info(
             group_idx,
             &self.disc,
@@ -1156,24 +1148,6 @@ impl BlockProcessor for BlockProcessorWIA {
 
         self.inner.seek(SeekFrom::Start(info.sector as u64 * SECTOR_SIZE as u64))?;
         let (_, disc_data) = read_block(&mut self.inner, info.num_sectors as usize * SECTOR_SIZE)?;
-        Ok(disc_data)
-    }
-
-    #[instrument(name = "BlockProcessorWIA::process_block_data", skip_all)]
-    fn process_block_data(
-        &mut self,
-        group_idx: u32,
-        disc_data: Bytes,
-    ) -> io::Result<BlockResult<Self::BlockMeta>> {
-        let info = find_group_info(
-            group_idx,
-            &self.disc,
-            self.partitions.as_ref(),
-            self.raw_data.as_ref(),
-        )
-        .ok_or_else(|| {
-            io::Error::other(format!("Couldn't find partition or raw data for group {}", group_idx))
-        })?;
 
         // Decrypt group and calculate hash exceptions
         let is_rvz = self.header.is_rvz();
@@ -1334,8 +1308,7 @@ impl BlockProcessorWIA {
                     // We only do this if we're _not_ compressing the data, as the compression
                     // will likely handle this better.
                     if self.compressor.kind == Compression::None && zeroes > SEED_SIZE_BYTES + 4 {
-                        #[cfg(not(target_arch = "wasm32"))]
-                        tracing::debug!("Packing {} zero bytes in group {}", zeroes, info.index);
+                        debug!("Packing {} zero bytes in group {}", zeroes, info.index);
                         junk_areas.push((data_offset, JunkSeed::Zeroed, zeroes));
                     }
 
@@ -1354,8 +1327,7 @@ impl BlockProcessorWIA {
                 .take_while(|(a, b)| a == b)
                 .count();
             if num_match > SEED_SIZE_BYTES + 4 {
-                #[cfg(not(target_arch = "wasm32"))]
-                tracing::debug!("Matched {} junk bytes at offset {:#X}", num_match, offset);
+                debug!("Matched {} junk bytes at offset {:#X}", num_match, offset);
                 junk_areas.push((data_offset, JunkSeed::Sector(sector), num_match));
                 offset += num_match as u64;
                 data_offset += num_match;
@@ -1370,12 +1342,7 @@ impl BlockProcessorWIA {
                     &mut seed,
                 );
                 if num_match > SEED_SIZE_BYTES + 4 {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    tracing::debug!(
-                        "Recovered junk seed for {} bytes at offset {:#X}",
-                        num_match,
-                        offset
-                    );
+                    debug!("Recovered junk seed for {} bytes at offset {:#X}", num_match, offset);
                     junk_areas.push((data_offset, JunkSeed::Recovered(seed), num_match));
                     offset += num_match as u64;
                     data_offset += num_match;
