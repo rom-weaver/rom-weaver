@@ -66,8 +66,10 @@ git push origin main
 
 crates.io requires each crate to be published manually once before trusted
 publishing can be configured. Wait for Release Please to open its release pull
-request and for that pull request to pass CI. From a clean checkout of its final
-commit, publish the workspace:
+request and for that pull request to pass CI. The workspace publishes five
+packages: `rom-weaver-core`, `rom-weaver-checksum`, `rom-weaver-containers`,
+`rom-weaver-patches`, and `rom-weaver-cli`. From a clean checkout of the release
+pull request's final commit, publish them together:
 
 ```bash
 cargo login
@@ -161,7 +163,7 @@ it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
 
 One value is **not** relative: the bundle schema's `$id` in
 `docs/rom-weaver-bundle.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in
-`crates/rom-weaver-app/src/bundle_schema.rs` (a unit test asserts they match).
+`crates/rom-weaver-cli/src/bundle_schema.rs` (a unit test asserts they match).
 It points at `rom-weaver.com`, and `deploy-web.yml` copies the schema to the site
 root **on the production channel only** - beta and nightly are not canonical and
 must not claim that URL. Treat any future edit as a change of the schema's

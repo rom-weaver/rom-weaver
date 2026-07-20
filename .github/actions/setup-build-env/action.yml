@@ -40,7 +40,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # clang/libclang-dev back bindgen in rom-weaver-libarchive-sys; without them
+    # clang/libclang-dev back the libarchive bindgen step in rom-weaver-containers; without them
     # it cannot resolve system headers ("'sys/stat.h' file not found").
     # cmake/ninja/pkg-config build the vendored C deps. Jobs that compile no
     # Rust pass an empty list.

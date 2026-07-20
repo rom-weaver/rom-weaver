@@ -127,8 +127,8 @@ cargo build -p rom-weaver-cli
 cargo run -p rom-weaver-cli -- --help
 ```
 
-The reusable command orchestration lives in `rom-weaver-app`; the native and
-WASM CLI binaries are thin argument/reporter layers over it.
+The `rom-weaver-cli` package contains the reusable `rom_weaver_app` command
+library plus the native CLI, WASM entrypoint, and type generator.
 
 ## Test and lint
 

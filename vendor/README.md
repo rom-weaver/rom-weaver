@@ -12,7 +12,7 @@ back to an upstream release. Not everything vendored lives here - the
 ## Current vendor contents
 
 - `vendor/libarchive`:
-  - Git submodule used by `crates/rom-weaver-libarchive-sys/build.rs`.
+  - Git submodule used by `crates/rom-weaver-containers/libarchive/build.rs`.
   - Initialize or refresh with:
     ```bash
     git submodule update --init --recursive vendor/libarchive

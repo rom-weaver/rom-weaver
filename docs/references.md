@@ -76,9 +76,9 @@ It is intentionally a living document. Some patch families do not have stable fo
 
 - Patch registry: [`crates/rom-weaver-patches/src/lib.rs`](../crates/rom-weaver-patches/src/lib.rs)
 - Handlers directory: [`crates/rom-weaver-patches/src/`](../crates/rom-weaver-patches/src/)
-- DCP format core: [`crates/rom-weaver-app/src/dcp/`](../crates/rom-weaver-app/src/dcp/) (zip, manifest, apply, rebuild)
-- GD-ROM filesystem read/write: [`crates/rom-weaver-app/src/gdrom/`](../crates/rom-weaver-app/src/gdrom/) (sector, iso9660, gdrom, iso_writer, mode1)
-- DCP CLI path: [`crates/rom-weaver-app/src/patch_apply_dcp.rs`](../crates/rom-weaver-app/src/patch_apply_dcp.rs)
+- DCP format core: [`crates/rom-weaver-cli/src/dcp/`](../crates/rom-weaver-cli/src/dcp/) (zip, manifest, apply, rebuild)
+- GD-ROM filesystem read/write: [`crates/rom-weaver-cli/src/gdrom/`](../crates/rom-weaver-cli/src/gdrom/) (sector, iso9660, gdrom, iso_writer, mode1)
+- DCP CLI path: [`crates/rom-weaver-cli/src/patch_apply_dcp.rs`](../crates/rom-weaver-cli/src/patch_apply_dcp.rs)
 
 ## Container / Compression Specs
 

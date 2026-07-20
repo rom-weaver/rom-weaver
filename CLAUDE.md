@@ -76,7 +76,7 @@ instructions do **not** apply here.
 
 ## Layout pointers
 
-- CLI command orchestration: `crates/rom-weaver-app` (shared by native + wasm)
+- CLI command orchestration: `crates/rom-weaver-cli` (shared library + native + wasm)
 - Format handler registries: `crates/rom-weaver-containers`,
   `crates/rom-weaver-patches`
 - Browser wasm runtime (OPFS, thread pool, worker client):

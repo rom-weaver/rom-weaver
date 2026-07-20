@@ -23,10 +23,9 @@ why, and the exact steps to go back to upstream.
 
 `cargo publish` rewrites every path dependency into a registry dependency and
 then requires that crate to exist on crates.io. `rom-weaver-cli` is published so
-that `cargo install rom-weaver-cli` works, and all 14 `rom-weaver-*` crates are
-in its dependency graph. So **any vendored crate that is a workspace member must
-also be published** — there is no way to publish a crate while keeping one of
-its path dependencies private.
+that `cargo install rom-weaver-cli` works, so every internal path dependency in
+its graph must also be published. There is no way to publish a crate while
+keeping one of its path dependencies private.
 
 To see the current list:
 
@@ -44,18 +43,17 @@ is inlined as a module inside a crate that is already published instead. See
 
 | Code | Form | Published as | Reason |
 | --- | --- | --- | --- |
-| `vendor/libarchive` | Git submodule | not a crate | C sources built by `rom-weaver-libarchive-sys/build.rs`, which bundles the tarball into its package |
+| `vendor/libarchive` | Git submodule | part of `rom-weaver-containers` | C sources built by `crates/rom-weaver-containers/libarchive/build.rs`; a tarball fallback ships in that package |
 | `vendor/nod` | Git submodule | — | Upstream `main` checkout used to refresh the inlined source; excluded from the workspace |
-| `crates/rom-weaver-containers/src/nod` | Inlined module | not published | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
-| `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | not published | Upstream's published `write` feature forces `wax` |
+| `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
+| `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
 Everything else that was once vendored has gone back upstream: `qbsdiff` and
 `chd` now come from crates.io, and the `akv` wrapper was removed outright. That
 is the preferred outcome whenever upstream can serve the need — inlining is the
 fallback for when it cannot, and a published fork is the last resort.
 
-`rom-weaver-libarchive-sys` is the only remaining case republishing a
-third-party-facing package under the `rom-weaver-*` namespace.
+No vendored dependency is republished as its own `rom-weaver-*` crate.
 
 ## `nod`, inlined into `rom-weaver-containers`
 
@@ -135,7 +133,7 @@ Once it does not, the swap is four steps:
    `async-trait` entry with them.
 
 Call sites do not change. `rom_weaver_containers::xdvdfs::…` keeps working in
-`rom-weaver-app` and `cli_smoke`, and the internal paths (`blockdev`, `layout`,
+`rom-weaver-cli` and `cli_smoke`, and the internal paths (`blockdev`, `layout`,
 `read`, `write::fs`, `write::img`) match upstream's layout.
 
 Also revisit the `RUSTSEC-2025-0141` ignore in `deny.toml`. `bincode` 1.3.3 is

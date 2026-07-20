@@ -5,24 +5,24 @@ CLI and a WASM build that runs in browser workers), with a React webapp driving
 the WASM build over a JSON event protocol.
 
 ```
-                 ┌────────────────────────────┐
-                 │       rom-weaver-app       │  command orchestration
-                 │  (shared command surface)  │  (probe/extract/checksum/
-                 └─────────┬──────────┬───────┘   compress/trim/patch/ingest)
-                           │          │
-              native build │          │ wasm32-wasip1-threads build
-                           ▼          ▼
-                ┌───────────────┐  ┌──────────────────────┐
-                │ rom-weaver-cli│  │ rom-weaver-cli (wasm) │ argv/reporter shim
-                └───────────────┘  └──────────┬───────────┘
-                                              │ JSON events over stdio
-                                   ┌──────────▼───────────┐
-                                   │ react src/wasm layer │ OPFS WASI runner,
-                                   │    (browser-only)    │ thread pool, worker client
-                                   └──────────┬───────────┘
-                                   ┌──────────▼───────────┐
-                                   │  rom-weaver-webapp    │ workflows, forms, PWA
-                                   └──────────────────────┘
+                 ┌──────────────────────────────┐
+                 │ rom-weaver-cli Cargo package│
+                 │  rom_weaver_app shared lib  │  command orchestration
+                 └──────────┬──────────┬────────┘
+                            │          │
+               native build │          │ wasm32-wasip1-threads build
+                            ▼          ▼
+                 ┌──────────────┐  ┌──────────────────────┐
+                 │  rom-weaver  │  │ rom-weaver-app.wasm │ typed JSON stdio
+                 │ CLI binary   │  └──────────┬───────────┘
+                 └──────────────┘             │
+                                  ┌───────────▼───────────┐
+                                  │ react src/wasm layer │ OPFS WASI runner,
+                                  │    (browser-only)    │ thread pool, worker client
+                                  └───────────┬───────────┘
+                                  ┌───────────▼───────────┐
+                                  │ rom-weaver-webapp     │ workflows, forms, PWA
+                                  └───────────────────────┘
 ```
 
 <!-- START doctoc -->
@@ -49,24 +49,21 @@ the WASM build over a JSON event protocol.
 | --- | --- |
 | `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`), and the standalone codec backends (zstd, deflate, lzma, … in `src/codecs`). Depends on nothing else in the workspace. |
 | `crates/rom-weaver-checksum` | Checksum engines (crc32/md5/sha*/blake3/crc32c/crc16/adler32) plus the streaming variant engine shared by `checksum` and extract flows. |
-| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, …) plus the native CHD implementation (`src/chd`: read sessions, create pipeline, codecs, disc inference) exposed as a `ContainerHandler` + `ChdCodec`. |
+| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, …), native CHD implementation (`src/chd`), and the libarchive wrapper/bindings/build integration (`src/libarchive`, `libarchive/`). |
 | `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,…}.rs`), one file per format, including VCDIFF/xdelta encode+decode (`src/xdelta`, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
-| `crates/rom-weaver-app/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
-| `crates/rom-weaver-app/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-patches`'s `xdelta` module. |
-| `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
-| `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows, and cheat-code decoding/apply. Its `rom-weaver-typegen` binary generates the browser's Rust-derived TypeScript files. |
-| `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
+| `crates/rom-weaver-cli/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
+| `crates/rom-weaver-cli/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-patches`'s `xdelta` module. |
+| `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
 | `vendor/` | Vendored source checkouts (`nod` for RVZ refreshes, `libarchive`). `nod` and `libarchive` are git submodules; the built nod source is inlined under `rom-weaver-containers`. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
-(`checksum`/`containers`/`patches`) ← `app` ← `cli`. Format crates mostly do
-not depend on each other, with one exception: `containers` consumes
-`libarchive` to assemble its registry. The app's `dcp` module consumes the
-app's `gdrom` module (data-track filesystem) and `patches`' `xdelta` module
-(per-file VCDIFF apply).
+(`checksum`/`containers`/`patches`) ← `cli`. Libarchive is an internal
+`containers` module rather than another package. The CLI package's `dcp` module
+consumes its `gdrom` module (data-track filesystem) and `patches`' `xdelta`
+module (per-file VCDIFF apply).
 
 ## Core abstractions (`rom-weaver-core/src/registry.rs`)
 
@@ -84,7 +81,7 @@ keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI
 
 Handlers return `OperationReport` (family, format, stage, label, JSON details,
 percent, thread execution, status) - the single progress/result currency that
-flows from format code through `rom-weaver-app` to the CLI reporters and, in
+flows from format code through the `rom_weaver_app` library to the CLI reporters and, in
 JSON mode, to the browser. `OperationContext` carries cancellation, temp-path
 allocation, progress sinks, and thread budgets downward.
 
@@ -206,7 +203,7 @@ Some dumps carry a copier header the patch author may or may not have included
 (`crates/rom-weaver-checksum/src/rom_headers.rs` is the source of truth:
 signatures, size-modulus rules, per-header `headered_extension` /
 `headerless_extension`, and `retained_on_output`). Patch apply handles this with
-two symmetric policies (`crates/rom-weaver-app/src/patch_apply.rs`):
+two symmetric policies (`crates/rom-weaver-cli/src/patch_apply.rs`):
 
 - **`--patch-header auto|keep|strip`** - which bytes each patch applies against.
   Auto decides **per patch in the chain** on checksum proof: the patch's
@@ -264,7 +261,7 @@ dedicated path that rebuilds a whole disc track.
   cooked image and raw track are never materialized, so peak memory scales with
   the largest single file's apply working set - not the disc or the patch.
 - **CLI wiring.** `patch apply` detects a `.dcp` patch and routes to
-  `rom-weaver-app/src/patch_apply_dcp.rs`, which requires a disc-sheet
+  `rom-weaver-cli/src/patch_apply_dcp.rs`, which requires a disc-sheet
   (`.cue`/`.gdi`) input, auto-selects the data track (largest track that opens
   as a `GdRomFs`), rebuilds it, then reuses the shared disc staging
   (`patch_apply_disc.rs`) to reassemble the full disc and compress to CHD by
@@ -296,7 +293,7 @@ checks validate it - the default shape for distributable patch bundles; the
 apply error for a sourceless bundle input and the webapp's ROM step both
 surface the expected name/checksums/size so the user knows which ROM to
 supply. Schema and the single shared parser live in
-`rom-weaver-app/src/bundle_schema.rs` / `bundle_parse.rs`; validation
+`rom-weaver-cli/src/bundle_schema.rs` / `bundle_parse.rs`; validation
 failures use stable `bundle.*` `ValidationCode`s. Bundle detection is
 filename-based: exactly `rom-weaver-bundle.json`, `rom-weaver-bundle.json.<gz|bz2|xz|zst>`, or a root-level
 `rom-weaver-bundle.json` archive member. Never name one `manifest.json` - the webapp service
@@ -372,7 +369,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
   behaviorally identical.
 - **`ingest` - the mainline browser drop path.** The webapp routes every
   dropped input through the shared `ingest` command
-  (`rom-weaver-app/src/ingest_command.rs`), one wasm call per source. It
+  (`rom-weaver-cli/src/ingest_command.rs`), one wasm call per source. It
   classifies the source into a `rom` or `patch` bucket, does nested archive/
   codec extraction, checksums each ROM leaf (variants + platform identity), and
   describes any patches - replacing the webapp's older separate classify →
