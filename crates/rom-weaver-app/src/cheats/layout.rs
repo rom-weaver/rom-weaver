@@ -9,7 +9,7 @@
 
 use rom_weaver_core::Result;
 
-use crate::{CheatSystem, CheatWrite, DecodedCode, coded};
+use super::{CheatSystem, CheatWrite, DecodedCode, coded};
 
 const NES_INES_MAGIC: [u8; 4] = *b"NES\x1A";
 const NES_HEADER_BYTES: usize = 16;

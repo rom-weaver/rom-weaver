@@ -1,13 +1,13 @@
 //! Orchestration for baking cheat codes (Game Genie, Pro Action Replay /
 //! GameShark) into ROMs. The pure decode/resolve logic lives in
-//! `rom-weaver-cheats`; this module detects the system (reusing the
+//! `cheats`; this module detects the system (reusing the
 //! `KnownRomHeader` detection), reads the ROM bytes, resolves the writes, and
 //! produces either a synthetic IPS patch (for `patch apply`) or a patched ROM
 //! file (for `patch create`).
 
 use super::*;
 
-use rom_weaver_cheats::{CheatKind, CheatSystem, CheatWrite, RomLayout};
+use crate::cheats::{self, CheatKind, CheatSystem, CheatWrite, RomLayout};
 
 /// Summary of a cheat-code resolution, used to enrich operation labels.
 pub(super) struct CheatApplySummary {
@@ -129,21 +129,18 @@ impl CliApp {
         let layout = RomLayout::detect(rom, system);
         let mut all = Vec::new();
         // A single `--code` value may carry several `+`/comma/space-joined codes.
-        for code in codes
-            .iter()
-            .flat_map(|code| rom_weaver_cheats::split_codes(code))
-        {
+        for code in codes.iter().flat_map(|code| cheats::split_codes(code)) {
             let decoded = if kind_id.eq_ignore_ascii_case("auto") {
-                rom_weaver_cheats::decode_auto(code, system)?
+                cheats::decode_auto(code, system)?
             } else {
                 let kind = CheatKind::parse(kind_id).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
                         "unknown --code-kind `{kind_id}`; expected auto, game-genie, or gameshark"
                     ))
                 })?;
-                rom_weaver_cheats::decode(code, system, kind)?
+                cheats::decode(code, system, kind)?
             };
-            all.extend(rom_weaver_cheats::resolve_writes(rom, &layout, &decoded)?);
+            all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
         }
         Ok(all)
     }
@@ -211,7 +208,7 @@ impl CliApp {
             "baking cheat codes into ROM"
         );
         let writes = Self::resolve_cheat_writes(&rom, system, codes, kind_id)?;
-        rom_weaver_cheats::apply_writes(&mut rom, &writes)?;
+        cheats::apply_writes(&mut rom, &writes)?;
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -228,7 +225,7 @@ impl CliApp {
 fn count_codes(codes: &[String]) -> usize {
     codes
         .iter()
-        .flat_map(|code| rom_weaver_cheats::split_codes(code))
+        .flat_map(|code| cheats::split_codes(code))
         .count()
 }
 

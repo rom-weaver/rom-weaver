@@ -3,7 +3,7 @@
 //! image (the same idea as "Game Genie Good Guy", reimplemented from public
 //! format references).
 //!
-//! The crate is pure: it operates on in-memory ROM bytes plus a [`CheatSystem`]
+//! The module is pure: it operates on in-memory ROM bytes plus a [`CheatSystem`]
 //! and never touches the filesystem. The app layer detects the system (reusing
 //! `rom-weaver-checksum`'s header detection) and drives apply/create.
 //!
@@ -20,7 +20,9 @@ mod action_replay;
 mod game_genie;
 mod layout;
 
-pub use layout::{Mapping, RomLayout};
+#[cfg(test)]
+use layout::Mapping;
+pub use layout::RomLayout;
 
 /// A console family whose cheat codes we can decode. The address layout and
 /// code scheme differ per system, so the caller must identify it up front.
@@ -240,5 +242,5 @@ pub fn apply_writes(rom: &mut [u8], writes: &[CheatWrite]) -> Result<()> {
 }
 
 #[cfg(test)]
-#[path = "../tests/unit/cheats.rs"]
+#[path = "tests.rs"]
 mod cheats_tests;

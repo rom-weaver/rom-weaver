@@ -2,7 +2,6 @@
 members = [
     "crates/rom-weaver-app",
     "crates/rom-weaver-chd",
-    "crates/rom-weaver-cheats",
     "crates/rom-weaver-checksum",
     "crates/rom-weaver-cli",
     "crates/rom-weaver-codecs",
@@ -15,7 +14,6 @@ members = [
     "crates/rom-weaver-nod",
     "crates/rom-weaver-patches",
     "crates/rom-weaver-xdelta",
-    "tools/rom-weaver-typegen",
     "vendor/chd-0.3.4",
     "vendor/xdvdfs-0.8.3",
 ]

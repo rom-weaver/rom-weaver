@@ -128,7 +128,7 @@ echo "run: twiggy top -n 80 $out_dir/rom-weaver-app.wasm"
 
 [tasks.fmt]
 description = "Check Rust formatting"
-run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom-weaver-cheats --package rom-weaver-checksum --package rom-weaver-cli --package rom-weaver-codecs --package rom-weaver-containers --package rom-weaver-core --package rom-weaver-dcp --package rom-weaver-gdrom --package rom-weaver-libarchive --package rom-weaver-libarchive-sys --package rom-weaver-patches --package rom-weaver-typegen --package rom-weaver-xdelta --check"
+run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom-weaver-checksum --package rom-weaver-cli --package rom-weaver-codecs --package rom-weaver-containers --package rom-weaver-core --package rom-weaver-dcp --package rom-weaver-gdrom --package rom-weaver-libarchive --package rom-weaver-libarchive-sys --package rom-weaver-patches --package rom-weaver-xdelta --check"
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"
@@ -136,11 +136,11 @@ run = "cargo clippy --workspace --exclude rom-weaver-chd-core --exclude rom-weav
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"
-run = "cargo run -p rom-weaver-typegen -- --write"
+run = "cargo run -p rom-weaver-app --features typescript-types --bin rom-weaver-typegen -- --write"
 
 [tasks.typegen-check]
 description = "Verify TypeScript bindings are up to date"
-run = "cargo run -p rom-weaver-typegen -- --check"
+run = "cargo run -p rom-weaver-app --features typescript-types --bin rom-weaver-typegen -- --check"
 
 [tasks.manpages]
 description = "Regenerate CLI man pages from Clap definitions"
@@ -187,7 +187,7 @@ description = "Find unused Rust dependencies"
 # build. The vendored crates listed here ARE workspace members, so they stay
 # covered; bump these paths when one of them is revendored at a new version.
 run = """cargo-machete --skip-target-dir \
-  crates tools \
+  crates \
   vendor/chd-0.3.4 \
   vendor/xdvdfs-0.8.3"""
 

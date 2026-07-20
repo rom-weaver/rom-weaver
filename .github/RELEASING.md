@@ -71,7 +71,7 @@ commit, publish the workspace:
 
 ```bash
 cargo login
-cargo publish --workspace --exclude rom-weaver-typegen --locked
+cargo publish --workspace --locked
 ```
 
 Do not change the release pull request after this publish. Configure a trusted

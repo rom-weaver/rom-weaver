@@ -9,7 +9,7 @@
 
 use rom_weaver_core::Result;
 
-use crate::{CheatKind, CheatSystem, DecodedCode, coded};
+use super::{CheatKind, CheatSystem, DecodedCode, coded};
 
 pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result<DecodedCode> {
     match system {

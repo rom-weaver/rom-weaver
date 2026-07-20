@@ -53,7 +53,7 @@ jobs:
       # pull request that is the merge commit, which is what gets built.
       #
       # Inputs, and why each is here:
-      #   crates, tools, vendor  - the sources themselves
+      #   crates, vendor         - the sources themselves
       #   Cargo.lock, Cargo.toml - resolved dependency versions
       #   .cargo                 - target rustflags, incl. --max-memory and LTO
       #   scripts/wasm           - the build script and its post-processing
@@ -69,7 +69,7 @@ jobs:
           CACHE_EPOCH: "1"
         run: |
           basis=$(git ls-tree HEAD -- \
-            crates tools vendor Cargo.lock Cargo.toml .cargo scripts/wasm \
+            crates vendor Cargo.lock Cargo.toml .cargo scripts/wasm \
             .mise.toml .github/actions/setup-build-env)
           if [ -z "$basis" ]; then
             echo "::error::wasm cache basis resolved to nothing - refusing to key a cache on an empty tree"
@@ -234,7 +234,7 @@ jobs:
         # Package each crate exactly as cargo publish would, without uploading.
         # This catches missing direct dependencies and files absent from crates.io
         # tarballs before release automation runs.
-        run: cargo publish --workspace --exclude rom-weaver-typegen --locked --dry-run
+        run: cargo publish --workspace --locked --dry-run
 
       # `npm audit` resolves straight from the lockfiles, so this needs node but
       # no install - which is why it sits in this job rather than behind the

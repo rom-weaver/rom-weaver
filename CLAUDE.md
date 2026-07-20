@@ -9,7 +9,7 @@ threading model, and the Rust⇄TypeScript boundary.
 ```bash
 cargo build -p rom-weaver-cli                      # native CLI
 cargo test --workspace                             # full Rust suite
-cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED after Rust type/metadata changes)
+mise run typegen                                    # regen TS types (REQUIRED after Rust type/metadata changes)
 mise run deny                                      # dep advisories + licenses + sources (deny.toml)
 mise run machete                                   # unused Rust dependencies
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
@@ -54,7 +54,7 @@ instructions do **not** apply here.
 - **Never hand-edit a version.** `release-please-config.json` owns every bump:
   root + webapp + alias + 4 platform `package.json`s and their locks, the
   `optionalDependencies` pins, `workspace.package.version`, ~43 path-dependency
-  pins across `crates/*`, `tools/*`, `vendor/*`, and `Cargo.lock`.
+  pins across `crates/*`, `vendor/*`, and `Cargo.lock`.
 - **Flow:** merge conventional commits to `main` → CI goes green → release-please
   opens/updates a `chore(main): release X.Y.Z` PR → merging that PR tags
   `vX.Y.Z` and sets `release_created=true`, which unlocks the cargo/npm/docker

@@ -1181,6 +1181,7 @@ mod extract_batch_plan;
 #[path = "extract_batch.rs"]
 mod extract_batch;
 
+mod cheats;
 mod cheats_apply;
 mod patch_apply;
 mod patch_apply_dcp;

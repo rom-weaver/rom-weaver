@@ -56,23 +56,20 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-xdelta` | VCDIFF/xdelta encode+decode, separate from `rom-weaver-patches` (parallel window encoding). Also exposes `apply_patch_bytes` for in-memory VCDIFF apply (used by `.dcp`). |
 | `crates/rom-weaver-gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
 | `crates/rom-weaver-dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on `rom-weaver-gdrom` + `rom-weaver-xdelta`. |
-| `crates/rom-weaver-cheats` | Console cheat-code decoder (Game Genie / Pro Action Replay / GameShark) → concrete ROM byte writes, so a cheat can be baked permanently into a ROM image. Pure (in-memory bytes + `CheatSystem`); the app layer detects the system and drives apply/create. |
 | `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
-| `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows. |
+| `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows, and cheat-code decoding/apply. Its `rom-weaver-typegen` binary generates the browser's Rust-derived TypeScript files. |
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
-| `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-webapp/src/wasm/generated/`. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
 | `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
-(`checksum`/`codecs`/`containers`/`chd`/`patches`/`xdelta`/`gdrom`/`dcp`/`cheats`)
+(`checksum`/`codecs`/`containers`/`chd`/`patches`/`xdelta`/`gdrom`/`dcp`)
 ← `app` ← `cli`. Format crates mostly do not depend on each other, with a few
 exceptions: `containers` consumes `chd`, `codecs`, and `libarchive` to assemble
-its registry; `dcp` consumes `gdrom` (data-track filesystem) and `xdelta`
-(per-file VCDIFF apply); and `cheats` consumes `checksum` for system/header
-detection.
+its registry; and `dcp` consumes `gdrom` (data-track filesystem) and `xdelta`
+(per-file VCDIFF apply).
 
 ## Core abstractions (`rom-weaver-core/src/registry.rs`)
 
@@ -364,7 +361,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
 
 ## Rust ⇄ TypeScript boundary
 
-- **Type generation.** `cargo run -p rom-weaver-typegen -- --write` (or
+- **Type generation.** `mise run typegen` (or
   `npm run typegen`) emits `rom-weaver-rust-types.d.ts`,
   `rom-weaver-format-metadata.ts`, and `rom-weaver-command-types.ts` into
   `packages/rom-weaver-webapp/src/wasm/generated/`. CI runs `--check`; any change to
@@ -397,7 +394,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
 
 ```
 cargo build (workspace)                     # native CLI
-cargo run -p rom-weaver-typegen -- --write  # regen TS types when Rust types change
+mise run typegen                            # regen TS types when Rust types change
 mise run build-wasm-prod                    # WASI SDK build → wasm-opt → brotli
                                             #   → sync into packages/rom-weaver-webapp/src/wasm
 npm --prefix packages/rom-weaver-webapp run dev|build

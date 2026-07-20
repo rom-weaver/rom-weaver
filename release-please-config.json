@@ -57,12 +57,6 @@
         },
         {
           "type": "toml",
-          "path": "tools/*/Cargo.toml",
-          "glob": true,
-          "jsonpath": "$..[?(@.path && @.version)].version"
-        },
-        {
-          "type": "toml",
           "path": "vendor/*/Cargo.toml",
           "glob": true,
           "jsonpath": "$..[?(@.path && @.version)].version"
