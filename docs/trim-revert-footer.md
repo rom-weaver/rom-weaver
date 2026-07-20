@@ -9,6 +9,16 @@ The trimmed file is `[trimmed ROM data][footer]`. The footer sits where padding 
 past the ROM header's used-size - so emulators and flashcarts that read up to the used-size
 ignore it, and playability is unaffected.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Layout (14 bytes, appended at end of file)](#layout-14-bytes-appended-at-end-of-file)
+- [CRC-32](#crc-32)
+- [Detection and revert](#detection-and-revert)
+- [Notes and invariants](#notes-and-invariants)
+
+<!-- END doctoc -->
+
 ## Layout (14 bytes, appended at end of file)
 
 All multi-byte integers are **little-endian**.

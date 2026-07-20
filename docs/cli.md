@@ -4,6 +4,35 @@ The rom-weaver CLI exposes the same Rust command core used by the browser app.
 Use it for repeatable patching, container work, checksums, trimming, and JSON
 automation.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Install](#install)
+  - [npm](#npm)
+  - [Cargo](#cargo)
+  - [Docker](#docker)
+  - [Development checkout](#development-checkout)
+- [First weave](#first-weave)
+- [Common workflows](#common-workflows)
+- [Commands](#commands)
+- [Input selection](#input-selection)
+- [Patch apply behavior](#patch-apply-behavior)
+- [Patch validation](#patch-validation)
+- [Bundles](#bundles)
+- [Supported formats](#supported-formats)
+  - [Patch formats](#patch-formats)
+  - [Container and compression formats](#container-and-compression-formats)
+  - [Create-time codecs](#create-time-codecs)
+- [Checksum support](#checksum-support)
+- [Trim support](#trim-support)
+- [Header detection and repair](#header-detection-and-repair)
+- [JSON output](#json-output)
+  - [Exit codes](#exit-codes)
+- [Shell completions](#shell-completions)
+- [Man pages](#man-pages)
+
+<!-- END doctoc -->
+
 ## Install
 
 ### npm

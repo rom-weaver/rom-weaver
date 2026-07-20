@@ -1,5 +1,13 @@
 # Security policy
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Supported versions](#supported-versions)
+- [Report a vulnerability](#report-a-vulnerability)
+
+<!-- END doctoc -->
+
 ## Supported versions
 
 Security fixes are made on the default branch and included in the next release.
@@ -8,10 +16,10 @@ backported fixes.
 
 ## Report a vulnerability
 
-Email **brandonocasey@gmail.com** with the subject `[rom-weaver security]`.
-Include the affected version, impact, reproduction steps, and any suggested
-mitigation. Do not open a public issue until the vulnerability has been fixed
-or disclosure has been coordinated.
+[Open an issue](https://github.com/brandonocasey/rom-weaver/issues/new/choose)
+with the affected version, impact, safe reproduction details, and any suggested
+mitigation. Do not include exploit details, credentials, personal information,
+or other sensitive material in the public report.
 
 Do not attach copyrighted ROMs or disc images, firmware, encryption keys,
 credentials, or personal files. Use a minimal synthetic input when possible,

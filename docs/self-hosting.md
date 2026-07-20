@@ -9,13 +9,42 @@ Do not mount rom-weaver at the root of an origin that also serves other apps.
 At the root, its service worker can control every path on that origin. Under
 `/rom-weaver/`, it controls only that path.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Docker](#docker)
+  - [Published image](#published-image)
+  - [Build from source with Compose](#build-from-source-with-compose)
+- [Static files](#static-files)
+- [Cross-origin isolation](#cross-origin-isolation)
+- [Host integration](#host-integration)
+
+<!-- END doctoc -->
+
 ## Docker
 
-Docker Compose builds the WASM module, bundles the webapp, and starts the
-included static server:
+### Published image
+
+Run the prebuilt image and verify its health endpoint:
 
 ```bash
+docker run --rm --publish 8080:8080 ghcr.io/brandonocasey/rom-weaver-webapp:latest
+curl --fail --silent --show-error http://localhost:8080/health
+```
+
+Open `http://localhost:8080/`. For production, put the container behind the
+HTTPS reverse proxy that serves the rest of the site.
+
+### Build from source with Compose
+
+Docker Compose builds the WASM module, bundles the webapp, and starts the
+included static server from a checkout:
+
+```bash
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
 docker compose up --build --detach
+curl --fail --silent --show-error http://localhost:8080/health
 ```
 
 This path only requires Docker with Compose; the image installs the required
@@ -23,15 +52,13 @@ Rust, WASI SDK, Binaryen, and Node.js toolchains. The first build compiles the
 full WASM application and can take several minutes. Later builds reuse Docker's
 layer cache when their inputs have not changed.
 
-Open `http://localhost:8080` to verify the container. To use another host port:
+To use another host port:
 
 ```bash
 PORT=3000 docker compose up --build --detach
 ```
 
-The container listens on port 8080 over plain HTTP. In production, put it
-behind the HTTPS reverse proxy that serves the rest of the site. For an Nginx
-subpath route:
+The container listens on port 8080 over plain HTTP. For an Nginx subpath route:
 
 ```nginx
 location = /rom-weaver {
@@ -59,16 +86,11 @@ docker compose down
 
 ## Static files
 
-Building from source requires `mise`, the WASI SDK, and Brotli; the
-[development guide](development.md#prerequisites) lists the platform-specific
-setup. Build a portable static directory:
+Follow the [development guide](development.md#clone-and-bootstrap) to prepare a
+checkout with `mise`, the WASI SDK, Brotli, and the package dependencies. Then
+build a portable static directory:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
-cd rom-weaver
-mise install
-mise trust
-npm ci --prefix packages/rom-weaver-webapp
 mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
 ```
@@ -116,42 +138,7 @@ crossOriginIsolated === true
 If it is false, check the document's COOP/COEP response headers, HTTPS trust,
 and whether `cache-service-worker.js` controls the page.
 
-## Ingesting existing OPFS files
+## Host integration
 
-A host on the same origin can place inputs under the OPFS
-`rom-weaver-imports/` directory and send their mounted paths through the same
-pipeline as files dropped onto the Apply page. Include a bundle in the list
-when using one; it does not need a separate option.
-
-Applications importing the package can call `ingest`:
-
-```js
-import { ingest } from "rom-weaver-webapp";
-
-ingest([
-  "/work/rom-weaver-imports/rom-weaver-bundle.json",
-  "/work/rom-weaver-imports/game.bin",
-  "/work/rom-weaver-imports/change.ips",
-]);
-```
-
-Hosts serving the prebuilt webapp can dispatch the equivalent event after its
-module script has loaded:
-
-```js
-document.dispatchEvent(
-  new CustomEvent("rom-weaver:ingest", {
-    detail: [
-      "/work/rom-weaver-imports/rom-weaver-bundle.json",
-      "/work/rom-weaver-imports/game.bin",
-      "/work/rom-weaver-imports/change.ips",
-    ],
-  }),
-);
-```
-
-The mounted `/work/rom-weaver-imports/example.bin` path refers to
-`rom-weaver-imports/example.bin` below the origin's OPFS root. rom-weaver
-preserves that directory during startup cleanup and does not delete supplied
-files. OPFS is origin-private, so another origin cannot populate or ingest
-these paths.
+To preload remote sources or files already stored in same-origin OPFS, use the
+[webapp integration APIs](webapp-integration.md).

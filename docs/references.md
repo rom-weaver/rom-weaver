@@ -4,6 +4,21 @@ This file collects patch/container/compression references used by `rom-weaver`.
 
 It is intentionally a living document. Some patch families do not have stable formal specs; in those cases, canonical behavior is documented through widely used implementations.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Patch Format Specs](#patch-format-specs)
+- [Patch Reference Implementations](#patch-reference-implementations)
+  - [Upstream / External](#upstream--external)
+  - [In-Repo (`rom-weaver`) Implementations](#in-repo-rom-weaver-implementations)
+- [Container / Compression Specs](#container--compression-specs)
+- [Quick Mapping For `rom-weaver` Patch Families](#quick-mapping-for-rom-weaver-patch-families)
+- [BPS Comparison: MultiPatch / Flips](#bps-comparison-multipatch--flips)
+- [PPF Comparison: MultiPatch / ApplyPPF](#ppf-comparison-multipatch--applyppf)
+- [Notes](#notes)
+
+<!-- END doctoc -->
+
 ## Patch Format Specs
 
 - IPS: <https://zerosoft.zophar.net/ips.php>

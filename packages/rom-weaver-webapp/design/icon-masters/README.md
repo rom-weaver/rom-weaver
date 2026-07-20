@@ -4,6 +4,14 @@ Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wrap
 content of `../../src/assets/app/root/logo.svg` in an opaque `#31343a` background rect plus a
 scale/offset transform - regenerate them from `logo.svg` if the logo changes.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Geometry](#geometry)
+- [Rendering](#rendering)
+
+<!-- END doctoc -->
+
 ## Geometry
 
 The logo is geometrically centered but optically high: its top corners are

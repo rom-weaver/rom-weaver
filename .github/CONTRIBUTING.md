@@ -4,6 +4,14 @@ Bug reports, documentation fixes, and focused code contributions are welcome.
 Participation in this project is governed by the
 [code of conduct](CODE_OF_CONDUCT.md).
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Report a problem](#report-a-problem)
+- [Propose a change](#propose-a-change)
+
+<!-- END doctoc -->
+
 ## Report a problem
 
 Search the [issue tracker](https://github.com/brandonocasey/rom-weaver/issues)

@@ -2,6 +2,17 @@
 
 This folder contains ESM wrappers for browser execution of `rom-weaver-app.wasm`.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Files](#files)
+- [Runtime Requirements](#runtime-requirements)
+- [Quick Use (Dedicated Worker)](#quick-use-dedicated-worker)
+- [Notes](#notes)
+- [Browser Benchmark Wrapper](#browser-benchmark-wrapper)
+
+<!-- END doctoc -->
+
 ## Files
 
 - `rom-weaver-runtime-utils.mjs`: shared WASM environment imports

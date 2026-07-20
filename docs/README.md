@@ -2,12 +2,22 @@
 
 Choose the guide that matches what you are trying to do.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Use rom-weaver](#use-rom-weaver)
+- [Deploy](#deploy)
+- [Integrate](#integrate)
+- [Develop and contribute](#develop-and-contribute)
+
+<!-- END doctoc -->
+
 ## Use rom-weaver
 
 - [CLI guide](cli.md): installation, common workflows, command reference,
   supported formats, compression, checksums, trimming, and JSON output.
-- [Generated man pages](man/): `rom-weaver(1)` and one page per visible CLI
-  command, generated directly from Clap.
+- [Man pages](cli.md#man-pages): generate `rom-weaver(1)` and one page per
+  visible CLI command directly from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle.schema.json): machine-readable
   schema for distributable patch workflows.
 
@@ -20,10 +30,8 @@ Choose the guide that matches what you are trying to do.
 
 ## Integrate
 
-- [Webapp URL API](ARCHITECTURE.md#rom-weaver-bundlejson-bundles): drive the
-  webapp with `?bundle=` and `?rom=&patch=` links.
-- [OPFS ingest API](self-hosting.md#ingesting-existing-opfs-files): feed
-  same-origin host files into the webapp pipeline.
+- [Webapp integration](webapp-integration.md): preload `?bundle=…` and
+  `?rom=…&patch=…` URLs or feed same-origin OPFS files into the webapp pipeline.
 - [Browser WASM runtime](../packages/rom-weaver-webapp/src/wasm/README.md):
   the OPFS runner and worker-client API surface.
 
@@ -45,12 +53,4 @@ Choose the guide that matches what you are trying to do.
   real-device checks for WebKit, OPFS, memory pressure, and PWA behavior.
 - [References](references.md): format specifications and upstream reference
   implementations.
-
-## Design and migration notes
-
-- [CHD native Rust migration](chd-native-rust-migration.md)
 - [Reversible trim footer](trim-revert-footer.md)
-
-These notes document implementation constraints and durable file formats. They
-are useful when changing the corresponding subsystem, but are not required for
-normal CLI or webapp use.

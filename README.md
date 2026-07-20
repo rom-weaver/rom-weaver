@@ -19,6 +19,29 @@
  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Beta status](#beta-status)
+- [LLM-assisted development](#llm-assisted-development)
+- [Screenshots](#screenshots)
+  - [Desktop](#desktop)
+    - [Apply patches (Weave)](#apply-patches-weave)
+    - [Create a patch](#create-a-patch)
+  - [Mobile](#mobile)
+    - [Apply patches (Weave)](#apply-patches-weave-1)
+    - [Create a patch](#create-a-patch-1)
+- [Features](#features)
+- [Install](#install)
+  - [Webapp](#webapp)
+  - [CLI](#cli)
+  - [Self-host the webapp](#self-host-the-webapp)
+- [Documentation](#documentation)
+- [Contributing and support](#contributing-and-support)
+- [License](#license)
+
+<!-- END doctoc -->
+
 ## Beta status
 
 rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
@@ -268,42 +291,8 @@ supports SPA fallback and the required COOP/COEP/CORP headers; see
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md).
-
-**Use rom-weaver**
-
-- [CLI guide](docs/cli.md) — install alternatives, common workflows, command
-  reference, supported formats, compression codecs, checksums, and JSON
-  output.
-- Man pages — `rom-weaver(1)` and one page per command, generated from the CLI
-  definitions with `mise run manpages` (not checked in).
-- [Bundle schema](docs/rom-weaver-bundle.schema.json) — the machine-readable
-  `rom-weaver-bundle.json` workflow format.
-
-**Deploy**
-
-- [Self-hosting](docs/self-hosting.md) — Docker, static hosting, reverse
-  proxies, subpaths, and cross-origin isolation.
-- [Runtime configuration](docs/env-vars.md) — every `ROM_WEAVER_*`
-  environment variable and runtime knob.
-
-**Integrate**
-
-- [Webapp URL API](docs/ARCHITECTURE.md#rom-weaver-bundlejson-bundles) —
-  drive the webapp with `?bundle=` and `?rom=&patch=` links.
-- [OPFS ingest API](docs/self-hosting.md#ingesting-existing-opfs-files) —
-  feed same-origin host files into the webapp pipeline.
-- [Browser WASM runtime](packages/rom-weaver-webapp/src/wasm/README.md) — the
-  OPFS runner and worker-client API surface.
-
-**Develop**
-
-- [Development guide](docs/development.md) — prerequisites, builds, tests,
-  generated files, and worktrees.
-- [Architecture](docs/ARCHITECTURE.md) — crate graph, command core, browser
-  boundary, and testing layout.
-- [References](docs/references.md) — format specifications and reference
-  implementations.
+The [documentation index](docs/README.md) routes to the CLI, deployment,
+integration, development, architecture, and format-reference guides.
 
 ## Contributing and support
 

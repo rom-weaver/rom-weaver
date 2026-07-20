@@ -62,6 +62,10 @@ pre-commit:
     actionlint:
       glob: ".github/**/*.{yml,yaml}"
       run: mise run actionlint
+    markdown-toc:
+      files: git diff --name-only --cached --diff-filter=ACMR -- README.md docs .github/CODE_OF_CONDUCT.md .github/CONTRIBUTING.md .github/RELEASING.md .github/SECURITY.md packages/rom-weaver-webapp/design/icon-masters/README.md packages/rom-weaver-webapp/src/wasm/README.md scripts/wasm/README.md
+      run: bash scripts/update-markdown-toc.sh {files}
+      stage_fixed: true
     whitespace:
       run: git diff --cached --check
     thread-guard-regressions:

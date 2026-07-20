@@ -25,6 +25,24 @@ the WASM build over a JSON event protocol.
                                    └──────────────────────┘
 ```
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Workspace layout](#workspace-layout)
+- [Core abstractions (`rom-weaver-core/src/registry.rs`)](#core-abstractions-rom-weaver-coresrcregistryrs)
+- [Threading model](#threading-model)
+- [Browser I/O paths](#browser-io-paths)
+- [Patch apply: ROM copier headers](#patch-apply-rom-copier-headers)
+- [Dreamcast `.dcp` patches (the filesystem-level apply path)](#dreamcast-dcp-patches-the-filesystem-level-apply-path)
+- [rom-weaver-bundle.json bundles](#rom-weaver-bundlejson-bundles)
+- [Rust ⇄ TypeScript boundary](#rust-%E2%87%84-typescript-boundary)
+- [Build graph](#build-graph)
+- [Webapp UI - the loom workbench](#webapp-ui---the-loom-workbench)
+- [Testing](#testing)
+- [Other docs](#other-docs)
+
+<!-- END doctoc -->
+
 ## Workspace layout
 
 | Path | Role |
@@ -330,25 +348,19 @@ entry checks-only. Create re-parses before writing, so it can never emit
   chain step) rather than failing. Native builds download `url` entries via
   `ureq` (target-gated out of wasm); relative entry URLs resolve against the
   bundle's own URL.
-- **Browser flow.** The webapp's URL API (`?bundle=<url>` or
-  `?rom=<url>&patch=<url>…`, parsed once at boot in
-  `src/webapp/url-session/`) fetches sources with JS `fetch` (hosts must
-  allow CORS), runs `bundle parse` in wasm, and delivers the resolved
-  files through the standard page-drop pipeline. Bundle metadata seeds the
-  patch enablement switches (`optional: true` = off, everything else = on;
-  every patch remains toggleable) and output defaults; each entry's effective
-  chain checks are reconstructed from the rom/output endpoints. The session
-  display name derives from the output/rom naming (bundles carry no name
-  field). Patch name, description,
-  and six input/output checksum fields live in each patch's Options drawer.
-  Default output name, bundle format, original-ROM inclusion, export
-  progress, and the direct Export action live in Output. Local drops may include `rom-weaver-bundle.json`
-  plus its relative-path companions.
-  Patch sources are resolved to their extracted leaves first
-  (`prepareInputFile`), so bundles carry the actual patch files rather than
-  the archives they arrived in. The ROM stays out by default; when bundled,
-  its logical bytes remain the checksum source while CHD/RVZ/Z3DS is reused
-  or produced where the detected content identity recommends it.
+- **Browser flow.** URL sessions are parsed once at boot in
+  `src/webapp/url-session/`, fetched by the browser, resolved by the WASM
+  `bundle parse` command, and delivered to the standard page-drop pipeline.
+  Patch sources pass through `prepareInputFile`, so exported bundles contain
+  their extracted patch leaves; ROM checks continue to use logical bytes while
+  a suitable compressed source can be reused. The resulting
+  `BundleApplySession` reconstructs each entry's effective chain checks from
+  the ROM/output endpoints. Its display name derives from output or ROM naming
+  because bundles have no top-level name field. Patch metadata and checksum
+  fields live in each patch's Options drawer; output naming, bundle format,
+  ROM inclusion, export progress, and the Export action live in Output. The
+  public URL and same-origin OPFS host APIs are documented in
+  [Webapp integration](webapp-integration.md).
 
 ## Rust ⇄ TypeScript boundary
 
@@ -455,9 +467,5 @@ checks pre-commit, scoped by changed paths.
 
 ## Other docs
 
-- `docs/browser-concurrency.md` - browser thread/worker rules
-- `docs/env-vars.md` - every `ROM_WEAVER_*` runtime/test/build knob
-- `docs/mobile-safari-verification.md` - iOS Safari/WebKit verification steps
-- `docs/chd-native-rust-migration.md` - history of the native CHD backend
-- `docs/trim-revert-footer.md` - trim revert footer format
-- `docs/references.md` - format specs and reference implementations
+See the [documentation index](README.md) for runtime configuration, browser
+protocols, verification guides, implementation notes, and format references.

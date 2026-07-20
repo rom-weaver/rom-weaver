@@ -11,6 +11,18 @@ default.
 > TypeScript `export const`s, **not** environment variables - a `grep ROM_WEAVER_`
 > will surface them alongside the real knobs below.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Runtime knobs](#runtime-knobs)
+- [Solid-patch metadata (`patch create --format solid`)](#solid-patch-metadata-patch-create---format-solid)
+- [Test / build-only knobs](#test--build-only-knobs)
+- [wasm CLI harness (`scripts/wasm/run-wasi-cli.mjs`)](#wasm-cli-harness-scriptswasmrun-wasi-climjs)
+- [Browser / PWA runtime config (`window.*` globals)](#browser--pwa-runtime-config-window-globals)
+- [Webapp build/test/bench tooling (`*.mjs`)](#webapp-buildtestbench-tooling-mjs)
+
+<!-- END doctoc -->
+
 ## Runtime knobs
 
 | Variable | Type | Default | Read at | Purpose |

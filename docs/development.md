@@ -5,6 +5,20 @@ threaded WASI module. [mise](https://mise.jdx.dev) pins the Rust, Node.js,
 Binaryen, and ripgrep versions and exposes the repository's build and test
 tasks.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Prerequisites](#prerequisites)
+- [Clone and bootstrap](#clone-and-bootstrap)
+- [Build and run the webapp](#build-and-run-the-webapp)
+- [Build and run the native CLI](#build-and-run-the-native-cli)
+- [Test and lint](#test-and-lint)
+- [Generated files](#generated-files)
+- [Linked worktrees](#linked-worktrees)
+- [Project map](#project-map)
+
+<!-- END doctoc -->
+
 ## Prerequisites
 
 Install these system tools before the first build:
@@ -54,12 +68,19 @@ npm run hooks:install
 
 Run `mise tasks` at any time to list the supported task entry points.
 
-## Run the webapp
+## Build and run the webapp
 
-Build the development WASM module, then start the HTTPS development server:
+Choose the WASM build that matches the task:
 
 ```bash
-mise run build-wasm
+mise run wasm-check        # type-check the threaded WASI target
+mise run build-wasm        # fast development build
+mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
+```
+
+Then start the HTTPS development server:
+
+```bash
 npm run dev
 ```
 
@@ -76,24 +97,6 @@ server's COOP/COEP headers are required to exercise the same
 `npm run dev` checks the WASM artifact and rebuilds it when the Rust sources
 are newer. Run `mise run build-wasm` directly when changing the WASM toolchain
 or when you need to see the complete build output.
-
-## Build and run the native CLI
-
-```bash
-cargo build -p rom-weaver-cli
-cargo run -p rom-weaver-cli -- --help
-```
-
-The reusable command orchestration lives in `rom-weaver-app`; the native and
-WASM CLI binaries are thin argument/reporter layers over it.
-
-## WASM tasks
-
-```bash
-mise run wasm-check        # type-check the threaded WASI target
-mise run build-wasm        # fast development build
-mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
-```
 
 By default, build artifacts are written to
 `packages/rom-weaver-webapp/src/wasm/`, which is gitignored. To keep a separate
@@ -114,6 +117,16 @@ mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1
 
 See the [WASM runtime notes](../packages/rom-weaver-webapp/src/wasm/README.md)
 for the browser OPFS and worker API.
+
+## Build and run the native CLI
+
+```bash
+cargo build -p rom-weaver-cli
+cargo run -p rom-weaver-cli -- --help
+```
+
+The reusable command orchestration lives in `rom-weaver-app`; the native and
+WASM CLI binaries are thin argument/reporter layers over it.
 
 ## Test and lint
 
@@ -144,16 +157,14 @@ npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 Use the repository's browser-test runner instead of invoking browser Vitest
 directly; it isolates files and avoids browser-mode hangs in linked worktrees.
 
-Tiered end-to-end checks:
+The fast end-to-end gate is also available separately:
 
 ```bash
-mise run test-e2e-fast       # local and pull-request gate
-mise run test-e2e-nightly    # exhaustive matrix plus WebKit
-mise run test-e2e-ios        # HTTPS LAN server and real-device corpus
+mise run test-e2e-fast
 ```
 
-The [Mobile Safari guide](mobile-safari-verification.md) explains the WebKit,
-iOS Simulator, and real-device verification ladder.
+The [Mobile Safari guide](mobile-safari-verification.md) owns the WebKit,
+nightly matrix, iOS Simulator, and real-device verification procedures.
 
 ## Generated files
 

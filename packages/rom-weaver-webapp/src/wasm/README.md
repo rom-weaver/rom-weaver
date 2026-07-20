@@ -1,7 +1,19 @@
 # src/wasm (browser wasm runtime)
 
-JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution. Formerly the standalone
-`rom-weaver-wasm` package; now merged into `rom-weaver-webapp` and consumed via relative imports.
+JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution,
+consumed within `rom-weaver-webapp` via relative imports.
+
+<!-- START doctoc -->
+## Table of contents
+
+- [What You Get](#what-you-get)
+- [Import Paths](#import-paths)
+- [Browser OPFS Runner Example](#browser-opfs-runner-example)
+- [Dedicated Browser Worker Client Example](#dedicated-browser-worker-client-example)
+- [Build And Package](#build-and-package)
+- [Browser Benchmarks](#browser-benchmarks)
+
+<!-- END doctoc -->
 
 ## What You Get
 
@@ -95,11 +107,9 @@ worker.terminate();
 
 ## Build And Package
 
-Build artifacts are written to this directory by default:
-
-```bash
-mise run build-wasm
-```
+The [development guide](../../../../docs/development.md#build-and-run-the-webapp)
+owns the WASM build and dev-server procedure. Build artifacts are written to
+this directory by default.
 
 If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm`
 syncs them in automatically. To sync a pre-built directory manually (run from

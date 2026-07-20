@@ -17,6 +17,20 @@ signed SLSA build provenance. Publishers check the registry before writing, so
 reruns skip versions that already exist instead of failing halfway through a
 release.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [One-time repository setup](#one-time-repository-setup)
+- [First Cargo release](#first-cargo-release)
+- [npm trusted publishing](#npm-trusted-publishing)
+- [Webapp hosting and the channel domains](#webapp-hosting-and-the-channel-domains)
+- [Normal release flow](#normal-release-flow)
+  - [How a prerelease differs](#how-a-prerelease-differs)
+- [Retry a failed publication](#retry-a-failed-publication)
+- [Run the containers locally](#run-the-containers-locally)
+
+<!-- END doctoc -->
+
 ## One-time repository setup
 
 1. In GitHub Actions settings, allow workflows to read and write the repository

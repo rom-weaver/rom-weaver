@@ -6,6 +6,17 @@ emulation can catch some WebKit regressions, but they do not replace real iOS
 Safari for file picker, storage quota, memory pressure, download, and PWA
 behavior.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Automation Ladder](#automation-ladder)
+- [Real Device Setup](#real-device-setup)
+- [Worker Lifetime on Mobile](#worker-lifetime-on-mobile)
+- [Runtime Preflight](#runtime-preflight)
+- [Manual Scenarios](#manual-scenarios)
+
+<!-- END doctoc -->
+
 ## Automation Ladder
 
 Use these checks from cheapest to most faithful:
