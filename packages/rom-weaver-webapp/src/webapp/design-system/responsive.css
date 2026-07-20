@@ -68,6 +68,10 @@
   .rw-app .runprog .prog { gap: var(--sp-2xs); }
   .rw-app .runprog .meter { height: 8px; transform: none; }
   .rw-app .runprog .prog-actions { top: 6px; }
+  /* the phone run panel is too short for the cancel to clear the bar vertically,
+     so the whole column reserves its width instead of just the label */
+  .rw-app .runprog .prog { padding-inline-end: calc(var(--ctrl-h) + var(--sp-s)); }
+  .rw-app .runprog .lab { padding-inline-end: 0; }
   .rw-app .cards > .prog-panel { border-radius: var(--r-s); }
   /* keep the same vertical spread on phones - only the fell's inline padding
      and the bead size adjust; the cluster gap stays the base clamp */
