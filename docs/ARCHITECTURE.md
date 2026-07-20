@@ -54,8 +54,8 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-chd` | Native CHD implementation (read sessions, create pipeline, codecs, disc inference). Exposed as a `ContainerHandler` + `ChdCodec`. |
 | `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,…}.rs`), one file per format. |
 | `crates/rom-weaver-xdelta` | VCDIFF/xdelta encode+decode, separate from `rom-weaver-patches` (parallel window encoding). Also exposes `apply_patch_bytes` for in-memory VCDIFF apply (used by `.dcp`). |
-| `crates/rom-weaver-gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
-| `crates/rom-weaver-dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on `rom-weaver-gdrom` + `rom-weaver-xdelta`. |
+| `crates/rom-weaver-app/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
+| `crates/rom-weaver-app/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-xdelta`. |
 | `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
 | `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows, and cheat-code decoding/apply. Its `rom-weaver-typegen` binary generates the browser's Rust-derived TypeScript files. |
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
@@ -246,7 +246,7 @@ deltas (plus verbatim new files and an optional replacement `IP.BIN`) applied
 rebuilt. It therefore does **not** register as a `PatchHandler`; it has a
 dedicated path that rebuilds a whole disc track.
 
-- **`rom-weaver-gdrom`** is the filesystem layer. A Dreamcast high-density data
+- **The app's `gdrom` module** is the filesystem layer. A Dreamcast high-density data
   track is `MODE1/2352` raw sectors whose ISO9660 records use *absolute* LBAs
   biased by the track start (45000). `sector` cooks 2352→2048; `GdRomFs::open(reader, start_lba)`
   parses the PVD/directory tree resolving extents at `lba − start_lba`;
@@ -255,7 +255,7 @@ dedicated path that rebuilds a whole disc track.
   EDC (poly `0x8001801B`) /ECC (GF(2⁸), poly `0x11D`) - validated byte-for-byte
   against real disc sectors. The first 16 sectors are the IP.BIN boot area and
   are carried through (or replaced) on rebuild.
-- **`rom-weaver-dcp`** owns the format: `zip` reads the central directory and
+- **The app's `dcp` module** owns the format: `zip` reads the central directory and
   inflates entries (miniz_oxide, no C deps → wasm-safe); `manifest` classifies
   each entry as `Delta`/`Verbatim`/`BootSector`; `apply::apply_dcp` produces each
   patched file via an I/O-free emit closure (so native and browser share it);

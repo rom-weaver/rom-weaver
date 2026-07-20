@@ -1,5 +1,5 @@
 use super::shared::*;
-use rom_weaver_gdrom::{
+use rom_weaver_app::gdrom::{
     GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoFile, IsoTimestamp, USER_DATA_SIZE, build_iso,
     encode_mode1_sector,
 };

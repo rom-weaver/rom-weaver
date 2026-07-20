@@ -5,7 +5,7 @@
 
 use std::io::Cursor;
 
-use rom_weaver_gdrom::GdRomFs;
+use crate::gdrom::GdRomFs;
 
 use super::apply::{DcpOutput, apply_dcp};
 use super::manifest::{DcpManifest, DcpOperation};
@@ -401,7 +401,7 @@ fn apply_dcp_applies_delta_verbatim_and_boot_sector() {
 #[test]
 fn rebuild_track_streams_patched_disc() {
     use super::rebuild::rebuild_track_to_writer;
-    use rom_weaver_gdrom::IsoTimestamp;
+    use crate::gdrom::IsoTimestamp;
 
     // Source disc: a zero-byte file that sorts first (so a streaming desync
     // would corrupt everything after it), a file the patch modifies, and one it

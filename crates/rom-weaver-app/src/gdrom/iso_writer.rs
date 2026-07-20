@@ -405,7 +405,7 @@ pub fn build_iso(files: &[IsoFile], start_lba: u32, timestamp: IsoTimestamp) -> 
 
 /// Stream a planned ISO9660 layout to `sink` as a raw `MODE1/2352` track,
 /// re-encoding every cooked sector on the fly. `boot_area` (the IP.BIN system
-/// area, [`super::gdrom::BOOT_AREA_SIZE`] bytes) overlays the first sectors;
+/// area, [`super::filesystem::BOOT_AREA_SIZE`] bytes) overlays the first sectors;
 /// `fetch` is called once per file, in write order, to supply its bytes. Memory
 /// stays bounded by the header plus one file at a time - the cooked image and
 /// raw track are never fully materialized.

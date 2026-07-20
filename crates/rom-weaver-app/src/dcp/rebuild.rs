@@ -15,10 +15,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Seek, Write};
 
-use rom_weaver_core::{Result, RomWeaverError};
-use rom_weaver_gdrom::{
+use crate::gdrom::{
     BOOT_AREA_SIZE, FileEntry, GdRomFs, IsoEntry, IsoTimestamp, plan_iso, write_track,
 };
+use rom_weaver_core::{Result, RomWeaverError};
 
 use super::manifest::{DcpManifest, DcpOperation};
 use super::zip::{ZipEntry, extract_entry, read_central_directory};

@@ -1,6 +1,6 @@
 //! Dev tool: apply a `.dcp` against a GD-ROM data track and report results.
 //!
-//! Usage: `cargo run -p rom-weaver-dcp --example apply_dcp -- <patch.dcp> <track3.bin> [start_lba] [out_dir]`
+//! Usage: `cargo run -p rom-weaver-app --example apply_dcp -- <patch.dcp> <track3.bin> [start_lba] [out_dir]`
 //! With `out_dir`, each patched/verbatim file is written there (flattened);
 //! otherwise only a summary + per-file sizes are printed.
 
@@ -8,8 +8,8 @@ use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use rom_weaver_dcp::{DcpOutput, apply_dcp};
-use rom_weaver_gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
+use rom_weaver_app::dcp::{DcpOutput, apply_dcp};
+use rom_weaver_app::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
 
 fn main() {
     let mut args = std::env::args().skip(1);

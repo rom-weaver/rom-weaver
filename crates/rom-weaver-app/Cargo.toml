@@ -16,13 +16,14 @@ typescript-types = ["dep:ts-rs", "rom-weaver-core/typescript-types"]
 
 [dependencies]
 flate2.workspace = true
+crc32fast.workspace = true
+miniz_oxide.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
 rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.5.0" }
 rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
-rom-weaver-dcp = { path = "../rom-weaver-dcp", version = "0.5.0" }
-rom-weaver-gdrom = { path = "../rom-weaver-gdrom", version = "0.5.0" }
 rom-weaver-libarchive = { workspace = true, default-features = false }
 rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.5.0" }
+rom-weaver-xdelta = { path = "../rom-weaver-xdelta", version = "0.5.0" }
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true

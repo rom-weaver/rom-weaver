@@ -1183,6 +1183,8 @@ mod extract_batch;
 
 mod cheats;
 mod cheats_apply;
+pub mod dcp;
+pub mod gdrom;
 mod patch_apply;
 mod patch_apply_dcp;
 mod patch_apply_disc;

@@ -2,15 +2,15 @@
 //!
 //! A `.dcp` is a ZIP archive of per-file xdelta/VCDIFF deltas (and verbatim new
 //! files, and an optional replacement IP.BIN boot sector) applied inside a
-//! Dreamcast GD-ROM's ISO9660 filesystem. This crate owns the format knowledge:
+//! Dreamcast GD-ROM's ISO9660 filesystem. This module owns the format knowledge:
 //!
 //! - [`zip`] - read the ZIP central directory (entry names + sizes).
 //! - [`manifest`] - classify entries into typed [`DcpOperation`]s per the DCP
 //!   naming convention.
 //!
-//! The orchestration that reads source files (via `rom-weaver-gdrom`), applies
+//! The orchestration that reads source files (via [`crate::gdrom`]), applies
 //! deltas (via `rom-weaver-xdelta`), and rebuilds the disc lives in the app
-//! layer; this crate is the format core it builds on.
+//! layer.
 
 pub mod apply;
 pub mod manifest;
@@ -34,5 +34,5 @@ pub fn read_manifest<R: Read + Seek>(reader: &mut R) -> Result<DcpManifest> {
 }
 
 #[cfg(test)]
-#[path = "../tests/unit/dcp.rs"]
+#[path = "tests/dcp.rs"]
 mod tests;

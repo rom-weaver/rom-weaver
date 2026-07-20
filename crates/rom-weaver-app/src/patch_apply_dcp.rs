@@ -3,15 +3,15 @@
 //! A `.dcp` is not a byte-stream patch: it rebuilds a GD-ROM data track's
 //! ISO9660 filesystem. This path therefore diverges from the normal per-track
 //! apply. It requires a disc-sheet (`.cue`/`.gdi`) input, finds the GD-ROM
-//! high-density data track, rebuilds it with `rom-weaver-dcp`, reassembles the
+//! high-density data track, rebuilds it with the internal DCP module, reassembles the
 //! full disc via the shared disc staging, and emits the result (compressed to
 //! CHD by default, or written beside the output sheet with `--no-compress`).
 
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 
-use rom_weaver_dcp::rebuild_track_to_writer;
-use rom_weaver_gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
+use crate::dcp::rebuild_track_to_writer;
+use crate::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
 use super::*;
 

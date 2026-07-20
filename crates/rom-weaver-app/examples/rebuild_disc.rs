@@ -1,13 +1,13 @@
 //! Dev tool: apply a `.dcp` and rebuild the data track, then re-read the
 //! rebuilt track to verify patched bytes, verbatim files, and the boot area.
 //!
-//! Usage: `cargo run --release -p rom-weaver-dcp --example rebuild_disc -- <patch.dcp> <track3.bin> [start_lba] [out_track.bin]`
+//! Usage: `cargo run --release -p rom-weaver-app --example rebuild_disc -- <patch.dcp> <track3.bin> [start_lba] [out_track.bin]`
 
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 
-use rom_weaver_dcp::rebuild_track_to_writer;
-use rom_weaver_gdrom::{BOOT_AREA_SIZE, GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
+use rom_weaver_app::dcp::rebuild_track_to_writer;
+use rom_weaver_app::gdrom::{BOOT_AREA_SIZE, GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
 fn md5_hex(bytes: &[u8]) -> String {
     // Tiny dependency-free check: reuse the source disc as ground truth via

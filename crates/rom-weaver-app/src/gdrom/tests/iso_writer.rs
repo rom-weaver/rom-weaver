@@ -4,7 +4,7 @@
 
 use std::io::Cursor;
 
-use super::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
+use super::filesystem::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
 use super::iso_writer::{IsoEntry, IsoFile, IsoTimestamp, build_iso, plan_iso};
 use super::mode1::encode_mode1_sector;
 use super::sector::{LOGICAL_SECTOR_SIZE, SectorFormat};

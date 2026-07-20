@@ -32,7 +32,6 @@ clap_mangen = "0.3.0"
 flate2.workspace = true
 nod = { workspace = true, features = ["compress-lzma"] }
 rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.5.0" }
-rom-weaver-gdrom = { path = "../rom-weaver-gdrom", version = "0.5.0" }
 serde_json.workspace = true
 tar.workspace = true
 zstd.workspace = true

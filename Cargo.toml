@@ -7,8 +7,6 @@ members = [
     "crates/rom-weaver-codecs",
     "crates/rom-weaver-containers",
     "crates/rom-weaver-core",
-    "crates/rom-weaver-dcp",
-    "crates/rom-weaver-gdrom",
     "crates/rom-weaver-libarchive",
     "crates/rom-weaver-libarchive-sys",
     "crates/rom-weaver-nod",

@@ -11,8 +11,8 @@
 
 use std::io::{Read, Seek};
 
+use crate::gdrom::GdRomFs;
 use rom_weaver_core::{Result, RomWeaverError};
-use rom_weaver_gdrom::GdRomFs;
 
 use super::DcpManifest;
 use super::manifest::DcpOperation;

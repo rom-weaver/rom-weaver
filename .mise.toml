@@ -128,7 +128,7 @@ echo "run: twiggy top -n 80 $out_dir/rom-weaver-app.wasm"
 
 [tasks.fmt]
 description = "Check Rust formatting"
-run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom-weaver-checksum --package rom-weaver-cli --package rom-weaver-codecs --package rom-weaver-containers --package rom-weaver-core --package rom-weaver-dcp --package rom-weaver-gdrom --package rom-weaver-libarchive --package rom-weaver-libarchive-sys --package rom-weaver-patches --package rom-weaver-xdelta --check"
+run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom-weaver-checksum --package rom-weaver-cli --package rom-weaver-codecs --package rom-weaver-containers --package rom-weaver-core --package rom-weaver-libarchive --package rom-weaver-libarchive-sys --package rom-weaver-patches --package rom-weaver-xdelta --check"
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"

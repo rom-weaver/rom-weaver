@@ -223,9 +223,9 @@ impl CliApp {
                 Ok(file) => file,
                 Err(_) => continue,
             };
-            if rom_weaver_gdrom::GdRomFs::open(
+            if crate::gdrom::GdRomFs::open(
                 std::io::BufReader::new(file),
-                rom_weaver_gdrom::GD_HIGH_DENSITY_START_LBA,
+                crate::gdrom::GD_HIGH_DENSITY_START_LBA,
             )
             .is_ok()
             {

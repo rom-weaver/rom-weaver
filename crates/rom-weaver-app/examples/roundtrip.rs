@@ -1,12 +1,12 @@
 //! Dev tool: read a GD-ROM data track's whole filesystem, re-author it with the
 //! ISO writer, and verify every file reads back byte-identical.
 //!
-//! Usage: `cargo run --release -p rom-weaver-gdrom --example roundtrip -- <track.bin> [start_lba]`
+//! Usage: `cargo run --release -p rom-weaver-app --example roundtrip -- <track.bin> [start_lba]`
 
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 
-use rom_weaver_gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoFile, IsoTimestamp, build_iso};
+use rom_weaver_app::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoFile, IsoTimestamp, build_iso};
 
 fn main() {
     let mut args = std::env::args().skip(1);

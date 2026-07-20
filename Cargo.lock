@@ -1724,15 +1724,16 @@ name = "rom-weaver-app"
 version = "0.5.0"
 dependencies = [
  "clap",
+ "crc32fast",
  "flate2",
+ "miniz_oxide 0.9.1",
  "rayon",
  "rom-weaver-checksum",
  "rom-weaver-containers",
  "rom-weaver-core",
- "rom-weaver-dcp",
- "rom-weaver-gdrom",
  "rom-weaver-libarchive",
  "rom-weaver-patches",
+ "rom-weaver-xdelta",
  "serde",
  "serde_json",
  "tracing",
@@ -1794,7 +1795,6 @@ dependencies = [
  "rom-weaver-app",
  "rom-weaver-containers",
  "rom-weaver-core",
- "rom-weaver-gdrom",
  "rom-weaver-nod",
  "serde_json",
  "tar",
@@ -1855,26 +1855,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "ts-rs",
-]
-
-[[package]]
-name = "rom-weaver-dcp"
-version = "0.5.0"
-dependencies = [
- "crc32fast",
- "miniz_oxide 0.9.1",
- "rom-weaver-core",
- "rom-weaver-gdrom",
- "rom-weaver-xdelta",
- "tracing",
-]
-
-[[package]]
-name = "rom-weaver-gdrom"
-version = "0.5.0"
-dependencies = [
- "rom-weaver-core",
- "tracing",
 ]
 
 [[package]]

@@ -7,7 +7,7 @@
 
 use std::io::Cursor;
 
-use super::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
+use super::filesystem::{GD_HIGH_DENSITY_START_LBA, GdRomFs};
 use super::iso9660::{self, parse_directory, parse_primary_volume_descriptor};
 use super::sector::{LOGICAL_SECTOR_SIZE, SectorFormat};
 

@@ -14,13 +14,13 @@
 //! - [`mode1`] - re-encode cooked sectors into raw `MODE1/2352` for a rebuilt
 //!   data track.
 
-pub mod gdrom;
+mod filesystem;
 pub mod iso9660;
 pub mod iso_writer;
 pub mod mode1;
 pub mod sector;
 
-pub use gdrom::{BOOT_AREA_SIZE, FileEntry, GD_HIGH_DENSITY_START_LBA, GdRomFs};
+pub use filesystem::{BOOT_AREA_SIZE, FileEntry, GD_HIGH_DENSITY_START_LBA, GdRomFs};
 pub use iso_writer::{
     IsoEntry, IsoFile, IsoPlan, IsoTimestamp, PlannedFile, build_iso, plan_iso, write_track,
 };
@@ -28,13 +28,13 @@ pub use mode1::{RAW_SECTOR_SIZE, USER_DATA_SIZE, encode_mode1_sector};
 pub use sector::{LOGICAL_SECTOR_SIZE, SectorFormat, TrackSectors};
 
 #[cfg(test)]
-#[path = "../tests/unit/gdrom.rs"]
+#[path = "tests/gdrom.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/unit/mode1.rs"]
+#[path = "tests/mode1.rs"]
 mod mode1_tests;
 
 #[cfg(test)]
-#[path = "../tests/unit/iso_writer.rs"]
+#[path = "tests/iso_writer.rs"]
 mod iso_writer_tests;
