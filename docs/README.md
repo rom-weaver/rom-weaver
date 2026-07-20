@@ -18,6 +18,7 @@ Choose the guide that matches what you are trying to do.
   supported formats, compression, checksums, trimming, and JSON output.
 - [Man pages](cli.md#man-pages): generate `rom-weaver(1)` and one page per
   visible CLI command directly from Clap.
+- [Screenshots](screenshots.md): desktop and mobile views of the main workflows.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle.schema.json): machine-readable
   schema for distributable patch workflows.
 
@@ -48,11 +49,14 @@ Choose the guide that matches what you are trying to do.
 - [Architecture](ARCHITECTURE.md): workspace layout, crate graph, command core,
   browser boundary, OPFS, workers, and test organization.
 - [Browser concurrency](browser-concurrency.md): shared memory, worker protocols,
-  synchronization, cancellation, and file ownership.
+  the thread-start barrier, the OPFS proxy, and file ownership.
 - [Mobile Safari verification](mobile-safari-verification.md): automated and
   real-device checks for WebKit, OPFS, memory pressure, and PWA behavior.
 - [Vendored third-party code](vendor-code.md): what is vendored and why, the
   crates.io publishing constraint, and how to return each one to upstream.
+- [Release guide](../.github/RELEASING.md): first-release setup, trusted
+  publishing, deployment channels, and retry steps.
 - [References](references.md): format specifications and upstream reference
   implementations.
-- [Reversible trim footer](trim-revert-footer.md)
+- [Reversible trim footer](trim-revert-footer.md): the small footer that allows
+  an exact byte-for-byte trim reversal.

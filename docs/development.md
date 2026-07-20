@@ -29,7 +29,7 @@ Install these system tools before the first build:
 - CMake, Clang, and a native compiler toolchain
 - [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) for web builds
 - Brotli for optimized production WASM builds
-- sccache for the repository's configured Rust compiler wrapper
+- sccache (optional) to speed up repeated Rust builds
 
 On macOS with Homebrew:
 
@@ -56,14 +56,15 @@ For an existing clone:
 git submodule update --init --recursive
 ```
 
-Install and trust the pinned toolchains, install both JavaScript dependency
+Trust and install the pinned toolchains, install both JavaScript dependency
 sets, and install the repository hooks:
 
 ```bash
-mise install
 mise trust
+mise install
 npm ci
 npm ci --prefix packages/rom-weaver-webapp
+npm --prefix packages/rom-weaver-webapp exec playwright -- install chromium
 npm run hooks:install
 ```
 
@@ -113,7 +114,7 @@ compiler wiring live in `.cargo/config.toml` and `.mise.toml`; use `mise exec`
 for ad hoc target commands:
 
 ```bash
-mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1
+mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1-threads
 ```
 
 See the [WASM runtime notes](../packages/rom-weaver-webapp/src/wasm/README.md)
@@ -137,7 +138,7 @@ Run the complete local quality gate before submitting a change:
 mise run ci
 ```
 
-That task covers Rust formatting, Clippy, generated types and man pages,
+That task covers Rust formatting, Clippy, generated types,
 threaded-WASM guards, license inventory, Rust tests, the production WASM build,
 frontend linting, unit tests, browser/WASM tests, full-browser tests, webapp E2E,
 and the production frontend build.
@@ -222,13 +223,10 @@ upstream `qbsdiff` depends on `bzip2` with default features on, so
 pin is the only thing keeping `bzip2-sys` selected; drop it and the bzip2
 implementation underneath BDF patch output silently swaps.
 
-`libbz2-rs-sys` therefore compiles but is never linked. It costs roughly
-64 bytes in the WASM module and one scoped `deny.toml` exception for its
-`bzip2-1.0.6` license. `qbsdiff` was vendored under `vendor/` until 2026-07-20
-purely to avoid it; the vendored sources were byte-identical to upstream, so
-the fork was retired in favour of the crates.io release plus the pin above.
-Upstream exposes no feature to opt out of its default `bzip2` backend - if
-that changes, this exception can go away.
+`libbz2-rs-sys` therefore compiles but is never linked. Keep the scoped
+`deny.toml` exception for its `bzip2-1.0.6` license. If `qbsdiff` later exposes
+a feature that disables its default bzip2 backend, remove the extra backend
+and the exception together.
 
 ## Linked worktrees
 
@@ -240,9 +238,9 @@ testing:
 ```
 
 It installs package dependencies, copies existing WASM artifacts when
-available, and links the populated vendor submodules from the main checkout.
-The expected vendor symlinks appear as gitlink-to-symlink type changes unless
-the helper's worktree-scoped Git configuration is present.
+available, and links the populated `vendor/libarchive` submodule from the main
+checkout. The expected vendor symlink appears as a gitlink-to-symlink type
+change unless the helper's worktree-scoped Git configuration is present.
 
 Git refuses to remove worktrees containing submodules. After verifying that a
 worktree has no real changes, remove it from the main checkout with:

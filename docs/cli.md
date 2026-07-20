@@ -8,9 +8,7 @@ automation.
 ## Table of contents
 
 - [Install](#install)
-  - [npm](#npm)
-  - [Cargo](#cargo)
-  - [Docker](#docker)
+  - [Source install](#source-install)
   - [Development checkout](#development-checkout)
 - [First weave](#first-weave)
 - [Common workflows](#common-workflows)
@@ -35,49 +33,20 @@ automation.
 
 ## Install
 
-### npm
+### Source install
 
-The npm launcher requires Node.js 22 or newer and installs the native package
-for the current platform:
+Install the current source build. This requires Rust 1.95, CMake, Clang, and a
+native compiler toolchain.
 
 ```bash
-npm install --global @rom-weaver/cli
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
 ```
 
-For one-off use without installing, run `npx --yes @rom-weaver/cli --help`.
-
-Native npm packages target macOS arm64/x64, Linux x64 glibc, and Windows x64.
-On Unix, the npm package also installs the generated `rom-weaver(1)` command
-manuals when npm's global man directory is on `MANPATH`.
-
-### Cargo
-
-Cargo builds from source, so it covers Rust targets beyond the prebuilt npm
-platforms. Both paths require Rust 1.95, CMake, Clang, and a native build
-toolchain.
-
-```bash
-# Published crate
-cargo install rom-weaver-cli
-
-# Tagged source release
-cargo install \
-  --git https://github.com/brandonocasey/rom-weaver.git \
-  --tag v0.5.0 \
-  rom-weaver-cli
-```
-
-### Docker
-
-The published CLI image needs only Docker. Mount a working directory to
-process local files:
-
-```bash
-docker run --rm --volume "$PWD:/data" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest \
-  probe --input /data/game.sfc
-```
+Prebuilt npm, Cargo registry, Docker, and GitHub Release packages have not been
+published yet.
 
 ### Development checkout
 
@@ -153,10 +122,11 @@ rom-weaver trim --input game.nds --in-place --revert-marker
 rom-weaver trim --input game.nds --in-place --revert
 ```
 
-Every command reads its inputs from `-i`/`--input` and writes to `-o`/`--output`;
-short flags exist for the common options (`-i` input, `-o` output, `-j` threads,
-`-f` format, `-s` select, `-a` algo, `-n` dry-run). Run
-`rom-weaver <command> --help` for every option and caveat on a command.
+Most commands use `-i`/`--input` and `-o`/`--output`. Some commands need more
+specific inputs, such as `patch create --original ... --modified ...`. Common
+short flags include `-j` for threads, `-f` for format, `-s` for selection,
+`-a` for a checksum algorithm, and `-n` for a dry run. Run
+`rom-weaver <command> --help` for the exact options.
 
 `probe` and `checksum` also accept `-` as the `--input` value to read the ROM
 from stdin, so they slot into Unix pipelines:
@@ -183,6 +153,8 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 | `bundle parse` | Validate and resolve a bundle and its referenced entries. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Restore a ROM using undo data embedded in a PPF3 patch. |
+| `weave` | Run `patch apply` through its shorter alias. |
+| `completions` | Generate a shell completion script. |
 
 Global flags:
 

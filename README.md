@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/brandonocasey/rom-weaver/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/brandonocasey/rom-weaver?sort=semver&amp;label=version&amp;color=d9690f"></a>
+  <a href="https://github.com/brandonocasey/rom-weaver/tags"><img alt="Latest tag" src="https://img.shields.io/github/v/tag/brandonocasey/rom-weaver?sort=semver&amp;label=version&amp;color=d9690f"></a>
   <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-4a6d63?logo=nodedotjs&logoColor=white"></a>
   <a href=".mise.toml"><img alt="Rust 1.95" src="https://img.shields.io/badge/Rust-1.95-2c323b?logo=rust&logoColor=white"></a>
   <a href="LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
@@ -101,137 +101,30 @@ To run the webapp on your own infrastructure, see
 
 ### CLI
 
-The CLI needs no runtime beyond the install method you pick. Every method
-below installs the same `rom-weaver` command; run `rom-weaver --help` to
-verify it, then run the [first weave](docs/cli.md#first-weave).
-
-<details>
-<summary><strong>npx</strong> — run once without installing (Node.js 22+)</summary>
-
-```bash
-npx --yes @rom-weaver/cli --help
-```
-
-Downloads the native binary for the current platform on first use.
-
-</details>
-
-<details>
-<summary><strong>npm</strong> — global install (Node.js 22+)</summary>
-
-```bash
-npm install --global @rom-weaver/cli
-rom-weaver --help
-```
-
-The npm packages ship prebuilt binaries for macOS arm64/x64, Linux x64
-(glibc), and Windows x64. On Unix, the generated `rom-weaver(1)` man pages are
-installed when npm's global man directory is on `MANPATH`.
-
-</details>
-
-<details>
-<summary><strong>cargo binstall</strong> — install the prebuilt release binary</summary>
-
-Install [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) once,
-then download the matching native binary from the GitHub release:
-
-```bash
-cargo binstall --no-confirm rom-weaver-cli
-rom-weaver --help
-```
-
-This uses the release binary for macOS arm64/x64, Linux x64 glibc, and Windows
-x64 MSVC; it does not compile from source. Other targets should use the Cargo
-source install below.
-
-</details>
-
-<details>
-<summary><strong>Cargo</strong> — build from crates.io</summary>
-
-```bash
-cargo install rom-weaver-cli
-rom-weaver --help
-```
-
-Builds from source, so it works on any supported Rust target beyond the
-prebuilt npm platforms. Requires Rust 1.95+, CMake, Clang, and a native
-compiler toolchain.
-
-</details>
-
-<details>
-<summary><strong>Cargo</strong> — build a tagged release from Git</summary>
-
-```bash
-cargo install \
-  --git https://github.com/brandonocasey/rom-weaver.git \
-  --tag v0.5.0 \
-  rom-weaver-cli
-rom-weaver --help
-```
-
-Same toolchain requirements as the crates.io install. Useful for pinning an
-exact tag or testing an unreleased branch (drop `--tag` for the default
-branch).
-
-</details>
-
-<details>
-<summary><strong>Docker</strong> — published CLI image</summary>
-
-```bash
-docker run --rm ghcr.io/brandonocasey/rom-weaver-cli:latest --help
-```
-
-Mount a working directory to process local files:
-
-```bash
-docker run --rm --volume "$PWD:/data" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest \
-  probe --input /data/game.sfc
-```
-
-</details>
-
-<details>
-<summary><strong>From source</strong> — run a development checkout</summary>
+Install the current source build:
 
 ```bash
 git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
-cargo run --release -p rom-weaver-cli -- --help
+cargo install --path crates/rom-weaver-cli --locked
+rom-weaver --help
 ```
 
-Requires Rust 1.95+, CMake, Clang, and a native compiler toolchain. The
-[development guide](docs/development.md) covers the full toolchain setup,
-webapp builds, and tests.
+Requires Rust 1.95+, CMake, Clang, and a native compiler toolchain. Prebuilt
+npm, Cargo registry, Docker, and GitHub Release packages have not been
+published yet.
 
-</details>
+The [development guide](docs/development.md) covers the full toolchain setup,
+webapp builds, and tests.
 
 ### Self-host the webapp
 
-Each method serves the full webapp — WASM build, cross-origin isolation
+The source build serves the full webapp — WASM build, cross-origin isolation
 headers, SPA fallback, and precompressed assets included. The
 [self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
 routing, service-worker scope, and the required COOP/COEP headers.
 
-<details>
-<summary><strong>Docker</strong> — published webapp image</summary>
-
-```bash
-docker run --rm --publish 8080:8080 ghcr.io/brandonocasey/rom-weaver-webapp:latest
-curl --fail --silent --show-error http://localhost:8080/health
-```
-
-Open `http://localhost:8080/`. For production, put the container behind an
-HTTPS reverse proxy.
-
-</details>
-
-<details>
-<summary><strong>Docker Compose</strong> — build the image from a checkout</summary>
+Build and start it with Docker Compose:
 
 ```bash
 git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
@@ -243,28 +136,6 @@ curl --fail --silent --show-error http://localhost:8080/health
 Only Docker with Compose is required; the image installs its own build
 toolchains. Set `PORT` to change the host port, for example
 `PORT=3000 docker compose up --build --detach`.
-
-</details>
-
-<details>
-<summary><strong>Static hosting</strong> — download and upload the compiled webapp</summary>
-
-Download the compiled static bundle from the most recent [GitHub
-release](https://github.com/brandonocasey/rom-weaver/releases/latest), then
-extract it into the directory your HTTPS static host serves:
-
-```bash
-mkdir -p /path/to/rom-weaver
-curl --fail --location --show-error \
-  https://github.com/brandonocasey/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz \
-  | tar --extract --gzip --directory /path/to/rom-weaver
-```
-
-Replace `/path/to/rom-weaver` with your document root. The host must support
-SPA fallback and the required COOP/COEP/CORP headers; see
-[static files](docs/self-hosting.md#static-files) for host configuration.
-
-</details>
 
 ## Screenshots
 
@@ -327,7 +198,7 @@ integration, development, architecture, and format-reference guides.
 Bug reports and contributions are welcome. Read the
 [contribution guide](.github/CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
 before submitting a change, and report
-suspected vulnerabilities through the private channel in the
+suspected vulnerabilities through GitHub's private reporting form in the
 [security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
 support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 

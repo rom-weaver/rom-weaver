@@ -39,10 +39,11 @@ A host on the same origin can place inputs under the OPFS
 pipeline. Include a bundle in the list when using one; it does not need a
 separate option.
 
-Applications importing the package can call `ingest`:
+Code running inside this workspace can import the private webapp package and
+call `ingest`:
 
 ```js
-import { ingest } from "rom-weaver-webapp";
+import { ingest } from "@rom-weaver/webapp";
 
 ingest([
   "/work/rom-weaver-imports/rom-weaver-bundle.json",

@@ -13,7 +13,6 @@ At the root, its service worker can control every path on that origin. Under
 ## Table of contents
 
 - [Docker](#docker)
-  - [Published image](#published-image)
   - [Build from source with Compose](#build-from-source-with-compose)
 - [Static files](#static-files)
 - [Cross-origin isolation](#cross-origin-isolation)
@@ -22,18 +21,6 @@ At the root, its service worker can control every path on that origin. Under
 <!-- END doctoc -->
 
 ## Docker
-
-### Published image
-
-Run the prebuilt image and verify its health endpoint:
-
-```bash
-docker run --rm --publish 8080:8080 ghcr.io/brandonocasey/rom-weaver-webapp:latest
-curl --fail --silent --show-error http://localhost:8080/health
-```
-
-Open `http://localhost:8080/`. For production, put the container behind the
-HTTPS reverse proxy that serves the rest of the site.
 
 ### Build from source with Compose
 
@@ -86,22 +73,24 @@ docker compose down
 
 ## Static files
 
-Download the compiled static bundle from the most recent [GitHub
-release](https://github.com/brandonocasey/rom-weaver/releases/latest), then
-extract it into the directory served by your static host:
+Install the system tools from the [development guide](development.md#prerequisites),
+then build the static files from a checkout:
 
 ```bash
-mkdir -p /path/to/rom-weaver
-curl --fail --location --show-error \
-  https://github.com/brandonocasey/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz \
-  | tar --extract --gzip --directory /path/to/rom-weaver
+git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+cd rom-weaver
+mise trust
+mise install
+npm ci
+npm ci --prefix packages/rom-weaver-webapp
+mise run build-wasm-prod
+npm --prefix packages/rom-weaver-webapp run build
 ```
 
-Replace `/path/to/rom-weaver` with your document root. Preserve the extracted
-directory structure. The release bundle includes precompressed `.br` siblings,
-but generic static hosts do not automatically serve them; enable dynamic
-Brotli or gzip compression in the host when available, especially for the WASM
-file.
+Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host.
+Preserve the directory structure. The build includes precompressed `.br`
+files, but generic hosts do not automatically serve them. Enable Brotli or gzip
+compression when available, especially for the WASM file.
 
 The server should fall back to `index.html` for navigation requests within the
 rom-weaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so
