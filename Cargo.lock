@@ -781,21 +781,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
-
-[[package]]
 name = "futures-core"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1311,31 +1296,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "openssl"
-version = "0.10.81"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45"
-dependencies = [
- "bitflags",
- "cfg-if",
- "foreign-types",
- "libc",
- "openssl-macros",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "openssl-src"
 version = "300.6.1+3.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1514,63 +1474,6 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
-]
-
-[[package]]
-name = "pyo3"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd274650b21d4bfc26a0a47587962c1edb425f69287324355cd040c3ea66071c"
-dependencies = [
- "libc",
- "once_cell",
- "portable-atomic",
- "pyo3-build-config",
- "pyo3-ffi",
- "pyo3-macros",
-]
-
-[[package]]
-name = "pyo3-build-config"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5e2a7d2f0d013342f295c048ad19237add5154a55b1c5a254c0ec93d4109078"
-dependencies = [
- "target-lexicon",
-]
-
-[[package]]
-name = "pyo3-ffi"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca85c467da1bbc8d866eea5deff9cf29ea5f7785054a17da36e65bda9c05845b"
-dependencies = [
- "libc",
- "pyo3-build-config",
-]
-
-[[package]]
-name = "pyo3-macros"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ac53762fd065daa3194dd09337a38bd793a188100fd1a9304c4ab312d901771"
-dependencies = [
- "proc-macro2",
- "pyo3-macros-backend",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "pyo3-macros-backend"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ca3a1557399783172dc5bf39cfca835157732532cba56b71d2292161e53b362"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -1795,7 +1698,6 @@ dependencies = [
  "rom-weaver-app",
  "rom-weaver-containers",
  "rom-weaver-core",
- "rom-weaver-nod",
  "serde_json",
  "tar",
  "zstd",
@@ -1816,15 +1718,34 @@ dependencies = [
 name = "rom-weaver-containers"
 version = "0.5.0"
 dependencies = [
+ "adler2",
+ "aes",
  "arrayvec",
  "async-trait",
+ "base16ct",
  "bincode",
+ "block-padding",
+ "bytes",
+ "bzip2-sys",
+ "cbc",
  "chd",
  "ciso",
  "claxon",
+ "crc32fast",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "crypto-common 0.2.2",
+ "digest 0.11.3",
+ "dyn-clone",
  "encoding_rs",
  "flate2",
+ "itertools 0.15.0",
+ "liblzma-sys",
+ "libz-sys",
+ "lru",
  "maybe-async",
+ "md-5 0.11.0",
+ "polonius-the-crab",
  "proc-bitfield",
  "rand",
  "rayon",
@@ -1833,14 +1754,19 @@ dependencies = [
  "rom-weaver-codecs",
  "rom-weaver-core",
  "rom-weaver-libarchive",
- "rom-weaver-nod",
  "serde",
  "serde-big-array",
  "serde_json",
+ "sha1",
+ "simple_moving_average",
  "tar",
+ "thiserror",
  "tracing",
+ "xxhash-rust",
  "zeekstd",
+ "zerocopy",
  "zstd",
+ "zstd-sys",
 ]
 
 [[package]]
@@ -1882,41 +1808,6 @@ dependencies = [
  "openssl-sys",
  "path-slash",
  "tar",
- "zstd-sys",
-]
-
-[[package]]
-name = "rom-weaver-nod"
-version = "0.5.0"
-dependencies = [
- "adler2",
- "aes",
- "base16ct",
- "block-padding",
- "bytes",
- "bzip2-sys",
- "cbc",
- "crc32fast",
- "crossbeam-channel",
- "crossbeam-utils",
- "crypto-common 0.2.2",
- "digest 0.11.3",
- "dyn-clone",
- "encoding_rs",
- "itertools 0.15.0",
- "liblzma-sys",
- "libz-sys",
- "lru",
- "md-5 0.11.0",
- "openssl",
- "polonius-the-crab",
- "pyo3",
- "sha1",
- "simple_moving_average",
- "thiserror",
- "tracing",
- "xxhash-rust",
- "zerocopy",
  "zstd-sys",
 ]
 
@@ -2278,12 +2169,6 @@ dependencies = [
  "libc",
  "xattr",
 ]
-
-[[package]]
-name = "target-lexicon"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tempfile"

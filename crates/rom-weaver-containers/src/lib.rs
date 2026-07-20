@@ -19,13 +19,10 @@ mod constants;
 mod extract_support;
 mod formats;
 mod libarchive_support;
+pub mod nod;
 pub mod xdvdfs;
 
-use crate::xdvdfs::{
-    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
-};
-use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
-use nod::{
+use crate::nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
     write::{
@@ -33,6 +30,10 @@ use nod::{
         ProcessOptions as NodProcessOptions,
     },
 };
+use crate::xdvdfs::{
+    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
+};
+use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 #[cfg(test)]
 use rom_weaver_chd::ChdCodec;
 #[cfg(test)]

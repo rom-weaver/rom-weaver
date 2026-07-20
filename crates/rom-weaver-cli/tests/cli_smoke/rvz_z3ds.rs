@@ -640,7 +640,7 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
     // Overwrite everything from sector 1 with junk seeded from an ID that does NOT match the
     // header ("RWTEST"), mirroring a post-patch header.
     let junk_start = 0x8000;
-    let mut lfg = nod::util::lfg::LaggedFibonacci::default();
+    let mut lfg = rom_weaver_containers::nod::util::lfg::LaggedFibonacci::default();
     lfg.fill_sector_chunked(&mut iso_bytes[junk_start..], *b"GKQJ", 0, junk_start as u64);
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
 

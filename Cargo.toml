@@ -9,7 +9,6 @@ members = [
     "crates/rom-weaver-core",
     "crates/rom-weaver-libarchive",
     "crates/rom-weaver-libarchive-sys",
-    "crates/rom-weaver-nod",
     "crates/rom-weaver-patches",
     "crates/rom-weaver-xdelta",
 ]
@@ -32,16 +31,17 @@ version = "0.5.0"
 # so a bare `cargo clippy` and rust-analyzer's in-editor diagnostics enforce the
 # same thing CI does. The mise task still adds `-D warnings`; that is what makes
 # these fail a build rather than just print. Only the first-party crates opt in
-# (via `[lints] workspace = true`) - the vendored forks under vendor/ and
-# crates/rom-weaver-nod are excluded from the clippy task and must stay
-# lint-clean against *their* upstream, not ours.
+# (via `[lints] workspace = true`) - vendored source under `src/` is adapted to
+# the workspace's lint policy when it is inlined.
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
 adler2 = "2.0.1"
+aes = "0.9.1"
 assert_cmd = "2.1.1"
 assert_fs = "1.1.3"
+base16ct = "1.0"
 blake3 = "1.8.2"
 # Load-bearing for BDF byte-parity: upstream `qbsdiff` depends on `bzip2` with
 # default features, which pulls in the pure-Rust `libbz2-rs-sys` backend. Feature
@@ -49,6 +49,9 @@ blake3 = "1.8.2"
 # (`bzip2` selects via `#[cfg(feature = "bzip2-sys")]`). Dropping it silently
 # swaps the bzip2 implementation underneath BDF patch output.
 bzip2 = { version = "0.6.1", default-features = false, features = ["bzip2-sys"] }
+bzip2-sys = "0.1.13"
+block-padding = "0.4"
+bytes = "1.11"
 ciso = { version = "0.2.1", default-features = false, features = ["sync"] }
 chd = { version = "0.3.4", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
 clap = { version = "4.5.51", features = ["derive", "string"] }
@@ -58,6 +61,11 @@ crc16 = "0.4.0"
 crc32c = "0.6.8"
 crc32fast = "1.5.0"
 digest = { version = "0.11.0", default-features = false }
+cbc = "0.2.0-rc.3"
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
+crypto-common = "0.2"
+dyn-clone = "1.0"
 # Load-bearing for the same reason as the `bzip2` pin above: upstream `chd`
 # depends on `flate2` with the pure-Rust `zlib-rs` backend. Feature unification
 # means this pin is the only thing keeping `flate2` on the C backend, which
@@ -66,12 +74,14 @@ digest = { version = "0.11.0", default-features = false }
 flate2 = { version = "1.1.5", default-features = false, features = ["zlib"] }
 miniz_oxide = "0.9.1"
 flacenc = { version = "0.5.1", default-features = false }
+itertools = "0.15"
 lzma-rust2 = { version = "0.16.2", default-features = false, features = ["std", "encoder", "xz", "optimization"] }
 libc = "0.2.137"
 libz-sys = { version = "1.1.28", default-features = false }
 liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"
-nod = { package = "rom-weaver-nod", path = "crates/rom-weaver-nod", version = "0.5.0", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
+lru = "0.16"
+polonius-the-crab = "0.5"
 qbsdiff = "1.4.4"
 rayon = "1.11.0"
 arrayvec = { version = "0.7.2", default-features = false, features = ["std"] }
@@ -82,6 +92,7 @@ maybe-async = "0.2.7"
 proc-bitfield = "0.2.2"
 rand = "0.9"
 serde-big-array = "0.5.1"
+simple_moving_average = "1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha1 = "0.11.0"
@@ -92,6 +103,7 @@ thiserror = "2.0.17"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
 ts-rs = "12.0.1"
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zerocopy = { version = "0.8", features = ["alloc", "derive"] }
 zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }

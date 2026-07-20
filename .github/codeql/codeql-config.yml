@@ -8,7 +8,8 @@ query-filters:
   # the title ID zero-padded to 16 bytes. `nod` is a reader/writer for that
   # on-disc format, so these constants are dictated by the data it parses -
   # generating them randomly would make valid discs undecryptable. Every hit for
-  # this rule is in the vendored nod fork (`vendor/nod`, `crates/rom-weaver-nod`),
+  # this rule is in the vendored nod source (`vendor/nod`,
+  # `crates/rom-weaver-containers/src/nod`),
   # which is the only AES consumer in the workspace, so excluding the rule is in
   # practice scoped to that code.
   #

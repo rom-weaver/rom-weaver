@@ -58,7 +58,7 @@ impl Clone for ReopenablePathDiscStream {
 }
 
 #[cfg(target_family = "wasm")]
-impl nod::read::DiscStream for ReopenablePathDiscStream {
+impl crate::nod::read::DiscStream for ReopenablePathDiscStream {
     fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> io::Result<()> {
         let file = self.file()?;
         file.seek(SeekFrom::Start(offset))?;
@@ -213,7 +213,11 @@ impl NodHandlerCore {
         NodDiscReader::detect(&mut file).ok().flatten()
     }
 
-    fn validate_meta(&self, source: &Path, disc: &NodDiscReader) -> Result<nod::read::DiscMeta> {
+    fn validate_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<crate::nod::read::DiscMeta> {
         let meta = disc.meta();
         if meta.format == self.nod_format {
             Ok(meta)

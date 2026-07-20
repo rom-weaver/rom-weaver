@@ -13,7 +13,7 @@ pub(crate) use flate2::{
     Compression as DeflateCompression,
     write::{DeflateEncoder, GzEncoder},
 };
-pub(crate) use nod::{
+pub(crate) use rom_weaver_containers::nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
     write::{

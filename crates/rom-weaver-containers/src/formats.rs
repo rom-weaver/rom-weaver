@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path, sync::Arc};
 
-use nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
+use crate::nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
 use rom_weaver_core::{
     ContainerCapabilities, ContainerHandler, ContainerHandlerOperations,
     ContainerHandlerRegistration, CreateSupport, FormatDescriptor, OperationFamily,

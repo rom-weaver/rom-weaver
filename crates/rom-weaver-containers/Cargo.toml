@@ -11,26 +11,68 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = [
+    "compress-bzip2-vendored",
+    "compress-lzma-vendored",
+    "compress-zlib-vendored",
+    "compress-zstd-vendored",
+    "threading",
+]
+compress-bzip2 = []
+compress-bzip2-vendored = ["compress-bzip2", "dep:bzip2-sys"]
+compress-lzma = []
+compress-lzma-vendored = ["compress-lzma", "dep:liblzma-sys"]
+compress-zlib = ["dep:adler2"]
+compress-zlib-vendored = ["compress-zlib", "dep:libz-sys"]
+compress-zstd = []
+compress-zstd-vendored = ["compress-zstd", "dep:zstd-sys"]
+threading = ["dep:crossbeam-channel", "dep:crossbeam-utils"]
+
 [dependencies]
+adler2 = { workspace = true, optional = true }
+aes.workspace = true
+base16ct.workspace = true
+block-padding.workspace = true
+bytes.workspace = true
+bzip2-sys = { workspace = true, optional = true }
+cbc.workspace = true
 ciso.workspace = true
-nod.workspace = true
+crc32fast.workspace = true
+crossbeam-channel = { workspace = true, optional = true }
+crossbeam-utils = { workspace = true, optional = true }
+crypto-common.workspace = true
+digest.workspace = true
+dyn-clone.workspace = true
+encoding_rs.workspace = true
+itertools.workspace = true
+liblzma-sys = { workspace = true, optional = true }
+lru.workspace = true
+md-5.workspace = true
+polonius-the-crab.workspace = true
 rayon.workspace = true
 rom-weaver-codecs = { path = "../rom-weaver-codecs", version = "0.5.0" }
 rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.5.0" }
 rom-weaver-chd = { path = "../rom-weaver-chd", version = "0.5.0" }
 rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-libarchive = { workspace = true, default-features = false, features = ["write-archives"] }
+sha1.workspace = true
 serde_json.workspace = true
+simple_moving_average.workspace = true
 tracing.workspace = true
 # Direct dependencies of the vendored `src/xdvdfs` module; they leave with it.
 arrayvec.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
-encoding_rs.workspace = true
 maybe-async = { workspace = true, features = ["is_sync"] }
 proc-bitfield.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
+thiserror.workspace = true
+xxhash-rust.workspace = true
+zerocopy.workspace = true
+libz-sys = { workspace = true, optional = true, features = ["libc", "stock-zlib"] }
+zstd-sys = { workspace = true, optional = true }
 zstd.workspace = true
 zeekstd.workspace = true
 
@@ -39,13 +81,12 @@ chd.workspace = true
 claxon.workspace = true
 flate2.workspace = true
 rand.workspace = true
-nod = { workspace = true, features = ["compress-lzma"] }
 rom-weaver-chd = { path = "../rom-weaver-chd", version = "0.5.0", features = ["test-utils"] }
 tar.workspace = true
 
 [package.metadata.cargo-machete]
 # maybe-async expands its async traits to async-trait at macro expansion time.
-ignored = ["async-trait"]
+ignored = ["async-trait", "crypto-common", "md-5"]
 
 [lints]
 workspace = true

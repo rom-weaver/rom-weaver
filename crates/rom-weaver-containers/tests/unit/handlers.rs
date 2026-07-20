@@ -9,6 +9,14 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use crate::nod::{
+        common::{Compression as NodCompression, Format as NodFormat},
+        read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
+        write::{
+            DiscWriter as NodDiscWriter, FormatOptions as NodFormatOptions,
+            ProcessOptions as NodProcessOptions,
+        },
+    };
     use crate::{
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
@@ -23,14 +31,6 @@ mod tests {
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
     use flate2::{Compression as DeflateCompression, read::DeflateDecoder, write::DeflateEncoder};
-    use nod::{
-        common::{Compression as NodCompression, Format as NodFormat},
-        read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
-        write::{
-            DiscWriter as NodDiscWriter, FormatOptions as NodFormatOptions,
-            ProcessOptions as NodProcessOptions,
-        },
-    };
     use rom_weaver_codecs::encode_xz_preset;
     use rom_weaver_core::{
         CancellationToken, ContainerHandlerOperations, NoopProgressSink, OperationContext,
