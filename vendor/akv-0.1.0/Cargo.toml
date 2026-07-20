@@ -11,6 +11,6 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-always-assert = "0.1.2"
+always-assert = "0.2.0"
 libc = "0.2.137"
 rom-weaver-libarchive-sys = { path = "../../crates/rom-weaver-libarchive-sys", version = "0.5.0" }
