@@ -12,7 +12,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
-        brotli \
         build-essential \
         ca-certificates \
         clang \
@@ -88,7 +87,19 @@ RUN npm ci
 
 WORKDIR /app
 COPY . .
-RUN bash scripts/wasm/build-app.sh prod \
+# Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
+# across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit does
+# not export cache mounts to `type=gha`, so CI still pays a cold compile.
+#
+# There is deliberately no manifest-only `cargo fetch` prefetch layer ahead of
+# this COPY. Cargo refuses to parse a manifest whose targets are missing ("no
+# targets specified in the manifest"), so it would need a stubbed src/lib.rs or
+# src/main.rs per workspace member - 20 of them, silently wrong the moment a
+# crate's target layout changes. It would only save dependency download time on
+# a job that recompiles from scratch regardless.
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    bash scripts/wasm/build-app.sh prod \
     && npm --prefix packages/rom-weaver-webapp run build -- --mode docker
 
 # static-web-server serves the generated SPA as a non-root user. HTTPS is

@@ -42,8 +42,8 @@ runs:
   steps:
     # clang/libclang-dev back bindgen in rom-weaver-libarchive-sys; without them
     # it cannot resolve system headers ("'sys/stat.h' file not found").
-    # cmake/ninja/pkg-config build the vendored C deps, and brotli has no
-    # pinnable mise binary. Jobs that compile no Rust pass an empty list.
+    # cmake/ninja/pkg-config build the vendored C deps. Jobs that compile no
+    # Rust pass an empty list.
     - name: Install system dependencies
       if: inputs.apt-packages != ''
       shell: bash

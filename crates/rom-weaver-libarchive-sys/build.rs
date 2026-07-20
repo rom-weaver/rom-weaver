@@ -267,6 +267,15 @@ fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
     }
 }
 
+// A checkout that never initialized the submodule still has `vendor/libarchive`
+// as an empty directory, so an `is_dir` test would stage nothing and skip the
+// bundled tarball, leaving the build to fail much later on a missing source
+// file. Key off the tree's root CMakeLists.txt instead: present means real
+// sources, absent means fall back.
+fn has_libarchive_sources(libarchive_dir: &Path) -> bool {
+    libarchive_dir.join("CMakeLists.txt").is_file()
+}
+
 fn prepare_source_tree(
     manifest_dir: &Path,
     libarchive_dir: &Path,
@@ -282,7 +291,7 @@ fn prepare_source_tree(
     if staged.exists() {
         fs::remove_dir_all(&staged).expect("failed to clear staged libarchive source tree");
     }
-    if libarchive_dir.is_dir() {
+    if has_libarchive_sources(libarchive_dir) {
         copy_dir_recursive(libarchive_dir, &staged)
             .expect("failed to stage libarchive source tree");
     } else {

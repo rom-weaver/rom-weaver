@@ -9,7 +9,13 @@
 #
 # Reads MISE_PROJECT_ROOT and the WASI_* toolchain vars from the [env] block in
 # .mise.toml. Honors ROM_WEAVER_WASM_OUT_DIR (output dir) and, in prod mode,
-# BROTLI_QUALITY (defaults to 11).
+# BROTLI_QUALITY (defaults to 11) and ROM_WEAVER_WASM_NO_BROTLI.
+#
+# ROM_WEAVER_WASM_NO_BROTLI=1 keeps wasm-opt and strip but skips the `.br`
+# sibling. Set it wherever the host compresses on the fly: Cloudflare Pages has
+# no precompressed-sibling convention, so it re-compresses the raw wasm itself
+# and the quality-11 pass is ~15s of discarded work. The Docker image still
+# needs the sibling - `compression-static` in sws.toml serves it directly.
 set -euo pipefail
 
 mode="${1:-dev}"
@@ -29,9 +35,6 @@ built_artifact="$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wa
 prod_fingerprint_file="$artifact.prod.sha256"
 
 command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
-if [[ "$mode" == "prod" ]]; then
-  command -v brotli >/dev/null || { echo "missing command: brotli" >&2; exit 1; }
-fi
 [[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
 [[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
 
@@ -42,6 +45,18 @@ cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --targ
 
 if [[ "$mode" == "prod" ]]; then
   command -v wasm-opt >/dev/null || { echo "missing command: wasm-opt (install via mise or brew install binaryen)" >&2; exit 1; }
+  # Part of the fingerprint: switching Node (and so libbrotli) must invalidate a
+  # cached `.br`, exactly as a `brotli` CLI upgrade used to.
+  brotli_version="node-zlib libbrotli $(node -p 'process.versions.brotli')"
+  want_brotli=1
+  if [[ "${ROM_WEAVER_WASM_NO_BROTLI:-0}" == "1" ]]; then
+    want_brotli=0
+    # Drop any sibling from an earlier brotli-producing build up front: it is
+    # stale against whatever this run emits, and the cache-hit path below would
+    # otherwise leave it in place for sws.toml to serve in preference to the
+    # real wasm.
+    rm -f "$artifact.br"
+  fi
   prod_fingerprint="$(
     node "$MISE_PROJECT_ROOT/scripts/wasm/wasm-prod-fingerprint.mjs" \
       "$built_artifact" \
@@ -49,11 +64,17 @@ if [[ "$mode" == "prod" ]]; then
       "${BROTLI_QUALITY:-11}" \
       "$(wasm-opt --version 2>&1)" \
       "$("$WASI_STRIP" --version 2>&1)" \
-      "$(brotli --version 2>&1)"
+      "$brotli_version"
   )"
+  # The `.br` is only a required input to the cache check when we were asked to
+  # produce one; otherwise its absence is the expected state, not a stale build.
+  brotli_artifact_ok=1
+  if [[ "$want_brotli" == "1" && ! -f "$artifact.br" ]]; then
+    brotli_artifact_ok=0
+  fi
   if [[ "${ROM_WEAVER_WASM_FORCE:-0}" != "1" \
     && -f "$artifact" \
-    && -f "$artifact.br" \
+    && "$brotli_artifact_ok" == "1" \
     && -f "$prod_fingerprint_file" \
     && "$(<"$prod_fingerprint_file")" == "$prod_fingerprint" ]]; then
     echo "production WASM inputs unchanged; skipping wasm-opt and brotli"
@@ -67,7 +88,12 @@ if [[ "$mode" == "prod" ]]; then
       -o "$artifact.opt" "$artifact"
     mv "$artifact.opt" "$artifact"
     "$WASI_STRIP" "$artifact"
-    brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artifact"
+    if [[ "$want_brotli" == "1" ]]; then
+      node "$MISE_PROJECT_ROOT/scripts/wasm/brotli-compress.mjs" \
+        "$artifact" "$artifact.br" "${BROTLI_QUALITY:-11}"
+    else
+      echo "ROM_WEAVER_WASM_NO_BROTLI=1; skipping .br sibling (host compresses on the fly)"
+    fi
     printf '%s\n' "$prod_fingerprint" > "$prod_fingerprint_file"
   fi
 else
@@ -86,7 +112,7 @@ if [[ "$out_dir" != "$pkg_dir" ]]; then
   node "$MISE_PROJECT_ROOT/packages/rom-weaver-webapp/scripts/sync-dist.mjs" "$out_dir"
 fi
 
-if [[ "$mode" == "prod" ]]; then
+if [[ "$mode" == "prod" && "${want_brotli:-1}" == "1" ]]; then
   echo "artifacts written to $out_dir (rom-weaver-app.wasm, rom-weaver-app.wasm.br)"
 else
   echo "artifact written to $out_dir/rom-weaver-app.wasm"
