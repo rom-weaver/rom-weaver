@@ -31,12 +31,6 @@
   - [CLI](#cli)
   - [Self-host the webapp](#self-host-the-webapp)
 - [Screenshots](#screenshots)
-  - [Desktop](#desktop)
-    - [Apply patches (Weave)](#apply-patches-weave)
-    - [Create a patch](#create-a-patch)
-  - [Mobile](#mobile)
-    - [Apply patches (Weave)](#apply-patches-weave-1)
-    - [Create a patch](#create-a-patch-1)
 - [Documentation](#documentation)
 - [Contributing and support](#contributing-and-support)
 - [License](#license)
@@ -274,37 +268,54 @@ SPA fallback and the required COOP/COEP/CORP headers; see
 
 ## Screenshots
 
-### Desktop
+[View every screenshot at full size.](docs/screenshots.md)
 
-#### Apply patches (Weave)
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
-  <img src="packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
-</picture>
-
-#### Create a patch
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.png">
-  <img src="packages/rom-weaver-webapp/design/create-desktop-light.png" alt="Filled Create patch workflow on desktop">
-</picture>
-
-### Mobile
-
-#### Apply patches (Weave)
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
-  <img src="packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile" width="390">
-</picture>
-
-#### Create a patch
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.png">
-  <img src="packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile" width="390">
-</picture>
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Screenshot</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Desktop — Apply patches (Weave)</td>
+      <td>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
+          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Desktop — Create a patch</td>
+      <td>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.png">
+          <img src="packages/rom-weaver-webapp/design/create-desktop-light.png" alt="Filled Create patch workflow on desktop">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile — Apply patches (Weave)</td>
+      <td align="center">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
+          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile" width="390">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile — Create a patch</td>
+      <td align="center">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.png">
+          <img src="packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile" width="390">
+        </picture>
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ## Documentation
 
