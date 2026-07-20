@@ -156,7 +156,7 @@ msgstr "Dismiss"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.footer.donate"
-msgstr "Donate"
+msgstr "Tip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
