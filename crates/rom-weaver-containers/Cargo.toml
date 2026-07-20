@@ -22,7 +22,15 @@ rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-libarchive = { workspace = true, default-features = false, features = ["write-archives"] }
 serde_json.workspace = true
 tracing.workspace = true
-xdvdfs.workspace = true
+# Direct dependencies of the vendored `src/xdvdfs` module; they leave with it.
+arrayvec.workspace = true
+async-trait.workspace = true
+bincode.workspace = true
+encoding_rs.workspace = true
+maybe-async = { workspace = true, features = ["is_sync"] }
+proc-bitfield.workspace = true
+serde.workspace = true
+serde-big-array.workspace = true
 zstd.workspace = true
 zeekstd.workspace = true
 
@@ -30,9 +38,14 @@ zeekstd.workspace = true
 chd.workspace = true
 claxon.workspace = true
 flate2.workspace = true
+rand.workspace = true
 nod = { workspace = true, features = ["compress-lzma"] }
 rom-weaver-chd = { path = "../rom-weaver-chd", version = "0.5.0", features = ["test-utils"] }
 tar.workspace = true
+
+[package.metadata.cargo-machete]
+# maybe-async expands its async traits to async-trait at macro expansion time.
+ignored = ["async-trait"]
 
 [lints]
 workspace = true

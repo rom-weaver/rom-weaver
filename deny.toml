@@ -35,11 +35,12 @@ unmaintained = "workspace"
 ignore = [
     # bincode 1.3.3 reached the end of its development permanently (the team
     # considers 1.3.3 feature-complete, not abandoned mid-flight). It arrives
-    # through the vendored xdvdfs fork, which is a workspace member, so
-    # `unmaintained = "workspace"` still surfaces it. There is no successor with
-    # a compatible wire format, and swapping serializers in a vendored fork
-    # would break Xbox ISO parsing for no security benefit - this is a
-    # maintenance status, not a vulnerability. Revisit if xdvdfs upstream moves.
+    # as a direct dependency of rom-weaver-containers, which vendors the xdvdfs
+    # source in `src/xdvdfs`, so `unmaintained = "workspace"` surfaces it. There
+    # is no successor with a compatible wire format, and swapping serializers in
+    # vendored source would break Xbox ISO parsing for no security benefit - this
+    # is a maintenance status, not a vulnerability. Revisit if xdvdfs upstream
+    # releases the change that lets us depend on it directly again.
     "RUSTSEC-2025-0141",
 ]
 

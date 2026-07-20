@@ -20,10 +20,6 @@
     git submodule update --init --recursive vendor/nod
     ```
 
-- `vendor/xdvdfs-0.8.3`:
-  - Local patched copy of the `xdvdfs` crate.
-  - Wired through root `Cargo.toml` `[patch.crates-io]`.
-
 ## Validate after vendor updates
 
 ```bash

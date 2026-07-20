@@ -1,3 +1,7 @@
+// The vendored `xdvdfs` module is upstream no_std source using `alloc::*`
+// paths; `alloc` is not in the extern prelude, so it is linked here.
+extern crate alloc;
+
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -15,7 +19,11 @@ mod constants;
 mod extract_support;
 mod formats;
 mod libarchive_support;
+pub mod xdvdfs;
 
+use crate::xdvdfs::{
+    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
+};
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
@@ -47,9 +55,6 @@ use rom_weaver_libarchive::{
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
 };
 use serde_json::{Map, Value, json};
-use xdvdfs::{
-    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
-};
 use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::Compressor as ZstdCompressor;
 

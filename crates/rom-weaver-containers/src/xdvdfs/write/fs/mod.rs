@@ -8,17 +8,13 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::blockdev::BlockDeviceWrite;
+use crate::xdvdfs::blockdev::BlockDeviceWrite;
 
 use maybe_async::maybe_async;
 
-#[cfg(feature = "wax")]
-mod remap;
 mod sector_linear;
 mod xdvdfs;
 
-#[cfg(feature = "wax")]
-pub use remap::*;
 pub use sector_linear::*;
 pub use xdvdfs::*;
 

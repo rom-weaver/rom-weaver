@@ -41,14 +41,14 @@ impl<E> Error<E> {
 impl<E: Display> Display for Error<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::IOError(ref e) => {
+            Self::IOError(e) => {
                 f.write_str("IOError: ")?;
                 e.fmt(f)
             }
             Self::SizeOutOfBounds(offset, size) => f.write_str(
                 alloc::format!("File size out of bounds: {} for size {}", offset, size).as_str(),
             ),
-            Self::SerializationFailed(ref e) => {
+            Self::SerializationFailed(e) => {
                 f.write_str("Serialization failed: ")?;
                 Display::fmt(e, f)
             }
@@ -63,7 +63,6 @@ impl<E: Display> From<Error<E>> for alloc::string::String {
     }
 }
 
-#[cfg(feature = "std")]
 impl<E: Debug + Display> std::error::Error for Error<E> {}
 
 impl<E> From<E> for Error<E> {
@@ -104,7 +103,7 @@ pub fn cmp_ignore_case_utf8(a: &str, b: &str) -> core::cmp::Ordering {
 
 #[cfg(test)]
 mod test {
-    use crate::util::cmp_ignore_case_utf8;
+    use crate::xdvdfs::util::cmp_ignore_case_utf8;
 
     #[test]
     fn test_str_ignore_case_alpha() {
