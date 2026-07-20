@@ -232,9 +232,10 @@ jobs:
 
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
-        # This catches missing direct dependencies and files absent from crates.io
-        # tarballs before release automation runs.
-        run: cargo publish --workspace --locked --dry-run
+        # Workspace tests already compile the local dependency graph. Skip cargo's
+        # per-package verification here because it resolves same-version workspace
+        # dependencies from crates.io, which may still contain the pre-change graph.
+        run: cargo publish --workspace --locked --dry-run --no-verify
 
       # `npm audit` resolves straight from the lockfiles, so this needs node but
       # no install - which is why it sits in this job rather than behind the
