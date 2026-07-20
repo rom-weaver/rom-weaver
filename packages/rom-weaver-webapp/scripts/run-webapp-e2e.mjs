@@ -31,11 +31,24 @@ const reservePort = () =>
     });
   });
 
+// The dev/preview server uses a self-signed certificate, so loopback requests must skip
+// verification. Anything that is not loopback keeps full TLS validation - a redirected or
+// misconfigured URL should fail loudly rather than silently trust an unknown certificate.
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+const shouldRejectUnauthorized = (url) => {
+  try {
+    return !LOOPBACK_HOSTNAMES.has(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+};
+
 const waitForServer = (url, timeoutMs = 30_000) =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const attempt = () => {
-      const request = https.get(url, { rejectUnauthorized: false }, (response) => {
+      const request = https.get(url, { rejectUnauthorized: shouldRejectUnauthorized(url) }, (response) => {
         response.resume();
         if ((response.statusCode || 500) < 500) {
           resolve();
@@ -53,7 +66,7 @@ const waitForServer = (url, timeoutMs = 30_000) =>
 
 const requestStatus = (url) =>
   new Promise((resolve, reject) => {
-    const request = https.get(url, { rejectUnauthorized: false }, (response) => {
+    const request = https.get(url, { rejectUnauthorized: shouldRejectUnauthorized(url) }, (response) => {
       response.resume();
       resolve(response.statusCode || 0);
     });

@@ -1,0 +1,19 @@
+name: rom-weaver CodeQL config
+
+# Rule exclusions for code scanning. Keep this list short and justified - each
+# entry is analysis we are choosing not to receive.
+query-filters:
+  # The Wii disc format fixes its AES-CBC initialization vectors: the sector
+  # hash block is encrypted with an all-zero IV, and the ticket title-key IV is
+  # the title ID zero-padded to 16 bytes. `nod` is a reader/writer for that
+  # on-disc format, so these constants are dictated by the data it parses -
+  # generating them randomly would make valid discs undecryptable. Every hit for
+  # this rule is in the vendored nod fork (`vendor/nod`, `crates/rom-weaver-nod`),
+  # which is the only AES consumer in the workspace, so excluding the rule is in
+  # practice scoped to that code.
+  #
+  # Excluded by rule rather than by path (`paths-ignore` on the nod trees) so the
+  # rest of CodeQL still analyses the fork - only this one always-false signal is
+  # dropped. Revisit if first-party code ever does its own crypto.
+  - exclude:
+      id: rust/hard-coded-cryptographic-value

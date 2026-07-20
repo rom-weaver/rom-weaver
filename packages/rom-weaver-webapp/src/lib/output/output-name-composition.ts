@@ -1,7 +1,19 @@
 const PATCH_PREFIX_SEPARATOR_REGEX = /^[\s._\-:+|/\\]+/;
 const PATCH_PREFIX_BOUNDARY_REGEX = /^[\s._\-:+|/\\()[\]]/;
 // Trailing `[label]` in a patch name (for example `super awesome [big jump by foo v1.0]`).
-const PATCH_BRACKET_LABEL_REGEX = /\[([^\]]+)\]\s*$/;
+// Index-scanned rather than matched with `/\[([^\]]+)\]\s*$/`, whose `\[` retried at
+// every bracket and made long bracket-heavy names quadratic (CodeQL js/polynomial-redos).
+// The regex matched leftmost-first, so the label opens at the first `[` that still leaves
+// a `]`-free run up to the final `]` (`[[a]` -> `[a`, `[a][b]` -> `b`).
+const readBracketLabel = (name: string): string => {
+  const trimmed = name.trimEnd();
+  const close = trimmed.length - 1;
+  if (close < 0 || trimmed[close] !== "]") return "";
+  const previousClose = trimmed.lastIndexOf("]", close - 1);
+  const open = trimmed.indexOf("[", previousClose + 1);
+  if (open < 0 || open >= close) return "";
+  return trimmed.slice(open + 1, close);
+};
 
 const stripRedundantPatchPrefix = (inputBaseName: string, patchName: string) => {
   const base = String(inputBaseName || "").trim();
@@ -29,7 +41,7 @@ const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly 
   for (const patchName of patchNames) {
     const name = String(patchName || "").trim();
     if (!name) continue;
-    const bracketLabel = name.match(PATCH_BRACKET_LABEL_REGEX)?.[1]?.trim();
+    const bracketLabel = readBracketLabel(name).trim();
     if (bracketLabel) {
       bracketLabels.push(bracketLabel);
       continue;

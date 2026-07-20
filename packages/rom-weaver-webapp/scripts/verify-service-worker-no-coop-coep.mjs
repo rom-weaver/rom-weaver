@@ -14,13 +14,26 @@ const PAGE_TIMEOUT_MS = 20000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The preview server uses a self-signed certificate, so loopback requests must skip
+// verification. Anything that is not loopback keeps full TLS validation - a redirected or
+// misconfigured URL should fail loudly rather than silently trust an unknown certificate.
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+const shouldRejectUnauthorized = (url) => {
+  try {
+    return !LOOPBACK_HOSTNAMES.has(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+};
+
 const requestHeaders = (url) =>
   new Promise((resolve, reject) => {
     const request = https.request(
       url,
       {
         method: "HEAD",
-        rejectUnauthorized: false,
+        rejectUnauthorized: shouldRejectUnauthorized(url),
       },
       (response) => {
         response.resume();

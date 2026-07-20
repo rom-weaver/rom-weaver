@@ -1,14 +1,13 @@
+import { stripFileNameQuery } from "../../lib/path-utils.ts";
+
 type FileNameValue = unknown;
 
-const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
 const LEADING_RELATIVE_SLASHES_REGEX = /^\/+/;
 const EDGE_SLASHES_REGEX = /^[/\\]+|[/\\]+$/g;
 const PATH_BASENAME_PATTERN = /^.*\//;
 const UNSAFE_RELATIVE_PATH_SEGMENTS = new Set(["", ".", ".."]);
 
 const normalizePathSeparators = (value: FileNameValue): string => String(value || "").replace(/\\/g, "/");
-
-const stripFileNameQuery = (value: FileNameValue): string => String(value || "").replace(FILE_QUERY_OR_HASH_REGEX, "");
 
 const getBaseName = (value: FileNameValue, fallback = "") => {
   const normalized = normalizePathSeparators(value);

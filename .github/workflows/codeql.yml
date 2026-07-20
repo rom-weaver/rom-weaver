@@ -55,6 +55,8 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
+          # Rule exclusions live in the config file so each carries a written reason.
+          config-file: .github/codeql/codeql-config.yml
 
       - name: Analyze
         uses: github/codeql-action/analyze@v3

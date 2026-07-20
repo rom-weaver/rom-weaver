@@ -133,8 +133,28 @@ export function createStandaloneBrowserWasiThread({
   return slot;
 }
 
+const DEFAULT_THREAD_WORKER_URL = () => new URL("./workers/browser-wasi-thread-worker.ts", import.meta.url).href;
+
+// The thread worker runs with full access to the shared wasm memory, so its URL must stay
+// on our own origin. Callers pass a build-resolved URL; anything that resolves elsewhere
+// (a `data:`/`https://evil` string threaded in from untrusted config) is rejected outright
+// rather than spawned (CodeQL js/client-side-unvalidated-url-redirection).
+const assertSameOriginWorkerUrl = (href: string): string => {
+  const origin = typeof self === "undefined" ? undefined : self.location?.origin;
+  if (!origin) return href;
+  let resolved: URL;
+  try {
+    resolved = new URL(href, origin);
+  } catch {
+    throw new Error(`thread worker URL is not a valid URL: ${href}`);
+  }
+  if (resolved.origin !== origin)
+    throw new Error(`thread worker URL must be same-origin (${origin}), got ${resolved.origin}`);
+  return resolved.href;
+};
+
 export function resolveThreadWorkerUrl(value: string | URL | undefined): string {
-  if (value instanceof URL) return value.href;
-  if (typeof value === "string" && value.trim().length > 0) return value;
-  return new URL("./workers/browser-wasi-thread-worker.ts", import.meta.url).href;
+  if (value instanceof URL) return assertSameOriginWorkerUrl(value.href);
+  if (typeof value === "string" && value.trim().length > 0) return assertSameOriginWorkerUrl(value);
+  return DEFAULT_THREAD_WORKER_URL();
 }
