@@ -17,7 +17,7 @@ write-archives = ["rom-weaver-libarchive-sys/write-archives"]
 write-extra = ["write-archives", "rom-weaver-libarchive-sys/write-extra"]
 
 [dependencies]
-rom-weaver-akv.workspace = true
+libc.workspace = true
 rom-weaver-core = { path = "../rom-weaver-core", version = "0.5.0" }
 rom-weaver-libarchive-sys = { workspace = true, default-features = false }
 tracing = { workspace = true }

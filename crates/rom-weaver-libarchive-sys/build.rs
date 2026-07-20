@@ -50,6 +50,11 @@ const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_seek_data",
     "archive_read_close",
     "archive_read_free",
+    "archive_entry_filetype",
+    "archive_entry_pathname",
+    "archive_entry_pathname_utf8",
+    "archive_entry_size",
+    "archive_entry_size_is_set",
 ];
 
 const WASM_BINDGEN_WRITE_FUNCTIONS: &[&str] = &[
@@ -70,11 +75,6 @@ const WASM_BINDGEN_WRITE_FUNCTIONS: &[&str] = &[
     "archive_write_set_filter_option",
     "archive_entry_free",
     "archive_entry_new",
-    "archive_entry_filetype",
-    "archive_entry_pathname",
-    "archive_entry_pathname_utf8",
-    "archive_entry_size",
-    "archive_entry_size_is_set",
     "archive_entry_set_filetype",
     "archive_entry_set_pathname",
     "archive_entry_set_perm",

@@ -1,16 +1,17 @@
 #[cfg(feature = "write-archives")]
 use std::ffi::c_void;
+#[cfg(feature = "write-archives")]
+use std::fs::File;
 use std::{
     borrow::Cow,
     collections::BTreeSet,
     ffi::{CStr, CString},
-    fs::{self, File},
-    io::{self, Read, Seek, Write},
+    fs,
+    io::{self, Read, Write},
     path::Path,
     ptr::{self, NonNull},
 };
 
-use rom_weaver_akv::reader::ArchiveReader as RegularArchiveReader;
 use rom_weaver_core::{Result, RomWeaverError};
 
 pub use rom_weaver_libarchive_sys as sys;
@@ -18,11 +19,22 @@ pub use rom_weaver_libarchive_sys as sys;
 use sys::{
     ARCHIVE_EOF, ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR,
     ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
-    archive, archive_errno, archive_error_string, archive_read_close, archive_read_data,
-    archive_read_free, archive_read_new, archive_read_next_header, archive_read_open_filename,
-    archive_read_support_filter_bzip2, archive_read_support_filter_gzip,
-    archive_read_support_filter_xz, archive_read_support_filter_zstd,
-    archive_read_support_format_raw,
+    archive, archive_entry, archive_entry_filetype, archive_entry_pathname,
+    archive_entry_pathname_utf8, archive_entry_size, archive_entry_size_is_set, archive_errno,
+    archive_error_string, archive_format, archive_read_close, archive_read_data, archive_read_free,
+    archive_read_new, archive_read_next_header, archive_read_open_filename,
+    archive_read_support_filter_bzip2, archive_read_support_filter_compress,
+    archive_read_support_filter_gzip, archive_read_support_filter_lzip,
+    archive_read_support_filter_lzma, archive_read_support_filter_rpm,
+    archive_read_support_filter_uu, archive_read_support_filter_xz,
+    archive_read_support_filter_zstd, archive_read_support_format_7zip,
+    archive_read_support_format_ar, archive_read_support_format_cab,
+    archive_read_support_format_cpio, archive_read_support_format_empty,
+    archive_read_support_format_iso9660, archive_read_support_format_lha,
+    archive_read_support_format_mtree, archive_read_support_format_rar,
+    archive_read_support_format_rar5, archive_read_support_format_raw,
+    archive_read_support_format_tar, archive_read_support_format_warc,
+    archive_read_support_format_zip,
 };
 #[cfg(feature = "write-archives")]
 use sys::{

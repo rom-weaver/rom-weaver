@@ -20,10 +20,6 @@
     git submodule update --init --recursive vendor/nod
     ```
 
-- `vendor/akv-0.1.0`:
-  - Local patched copy of the `akv` crate.
-  - Wired through root `Cargo.toml` `[patch.crates-io]`.
-
 - `vendor/chd-0.3.4`:
   - Local patched copy of the `chd` crate.
   - Manifest patch routes `flate2` through `libz-sys` instead of adding `zlib-rs`.

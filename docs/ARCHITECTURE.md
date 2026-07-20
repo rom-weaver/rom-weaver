@@ -63,7 +63,7 @@ the WASM build over a JSON event protocol.
 | `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-webapp/src/wasm/generated/`. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `akv`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
+| `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates

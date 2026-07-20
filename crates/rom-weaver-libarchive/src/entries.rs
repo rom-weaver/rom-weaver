@@ -249,7 +249,7 @@ where
 }
 
 fn visit_selected_regular_archive_entries_with_reader<F>(
-    mut reader: RegularArchiveReader<'static>,
+    mut reader: ReadArchive,
     format_name: &str,
     selected_indices: &BTreeSet<usize>,
     mut visit_entry: F,
@@ -396,29 +396,23 @@ where
         (Ok(_), Err(error)) => Err(error),
     }
 }
-fn open_regular_archive_reader_from_io<R: Read + Seek + Send + 'static>(
-    io: R,
-    format_name: &str,
-) -> Result<RegularArchiveReader<'static>> {
-    RegularArchiveReader::open_io_with_bufsize::<_, REGULAR_ARCHIVE_READ_BLOCK_BYTES>(io).map_err(
-        |error| RomWeaverError::Validation(format!("{format_name} archive is invalid: {error}")),
+fn open_regular_archive_reader(source: &Path, format_name: &str) -> Result<ReadArchive> {
+    let mut reader = ReadArchive::new(&format!("{format_name} archive reader allocation failed"))?;
+    reader.support_regular_archives(&format!("{format_name} archive setup failed"))?;
+    reader.open_filename(
+        source,
+        "archive source",
+        REGULAR_ARCHIVE_READ_BLOCK_BYTES,
+        &format!("{format_name} archive is invalid"),
+    )?;
+    Ok(reader)
+}
+
+fn close_regular_archive_reader(reader: ReadArchive, format_name: &str) -> Result<()> {
+    reader.close(
+        &format!("{format_name} archive close failed"),
+        &format!("{format_name} archive release failed"),
     )
-}
-
-fn open_regular_archive_reader(
-    source: &Path,
-    format_name: &str,
-) -> Result<RegularArchiveReader<'static>> {
-    open_regular_archive_reader_from_io(File::open(source)?, format_name)
-}
-
-fn close_regular_archive_reader(
-    reader: RegularArchiveReader<'static>,
-    format_name: &str,
-) -> Result<()> {
-    reader.close().map_err(|error| {
-        RomWeaverError::Validation(format!("{format_name} archive close failed: {error}"))
-    })
 }
 
 fn detect_regular_archive_format(source: &Path, format_name: &str) -> Result<i32> {

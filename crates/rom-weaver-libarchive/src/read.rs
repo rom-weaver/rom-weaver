@@ -1,5 +1,34 @@
 use super::*;
+use libc::{S_IFDIR, S_IFMT, S_IFREG, mode_t};
+use std::os::raw::c_int;
 use tracing::trace;
+
+type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
+
+const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
+    ("ar format", archive_read_support_format_ar),
+    ("cpio format", archive_read_support_format_cpio),
+    ("empty format", archive_read_support_format_empty),
+    ("lha format", archive_read_support_format_lha),
+    ("mtree format", archive_read_support_format_mtree),
+    ("tar format", archive_read_support_format_tar),
+    ("warc format", archive_read_support_format_warc),
+    ("7zip format", archive_read_support_format_7zip),
+    ("cab format", archive_read_support_format_cab),
+    ("rar format", archive_read_support_format_rar),
+    ("rar5 format", archive_read_support_format_rar5),
+    ("iso9660 format", archive_read_support_format_iso9660),
+    ("zip format", archive_read_support_format_zip),
+    ("bzip2 filter", archive_read_support_filter_bzip2),
+    ("compress filter", archive_read_support_filter_compress),
+    ("gzip filter", archive_read_support_filter_gzip),
+    ("lzip filter", archive_read_support_filter_lzip),
+    ("lzma filter", archive_read_support_filter_lzma),
+    ("xz filter", archive_read_support_filter_xz),
+    ("uu filter", archive_read_support_filter_uu),
+    ("rpm filter", archive_read_support_filter_rpm),
+    ("zstd filter", archive_read_support_filter_zstd),
+];
 
 #[derive(Clone, Copy, Debug)]
 pub enum ReadFilter {
@@ -28,6 +57,19 @@ impl ReadArchive {
         self.check_status(status, context)
     }
 
+    pub(crate) fn support_regular_archives(&mut self, context: &str) -> Result<()> {
+        for (name, support) in REGULAR_ARCHIVE_SUPPORT {
+            let status = unsafe { support(self.as_ptr()) };
+            if status != ARCHIVE_OK {
+                return Err(error_from_archive(
+                    self.as_ptr(),
+                    &format!("{context} while enabling {name}"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn support_filter(&mut self, filter: ReadFilter, context: &str) -> Result<()> {
         let status = unsafe {
             match filter {
@@ -54,13 +96,32 @@ impl ReadArchive {
     }
 
     pub fn next_header(&mut self, context: &str) -> Result<bool> {
+        Ok(self.next_entry_ptr(context)?.is_some())
+    }
+
+    pub(crate) fn next_entry(&mut self) -> io::Result<Option<ReadArchiveEntry<'_>>> {
+        let entry = self
+            .next_entry_ptr("archive read header failed")
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        Ok(entry.map(|ptr| ReadArchiveEntry { archive: self, ptr }))
+    }
+
+    pub(crate) fn format(&self) -> c_int {
+        unsafe { archive_format(self.as_ptr()) }
+    }
+
+    fn next_entry_ptr(&mut self, context: &str) -> Result<Option<NonNull<archive_entry>>> {
         let mut entry = ptr::null_mut();
         let status = unsafe { archive_read_next_header(self.as_ptr(), &mut entry) };
         if status == ARCHIVE_EOF {
-            return Ok(false);
+            return Ok(None);
         }
         self.check_status(status, context)?;
-        Ok(true)
+        NonNull::new(entry).map(Some).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "{context}: libarchive returned a null entry pointer"
+            ))
+        })
     }
 
     pub fn read_data(&mut self, buffer: &mut [u8], context: &str) -> Result<usize> {
@@ -129,6 +190,61 @@ impl ReadArchive {
     }
 }
 
+pub(crate) struct ReadArchiveEntry<'a> {
+    archive: &'a mut ReadArchive,
+    ptr: NonNull<archive_entry>,
+}
+
+impl<'a> ReadArchiveEntry<'a> {
+    fn filetype(&self) -> mode_t {
+        unsafe { archive_entry_filetype(self.ptr.as_ptr()) }
+    }
+
+    pub(crate) fn is_dir(&self) -> bool {
+        (self.filetype() & S_IFMT as mode_t) == S_IFDIR as mode_t
+    }
+
+    pub(crate) fn is_file(&self) -> bool {
+        (self.filetype() & S_IFMT as mode_t) == S_IFREG as mode_t
+    }
+
+    pub(crate) fn size(&self) -> Option<u64> {
+        if unsafe { archive_entry_size_is_set(self.ptr.as_ptr()) } == 0 {
+            return None;
+        }
+        u64::try_from(unsafe { archive_entry_size(self.ptr.as_ptr()) }).ok()
+    }
+
+    pub(crate) fn pathname_mb(&self) -> io::Result<&CStr> {
+        let pathname = unsafe { archive_entry_pathname(self.ptr.as_ptr()) };
+        if pathname.is_null() {
+            return Err(self.io_error("archive entry pathname was unavailable"));
+        }
+        Ok(unsafe { CStr::from_ptr(pathname) })
+    }
+
+    pub(crate) fn pathname_utf8(&self) -> io::Result<&str> {
+        let pathname = unsafe { archive_entry_pathname_utf8(self.ptr.as_ptr()) };
+        if pathname.is_null() {
+            return Err(self.io_error("archive entry UTF-8 pathname was unavailable"));
+        }
+        unsafe { CStr::from_ptr(pathname) }
+            .to_str()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
+
+    pub(crate) fn into_reader(self) -> ArchiveDataReader<'a> {
+        ArchiveDataReader {
+            archive: self.archive,
+            context: "archive entry read failed".to_string(),
+        }
+    }
+
+    fn io_error(&self, context: &str) -> io::Error {
+        io::Error::other(error_from_archive(self.archive.as_ptr(), context).to_string())
+    }
+}
+
 impl Drop for ReadArchive {
     fn drop(&mut self) {
         if let Some(ptr) = self.ptr.take() {
@@ -173,7 +289,7 @@ where
             )));
         }
 
-        let mut reader = RawStreamEntryReader {
+        let mut reader = ArchiveDataReader {
             archive: &mut archive,
             context: format!("{format_name} stream read failed while reading payload"),
         };
@@ -193,12 +309,12 @@ where
     }
 }
 
-struct RawStreamEntryReader<'a> {
+pub(crate) struct ArchiveDataReader<'a> {
     archive: &'a mut ReadArchive,
     context: String,
 }
 
-impl Read for RawStreamEntryReader<'_> {
+impl Read for ArchiveDataReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.archive
             .read_data(buf, &self.context)

@@ -18,7 +18,6 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index";
 const VENDORED_WORKSPACE_PACKAGES = new Set([
-  "rom-weaver-akv",
   "rom-weaver-chd-core",
   "rom-weaver-nod",
   "rom-weaver-xdvdfs",
