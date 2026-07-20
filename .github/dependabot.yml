@@ -23,7 +23,6 @@ updates:
       # The vendored forks under vendor/ are tracked against their upstream
       # fork remotes, not crates.io. Bumping them here would fight the
       # submodule/vendoring workflow described in CLAUDE.md.
-      - dependency-name: rom-weaver-chd-core
       - dependency-name: rom-weaver-xdvdfs
 
   # Two npm manifests: the root wrapper (CLI shim + commitlint/lefthook) and

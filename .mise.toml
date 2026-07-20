@@ -132,7 +132,7 @@ run = "cargo fmt --package rom-weaver-app --package rom-weaver-chd --package rom
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"
-run = "cargo clippy --workspace --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs --all-targets --no-deps -- -D warnings"
+run = "cargo clippy --workspace --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs --all-targets --no-deps -- -D warnings"
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"
@@ -188,7 +188,6 @@ description = "Find unused Rust dependencies"
 # covered; bump these paths when one of them is revendored at a new version.
 run = """cargo-machete --skip-target-dir \
   crates \
-  vendor/chd-0.3.4 \
   vendor/xdvdfs-0.8.3"""
 
 [tasks.semver-checks]
@@ -203,7 +202,7 @@ run = "cargo semver-checks check-release --workspace"
 description = "Run the Rust workspace test suite"
 # --quiet collapses the ~1400 per-test `... ok` lines into progress dots; a
 # failing test still prints its full name and panic output.
-run = "cargo test --quiet --workspace --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs"
+run = "cargo test --quiet --workspace --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs"
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
@@ -218,7 +217,7 @@ out_dir="{{ config_root }}/dist/coverage/rust"
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
 cargo llvm-cov clean --workspace
-cargo llvm-cov --workspace --exclude rom-weaver-chd-core --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs --no-report
+cargo llvm-cov --workspace --exclude rom-weaver-nod --exclude rom-weaver-xdvdfs --no-report
 cargo llvm-cov report --html --output-dir "$out_dir"
 cargo llvm-cov report --lcov --output-path "$out_dir/lcov.info"
 '''
