@@ -8,13 +8,13 @@ query-filters:
   # the title ID zero-padded to 16 bytes. `nod` is a reader/writer for that
   # on-disc format, so these constants are dictated by the data it parses -
   # generating them randomly would make valid discs undecryptable. Every hit for
-  # this rule is in the vendored nod source (`vendor/nod`,
-  # `crates/rom-weaver-containers/src/nod`),
+  # this rule is in the inlined nod source
+  # (`crates/rom-weaver-containers/src/nod`),
   # which is the only AES consumer in the workspace, so excluding the rule is in
   # practice scoped to that code.
   #
-  # Excluded by rule rather than by path (`paths-ignore` on the nod trees) so the
-  # rest of CodeQL still analyses the fork - only this one always-false signal is
-  # dropped. Revisit if first-party code ever does its own crypto.
+  # Excluded by rule rather than by path so the rest of CodeQL still analyses
+  # the inlined module - only this one always-false signal is dropped. Revisit
+  # if first-party code ever does its own crypto.
   - exclude:
       id: rust/hard-coded-cryptographic-value

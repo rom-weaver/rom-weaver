@@ -25,7 +25,7 @@ while IFS= read -r line; do
   [ -n "$line" ] || continue
   path="${line:3}"
   case "$path" in
-    vendor/nod|vendor/libarchive)
+    vendor/libarchive)
       if [ -L "$worktree_dir/$path" ]; then
         continue
       fi

@@ -13,7 +13,7 @@
 #   - runs `npm ci` at the repo root and in packages/rom-weaver-webapp
 #   - copies the built wasm artifacts from the main checkout (if present) so
 #     browser tests and the dev server work without a local wasm build
-#   - links vendor/* submodules (nod, libarchive) from the main checkout so the
+#   - links the vendor/libarchive submodule from the main checkout so the
 #     fork-tracked / cmake-built C deps need no re-init or rebuild
 #
 # The cargo target dir is NOT handled here - keep a worktree-local target;
@@ -46,13 +46,12 @@ for artifact in rom-weaver-app.wasm rom-weaver-app.wasm.br; do
 done
 
 # vendor/* submodules are gitlinks: a fresh worktree leaves them empty. Building
-# them here is slow (libarchive is a cmake C build) and nod is a source-refresh
-# checkout,
+# it here is slow (libarchive is a cmake C build),
 # so mirror the already-populated copies from the main checkout via symlink.
 # Re-runnable: skip when already a symlink, and only link an empty worktree copy
 # against a populated main copy.
 echo "setup-worktree: link vendor submodules from main checkout"
-for submodule in nod libarchive; do
+for submodule in libarchive; do
   worktree_vendor="$worktree_dir/vendor/$submodule"
   main_vendor="$main_dir/vendor/$submodule"
   if [ -L "$worktree_vendor" ]; then
@@ -76,7 +75,7 @@ done
 # submodules; use scripts/remove-worktree.sh for a dirty-worktree guard.
 echo "setup-worktree: silence vendor typechange noise (worktree-scoped)"
 git config extensions.worktreeConfig true
-for submodule in nod libarchive; do
+for submodule in libarchive; do
   git config --worktree "submodule.vendor/$submodule.ignore" all
 done
 

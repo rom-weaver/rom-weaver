@@ -182,10 +182,9 @@ description = "Find unused Rust dependencies"
 # globally. --skip-target-dir keeps it off build artifacts.
 #
 # Paths are explicit because cargo-machete walks directories rather than
-# workspace members, so a bare run also scans the vendor/nod and
-# vendor/libarchive submodules - upstream manifests we don't control and don't
-# build. The vendored crates listed here ARE workspace members, so they stay
-# covered; bump these paths when one of them is revendored at a new version.
+# workspace members, so a bare run also scans the vendor/libarchive submodule -
+# an upstream manifest we don't control and don't build. The workspace crates
+# stay covered; bump these paths if another source checkout is added.
 run = """cargo-machete --skip-target-dir \
   crates \
  """

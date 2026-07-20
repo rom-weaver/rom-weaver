@@ -6,7 +6,6 @@ members = [
     "crates/rom-weaver-core",
     "crates/rom-weaver-patches",
 ]
-exclude = ["vendor/nod"]
 resolver = "2"
 
 [workspace.package]
