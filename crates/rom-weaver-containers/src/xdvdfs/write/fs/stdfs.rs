@@ -5,10 +5,7 @@ use alloc::vec::Vec;
 use maybe_async::maybe_async;
 use std::path::{Path, PathBuf};
 
-#[cfg(not(feature = "sync"))]
-use alloc::boxed::Box;
-
-use crate::blockdev::BlockDeviceWrite;
+use crate::xdvdfs::blockdev::BlockDeviceWrite;
 
 use super::{FileEntry, FileType, Filesystem, PathVec};
 

@@ -41,6 +41,10 @@ use rom_weaver_core::{
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
+use rom_weaver_containers::xdvdfs::{
+    blockdev::{BlockDeviceWrite as XdvdfsBlockDeviceWrite, OffsetWrapper as XdvdfsOffsetWrapper},
+    write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
+};
 #[cfg(test)]
 use rom_weaver_core::{ParsedSelectionInput, parse_selection_input};
 use rom_weaver_libarchive::{
@@ -57,10 +61,6 @@ use tracing::{debug, trace, warn};
 use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 #[cfg(feature = "typescript-types")]
 use ts_rs::TS;
-use xdvdfs::{
-    blockdev::{BlockDeviceWrite as XdvdfsBlockDeviceWrite, OffsetWrapper as XdvdfsOffsetWrapper},
-    write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
-};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]

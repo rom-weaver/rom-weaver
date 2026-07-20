@@ -1,4 +1,4 @@
-use crate::layout::SECTOR_SIZE;
+use crate::xdvdfs::layout::SECTOR_SIZE;
 
 pub struct SectorAllocator {
     next_free: u32,

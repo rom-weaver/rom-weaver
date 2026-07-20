@@ -647,7 +647,8 @@ fn trim_xiso_rebuilds_and_warns_irreversible() {
     let output_file = File::open(output.path()).expect("trimmed xiso output");
     let output_reader = std::io::BufReader::new(output_file);
     let mut output_image = XdvdfsOffsetWrapper::new(output_reader).expect("offset wrapper");
-    let volume = xdvdfs::read::read_volume(&mut output_image).expect("xdvdfs volume");
+    let volume =
+        rom_weaver_containers::xdvdfs::read::read_volume(&mut output_image).expect("xdvdfs volume");
     let root_entries = volume
         .root_table
         .walk_dirent_tree(&mut output_image)

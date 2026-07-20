@@ -106,7 +106,6 @@ pub struct DirectoryEntryNode {
 /// Intended use is for building the dirent tree within some other
 /// data structure, and then creating the on-disk structure separately
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[cfg(feature = "write")]
 pub struct DirectoryEntryData {
     pub node: DirectoryEntryDiskData,
     pub name: arrayvec::ArrayString<256>,
@@ -230,7 +229,6 @@ impl DirectoryEntryDiskData {
         }
     }
 
-    #[cfg(feature = "read")]
     #[maybe_async]
     pub async fn read_data<E>(
         &self,
@@ -248,7 +246,6 @@ impl DirectoryEntryDiskData {
         Ok(())
     }
 
-    #[cfg(feature = "read")]
     #[maybe_async]
     pub async fn read_data_all<E>(
         &self,
@@ -269,7 +266,6 @@ impl DirectoryEntryDiskData {
         Ok(buf)
     }
 
-    #[cfg(all(feature = "read", feature = "std"))]
     pub fn seek_to(
         &self,
         seek: &mut impl std::io::Seek,
@@ -298,7 +294,6 @@ impl DirectoryEntryNode {
     }
 }
 
-#[cfg(feature = "write")]
 impl DirectoryEntryData {
     pub fn name_slice(&self) -> &[u8] {
         let name_len = self.node.filename_length as usize;
@@ -330,7 +325,7 @@ impl DirectoryEntryData {
         let encoded_filename_len = self.encode_name(&mut [0; 256])?;
         let mut size = 0xe + (encoded_filename_len as u32);
 
-        if size % 4 > 0 {
+        if !size.is_multiple_of(4) {
             size += 4 - size % 4;
         }
 
@@ -338,14 +333,12 @@ impl DirectoryEntryData {
     }
 }
 
-#[cfg(feature = "write")]
 impl PartialOrd for DirectoryEntryData {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-#[cfg(feature = "write")]
 impl Ord for DirectoryEntryData {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         util::cmp_ignore_case_utf8(self.name_str(), other.name_str())
@@ -367,43 +360,5 @@ impl DirectoryEntryDiskNode {
             .with_little_endian()
             .deserialize(buf)
             .map_err(|e| util::Error::SerializationFailed(e))
-    }
-}
-
-// These tests drive the async read API through futures::executor; under the
-// workspace's `sync` feature maybe-async compiles the same functions as plain
-// sync fns, so the bodies no longer typecheck. Skip them there - they still
-// run with the crate's default (async) features.
-#[cfg(all(test, not(feature = "sync")))]
-mod test {
-    use super::{DirectoryEntryDiskData, DirentAttributes, DiskRegion};
-    use futures::executor;
-
-    #[test]
-    fn test_read_file_empty() {
-        let mut data: [u8; 8] = [0; 8];
-
-        let dirent = DirectoryEntryDiskData {
-            data: DiskRegion { sector: 0, size: 0 },
-            attributes: DirentAttributes(0),
-            filename_length: 0,
-        };
-
-        let mut buf = [0; 8];
-        executor::block_on(dirent.read_data(&mut data, &mut buf)).unwrap();
-    }
-
-    #[test]
-    fn test_read_file_all_empty() {
-        let mut data: [u8; 8] = [0; 8];
-
-        let dirent = DirectoryEntryDiskData {
-            data: DiskRegion { sector: 0, size: 0 },
-            attributes: DirentAttributes(0),
-            filename_length: 0,
-        };
-
-        let data = executor::block_on(dirent.read_data_all(&mut data)).unwrap();
-        assert_eq!(data.len(), 0);
     }
 }

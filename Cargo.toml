@@ -14,7 +14,6 @@ members = [
     "crates/rom-weaver-nod",
     "crates/rom-weaver-patches",
     "crates/rom-weaver-xdelta",
-    "vendor/xdvdfs-0.8.3",
 ]
 exclude = ["vendor/nod"]
 resolver = "2"
@@ -77,6 +76,14 @@ md-5 = "0.11.0"
 nod = { package = "rom-weaver-nod", path = "crates/rom-weaver-nod", version = "0.5.0", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
 qbsdiff = "1.4.4"
 rayon = "1.11.0"
+arrayvec = { version = "0.7.2", default-features = false, features = ["std"] }
+async-trait = "0.1"
+bincode = "1.3.3"
+encoding_rs = "0.8.32"
+maybe-async = "0.2.7"
+proc-bitfield = "0.2.2"
+rand = "0.9"
+serde-big-array = "0.5.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha1 = "0.11.0"
@@ -87,7 +94,6 @@ thiserror = "2.0.17"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
 ts-rs = "12.0.1"
-xdvdfs = { package = "rom-weaver-xdvdfs", path = "vendor/xdvdfs-0.8.3", version = "0.5.0", default-features = false, features = ["std", "read", "write", "sync"] }
 zerocopy = { version = "0.8", features = ["alloc", "derive"] }
 zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }

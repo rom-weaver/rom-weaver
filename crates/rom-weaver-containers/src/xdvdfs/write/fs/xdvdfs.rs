@@ -2,12 +2,9 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::fmt::Display;
 
-#[cfg(not(feature = "sync"))]
-use alloc::boxed::Box;
-
 use maybe_async::maybe_async;
 
-use crate::{
+use crate::xdvdfs::{
     blockdev::{BlockDeviceRead, BlockDeviceWrite},
     util,
 };
@@ -19,7 +16,7 @@ where
     D: BlockDeviceRead<E> + Sized,
 {
     dev: D,
-    volume: crate::layout::VolumeDescriptor,
+    volume: crate::xdvdfs::layout::VolumeDescriptor,
     etype: core::marker::PhantomData<E>,
 }
 
@@ -29,7 +26,7 @@ where
 {
     #[maybe_async]
     pub async fn new(mut dev: D) -> Option<XDVDFSFilesystem<E, D>> {
-        let volume = crate::read::read_volume(&mut dev).await;
+        let volume = crate::xdvdfs::read::read_volume(&mut dev).await;
 
         if let Ok(volume) = volume {
             Some(Self {
@@ -48,7 +45,7 @@ where
     E: Send + Sync + Display + Debug + 'static,
 {
     fn from(value: util::Error<E>) -> Self {
-        Self::new(std::io::ErrorKind::Other, value)
+        Self::other(value)
     }
 }
 

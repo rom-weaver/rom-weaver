@@ -1,4 +1,4 @@
-use crate::{blockdev::BlockDeviceWrite, layout};
+use crate::xdvdfs::{blockdev::BlockDeviceWrite, layout};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use maybe_async::maybe_async;
@@ -114,7 +114,7 @@ where
         assert_eq!(offset, 0);
 
         let mut sector_span = size / layout::SECTOR_SIZE as u64;
-        if size % layout::SECTOR_SIZE as u64 > 0 {
+        if !size.is_multiple_of(layout::SECTOR_SIZE as u64) {
             sector_span += 1;
         }
 
@@ -163,66 +163,5 @@ impl<E> core::ops::Index<u64> for SectorLinearBlockDevice<E> {
         self.contents
             .get(&index)
             .unwrap_or(&SectorLinearBlockContents::Empty)
-    }
-}
-
-#[cfg(feature = "ciso_support")]
-pub struct CisoSectorInput<'a, E: Send + Sync, W: BlockDeviceWrite<E>, F: Filesystem<W, E>> {
-    linear: SectorLinearBlockDevice<E>,
-    fs: SectorLinearBlockFilesystem<'a, E, W, F>,
-
-    bdev_t: core::marker::PhantomData<W>,
-}
-
-#[cfg(feature = "ciso_support")]
-impl<'a, E, W, F> CisoSectorInput<'a, E, W, F>
-where
-    W: BlockDeviceWrite<E>,
-    F: Filesystem<W, E>,
-    E: Send + Sync,
-{
-    pub fn new(
-        bdev: SectorLinearBlockDevice<E>,
-        fs: SectorLinearBlockFilesystem<'a, E, W, F>,
-    ) -> Self {
-        Self {
-            linear: bdev,
-            fs,
-            bdev_t: core::marker::PhantomData,
-        }
-    }
-}
-
-#[cfg(feature = "ciso_support")]
-#[maybe_async]
-impl<E, W, F> ciso::write::SectorReader<E> for CisoSectorInput<'_, E, W, F>
-where
-    W: BlockDeviceWrite<E>,
-    F: Filesystem<W, E>,
-    E: Send + Sync,
-{
-    async fn size(&mut self) -> Result<u64, E> {
-        self.linear.len().await
-    }
-
-    async fn read_sector(&mut self, sector: usize, sector_size: u32) -> Result<Vec<u8>, E> {
-        let mut buf = alloc::vec![0; sector_size as usize];
-
-        match &self.linear[sector as u64] {
-            SectorLinearBlockContents::Empty => {}
-            SectorLinearBlockContents::RawData(data) => {
-                buf.copy_from_slice(data.as_slice());
-            }
-            SectorLinearBlockContents::File(path, sector_idx) => {
-                let bytes_read = self
-                    .fs
-                    .fs
-                    .copy_file_buf(path, &mut buf, sector_size as u64 * sector_idx)
-                    .await?;
-                assert_eq!(bytes_read, sector_size as u64);
-            }
-        };
-
-        Ok(buf)
     }
 }

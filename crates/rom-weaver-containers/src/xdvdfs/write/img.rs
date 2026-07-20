@@ -1,9 +1,9 @@
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 
-use crate::blockdev::BlockDeviceWrite;
-use crate::write::{dirtab, fs, sector};
-use crate::{layout, util};
+use crate::xdvdfs::blockdev::BlockDeviceWrite;
+use crate::xdvdfs::write::{dirtab, fs, sector};
+use crate::xdvdfs::{layout, util};
 
 use alloc::vec;
 use alloc::vec::Vec;

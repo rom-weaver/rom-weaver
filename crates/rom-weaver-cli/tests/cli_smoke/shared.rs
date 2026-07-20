@@ -21,11 +21,11 @@ pub(crate) use nod::{
         ProcessOptions as NodProcessOptions,
     },
 };
-pub(crate) use serde_json::Value;
-pub(crate) use xdvdfs::{
+pub(crate) use rom_weaver_containers::xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
     write::{fs::StdFilesystem as XdvdfsStdFilesystem, img::create_xdvdfs_image},
 };
+pub(crate) use serde_json::Value;
 
 pub(crate) fn parse_json_lines(output: &[u8]) -> Vec<Value> {
     let text = String::from_utf8(output.to_vec()).expect("utf8 stdout");

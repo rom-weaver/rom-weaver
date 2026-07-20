@@ -119,63 +119,63 @@ impl ContainerHandlerOperations for XisoContainerHandler {
         let mut listed_entries = 0usize;
         let mut listed_directories = 0usize;
         let mut completed_steps = 0usize;
-        let extract_result =
-            xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut output, |progress| {
-                match progress {
-                    xdvdfs::write::img::ProgressInfo::FileCount(count) => {
-                        listed_entries = count;
-                        let total_steps = listed_entries.saturating_add(listed_directories);
-                        emit_container_step_progress(
-                            &ContainerProgressContext {
-                                context,
-                                command: "extract",
-                                format: XISO.name,
-                                stage: "extract",
-                                thread_execution: Some(&execution),
-                            },
-                            completed_steps,
-                            total_steps,
-                            extract_progress_label.as_str(),
-                        );
-                    }
-                    xdvdfs::write::img::ProgressInfo::DirCount(count) => {
-                        listed_directories = count;
-                        let total_steps = listed_entries.saturating_add(listed_directories);
-                        emit_container_step_progress(
-                            &ContainerProgressContext {
-                                context,
-                                command: "extract",
-                                format: XISO.name,
-                                stage: "extract",
-                                thread_execution: Some(&execution),
-                            },
-                            completed_steps,
-                            total_steps,
-                            extract_progress_label.as_str(),
-                        );
-                    }
-                    xdvdfs::write::img::ProgressInfo::DirAdded(_, _)
-                    | xdvdfs::write::img::ProgressInfo::FileAdded(_, _) => {
-                        completed_steps = completed_steps.saturating_add(1);
-                        let total_steps = listed_entries.saturating_add(listed_directories);
-                        emit_container_step_progress(
-                            &ContainerProgressContext {
-                                context,
-                                command: "extract",
-                                format: XISO.name,
-                                stage: "extract",
-                                thread_execution: Some(&execution),
-                            },
-                            completed_steps,
-                            total_steps,
-                            extract_progress_label.as_str(),
-                        );
-                    }
-                    xdvdfs::write::img::ProgressInfo::DiscoveredDirectory(_)
-                    | xdvdfs::write::img::ProgressInfo::FinishedPacking => {}
-                    _ => {}
+        let extract_result = crate::xdvdfs::write::img::create_xdvdfs_image(
+            &mut source_fs,
+            &mut output,
+            |progress| match progress {
+                crate::xdvdfs::write::img::ProgressInfo::FileCount(count) => {
+                    listed_entries = count;
+                    let total_steps = listed_entries.saturating_add(listed_directories);
+                    emit_container_step_progress(
+                        &ContainerProgressContext {
+                            context,
+                            command: "extract",
+                            format: XISO.name,
+                            stage: "extract",
+                            thread_execution: Some(&execution),
+                        },
+                        completed_steps,
+                        total_steps,
+                        extract_progress_label.as_str(),
+                    );
                 }
-            });
+                crate::xdvdfs::write::img::ProgressInfo::DirCount(count) => {
+                    listed_directories = count;
+                    let total_steps = listed_entries.saturating_add(listed_directories);
+                    emit_container_step_progress(
+                        &ContainerProgressContext {
+                            context,
+                            command: "extract",
+                            format: XISO.name,
+                            stage: "extract",
+                            thread_execution: Some(&execution),
+                        },
+                        completed_steps,
+                        total_steps,
+                        extract_progress_label.as_str(),
+                    );
+                }
+                crate::xdvdfs::write::img::ProgressInfo::DirAdded(_, _)
+                | crate::xdvdfs::write::img::ProgressInfo::FileAdded(_, _) => {
+                    completed_steps = completed_steps.saturating_add(1);
+                    let total_steps = listed_entries.saturating_add(listed_directories);
+                    emit_container_step_progress(
+                        &ContainerProgressContext {
+                            context,
+                            command: "extract",
+                            format: XISO.name,
+                            stage: "extract",
+                            thread_execution: Some(&execution),
+                        },
+                        completed_steps,
+                        total_steps,
+                        extract_progress_label.as_str(),
+                    );
+                }
+                crate::xdvdfs::write::img::ProgressInfo::DiscoveredDirectory(_)
+                | crate::xdvdfs::write::img::ProgressInfo::FinishedPacking => {}
+            },
+        );
         if let Err(error) = extract_result {
             let _ = fs::remove_file(&output_path);
             return Err(RomWeaverError::Validation(format!(
