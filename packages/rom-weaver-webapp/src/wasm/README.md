@@ -1,7 +1,7 @@
 # src/wasm (browser wasm runtime)
 
-JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution. Formerly the standalone
-`rom-weaver-wasm` package; now merged into `rom-weaver-webapp` and consumed via relative imports.
+JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution,
+consumed within `rom-weaver-webapp` via relative imports.
 
 <!-- START doctoc -->
 ## Table of contents

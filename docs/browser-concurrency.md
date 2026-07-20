@@ -19,7 +19,6 @@ also requires `Atomics.waitAsync` (the page main thread may not block).
 
 - [1. WASI thread-start handshake (the "start barrier")](#1-wasi-thread-start-handshake-the-start-barrier)
 - [2. Virtual-file SharedArrayBuffer read channel](#2-virtual-file-sharedarraybuffer-read-channel)
-- [Known duplication (follow-ups, not yet shared)](#known-duplication-follow-ups-not-yet-shared)
 
 <!-- END doctoc -->
 
@@ -163,20 +162,3 @@ Status is `VIRTUAL_FILE_STATUS_OK` (0) / `VIRTUAL_FILE_STATUS_ERROR` (1).
 **Timeouts / geometry:** `VIRTUAL_FILE_PROXY_READ_TIMEOUT_MS = 12000`,
 `VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS = 8000`, atomics wait slice `100 ms`,
 chunk size clamped to `[256 KiB, 2 MiB]`.
-
----
-
-## Known duplication (follow-ups, not yet shared)
-
-These are intentionally left as-is for now; flagged so a future cleanup is deliberate:
-
-- There are **two separate** `waitForAtomicsStateChange` implementations - one in
-  `browser-wasi-thread-protocol.ts` (thread start barrier) and one in
-  `browser-opfs-io-adapters.ts` (virtual-file channel). They are **not** identical: the
-  thread one uses `Date.now()` and falls back to a single bounded `Atomics.wait`; the
-  io-adapters one uses `performance.now()` and always loops in slices, with different
-  return values. Unifying them means reconciling those semantics, so it is a separate
-  change with its own perf check - not a mechanical de-dup.
-- Read-cache geometry constants (block bytes/count) differ between the OPFS sync-handle
-  path and the virtual-blob path by design (different access patterns); see the comments
-  in `browser-opfs-io-adapters.ts`.
