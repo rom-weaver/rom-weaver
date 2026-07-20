@@ -46,7 +46,8 @@ for artifact in rom-weaver-app.wasm rom-weaver-app.wasm.br; do
 done
 
 # vendor/* submodules are gitlinks: a fresh worktree leaves them empty. Building
-# them here is slow (libarchive is a cmake C build) and nod tracks a fork remote,
+# them here is slow (libarchive is a cmake C build) and nod is a source-refresh
+# checkout,
 # so mirror the already-populated copies from the main checkout via symlink.
 # Re-runnable: skip when already a symlink, and only link an empty worktree copy
 # against a populated main copy.

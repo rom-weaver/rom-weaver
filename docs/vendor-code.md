@@ -10,6 +10,7 @@ why, and the exact steps to go back to upstream.
 
 - [The publishing constraint](#the-publishing-constraint)
 - [What is vendored](#what-is-vendored)
+- [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
   - [Going back to upstream when a release lands](#going-back-to-upstream-when-a-release-lands)
@@ -44,8 +45,8 @@ is inlined as a module inside a crate that is already published instead. See
 | Code | Form | Published as | Reason |
 | --- | --- | --- | --- |
 | `vendor/libarchive` | Git submodule | not a crate | C sources built by `rom-weaver-libarchive-sys/build.rs`, which bundles the tarball into its package |
-| `vendor/nod` | Git submodule | — | Contribution checkout for the fork remote; excluded from the workspace |
-| `crates/rom-weaver-nod` | Source copy | `rom-weaver-nod` | GameCube/Wii disc support with local changes ahead of upstream |
+| `vendor/nod` | Git submodule | — | Upstream `main` checkout used to refresh the inlined source; excluded from the workspace |
+| `crates/rom-weaver-containers/src/nod` | Inlined module | not published | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | not published | Upstream's published `write` feature forces `wax` |
 
 Everything else that was once vendored has gone back upstream: `qbsdiff` and
@@ -53,8 +54,26 @@ Everything else that was once vendored has gone back upstream: `qbsdiff` and
 is the preferred outcome whenever upstream can serve the need — inlining is the
 fallback for when it cannot, and a published fork is the last resort.
 
-`rom-weaver-nod` and `rom-weaver-libarchive-sys` are the two cases still
-republishing third-party work under the `rom-weaver-*` namespace.
+`rom-weaver-libarchive-sys` is the only remaining case republishing a
+third-party-facing package under the `rom-weaver-*` namespace.
+
+## `nod`, inlined into `rom-weaver-containers`
+
+GameCube and Wii disc support comes from [encounter/nod](https://github.com/encounter/nod)
+(MIT OR Apache-2.0). The source lives at
+`crates/rom-weaver-containers/src/nod/`, with both upstream license files beside
+it, and is exposed internally as `rom_weaver_containers::nod`.
+
+`vendor/nod` remains as the upstream `main` checkout for refreshing this copy;
+it is not a Cargo dependency. To update nod, copy `vendor/nod/nod/src/` into
+`crates/rom-weaver-containers/src/nod/`, keep the license files, rewrite its
+`crate::` paths to `crate::nod::`, and retain only the compression/threading
+features declared by `rom-weaver-containers`.
+
+The inlined module drops nod's Python bindings and OpenSSL backend because
+rom-weaver only uses the Rust disc reader/writer API. Keeping the source inside
+the already-published containers crate avoids creating a publishable
+`rom-weaver-nod` package for upstream code.
 
 ## `xdvdfs`, inlined into `rom-weaver-containers`
 

@@ -17,10 +17,6 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index";
-const VENDORED_WORKSPACE_PACKAGES = new Set([
-  "rom-weaver-nod",
-  "rom-weaver-xdvdfs",
-]);
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;
 const NO_ATTRIBUTION_FILE_RE = /(0bsd|cc0|mit[-_ ]?0|unlicense|wtfpl|public[-_ ]?domain)/i;
@@ -58,11 +54,10 @@ function loadCargoMetadata() {
 /**
  * Walk the resolve graph from the workspace members over normal + build edges,
  * skipping dev-only edges. Returns the set of reachable package ids, excluding
- * first-party workspace members but retaining vendored third-party forks.
+ * all first-party workspace members.
  */
 function resolveThirdPartyIds(metadata) {
   const workspaceIds = new Set(metadata.workspace_members);
-  const packagesById = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
   const nodesById = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
 
   const reached = new Set();
@@ -90,14 +85,7 @@ function resolveThirdPartyIds(metadata) {
     }
   }
 
-  for (const id of workspaceIds) {
-    const pkg = packagesById.get(id);
-    if (pkg !== undefined && VENDORED_WORKSPACE_PACKAGES.has(pkg.name)) {
-      reached.add(id);
-    } else {
-      reached.delete(id);
-    }
-  }
+  for (const id of workspaceIds) reached.delete(id);
   return reached;
 }
 

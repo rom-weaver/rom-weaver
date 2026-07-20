@@ -61,7 +61,7 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`). `nod` and `libarchive` are git submodules; `nod` points at a fork - push `nod` changes to the fork remote, not upstream. |
+| `vendor/` | Vendored source checkouts (`nod` for RVZ refreshes, `libarchive`). `nod` and `libarchive` are git submodules; the built nod source is inlined under `rom-weaver-containers`. |
 | `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
@@ -119,7 +119,7 @@ Patterns that matter when touching this code:
   it - so container/patch decode reads per-worker like native does, and the old
   read-on-main gates (`ROM_WEAVER_CONTAINER_MAIN_THREAD_READER` /
   `ROM_WEAVER_PATCH_MAIN_THREAD_READER`) are retired. (Lone remaining
-  read-on-main: RVZ *create* in the vendored `nod` fork.) See **Browser I/O
+  read-on-main: RVZ *create* in the inlined `nod` source.) See **Browser I/O
   paths** below for the full picture.
 - **Browser thread budgets.** "auto" is resolved on the JS side
   (`packages/rom-weaver-webapp/src/wasm/workers/browser-thread-budget.ts` and the
