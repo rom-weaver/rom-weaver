@@ -2,6 +2,11 @@
 
 `rom-weaver` vendors a small set of dependencies for reproducibility and local patching.
 
+See [`docs/vendor-code.md`](../docs/vendor-code.md) for why each one is vendored,
+how vendoring interacts with publishing to crates.io, and the steps to move each
+back to an upstream release. Not everything vendored lives here - the `xdvdfs`
+source is inlined at `crates/rom-weaver-containers/src/xdvdfs/`.
+
 ## Current vendor contents
 
 - `vendor/libarchive`:

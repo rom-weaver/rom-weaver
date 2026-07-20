@@ -51,6 +51,8 @@ Choose the guide that matches what you are trying to do.
   synchronization, cancellation, and file ownership.
 - [Mobile Safari verification](mobile-safari-verification.md): automated and
   real-device checks for WebKit, OPFS, memory pressure, and PWA behavior.
+- [Vendored third-party code](vendor-code.md): what is vendored and why, the
+  crates.io publishing constraint, and how to return each one to upstream.
 - [References](references.md): format specifications and upstream reference
   implementations.
 - [Reversible trim footer](trim-revert-footer.md)
