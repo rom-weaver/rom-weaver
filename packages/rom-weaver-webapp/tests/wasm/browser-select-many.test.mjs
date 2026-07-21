@@ -43,9 +43,12 @@ async function extractMultiRomWithSelection(resolveSelection) {
       return resolveSelection(parsed);
     });
 
-    const result = await worker.runJson(["extract", archivePath, "--out-dir", extractDir, "--threads", "1"], {
-      interactive_selection_enabled: true,
-    });
+    const result = await worker.runJson(
+      ["extract", "--input", archivePath, "--out-dir", extractDir, "--threads", "1"],
+      {
+        interactive_selection_enabled: true,
+      },
+    );
 
     captured = {
       bonusSize: await guestFileSizeOrNull(opfsHandle, joinGuestPath(extractDir, "bonus.sfc")),

@@ -206,7 +206,7 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
             }
             const outputDir = extractOutputDirPath(formatName, codecLabel);
             await runBenchmarkCommand(
-              ["extract", source.path, "--out-dir", outputDir, "--threads", String(THREAD_COUNT)],
+              ["extract", "--input", source.path, "--out-dir", outputDir, "--threads", String(THREAD_COUNT)],
               "extract",
             );
           },
@@ -226,7 +226,16 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
         async () => {
           await ensureRuntimeReady();
           await runBenchmarkCommand(
-            ["checksum", SOURCE_PATH, "--algo", algorithm, "--no-extract", "--threads", String(THREAD_COUNT)],
+            [
+              "checksum",
+              "--input",
+              SOURCE_PATH,
+              "--algo",
+              algorithm,
+              "--no-extract",
+              "--threads",
+              String(THREAD_COUNT),
+            ],
             "checksum",
           );
         },
@@ -242,7 +251,7 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
           await ensureRuntimeReady();
           const comboArgs = checksumMultiAlgorithmArgs(CHECKSUM_COMBO_ALGORITHMS);
           await runBenchmarkCommand(
-            ["checksum", SOURCE_PATH, ...comboArgs, "--no-extract", "--threads", String(THREAD_COUNT)],
+            ["checksum", "--input", SOURCE_PATH, ...comboArgs, "--no-extract", "--threads", String(THREAD_COUNT)],
             "checksum",
           );
         },
@@ -264,7 +273,7 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
               return;
             }
             await runBenchmarkCommand(
-              ["checksum", currentSource.path, "--algo", algorithm, "--threads", String(THREAD_COUNT)],
+              ["checksum", "--input", currentSource.path, "--algo", algorithm, "--threads", String(THREAD_COUNT)],
               "checksum",
             );
           },
@@ -287,7 +296,16 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
               return;
             }
             await runBenchmarkCommand(
-              ["checksum", currentSource.path, "--algo", algorithm, "--no-extract", "--threads", String(THREAD_COUNT)],
+              [
+                "checksum",
+                "--input",
+                currentSource.path,
+                "--algo",
+                algorithm,
+                "--no-extract",
+                "--threads",
+                String(THREAD_COUNT),
+              ],
               "checksum",
             );
           },
@@ -750,7 +768,17 @@ function selectedCodecCasesForFormat(formatName) {
 }
 
 function romWeaverCompressArgs({ inputPath, formatName, outputPath, threads, codecOverride = null }) {
-  const args = ["compress", inputPath, "--format", formatName, "--output", outputPath, "--threads", String(threads)];
+  const args = [
+    "compress",
+    "--input",
+    inputPath,
+    "--format",
+    formatName,
+    "--output",
+    outputPath,
+    "--threads",
+    String(threads),
+  ];
   const codec = codecOverride ?? ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT[formatName] ?? null;
   if (codec) {
     args.push("--codec", codec);

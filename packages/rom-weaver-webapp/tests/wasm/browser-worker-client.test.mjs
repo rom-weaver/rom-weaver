@@ -188,15 +188,19 @@ async function runJsonAndAssert(worker, args, command) {
 async function runCompressExtractChecksumSequence({ worker, sourcePath, archivePath, extractDir, extractedPath }) {
   await runJsonAndAssert(
     worker,
-    ["compress", sourcePath, "--format", "zip", "--output", archivePath, "--threads", "1"],
+    ["compress", "--input", sourcePath, "--format", "zip", "--output", archivePath, "--threads", "1"],
     "compress",
   );
 
-  await runJsonAndAssert(worker, ["extract", archivePath, "--out-dir", extractDir, "--threads", "1"], "extract");
+  await runJsonAndAssert(
+    worker,
+    ["extract", "--input", archivePath, "--out-dir", extractDir, "--threads", "1"],
+    "extract",
+  );
 
-  await runJsonAndAssert(worker, ["checksum", sourcePath, "--algo", "crc32", "--no-extract"], "checksum");
+  await runJsonAndAssert(worker, ["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"], "checksum");
 
-  await runJsonAndAssert(worker, ["checksum", extractedPath, "--algo", "crc32", "--no-extract"], "checksum");
+  await runJsonAndAssert(worker, ["checksum", "--input", extractedPath, "--algo", "crc32", "--no-extract"], "checksum");
 }
 
 describe("rom-weaver-wasm browser runner parity", () => {
@@ -294,7 +298,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
   it("runJson executes checksum through browser worker runner", async () => {
     await withTempFixture(async ({ sourcePath, worker }) => {
-      const result = await worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"]);
+      const result = await worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"]);
 
       expect(result.exitCode).toBe(0);
       expect(result.ok).toBe(true);
@@ -317,7 +321,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         const firstEvent = new Promise((resolve) => {
           resolveFirstEvent = resolve;
         });
-        const resultPromise = worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"], {
+        const resultPromise = worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"], {
           onEvent(event) {
             if (event?.command === "stream-test" && event.status === "running") {
               resolveFirstEvent(event);
@@ -346,7 +350,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
   it("browser client passes default threads when command args omit them", async () => {
     await withTempFixture(
       async ({ sourcePath, worker }) => {
-        const result = await worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"]);
+        const result = await worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"]);
 
         const terminal = assertRunJsonSucceeded(result, { command: "checksum" });
         expect(result.command.args.threads).toBe(3);
@@ -365,6 +369,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       async ({ sourcePath, worker }) => {
         const result = await worker.runJson([
           "checksum",
+          "--input",
           sourcePath,
           "--algo",
           "crc32",
@@ -390,6 +395,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       async ({ sourcePath, worker }) => {
         const result = await worker.runJson([
           "checksum",
+          "--input",
           sourcePath,
           "--algo",
           "crc32",
@@ -415,6 +421,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       async ({ sourcePath, worker }) => {
         const result = await worker.runJson([
           "checksum",
+          "--input",
           sourcePath,
           "--algo",
           "crc32",
@@ -439,6 +446,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       async ({ sourcePath, worker }) => {
         const result = await worker.runJson([
           "checksum",
+          "--input",
           sourcePath,
           "--algo",
           "crc32",
@@ -462,7 +470,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
   it("browser client accepts configured default threads above the default thread count", async () => {
     await withTempFixture(
       async ({ sourcePath, worker }) => {
-        const result = await worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"]);
+        const result = await worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"]);
 
         const terminal = assertRunJsonSucceeded(result, { command: "checksum" });
         expect(result.command.args.threads).toBe(8);
@@ -481,6 +489,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       const outputPath = joinGuestPath("/work", "single-mount-output.zip");
       const result = await worker.runJson([
         "compress",
+        "--input",
         sourcePath,
         "--format",
         "zip",
@@ -507,7 +516,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       const nestedSourcePath = joinGuestPath(dir, "roms", "input.bin");
       await writeGuestFile(opfsHandle, nestedSourcePath, toBytes("nested guest fixture"));
 
-      const result = await worker.runJson(["checksum", nestedSourcePath, "--algo", "crc32", "--no-extract"]);
+      const result = await worker.runJson(["checksum", "--input", nestedSourcePath, "--algo", "crc32", "--no-extract"]);
 
       assertRunJsonSucceeded(result, {
         command: "checksum",
@@ -520,7 +529,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       let streamedTraceEvents = 0;
       let streamedTraceLines = 0;
       const result = await worker.runJson(
-        ["--log-level", "trace", "checksum", sourcePath, "--algo", "crc32", "--no-extract"],
+        ["--log-level", "trace", "checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"],
         {
           onTraceEvent() {
             streamedTraceEvents += 1;
@@ -599,7 +608,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         const canUseThreadedWasm = typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true;
         expect(init.threaded).toBe(canUseThreadedWasm);
         expect(init.wasmUrl).toMatch(/rom-weaver-app(?:-threaded)?\.wasm/);
-        const result = await worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"]);
+        const result = await worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"]);
 
         assertRunJsonSucceeded(result, {
           command: "checksum",
@@ -636,6 +645,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
         const result = await worker.runJson([
           "checksum",
+          "--input",
           sourcePath,
           "--algo",
           "crc32",
@@ -670,6 +680,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         const resultPromise = worker.runJson(
           [
             "checksum",
+            "--input",
             sourcePath,
             "--algo",
             "crc32",
@@ -757,6 +768,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
           const resultPromise = worker.runJson(
             [
               "compress",
+              "--input",
               sourcePath,
               "--format",
               "7z",
@@ -792,6 +804,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
           expect(await getGuestFileSize(opfsHandle, archivePath)).toBeGreaterThan(0);
           const extractResult = await worker.runJson([
             "extract",
+            "--input",
             archivePath,
             "--out-dir",
             extractDir,
@@ -842,6 +855,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
           const compressResult = await worker.runJson([
             "compress",
+            "--input",
             sourcePath,
             "--format",
             "7z",
@@ -859,6 +873,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
           const extractResult = await worker.runJson([
             "extract",
+            "--input",
             archivePath,
             "--out-dir",
             extractDir,
@@ -907,6 +922,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
           const result = await worker.runJson(
             [
               "compress",
+              "--input",
               sourcePath,
               "--format",
               "7z",
@@ -953,6 +969,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
           const extractResult = await worker.runJson([
             "extract",
+            "--input",
             archivePath,
             "--out-dir",
             extractDir,
@@ -1003,6 +1020,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
           const threadedChecksumArgs = [
             "checksum",
+            "--input",
             sourcePath,
             "--algo",
             "crc32",
@@ -1067,6 +1085,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
 
           const checksumArgs = [
             "checksum",
+            "--input",
             sourcePath,
             "--algo",
             "crc32",
@@ -1165,6 +1184,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
             const resolvedCodec = codec === "store" ? codec : `${codec}:6`;
             const command = [
               "compress",
+              "--input",
               sourcePath,
               "--format",
               "7z",
@@ -1271,9 +1291,12 @@ describe("rom-weaver-wasm browser runner parity", () => {
           { command: "patch-apply" },
         );
 
-        assertRunJsonSucceeded(await worker.runJson(["checksum", appliedPath, "--algo", "crc32", "--no-extract"]), {
-          command: "checksum",
-        });
+        assertRunJsonSucceeded(
+          await worker.runJson(["checksum", "--input", appliedPath, "--algo", "crc32", "--no-extract"]),
+          {
+            command: "checksum",
+          },
+        );
       });
     },
     45 * 60 * 1000,
@@ -1288,7 +1311,7 @@ describe("rom-weaver-wasm browser worker client parity", () => {
         expect(init.threaded).toBe(canUseThreadedWasm);
         expect(init.wasmUrl).toMatch(/rom-weaver-app(?:-threaded)?\.wasm/);
         let streamedEvents = 0;
-        const result = await worker.runJson(["checksum", sourcePath, "--algo", "crc32", "--no-extract"], {
+        const result = await worker.runJson(["checksum", "--input", sourcePath, "--algo", "crc32", "--no-extract"], {
           onEvent() {
             streamedEvents += 1;
           },
@@ -1343,7 +1366,7 @@ describe("rom-weaver-wasm browser worker client parity", () => {
     const client = createBrowserWorkerClient();
     try {
       await expect(
-        client.runJson(["checksum", "/work/does-not-exist.bin", "--algo", "crc32", "--no-extract"]),
+        client.runJson(["checksum", "--input", "/work/does-not-exist.bin", "--algo", "crc32", "--no-extract"]),
       ).rejects.toMatchObject({
         kind: "worker",
       });
@@ -1394,8 +1417,8 @@ describe("rom-weaver-wasm browser worker client parity", () => {
       await writeGuestFile(opfsHandle, sourceBPath, toBytes("parallel fixture b"));
 
       const [resultA, resultB] = await Promise.all([
-        worker.runJson(["checksum", sourceAPath, "--algo", "crc32", "--no-extract"]),
-        worker.runJson(["checksum", sourceBPath, "--algo", "crc32", "--no-extract"]),
+        worker.runJson(["checksum", "--input", sourceAPath, "--algo", "crc32", "--no-extract"]),
+        worker.runJson(["checksum", "--input", sourceBPath, "--algo", "crc32", "--no-extract"]),
       ]);
 
       for (const result of [resultA, resultB]) {

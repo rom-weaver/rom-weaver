@@ -109,12 +109,15 @@ describe("opfs async proxy (end-to-end)", () => {
         await writeGuestFile(opfsHandle, sourcePath, payload);
 
         assertRunJsonSucceeded(
-          await runJson(["compress", sourcePath, "--format", "zip", "--output", zipPath, "--threads", "2"]),
+          await runJson(["compress", "--input", sourcePath, "--format", "zip", "--output", zipPath, "--threads", "2"]),
           { command: "compress" },
         );
-        assertRunJsonSucceeded(await runJson(["extract", zipPath, "--out-dir", extractDir, "--threads", "2"]), {
-          command: "extract",
-        });
+        assertRunJsonSucceeded(
+          await runJson(["extract", "--input", zipPath, "--out-dir", extractDir, "--threads", "2"]),
+          {
+            command: "extract",
+          },
+        );
 
         // The extracted file (written by worker threads through the proxy) matches the source bytes.
         const extracted = await readGuestFile(opfsHandle, joinGuestPath(extractDir, "payload.bin"));

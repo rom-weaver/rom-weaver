@@ -81,7 +81,18 @@ const ensureArchive = (output, format, inputs) => {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   run(
     CLI,
-    ["compress", ...inputs, "--format", format, "--output", output, "--level", "min", "--threads", "4"],
+    [
+      "compress",
+      ...inputs.flatMap((input) => ["--input", input]),
+      "--format",
+      format,
+      "--output",
+      output,
+      "--level",
+      "min",
+      "--threads",
+      "4",
+    ],
     `Creating ${path.basename(output)}`,
   );
 };

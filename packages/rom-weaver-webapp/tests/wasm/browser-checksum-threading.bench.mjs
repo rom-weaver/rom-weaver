@@ -79,6 +79,7 @@ describe("rom-weaver-wasm benchmark parity with python bench-checksum-threading"
                 String(startBytes),
                 "--length",
                 String(sizeBytes),
+                "--input",
                 SOURCE_PATH,
               ]),
             );

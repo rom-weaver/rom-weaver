@@ -194,7 +194,7 @@ function commandArgsToRunRequest(args) {
 
 function probeArgs(parsed) {
   return {
-    input: requirePositional(parsed, 0, "probe source"),
+    input: requireOptionValue(parsed, "input"),
     ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
     ...filterFlags(parsed),
     ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
@@ -204,7 +204,7 @@ function probeArgs(parsed) {
 
 function compressArgs(parsed) {
   return {
-    input: parsed.positionals,
+    input: readOptionValues(parsed, "input"),
     output: requireOptionValue(parsed, "output"),
     ...(readOptionalValue(parsed, "format") ? { format: readOptionalValue(parsed, "format") } : {}),
     ...(readOptionValues(parsed, "codec").length ? { codec: readOptionValues(parsed, "codec") } : {}),
@@ -215,7 +215,7 @@ function compressArgs(parsed) {
 function extractArgs(parsed) {
   return {
     output: requireOptionValue(parsed, "out-dir"),
-    input: requirePositional(parsed, 0, "extract source"),
+    input: requireOptionValue(parsed, "input"),
     ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
     ...filterFlags(parsed),
     ...(readOptionValues(parsed, "checksum").length ? { checksum: readOptionValues(parsed, "checksum") } : {}),
@@ -229,7 +229,7 @@ function extractArgs(parsed) {
 function checksumArgs(parsed) {
   return {
     algo: readOptionValues(parsed, "algo"),
-    input: requirePositional(parsed, 0, "checksum source"),
+    input: requireOptionValue(parsed, "input"),
     ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
     ...filterFlags(parsed),
     ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
@@ -377,7 +377,6 @@ function parseCommandTokens(args, commandIndex) {
   const flags = new Set();
   const flagCounts = new Map();
   const options = new Map();
-  const positionals = [];
 
   for (let index = 0; index < args.length; index += 1) {
     if (index === commandIndex) {
@@ -400,7 +399,6 @@ function parseCommandTokens(args, commandIndex) {
       continue;
     }
     if (!raw.startsWith("--")) {
-      if (index > commandIndex) positionals.push(raw);
       continue;
     }
 
@@ -428,7 +426,7 @@ function parseCommandTokens(args, commandIndex) {
     options.set(name, values);
   }
 
-  return { flags, flagCounts, options, positionals };
+  return { flags, flagCounts, options };
 }
 
 function readOptionValues(parsed, name) {
@@ -480,12 +478,6 @@ function requireOptionValue(parsed, name) {
   return value;
 }
 
-function requirePositional(parsed, index, label) {
-  const value = parsed.positionals[index];
-  if (!value) throw new Error(`missing ${label}`);
-  return value;
-}
-
 function errorMessage(error) {
   if (!error) return "";
   if (typeof error === "string") return error;
@@ -518,7 +510,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
 
   const compressEvents = [];
   const compressResult = await runJson(
-    ["compress", sourcePath, "--format", "zip", "--output", archivePath, "--threads", "1"],
+    ["compress", "--input", sourcePath, "--format", "zip", "--output", archivePath, "--threads", "1"],
     {
       onEvent(event) {
         compressEvents.push(event);
@@ -536,6 +528,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
   const sevenZCompressResult = await runJson(
     [
       "compress",
+      "--input",
       sevenZSourcePath,
       "--format",
       "7z",
@@ -589,7 +582,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
   ).toBe(false);
 
   const extractEvents = [];
-  const extractResult = await runJson(["extract", archivePath, "--out-dir", extractDir, "--threads", "1"], {
+  const extractResult = await runJson(["extract", "--input", archivePath, "--out-dir", extractDir, "--threads", "1"], {
     onEvent(event) {
       extractEvents.push(event);
     },
@@ -686,20 +679,20 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
   await writeGuestFile(opfsHandle, modifiedPath, toBytes("a1XYZf!!!"));
 
   assertRunJsonSucceeded(
-    await runJson(["compress", chdSourcePath, "--format", "chd", "--output", chdPath, "--threads", "1"]),
+    await runJson(["compress", "--input", chdSourcePath, "--format", "chd", "--output", chdPath, "--threads", "1"]),
     { command: "compress" },
   );
-  assertRunJsonSucceeded(await runJson(["probe", chdPath, "--no-extract"]), { command: "probe" });
-  assertRunJsonSucceeded(await runJson(["extract", chdPath, "--out-dir", chdExtractDir, "--threads", "1"]), {
+  assertRunJsonSucceeded(await runJson(["probe", "--input", chdPath, "--no-extract"]), { command: "probe" });
+  assertRunJsonSucceeded(await runJson(["extract", "--input", chdPath, "--out-dir", chdExtractDir, "--threads", "1"]), {
     command: "extract",
   });
 
   assertRunJsonSucceeded(
-    await runJson(["compress", sourcePath, "--format", "zip", "--output", zipPath, "--threads", "1"]),
+    await runJson(["compress", "--input", sourcePath, "--format", "zip", "--output", zipPath, "--threads", "1"]),
     { command: "compress" },
   );
-  assertRunJsonSucceeded(await runJson(["probe", zipPath, "--no-extract"]), { command: "probe" });
-  assertRunJsonSucceeded(await runJson(["extract", zipPath, "--out-dir", zipExtractDir, "--threads", "1"]), {
+  assertRunJsonSucceeded(await runJson(["probe", "--input", zipPath, "--no-extract"]), { command: "probe" });
+  assertRunJsonSucceeded(await runJson(["extract", "--input", zipPath, "--out-dir", zipExtractDir, "--threads", "1"]), {
     command: "extract",
   });
 
@@ -745,12 +738,13 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
   }
 
   assertRunJsonSucceeded(
-    await runJson(["compress", sourcePath, "--format", "7z", "--output", sevenZPath, "--threads", "1"]),
+    await runJson(["compress", "--input", sourcePath, "--format", "7z", "--output", sevenZPath, "--threads", "1"]),
     { command: "compress" },
   );
   assertRunJsonSucceeded(
     await runJson([
       "compress",
+      "--input",
       sourcePath,
       "--format",
       "7z",
@@ -765,11 +759,11 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
   );
 
   assertRunJsonSucceeded(
-    await runJson(["extract", sevenZPath, "--out-dir", sevenZDefaultExtractDir, "--threads", "1"]),
+    await runJson(["extract", "--input", sevenZPath, "--out-dir", sevenZDefaultExtractDir, "--threads", "1"]),
     { command: "extract" },
   );
   assertRunJsonSucceeded(
-    await runJson(["extract", sevenZLzma2Path, "--out-dir", sevenZLzma2ExtractDir, "--threads", "1"]),
+    await runJson(["extract", "--input", sevenZLzma2Path, "--out-dir", sevenZLzma2ExtractDir, "--threads", "1"]),
     { command: "extract" },
   );
 
