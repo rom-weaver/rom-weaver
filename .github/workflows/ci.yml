@@ -237,7 +237,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node rust ripgrep cargo-deny cargo-machete
+          tools: node rust ripgrep cargo-deny cargo-machete nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
 
@@ -369,7 +369,7 @@ jobs:
       # vendored libarchive host build; no brew installs needed.
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: rust
+          tools: rust nextest
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
 
@@ -396,6 +396,14 @@ jobs:
     if: github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
+      # The mise legs get this from .mise.toml's [env]; this leg bypasses mise.
+      # Incremental artifacts only bloat the rust-cache save.
+      CARGO_INCREMENTAL: "0"
+      # MSVC debug info (PDBs, link.exe /DEBUG) is the priciest part of a
+      # Windows debug build. Line tables keep file:line in test backtraces
+      # while skipping the bulk of it. Applies to the test profile via its
+      # dev-profile inheritance; local builds are untouched.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -423,11 +431,21 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      # Same version as the .mise.toml pin; this leg cannot use mise.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.140
+
       # The runner image ships cmake and MSVC + LLVM, which is everything the
       # vendored libarchive build needs - the npm platform publish builds this
-      # same graph with no extra installs.
+      # same graph with no extra installs. nextest does not execute doctests,
+      # so those run as a separate cargo test --doc pass, same as the
+      # test-rust mise task.
       - name: Rust tests
-        run: cargo test --quiet --workspace --locked
+        run: cargo nextest run --workspace --locked
+
+      - name: Rust doc tests
+        run: cargo test --quiet --doc --workspace --locked
 
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.

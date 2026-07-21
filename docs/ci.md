@@ -109,9 +109,17 @@ security ── advisories (warn only, always green)
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
   the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
-  release jobs already prove this route on the same image. No wasm leg:
+  release jobs already prove this route on the same image. Because it bypasses
+  mise it re-declares `CARGO_INCREMENTAL=0` itself, and it trims MSVC debug
+  info to line tables (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`) - PDB
+  generation is the priciest part of a Windows debug build. No wasm leg:
   building the wasm module on Windows is unsupported until the bash compiler
   shims have a native counterpart.
+
+  The test run phase uses cargo-nextest on every platform leg (the mise legs
+  through the `test-rust` task, Windows via `taiki-e/install-action` at the
+  same pinned version). nextest does not execute doctests, so each leg runs a
+  separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`rust`** is an aggregator: it fails unless the four jobs above succeeded. Its
   only purpose is to present one stable check name (`Rust`) while the work
   runs in parallel, so branch protection would have a single thing to require.
