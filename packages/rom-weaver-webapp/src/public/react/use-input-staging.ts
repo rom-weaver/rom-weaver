@@ -60,8 +60,8 @@ const buildFinalRomInputRow = ({
 }) => {
   const info = resolveRowInfo(rawInfo);
   const id = info.id || getInputKey(inputs[index] as BinarySource, inputs);
-  const existing =
-    current.find((entry) => entry.id === id) || current.find((entry) => entry.order === (info.order ?? index));
+  const byId = new Map(current.map((entry) => [entry.id, entry]));
+  const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
   return createRomInputRow({
     ...existing,
     archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,

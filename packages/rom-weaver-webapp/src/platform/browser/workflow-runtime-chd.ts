@@ -70,7 +70,7 @@ const getChdExtractedOutputName = ({
     normalizeEntryPath(entry.path || entry.fileName) === normalizeEntryPath(primaryFile.path || primaryFile.fileName);
   if (isPrimaryDataOutput && outputName) return stripPrimaryChdTrackSuffix(outputName);
   if (isPrimaryDataOutput && shouldSplitBin)
-    return stripPrimaryChdTrackSuffix(normalizedFileName || entry.fileName || "");
+    return stripPrimaryChdTrackSuffix(normalizedFileName || entry.fileName || "") || directOutputFileName || fileName;
   if (isPrimaryDataOutput && !shouldSplitBin && outputName) return outputName;
   return normalizedFileName || entry.fileName || directOutputFileName || fileName;
 };
