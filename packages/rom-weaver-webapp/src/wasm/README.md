@@ -77,6 +77,32 @@ Runtime behavior:
 - Browser picker handles/files should be staged into OPFS before `run()`.
 - Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
 - Dynamic files created during a run are flushed back to OPFS after `_start()` returns.
+- WASI argv0 is fixed to `rom-weaver`; constructor-level `program`, `argv0`, and `env` configuration is not supported.
+- Use the second argument to `run()` or `runJson()` for per-run `env` values when a command needs a supported runtime knob.
+
+Format-specific creation metadata belongs on the typed command. For example,
+SOLID's extended seven-string header can be requested without ambient
+environment variables:
+
+```js
+await runner.runJson({
+  type: 'patch',
+  args: {
+    type: 'create',
+    args: {
+      original: '/work/original.sfc',
+      modified: '/work/translated.sfc',
+      output: '/work/translation.solid',
+      format: 'solid',
+      solid_system: 'SNES',
+      solid_game: 'Example Game',
+      solid_hack: 'English Translation',
+      solid_version: '1.0',
+      solid_author: 'Example Team',
+    },
+  },
+});
+```
 
 ## Dedicated browser worker client example
 

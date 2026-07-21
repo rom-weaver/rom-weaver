@@ -12,13 +12,24 @@ overrides. Most runtime numbers and booleans are parsed by
 <!-- START doctoc -->
 ## Table of contents
 
+- [Command-scoped configuration](#command-scoped-configuration)
 - [Runtime knobs](#runtime-knobs)
-- [Solid-patch metadata (`patch create --format solid`)](#solid-patch-metadata-patch-create---format-solid)
 - [Test / build-only knobs](#test--build-only-knobs)
-- [Browser / PWA runtime config (`window.*` globals)](#browser--pwa-runtime-config-window-globals)
+- [Browser / PWA runtime handles (`window.*` globals)](#browser--pwa-runtime-handles-window-globals)
 - [Webapp build/test/bench tooling (`*.mjs`)](#webapp-buildtestbench-tooling-mjs)
 
 <!-- END doctoc -->
+
+## Command-scoped configuration
+
+Patch metadata and browser command arguments are command inputs, not ambient
+environment configuration. SOLID metadata is supplied with the
+`patch create --solid-*` flags documented in [CLI usage](cli.md), or with the
+corresponding `solid_*` fields on a typed WASM `PatchCreateCommand`.
+
+The browser OPFS runner likewise has no constructor-level `program`, `argv0`,
+or `env` options. WASI argv0 is always `rom-weaver`. A command may still supply
+`env` in its per-run options when it needs one of the runtime knobs below.
 
 ## Runtime knobs
 
@@ -30,16 +41,6 @@ overrides. Most runtime numbers and booleans are parsed by
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1–2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
 | `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
 
-## Solid-patch metadata (`patch create --format solid`)
-
-These eight strings are currently the **only** way to populate Solid patch
-header metadata - there is no equivalent CLI flag. Read in
-`crates/rom-weaver-patches/src/solid.rs`.
-
-`ROM_WEAVER_SOLID_GAME`, `ROM_WEAVER_SOLID_HACK`, `ROM_WEAVER_SOLID_VERSION`,
-`ROM_WEAVER_SOLID_AUTHOR`, `ROM_WEAVER_SOLID_CONTACT`, `ROM_WEAVER_SOLID_COMMENT`,
-`ROM_WEAVER_SOLID_SYSTEM`, `ROM_WEAVER_SOLID_PATCH_INFO7`.
-
 ## Test / build-only knobs
 
 Not for production use.
@@ -50,16 +51,13 @@ Not for production use.
 | `ROM_WEAVER_TEST_TMPDIR` | container test harness | Overrides the temp dir used by container tests. |
 | `ROM_WEAVER_WASI_THREADS` | crate `build.rs` scripts | Forces the `rom_weaver_wasi_threads` cfg on (otherwise gated on the `wasm32-wasip1-threads` target). |
 
-## Browser / PWA runtime config (`window.*` globals)
+## Browser / PWA runtime handles (`window.*` globals)
 
-> **Not env vars:** these are `window` globals injected into / exposed by the
-> webapp at runtime (page-level config and diagnostic handles), **not** process
-> environment variables.
+> **Not env vars:** these are diagnostic and service-worker handles exposed by
+> the webapp at runtime, **not** process environment variables.
 
 | Global | Direction | Set/read at | Purpose |
 | --- | --- | --- | --- |
-| `window.ROM_WEAVER_APP_CONFIG` | read by app | `webapp/webapp.ts` | Page-injected `WebAppConfig` consumed at startup (empty object if absent). |
-| `window.ROM_WEAVER_APP_BOOTSTRAP` | read by app | `webapp/webapp.ts` | Bootstrap hooks (`markMounted`, `showError`) the host page provides. |
 | `window.ROM_WEAVER_CONSOLE_LOGS` | exposed by app | `webapp/console-log-capture.ts` | Console-log capture API (`getReport`/`copy`/`clear`/…) for debugging. |
 | `window.ROM_WEAVER_SERVICE_WORKER` | exposed by app | `webapp/webapp.ts` | Service-worker cache controls (`forceCacheAndReload`/`getState`/…). |
 | `window.ROM_WEAVER_BROWSER_DIAGNOSTICS` | exposed by app | `webapp/browser-runtime-diagnostics.ts` | Browser runtime diagnostics handle. |

@@ -125,6 +125,25 @@ rom-weaver patch create \
   --output release.bps
 ```
 
+For SOLID patches, `--solid-system`, `--solid-game`, and `--solid-hack`
+override the default three-string header metadata. Supplying
+`--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment`
+selects the seven-string extended header automatically; use
+`--solid-extended` when the extended fields should intentionally remain empty.
+These options require SOLID output and cannot be combined with `--plan`.
+
+```bash
+rom-weaver patch create \
+  --original original.sfc \
+  --modified translated.sfc \
+  --output translation.solid \
+  --solid-system SNES \
+  --solid-game "Example Game" \
+  --solid-hack "English Translation" \
+  --solid-version 1.0 \
+  --solid-author "Example Team"
+```
+
 Extract a container and checksum a ROM:
 
 ```bash
