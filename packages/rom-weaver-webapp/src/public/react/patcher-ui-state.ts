@@ -66,6 +66,20 @@ type RomInputInfoState = {
   checksumTiming: string;
 };
 
+const normalizeRomProbe = (value: JsonValue | object | null | undefined): ChecksumRomProbe | undefined => {
+  if (!isRecord(value)) return undefined;
+  const trim = isRecord(value.trim) ? value.trim : {};
+  return {
+    trim: {
+      detected: trim.detected === true,
+      mode: typeof trim.mode === "string" ? trim.mode : undefined,
+      preservedDownloadPlayCert:
+        typeof trim.preservedDownloadPlayCert === "boolean" ? trim.preservedDownloadPlayCert : undefined,
+      trimmedInputBytes: typeof trim.trimmedInputBytes === "number" ? trim.trimmedInputBytes : undefined,
+    },
+  };
+};
+
 type ArchivePathEntryState = {
   fileName: string;
   kind?: string;
@@ -343,8 +357,6 @@ const normalizePatcherUiState = (
     fallbackChecksumTiming = "",
   ): RomInputInfoState => {
     const source = isRecord(info) ? info : {};
-    const romProbe = isRecord(source.romProbe) ? source.romProbe : {};
-    const trim = isRecord(romProbe.trim) ? romProbe.trim : {};
     const checksumVariants = Array.isArray(source.checksumVariants)
       ? source.checksumVariants.filter(
           (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
@@ -359,17 +371,7 @@ const normalizePatcherUiState = (
       fileName: typeof source.fileName === "string" ? source.fileName : "",
       md5: typeof source.md5 === "string" ? source.md5 : "",
       romInfo: typeof source.romInfo === "string" ? source.romInfo : "",
-      romProbe: isRecord(source.romProbe)
-        ? {
-            trim: {
-              detected: trim.detected === true,
-              mode: typeof trim.mode === "string" ? trim.mode : undefined,
-              preservedDownloadPlayCert:
-                typeof trim.preservedDownloadPlayCert === "boolean" ? trim.preservedDownloadPlayCert : undefined,
-              trimmedInputBytes: typeof trim.trimmedInputBytes === "number" ? trim.trimmedInputBytes : undefined,
-            },
-          }
-        : undefined,
+      romProbe: normalizeRomProbe(source.romProbe),
       romType: isRecord(source.romType)
         ? {
             discFormat: typeof source.romType.discFormat === "string" ? source.romType.discFormat : undefined,

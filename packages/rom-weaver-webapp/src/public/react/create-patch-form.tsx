@@ -36,6 +36,21 @@ import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
+
+const finishCreateRoleStaging = (
+  role: "modified" | "original",
+  roleGeneration: number,
+  isCurrentStaging: () => boolean,
+  isCurrentRoleStaging: (role: "modified" | "original", roleGeneration: number) => boolean,
+  commit: () => void,
+  clearProgress: () => void,
+) => {
+  if (!isCurrentStaging()) return false;
+  if (!isCurrentRoleStaging(role, roleGeneration)) return true;
+  commit();
+  clearProgress();
+  return true;
+};
 import {
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
@@ -527,42 +542,43 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       if (!changed) return true;
       if (!source) return true;
       await enqueueSourceStage(role, setSource);
-      if (!isCurrentStaging()) return false;
-      if (isCurrentRoleStaging(role, roleGeneration)) {
-        commit();
-        clearProgressForStage("input");
+      return finishCreateRoleStaging(role, roleGeneration, isCurrentStaging, isCurrentRoleStaging, commit, () =>
+        clearProgressForStage("input"),
+      );
+    };
+    let activeRole: "modified" | "original" | null = null;
+    const stageCreateRoles = async () => {
+      if (originalChanged && original) {
+        activeRole = "original";
+        const originalStaged = await stageCreateRole(
+          "original",
+          originalChanged,
+          original,
+          originalGeneration,
+          () => activeWorkflow.setOriginal(original),
+          () => setOriginalState(activeWorkflow.getOriginal()),
+        );
+        if (!originalStaged) return false;
+        activeRole = null;
+      }
+      if (modifiedChanged && modified) {
+        activeRole = "modified";
+        const modifiedStaged = await stageCreateRole(
+          "modified",
+          modifiedChanged,
+          modified,
+          modifiedGeneration,
+          () => activeWorkflow.setModified(modified),
+          () => setModifiedState(activeWorkflow.getModified()),
+        );
+        if (!modifiedStaged) return false;
+        activeRole = null;
       }
       return true;
     };
     const finishStaging = async () => {
-      let activeRole: "modified" | "original" | null = null;
       try {
-        if (originalChanged && original) {
-          activeRole = "original";
-          const originalStaged = await stageCreateRole(
-            "original",
-            originalChanged,
-            original,
-            originalGeneration,
-            () => activeWorkflow.setOriginal(original),
-            () => setOriginalState(activeWorkflow.getOriginal()),
-          );
-          if (!originalStaged) return;
-          activeRole = null;
-        }
-        if (modifiedChanged && modified) {
-          activeRole = "modified";
-          const modifiedStaged = await stageCreateRole(
-            "modified",
-            modifiedChanged,
-            modified,
-            modifiedGeneration,
-            () => activeWorkflow.setModified(modified),
-            () => setModifiedState(activeWorkflow.getModified()),
-          );
-          if (!modifiedStaged) return;
-          activeRole = null;
-        }
+        if (!(await stageCreateRoles())) return;
       } catch (error) {
         const normalizedError = error instanceof Error ? error : new Error(String(error));
         const code = getErrorCode(normalizedError);

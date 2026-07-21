@@ -225,6 +225,70 @@ const downloadPendingOutput = async ({
   }
 };
 
+const handleApplyPrimaryGate = async ({
+  activeSettings,
+  applyQueueBlocked,
+  busy,
+  canQueueApply,
+  canStartApply,
+  cancelActiveOperation,
+  clearActiveApplyProgress,
+  downloadOutput,
+  effectiveResolvedOutputName,
+  hasPendingDownload,
+  lifecycle,
+  onError,
+  pendingDownloadFileName,
+  pendingDownloadFileNameRef,
+  pendingDownloadResult,
+  setOutputErrorMessage,
+}: {
+  activeSettings: ApplyPatchFormSettings;
+  applyQueueBlocked: boolean;
+  busy: boolean;
+  canQueueApply: boolean;
+  canStartApply: boolean;
+  cancelActiveOperation: () => void;
+  clearActiveApplyProgress: () => void;
+  downloadOutput: ApplyRunWorkflow["downloadOutput"];
+  effectiveResolvedOutputName: string;
+  hasPendingDownload: boolean;
+  lifecycle: ApplyRunLifecycle;
+  onError?: (error: Error) => void;
+  pendingDownloadFileName: string | null;
+  pendingDownloadFileNameRef: MutableRefObject<string | null>;
+  pendingDownloadResult: ApplyWorkflowResult | null;
+  setOutputErrorMessage: SessionState["setOutputErrorMessage"];
+}) => {
+  if (busy) {
+    lifecycle.setApplyQueued(false);
+    cancelActiveOperation();
+    clearActiveApplyProgress();
+    return true;
+  }
+  if (pendingDownloadResult && hasPendingDownload) {
+    await downloadPendingOutput({
+      activeSettings,
+      downloadOutput,
+      fileName:
+        pendingDownloadFileNameRef.current || pendingDownloadFileName || effectiveResolvedOutputName || "output",
+      onError,
+      output: pendingDownloadResult,
+      setOutputErrorMessage,
+    });
+    return true;
+  }
+  if (applyQueueBlocked) {
+    lifecycle.setApplyQueued(false);
+    return true;
+  }
+  if (canQueueApply && !canStartApply) {
+    lifecycle.setApplyQueued(true);
+    return true;
+  }
+  return !canStartApply;
+};
+
 // Owns the apply-and-download workflow for the patcher session: queueing/cancellation gating, the
 // AbortController lifecycle, per-stage progress fan-out, completion timing/size summary, and the
 // download hand-off. Returns the primary-action handlers consumed by the output controller. The live
@@ -297,34 +361,28 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           pendingDownloadFileNameRef,
           pendingDownloadResultRef,
         } = refs;
-        if (busy) {
-          setApplyQueued(false);
-          cancelActiveOperation();
-          clearActiveApplyProgress();
-          return;
-        }
         const pendingDownloadResult = pendingDownloadResultRef.current;
-        if (pendingDownloadResult && hasPendingDownload) {
-          await downloadPendingOutput({
+        if (
+          await handleApplyPrimaryGate({
             activeSettings,
+            applyQueueBlocked,
+            busy,
+            canQueueApply,
+            canStartApply,
+            cancelActiveOperation,
+            clearActiveApplyProgress,
             downloadOutput,
-            fileName:
-              pendingDownloadFileNameRef.current || pendingDownloadFileName || effectiveResolvedOutputName || "output",
+            effectiveResolvedOutputName,
+            hasPendingDownload,
+            lifecycle,
             onError,
-            output: pendingDownloadResult,
+            pendingDownloadFileName,
+            pendingDownloadFileNameRef,
+            pendingDownloadResult,
             setOutputErrorMessage,
-          });
+          })
+        )
           return;
-        }
-        if (applyQueueBlocked) {
-          setApplyQueued(false);
-          return;
-        }
-        if (canQueueApply && !canStartApply) {
-          setApplyQueued(true);
-          return;
-        }
-        if (!canStartApply) return;
         setApplyQueued(false);
         const useChecksumOverride = hasStrictInputChecksumMismatch && checksumOverrideChecked;
         if (useChecksumOverride) setChecksumOverrideChecked(false);

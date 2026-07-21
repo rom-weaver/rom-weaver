@@ -314,26 +314,23 @@ const discoverImplicitPatches = async (
   }
 };
 
-const runApplyWorkflow = async (
-  input: PatchInput,
-  runtime: WorkflowRuntime,
-  deps: PatchWorkflowDeps,
-): Promise<ApplyWorkflowResult> => {
-  const options = input.options || {};
-  requireOutputName(options.output?.outputName);
-  const { inputAssets, inputSources } = await prepareApplyInputAssets(input, runtime, deps);
-  const { patchFiles: preparedPatchFiles, patchSources } = await prepareExplicitPatchFiles(input, runtime, deps);
-  const inputCompressedSize = inputSources.reduce(
-    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
-    0,
-  );
-  const patchCompressedSize = patchSources.reduce(
-    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
-    0,
-  );
-
-  const patchFiles = preparedPatchFiles;
-
+const prepareApplyPatches = async ({
+  input,
+  inputAssets,
+  inputSources,
+  options,
+  patchFiles,
+  runtime,
+  deps,
+}: {
+  input: PatchInput;
+  inputAssets: InputAsset[];
+  inputSources: SourceRef[];
+  options: NonNullable<PatchInput["options"]>;
+  patchFiles: PatchFileInstance[];
+  runtime: WorkflowRuntime;
+  deps: PatchWorkflowDeps;
+}) => {
   const shouldDiscoverImplicitPatches =
     input.patches === undefined && input.preparedPatchFiles === undefined && input.parsedPatches === undefined;
   if (patchFiles.length) {
@@ -357,9 +354,6 @@ const runApplyWorkflow = async (
       reason: "explicit patch list provided",
     });
   }
-  const preparedInputSize = inputAssets.reduce((total, asset) => total + asset.size, 0);
-  const preparedInputMetrics = summarizePreparedInputMetrics(inputAssets);
-  const patchSize = patchFiles.reduce((total, patchFile) => total + patchFile.fileSize, 0);
 
   const suppliedParsedPatches = input.parsedPatches ? [...input.parsedPatches] : [];
   if (!patchFiles.length && suppliedParsedPatches.length)
@@ -393,6 +387,40 @@ const runApplyWorkflow = async (
       reason: "no patches provided",
     });
   }
+  return { patches, patchFiles };
+};
+
+const runApplyWorkflow = async (
+  input: PatchInput,
+  runtime: WorkflowRuntime,
+  deps: PatchWorkflowDeps,
+): Promise<ApplyWorkflowResult> => {
+  const options = input.options || {};
+  requireOutputName(options.output?.outputName);
+  const { inputAssets, inputSources } = await prepareApplyInputAssets(input, runtime, deps);
+  const { patchFiles: preparedPatchFiles, patchSources } = await prepareExplicitPatchFiles(input, runtime, deps);
+  const inputCompressedSize = inputSources.reduce(
+    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
+    0,
+  );
+  const patchCompressedSize = patchSources.reduce(
+    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
+    0,
+  );
+
+  const patchFiles = preparedPatchFiles;
+  const { patches } = await prepareApplyPatches({
+    deps,
+    input,
+    inputAssets,
+    inputSources,
+    options,
+    patchFiles,
+    runtime,
+  });
+  const preparedInputSize = inputAssets.reduce((total, asset) => total + asset.size, 0);
+  const preparedInputMetrics = summarizePreparedInputMetrics(inputAssets);
+  const patchSize = patchFiles.reduce((total, patchFile) => total + patchFile.fileSize, 0);
 
   const patchTargets = input.patchTargets || getApplyPatchTargets(options);
   const targets: InputAsset[] = [];

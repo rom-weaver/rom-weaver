@@ -1,5 +1,5 @@
 import { Archive, Disc3, Download, ListChecks, Package, ShieldCheck, TriangleAlert } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -1019,6 +1019,82 @@ const getBundleFormatValue = (
   return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
 };
 
+const BundleOutputFields = ({
+  bundleExport,
+  bundleTools,
+  outputHeaderField,
+}: {
+  bundleExport?: BundleExportState;
+  bundleTools?: BundleToolsState;
+  outputHeaderField: ReactNode;
+}) => {
+  const exportTypeInfo = {
+    items: [
+      "A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM; it is not a pre-patched ROM.",
+      "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
+      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
+      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player weaves it.",
+    ],
+    summary:
+      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
+    title: "Bundle",
+  };
+  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
+  if (!bundleExport) return outputHeaderField;
+  return (
+    <>
+      {outputHeaderField}
+      <OutputField
+        className="export-type-field"
+        label="Bundle"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+      >
+        <select
+          className="select"
+          disabled={bundleExport.busy}
+          id="rom-weaver-bundle-export-format"
+          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
+          value={bundleFormatValue}
+        >
+          <option value="">Hide bundle creation</option>
+          <option value="zip:patches">Bundle + patches (.zip)</option>
+          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
+          <option value="7z:patches">Bundle + patches (.7z)</option>
+          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+        </select>
+      </OutputField>
+    </>
+  );
+};
+
+const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compressTiming?: string): ReactNode => {
+  if (applyDone) {
+    return (
+      <>
+        {applyTiming ? (
+          <span className="rb mono done-chip">
+            <span className="k">Weave</span>
+            <span className="t">{applyTiming}</span>
+          </span>
+        ) : null}
+        {compressTiming ? (
+          <span className="rb mono done-chip" style={{ animationDelay: "0.19s" }}>
+            <span className="k">Compress</span>
+            <span className="t">{compressTiming}</span>
+          </span>
+        ) : null}
+      </>
+    );
+  }
+  if (!applyTiming) return undefined;
+  return (
+    <span className="rb mono">
+      <span className="k">Weave</span>
+      <span className="t">{applyTiming}</span>
+    </span>
+  );
+};
+
 function ApplyWorkflowFormView({
   controllers,
   bundleExpectedRomChecks,
@@ -1165,17 +1241,6 @@ function ApplyWorkflowFormView({
       visible={!!outputHeaderVariant}
     />
   );
-  const exportTypeInfo = {
-    items: [
-      "A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM; it is not a pre-patched ROM.",
-      "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
-      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
-      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player weaves it.",
-    ],
-    summary:
-      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
-    title: "Bundle",
-  };
   // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
@@ -1184,31 +1249,8 @@ function ApplyWorkflowFormView({
   // The bundle package select mirrors the persisted "Bundle" user setting - ""
   // is the hide sentinel (matches the stored value), a format arms the action.
   const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  const bundleOutputFields = bundleExport ? (
-    <>
-      {outputHeaderField}
-      <OutputField
-        className="export-type-field"
-        label="Bundle"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
-      >
-        <select
-          className="select"
-          disabled={bundleExport.busy}
-          id="rom-weaver-bundle-export-format"
-          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
-          value={bundleFormatValue}
-        >
-          <option value="">Hide bundle creation</option>
-          <option value="zip:patches">Bundle + patches (.zip)</option>
-          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-          <option value="7z:patches">Bundle + patches (.7z)</option>
-          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
-        </select>
-      </OutputField>
-    </>
-  ) : (
-    outputHeaderField
+  const bundleOutputFields = (
+    <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
   );
 
   // Unified drop: bare files stage immediately; each archive shows an
@@ -1471,31 +1513,7 @@ function ApplyWorkflowFormView({
                 </ul>
               </InfoPopover>
             }
-            meta={
-              applyDone ? (
-                <>
-                  {outputState.applyTiming ? (
-                    <span className="rb mono done-chip">
-                      <span className="k">Weave</span>
-                      <span className="t">{outputState.applyTiming}</span>
-                    </span>
-                  ) : null}
-                  {outputState.compressTiming ? (
-                    <span className="rb mono done-chip" style={{ animationDelay: "0.19s" }}>
-                      <span className="k">Compress</span>
-                      <span className="t">{outputState.compressTiming}</span>
-                    </span>
-                  ) : null}
-                </>
-              ) : outputState.applyTiming ? (
-                // Mid-run the elapsed readout carries the same "Weave" key as the
-                // finished chip, so the bare number never appears unlabeled.
-                <span className="rb mono">
-                  <span className="k">Weave</span>
-                  <span className="t">{outputState.applyTiming}</span>
-                </span>
-              ) : undefined
-            }
+            meta={renderApplyTimingMeta(applyDone, outputState.applyTiming, outputState.compressTiming)}
             notice={
               <SectionNotice
                 id="rom-weaver-output-notice-message"

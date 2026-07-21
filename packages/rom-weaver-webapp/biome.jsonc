@@ -30,7 +30,7 @@
         // Keep ratcheting toward Biome's default of 15 as hotspots are simplified.
         "noExcessiveCognitiveComplexity": {
           "level": "error",
-          "options": { "maxAllowedComplexity": 50 },
+          "options": { "maxAllowedComplexity": 45 },
         },
         "noForEach": "error",
         "noUselessStringConcat": "error",

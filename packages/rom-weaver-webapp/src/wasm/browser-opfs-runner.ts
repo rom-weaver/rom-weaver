@@ -76,6 +76,73 @@ import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./workers
 
 const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
+type BrowserOpfsProxyRuntime = Awaited<ReturnType<typeof startOpfsProxyRuntime>>;
+type BrowserThreadSpawner = ReturnType<typeof createBrowserWasiThreadSpawner>;
+type BrowserOpfsMountCache = ReturnType<typeof createBrowserOpfsMountCache>;
+
+const invalidateMountCacheBeforeRun = async ({
+  enabled,
+  mountCache,
+  runtimeMounts,
+  trace,
+}: {
+  enabled: boolean;
+  mountCache: BrowserOpfsMountCache;
+  runtimeMounts: string[];
+  trace: (message: string) => void;
+}) => {
+  if (!enabled) return;
+  trace("[browser-opfs] invalidate mount cache before run start");
+  await mountCache.invalidateMountPaths(runtimeMounts);
+  trace("[browser-opfs] invalidate mount cache before run done");
+};
+
+const registerProxyBlobInputs = (
+  virtualFiles: NormalizedVirtualFile[],
+  opfsProxy: BrowserOpfsProxyRuntime,
+  trace: (message: string) => void,
+) => {
+  const proxyBlobInputs = virtualFiles.filter(
+    (file): file is NormalizedVirtualFile & { source: Blob } =>
+      Boolean(file.useProxyHandle) && file.source instanceof Blob,
+  );
+  for (const file of proxyBlobInputs) {
+    opfsProxy.registerBlobSource(file.path, file.source);
+    trace(`[browser-opfs] proxy blob source registered path=${file.path} size=${file.source.size}`);
+  }
+  return proxyBlobInputs;
+};
+
+const createRunThreadSpawner = ({
+  options,
+  runOptions,
+  threadWorkerPool,
+  ...runtime
+}: Parameters<typeof createBrowserWasiThreadSpawner>[0] & {
+  options: BrowserOpfsCreateOptions;
+  runOptions: BrowserOpfsRunOptions;
+  threadWorkerPool: ReturnType<typeof createBrowserWasiThreadWorkerPool> | null;
+}) =>
+  createBrowserWasiThreadSpawner({
+    ...runtime,
+    threadWorkerPool:
+      runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl ? null : threadWorkerPool,
+    threadWorkerUrl: runOptions.threadWorkerUrl ?? options.threadWorkerUrl,
+  });
+
+const createThreadSpawnerDrain = (threadSpawner: BrowserThreadSpawner) => {
+  let drained = false;
+  return async () => {
+    if (drained) return;
+    drained = true;
+    await threadSpawner.ready.catch(() => {
+      // drain regardless of readiness failures; the run error surfaces elsewhere
+    });
+    await threadSpawner.waitForWorkers().catch(() => {
+      // drain best-effort; worker failures already surfaced through the run result
+    });
+  };
+};
 
 export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptions = {}) {
   assertDedicatedWorkerRuntime();
@@ -164,11 +231,12 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)} wasmBytes=${wasmByteLength ?? "?"} wasmSha=${wasmSha || "?"}`,
       );
-      if (runOptions.invalidateMountCacheBeforeRun) {
-        trace("[browser-opfs] invalidate mount cache before run start");
-        await mountCache.invalidateMountPaths(runtimeMounts);
-        trace("[browser-opfs] invalidate mount cache before run done");
-      }
+      await invalidateMountCacheBeforeRun({
+        enabled: !!runOptions.invalidateMountCacheBeforeRun,
+        mountCache,
+        runtimeMounts,
+        trace,
+      });
       const env = createRunEnv({
         requestedThreadCount: parseRequestedThreadCount(request),
         runEnv: runOptions.env,
@@ -195,14 +263,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       // Hand any proxy-handle Blob inputs to the OPFS proxy worker so it serves them by guest path
       // (single Blob owner, no per-thread FileReaderSync, no staging copy). Registered before the fd
       // build so it is in place before any thread opens the path; unregistered in the finally below.
-      const proxyBlobInputs = virtualFiles.filter(
-        (file): file is NormalizedVirtualFile & { source: Blob } =>
-          Boolean(file.useProxyHandle) && file.source instanceof Blob,
-      );
-      for (const file of proxyBlobInputs) {
-        opfsProxy.registerBlobSource(file.path, file.source);
-        trace(`[browser-opfs] proxy blob source registered path=${file.path} size=${file.source.size}`);
-      }
+      const proxyBlobInputs = registerProxyBlobInputs(virtualFiles, opfsProxy, trace);
 
       const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
@@ -232,7 +293,13 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         ...(Array.isArray(options.knownInputPaths) ? options.knownInputPaths : []),
         ...(Array.isArray(runOptions.knownInputPaths) ? runOptions.knownInputPaths : []),
       ]);
-      const threadSpawner = createBrowserWasiThreadSpawner({
+      const threadSpawner = createRunThreadSpawner({
+        options,
+        runOptions,
+        threadWorkerPool:
+          runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl
+            ? null
+            : threadWorkerPool,
         envList,
         moduleImports,
         runtime: {
@@ -251,11 +318,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         streamBroadcastChannelName: runOptions.__streamBroadcastChannelName,
         streamRequestId: runOptions.__streamRequestId,
         threadIdState,
-        threadWorkerPool:
-          runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl
-            ? null
-            : threadWorkerPool,
-        threadWorkerUrl: runOptions.threadWorkerUrl ?? options.threadWorkerUrl,
         trace,
         wasiArgs,
         wasmMemory,
@@ -263,17 +325,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       });
       // Always drain dispatched shells: pre-WASI failures otherwise leave them permanently busy.
       // Shutdown is idempotent, so the success path may drain twice safely.
-      let threadSpawnerDrained = false;
-      const drainThreadSpawnerOnce = async () => {
-        if (threadSpawnerDrained) return;
-        threadSpawnerDrained = true;
-        await threadSpawner.ready.catch(() => {
-          // drain regardless of readiness failures; the run error surfaces elsewhere
-        });
-        await threadSpawner.waitForWorkers().catch(() => {
-          // drain best-effort; worker failures already surfaced through the run result
-        });
-      };
+      const drainThreadSpawnerOnce = createThreadSpawnerDrain(threadSpawner);
       trace(`[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode}`);
       const { fds, mounts, stdoutCollector, stderrCollector, stdoutChunks, stderrChunks } =
         await buildBrowserOpfsWasiFds({
@@ -335,7 +387,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         }
         trace("[browser-opfs] waitForWorkers start");
         await threadSpawner.waitForWorkers();
-        threadSpawnerDrained = true;
         trace("[browser-opfs] waitForWorkers done");
         traceFlushOpenWasiFileDescriptors(trace, wasi.fds, "[browser-opfs] flush fd write buffers");
         traceDirectWasiFileIoStats(trace, wasi, "[perf] direct file io");

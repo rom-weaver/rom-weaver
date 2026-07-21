@@ -145,6 +145,27 @@ const formatPatchValidationValue = (label: string, value: number | string | unde
   return `${label}=${String(value).trim()}`;
 };
 
+const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementValues: string[]): string => {
+  const deep = patch.patchValidation;
+  if (deep) return deep.status;
+  if (patch.checksumPreflight?.status === "invalid") return "invalid";
+  if (patch.checksumPreflight) return "verifying";
+  return requirementValues.length ? "pending" : "unknown";
+};
+
+const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState["patchValidation"]): string => {
+  if (status === "verifying") return "Verifying patch against the ROM…";
+  if (deep?.status === "deferred")
+    return deep.message || "Applies to the previous patch's output; verified during the weave";
+  if (deep?.status === "valid") return "Patch validation passed";
+  if (deep?.status === "invalid") return deep.message || "Patch validation failed";
+  if (deep?.status === "pending") return "Patch validation pending";
+  if (status === "valid") return "Source requirements matched";
+  if (status === "invalid") return "Source requirements mismatch";
+  if (status === "pending") return "Source requirements pending";
+  return "Patch does not provide source requirements";
+};
+
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   const requirementValues = [
     formatPatchValidationValue("in size", patch.requirements?.sourceSize),
@@ -158,34 +179,13 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   // lands, a targeted patch (its cheap preflight computed) reads as "verifying"; a preflight checksum
   // mismatch fails immediately without waiting for preflight. Once the verdict lands it wins.
   const deep = patch.patchValidation;
-  let status: string;
-  if (deep) status = deep.status;
-  else if (patch.checksumPreflight?.status === "invalid") status = "invalid";
-  else if (patch.checksumPreflight) status = "verifying";
-  else status = requirementValues.length ? "pending" : "unknown";
+  const status = getPatchValidationStatus(patch, requirementValues);
   const validationValues = requirementValues.length
     ? requirementValues
     : deep || patch.checksumPreflight
       ? ["preflight validation"]
       : [];
-  const message =
-    status === "verifying"
-      ? "Verifying patch against the ROM…"
-      : deep?.status === "deferred"
-        ? deep.message || "Applies to the previous patch's output; verified during the weave"
-        : deep?.status === "valid"
-          ? "Patch validation passed"
-          : deep?.status === "invalid"
-            ? deep.message || "Patch validation failed"
-            : deep?.status === "pending"
-              ? "Patch validation pending"
-              : status === "valid"
-                ? "Source requirements matched"
-                : status === "invalid"
-                  ? "Source requirements mismatch"
-                  : status === "pending"
-                    ? "Source requirements pending"
-                    : "Patch does not provide source requirements";
+  const message = getPatchValidationMessage(status, deep);
   return {
     checksumMismatch: status === "invalid",
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),

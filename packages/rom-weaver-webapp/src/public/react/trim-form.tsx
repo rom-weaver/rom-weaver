@@ -310,6 +310,140 @@ const getProgressDetails = (event: WorkflowProgress): Record<string, unknown> =>
     ? (event.details as Record<string, unknown>)
     : {};
 
+const shouldRunTrim = ({
+  source,
+  trimQueueBlocked,
+  trimPreparationPending,
+  trimReady,
+  setTrimQueued,
+}: {
+  source: BinarySource | null;
+  trimQueueBlocked: boolean;
+  trimPreparationPending: boolean;
+  trimReady: boolean;
+  setTrimQueued: (queued: boolean) => void;
+}) => {
+  if (!source) return false;
+  if (trimQueueBlocked) {
+    setTrimQueued(false);
+    return false;
+  }
+  if (trimPreparationPending && !trimReady) {
+    setTrimQueued(true);
+    return false;
+  }
+  return trimReady;
+};
+
+const handleTrimRunClick = ({
+  abortActiveOperation,
+  busy,
+  setConfirmOpen,
+  setTrimQueued,
+  source,
+}: {
+  abortActiveOperation: () => void;
+  busy: boolean;
+  setConfirmOpen: (open: boolean) => void;
+  setTrimQueued: (queued: boolean) => void;
+  source: BinarySource | null;
+}) => {
+  if (busy) {
+    setTrimQueued(false);
+    abortActiveOperation();
+    return;
+  }
+  if (!source) return;
+  setConfirmOpen(true);
+};
+
+const downloadCompletedTrimOutput = async ({
+  completedOutput,
+  notifyError,
+  setOutputWorkflowMessage,
+}: {
+  completedOutput: CompletedTrimOutput;
+  notifyError: (error: Error) => void;
+  setOutputWorkflowMessage: (error: Error) => void;
+}) => {
+  try {
+    await completedOutput.saveAs({ interactive: true });
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    setOutputWorkflowMessage(normalizedError);
+    notifyError(normalizedError);
+  }
+};
+
+const setFallbackTrimInput = async ({
+  source,
+  sourceFileName,
+  trace,
+  trimWorkflow,
+  usingStagedWorkflow,
+}: {
+  source: BinarySource;
+  sourceFileName: string;
+  trace: (message: string, details?: Record<string, unknown>) => void;
+  trimWorkflow: BrowserTrimWorkflow;
+  usingStagedWorkflow: boolean;
+}) => {
+  if (usingStagedWorkflow) return;
+  trace("run.fallback-set-input.start", { sourceName: sourceFileName, workflowId: trimWorkflow.id });
+  await trimWorkflow.setInput(source);
+  trace("run.fallback-set-input.finish", { input: trimWorkflow.getInput(), workflowId: trimWorkflow.id });
+};
+
+const confirmTrimRun = ({
+  runTrim,
+  setConfirmOpen,
+  setTrimQueued,
+  sourceStaging,
+}: {
+  runTrim: () => Promise<void>;
+  setConfirmOpen: (open: boolean) => void;
+  setTrimQueued: (queued: boolean) => void;
+  sourceStaging: boolean;
+}) => {
+  setConfirmOpen(false);
+  if (sourceStaging) {
+    setTrimQueued(true);
+    return;
+  }
+  void runTrim();
+};
+
+const createTrimSourceNotice = ({
+  clearWorkflowMessage,
+  errorCode,
+  message,
+  messageDismissible,
+  runtimeSourceNoticeVisible,
+  sourceNoticeMessage,
+  sourceState,
+}: {
+  clearWorkflowMessage: () => void;
+  errorCode: string;
+  message: string;
+  messageDismissible: boolean;
+  runtimeSourceNoticeVisible: boolean;
+  sourceNoticeMessage: string;
+  sourceState: TrimWorkflowSourceState | null;
+}) => (
+  <TrimNotice
+    id="trim-builder-source-error-message"
+    level={
+      runtimeSourceNoticeVisible
+        ? errorCode === "AMBIGUOUS_SELECTION"
+          ? "warn"
+          : "error"
+        : getSourceNoticeLevel(sourceState)
+    }
+    message={runtimeSourceNoticeVisible ? message : sourceNoticeMessage}
+    onDismiss={runtimeSourceNoticeVisible && messageDismissible ? clearWorkflowMessage : undefined}
+  />
+);
+
 const resolveTrimAutomaticOutputFormat = ({
   automaticCompressionFormat,
   defaultArchiveFormat,
@@ -321,16 +455,33 @@ const resolveTrimAutomaticOutputFormat = ({
   defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0];
   rawOutputFormat: string;
 }) => {
-  const automaticSpecialOutputFormat =
-    allowsDefaultCompressionSpecial(defaultCompressionMode) &&
-    ["chd", "rvz", "z3ds"].includes(automaticCompressionFormat)
-      ? automaticCompressionFormat
-      : "";
-  const automaticDefaultFormat =
-    defaultCompressionMode === "auto"
-      ? automaticCompressionFormat
-      : automaticSpecialOutputFormat || defaultArchiveFormat;
+  const automaticSpecialOutputFormat = getTrimSpecialOutputFormat(automaticCompressionFormat, defaultCompressionMode);
+  const automaticDefaultFormat = getTrimDefaultOutputFormat(
+    automaticCompressionFormat,
+    automaticSpecialOutputFormat,
+    defaultArchiveFormat,
+    defaultCompressionMode,
+  );
   return automaticSpecialOutputFormat || (automaticDefaultFormat === "none" ? rawOutputFormat : automaticDefaultFormat);
+};
+
+const getTrimSpecialOutputFormat = (
+  automaticCompressionFormat: string,
+  defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0],
+) => {
+  if (!allowsDefaultCompressionSpecial(defaultCompressionMode)) return "";
+  if (!["chd", "rvz", "z3ds"].includes(automaticCompressionFormat)) return "";
+  return automaticCompressionFormat;
+};
+
+const getTrimDefaultOutputFormat = (
+  automaticCompressionFormat: string,
+  automaticSpecialOutputFormat: string,
+  defaultArchiveFormat: string,
+  defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0],
+) => {
+  if (defaultCompressionMode === "auto") return automaticCompressionFormat;
+  return automaticSpecialOutputFormat || defaultArchiveFormat;
 };
 
 type InternalTrimPatchFormProps = TrimPatchFormProps & {
@@ -691,26 +842,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const runTrim = async () => {
     if (completedOutput) {
       setTrimQueued(false);
-      try {
-        await completedOutput.saveAs({ interactive: true });
-      } catch (error) {
-        const normalizedError = error instanceof Error ? error : new Error(String(error));
-        setOutputWorkflowMessage(normalizedError);
-        notifyError(normalizedError);
-      }
+      await downloadCompletedTrimOutput({ completedOutput, notifyError, setOutputWorkflowMessage });
       return;
     }
-    if (!source) return;
-    if (trimQueueBlocked) {
-      setTrimQueued(false);
-      return;
-    }
-    if (trimPreparationPending && !trimReady) {
-      setTrimQueued(true);
-      return;
-    }
-    if (!trimReady) return;
     const stagedSource = source;
+    if (!shouldRunTrim({ setTrimQueued, source: stagedSource, trimPreparationPending, trimQueueBlocked, trimReady }))
+      return;
+    if (!stagedSource) return;
     await runWorkflow(async (abortController, registerCleanup) => {
       const outputCompression = isCompressionFormat(resolvedOutputFormat) ? resolvedOutputFormat : "none";
       await stagedTrimWorkflowReadyRef.current?.catch(() => undefined);
@@ -751,17 +889,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         trimWorkflow.off("progress", handleProgress);
         if (!usingStagedWorkflow) await trimWorkflow.dispose();
       });
-      if (!usingStagedWorkflow) {
-        emitTrimFormTrace("run.fallback-set-input.start", {
-          sourceName: sourceFileName,
-          workflowId: trimWorkflow.id,
-        });
-        await trimWorkflow.setInput(stagedSource);
-        emitTrimFormTrace("run.fallback-set-input.finish", {
-          input: trimWorkflow.getInput(),
-          workflowId: trimWorkflow.id,
-        });
-      }
+      await setFallbackTrimInput({
+        source: stagedSource,
+        sourceFileName,
+        trace: emitTrimFormTrace,
+        trimWorkflow,
+        usingStagedWorkflow,
+      });
       await trimWorkflow.setOutputFormat(resolvedOutputFormat);
       await trimWorkflow.setOutputName(executionOutputName);
 
@@ -808,22 +942,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   };
 
   const onRunClick = () => {
-    if (busy) {
-      setTrimQueued(false);
-      abortActiveOperation();
-      return;
-    }
-    if (!source) return;
-    setConfirmOpen(true);
+    handleTrimRunClick({ abortActiveOperation, busy, setConfirmOpen, setTrimQueued, source });
   };
 
   const onConfirmTrim = () => {
-    setConfirmOpen(false);
-    if (sourceStaging) {
-      setTrimQueued(true);
-      return;
-    }
-    void runTrim();
+    confirmTrimRun({ runTrim, setConfirmOpen, setTrimQueued, sourceStaging });
   };
 
   useEffect(
@@ -888,20 +1011,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const stageBytes = sourceState?.size ?? sourceState?.sourceSize;
   const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
   const runtimeSourceNoticeVisible = !!message && messagePlacement === "source";
-  const sourceNotice = (
-    <TrimNotice
-      id="trim-builder-source-error-message"
-      level={
-        runtimeSourceNoticeVisible
-          ? errorCode === "AMBIGUOUS_SELECTION"
-            ? "warn"
-            : "error"
-          : getSourceNoticeLevel(sourceState)
-      }
-      message={runtimeSourceNoticeVisible ? message : sourceNoticeMessage}
-      onDismiss={runtimeSourceNoticeVisible && messageDismissible ? clearWorkflowMessage : undefined}
-    />
-  );
+  const sourceNotice = createTrimSourceNotice({
+    clearWorkflowMessage,
+    errorCode,
+    message,
+    messageDismissible,
+    runtimeSourceNoticeVisible,
+    sourceNoticeMessage,
+    sourceState,
+  });
   const sourceItems = buildTrimSourceItems({
     checksumProps,
     onRemove: () => updateSource(null),

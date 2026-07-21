@@ -47,6 +47,53 @@ import { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } from "./workflow-
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
+type BrowserBundleCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["bundle"]>["create"]>>[0];
+
+const stageBundleCreateInputs = async ({
+  bundleRom,
+  logLevel,
+  onLog,
+  patches,
+  rom,
+  workerIo,
+}: Pick<BrowserBundleCreateInput, "bundleRom" | "patches" | "rom"> & {
+  logLevel: BrowserBundleCreateInput["logLevel"];
+  onLog: BrowserBundleCreateInput["onLog"];
+  workerIo: RuntimeWorkerIo;
+}) => {
+  const staged: Array<Awaited<ReturnType<RuntimeWorkerIo["stageSource"]>>> = [];
+  const stage = async (
+    source: { source: unknown; fileName?: string },
+    pathPrefix: string,
+    fallbackFileName: string,
+  ) => {
+    const stagedSource = await workerIo.stageSource({
+      fallbackFileName,
+      pathPrefix,
+      scope: "archive",
+      source: source.source,
+      trace: { logLevel, onLog },
+    });
+    staged.push(stagedSource);
+    return stagedSource.filePath;
+  };
+  const romPath = rom ? await stage(rom, "bundle-rom", rom.fileName || "rom.bin") : undefined;
+  const bundleRomPath = bundleRom
+    ? await stage(bundleRom, "bundle-bundle-rom", bundleRom.fileName || "rom.bin")
+    : undefined;
+  const patchPaths: string[] = [];
+  for (const [index, patch] of patches.entries()) {
+    patchPaths.push(await stage(patch, `bundle-patch-${index + 1}`, patch.fileName || `patch-${index + 1}.bin`));
+  }
+  return {
+    bundleRomPath,
+    inputPaths: [...(romPath ? [romPath] : []), ...(bundleRomPath ? [bundleRomPath] : []), ...patchPaths],
+    patchPaths,
+    romPath,
+    staged,
+  };
+};
+
 const getBrowserDestinationHandle = (destination: unknown) => {
   if (!destination || typeof destination === "string") return undefined;
   if (typeof destination === "object" && "createWritable" in destination) return destination as FileSystemFileHandle;
@@ -207,43 +254,21 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     const createdOutputs: Array<{ dispose: () => Promise<void> }> = [];
     const outputScope = createRomWeaverOutputScope();
     try {
-      let romPath: string | undefined;
-      if (rom) {
-        const stagedRom = await workerIo.stageSource({
-          fallbackFileName: rom.fileName || "rom.bin",
-          pathPrefix: "bundle-rom",
-          scope: "archive",
-          source: rom.source,
-          trace: { logLevel, onLog },
-        });
-        staged.push(stagedRom);
-        romPath = stagedRom.filePath;
-      }
-      let bundleRomPath: string | undefined;
-      if (bundleRom) {
-        const stagedBundleRom = await workerIo.stageSource({
-          fallbackFileName: bundleRom.fileName || "rom.bin",
-          pathPrefix: "bundle-bundle-rom",
-          scope: "archive",
-          source: bundleRom.source,
-          trace: { logLevel, onLog },
-        });
-        staged.push(stagedBundleRom);
-        bundleRomPath = stagedBundleRom.filePath;
-      }
-      const patchPaths: string[] = [];
-      for (const [index, patch] of patches.entries()) {
-        const stagedPatch = await workerIo.stageSource({
-          fallbackFileName: patch.fileName || `patch-${index + 1}.bin`,
-          pathPrefix: `bundle-patch-${index + 1}`,
-          scope: "archive",
-          source: patch.source,
-          trace: { logLevel, onLog },
-        });
-        staged.push(stagedPatch);
-        patchPaths.push(stagedPatch.filePath);
-      }
-      const inputPaths = [...(romPath ? [romPath] : []), ...(bundleRomPath ? [bundleRomPath] : []), ...patchPaths];
+      const {
+        bundleRomPath,
+        inputPaths,
+        patchPaths,
+        romPath,
+        staged: stagedInputs,
+      } = await stageBundleCreateInputs({
+        bundleRom,
+        logLevel,
+        onLog,
+        patches,
+        rom,
+        workerIo,
+      });
+      staged.push(...stagedInputs);
       const outputPath = outputScope.selectOutputPath("", "rom-weaver-bundle.json", inputPaths);
       // The bundle name comes from the caller (its extension picks the archive
       // format); only its base name is honored so it stays inside the mount.
