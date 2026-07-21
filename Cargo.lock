@@ -1691,6 +1691,7 @@ dependencies = [
  "rom-weaver-containers",
  "rom-weaver-core",
  "rom-weaver-patches",
+ "same-file",
  "serde",
  "serde_json",
  "tar",
