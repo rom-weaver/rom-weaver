@@ -1,15 +1,36 @@
 {
   "name": "@rom-weaver/linux-x64-gnu",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Linux x64 glibc binary for rom-weaver",
   "author": "Brandon Casey",
-  "repository": {"type": "git", "url": "https://github.com/brandonocasey/rom-weaver.git", "directory": "packages/rom-weaver-cli-platforms/linux-x64-gnu"},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brandonocasey/rom-weaver.git",
+    "directory": "packages/rom-weaver-cli-platforms/linux-x64-gnu"
+  },
   "license": "AGPL-3.0-or-later",
   "funding": "https://ko-fi.com/brandonocasey",
-  "os": ["linux"],
-  "cpu": ["x64"],
-  "libc": ["glibc"],
-  "bin": {"rom-weaver": "bin/rom-weaver"},
-  "files": ["bin/rom-weaver", "LICENSE.md", "NOTICE", "THIRD_PARTY_LICENSES.md", "third_party/licenses/**"],
-  "publishConfig": {"access": "public", "provenance": true}
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "bin": {
+    "rom-weaver": "bin/rom-weaver"
+  },
+  "files": [
+    "bin/rom-weaver",
+    "LICENSE.md",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md",
+    "third_party/licenses/**"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
