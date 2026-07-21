@@ -51,6 +51,11 @@ const finishCreateRoleStaging = (
   clearProgress();
   return true;
 };
+
+const CREATE_SAMPLE_ASSETS = [
+  ["/create-original.bin", "original.bin"],
+  ["/create-modified.bin", "modified.bin"],
+] as const;
 import {
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
@@ -117,6 +122,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
   const [createPatchFormatCandidates, setCreatePatchFormatCandidates] =
     useState<CreatePatchFormatCandidateState | null>(null);
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [sampleError, setSampleError] = useState("");
   const [busy, setBusy] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
@@ -390,6 +397,24 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const [originalFile, modifiedFile] = routeByOrder(ordered, [!!original, !!modified]);
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
+  };
+  const loadCreateSample = async () => {
+    setSampleLoading(true);
+    setSampleError("");
+    try {
+      const files = await Promise.all(
+        CREATE_SAMPLE_ASSETS.map(async ([url, name]) => {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return new File([await response.blob()], name, { type: "application/octet-stream" });
+        }),
+      );
+      handleUnifiedDrop(files);
+    } catch {
+      setSampleError("Could not load the sample. Try again.");
+    } finally {
+      setSampleLoading(false);
+    }
   };
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
@@ -805,6 +830,21 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: "Add or replace a ROM",
+      afterDropZone: createSourcesActuallyEmpty ? (
+        <div className="first-weave-demo">
+          <span>New here?</span>
+          <button
+            aria-busy={sampleLoading}
+            className="btn ghost slim"
+            disabled={sampleLoading}
+            onClick={() => void loadCreateSample()}
+            type="button"
+          >
+            {sampleLoading ? "Loading sample…" : "Start with sample assets"}
+          </button>
+          {sampleError ? <span role="status">{sampleError}</span> : null}
+        </div>
+      ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
       heroLabel: "Drop or click to add the original and modified ROMs",

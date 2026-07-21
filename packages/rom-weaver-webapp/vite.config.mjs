@@ -29,6 +29,8 @@ const channelAssetPath = (channel, name) => {
 const rootStaticAssetSourcesForChannel = (channel) => ({
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": channelAssetPath(channel, "apple-touch-icon.png"),
+  "/create-modified.bin": path.join(rootAssetDir, "create-modified.bin"),
+  "/create-original.bin": path.join(rootAssetDir, "create-original.bin"),
   "/favicon.ico": channelAssetPath(channel, "favicon.ico"),
   "/first-weave.zip": path.join(rootAssetDir, "first-weave.zip"),
   "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
@@ -452,6 +454,8 @@ export default defineConfig(({ command, mode }) => {
             "first-weave.zip",
             "favicon.ico",
             "apple-touch-icon.png",
+            "create-modified.bin",
+            "create-original.bin",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
