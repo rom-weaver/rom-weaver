@@ -1042,6 +1042,96 @@ function ApplyWorkflowFormView({
       Add patches in <b className="hexref mono">0x01</b> or click for any input
     </NeedsInput>
   );
+  const renderOutputAction = () => (
+    <>
+      {errorNotice?.visible ? (
+        <Notice
+          id="rom-weaver-row-error-message"
+          level={errorNotice.level === "warning" ? "warn" : "error"}
+          onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+        >
+          {errorNotice.message}
+        </Notice>
+      ) : null}
+      {uiState.checksumOverride.visible ? (
+        <label className="checkrow warn">
+          <input
+            checked={uiState.checksumOverride.checked}
+            disabled={uiState.checksumOverride.disabled}
+            id="rom-weaver-checkbox-checksum-override"
+            onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          <span>{uiState.checksumOverride.label}</span>
+        </label>
+      ) : null}
+      {uiState.outputChecksumWarning.visible ? (
+        <div id="rom-weaver-row-output-checksum-warning">
+          <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
+          <label className="checkrow warn">
+            <input
+              checked={uiState.outputChecksumWarning.checked}
+              disabled={uiState.outputChecksumWarning.disabled}
+              id="rom-weaver-checkbox-output-checksum-override"
+              onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
+              type="checkbox"
+            />
+            <span>{uiState.outputChecksumWarning.label}</span>
+          </label>
+        </div>
+      ) : null}
+      <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
+        <p aria-live="polite" className="patch-off-note">
+          <TriangleAlert aria-hidden="true" />
+          <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
+        </p>
+      </div>
+      <PatcherPrimaryAction
+        controller={controllers.output}
+        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+        totalTime={applyTotalTime || undefined}
+      />
+      {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
+      {bundleTools?.outputVerification ? (
+        bundleTools.outputVerification.level === "warn" ? (
+          <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+            <TriangleAlert aria-hidden="true" />
+            <span>{bundleTools.outputVerification.message}</span>
+          </p>
+        ) : (
+          <p aria-live="polite" className="patch-off-note is-ok" id="rom-weaver-output-verified">
+            <ShieldCheck aria-hidden="true" />
+            <span>{bundleTools.outputVerification.message}</span>
+          </p>
+        )
+      ) : null}
+      {bundleExport && bundleTools?.exportVisible ? (
+        bundleExport.busy ? (
+          <ProgressActionButton
+            cancelLabel="Cancel bundle export"
+            disabled
+            label={bundleActionLabel}
+            onCancel={bundleExport.cancelExport}
+            onClick={() => undefined}
+            progress={bundleExport.progress}
+            progressId="rom-weaver-bundle-export-progress"
+          />
+        ) : (
+          <button
+            className="btn ghost slim bundle-dl"
+            disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+            id="rom-weaver-button-export-bundle"
+            onClick={() => void bundleExport.runExport()}
+            type="button"
+          >
+            {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+            {bundleActionLabel}
+          </button>
+        )
+      ) : null}
+      {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+    </>
+  );
 
   if (startup.status === "error") {
     return (
@@ -1211,98 +1301,7 @@ function ApplyWorkflowFormView({
             </div>
           ) : null}
           <WorkflowOutputStep
-            action={
-              <>
-                {errorNotice?.visible ? (
-                  <Notice
-                    id="rom-weaver-row-error-message"
-                    level={errorNotice.level === "warning" ? "warn" : "error"}
-                    onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
-                  >
-                    {errorNotice.message}
-                  </Notice>
-                ) : null}
-                {uiState.checksumOverride.visible ? (
-                  <label className="checkrow warn">
-                    <input
-                      checked={uiState.checksumOverride.checked}
-                      disabled={uiState.checksumOverride.disabled}
-                      id="rom-weaver-checkbox-checksum-override"
-                      onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-                      type="checkbox"
-                    />
-                    <span>{uiState.checksumOverride.label}</span>
-                  </label>
-                ) : null}
-                {uiState.outputChecksumWarning.visible ? (
-                  <div id="rom-weaver-row-output-checksum-warning">
-                    <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
-                    <label className="checkrow warn">
-                      <input
-                        checked={uiState.outputChecksumWarning.checked}
-                        disabled={uiState.outputChecksumWarning.disabled}
-                        id="rom-weaver-checkbox-output-checksum-override"
-                        onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
-                        type="checkbox"
-                      />
-                      <span>{uiState.outputChecksumWarning.label}</span>
-                    </label>
-                  </div>
-                ) : null}
-                <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
-                  <p aria-live="polite" className="patch-off-note">
-                    <TriangleAlert aria-hidden="true" />
-                    <span>
-                      {disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}
-                    </span>
-                  </p>
-                </div>
-                <PatcherPrimaryAction
-                  controller={controllers.output}
-                  disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-                  totalTime={applyTotalTime || undefined}
-                />
-                {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-                {bundleTools?.outputVerification ? (
-                  bundleTools.outputVerification.level === "warn" ? (
-                    <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
-                      <TriangleAlert aria-hidden="true" />
-                      <span>{bundleTools.outputVerification.message}</span>
-                    </p>
-                  ) : (
-                    <p aria-live="polite" className="patch-off-note is-ok" id="rom-weaver-output-verified">
-                      <ShieldCheck aria-hidden="true" />
-                      <span>{bundleTools.outputVerification.message}</span>
-                    </p>
-                  )
-                ) : null}
-                {bundleExport && bundleTools?.exportVisible ? (
-                  bundleExport.busy ? (
-                    <ProgressActionButton
-                      cancelLabel="Cancel bundle export"
-                      disabled
-                      label={bundleActionLabel}
-                      onCancel={bundleExport.cancelExport}
-                      onClick={() => undefined}
-                      progress={bundleExport.progress}
-                      progressId="rom-weaver-bundle-export-progress"
-                    />
-                  ) : (
-                    <button
-                      className="btn ghost slim bundle-dl"
-                      disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-                      id="rom-weaver-button-export-bundle"
-                      onClick={() => void bundleExport.runExport()}
-                      type="button"
-                    >
-                      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
-                      {bundleActionLabel}
-                    </button>
-                  )
-                ) : null}
-                {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-              </>
-            }
+            action={renderOutputAction()}
             compress={buildOutputCompressionPanel({
               disabled: outputState.disabled,
               extraChildren: bundleOutputFields,

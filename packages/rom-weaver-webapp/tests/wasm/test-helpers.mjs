@@ -162,123 +162,25 @@ function commandArgsToRunRequest(args) {
   const commandArgs = command === "patch" ? commandRequest.args.args : commandRequest.args;
   switch (command === "patch" ? `patch-${subcommand}` : command) {
     case "probe":
-      Object.assign(commandArgs, {
-        input: requirePositional(parsed, 0, "probe source"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...filterFlags(parsed),
-        ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-      });
+      Object.assign(commandArgs, probeArgs(parsed));
       break;
     case "compress":
-      Object.assign(commandArgs, {
-        input: parsed.positionals,
-        output: requireOptionValue(parsed, "output"),
-        ...(readOptionalValue(parsed, "format") ? { format: readOptionalValue(parsed, "format") } : {}),
-        ...(readOptionValues(parsed, "codec").length ? { codec: readOptionValues(parsed, "codec") } : {}),
-        ...(readOptionalValue(parsed, "level") ? { level: readOptionalValue(parsed, "level") } : {}),
-      });
+      Object.assign(commandArgs, compressArgs(parsed));
       break;
     case "extract":
-      Object.assign(commandArgs, {
-        output: requireOptionValue(parsed, "out-dir"),
-        input: requirePositional(parsed, 0, "extract source"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...filterFlags(parsed),
-        ...(readOptionValues(parsed, "checksum").length ? { checksum: readOptionValues(parsed, "checksum") } : {}),
-        ...(parsed.flags.has("split-bin") ? { split_bin: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-        ...(parsed.flags.has("no-nested-extract") ? { no_nested_extract: true } : {}),
-        // Old default allowed overwrite; `--no-overwrite` opted into failing.
-        // The new wire field inverts that: force overwrite unless opted out.
-        force: !parsed.flags.has("no-overwrite"),
-      });
+      Object.assign(commandArgs, extractArgs(parsed));
       break;
     case "checksum":
-      Object.assign(commandArgs, {
-        algo: readOptionValues(parsed, "algo"),
-        input: requirePositional(parsed, 0, "checksum source"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...filterFlags(parsed),
-        ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-        ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
-        ...(parsed.flags.has("no-trim-fix") ? { no_trim_fix: true } : {}),
-        ...(readOptionalNumber(parsed, "start") === null ? {} : { start: readOptionalNumber(parsed, "start") }),
-        ...(readOptionalNumber(parsed, "length") === null ? {} : { length: readOptionalNumber(parsed, "length") }),
-      });
+      Object.assign(commandArgs, checksumArgs(parsed));
       break;
     case "patch-create":
-      Object.assign(commandArgs, {
-        format: requireOptionValue(parsed, "format"),
-        modified: requireOptionValue(parsed, "modified"),
-        original: requireOptionValue(parsed, "original"),
-        output: requireOptionValue(parsed, "output"),
-        ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
-        ...(readOptionalValue(parsed, "xdelta-secondary")
-          ? { xdelta_secondary: readOptionalValue(parsed, "xdelta-secondary") }
-          : {}),
-      });
+      Object.assign(commandArgs, patchCreateArgs(parsed));
       break;
     case "patch-apply":
-      Object.assign(commandArgs, {
-        input: requireOptionValue(parsed, "input"),
-        output: requireOptionValue(parsed, "output"),
-        patches: readOptionValues(parsed, "patch"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...filterFlags(parsed),
-        ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-        ...(parsed.flags.has("no-compress") ? { no_compress: true } : {}),
-        ...(readOptionalValue(parsed, "compress-format")
-          ? { compress_format: readOptionalValue(parsed, "compress-format") }
-          : {}),
-        ...(readOptionValues(parsed, "compress-codec").length
-          ? { compress_codec: readOptionValues(parsed, "compress-codec") }
-          : {}),
-        ...(readOptionalValue(parsed, "compress-level")
-          ? { compress_level: readOptionalValue(parsed, "compress-level") }
-          : {}),
-        ...(readOptionValues(parsed, "checksum-cache").length
-          ? { assume_in: readOptionValues(parsed, "checksum-cache") }
-          : {}),
-        ...(readOptionValues(parsed, "validate-with-checksum").length
-          ? { expect_in: readOptionValues(parsed, "validate-with-checksum") }
-          : {}),
-        ...(readOptionValues(parsed, "validate-output-checksum").length
-          ? { expect_out: readOptionValues(parsed, "validate-output-checksum") }
-          : {}),
-        ...(readOptionValues(parsed, "patch-header").length
-          ? { patch_header: readOptionValues(parsed, "patch-header") }
-          : {}),
-        ...(readOptionalValue(parsed, "output-header")
-          ? { output_header: readOptionalValue(parsed, "output-header") }
-          : {}),
-        ...(parsed.flags.has("repair-checksum") ? { repair_checksum: true } : {}),
-        ...(readOptionValues(parsed, "n64-byte-order").length
-          ? { n64_byte_order: readOptionValues(parsed, "n64-byte-order") }
-          : {}),
-        ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
-      });
+      Object.assign(commandArgs, patchApplyArgs(parsed));
       break;
     case "patch-validate":
-      Object.assign(commandArgs, {
-        input: requireOptionValue(parsed, "input"),
-        patches: readOptionValues(parsed, "patch"),
-        ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
-        ...filterFlags(parsed),
-        ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
-        ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
-        ...(readOptionValues(parsed, "checksum-cache").length
-          ? { assume_in: readOptionValues(parsed, "checksum-cache") }
-          : {}),
-        ...(expectInTokens(parsed).length ? { expect_in: expectInTokens(parsed) } : {}),
-        ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
-        ...(readOptionalValue(parsed, "n64-byte-order")
-          ? { n64_byte_order: readOptionalValue(parsed, "n64-byte-order") }
-          : {}),
-        ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
-      });
+      Object.assign(commandArgs, patchValidateArgs(parsed));
       break;
     default:
       break;
@@ -288,6 +190,130 @@ function commandArgsToRunRequest(args) {
   if (threads !== null) commandArgs.threads = threads;
 
   return Object.keys(output).length > 0 ? { command: commandRequest, output } : commandRequest;
+}
+
+function probeArgs(parsed) {
+  return {
+    input: requirePositional(parsed, 0, "probe source"),
+    ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
+    ...filterFlags(parsed),
+    ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
+    ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
+  };
+}
+
+function compressArgs(parsed) {
+  return {
+    input: parsed.positionals,
+    output: requireOptionValue(parsed, "output"),
+    ...(readOptionalValue(parsed, "format") ? { format: readOptionalValue(parsed, "format") } : {}),
+    ...(readOptionValues(parsed, "codec").length ? { codec: readOptionValues(parsed, "codec") } : {}),
+    ...(readOptionalValue(parsed, "level") ? { level: readOptionalValue(parsed, "level") } : {}),
+  };
+}
+
+function extractArgs(parsed) {
+  return {
+    output: requireOptionValue(parsed, "out-dir"),
+    input: requirePositional(parsed, 0, "extract source"),
+    ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
+    ...filterFlags(parsed),
+    ...(readOptionValues(parsed, "checksum").length ? { checksum: readOptionValues(parsed, "checksum") } : {}),
+    ...(parsed.flags.has("split-bin") ? { split_bin: true } : {}),
+    ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
+    ...(parsed.flags.has("no-nested-extract") ? { no_nested_extract: true } : {}),
+    force: !parsed.flags.has("no-overwrite"),
+  };
+}
+
+function checksumArgs(parsed) {
+  return {
+    algo: readOptionValues(parsed, "algo"),
+    input: requirePositional(parsed, 0, "checksum source"),
+    ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
+    ...filterFlags(parsed),
+    ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
+    ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
+    ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
+    ...(parsed.flags.has("no-trim-fix") ? { no_trim_fix: true } : {}),
+    ...(readOptionalNumber(parsed, "start") === null ? {} : { start: readOptionalNumber(parsed, "start") }),
+    ...(readOptionalNumber(parsed, "length") === null ? {} : { length: readOptionalNumber(parsed, "length") }),
+  };
+}
+
+function patchCreateArgs(parsed) {
+  return {
+    format: requireOptionValue(parsed, "format"),
+    modified: requireOptionValue(parsed, "modified"),
+    original: requireOptionValue(parsed, "original"),
+    output: requireOptionValue(parsed, "output"),
+    ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
+    ...(readOptionalValue(parsed, "xdelta-secondary")
+      ? { xdelta_secondary: readOptionalValue(parsed, "xdelta-secondary") }
+      : {}),
+  };
+}
+
+function patchApplyArgs(parsed) {
+  return {
+    input: requireOptionValue(parsed, "input"),
+    output: requireOptionValue(parsed, "output"),
+    patches: readOptionValues(parsed, "patch"),
+    ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
+    ...filterFlags(parsed),
+    ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
+    ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
+    ...(parsed.flags.has("no-compress") ? { no_compress: true } : {}),
+    ...(readOptionalValue(parsed, "compress-format")
+      ? { compress_format: readOptionalValue(parsed, "compress-format") }
+      : {}),
+    ...(readOptionValues(parsed, "compress-codec").length
+      ? { compress_codec: readOptionValues(parsed, "compress-codec") }
+      : {}),
+    ...(readOptionalValue(parsed, "compress-level")
+      ? { compress_level: readOptionalValue(parsed, "compress-level") }
+      : {}),
+    ...(readOptionValues(parsed, "checksum-cache").length
+      ? { assume_in: readOptionValues(parsed, "checksum-cache") }
+      : {}),
+    ...(readOptionValues(parsed, "validate-with-checksum").length
+      ? { expect_in: readOptionValues(parsed, "validate-with-checksum") }
+      : {}),
+    ...(readOptionValues(parsed, "validate-output-checksum").length
+      ? { expect_out: readOptionValues(parsed, "validate-output-checksum") }
+      : {}),
+    ...(readOptionValues(parsed, "patch-header").length
+      ? { patch_header: readOptionValues(parsed, "patch-header") }
+      : {}),
+    ...(readOptionalValue(parsed, "output-header")
+      ? { output_header: readOptionalValue(parsed, "output-header") }
+      : {}),
+    ...(parsed.flags.has("repair-checksum") ? { repair_checksum: true } : {}),
+    ...(readOptionValues(parsed, "n64-byte-order").length
+      ? { n64_byte_order: readOptionValues(parsed, "n64-byte-order") }
+      : {}),
+    ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
+  };
+}
+
+function patchValidateArgs(parsed) {
+  return {
+    input: requireOptionValue(parsed, "input"),
+    patches: readOptionValues(parsed, "patch"),
+    ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
+    ...filterFlags(parsed),
+    ...(parsed.flags.has("no-extract") ? { no_extract: true } : {}),
+    ...(parsed.flags.has("no-ignore") ? { no_ignore: true } : {}),
+    ...(readOptionValues(parsed, "checksum-cache").length
+      ? { assume_in: readOptionValues(parsed, "checksum-cache") }
+      : {}),
+    ...(expectInTokens(parsed).length ? { expect_in: expectInTokens(parsed) } : {}),
+    ...(parsed.flags.has("strip-header") ? { strip_header: true } : {}),
+    ...(readOptionalValue(parsed, "n64-byte-order")
+      ? { n64_byte_order: readOptionalValue(parsed, "n64-byte-order") }
+      : {}),
+    ...(parsed.flags.has("ignore-checksum-validation") ? { ignore_checksum_validation: true } : {}),
+  };
 }
 
 // Map the legacy `--rom-filter`/`--patch-filter` DSL flags to the wire

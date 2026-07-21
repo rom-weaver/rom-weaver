@@ -20,7 +20,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
-import { Notice } from "./components/ds/feedback.tsx";
+import { type FileProgressProps, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
@@ -93,6 +93,68 @@ type CompletedTrimOutput = {
   size?: number;
 };
 type TrimMessagePlacement = "output" | "source";
+
+const TrimOutputAction = ({
+  busy,
+  completedOutput,
+  disabled,
+  onCancelProgress,
+  onDownload,
+  onRun,
+  progressProps,
+  progressStage,
+  queued,
+  sourceInputSize,
+  waitingProgressProps,
+}: {
+  busy: boolean;
+  completedOutput: CompletedTrimOutput | null;
+  disabled: boolean;
+  onCancelProgress: () => void;
+  onDownload: () => void;
+  onRun: () => void;
+  progressProps: FileProgressProps | null;
+  progressStage?: string;
+  queued: boolean;
+  sourceInputSize?: number;
+  waitingProgressProps: FileProgressProps | null;
+}) => (
+  <OutputRunAction
+    disabled={disabled}
+    download={
+      completedOutput
+        ? getCompletedDownloadMeta(
+            completedOutput.fileName,
+            completedOutput.size,
+            completedOutput.inputSize ?? sourceInputSize,
+            completedOutput.rawSize,
+          )
+        : undefined
+    }
+    icon={completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />}
+    id="trim-builder-button-run"
+    onClick={completedOutput ? onDownload : onRun}
+    progress={
+      queued
+        ? waitingProgressProps
+          ? {
+              ...waitingProgressProps,
+              cancelLabel: "Cancel queued trim",
+              onCancel: onCancelProgress,
+            }
+          : null
+        : busy && progressProps && progressStage !== "input"
+          ? {
+              ...progressProps,
+              cancelLabel: "Cancel trim",
+              onCancel: onCancelProgress,
+            }
+          : null
+    }
+  >
+    TRIM & DOWNLOAD
+  </OutputRunAction>
+);
 
 // Raw extension keeps the trimmed bytes uncompressed; zip/7z wrap the trimmed file in an archive.
 const getSourceExtension = (fileName: string) => {
@@ -791,41 +853,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     output: {
       action: (
-        <OutputRunAction
+        <TrimOutputAction
+          busy={busy}
+          completedOutput={completedOutput}
           disabled={actionDisabled}
-          download={
-            completedOutput
-              ? getCompletedDownloadMeta(
-                  completedOutput.fileName,
-                  completedOutput.size,
-                  completedOutput.inputSize ?? sourceState?.size,
-                  completedOutput.rawSize,
-                )
-              : undefined
-          }
-          icon={completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />}
-          id="trim-builder-button-run"
-          onClick={() => (completedOutput ? void runTrim() : onRunClick())}
-          progress={
-            trimQueued
-              ? waitingProgressProps
-                ? {
-                    ...waitingProgressProps,
-                    cancelLabel: "Cancel queued trim",
-                    onCancel: cancelTrimOutputProgress,
-                  }
-                : null
-              : busy && progressProps && progress?.stage !== "input"
-                ? {
-                    ...progressProps,
-                    cancelLabel: "Cancel trim",
-                    onCancel: cancelTrimOutputProgress,
-                  }
-                : null
-          }
-        >
-          TRIM & DOWNLOAD
-        </OutputRunAction>
+          onCancelProgress={cancelTrimOutputProgress}
+          onDownload={() => void runTrim()}
+          onRun={onRunClick}
+          progressProps={progressProps}
+          progressStage={progress?.stage}
+          queued={trimQueued}
+          sourceInputSize={sourceState?.size}
+          waitingProgressProps={waitingProgressProps}
+        />
       ),
       compress: buildOutputCompressionPanel({
         disabled: outputDisabled,

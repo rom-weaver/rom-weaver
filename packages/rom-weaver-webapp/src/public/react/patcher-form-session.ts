@@ -940,122 +940,122 @@ const useLocalApplyPatchFormSession = ({
       const patchSettingsChanged = patchStageSyncRef.current.settingsKey !== stageSettingsKey;
       if (hasNewPatch || patchSettingsChanged) setPatchStaging(true);
     }
-    const handle = setTimeout(() => {
-      if (stageInput) {
-        const previousSync = inputStageSyncRef.current;
-        const inputsChanged = !sameKeyList(previousSync.keys, currentInputKeys);
-        const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
-        if (!effectiveInputs.length) {
-          const shouldClearStagedInput = previousSync.inputs.length > 0;
-          inputStageSyncRef.current = {
-            inputs: [],
-            keys: [],
-            settingsKey: stageSettingsKey,
-          };
-          inputStageMachine.invalidateStage();
-          setInputStaging(false);
-          setRomInputs([]);
-          if (shouldClearStagedInput) {
-            emitSessionTrace("input staging clear dispatched", {
-              previousCount: previousSync.inputs.length,
+    const syncInputStage = () => {
+      const previousSync = inputStageSyncRef.current;
+      const inputsChanged = !sameKeyList(previousSync.keys, currentInputKeys);
+      const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
+      if (!effectiveInputs.length) {
+        const shouldClearStagedInput = previousSync.inputs.length > 0;
+        inputStageSyncRef.current = {
+          inputs: [],
+          keys: [],
+          settingsKey: stageSettingsKey,
+        };
+        inputStageMachine.invalidateStage();
+        setInputStaging(false);
+        setRomInputs([]);
+        if (shouldClearStagedInput) {
+          emitSessionTrace("input staging clear dispatched", {
+            previousCount: previousSync.inputs.length,
+          });
+          void stageInput?.(createStageSnapshot(), {
+            onChecksum: () => undefined,
+            onProgress: () => undefined,
+            onState: () => undefined,
+          }).catch((error) => {
+            const normalizedError = toError(error);
+            if (isWorkflowDisposedError(normalizedError)) return;
+            emitSessionTrace("input staging clear failed", {
+              message: normalizedError.message,
+              name: normalizedError.name,
             });
-            void stageInput(createStageSnapshot(), {
-              onChecksum: () => undefined,
-              onProgress: () => undefined,
-              onState: () => undefined,
-            }).catch((error) => {
-              const normalizedError = toError(error);
-              if (isWorkflowDisposedError(normalizedError)) return;
-              emitSessionTrace("input staging clear failed", {
-                message: normalizedError.message,
-                name: normalizedError.name,
-              });
-              logUiError("Input staging clear failed", normalizedError);
-              onError?.(normalizedError);
-            });
-          }
-        } else if (inputsChanged || settingsChanged) {
-          const previousInputs = previousSync.inputs.slice();
-          inputStageSyncRef.current = {
-            inputs: effectiveInputs.slice(),
-            keys: currentInputKeys,
-            settingsKey: stageSettingsKey,
-          };
-          syncRomInput(createStageSnapshot(), previousInputs);
+            logUiError("Input staging clear failed", normalizedError);
+            onError?.(normalizedError);
+          });
         }
+      } else if (inputsChanged || settingsChanged) {
+        const previousInputs = previousSync.inputs.slice();
+        inputStageSyncRef.current = {
+          inputs: effectiveInputs.slice(),
+          keys: currentInputKeys,
+          settingsKey: stageSettingsKey,
+        };
+        syncRomInput(createStageSnapshot(), previousInputs);
+      }
+    };
+    const syncPatchStage = () => {
+      const previousSync = patchStageSyncRef.current;
+      const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
+      const patchesChanged = !sameKeyList(previousSync.keys, currentPatchKeys);
+      // Reordering and removing patches only rearrange/drop files already staged in OPFS;
+      // as long as no current patch is new, there is nothing to (re-)stage - just record order.
+      const previousPatchKeys = new Set(previousSync.keys);
+      const noNewPatches = patchesChanged && currentPatchKeys.every((key) => previousPatchKeys.has(key));
+      // Appending patches keeps the existing prefix staged; only the new tail needs work.
+      const patchesAppended =
+        patchesChanged &&
+        currentPatchKeys.length > previousSync.keys.length &&
+        previousSync.keys.every((key, index) => currentPatchKeys[index] === key);
+      const previousPatchCount = previousSync.patches.length;
+      const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
+      if (!(inputsChanged || patchesChanged || settingsChanged)) return;
+      if (!activePatches.length) {
+        patchStageSyncRef.current = {
+          inputs: effectiveInputs.slice(),
+          keys: [],
+          patches: [],
+          settingsKey: stageSettingsKey,
+        };
+        patchStageMachine.invalidateStage();
+        setPatchStaging(false);
+        setPatchProgress(null);
+        return;
       }
 
-      if (stagePatches) {
-        const previousSync = patchStageSyncRef.current;
-        const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
-        const patchesChanged = !sameKeyList(previousSync.keys, currentPatchKeys);
-        // Reordering and removing patches only rearrange/drop files already staged in OPFS;
-        // as long as no current patch is new, there is nothing to (re-)stage - just record order.
-        const previousPatchKeys = new Set(previousSync.keys);
-        const noNewPatches = patchesChanged && currentPatchKeys.every((key) => previousPatchKeys.has(key));
-        // Appending patches keeps the existing prefix staged; only the new tail needs work.
-        const patchesAppended =
-          patchesChanged &&
-          currentPatchKeys.length > previousSync.keys.length &&
-          previousSync.keys.every((key, index) => currentPatchKeys[index] === key);
-        const previousPatchCount = previousSync.patches.length;
-        const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
-        if (inputsChanged || patchesChanged || settingsChanged) {
-          if (activePatches.length) {
-            patchStageSyncRef.current = {
-              inputs: effectiveInputs.slice(),
-              keys: currentPatchKeys,
-              patches: activePatches.slice(),
-              settingsKey: stageSettingsKey,
-            };
-            const skipForInputOnlyChange = inputsChanged && !patchesChanged && !settingsChanged;
-            const skipForReorderOrRemove = noNewPatches && !inputsChanged && !settingsChanged;
-            // A single in-place replace (same length, exactly one slot swapped): re-stage just that
-            // slot so the untouched cards keep their resolved state + verdicts. Multi-slot swaps fall
-            // back to the full re-stage below (matching the controller's clear-and-re-add).
-            const inPlaceReplaceIndices =
-              patchesChanged &&
-              !inputsChanged &&
-              !settingsChanged &&
-              currentPatchKeys.length === previousSync.keys.length
-                ? currentPatchKeys.flatMap((key, index) => (key === previousSync.keys[index] ? [] : [index]))
-                : [];
-            const singleReplaceIndex = inPlaceReplaceIndices.length === 1 ? (inPlaceReplaceIndices[0] ?? -1) : -1;
-            if (skipForReorderOrRemove) {
-              emitSessionTrace("patch reorder/remove skipped re-stage", { patchCount: activePatches.length });
-            } else if (!skipForInputOnlyChange) {
-              // An input-only change re-runs the deferred validation from syncRomInput's completion
-              // (race-free - after the ROM is staged and patch targets resolve), so it is skipped here.
-              if (singleReplaceIndex >= 0) {
-                emitSessionTrace("patch replaced in place; re-staging one slot", {
-                  index: singleReplaceIndex,
-                  patchCount: activePatches.length,
-                });
-                syncPatchFiles(createStageSnapshot(), { freshIndices: new Set([singleReplaceIndex]) });
-              } else {
-                const freshFromIndex = patchesAppended && !inputsChanged && !settingsChanged ? previousPatchCount : 0;
-                if (freshFromIndex > 0) {
-                  emitSessionTrace("patch append staged incrementally", {
-                    freshFromIndex,
-                    patchCount: activePatches.length,
-                  });
-                }
-                syncPatchFiles(createStageSnapshot(), { freshFromIndex });
-              }
-            }
-          } else {
-            patchStageSyncRef.current = {
-              inputs: effectiveInputs.slice(),
-              keys: [],
-              patches: [],
-              settingsKey: stageSettingsKey,
-            };
-            patchStageMachine.invalidateStage();
-            setPatchStaging(false);
-            setPatchProgress(null);
-          }
-        }
+      patchStageSyncRef.current = {
+        inputs: effectiveInputs.slice(),
+        keys: currentPatchKeys,
+        patches: activePatches.slice(),
+        settingsKey: stageSettingsKey,
+      };
+      const skipForInputOnlyChange = inputsChanged && !patchesChanged && !settingsChanged;
+      const skipForReorderOrRemove = noNewPatches && !inputsChanged && !settingsChanged;
+      // A single in-place replace (same length, exactly one slot swapped): re-stage just that
+      // slot so the untouched cards keep their resolved state + verdicts. Multi-slot swaps fall
+      // back to the full re-stage below (matching the controller's clear-and-re-add).
+      const inPlaceReplaceIndices =
+        patchesChanged && !inputsChanged && !settingsChanged && currentPatchKeys.length === previousSync.keys.length
+          ? currentPatchKeys.flatMap((key, index) => (key === previousSync.keys[index] ? [] : [index]))
+          : [];
+      const singleReplaceIndex = inPlaceReplaceIndices.length === 1 ? (inPlaceReplaceIndices[0] ?? -1) : -1;
+      if (skipForReorderOrRemove) {
+        emitSessionTrace("patch reorder/remove skipped re-stage", { patchCount: activePatches.length });
+        return;
       }
+      if (skipForInputOnlyChange) return;
+
+      // An input-only change re-runs the deferred validation from syncRomInput's completion
+      // (race-free - after the ROM is staged and patch targets resolve), so it is skipped here.
+      if (singleReplaceIndex >= 0) {
+        emitSessionTrace("patch replaced in place; re-staging one slot", {
+          index: singleReplaceIndex,
+          patchCount: activePatches.length,
+        });
+        syncPatchFiles(createStageSnapshot(), { freshIndices: new Set([singleReplaceIndex]) });
+        return;
+      }
+      const freshFromIndex = patchesAppended && !inputsChanged && !settingsChanged ? previousPatchCount : 0;
+      if (freshFromIndex > 0) {
+        emitSessionTrace("patch append staged incrementally", {
+          freshFromIndex,
+          patchCount: activePatches.length,
+        });
+      }
+      syncPatchFiles(createStageSnapshot(), { freshFromIndex });
+    };
+    const handle = setTimeout(() => {
+      if (stageInput) syncInputStage();
+      if (stagePatches) syncPatchStage();
     }, STAGE_COALESCE_WINDOW_MS);
     return () => clearTimeout(handle);
   }, [
