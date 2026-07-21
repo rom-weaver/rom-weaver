@@ -10,6 +10,7 @@ automation.
 - [Install](#install)
   - [Prebuilt install](#prebuilt-install)
   - [Source install](#source-install)
+  - [Run in Docker](#run-in-docker)
   - [Development checkout](#development-checkout)
 - [First weave](#first-weave)
 - [Common workflows](#common-workflows)
@@ -27,6 +28,7 @@ automation.
 - [Header detection and repair](#header-detection-and-repair)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
+- [File permissions](#file-permissions)
 - [Shell completions](#shell-completions)
 - [Man pages](#man-pages)
 
@@ -65,6 +67,46 @@ cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
 ```
+
+### Run in Docker
+
+A Linux CLI image is published for each release. It carries its own runtime, so
+nothing but Docker is required:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "$PWD:/work" \
+  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  probe --input /work/game.iso
+```
+
+The image's working directory is `/work`; mount the directory holding your ROMs
+there and pass paths under `/work`. Arguments after the image name go straight to
+`rom-weaver`, so `--help` and every subcommand work unchanged.
+
+`--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files
+keep their host ownership, and without it the container runs as its own
+`rom-weaver` user (uid 10001): reading your files may be refused, and anything it
+does write ends up owned by a uid that does not exist on the host. rom-weaver
+reads no home directory or user config, so an arbitrary uid needs no matching
+account inside the image.
+
+Mount read-only sources with `:ro` and give writes their own destination:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "$HOME/roms:/work/in:ro" \
+  --volume "$PWD/out:/work/out" \
+  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  weave --input /work/in/game.sfc --patch /work/in/hack.bps --output /work/out/patched.sfc
+```
+
+Tags follow the release: `latest`, the exact version (`0.5.0`), and the minor
+series (`0.5`). Prereleases publish under `beta` instead of `latest`. The image
+is built for `linux/amd64` only, so it runs under emulation on arm64 hosts
+(Apple Silicon included) — install a native build there for large jobs.
 
 ### Development checkout
 
@@ -508,6 +550,45 @@ rom-weaver --json probe --input game.sfc | jq
 `rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an
 unsupported operation or a command-line usage error, and `130` when a run is
 cancelled.
+
+## File permissions
+
+Inputs are checked for readability before a command does any work, and the
+destinations of the commands that write large outputs — `extract`, `compress`,
+`trim`, `patch apply`, and `patch create` — are checked for writability at the
+same point. A read-only output directory costs a validation error, not an
+abandoned multi-gigabyte compress. Both checks perform the real operation (an
+open, a listing, a create), so ACLs, group membership, and read-only mounts are
+honored rather than guessed at from mode bits.
+
+Denials name the path, the operation, and the identities involved:
+
+```
+error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
+(`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
+```
+
+Read that as three facts: what was refused, who owns it, and who asked. Only a
+genuinely absent path is reported as `input path does not exist`; a file that
+exists but cannot be reached — including one behind a directory your user
+cannot traverse — is always reported as a denial, never as a typo.
+
+Common fixes:
+
+- **Reading someone else's files** — `sudo chown` them, add yourself to the
+  owning group, or copy them somewhere you own.
+- **Writing to a read-only location** — point `--output` at a directory you own.
+  rom-weaver creates missing output directories but never changes permissions
+  on an existing one.
+- **Output files owned by the wrong user** — new files inherit your identity and
+  umask; rom-weaver does not copy the source file's mode.
+- **In a container** — the message adds a container hint, because the usual
+  cause is a uid mismatch against a bind mount. Re-run with
+  `--user "$(id -u):$(id -g)"` as shown in [Run in Docker](#run-in-docker).
+
+Permission failures exit `1`. Under `--json` they arrive as a terminal event
+with `"status": "failed"`, carrying `"stage": "validate"` when the preflight
+caught them.
 
 ## Shell completions
 

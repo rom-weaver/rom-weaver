@@ -109,6 +109,21 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.sh | sh
 ```
 
+Or run it from the published Linux image, without installing anything:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "$PWD:/work" \
+  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  probe --input /work/game.iso
+```
+
+Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
+bind-mounted files keep their host ownership, so without it the container cannot
+read files it does not own and leaves anything it writes owned by an unknown uid.
+See [Run in Docker](docs/cli.md#run-in-docker).
+
 To install the current source build instead:
 
 ```bash
@@ -120,6 +135,9 @@ rom-weaver --help
 
 The source build requires Rust 1.95+, CMake, Clang, and a native compiler
 toolchain.
+
+Hitting `Permission denied`? See
+[File permissions](docs/cli.md#file-permissions).
 
 The [development guide](docs/development.md) covers the full toolchain setup,
 webapp builds, and tests.
