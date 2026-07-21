@@ -19,7 +19,7 @@ license = "AGPL-3.0-or-later"
 publish = ["crates-io"]
 repository = "https://github.com/brandonocasey/rom-weaver"
 rust-version = "1.95"
-version = "0.6.0"
+version = "0.6.1"
 
 # Lint policy in the manifest rather than only in the `mise run clippy` flags,
 # so a bare `cargo clippy` and rust-analyzer's in-editor diagnostics enforce the
@@ -72,6 +72,7 @@ flacenc = { version = "0.5.1", default-features = false }
 itertools = "0.15"
 lzma-rust2 = { version = "0.16.2", default-features = false, features = ["std", "encoder", "xz", "optimization"] }
 libc = "0.2.137"
+same-file = "1.0.6"
 libz-sys = { version = "1.1.28", default-features = false }
 liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.1](https://github.com/brandonocasey/rom-weaver/compare/v0.6.0...v0.6.1) (2026-07-21)
+
+
+### Features
+
+* **ci:** cascade webapp deploys down the channel ladder ([521e696](https://github.com/brandonocasey/rom-weaver/commit/521e6960d272efb89bc8d4dbc967885af115e67b))
+
+
+### Bug Fixes
+
+* **docker:** make the build caches actually cache ([#46](https://github.com/brandonocasey/rom-weaver/issues/46)) ([c0f913b](https://github.com/brandonocasey/rom-weaver/commit/c0f913b129bed0c3be8140d4c3e5b6c69c893795))
+* **webapp:** cancel pending-drop timers on unmount ([#49](https://github.com/brandonocasey/rom-weaver/issues/49)) ([aba587d](https://github.com/brandonocasey/rom-weaver/commit/aba587d0e1541d8da5722740ecfa4d37748a31fa))
+
+
+### Continuous Integration
+
+* **release:** build releases as drafts so immutability works ([#44](https://github.com/brandonocasey/rom-weaver/issues/44)) ([30478f6](https://github.com/brandonocasey/rom-weaver/commit/30478f60e397c703f560514f4f4e0a70f04a3f76))
+
 ## [0.6.0](https://github.com/brandonocasey/rom-weaver/compare/v0.5.0...v0.6.0) (2026-07-21)
 
 

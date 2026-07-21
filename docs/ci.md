@@ -34,7 +34,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `commitlint.yml` | PR (open/edit/sync), push to `main` | No | Conventional-commit format |
+| `commitlint.yml` | PR (open/edit/sync) | No | Conventional-commit pull request title |
 | `codeql.yml` | push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | after a successful `CI` on `main` | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool |
@@ -45,6 +45,11 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `npm-publish.yml` | called by `release.yml`, manual | n/a | 4 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
+`commitlint.yml` lints the **pull request title only**. Merge commits are
+disabled and squash merges take `PR_TITLE` as the subject, so the title is the
+only text that reaches `main` and the only text Release Please reads. Branch
+commits are squashed away, so they are not linted.
+
 Nothing publishes on a push. `release.yml` runs on `workflow_run` gated on a
 **successful** CI, and even then only opens a release pull request; merging
 that pull request is what sets `release_created` and unlocks the publish jobs.
@@ -52,15 +57,17 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 > **`main` is not branch-protected.** Nothing is a *required* status check
 > today, so "gating" above means "CI must be green before Release Please
 > runs", not "GitHub will refuse the merge". If protection is ever enabled,
-> the checks to require are `Rust`, `Webapp`, and `Conventional commits` -
-> the `rust` job exists to give the first of those a single stable name.
+> the checks to require are `Rust`, `Webapp lint + tests + build`, and
+> `Conventional commits` - the `rust` job exists to give the first of those a
+> single stable name.
 
 ## `ci.yml` - the required gate
 
 ```
-             ┌── rust-host ──┐
-checkout ────┤               ├── rust (aggregate check name)
-             └── wasm-check ─┘
+             ┌── rust-host ────┐
+             ├── wasm-check ───┤
+checkout ────┼── rust-macos ───┼── rust (aggregate check name)
+             └── rust-windows ─┘
 
          ┌── webapp ── lint, unit, browser, E2E, build
 wasm ────┤
@@ -98,7 +105,28 @@ security ── advisories (warn only, always green)
 - **`wasm-check`** runs `cargo check` against `wasm32-wasip1-threads`. It has a
   separate Cargo fingerprint from the host checks, so serializing it into
   `rust-host` would only lengthen the required gate.
-- **`rust`** is an aggregator: it fails unless both jobs above succeeded. Its
+- **`rust-macos`** runs the Rust test suite plus the threaded wasm check on
+  `macos-14` (arm64) - the platform the release fan-out ships CLI binaries for
+  and the one contributors build the wasm module on, but that nothing
+  previously tested. It uses the same mise/setup-build-env path as the Linux
+  jobs, so the wasm env wiring in `.mise.toml` (WASI SDK discovery, the bash
+  compiler shims) is what gets exercised. fmt, clippy, typegen, and the policy
+  checks are platform-independent and already gate in `rust-host`.
+- **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
+  the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
+  rather than mise, whose `[env]` exec templates assume a POSIX shell; the
+  release jobs already prove this route on the same image. Because it bypasses
+  mise it re-declares `CARGO_INCREMENTAL=0` itself, and it trims MSVC debug
+  info to line tables (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`) - PDB
+  generation is the priciest part of a Windows debug build. No wasm leg:
+  building the wasm module on Windows is unsupported until the bash compiler
+  shims have a native counterpart.
+
+  The test run phase uses cargo-nextest on every platform leg (the mise legs
+  through the `test-rust` task, Windows via `taiki-e/install-action` at the
+  same pinned version). nextest does not execute doctests, so each leg runs a
+  separate `cargo test --doc` pass rather than silently shrinking the suite.
+- **`rust`** is an aggregator: it fails unless the four jobs above succeeded. Its
   only purpose is to present one stable check name (`Rust`) while the work
   runs in parallel, so branch protection would have a single thing to require.
 - **`security`** runs `cargo deny advisories` and `npm audit`. **Deliberately
@@ -200,7 +228,9 @@ Caching decisions that live here:
   `main`**. A branch run writes ~450 MB into a branch-local scope nothing else
   can read, which is pure ballast against the 10 GiB budget.
 - **WASI SDK**: keyed on version *and* checksum, so a version bump misses by
-  construction and can never serve a stale SDK.
+  construction and can never serve a stale SDK. The archive is per-platform
+  (x86_64-linux for the Linux jobs, arm64-macos for `rust-macos`), each pinned
+  by its own checksum.
 - **`node_modules`**: the installed tree is cached, not `~/.npm` - a hit skips
   `npm ci` outright instead of merely speeding up its download half.
 - **Playwright**: browser binaries only. The apt-level libraries they link

@@ -1,5 +1,5 @@
 source: https://github.com/brandonocasey/libarchive
-ref: v3.8.7-6-gc2620739
-commit: c26207393a683710f99513fa321945d4da3dfe50
+ref: v3.8.7-7-g18387bec
+commit: 18387bec75be283d34cd94af73dc217ec4ca26d4
 pruned: .git .github .cirrus.yml libarchive/test cat/test cpio/test tar/test unzip/test test_utils doc examples contrib build/autoconf build/ci build/release build/utils build/autogen.sh build/bump-version.sh build/clean.sh build/makerelease.sh
 refreshed-by: scripts/vendor-libarchive.sh

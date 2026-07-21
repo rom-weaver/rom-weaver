@@ -1,5 +1,4 @@
 use super::*;
-use libc::{S_IFDIR, S_IFMT, S_IFREG, mode_t};
 use std::os::raw::c_int;
 use tracing::trace;
 
@@ -195,17 +194,26 @@ pub(crate) struct ReadArchiveEntry<'a> {
     ptr: NonNull<archive_entry>,
 }
 
+// libarchive normalizes archive_entry_filetype() to its own AE_IF* values
+// (archive_entry.h) on every platform. Compare against those rather than
+// libc's S_IF*, which only coincidentally match on Unix and don't exist as
+// libc items on windows-msvc. The AE_IF* macros are casts, so bindgen cannot
+// export them as constants.
+const AE_IFMT: u32 = 0o170000;
+const AE_IFREG: u32 = 0o100000;
+const AE_IFDIR: u32 = 0o040000;
+
 impl<'a> ReadArchiveEntry<'a> {
-    fn filetype(&self) -> mode_t {
-        unsafe { archive_entry_filetype(self.ptr.as_ptr()) }
+    fn filetype(&self) -> u32 {
+        (unsafe { archive_entry_filetype(self.ptr.as_ptr()) }) as u32
     }
 
     pub(crate) fn is_dir(&self) -> bool {
-        (self.filetype() & S_IFMT as mode_t) == S_IFDIR as mode_t
+        (self.filetype() & AE_IFMT) == AE_IFDIR
     }
 
     pub(crate) fn is_file(&self) -> bool {
-        (self.filetype() & S_IFMT as mode_t) == S_IFREG as mode_t
+        (self.filetype() & AE_IFMT) == AE_IFREG
     }
 
     pub(crate) fn size(&self) -> Option<u64> {

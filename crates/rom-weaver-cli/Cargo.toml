@@ -24,10 +24,10 @@ crc32fast.workspace = true
 flate2.workspace = true
 miniz_oxide.workspace = true
 rayon.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.6.0" }
-rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.6.0" }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.0" }
-rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.6.0" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.6.1" }
+rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.6.1" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.1" }
+rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.6.1" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -36,6 +36,9 @@ zstd.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap.workspace = true
+# File-identity comparison for in-place apply safety; stable-Rust route to
+# the Windows by-handle info std still gates behind an unstable feature.
+same-file.workspace = true
 clap_complete = "4.5"
 # Light interactive prompts for `apply --tui`; built on `console`, already in
 # the tree via indicatif. default-features off drops editor/password/fuzzy.

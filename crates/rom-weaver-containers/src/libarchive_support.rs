@@ -318,7 +318,7 @@ pub(crate) fn write_archive_with_libarchive(
                 if percent_bucket == 0 {
                     return;
                 }
-                loop {
+                let previous_bucket = loop {
                     let previous_bucket = codec_progress_bucket.load(Ordering::Relaxed);
                     if percent_bucket <= previous_bucket {
                         return;
@@ -332,18 +332,26 @@ pub(crate) fn write_archive_with_libarchive(
                         )
                         .is_ok()
                     {
-                        break;
+                        break previous_bucket;
                     }
+                };
+                // The main archive thread samples the shared encoded-bytes
+                // counter only at drain points, so a fast multi-threaded
+                // encode can skip many percent levels between callbacks (and
+                // observe only the final one). Fill the gap like
+                // maybe_emit_container_byte_progress does, so progress stays
+                // dense no matter how sparsely the counter was sampled.
+                for bucket in previous_bucket.saturating_add(1)..=percent_bucket {
+                    emit_container_running_progress(
+                        &codec_progress_context,
+                        "compress",
+                        codec_progress_format,
+                        "create",
+                        format!("compressing `{codec_progress_format}`"),
+                        bucket as f32,
+                        Some(&codec_progress_execution),
+                    );
                 }
-                emit_container_running_progress(
-                    &codec_progress_context,
-                    "compress",
-                    codec_progress_format,
-                    "create",
-                    format!("compressing `{codec_progress_format}`"),
-                    percent_bucket as f32,
-                    Some(&codec_progress_execution),
-                );
             }))
         } else {
             None
@@ -527,7 +535,10 @@ fn emit_final_7zip_codec_progress(
 ) {
     loop {
         let previous = emitted_bucket.load(Ordering::Relaxed);
-        if previous == 0 || previous >= 99 {
+        // No `previous == 0` early-out: a fast encode can finish before the
+        // running path ever observes a nonzero bucket, and suppressing the
+        // terminal event then would leave the whole compress without progress.
+        if previous >= 99 {
             return;
         }
         if emitted_bucket

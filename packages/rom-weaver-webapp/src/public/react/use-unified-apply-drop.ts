@@ -230,13 +230,27 @@ const useUnifiedApplyDrop = (
   const nextIdRef = useRef(0);
   const activeDropsRef = useRef(new Map<AbortController, ActiveDropKind>());
   const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
-  useEffect(
-    () => () => {
-      for (const controller of activeDropsRef.current.keys()) controller.abort();
-      activeDropsRef.current.clear();
-    },
-    [],
-  );
+  const pendingTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    // Re-armed on every setup, not just initialised at declaration: StrictMode runs
+    // setup -> cleanup -> setup against the same fiber and the same refs, so a ref only
+    // ever cleared would stay false after the double-invoke and disable clear() forever.
+    mountedRef.current = true;
+    // Captured at setup so the cleanup does not read `.current` later; both refs hold a
+    // collection that is only ever mutated, never reassigned, so these are the same objects.
+    const activeDrops = activeDropsRef.current;
+    const pendingTimers = pendingTimersRef.current;
+    return () => {
+      mountedRef.current = false;
+      for (const controller of activeDrops.keys()) controller.abort();
+      activeDrops.clear();
+      // The minimum-display timers below outlive the drop that scheduled them, so an unmount
+      // between scheduling and firing would otherwise setState on a dead root.
+      for (const timer of pendingTimers) clearTimeout(timer);
+      pendingTimers.clear();
+    };
+  }, []);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
       const classification = classifyDroppedFiles(files);
@@ -296,11 +310,23 @@ const useUnifiedApplyDrop = (
       const pendingIds = new Set(pending.map((entry) => entry.id));
       const pendingStartedAt = performance.now();
       const clearPending = () => {
-        if (!pendingIds.size) return;
-        const clear = () => setPendingDrops((current) => current.filter((entry) => !pendingIds.has(entry.id)));
+        // An aborted route's .finally() runs as a microtask after unmount cleanup has already
+        // emptied pendingTimersRef, so a timer scheduled here would never be cancelled.
+        if (!(pendingIds.size && mountedRef.current)) return;
+        const clear = () => {
+          if (!mountedRef.current) return;
+          setPendingDrops((current) => current.filter((entry) => !pendingIds.has(entry.id)));
+        };
         const remaining = MIN_PENDING_DISPLAY_MS - (performance.now() - pendingStartedAt);
-        if (remaining > 0) setTimeout(clear, remaining);
-        else clear();
+        if (remaining <= 0) {
+          clear();
+          return;
+        }
+        const timer = setTimeout(() => {
+          pendingTimersRef.current.delete(timer);
+          clear();
+        }, remaining);
+        pendingTimersRef.current.add(timer);
       };
       const previousRoute = dropQueueRef.current.catch(() => undefined);
       const mayContainBundle =

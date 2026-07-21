@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/webapp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal.",
   "author": "Brandon Casey",
   "homepage": "https://rom-weaver.com",

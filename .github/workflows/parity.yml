@@ -1,4 +1,4 @@
-name: Parity
+name: Nightly parity (chdman + dolphin-tool)
 
 # Nightly compression parity against live chdman and dolphin-tool releases. It is non-blocking
 # because those third-party tools change independently of this repository.

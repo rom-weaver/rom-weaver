@@ -34,7 +34,7 @@ jobs:
   # so it finishes in well under a minute and reports independently of the
   # build jobs instead of hiding behind them.
   repo-lint:
-    name: Repo lint
+    name: Lint workflows + scripts + Dockerfiles
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: github.ref_type != 'tag'
@@ -68,7 +68,7 @@ jobs:
   # source-only pull request would instead invalidate `COPY . .` and pay a cold
   # cargo+wasm compile to tell us nothing about the Dockerfile.
   docker:
-    name: Docker ${{ matrix.name }} image
+    name: Docker build (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
@@ -183,7 +183,7 @@ jobs:
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.
   wasm:
-    name: WASM build
+    name: Build WASM module
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -245,7 +245,7 @@ jobs:
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
   rust-host:
-    name: Rust host
+    name: Rust lint + tests (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
@@ -260,7 +260,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node rust ripgrep cargo-deny cargo-machete
+          tools: node rust ripgrep cargo-deny cargo-machete nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
 
@@ -311,7 +311,7 @@ jobs:
   # request red blocks unrelated work until someone lands an upgrade. Findings
   # surface as annotations and a job summary instead, so this job stays green.
   security:
-    name: Security advisories
+    name: Security advisories (non-gating)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     if: github.ref_type != 'tag'
@@ -342,7 +342,7 @@ jobs:
   # The threaded target has a separate Cargo fingerprint from the host checks,
   # so serializing it inside the host job only lengthens the required Rust gate.
   wasm-check:
-    name: Rust WASM check
+    name: Rust check (WASM target)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
@@ -365,6 +365,137 @@ jobs:
       - name: WASM threaded check
         run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
+  # The release fan-out builds the CLI for macOS, but until here nothing ever
+  # *tested* on it - a platform-specific regression surfaced at publish time or
+  # from a user report. Runs the test suite plus the threaded wasm check, since
+  # macOS is the platform contributors actually build the wasm module on and
+  # its toolchain wiring (WASI SDK discovery, the bash compiler shims) was
+  # otherwise only ever verified on Linux. fmt, clippy, typegen, and the policy
+  # checks are platform-independent and already gate in `rust-host`.
+  #
+  # Uses the same mise/setup-build-env path as the Linux jobs: mise is the
+  # toolchain manager the repo's macOS development already runs on, and reusing
+  # it here means the wasm env wiring in .mise.toml is what gets exercised
+  # rather than a hand-copied imitation of it.
+  rust-macos:
+    name: Rust tests + WASM check (macOS)
+    runs-on: macos-14
+    timeout-minutes: 90
+    if: github.ref_type != 'tag'
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The runner image ships cmake and the Xcode clang, which covers the
+      # vendored libarchive host build; no brew installs needed.
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: rust nextest
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      - name: Rust tests
+        run: mise run test-rust
+
+      # Same rationale as the Linux `wasm-check` job: RUSTFLAGS is safe to
+      # override for a check because nothing is linked.
+      - name: WASM threaded check
+        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
+
+  # Windows cannot reuse the mise path: the wasm toolchain's compiler shims
+  # are bash scripts a native cargo cannot exec, and mise's [env] templates
+  # assume a POSIX shell. The npm platform publish already proves the
+  # dtolnay + rustup route on this exact image, so the tests ride that instead.
+  # The toolchain pin is read from .mise.toml so this leg can never drift from
+  # the version the other jobs test with. No wasm leg here - building the wasm
+  # module on Windows is unsupported until those shims have a native
+  # counterpart.
+  rust-windows:
+    name: Rust tests (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 90
+    if: github.ref_type != 'tag'
+    env:
+      CARGO_TERM_COLOR: always
+      # The mise legs get this from .mise.toml's [env]; this leg bypasses mise.
+      # Incremental artifacts only bloat the rust-cache save.
+      CARGO_INCREMENTAL: "0"
+      # MSVC debug info (PDBs, link.exe /DEBUG) is the priciest part of a
+      # Windows debug build. Line tables keep file:line in test backtraces
+      # while skipping the bulk of it. Applies to the test profile via its
+      # dev-profile inheritance; local builds are untouched.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      # rust-lld (lld-link flavor, ships with the toolchain) links large test
+      # binaries markedly faster than MSVC link.exe, and this workspace
+      # produces many of them. Safe here (unlike the wasm job) because this
+      # target has no configured link flags to clobber.
+      RUSTFLAGS: -C linker=rust-lld
+      # The workspace (and target/) already lives on D:, the runner's local
+      # temp disk (~9-19k IOPS); C: is remote-backed managed storage (~4-6k
+      # IOPS and often worse). Move the remaining hot paths off C:: the crate
+      # registry + installed cargo binaries, the toolchain rustc/std read on
+      # every compile, and the temp dirs the test suite churns through
+      # (the step below points TMP/TEMP at RUNNER_TEMP, already on D:).
+      # rustup, taiki-e/install-action, and rust-cache all honor these.
+      CARGO_HOME: D:\cargo-home
+      RUSTUP_HOME: D:\rustup-home
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The default Windows temp dir lives on the slow OS disk; the test
+      # suite churns through temp fixtures, so point it at RUNNER_TEMP on the
+      # local disk instead. A step because the `runner` context is not
+      # available in job-level env.
+      - name: Move temp dirs off the OS disk
+        shell: bash
+        run: |
+          {
+            echo "TMP=$RUNNER_TEMP"
+            echo "TEMP=$RUNNER_TEMP"
+          } >> "$GITHUB_ENV"
+
+      - name: Read pinned Rust version
+        id: pin
+        shell: bash
+        run: |
+          version=$(sed -n 's/^rust = "\(.*\)"$/\1/p' .mise.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no rust pin found in .mise.toml"
+            exit 1
+          fi
+          echo "rust=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.pin.outputs.rust }}
+
+      # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
+      # includes the OS, so this leg never collides with the others.
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Same version as the .mise.toml pin; this leg cannot use mise.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.140
+
+      # The runner image ships cmake and MSVC + LLVM, which is everything the
+      # vendored libarchive build needs - the npm platform publish builds this
+      # same graph with no extra installs. nextest does not execute doctests,
+      # so those run as a separate cargo test --doc pass, same as the
+      # test-rust mise task.
+      - name: Rust tests
+        run: cargo nextest run --workspace --locked
+
+      - name: Rust doc tests
+        run: cargo test --quiet --doc --workspace --locked
+
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
   # The `main protection` ruleset requires this context by name. It must fail
@@ -374,20 +505,24 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [rust-host, wasm-check]
+    needs: [rust-host, wasm-check, rust-macos, rust-windows]
     if: always() && github.ref_type != 'tag'
     steps:
       - name: Verify Rust jobs
         env:
           HOST_RESULT: ${{ needs.rust-host.result }}
           WASM_RESULT: ${{ needs.wasm-check.result }}
+          MACOS_RESULT: ${{ needs.rust-macos.result }}
+          WINDOWS_RESULT: ${{ needs.rust-windows.result }}
         run: |
           test "$HOST_RESULT" = success
           test "$WASM_RESULT" = success
+          test "$MACOS_RESULT" = success
+          test "$WINDOWS_RESULT" = success
 
   # Consumes the prebuilt wasm module; compiles no Rust of its own.
   webapp:
-    name: Webapp
+    name: Webapp lint + tests + build
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
@@ -454,7 +589,7 @@ jobs:
   # Split out of `deploy` because the channel list drives that job's matrix, and
   # a matrix can only be fed by an upstream job's output.
   deploy-plan:
-    name: Plan web deploy
+    name: Plan webapp deploy
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Same non-gating boundary as `deploy` below: a failure here must skip
@@ -532,7 +667,7 @@ jobs:
   # minutes or a second toolchain. Depend only on `wasm` so preview URLs arrive
   # while the rest of the suite is still running.
   deploy:
-    name: Deploy web (${{ matrix.target.channel }})
+    name: Deploy webapp (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: [wasm, deploy-plan]
