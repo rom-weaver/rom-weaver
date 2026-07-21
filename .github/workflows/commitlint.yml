@@ -39,4 +39,23 @@ jobs:
       - name: Check pull request title
         env:
           PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-        run: printf '%s\n' "$PULL_REQUEST_TITLE" | npm exec -- commitlint
+        run: |
+          if printf '%s\n' "$PULL_REQUEST_TITLE" | npm exec -- commitlint; then
+            exit 0
+          fi
+
+          echo '::error title=Invalid pull request title::Use Conventional Commits. See the check summary for valid types and scopes.'
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Invalid pull request title
+
+          Rename the pull request using `type(scope): description` or `type: description`.
+
+          Valid types: `build`, `chore`, `ci`, `docs`, `dx`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
+
+          A scope is optional. Any short scope naming the affected area is valid; common scopes include `app`, `bundle`, `ci`, `cli`, `commitlint`, `core`, `deps`, `docs`, `main`, `release`, `runtime`, `vendor`, `wasm`, and `webapp`.
+
+          Example: `feat(webapp): add sample assets`
+
+          The check will rerun automatically after the title is edited.
+          EOF
+          exit 1
