@@ -33,7 +33,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `commitlint.yml` | PR (open/edit/sync), push to `main` | No | Conventional-commit format |
+| `commitlint.yml` | PR (open/edit/sync) | No | Conventional-commit pull request title |
 | `codeql.yml` | push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | after a successful `CI` on `main` | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool |
@@ -43,6 +43,11 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish + semver check |
 | `npm-publish.yml` | called by `release.yml`, manual | n/a | 4 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
+
+`commitlint.yml` lints the **pull request title only**. Merge commits are
+disabled and squash merges take `PR_TITLE` as the subject, so the title is the
+only text that reaches `main` and the only text Release Please reads. Branch
+commits are squashed away, so they are not linted.
 
 Nothing publishes on a push. `release.yml` runs on `workflow_run` gated on a
 **successful** CI, and even then only opens a release pull request; merging
