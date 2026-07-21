@@ -3,6 +3,7 @@ import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
+import { ACCENTS } from "./accent.ts";
 import { RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import { LICENSE_URL, NOTICE_URL, THIRD_PARTY_LICENSES_URL } from "./project-links.ts";
@@ -173,10 +174,54 @@ const renderFieldInfo = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraf
   );
 };
 
+/**
+ * Accent picker. A native <select> can't render its options' colours (Safari
+ * ignores option styling entirely), and the colour IS the choice here - so the
+ * six dye lots show as swatches, all visible at once instead of behind a popup.
+ * The first radio carries the field id so the row's <label> targets it.
+ */
+const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: FieldRenderProps) => {
+  const field = SETTINGS_FIELD_METADATA[fieldKey];
+  const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
+  const value = getFieldValue(fieldKey, draftSettings) || getDefaultValueString(fieldKey);
+  const selected = ACCENTS.find((accent) => accent.value === value);
+  return (
+    <span aria-label={field.label} className="accent-picker" role="radiogroup">
+      {ACCENTS.map((accent, index) => (
+        <label className="accent-chip" key={accent.value} title={accent.label}>
+          <input
+            aria-label={accent.label}
+            checked={value === accent.value}
+            disabled={disabled}
+            id={index === 0 ? field.id : undefined}
+            name={field.id}
+            onChange={() => onDraftChange(fieldKey, accent.value)}
+            type="radio"
+            value={accent.value}
+          />
+          <span aria-hidden="true" className="accent-chip-dot" style={{ background: accent.swatch }} />
+        </label>
+      ))}
+      <span className="accent-name">{selected ? getSelectOptionLabel(fieldKey, selected) : value}</span>
+    </span>
+  );
+};
+
 /** The control element (select / text / number input) for a non-toggle field. */
 const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftChange }: FieldRenderProps) => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
+  if (fieldKey === "accent") {
+    return (
+      <AccentPicker
+        draftSettings={draftSettings}
+        fieldKey={fieldKey}
+        onDraftChange={onDraftChange}
+        uiState={uiState}
+        validation={validation}
+      />
+    );
+  }
   if (field.kind === "select") {
     const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
     const value = getFieldValue(fieldKey, draftSettings);

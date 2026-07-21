@@ -18,28 +18,11 @@ type BuildChannel = (typeof CHANNELS)[number];
 
 const isBuildChannel = (value: unknown): value is BuildChannel => CHANNELS.includes(value as BuildChannel);
 
-const BUILD_CHANNEL: BuildChannel = isBuildChannel(__APP_CHANNEL__) ? __APP_CHANNEL__ : "dev";
-const BUILD_CHANNEL_LABEL = __APP_CHANNEL_LABEL__ || BUILD_CHANNEL;
-
-/**
- * Dev-only channel override (`?rw-channel=nightly`), so channel styling can be
- * reviewed without deploying. Ignored in production builds - the channel is a
- * build fact there, not something a URL should be able to lie about.
- */
-const readChannelOverride = (): BuildChannel | null => {
-  if (!import.meta.env.DEV) return null;
-  if (typeof window === "undefined") return null;
-  const requested = new URLSearchParams(window.location.search).get("rw-channel");
-  if (!requested) return null;
-  if (!isBuildChannel(requested)) {
-    logger.warn("Ignoring unknown rw-channel override", { requested });
-    return null;
-  }
-  return requested;
-};
-
-const ACTIVE_CHANNEL: BuildChannel = readChannelOverride() ?? BUILD_CHANNEL;
-const ACTIVE_CHANNEL_LABEL = ACTIVE_CHANNEL === BUILD_CHANNEL ? BUILD_CHANNEL_LABEL : ACTIVE_CHANNEL;
+// The channel is a build fact, never a runtime one: no URL parameter or storage
+// key can move it. To see a channel's out-of-box look locally, build or serve
+// with the real thing - `ROM_WEAVER_CHANNEL=beta npm run dev`.
+const ACTIVE_CHANNEL: BuildChannel = isBuildChannel(__APP_CHANNEL__) ? __APP_CHANNEL__ : "dev";
+const ACTIVE_CHANNEL_LABEL = __APP_CHANNEL_LABEL__ || ACTIVE_CHANNEL;
 
 /** Production wears the plain brand; every other channel is marked. */
 const CHANNEL_BADGE = ACTIVE_CHANNEL === "prod" ? "" : ACTIVE_CHANNEL_LABEL;
