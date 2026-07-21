@@ -32,10 +32,18 @@ For substantial behavior or format changes, open an issue first so the scope
 can be agreed before implementation. Keep pull requests focused and update the
 relevant documentation when behavior changes.
 
-The [development guide](../docs/development.md) covers the recursive clone,
-toolchains, builds, tests, generated files, and linked worktrees. Before
-submitting a pull request, run the smallest relevant checks and, when possible,
-the complete local gate:
+The [development guide](../docs/development.md) covers cloning and bootstrap,
+toolchains, builds, tests, generated files, and linked worktrees.
+
+Pull request titles must use Conventional Commits because the squash-merge title
+becomes the commit on `main` and the input to Release Please. Use
+`type(scope): summary`, for example `fix(webapp): handle empty patch archives`.
+The scope is optional; allowed types are `build`, `chore`, `ci`, `docs`, `dx`,
+`feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`. Branch commit
+messages are not linted.
+
+Before submitting a pull request, run the smallest relevant checks and, when
+possible, the complete local gate:
 
 ```bash
 mise run ci

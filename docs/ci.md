@@ -34,7 +34,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `commitlint.yml` | PR (open/edit/sync) | No | Conventional-commit pull request title |
+| `commitlint.yml` | PR (open/edit/sync) | **Yes** | Conventional-commit pull request title |
 | `codeql.yml` | push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | after a successful `CI` on `main` | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool |
@@ -54,12 +54,10 @@ Nothing publishes on a push. `release.yml` runs on `workflow_run` gated on a
 **successful** CI, and even then only opens a release pull request; merging
 that pull request is what sets `release_created` and unlocks the publish jobs.
 
-> **`main` is not branch-protected.** Nothing is a *required* status check
-> today, so "gating" above means "CI must be green before Release Please
-> runs", not "GitHub will refuse the merge". If protection is ever enabled,
-> the checks to require are `Rust`, `Webapp`, and `Conventional commits` -
-> the `rust` and `webapp` aggregate jobs exist to give the first two of those
-> a single stable name each.
+> **`main` is protected by the active `main protection` ruleset.** Pull requests
+> must use squash merge and pass `Rust`, `Conventional commits`, `Build WASM
+> module`, `Lint workflows + scripts + Dockerfiles`, `Webapp`, `Docker build
+> (CLI)`, and `Docker build (webapp)`.
 
 ## `ci.yml` - the required gate
 
@@ -133,9 +131,9 @@ security ── advisories (warn only, always green)
   through the `test-rust` task, Windows via `taiki-e/install-action` at the
   same pinned version). nextest does not execute doctests, so each leg runs a
   separate `cargo test --doc` pass rather than silently shrinking the suite.
-- **`rust`** is an aggregator: it fails unless the four jobs above succeeded. Its
-  only purpose is to present one stable check name (`Rust`) while the work
-  runs in parallel, so branch protection would have a single thing to require.
+- **`rust`** is an aggregator: it fails unless the four jobs above succeeded.
+  Its only purpose is to present one stable check name (`Rust`) while the work
+  runs in parallel, so branch protection has a single thing to require.
 - **`security`** runs `cargo deny advisories` and `npm audit`. **Deliberately
   non-gating** - an advisory can be published against a transitive dependency
   without any commit of ours, and letting that turn every open pull request red
@@ -433,23 +431,34 @@ workflow-wide; `cache-cleanup.yml` starts from `permissions: {}` and takes only
 
 ## Reproducing CI locally
 
-CI runs the same `mise` tasks the pre-commit hooks do, just unconditionally and
-over the whole tree instead of scoped to changed paths.
+The pre-commit hooks select lint checks from the staged paths. CI reuses those
+tasks over the whole tree, then adds tests, builds, publishability checks, and
+the macOS/Windows Rust legs. `mise run ci` is the broad local gate; use the
+individual commands below when narrowing a failure or matching a specific job.
 
 ```bash
-mise run fmt clippy typegen-check thread-guards test-rust   # rust-host
-mise run licenses-check deny-policy machete                 # rust-host
-mise run wasm-check                                         # wasm-check
-mise run build-wasm-prod                                    # wasm
-npm --prefix packages/rom-weaver-webapp run lint            # webapp
+mise run ci                                                  # broad local gate
+
+mise run actionlint ::: shellcheck ::: hadolint                  # repo-lint
+mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
+mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
+cargo publish --workspace --locked --dry-run --no-verify     # rust-host
+mise run wasm-check                                          # wasm-check
+mise run build-wasm-prod                                     # wasm
+npm test                                                     # webapp build-script tests
+npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
+npm --prefix packages/rom-weaver-webapp run icons:channels:check
 npm --prefix packages/rom-weaver-webapp run test:unit
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-
-mise x -- actionlint                                        # lint the workflows themselves
+npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+npm --prefix packages/rom-weaver-webapp run build
 ```
 
-The workflow files are covered by `actionlint`, which is shellcheck-aware and
-so also lints the inline `run:` scripts.
+`actionlint` is shellcheck-aware and also lints inline workflow `run:` scripts;
+the separate `shellcheck` task covers tracked shell files. The Docker jobs are
+conditional on image-plumbing changes and are most directly reproduced with
+the source-build commands in the [self-hosting guide](self-hosting.md).
 
 ## Gotchas
 

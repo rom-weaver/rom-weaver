@@ -132,11 +132,16 @@ Run the complete local quality gate before submitting a change:
 mise run ci
 ```
 
-That task covers Rust formatting, Clippy, generated types,
-threaded-WASM guards, license inventory, workflow/shell/Dockerfile linting,
-Rust tests, the production WASM build, frontend linting, unit tests,
-browser/WASM tests, full-browser tests, webapp E2E, and the production frontend
-build.
+That task covers Rust formatting, Clippy, generated types, threaded-WASM
+guards, license inventory, workflow/shell/Dockerfile linting, Rust tests, the
+production WASM build, frontend linting, unit tests, browser/WASM tests,
+full-browser tests, webapp E2E, and the production frontend build.
+
+The frontend `lint` command is the source of truth for formatting, Oxlint and
+Biome (including complexity limits), TypeScript, browser compatibility, unused
+exports, copy/paste duplication, i18n catalog integrity, and the legacy-string
+audit. The pre-commit hook selects these and the Rust checks from the staged
+paths; CI runs its lint jobs over the whole tree.
 
 Useful narrower checks:
 
@@ -149,7 +154,7 @@ mise run actionlint    # GitHub Actions workflows and composite actions
 mise run shellcheck    # tracked shell scripts
 mise run hadolint      # Dockerfiles
 
-npm --prefix packages/rom-weaver-webapp run lint
+npm --prefix packages/rom-weaver-webapp run lint    # complete frontend lint fan-out
 npm --prefix packages/rom-weaver-webapp run test:unit
 npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 ```
