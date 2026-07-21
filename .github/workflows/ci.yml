@@ -222,7 +222,7 @@ jobs:
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
   rust-host:
-    name: Rust host
+    name: Rust host (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
