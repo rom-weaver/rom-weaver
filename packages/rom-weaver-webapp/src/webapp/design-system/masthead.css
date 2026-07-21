@@ -12,7 +12,7 @@
     drop-shadow(1px 0 0 rgb(255 255 255 / .45))
     drop-shadow(-1px 0 0 rgb(255 255 255 / .45));
 }
-.rw-app .brand-word { margin: 0; font-size: clamp(.9rem, .78rem + .55vw, 1.12rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.rw-app .brand-word { margin: 0; font-size: clamp(1.12rem, .96rem + .72vw, 1.42rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
@@ -61,7 +61,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
-.rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.5rem, .44rem + .27vw, .62rem); line-height: 1.2; white-space: nowrap; }
+.rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
 .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
