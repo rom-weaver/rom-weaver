@@ -8,6 +8,7 @@ release pull request and `CHANGELOG.md`. Merging that pull request creates the
 - the Cargo workspace to crates.io;
 - six npm packages: `@rom-weaver/cli`, its four `@rom-weaver/<platform>`
   binaries, and the unscoped `rom-weaver` alias that depends on the launcher;
+- the `rom-weaver` formula in `brandonocasey/homebrew-tap` for stable releases;
 - `ghcr.io/<owner>/rom-weaver-cli`;
 - `ghcr.io/<owner>/rom-weaver-webapp`.
 
@@ -17,8 +18,9 @@ signed SLSA build provenance. Publishers check the registry before writing, so
 reruns skip versions that already exist instead of failing halfway through a
 release.
 
-No GitHub Release or registry package has been published yet. Complete the
-one-time setup below before treating the public package commands as available.
+No GitHub Release, registry package, or tap formula has been published yet.
+Complete the one-time setup below before treating the public package commands
+as available.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -53,6 +55,10 @@ one-time setup below before treating the public package commands as available.
    protection rules. Use squash merges so the validated pull request title is
    the commit subject that lands on `main`.
 6. Ensure the existing `v0.5.0` tag is present on GitHub before the first run.
+7. Create the public `brandonocasey/homebrew-tap` repository with a README,
+   then add a fine-grained `HOMEBREW_TAP_TOKEN` Actions secret with Contents
+   read/write access to that repository. Stable releases update
+   `Formula/rom-weaver.rb`; prereleases leave the tap unchanged.
 
 Push the baseline tag and current branch to start Release Please:
 

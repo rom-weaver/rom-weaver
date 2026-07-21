@@ -8,6 +8,7 @@ automation.
 ## Table of contents
 
 - [Install](#install)
+  - [Prebuilt install](#prebuilt-install)
   - [Source install](#source-install)
   - [Development checkout](#development-checkout)
 - [First weave](#first-weave)
@@ -33,6 +34,26 @@ automation.
 
 ## Install
 
+### Prebuilt install
+
+Prebuilt installers will become available with the first GitHub Release.
+
+Install with Homebrew on macOS or x86-64 Linux:
+
+```bash
+brew install brandonocasey/tap/rom-weaver
+```
+
+Or download the latest release to `~/.local/bin`:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.sh | sh
+```
+
+Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or
+`ROM_WEAVER_VERSION` to install a specific release.
+
 ### Source install
 
 Install the current source build. This requires Rust 1.95, CMake, Clang, and a
@@ -44,9 +65,6 @@ cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
 ```
-
-Prebuilt npm, Cargo registry, Docker, and GitHub Release packages have not been
-published yet.
 
 ### Development checkout
 

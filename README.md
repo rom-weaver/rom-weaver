@@ -93,7 +93,22 @@ To run the webapp on your own infrastructure, see
 
 ### CLI
 
-Install the current source build:
+Prebuilt installers will become available with the first GitHub Release.
+
+Install with Homebrew on macOS or x86-64 Linux:
+
+```bash
+brew install brandonocasey/tap/rom-weaver
+```
+
+Or download the latest release to `~/.local/bin`:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.sh | sh
+```
+
+To install the current source build instead:
 
 ```bash
 git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
@@ -102,9 +117,8 @@ cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --help
 ```
 
-Requires Rust 1.95+, CMake, Clang, and a native compiler toolchain. Prebuilt
-npm, Cargo registry, Docker, and GitHub Release packages have not been
-published yet.
+The source build requires Rust 1.95+, CMake, Clang, and a native compiler
+toolchain.
 
 The [development guide](docs/development.md) covers the full toolchain setup,
 webapp builds, and tests.
