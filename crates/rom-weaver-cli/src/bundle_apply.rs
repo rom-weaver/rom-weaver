@@ -337,7 +337,7 @@ impl CliApp {
         &self,
         source: BundleApplySource,
         args: &PatchApplyCommand,
-        context: &OperationContext,
+        _context: &OperationContext,
     ) -> Result<BundleApplySourceContext> {
         let mode = match &source {
             BundleApplySource::Explicit(_) => BundleApplySourceKind::Explicit,
@@ -354,7 +354,7 @@ impl CliApp {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         let base = super::bundle_download::bundle_url_base(url);
-                        let local = self.download_bundle_url(url, "--bundle", context)?;
+                        let local = self.download_bundle_url(url, "--bundle", _context)?;
                         let dir = parent_dir(&local);
                         (
                             Box::new(self.load_bundle_source(&local)?),
