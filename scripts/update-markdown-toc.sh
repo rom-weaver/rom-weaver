@@ -16,12 +16,16 @@ if ((${#files[@]} == 0)); then
   )
 fi
 
+# doctoc only filters by extension when it walks a directory; an explicit file
+# argument is rewritten whatever it is. lefthook hands us the staged paths under
+# docs/, so without this guard a staged docs/*.json gets TOC markers appended
+# and stops being valid JSON.
 readme=false
 other_files=()
 for file in "${files[@]}"; do
   if [[ "$file" == README.md ]]; then
     readme=true
-  else
+  elif [[ -d "$file" || "$file" == *.md ]]; then
     other_files+=("$file")
   fi
 done
