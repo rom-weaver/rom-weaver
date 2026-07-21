@@ -18,6 +18,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`scripts/ci/resolve-wasm-run.sh`](#scriptsciresolve-wasm-runsh)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
+  - [Draft-first releases](#draft-first-releases)
   - [Prerelease routing](#prerelease-routing)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
@@ -39,7 +40,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `e2e-nightly.yml` | nightly 07:41 UTC, manual | No | Exhaustive Chromium + WebKit E2E matrix |
 | `cache-cleanup.yml` | daily 09:00 UTC, manual | No | Reap closed-PR Actions caches |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
-| `cargo-publish.yml` | called by `release.yml`, manual | n/a | crates.io publish + semver check |
+| `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish + semver check |
 | `npm-publish.yml` | called by `release.yml`, manual | n/a | 4 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
@@ -218,14 +219,34 @@ spec would tag every platform package as a prerelease.
 | Job | Produces |
 | --- | --- |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
-| `publish-cargo` | crates.io, after `cargo-semver-checks` against each published baseline |
 | `publish-npm` | 4 platform packages → launcher → unscoped alias, in that order |
 | `publish-homebrew` | formula commit to `brandonocasey/homebrew-tap` (stable only) |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
+| `publish-release` | flips the draft release to published, creating the tag |
 
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would
 make installs resolve a version that is not on the registry yet.
+
+### Draft-first releases
+
+Release Please creates the GitHub release as a **draft** (`"draft": true` in
+`release-please-config.json`), every asset-producing job attaches to that draft,
+and `publish-release` publishes it only once they have all succeeded. This is
+what makes the repo's **immutable releases** setting workable: immutability is
+stamped at publish time, and a published immutable release accepts no further
+assets *and permanently reserves its tag name* - v0.6.0 was lost that way. A
+failure anywhere in the fan-out now leaves a draft, which can be deleted and
+re-cut at the same version.
+
+A draft release has no tag until it is published, so jobs check out
+`needs.release.outputs.sha` rather than `v${version}`.
+
+`cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being
+called by `release.yml`. crates.io Trusted Publishing rejects the `workflow_run`
+event that gates `release.yml`, and a reusable workflow inherits its caller's
+event, so OIDC could never authenticate from inside the fan-out. Keying off the
+tag also orders it naturally last.
 
 `cargo-semver-checks` runs per-crate rather than `--workspace` so a crate with
 no published baseline (a first release, or a newly added crate) is skipped

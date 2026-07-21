@@ -76,6 +76,14 @@ jobs:
       - name: Prepare platform package
         run: node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
 
+      - name: Publish platform package
+        shell: bash
+        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # After the npm publish, not before: npm is the irreversible half, so a
+      # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
         shell: bash
         env:
@@ -95,12 +103,6 @@ jobs:
           printf '%s  %s\n' "$checksum" "$asset_name" > "$asset_name.sha256"
           gh release upload "v${{ inputs.version }}" "$asset_name" "$asset_name.sha256" \
             --repo "$GITHUB_REPOSITORY" --clobber
-
-      - name: Publish platform package
-        shell: bash
-        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   launcher:
     needs: platform

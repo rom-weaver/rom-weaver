@@ -1,12 +1,15 @@
 name: Publish Cargo crates
 
+# Triggered by the release tag rather than called from release.yml: crates.io
+# Trusted Publishing rejects the `workflow_run` event that gates release.yml
+# ("Trusted Publishing does not support the 'workflow_run' event trigger due to
+# security concerns"), and a reusable workflow inherits its caller's event. The
+# tag only appears once release.yml publishes the draft, so this still runs
+# strictly after the rest of the release succeeded.
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: Release version without the v prefix
-        required: true
-        type: string
+  push:
+    tags:
+      - v*
   workflow_dispatch:
     inputs:
       version:
