@@ -222,7 +222,7 @@ jobs:
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
   rust-host:
-    name: Rust host (Linux)
+    name: Rust lint + tests (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
@@ -319,7 +319,7 @@ jobs:
   # The threaded target has a separate Cargo fingerprint from the host checks,
   # so serializing it inside the host job only lengthens the required Rust gate.
   wasm-check:
-    name: Rust WASM check
+    name: Rust check (WASM target)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
