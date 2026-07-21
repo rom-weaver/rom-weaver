@@ -17,6 +17,8 @@ export default defineConfig({
   assetsInclude: ["**/*.wasm"],
   base: "./",
   define: {
+    __APP_CHANNEL__: JSON.stringify("dev"),
+    __APP_CHANNEL_LABEL__: JSON.stringify("dev"),
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version || "0.1.0"),
     __COMMIT_HASH__: JSON.stringify("dev"),
     __DIRTY_HASH__: JSON.stringify(""),

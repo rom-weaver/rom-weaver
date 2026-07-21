@@ -13,6 +13,7 @@ type ConsoleLogRecord = {
 type ConsoleLogReport = {
   app: {
     branch?: string;
+    channel?: string;
     commit?: string;
     dirty?: string;
     version?: string;
@@ -154,6 +155,8 @@ const getConsoleForInternalLog = (level: ConsoleLogLevel) =>
 
 const getReportApp = (): ConsoleLogReport["app"] => ({
   branch: typeof __GIT_BRANCH__ === "undefined" ? undefined : __GIT_BRANCH__,
+  // Which origin the report came from; a nightly bug reads very differently from a prod one.
+  channel: typeof __APP_CHANNEL__ === "undefined" ? undefined : __APP_CHANNEL__,
   commit: typeof __COMMIT_HASH__ === "undefined" ? undefined : __COMMIT_HASH__,
   dirty: typeof __DIRTY_HASH__ === "undefined" ? undefined : __DIRTY_HASH__,
   version: typeof __APP_VERSION__ === "undefined" ? undefined : __APP_VERSION__,

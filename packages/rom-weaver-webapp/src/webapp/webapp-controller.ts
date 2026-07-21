@@ -1,3 +1,4 @@
+import { applyAccent } from "./accent.ts";
 import {
   buildSettingsForWebapp,
   copySettings,
@@ -183,6 +184,8 @@ const mergeDraftSettings = (
 
 const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
+  // Before the React tree renders, so the accent tokens resolve on first paint.
+  applyAccent(settings.accent);
   // The URL hash wins (deep links / reload), then the last persisted tab, then the default.
   const initialView = normalizeWorkflowViewForSettings(
     readWorkflowViewFromHash() || loadPersistedWorkflowView(options.storage),
@@ -251,6 +254,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       writeWorkflowViewToHash(nextCurrentView);
     }
     emitCommittedSettings();
+    applyAccent(nextSettings.accent);
     options.onLocalizationChange(nextSettings.language);
   };
 

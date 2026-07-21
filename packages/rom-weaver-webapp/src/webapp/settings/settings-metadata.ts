@@ -15,6 +15,8 @@ import {
 } from "../../lib/compression/compression-metadata.ts";
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
+import { ACCENTS } from "../accent.ts";
+import { DEFAULT_CHANNEL_ACCENT } from "../build-channel.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
 import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
@@ -30,6 +32,7 @@ const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
 
 type SettingsState = {
   defaultCompression: string;
+  accent: string;
   language: string;
   logLevel: string;
   bundlePackage: string;
@@ -141,6 +144,12 @@ function getDefaultThreads(): number {
   return getDefaultBrowserThreadCount(typeof globalThis === "undefined" ? undefined : globalThis);
 }
 
+// The build channel picks the starting dye lot so nightly/beta look distinct
+// before anyone touches settings; picking an accent overrides it for good.
+function getDefaultAccent(): string {
+  return DEFAULT_CHANNEL_ACCENT;
+}
+
 function getDefaultLanguage(): string {
   const browserLanguage = negotiateLocale(getBrowserLocaleCandidates());
   const fullMatch = normalizeChoiceSetting(browserLanguage, SETTINGS_VALID_LANGUAGES, "");
@@ -150,6 +159,7 @@ function getDefaultLanguage(): string {
 
 const SETTINGS_FIELD_ORDER = [
   "defaultCompression",
+  "accent",
   "language",
   "logLevel",
   "betaToolsEnabled",
@@ -327,6 +337,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("fixChecksum"),
     labelDataLocalize: "Fix ROM header",
     layout: "large",
+  },
+  accent: {
+    defaultValue: getDefaultAccent,
+    id: "settings-accent",
+    key: "accent",
+    kind: "select",
+    label: "Accent",
+    options: ACCENTS.map((accent) => ({ label: accent.label, value: accent.value })),
+    validationLabel: "Accent",
   },
   language: {
     defaultValue: getDefaultLanguage,

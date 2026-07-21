@@ -1,0 +1,89 @@
+/* ═══ accent dye lots ═══
+   The thread keeps its weight and role in every accent; only its dye changes.
+   Chassis, plate and ink stay put, so an accent reads as the same app in a
+   different dye lot rather than a different theme.
+
+   Each build channel picks a default accent (see build-channel.ts) so nightly
+   and beta are visually distinct out of the box, but the accent is a user
+   setting - whatever they pick wins.
+
+   Loaded after tokens.css: the per-theme --thread-text overrides here need to
+   out-specify and out-order the plain :root[data-theme] blocks. Madder is the
+   baseline defined in tokens.css and needs no block of its own.
+
+   Every pairing below is verified in tests/browser/accessibility.browser.test.js
+   ("accent" sweep) - both themes, every surface. */
+
+/* ── woad: indigo ── */
+:root[data-accent="woad"] {
+  --thread: #6d7ce8;
+  --thread-ink: #0b1030;
+}
+:root[data-accent="woad"][data-theme="dark"] { --thread-text: #9aa6ff; }
+:root[data-accent="woad"][data-theme="light"] { --thread-text: #4149c4; }
+
+/* ── violet ── */
+:root[data-accent="violet"] {
+  --thread: #9a6ae0;
+  --thread-ink: #16092c;
+}
+:root[data-accent="violet"][data-theme="dark"] { --thread-text: #c3a4ff; }
+:root[data-accent="violet"][data-theme="light"] { --thread-text: #6b3fb5; }
+
+/* ── verdigris: green ── */
+:root[data-accent="verdigris"] {
+  --thread: #3faa72;
+  --thread-ink: #04180e;
+}
+:root[data-accent="verdigris"][data-theme="dark"] { --thread-text: #58c795; }
+:root[data-accent="verdigris"][data-theme="light"] { --thread-text: #0b6b46; }
+
+/* ── teal ── */
+:root[data-accent="teal"] {
+  --thread: #2aa0a8;
+  --thread-ink: #03181a;
+}
+:root[data-accent="teal"][data-theme="dark"] { --thread-text: #45c3cb; }
+:root[data-accent="teal"][data-theme="light"] { --thread-text: #06696f; }
+
+/* ── plum ── */
+:root[data-accent="plum"] {
+  --thread: #cb63a5;
+  --thread-ink: #2a0620;
+}
+:root[data-accent="plum"][data-theme="dark"] { --thread-text: #e58ac0; }
+:root[data-accent="plum"][data-theme="light"] { --thread-text: #a3266f; }
+
+/* ── channel badge ──
+   Names the build (nightly / beta / pr-123 / dev). Production has no badge. */
+.rw-app .channel-badge {
+  flex: none;
+  padding: 1px var(--sp-s);
+  border: 1px solid color-mix(in oklab, var(--thread) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--thread) 16%, transparent);
+  color: var(--thread-text);
+  font-size: var(--badge-fs);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+/* Wraps rather than overflows: the phone masthead gives the brand a 112px
+   floor, which the word plus a long label (`pr-1234`) can exceed. */
+.rw-app .brand-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-xs) var(--sp-s); min-width: 0; }
+
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .channel-badge { padding-inline: var(--sp-xs); font-size: .58rem; letter-spacing: .04em; }
+}
+
+/* Accent picker swatches in settings. */
+.rw-app .accent-swatch {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 1px solid var(--seam-strong);
+  border-radius: 50%;
+  vertical-align: -.14em;
+}

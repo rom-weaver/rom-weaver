@@ -14,6 +14,7 @@ import type { PageFileDrop } from "../public/react/index.tsx";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import { CHANNEL_BADGE } from "./build-channel.ts";
 import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { LogDialog } from "./components/log-dialog.tsx";
@@ -300,6 +301,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
+            channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={state.currentView}
             donateHref={DONATE_URL}

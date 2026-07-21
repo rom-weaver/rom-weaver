@@ -21,6 +21,7 @@ import { ArchiveDialog } from "../../src/public/react/patcher-react-shared.tsx";
 import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
+import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
 import {
@@ -77,6 +78,7 @@ afterEach(async () => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-accent");
   await setViewport(DEFAULT_VIEWPORT);
 });
 
@@ -386,7 +388,7 @@ const PAGE_TABS = [
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
 // around an arbitrary workflow form node, mirroring webapp-root.tsx.
-const Shell = (currentTab, panelView, formNode) =>
+const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
@@ -397,6 +399,7 @@ const Shell = (currentTab, panelView, formNode) =>
         "div",
         { className: "app" },
         createElement(Masthead, {
+          ...mastheadProps,
           currentTab,
           donateHref: "https://example.invalid/donate",
           githubHref: "https://example.invalid/repo",
@@ -951,6 +954,75 @@ describe("webapp keyboard navigation", () => {
 
     expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
   });
+});
+
+// ── Accent dye lots ──────────────────────────────────────────────────────────
+// The accent axis re-dyes --thread / --thread-ink / --thread-text, which ~114
+// declarations across 16 design-system files consume: primary buttons, the
+// selected mode thumb, focus rings, meter fills, drawer seams, the channel
+// badge. Every accent must therefore clear contrast on every surface, in both
+// themes - a hue that only works on the default palette is a real regression.
+//
+// Accent tokens carry no layout, so contrast does not vary with width the way
+// it does across the 8-viewport matrix above; this sweep runs one phone and one
+// desktop width (the two that select different thread-bearing CSS, phone-dock
+// vs. the default rules) against every accent instead.
+const ACCENT_VIEWPORTS = [
+  VIEWPORTS[0], // 360w smallest phone -> phone-dock.css thread rules
+  VIEWPORTS[6], // 1280w desktop
+];
+
+// The masthead is the only place the channel badge renders, and it is the one
+// surface where a thread-tinted fill sits behind thread-tinted text. Mounted as
+// a full page (not a lone masthead) so the tabs' aria-controls resolve to the
+// tabpanel they name, exactly as they do in production.
+const badgedMastheadPage = () =>
+  Shell(
+    "patcher",
+    "patcher",
+    createElement(ApplyWorkflowFormView, { controllers: applyControllers(createEmptyPatcherUiState(), []) }),
+    { channelBadge: "nightly" },
+  );
+
+// Curated to cover every design-system file that reads a thread token:
+// dropzone/hero, file-cards + drawers + fields + workbench, result + weave-meter,
+// dialogs, banners, and masthead (incl. the badge).
+const ACCENT_SURFACES = [
+  { factory: emptyApplyPage, name: "empty apply (hero + dropzone)", page: true },
+  { dense: true, factory: densePatchApplyPage, name: "dense apply (cards, drawers, verdicts)", page: true },
+  { factory: doneApplyPage, name: "apply completed (result + meter)", page: true },
+  { factory: () => ModalHost(DIALOGS.settings()), name: "settings dialog" },
+  { factory: () => ModalHost(DIALOGS.log()), name: "log dialog" },
+  { factory: Banners, name: "banners" },
+  { badge: true, factory: badgedMastheadPage, name: "masthead + channel badge", page: true },
+];
+
+describe("accent dye-lot accessibility", () => {
+  for (const accent of ACCENTS) {
+    for (const { badge, dense, factory, name, page: isPage } of ACCENT_SURFACES) {
+      for (const theme of THEMES) {
+        for (const viewport of ACCENT_VIEWPORTS) {
+          test(`${name} passes WCAG 2.1 A/AA (${accent.value} accent, ${theme} theme, ${viewport.name})`, async () => {
+            await setViewport(viewport);
+            // The production application path, so a bug in applyAccent fails here too.
+            applyAccent(accent.value);
+            const node = isPage ? factory() : createElement(factory);
+            if (isPage) await renderPage(node, theme);
+            else await renderNode(node, theme);
+            if (dense) await openAllDrawers(host);
+
+            // sanity: the accent really is on the element the tokens key off
+            const expected = accent.value === "madder" ? null : accent.value;
+            expect(document.documentElement.getAttribute("data-accent")).toBe(expected);
+            // …and the badge surface really rendered a badge, so it isn't scanning nothing
+            if (badge) expect(host.querySelector(".channel-badge")?.textContent).toBe("nightly");
+
+            expect(await scanViolations(host, { bestPractice: true, region: isPage })).toEqual([]);
+          });
+        }
+      }
+    }
+  }
 });
 
 describe("webapp responsive navigation", () => {

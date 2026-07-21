@@ -95,12 +95,19 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
-const applyRootStaticAssetMiddleware = (middlewares) => {
+const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
     const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
     if (!sourcePath) {
       next();
+      return;
+    }
+    if (requestPath === "/manifest.json") {
+      res.statusCode = 200;
+      setRootStaticAssetContentType(requestPath, res);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(createRootManifestSource(channel, channelLabel));
       return;
     }
     fs.readFile(sourcePath, (err, source) => {
@@ -116,13 +123,13 @@ const applyRootStaticAssetMiddleware = (middlewares) => {
   });
 };
 
-const serveRootStaticAssets = () => ({
+const serveRootStaticAssets = (channel, channelLabel) => ({
   apply: "serve",
   configurePreviewServer(server) {
-    applyRootStaticAssetMiddleware(server.middlewares);
+    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel);
   },
   configureServer(server) {
-    applyRootStaticAssetMiddleware(server.middlewares);
+    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel);
   },
   name: "rom-weaver-root-static-assets",
 });
@@ -189,10 +196,46 @@ const writeCompressedAssetsInDirectory = (directory) => {
   }
 };
 
-const createRootManifestSource = () =>
-  fs.readFileSync(rootManifestSourcePath, "utf8").replace(/"src\/assets\/app\//g, '"assets/app/');
+const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
 
-const writeWebappStaticAssets = () => {
+// An unset channel is a local build or the dev server. Production is only ever
+// reached by CI passing it explicitly, so a typo degrades to "dev" (marked)
+// rather than silently impersonating production (unmarked).
+const resolveAppChannel = (value) => {
+  const channel = String(value || "").trim();
+  if (!channel) return "dev";
+  if (APP_CHANNELS.has(channel)) return channel;
+  console.warn(`[rom-weaver] unknown ROM_WEAVER_CHANNEL '${channel}', falling back to 'dev'`);
+  return "dev";
+};
+
+// Installed PWAs are identified by their manifest name, so without a per-channel
+// one a nightly install is indistinguishable from production on the home screen.
+const createRootManifestSource = (channel, channelLabel) => {
+  const source = fs.readFileSync(rootManifestSourcePath, "utf8").replace(/"src\/assets\/app\//g, '"assets/app/');
+  if (channel === "prod") return source;
+  const manifest = JSON.parse(source);
+  manifest.name = `${manifest.name} ${channelLabel}`;
+  manifest.short_name = `${manifest.short_name} ${channelLabel}`;
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+};
+
+// The tab title and the iOS home-screen label are the two places the channel has
+// to show up before the bundle has even booted.
+const stampChannelIdentity = (channel, channelLabel) => ({
+  name: "rom-weaver-channel-identity",
+  transformIndexHtml: {
+    handler(html) {
+      if (channel === "prod") return html;
+      return html
+        .replace("<title>rom-weaver</title>", `<title>rom-weaver ${channelLabel}</title>`)
+        .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${channelLabel}$3`);
+    },
+    order: "pre",
+  },
+});
+
+const writeWebappStaticAssets = (channel, channelLabel) => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -202,7 +245,7 @@ const writeWebappStaticAssets = () => {
         const outputPath = path.join(distDir, assetPath);
         if (assetPath === "/manifest.json") {
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-          fs.writeFileSync(outputPath, createRootManifestSource());
+          fs.writeFileSync(outputPath, createRootManifestSource(channel, channelLabel));
           continue;
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
@@ -320,6 +363,10 @@ export default defineConfig(({ command, mode }) => {
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
+  // CI's deploy job already resolves which origin this bundle is headed for;
+  // an unset channel means a local build or dev server, never production.
+  const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
+  const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
@@ -343,6 +390,8 @@ export default defineConfig(({ command, mode }) => {
       transformer: "lightningcss",
     },
     define: {
+      __APP_CHANNEL__: JSON.stringify(appChannel),
+      __APP_CHANNEL_LABEL__: JSON.stringify(appChannelLabel),
       __APP_VERSION__: JSON.stringify(appVersion),
       __COMMIT_HASH__: JSON.stringify(commitHash),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
@@ -366,11 +415,12 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     plugins: [
-      serveRootStaticAssets(),
+      serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(),
       deferDevHotUpdates(),
+      stampChannelIdentity(appChannel, appChannelLabel),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
-      writeWebappStaticAssets(),
+      writeWebappStaticAssets(appChannel, appChannelLabel),
       writeChangelogAsset(),
       VitePWA({
         devOptions: {

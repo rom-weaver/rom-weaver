@@ -63,6 +63,7 @@ const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
 const BOOLEAN_SETTINGS_FIELDS = ["betaToolsEnabled", "fixChecksum"] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
+  "accent",
   "language",
   "logLevel",
   "bundlePackage",
@@ -383,6 +384,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    accent: commonSettings.accent,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
@@ -435,6 +437,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
       return settings;
     }
     const loadedSettings = readGroupedStoredSettings(parsedSettings);
+
+    const accent = readStoredField(storedStringSchema, loadedSettings.accent);
+    if (accent !== undefined) settings.accent = normalizeChoiceField("accent", accent, settings.accent);
 
     const language = readStoredField(storedStringSchema, loadedSettings.language);
     if (language !== undefined) settings.language = normalizeChoiceField("language", language, settings.language);
@@ -543,7 +548,12 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
-    if (fieldKey === "betaToolsEnabled" || fieldKey === "language" || fieldKey === "logLevel") {
+    if (
+      fieldKey === "accent" ||
+      fieldKey === "betaToolsEnabled" ||
+      fieldKey === "language" ||
+      fieldKey === "logLevel"
+    ) {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
@@ -640,6 +650,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
   const compressionLevels = resolveCompressionLevels(settings);
   return Object.assign(
     {
+      accent: settings.accent,
       bundlePackage: settings.bundlePackage,
       chdCreateCdCodecs: settings.chdCreateCdCodecs,
       chdCreateDvdCodecs: settings.chdCreateDvdCodecs,

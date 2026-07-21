@@ -152,6 +152,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
 
 const Masthead = ({
   logoSrc,
+  channelBadge,
   tabs,
   currentTab,
   onSelectTab,
@@ -167,6 +168,8 @@ const Masthead = ({
   versionTitle,
 }: {
   logoSrc?: string;
+  /** Deploy channel marker; empty on production, which wears the plain brand. */
+  channelBadge?: string;
   tabs: WorkflowTab[];
   currentTab: string;
   onSelectTab: (id: string) => void;
@@ -196,10 +199,13 @@ const Masthead = ({
       <span className="brand">
         {logoSrc ? <img alt="" className="brand-mark" height={44} src={logoSrc} width={44} /> : null}
         <span className="brand-copy">
-          <h1 className="brand-word">
-            rom<span className="brand-hy">–</span>
-            <b>weaver</b>
-          </h1>
+          <span className="brand-line">
+            <h1 className="brand-word">
+              rom<span className="brand-hy">–</span>
+              <b>weaver</b>
+            </h1>
+            {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
+          </span>
           {version ? (
             <span className="masthead-version mono">
               <span className="build-version-label" title={versionTitle}>

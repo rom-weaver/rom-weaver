@@ -392,6 +392,8 @@ jobs:
           # treats the project's production branch (main) as a live deploy and
           # anything else as a throwaway preview.
           branch=main
+          # `label` is what the bundle shows in its masthead badge and PWA name.
+          label="$channel"
           case "$channel" in
             prod)    project=rom-weaver ;;
             beta)    project=rom-weaver-beta ;;
@@ -399,17 +401,25 @@ jobs:
             preview)
               project=rom-weaver-preview
               branch="pr-${PR_NUMBER}"
+              label="pr-${PR_NUMBER}"
               ;;
             *) echo "::error::unknown channel '$channel'"; exit 1 ;;
           esac
           {
             echo "channel=$channel"
             echo "branch=$branch"
+            echo "label=$label"
             echo "project=$project"
           } >> "$GITHUB_OUTPUT"
           echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
 
+      # The channel stamps the bundle's visible identity - masthead badge, tab
+      # title, PWA name and accent tokens - so a nightly or preview tab is never
+      # mistaken for production. Unset (any local build) resolves to "dev".
       - name: Build webapp
+        env:
+          ROM_WEAVER_CHANNEL: ${{ steps.channel.outputs.channel }}
+          ROM_WEAVER_CHANNEL_LABEL: ${{ steps.channel.outputs.label }}
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Idempotent, so the first run on a channel bootstraps its own project and
