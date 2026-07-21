@@ -84,13 +84,18 @@ mise install
 npm ci
 npm ci --prefix packages/rom-weaver-webapp
 mise run build-wasm-prod
-npm --prefix packages/rom-weaver-webapp run build
+npm --prefix packages/rom-weaver-webapp run build -- --mode selfhost
 ```
 
 Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host.
-Preserve the directory structure. The build includes precompressed `.br`
-files, but generic hosts do not automatically serve them. Enable Brotli or gzip
-compression when available, especially for the WASM file.
+Preserve the directory structure. `--mode selfhost` is what writes the
+precompressed `.br` and `.gz` siblings; a plain `run build` targets the CDN-served
+channel deploys, which compress on the fly, and emits none. Generic hosts do not
+serve the siblings automatically either - enable Brotli or gzip compression when
+available, especially for the WASM file.
+
+The `rom-weaver-webapp.tar.gz` asset on each GitHub release is this same build,
+so unpacking it is an alternative to building from a checkout.
 
 The server should fall back to `index.html` for navigation requests within the
 rom-weaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so

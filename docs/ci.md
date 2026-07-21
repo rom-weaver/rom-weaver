@@ -18,6 +18,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`scripts/ci/resolve-wasm-run.sh`](#scriptsciresolve-wasm-runsh)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
+  - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
   - [Draft-first releases](#draft-first-releases)
   - [Prerelease routing](#prerelease-routing)
 - [Actions cache budget](#actions-cache-budget)
@@ -285,6 +286,42 @@ spec would tag every platform package as a prerelease.
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would
 make installs resolve a version that is not on the registry yet.
+
+### Containers reuse what the fan-out already built
+
+`publish-containers` runs after `static-webapp` and `publish-npm` rather than
+beside them, because both images are now assembled from artifacts those jobs
+produce from the same commit:
+
+| Image | Consumes | Instead of |
+| --- | --- | --- |
+| `rom-weaver-cli` | `cli-binary-linux-x64-gnu`, the `linux-x64-gnu` binary `publish-npm` builds | a second `cargo build --release` of the workspace |
+| `rom-weaver-webapp` | `webapp-dist`, the bundle `static-webapp` packages | rustup + WASI SDK + binaryen + a cold wasm build |
+
+Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`)
+that defaults to building from source, so `docker build` with no arguments -
+what self-hosters and the `docker` job in `ci.yml` run - is unchanged. The
+prebuilt half reads a `prebuilt/` directory out of the build context, which only
+has to exist for the build that asks for it: BuildKit builds only the stages the
+selected one depends on. `docker-publish.yml` downloads the artifact, falls back
+to `source` when there is none, and so still works standalone under
+`workflow_dispatch`, where there are no sibling jobs.
+
+Two consequences worth knowing:
+
+- The CLI runtime is `debian:trixie-slim`, not bookworm. The reused binary is
+  linked against the glibc of the `ubuntu-24.04` runner `publish-npm` builds on
+  (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both
+  halves of the switch.
+- `static-webapp` packages the tarball with `--mode selfhost`, which adds the
+  precompressed `.br`/`.gz` siblings that the container's static-web-server
+  expects (`compression-static` in `sws.toml`). The container and the
+  `rom-weaver-webapp.tar.gz` release asset are now the same bytes rather than
+  two independent builds that ought to agree.
+
+A prebuilt build deliberately does **not** write the `buildcache` tag: it has
+nothing expensive to cache, and exporting its handful of `COPY` layers would
+evict the source layer graph that the `docker` job in `ci.yml` restores.
 
 ### Draft-first releases
 

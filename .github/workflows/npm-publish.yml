@@ -83,6 +83,29 @@ jobs:
       - name: Prepare platform package
         run: node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
 
+      # The CLI image is linux/amd64 and builds the identical
+      # `cargo build --locked --release -p rom-weaver-cli` from the same commit,
+      # so it consumes this instead of compiling a second time. A run artifact
+      # rather than the release asset below: it is visible to a sibling job in
+      # this run without depending on draft-release readability, and it is
+      # uploaded here, before the npm publish, so a container build never waits
+      # on the irreversible step.
+      - name: Upload Linux binary for the container build
+        if: matrix.package == 'linux-x64-gnu'
+        uses: actions/upload-artifact@v5
+        with:
+          name: cli-binary-linux-x64-gnu
+          path: packages/rom-weaver-cli-platforms/linux-x64-gnu/bin/rom-weaver
+          if-no-files-found: error
+          # Artifact names are immutable within a run and a re-run shares the
+          # run's namespace, so without this the documented "rerun the failed
+          # jobs" retry (.github/RELEASING.md) would 409 here on every attempt
+          # and strand the draft. A rerun rebuilds the same released sha, and
+          # publish-containers was skipped in the failed attempt, so nothing can
+          # be reading the artifact while it is replaced.
+          overwrite: true
+          retention-days: 7
+
       - name: Publish platform package
         shell: bash
         run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}

@@ -85,9 +85,13 @@ jobs:
           - name: CLI
             image: rom-weaver-cli
             file: Dockerfile
+            build_arg: BINARY
+            stub: prebuilt/rom-weaver
           - name: webapp
             image: rom-weaver-webapp
             file: packages/rom-weaver-webapp/Dockerfile
+            build_arg: DIST
+            stub: prebuilt/index.html
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -156,6 +160,25 @@ jobs:
           push: false
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
           cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
+
+      # The build above exercises only the source half of each image. Without
+      # this the prebuilt half would first execute during a release fan-out,
+      # where a broken `COPY prebuilt/...` costs a draft release rather than a
+      # red pull request. Against a stub it is a COPY onto runtime layers the
+      # step above already built, so it takes seconds.
+      - name: Build the prebuilt path against a stub
+        if: steps.gate.outputs.build == 'true'
+        env:
+          BUILD_ARG: ${{ matrix.build_arg }}
+          FILE: ${{ matrix.file }}
+          STUB: ${{ matrix.stub }}
+        run: |
+          set -euo pipefail
+          rm -rf prebuilt
+          mkdir -p "$(dirname "$STUB")"
+          printf 'stub\n' > "$STUB"
+          docker build --file "$FILE" --build-arg "${BUILD_ARG}=prebuilt" --tag prebuilt-smoke .
+          rm -rf prebuilt
 
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.

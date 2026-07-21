@@ -26,6 +26,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  # Read the run artifacts the npm and static-webapp jobs published.
+  actions: read
   artifact-metadata: write
   attestations: write
   contents: read
@@ -44,10 +46,16 @@ jobs:
             image: rom-weaver-cli
             context: .
             file: Dockerfile
+            # Selects the Dockerfile's prebuilt stage, and names the run
+            # artifact holding what that stage assembles the image from.
+            build_arg: BINARY
+            artifact: cli-binary-linux-x64-gnu
           - name: webapp
             image: rom-weaver-webapp
             context: .
             file: packages/rom-weaver-webapp/Dockerfile
+            build_arg: DIST
+            artifact: webapp-dist
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,6 +63,48 @@ jobs:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: docker/setup-buildx-action@v4
+
+      # Every image here was previously rebuilt from source even though the rest
+      # of the fan-out had already produced the exact same output from the exact
+      # same commit: the CLI binary from npm-publish and the webapp bundle from
+      # the static-webapp job. Reusing them removes a full workspace compile and
+      # a rustup + WASI-SDK + binaryen + wasm build from the release path, and
+      # makes the published container and the published release asset the same
+      # bytes rather than two independent builds that ought to agree.
+      #
+      # A standalone workflow_dispatch has no sibling jobs and so no artifacts;
+      # that is not an error, it just falls back to building from source.
+      - name: Download prebuilt artifact
+        id: prebuilt
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ matrix.artifact }}
+          path: prebuilt
+
+      # The fallback is correct but slow, and it is otherwise invisible - a
+      # release that quietly went back to compiling everything should say so.
+      - name: Resolve build source
+        id: source
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+          # `sha` is supplied only by the release fan-out, and a reusable
+          # workflow inherits its caller's event - so github.event_name cannot
+          # tell the two entry points apart, but this can.
+          EXPECTED: ${{ inputs.sha != '' }}
+          NAME: ${{ matrix.name }}
+          OUTCOME: ${{ steps.prebuilt.outcome }}
+        run: |
+          if [ "$OUTCOME" = success ]; then
+            value=prebuilt
+          else
+            value=source
+            if [ "$EXPECTED" = true ]; then
+              echo "::warning::no ${ARTIFACT} artifact; rebuilding the ${NAME} image from source"
+            fi
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "building the ${NAME} image from ${value}"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -111,6 +161,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          build-args: ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
           labels: ${{ steps.metadata.outputs.labels }}
           platforms: linux/amd64
           push: true
@@ -118,7 +169,12 @@ jobs:
           sbom: true
           tags: ${{ steps.metadata.outputs.tags }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache,mode=max
+          # Only a source build has anything worth caching, and only a source
+          # build produces the layer graph the CI image job restores. Exporting
+          # a prebuilt graph here would overwrite `buildcache` with a handful of
+          # cheap COPY layers and leave the next Dockerfile pull request to pay
+          # a cold compile.
+          cache-to: ${{ steps.source.outputs.value == 'source' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
 
       - name: Sign build provenance
         uses: actions/attest@v4
