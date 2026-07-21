@@ -34,7 +34,7 @@ jobs:
   # so it finishes in well under a minute and reports independently of the
   # build jobs instead of hiding behind them.
   repo-lint:
-    name: Repo lint
+    name: Lint workflows + scripts + Dockerfiles
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: github.ref_type != 'tag'
@@ -68,7 +68,7 @@ jobs:
   # source-only pull request would instead invalidate `COPY . .` and pay a cold
   # cargo+wasm compile to tell us nothing about the Dockerfile.
   docker:
-    name: Docker ${{ matrix.name }} image
+    name: Docker build (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
@@ -160,7 +160,7 @@ jobs:
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.
   wasm:
-    name: WASM build
+    name: Build WASM module
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -288,7 +288,7 @@ jobs:
   # request red blocks unrelated work until someone lands an upgrade. Findings
   # surface as annotations and a job summary instead, so this job stays green.
   security:
-    name: Security advisories
+    name: Security advisories (non-gating)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     if: github.ref_type != 'tag'
@@ -426,7 +426,7 @@ jobs:
 
   # Consumes the prebuilt wasm module; compiles no Rust of its own.
   webapp:
-    name: Webapp
+    name: Webapp lint + tests + build
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
@@ -493,7 +493,7 @@ jobs:
   # Split out of `deploy` because the channel list drives that job's matrix, and
   # a matrix can only be fed by an upstream job's output.
   deploy-plan:
-    name: Plan web deploy
+    name: Plan webapp deploy
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Same non-gating boundary as `deploy` below: a failure here must skip
@@ -571,7 +571,7 @@ jobs:
   # minutes or a second toolchain. Depend only on `wasm` so preview URLs arrive
   # while the rest of the suite is still running.
   deploy:
-    name: Deploy web (${{ matrix.target.channel }})
+    name: Deploy webapp (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: [wasm, deploy-plan]

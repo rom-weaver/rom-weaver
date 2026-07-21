@@ -51,8 +51,9 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 > **`main` is not branch-protected.** Nothing is a *required* status check
 > today, so "gating" above means "CI must be green before Release Please
 > runs", not "GitHub will refuse the merge". If protection is ever enabled,
-> the checks to require are `Rust`, `Webapp`, and `Conventional commits` -
-> the `rust` job exists to give the first of those a single stable name.
+> the checks to require are `Rust`, `Webapp lint + tests + build`, and
+> `Conventional commits` - the `rust` job exists to give the first of those a
+> single stable name.
 
 ## `ci.yml` - the required gate
 
