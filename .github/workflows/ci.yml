@@ -468,28 +468,9 @@ jobs:
           fi
           echo "rust=$version" >> "$GITHUB_OUTPUT"
 
-      # The toolchain download/install is ~1 min of every run and depends only
-      # on the pin. Same restore-everywhere/save-on-main policy as the cargo
-      # cache: a branch-scoped copy would be ballast against the 10 GiB
-      # budget. On a hit the install step below is a no-op. (The mise legs
-      # need none of this - jdx/mise-action caches their toolchains itself.)
-      - name: Restore Rust toolchain
-        id: rustup-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: D:\rustup-home
-          key: rustup-${{ runner.os }}-${{ steps.pin.outputs.rust }}
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.pin.outputs.rust }}
-
-      - name: Save Rust toolchain
-        if: github.ref == 'refs/heads/main' && steps.rustup-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: D:\rustup-home
-          key: rustup-${{ runner.os }}-${{ steps.pin.outputs.rust }}
 
       # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
       # includes the OS, so this leg never collides with the others.

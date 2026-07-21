@@ -115,11 +115,8 @@ security ── advisories (warn only, always green)
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
   the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
-  release jobs already prove this route on the same image. The toolchain is
-  cached (restore everywhere, save on `main`) keyed on the `.mise.toml` pin;
-  the mise legs need no equivalent because `jdx/mise-action` caches theirs.
-  Because it bypasses mise it re-declares `CARGO_INCREMENTAL=0` itself, and it
-  trims MSVC debug
+  release jobs already prove this route on the same image. Because it bypasses
+  mise it re-declares `CARGO_INCREMENTAL=0` itself, and it trims MSVC debug
   info to line tables (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`) - PDB
   generation is the priciest part of a Windows debug build. No wasm leg:
   building the wasm module on Windows is unsupported until the bash compiler
