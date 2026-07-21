@@ -97,6 +97,13 @@ jobs:
           name: cli-binary-linux-x64-gnu
           path: packages/rom-weaver-cli-platforms/linux-x64-gnu/bin/rom-weaver
           if-no-files-found: error
+          # Artifact names are immutable within a run and a re-run shares the
+          # run's namespace, so without this the documented "rerun the failed
+          # jobs" retry (.github/RELEASING.md) would 409 here on every attempt
+          # and strand the draft. A rerun rebuilds the same released sha, and
+          # publish-containers was skipped in the failed attempt, so nothing can
+          # be reading the artifact while it is replaced.
+          overwrite: true
           retention-days: 7
 
       - name: Publish platform package
