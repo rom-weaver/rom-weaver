@@ -57,19 +57,22 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 > **`main` is not branch-protected.** Nothing is a *required* status check
 > today, so "gating" above means "CI must be green before Release Please
 > runs", not "GitHub will refuse the merge". If protection is ever enabled,
-> the checks to require are `Rust`, `Webapp lint + tests + build`, and
-> `Conventional commits` - the `rust` job exists to give the first of those a
-> single stable name.
+> the checks to require are `Rust`, `Webapp`, and `Conventional commits` -
+> the `rust` and `webapp` aggregate jobs exist to give the first two of those
+> a single stable name each.
 
 ## `ci.yml` - the required gate
 
 ```
-             ┌── rust-host ────┐
-             ├── wasm-check ───┤
-checkout ────┼── rust-macos ───┼── rust (aggregate check name)
-             └── rust-windows ─┘
+             ┌── rust-host ───────┐
+             ├── wasm-check ──────┤
+checkout ────┼── rust-macos ──────┼── rust (aggregate check name)
+             ├── rust-macos-wasm ─┤
+             └── rust-windows ────┘
 
-         ┌── webapp ── lint, unit, browser, E2E, build
+         ┌── webapp-static ───┐
+         ├── webapp-browser ──┼── webapp (aggregate check name)
+         ├── webapp-wasm-e2e ─┘
 wasm ────┤
          └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
                  ↑
@@ -105,13 +108,17 @@ security ── advisories (warn only, always green)
 - **`wasm-check`** runs `cargo check` against `wasm32-wasip1-threads`. It has a
   separate Cargo fingerprint from the host checks, so serializing it into
   `rust-host` would only lengthen the required gate.
-- **`rust-macos`** runs the Rust test suite plus the threaded wasm check on
-  `macos-14` (arm64) - the platform the release fan-out ships CLI binaries for
-  and the one contributors build the wasm module on, but that nothing
+- **`rust-macos`** runs the Rust test suite on `macos-14` (arm64) - the
+  platform the release fan-out ships CLI binaries for, but that nothing
   previously tested. It uses the same mise/setup-build-env path as the Linux
-  jobs, so the wasm env wiring in `.mise.toml` (WASI SDK discovery, the bash
-  compiler shims) is what gets exercised. fmt, clippy, typegen, and the policy
-  checks are platform-independent and already gate in `rust-host`.
+  jobs. fmt, clippy, typegen, and the policy checks are platform-independent
+  and already gate in `rust-host`.
+- **`rust-macos-wasm`** is the macOS half of the threaded wasm check - macOS
+  is the platform contributors actually build the wasm module on, so the wasm
+  env wiring in `.mise.toml` (WASI SDK discovery, the bash compiler shims) is
+  what gets exercised. Split from `rust-macos` for the same reason
+  `wasm-check` is split from `rust-host`: the two targets have separate Cargo
+  fingerprints, and serializing them was the longest leg of the Rust gate.
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
   the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
@@ -134,9 +141,16 @@ security ── advisories (warn only, always green)
   without any commit of ours, and letting that turn every open pull request red
   blocks unrelated work. Findings surface as warnings via
   `scripts/warn-only.sh`; the job stays green.
-- **`webapp`** consumes the prebuilt module and compiles no Rust: build-script
-  tests, lint, unit tests, two browser suites, the webapp E2E, and the vite
-  build.
+- **`webapp-static`**, **`webapp-browser`**, and **`webapp-wasm-e2e`** consume
+  the prebuilt module and compile no Rust. The work is split three ways so the
+  parallel browser suite - the single longest webapp step - is never
+  serialized behind the rest: `webapp-static` is the node-only work (build
+  script tests, lint, unit tests, vite build; no Playwright install),
+  `webapp-browser` is the parallel browser suite alone, and `webapp-wasm-e2e`
+  is the remaining Playwright work (icon check, wasm browser suite, webapp
+  E2E).
+- **`webapp`** is the aggregator for those three, mirroring `rust`: one stable
+  check name (`Webapp`) while the suites run in parallel.
 - **`deploy-plan`** turns the ref into the list of channels to publish (below).
   It exists as its own job because a matrix can only be fed by an upstream
   job's output.
@@ -229,8 +243,8 @@ Caching decisions that live here:
   can read, which is pure ballast against the 10 GiB budget.
 - **WASI SDK**: keyed on version *and* checksum, so a version bump misses by
   construction and can never serve a stale SDK. The archive is per-platform
-  (x86_64-linux for the Linux jobs, arm64-macos for `rust-macos`), each pinned
-  by its own checksum.
+  (x86_64-linux for the Linux jobs, arm64-macos for `rust-macos-wasm`), each
+  pinned by its own checksum.
 - **`node_modules`**: the installed tree is cached, not `~/.npm` - a hit skips
   `npm ci` outright instead of merely speeding up its download half.
 - **Playwright**: browser binaries only. The apt-level libraries they link
