@@ -63,7 +63,10 @@ in the [CLI guide](docs/cli.md#supported-formats).
 
 rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
 breaking changes may still happen between minor releases. Patching,
-compressing, extracting, and bundling have all been tested extensively. If you
+compressing, extracting, and bundling have all been tested extensively. That
+hands-on testing happens on macOS and Linux; Windows runs the same automated
+test suite in CI but has seen much less real-world use, so expect rougher
+edges there and please report anything Windows-specific. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0. Trim and Tools are
 currently untested but theoretically working, so they are disabled in the
