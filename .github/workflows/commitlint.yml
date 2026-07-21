@@ -1,4 +1,4 @@
-name: Commitlint
+name: Conventional commits
 
 on:
   workflow_dispatch:

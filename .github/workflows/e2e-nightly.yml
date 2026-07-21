@@ -1,4 +1,4 @@
-name: E2E Nightly
+name: Nightly browser E2E
 
 on:
   workflow_dispatch:
