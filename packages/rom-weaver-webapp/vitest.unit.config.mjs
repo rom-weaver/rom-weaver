@@ -14,5 +14,6 @@ export default mergeConfig(baseConfig, {
     },
     environment: "node",
     include: ["tests/unit/**/*.test.{ts,tsx}"],
+    setupFiles: ["./tests/unit/setup.ts"],
   },
 });
