@@ -58,6 +58,105 @@ jobs:
       - name: Dockerfiles
         run: mise run hadolint
 
+  # Images were previously built only by the release fan-out, so a Dockerfile
+  # that no longer builds surfaced at the moment it blocked a publish. hadolint
+  # above reads the Dockerfile; it does not run it.
+  #
+  # Gated on the files that define the images rather than run unconditionally.
+  # Such a change leaves the sources alone, so the registry build cache written
+  # by the publish job restores every expensive layer and this costs minutes; a
+  # source-only pull request would instead invalidate `COPY . .` and pay a cold
+  # cargo+wasm compile to tell us nothing about the Dockerfile.
+  docker:
+    name: Docker ${{ matrix.name }} image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    if: github.ref_type != 'tag'
+    permissions:
+      contents: read
+      # Read to restore the cache; write so a merge to main can refresh it. A
+      # pull request from a fork receives a read-only token regardless, which is
+      # why the export below is restricted to pushes on main anyway.
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CLI
+            image: rom-weaver-cli
+            file: Dockerfile
+          - name: webapp
+            image: rom-weaver-webapp
+            file: packages/rom-weaver-webapp/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The gate below diffs against the base commit, which a shallow clone
+          # would not contain.
+          fetch-depth: 0
+
+      - name: Check whether the image plumbing changed
+        id: gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # Anything that changes how an image is assembled: the Dockerfiles,
+          # what lands in their context, the runtime server config, and the two
+          # workflows that build them.
+          paths='^(Dockerfile|\.dockerignore|docker-compose\.yml|packages/rom-weaver-webapp/(Dockerfile|sws\.toml)|\.github/workflows/(ci|docker-publish)\.yml)$'
+
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            echo "manual run; building unconditionally"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
+            echo "no base commit to diff against; building"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | { grep -E "$paths" || true; })
+          if [[ -n "$changed" ]]; then
+            echo "image plumbing changed:"
+            echo "$changed"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no image plumbing changed; skipping the build"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.gate.outputs.build == 'true'
+
+      - name: Log in to GitHub Container Registry
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Never pushes an image. On main it refreshes the build cache so the next
+      # release starts warm; on a pull request it only reads, because a fork's
+      # token cannot write to the registry.
+      - name: Build image
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
+          cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
+
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.
   wasm:

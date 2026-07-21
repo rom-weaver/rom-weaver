@@ -20,6 +20,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 - [Release fan-out](#release-fan-out)
   - [Prerelease routing](#prerelease-routing)
 - [Actions cache budget](#actions-cache-budget)
+  - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
 - [Reproducing CI locally](#reproducing-ci-locally)
 - [Gotchas](#gotchas)
@@ -74,6 +75,14 @@ security ── advisories (warn only, always green)
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
+- **`docker`** builds the CLI and webapp images without pushing, so a broken
+  Dockerfile fails here rather than at the moment it blocks a release publish.
+  It runs only when the files defining the images change (the two Dockerfiles,
+  `.dockerignore`, `docker-compose.yml`, `sws.toml`, `ci.yml`,
+  `docker-publish.yml`), because such a change leaves the sources alone and the
+  registry build cache restores every expensive layer; a source-only pull
+  request would invalidate `COPY . .` and pay a cold cargo+wasm compile for no
+  signal about the Dockerfile. On `main` it also refreshes that cache.
 - **`wasm`** builds the production WASM module. This is the single most
   expensive step in the pipeline (~6.5 min) and it used to run twice, so it is
   built once here and shared with `webapp` and `deploy` as an artifact, and
@@ -254,6 +263,21 @@ The cleanup is **scheduled, not triggered by `pull_request: closed`**:
 workflows triggered by Dependabot or a fork get a read-only `GITHUB_TOKEN`, so
 a close-triggered job could not delete anything for exactly the traffic that
 produces most of the garbage.
+
+### Why the Docker build cache is not in this budget
+
+The image builds cache to `ghcr.io/<owner>/<image>:buildcache`, not `type=gha`.
+Publishing runs only when a release pull request merges, and Actions entries are
+evicted after seven days without a read, so a gha cache was reliably cold by the
+next release while `mode=max` still wrote the whole layer graph - Rust builder
+stage included - into the 10 GiB budget above. Those entries were also beyond
+the cleanup's reach, which reaps closed-pull-request scopes while these were
+written on a tag. A registry cache costs no Actions budget, expires on no timer,
+and the `docker` job in `ci.yml` reads the same ref.
+
+Cache **mounts** (`--mount=type=cache`) are a separate mechanism and remain
+local-only: BuildKit exports them to neither backend, so CI always pays a cold
+compile for the layer that runs the build.
 
 ## Secrets
 

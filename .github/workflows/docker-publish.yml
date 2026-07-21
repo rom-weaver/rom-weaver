@@ -89,6 +89,15 @@ jobs:
             type=raw,value=latest,enable=${{ steps.policy.outputs.release == 'true' }}
             type=raw,value=beta,enable=${{ steps.policy.outputs.release != 'true' }}
 
+      # The build cache lives in the registry beside the images, not in
+      # `type=gha`. This job only runs when a release pull request merges, and
+      # Actions cache entries are evicted after seven days without a read, so a
+      # gha cache was reliably cold by the next release - while `mode=max` still
+      # wrote the whole layer graph, Rust builder stage included, into the 10 GiB
+      # repository budget that `cache-cleanup.yml` exists to defend. Those
+      # entries also sat outside its reach: it reaps closed-pull-request scopes,
+      # and these were written on a tag. A registry cache costs no Actions
+      # budget, never expires on a timer, and CI reads the same ref.
       - name: Build and push image
         id: build
         uses: docker/build-push-action@v7
@@ -101,8 +110,8 @@ jobs:
           provenance: mode=max
           sbom: true
           tags: ${{ steps.metadata.outputs.tags }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache,mode=max
 
       - name: Sign build provenance
         uses: actions/attest@v4
