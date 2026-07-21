@@ -322,7 +322,7 @@ const writeChangelogAsset = () => {
   };
 };
 
-const writePreviewCompressedAssets = () => {
+const writeStaticCompressedAssets = () => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -336,7 +336,7 @@ const writePreviewCompressedAssets = () => {
     configResolved(config) {
       outDir = config.build.outDir;
     },
-    name: "rom-weaver-preview-compressed-assets",
+    name: "rom-weaver-static-compressed-assets",
   };
 };
 
@@ -472,7 +472,10 @@ export default defineConfig(({ command, mode }) => {
         strategies: "injectManifest",
       }),
       preloadPrimaryFont(),
-      ...(mode === "docker" ? [writePreviewCompressedAssets()] : []),
+      // `selfhost`, not `docker`: the container and the static release tarball
+      // are one bundle now, and both are served by a static server that reads
+      // precompressed siblings rather than a CDN that compresses on the fly.
+      ...(mode === "selfhost" ? [writeStaticCompressedAssets()] : []),
     ],
     preview: {
       headers: securityHeaders,

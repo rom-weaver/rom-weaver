@@ -30,3 +30,7 @@
 /packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm
 /packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm.br
 /packages/rom-weaver-webapp/tests/wasm/__screenshots__/
+
+# Prebuilt artifacts staged for a `--build-arg BINARY=prebuilt` / `DIST=prebuilt`
+# container build. CI writes this in the runner checkout; see docs/ci.md.
+/prebuilt/

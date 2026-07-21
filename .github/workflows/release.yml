@@ -142,13 +142,28 @@ jobs:
       - name: Verify WASM artifact
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
+      # `--mode selfhost` adds the precompressed .br/.gz siblings. They are what
+      # the container's static-web-server reads (`compression-static` in
+      # sws.toml), and any static server fronting the tarball can use them too -
+      # unlike the CDN-served channel deploys, which compress on the fly.
       - name: Package static webapp release asset
         run: |
-          npm --prefix packages/rom-weaver-webapp run build
+          npm --prefix packages/rom-weaver-webapp run build -- --mode selfhost
           tar --create --gzip \
             --file rom-weaver-webapp.tar.gz \
             --directory packages/rom-weaver-webapp/dist .
           sha256sum rom-weaver-webapp.tar.gz > rom-weaver-webapp.tar.gz.sha256
+
+      # Consumed by the webapp image, which would otherwise install rustup, the
+      # WASI SDK and binaryen and rebuild the same bundle from scratch. Sharing
+      # it also makes the container and this release asset the same bytes.
+      - name: Upload static webapp bundle for the container build
+        uses: actions/upload-artifact@v5
+        with:
+          name: webapp-dist
+          path: packages/rom-weaver-webapp/dist
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload static webapp release asset
         env:
@@ -217,10 +232,20 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
+  # Both images are assembled from artifacts these two jobs produce, so this now
+  # runs after them instead of beside them. The serialization is bought back
+  # several times over: the webapp image no longer builds a toolchain and a wasm
+  # module of its own, and the CLI image no longer compiles the workspace.
+  # docker-publish falls back to building from source if either artifact is
+  # missing, which is what a standalone workflow_dispatch gets.
   publish-containers:
-    needs: release
+    needs: [release, static-webapp, publish-npm]
     if: needs.release.outputs.release_created == 'true'
     permissions:
+      # A reusable workflow gets the caller job's token, never more, so this has
+      # to be granted here as well as declared there - without it the artifact
+      # download fails and both images quietly rebuild from source.
+      actions: read
       artifact-metadata: write
       attestations: write
       contents: read
