@@ -367,18 +367,18 @@ jobs:
 
   # The release fan-out builds the CLI for macOS, but until here nothing ever
   # *tested* on it - a platform-specific regression surfaced at publish time or
-  # from a user report. Runs the test suite plus the threaded wasm check, since
-  # macOS is the platform contributors actually build the wasm module on and
-  # its toolchain wiring (WASI SDK discovery, the bash compiler shims) was
-  # otherwise only ever verified on Linux. fmt, clippy, typegen, and the policy
-  # checks are platform-independent and already gate in `rust-host`.
+  # from a user report. fmt, clippy, typegen, and the policy checks are
+  # platform-independent and already gate in `rust-host`.
   #
   # Uses the same mise/setup-build-env path as the Linux jobs: mise is the
-  # toolchain manager the repo's macOS development already runs on, and reusing
-  # it here means the wasm env wiring in .mise.toml is what gets exercised
-  # rather than a hand-copied imitation of it.
+  # toolchain manager the repo's macOS development already runs on. The
+  # threaded wasm check lives in `rust-macos-wasm` below - same reasoning as
+  # the Linux `rust-host`/`wasm-check` split: the two targets have separate
+  # Cargo fingerprints, so serializing them in one job only lengthens the
+  # required Rust gate. This leg needs neither the WASI SDK nor the wasm
+  # target.
   rust-macos:
-    name: Rust tests + WASM check (macOS)
+    name: Rust tests (macOS)
     runs-on: macos-14
     timeout-minutes: 90
     if: github.ref_type != 'tag'
@@ -393,11 +393,30 @@ jobs:
       - uses: ./.github/actions/setup-build-env
         with:
           tools: rust nextest
-          rust-targets: wasm32-wasip1-threads
-          wasi-sdk: "true"
 
       - name: Rust tests
         run: mise run test-rust
+
+  # The macOS half of the threaded wasm check: macOS is the platform
+  # contributors actually build the wasm module on, and its toolchain wiring
+  # (WASI SDK discovery, the bash compiler shims in .mise.toml) was otherwise
+  # only ever verified on Linux.
+  rust-macos-wasm:
+    name: Rust WASM check (macOS)
+    runs-on: macos-14
+    timeout-minutes: 90
+    if: github.ref_type != 'tag'
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: rust
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
 
       # Same rationale as the Linux `wasm-check` job: RUSTFLAGS is safe to
       # override for a check because nothing is linked.
@@ -509,7 +528,7 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [rust-host, wasm-check, rust-macos, rust-windows]
+    needs: [rust-host, wasm-check, rust-macos, rust-macos-wasm, rust-windows]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Verify Rust jobs
@@ -517,16 +536,62 @@ jobs:
           HOST_RESULT: ${{ needs.rust-host.result }}
           WASM_RESULT: ${{ needs.wasm-check.result }}
           MACOS_RESULT: ${{ needs.rust-macos.result }}
+          MACOS_WASM_RESULT: ${{ needs.rust-macos-wasm.result }}
           WINDOWS_RESULT: ${{ needs.rust-windows.result }}
         run: |
           test "$HOST_RESULT" = success
           test "$WASM_RESULT" = success
           test "$MACOS_RESULT" = success
+          test "$MACOS_WASM_RESULT" = success
           test "$WINDOWS_RESULT" = success
 
-  # Consumes the prebuilt wasm module; compiles no Rust of its own.
-  webapp:
-    name: Webapp lint + tests + build
+  # The webapp work consumes the prebuilt wasm module and compiles no Rust of
+  # its own. It is split into three jobs so the slow parallel browser suite is
+  # never serialized behind lint or the other suites, and the node-only work
+  # skips the Playwright install entirely; the `webapp` aggregate below gives
+  # branch protection one stable name for all of it.
+  webapp-static:
+    name: Webapp lint + unit + build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: wasm
+    if: github.ref_type != 'tag'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node ripgrep
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      # Lives here rather than in the `rust` job because
+      # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
+      # imports only env functions the runtime provides - it reads the real
+      # .wasm and needs the artifact downloaded above.
+      - name: Build script tests
+        run: npm test
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+      - name: Build
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+  # The single longest webapp suite (~4 min) rides alone so it defines this
+  # group's wall clock instead of adding to it.
+  webapp-browser:
+    name: Webapp browser tests (parallel)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
@@ -548,15 +613,33 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      # Lives here rather than in the `rust` job because
-      # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
-      # imports only env functions the runtime provides - it reads the real
-      # .wasm and needs the artifact downloaded above.
-      - name: Build script tests
-        run: npm test
+      - name: Browser tests (parallel)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 
-      - name: Lint
-        run: npm --prefix packages/rom-weaver-webapp run lint
+  # Everything else that needs a Playwright chromium: the wasm-layer browser
+  # suite, the E2E pass, and the icon check.
+  webapp-wasm-e2e:
+    name: Webapp browser tests (wasm) + E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: wasm
+    if: github.ref_type != 'tag'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node ripgrep
+          cargo-cache: "false"
+          webapp-deps: "true"
+          playwright: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
 
       # The per-channel app icons are committed, not built, so nothing else would
       # notice them going stale against logo.svg / the icon masters / an accent's
@@ -565,20 +648,32 @@ jobs:
       - name: Channel icons up to date
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
-
       - name: Browser tests (wasm)
         run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-
-      - name: Browser tests (parallel)
-        run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 
       - name: Webapp E2E
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
-      - name: Build
-        run: npm --prefix packages/rom-weaver-webapp run build
+  # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
+  # for branch protection while the three webapp jobs run in parallel. Must
+  # fail rather than skip when a dependency fails (a skipped check counts as
+  # passing), and `!cancelled()` keeps a superseded run from reporting red.
+  webapp:
+    name: Webapp
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [webapp-static, webapp-browser, webapp-wasm-e2e]
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    steps:
+      - name: Verify webapp jobs
+        env:
+          STATIC_RESULT: ${{ needs.webapp-static.result }}
+          BROWSER_RESULT: ${{ needs.webapp-browser.result }}
+          WASM_E2E_RESULT: ${{ needs.webapp-wasm-e2e.result }}
+        run: |
+          test "$STATIC_RESULT" = success
+          test "$BROWSER_RESULT" = success
+          test "$WASM_E2E_RESULT" = success
 
   # Decide which channels this ref publishes to. Channels are ordered
   # prod -> beta -> nightly, and a deploy refreshes its own channel plus every

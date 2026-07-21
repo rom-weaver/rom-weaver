@@ -192,6 +192,8 @@ struct lzma2_mt_job {
 	/* Shared input-bytes-encoded counter, advanced as this block streams. */
 	pthread_mutex_t		*progress_mutex;
 	uint64_t		*encoded_bytes;
+	pthread_cond_t		*progress_cond;	/* NULL when unavailable */
+	int			 done;		/* set under progress_mutex */
 };
 
 struct lzma2_mt_stream {
@@ -222,6 +224,9 @@ struct lzma2_mt_stream {
 	pthread_mutex_t		 progress_mutex;
 	uint64_t		 encoded_bytes;			/* total input encoded */
 	int			 progress_mutex_ready;
+	/* Wakes a blocked drain whenever encoded_bytes advances or a job ends. */
+	pthread_cond_t		 progress_cond;
+	int			 progress_cond_ready;
 };
 #endif
 
@@ -2240,13 +2245,14 @@ compression_lzma2_mt_report(struct lzma2_mt_job *job, uint64_t bytes)
 		return;
 	pthread_mutex_lock(job->progress_mutex);
 	*job->encoded_bytes += bytes;
+	if (job->progress_cond != NULL)
+		pthread_cond_broadcast(job->progress_cond);
 	pthread_mutex_unlock(job->progress_mutex);
 }
 
-static void *
-compression_lzma2_mt_worker(void *arg)
+static void
+compression_lzma2_mt_encode(struct lzma2_mt_job *job)
 {
-	struct lzma2_mt_job *job = (struct lzma2_mt_job *)arg;
 	lzma_filter filters[2];
 	lzma_stream strm = LZMA_STREAM_INIT;
 	const uint8_t *next;
@@ -2255,7 +2261,7 @@ compression_lzma2_mt_worker(void *arg)
 
 	if (job->in_size > (size_t)-1 - (job->in_size / 16) - 1024) {
 		job->ret = LZMA_MEM_ERROR;
-		return (NULL);
+		return;
 	}
 	cap = job->in_size + (job->in_size / 16) + 1024;
 	if (cap < 1024)
@@ -2282,13 +2288,13 @@ compression_lzma2_mt_worker(void *arg)
 
 	if (lzma_raw_encoder(&strm, filters) != LZMA_OK) {
 		job->ret = LZMA_PROG_ERROR;
-		return (NULL);
+		return;
 	}
 	out = malloc(cap);
 	if (out == NULL) {
 		lzma_end(&strm);
 		job->ret = LZMA_MEM_ERROR;
-		return (NULL);
+		return;
 	}
 	strm.next_out = out;
 	strm.avail_out = cap;
@@ -2324,7 +2330,7 @@ compression_lzma2_mt_worker(void *arg)
 				free(out);
 				lzma_end(&strm);
 				job->ret = LZMA_MEM_ERROR;
-				return (NULL);
+				return;
 			}
 			cap *= 2;
 			out = bigger;
@@ -2342,7 +2348,7 @@ compression_lzma2_mt_worker(void *arg)
 			free(out);
 			lzma_end(&strm);
 			job->ret = ret;
-			return (NULL);
+			return;
 		}
 	}
 
@@ -2354,11 +2360,30 @@ compression_lzma2_mt_worker(void *arg)
 	if (produced == 0 || out[produced - 1] != 0) {
 		free(out);
 		job->ret = LZMA_DATA_ERROR;
-		return (NULL);
+		return;
 	}
 	job->out = out;
 	job->out_size = produced - 1;	/* strip the trailing end marker */
 	job->ret = LZMA_OK;
+}
+
+static void *
+compression_lzma2_mt_worker(void *arg)
+{
+	struct lzma2_mt_job *job = (struct lzma2_mt_job *)arg;
+
+	compression_lzma2_mt_encode(job);
+	/*
+	 * Mark completion under the progress lock and wake the main thread so
+	 * a drain blocked on this block stops waiting, whether the encode
+	 * succeeded or failed.
+	 */
+	if (job->progress_cond != NULL) {
+		pthread_mutex_lock(job->progress_mutex);
+		job->done = 1;
+		pthread_cond_broadcast(job->progress_cond);
+		pthread_mutex_unlock(job->progress_mutex);
+	}
 	return (NULL);
 }
 
@@ -2385,6 +2410,42 @@ compression_lzma2_mt_join(struct archive *a, struct lzma2_mt_job *job)
 	return (ARCHIVE_OK);
 }
 
+/*
+ * Blocking join for the oldest in-flight block that keeps relaying the shared
+ * encoded-bytes counter to the user progress callback while it waits, instead
+ * of going silent inside pthread_join until the whole block is finished. On
+ * fast inputs the encoder can otherwise outrun every progress sample and the
+ * first emitted value is already the final one.
+ */
+static int
+compression_lzma2_mt_wait_join(struct archive *a,
+    struct lzma2_mt_stream *strm, struct lzma2_mt_job *job)
+{
+	uint64_t encoded;
+
+	if (strm->progress_cond_ready && strm->progress_mutex_ready) {
+		pthread_mutex_lock(&strm->progress_mutex);
+		while (!job->done) {
+			encoded = strm->encoded_bytes;
+			if (strm->progress_callback != NULL &&
+			    encoded > strm->progress_bytes_reported) {
+				strm->progress_bytes_reported = encoded;
+				/* Call back without the lock so a slow (or
+				 * re-entrant) callback never stalls workers. */
+				pthread_mutex_unlock(&strm->progress_mutex);
+				strm->progress_callback(
+				    strm->progress_callback_data, encoded);
+				pthread_mutex_lock(&strm->progress_mutex);
+				continue;
+			}
+			pthread_cond_wait(&strm->progress_cond,
+			    &strm->progress_mutex);
+		}
+		pthread_mutex_unlock(&strm->progress_mutex);
+	}
+	return (compression_lzma2_mt_join(a, job));
+}
+
 static int
 compression_lzma2_mt_drain(struct archive *a, struct la_zstream *lastrm,
     int wait)
@@ -2400,7 +2461,7 @@ compression_lzma2_mt_drain(struct archive *a, struct la_zstream *lastrm,
 		if (!job->joined) {
 			if (!wait)
 				return (ARCHIVE_OK);
-			ret = compression_lzma2_mt_join(a, job);
+			ret = compression_lzma2_mt_wait_join(a, strm, job);
 			if (ret != ARCHIVE_OK)
 				return (ret);
 		}
@@ -2487,6 +2548,8 @@ compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 	job->opt = strm->opt;
 	job->progress_mutex = &strm->progress_mutex;
 	job->encoded_bytes = &strm->encoded_bytes;
+	job->progress_cond = strm->progress_cond_ready ?
+	    &strm->progress_cond : NULL;
 	ret = pthread_create(&job->thread, NULL, compression_lzma2_mt_worker,
 	    job);
 	if (ret != 0) {
@@ -2571,6 +2634,9 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 	}
 	if (pthread_mutex_init(&strm->progress_mutex, NULL) == 0)
 		strm->progress_mutex_ready = 1;
+	if (strm->progress_mutex_ready &&
+	    pthread_cond_init(&strm->progress_cond, NULL) == 0)
+		strm->progress_cond_ready = 1;
 	lastrm->real_stream = strm;
 	lastrm->valid = 1;
 	lastrm->code = compression_code_lzma2_mt;
@@ -2680,6 +2746,8 @@ compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
 			free(job->in);
 			free(job->out);
 		}
+		if (strm->progress_cond_ready)
+			pthread_cond_destroy(&strm->progress_cond);
 		if (strm->progress_mutex_ready)
 			pthread_mutex_destroy(&strm->progress_mutex);
 		free(strm->jobs);
