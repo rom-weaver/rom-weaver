@@ -1,0 +1,113 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful CI run containing the wasm-prod artifact (auto-detected when omitted)
+        required: false
+        type: string
+  # Coverage is informational. Run it after CI so its duration or failure cannot
+  # delay Release Please or suppress publishing from a green required gate.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Coverage
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: always
+      ROM_WEAVER_COVERAGE: "1"
+      MISE_DISABLE_TOOLS: >-
+        aqua:WebAssembly/binaryen,aqua:BurntSushi/ripgrep,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          submodules: recursive
+
+      - name: Resolve CI artifact
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_RUN_ID: ${{ github.event.workflow_run.id || inputs.ci_run_id }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          run_id="$REQUESTED_RUN_ID"
+          if [ -z "$run_id" ]; then
+            run_id=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow ci.yml \
+              --commit "$TARGET_SHA" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')
+          fi
+          test -n "$run_id"
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+            --jq '[.artifacts[] | select(.name == "wasm-prod" and .expired == false)] | length')
+          test "$count" -gt 0
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
+          rust-components: llvm-tools-preview
+          webapp-deps: "true"
+          playwright: "true"
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Download tested WASM artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.ci.outputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name wasm-prod \
+            --dir packages/rom-weaver-webapp/src/wasm
+
+      - name: Verify WASM artifact
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+
+      - name: Rust coverage
+        run: mise run coverage-rust
+
+      - name: React unit coverage
+        run: npm --prefix packages/rom-weaver-webapp run test:unit:coverage
+
+      - name: React UI coverage
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:coverage
+
+      - name: React wasm coverage
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm:coverage
+
+      - name: Coverage summary
+        run: node scripts/coverage-summary.mjs
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-reports
+          path: dist/coverage/**
+          if-no-files-found: warn

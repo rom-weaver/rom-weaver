@@ -8,9 +8,21 @@ on:
     branches:
       - main
 
+# Release Please can synchronize the branch and edit the pull request within
+# seconds. Keep only the newest validation for a ref instead of paying for each.
+concurrency:
+  group: commitlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   conventional-commits:
     name: Conventional commits
+    # A body-only edit cannot change either condition checked below. Title and
+    # base edits still rerun, as do every non-edited pull request event.
+    if: >-
+      github.event.action != 'edited' ||
+      github.event.changes.title != null ||
+      github.event.changes.base != null
     runs-on: ubuntu-24.04
     permissions:
       contents: read

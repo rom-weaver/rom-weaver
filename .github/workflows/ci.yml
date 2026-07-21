@@ -37,6 +37,9 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: always
+      # This job only needs Rust, Node, and Binaryen.
+      MISE_DISABLE_TOOLS: >-
+        aqua:BurntSushi/ripgrep,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -53,10 +56,10 @@ jobs:
       # pull request that is the merge commit, which is what gets built.
       #
       # Inputs, and why each is here:
-      #   crates, vendor         - the sources themselves
+      #   crates, vendor/libarchive - the sources themselves
       #   Cargo.lock, Cargo.toml - resolved dependency versions
       #   .cargo                 - target rustflags, incl. --max-memory and LTO
-      #   scripts/wasm           - the build script and its post-processing
+      #   scripts/wasm, license generator - build and attribution post-processing
       #   .mise.toml             - the rust and binaryen (wasm-opt) pins
       #   .github/actions/...    - the WASI SDK version and checksum
       #
@@ -69,8 +72,9 @@ jobs:
           CACHE_EPOCH: "1"
         run: |
           basis=$(git ls-tree HEAD -- \
-            crates vendor Cargo.lock Cargo.toml .cargo scripts/wasm \
-            .mise.toml .github/actions/setup-build-env)
+            crates vendor/libarchive Cargo.lock Cargo.toml .cargo scripts/wasm \
+            scripts/gen-third-party-licenses.mjs .mise.toml \
+            .github/actions/setup-build-env)
           if [ -z "$basis" ]; then
             echo "::error::wasm cache basis resolved to nothing - refusing to key a cache on an empty tree"
             exit 1
@@ -132,7 +136,8 @@ jobs:
       # exports. That produces a module that still builds and still passes
       # wasm-opt, but declares a 1 GiB ceiling and fails to instantiate against
       # the runtime's 4 GiB memory. Warnings are denied by the separate
-      # `cargo check` in the `rust` job, which does not link and so is immune.
+      # `cargo check` in the `wasm-check` job, which does not link and so is
+      # immune.
       - name: Build production WASM
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
@@ -163,13 +168,16 @@ jobs:
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
-  rust:
-    name: Rust
+  rust-host:
+    name: Rust host
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
+      # Host checks need Rust, Node, ripgrep, cargo-deny, and cargo-machete.
+      MISE_DISABLE_TOOLS: >-
+        aqua:WebAssembly/binaryen,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -182,10 +190,6 @@ jobs:
         with:
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
-          # For the threaded-wasm type-check below. It is a `cargo check`, but
-          # libarchive-sys's build script still compiles C against the sysroot.
-          rust-targets: wasm32-wasip1-threads
-          wasi-sdk: "true"
 
       - name: Rust format
         run: mise run fmt
@@ -195,14 +199,6 @@ jobs:
 
       - name: Rust typegen
         run: mise run typegen-check
-
-      # Safe to override RUSTFLAGS for a check: nothing is linked, so losing the
-      # config's link-args is inconsequential. Lives in this job rather than
-      # next to the wasm build so it stays off the critical path - the build
-      # cannot reuse these artifacts anyway, since the differing RUSTFLAGS give
-      # them a separate fingerprint.
-      - name: WASM threaded check
-        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
       - name: Whitespace
         env:
@@ -244,6 +240,52 @@ jobs:
         run: |
           npm run audit:deps
           npm --prefix packages/rom-weaver-webapp run audit:deps
+
+  # The threaded target has a separate Cargo fingerprint from the host checks,
+  # so serializing it inside the host job only lengthens the required Rust gate.
+  wasm-check:
+    name: Rust WASM check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    if: github.ref_type != 'tag'
+    env:
+      CARGO_TERM_COLOR: always
+      MISE_DISABLE_TOOLS: >-
+        node,aqua:WebAssembly/binaryen,aqua:BurntSushi/ripgrep,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          # `cargo check` still runs the libarchive build script against WASI.
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      # Safe to override RUSTFLAGS for a check: nothing is linked, so losing the
+      # target config's link args is inconsequential.
+      - name: WASM threaded check
+        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
+
+  # Keep the existing required-check name stable while the independent host and
+  # threaded-target work runs in parallel.
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [rust-host, wasm-check]
+    if: always() && github.ref_type != 'tag'
+    steps:
+      - name: Verify Rust jobs
+        env:
+          HOST_RESULT: ${{ needs.rust-host.result }}
+          WASM_RESULT: ${{ needs.wasm-check.result }}
+        run: |
+          test "$HOST_RESULT" = success
+          test "$WASM_RESULT" = success
 
   # Consumes the prebuilt wasm module; compiles no Rust of its own.
   webapp:
@@ -295,67 +337,6 @@ jobs:
 
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
-
-  # Coverage has no percentage threshold - it is reported, not enforced - so it
-  # does not gate a merge and is kept off the pull-request critical path. It
-  # still runs on every push to main, so the release candidates that matter are
-  # covered, and on demand via workflow_dispatch. Tags are excluded: the commit
-  # under a release tag already produced this report on main.
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    needs: wasm
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'workflow_dispatch'
-    env:
-      CARGO_TERM_COLOR: always
-      ROM_WEAVER_COVERAGE: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup-build-env
-        with:
-          apt-packages: cmake ninja-build pkg-config clang libclang-dev
-          # llvm-tools-preview backs cargo-llvm-cov's instrumentation.
-          rust-components: llvm-tools-preview
-          webapp-deps: "true"
-          playwright: "true"
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
-
-      - name: Rust coverage
-        run: mise run coverage-rust
-
-      - name: React unit coverage
-        run: npm --prefix packages/rom-weaver-webapp run test:unit:coverage
-
-      - name: React UI coverage
-        run: npm --prefix packages/rom-weaver-webapp run test:browser:coverage
-
-      - name: React wasm coverage
-        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm:coverage
-
-      - name: Coverage summary
-        run: node scripts/coverage-summary.mjs
-
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-reports
-          path: dist/coverage/**
-          if-no-files-found: warn
 
   # Publishes the webapp to Cloudflare Pages on three channels, each its own
   # origin so OPFS / service-worker scope / Cache Storage stay isolated:
