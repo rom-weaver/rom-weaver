@@ -342,30 +342,58 @@ jobs:
       - name: WASM threaded check
         run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
-  # The release fan-out builds the CLI for macOS and Windows, but until here
-  # nothing ever *tested* on them - a platform-specific regression surfaced at
-  # publish time or from a user report. Runs only the test suite: fmt, clippy,
-  # typegen, and the policy checks are platform-independent and already gate in
-  # `rust-host`, so repeating them here would only lengthen the slowest leg.
+  # The release fan-out builds the CLI for macOS, but until here nothing ever
+  # *tested* on it - a platform-specific regression surfaced at publish time or
+  # from a user report. Runs the test suite plus the threaded wasm check, since
+  # macOS is the platform contributors actually build the wasm module on and
+  # its toolchain wiring (WASI SDK discovery, the bash compiler shims) was
+  # otherwise only ever verified on Linux. fmt, clippy, typegen, and the policy
+  # checks are platform-independent and already gate in `rust-host`.
   #
-  # Deliberately not the mise/setup-build-env path: mise's [env] exec templates
-  # shell out to bash, which is untested on the Windows runner, and the release
-  # jobs already prove the dtolnay + rustup route on these exact images. The
-  # toolchain pin is read from .mise.toml so the platforms can never drift from
-  # the version rust-host tests with.
-  rust-platform:
-    name: Rust tests (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
+  # Uses the same mise/setup-build-env path as the Linux jobs: mise is the
+  # toolchain manager the repo's macOS development already runs on, and reusing
+  # it here means the wasm env wiring in .mise.toml is what gets exercised
+  # rather than a hand-copied imitation of it.
+  rust-macos:
+    name: Rust tests + WASM check (macOS)
+    runs-on: macos-14
     timeout-minutes: 90
     if: github.ref_type != 'tag'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            runner: macos-14
-          - name: Windows
-            runner: windows-2025
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The runner image ships cmake and the Xcode clang, which covers the
+      # vendored libarchive host build; no brew installs needed.
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: rust
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      - name: Rust tests
+        run: mise run test-rust
+
+      # Same rationale as the Linux `wasm-check` job: RUSTFLAGS is safe to
+      # override for a check because nothing is linked.
+      - name: WASM threaded check
+        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
+
+  # Windows cannot reuse the mise path: the wasm toolchain's compiler shims
+  # are bash scripts a native cargo cannot exec, and mise's [env] templates
+  # assume a POSIX shell. The npm platform publish already proves the
+  # dtolnay + rustup route on this exact image, so the tests ride that instead.
+  # The toolchain pin is read from .mise.toml so this leg can never drift from
+  # the version the other jobs test with. No wasm leg here - building the wasm
+  # module on Windows is unsupported until those shims have a native
+  # counterpart.
+  rust-windows:
+    name: Rust tests (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 90
+    if: github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -388,17 +416,16 @@ jobs:
           toolchain: ${{ steps.pin.outputs.rust }}
 
       # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
-      # includes the OS, so the two legs never collide with each other or with
-      # rust-host.
+      # includes the OS, so this leg never collides with the others.
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # The runner images ship cmake and a host C toolchain (Xcode clang / MSVC
-      # + LLVM), which is everything the vendored libarchive build needs - the
-      # npm platform publish builds this same graph with no extra installs.
+      # The runner image ships cmake and MSVC + LLVM, which is everything the
+      # vendored libarchive build needs - the npm platform publish builds this
+      # same graph with no extra installs.
       - name: Rust tests
         run: cargo test --quiet --workspace --locked
 
@@ -411,18 +438,20 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [rust-host, wasm-check, rust-platform]
+    needs: [rust-host, wasm-check, rust-macos, rust-windows]
     if: always() && github.ref_type != 'tag'
     steps:
       - name: Verify Rust jobs
         env:
           HOST_RESULT: ${{ needs.rust-host.result }}
           WASM_RESULT: ${{ needs.wasm-check.result }}
-          PLATFORM_RESULT: ${{ needs.rust-platform.result }}
+          MACOS_RESULT: ${{ needs.rust-macos.result }}
+          WINDOWS_RESULT: ${{ needs.rust-windows.result }}
         run: |
           test "$HOST_RESULT" = success
           test "$WASM_RESULT" = success
-          test "$PLATFORM_RESULT" = success
+          test "$MACOS_RESULT" = success
+          test "$WINDOWS_RESULT" = success
 
   # Consumes the prebuilt wasm module; compiles no Rust of its own.
   webapp:

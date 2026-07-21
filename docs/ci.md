@@ -58,9 +58,10 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 ## `ci.yml` - the required gate
 
 ```
-             ┌── rust-host ─────┐
-checkout ────┼── wasm-check ────┼── rust (aggregate check name)
-             └── rust-platform ─┘
+             ┌── rust-host ────┐
+             ├── wasm-check ───┤
+checkout ────┼── rust-macos ───┼── rust (aggregate check name)
+             └── rust-windows ─┘
 
          ┌── webapp ── lint, unit, browser, E2E, build
 wasm ────┤
@@ -98,15 +99,20 @@ security ── advisories (warn only, always green)
 - **`wasm-check`** runs `cargo check` against `wasm32-wasip1-threads`. It has a
   separate Cargo fingerprint from the host checks, so serializing it into
   `rust-host` would only lengthen the required gate.
-- **`rust-platform`** runs the Rust test suite on macOS (`macos-14`, arm64) and
-  Windows (`windows-2025`) - the platforms the release fan-out ships CLI
-  binaries for but that nothing previously tested. Only `cargo test` runs
-  there: fmt, clippy, typegen, and the policy checks are platform-independent
-  and already gate in `rust-host`. It installs the toolchain with
-  `dtolnay/rust-toolchain` (pin read from `.mise.toml`) rather than
-  mise/setup-build-env, because mise's `[env]` exec templates shell out to
-  bash and the release jobs already prove this route on these exact images.
-- **`rust`** is an aggregator: it fails unless the three jobs above succeeded. Its
+- **`rust-macos`** runs the Rust test suite plus the threaded wasm check on
+  `macos-14` (arm64) - the platform the release fan-out ships CLI binaries for
+  and the one contributors build the wasm module on, but that nothing
+  previously tested. It uses the same mise/setup-build-env path as the Linux
+  jobs, so the wasm env wiring in `.mise.toml` (WASI SDK discovery, the bash
+  compiler shims) is what gets exercised. fmt, clippy, typegen, and the policy
+  checks are platform-independent and already gate in `rust-host`.
+- **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
+  the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
+  rather than mise, whose `[env]` exec templates assume a POSIX shell; the
+  release jobs already prove this route on the same image. No wasm leg:
+  building the wasm module on Windows is unsupported until the bash compiler
+  shims have a native counterpart.
+- **`rust`** is an aggregator: it fails unless the four jobs above succeeded. Its
   only purpose is to present one stable check name (`Rust`) while the work
   runs in parallel, so branch protection would have a single thing to require.
 - **`security`** runs `cargo deny advisories` and `npm audit`. **Deliberately
@@ -208,7 +214,9 @@ Caching decisions that live here:
   `main`**. A branch run writes ~450 MB into a branch-local scope nothing else
   can read, which is pure ballast against the 10 GiB budget.
 - **WASI SDK**: keyed on version *and* checksum, so a version bump misses by
-  construction and can never serve a stale SDK.
+  construction and can never serve a stale SDK. The archive is per-platform
+  (x86_64-linux for the Linux jobs, arm64-macos for `rust-macos`), each pinned
+  by its own checksum.
 - **`node_modules`**: the installed tree is cached, not `~/.npm` - a hit skips
   `npm ci` outright instead of merely speeding up its download half.
 - **Playwright**: browser binaries only. The apt-level libraries they link

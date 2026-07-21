@@ -33,8 +33,11 @@ inputs:
     description: WASI SDK major version. Single source of truth for every job.
     default: "33"
   wasi-sdk-sha256:
-    description: Checksum of the WASI SDK tarball. Part of the cache key, so a version bump can never serve a stale SDK.
+    description: Checksum of the x86_64-linux WASI SDK tarball. Part of the cache key, so a version bump can never serve a stale SDK.
     default: 0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce
+  wasi-sdk-sha256-macos:
+    description: Checksum of the arm64-macos WASI SDK tarball, for the macOS platform leg.
+    default: 85c997a2665ead91673b5bb88b7d0df3fc8900df3bfa244f720d478187bbdc78
   webapp-deps:
     description: Run `npm ci` for the webapp package.
     default: "false"
@@ -119,6 +122,26 @@ runs:
         # already restoring main's cache and rebuilding the delta.
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
+    # The SDK ships one archive per host platform; resolve which one this
+    # runner needs, and its checksum, once for the three steps below.
+    - name: Resolve WASI SDK platform
+      if: inputs.wasi-sdk == 'true'
+      id: wasi-sdk-platform
+      shell: bash
+      env:
+        SHA256_LINUX: ${{ inputs.wasi-sdk-sha256 }}
+        SHA256_MACOS: ${{ inputs.wasi-sdk-sha256-macos }}
+      run: |
+        case "$RUNNER_OS" in
+          Linux) slug=x86_64-linux; sha256="$SHA256_LINUX" ;;
+          macOS) slug=arm64-macos;  sha256="$SHA256_MACOS" ;;
+          *) echo "::error::no WASI SDK wiring for $RUNNER_OS"; exit 1 ;;
+        esac
+        {
+          echo "slug=$slug"
+          echo "sha256=$sha256"
+        } >> "$GITHUB_OUTPUT"
+
     # Keyed on the pinned version + its checksum, so a version bump misses the
     # cache by construction and never serves a stale SDK.
     - name: Cache WASI SDK
@@ -126,20 +149,22 @@ runs:
       id: wasi-sdk-cache
       uses: actions/cache@v6
       with:
-        path: ${{ runner.temp }}/wasi-sdk-${{ inputs.wasi-sdk-version }}.0-x86_64-linux
-        key: wasi-sdk-${{ runner.os }}-${{ inputs.wasi-sdk-version }}-${{ inputs.wasi-sdk-sha256 }}
+        path: ${{ runner.temp }}/wasi-sdk-${{ inputs.wasi-sdk-version }}.0-${{ steps.wasi-sdk-platform.outputs.slug }}
+        key: wasi-sdk-${{ runner.os }}-${{ inputs.wasi-sdk-version }}-${{ steps.wasi-sdk-platform.outputs.sha256 }}
 
     - name: Install WASI SDK
       if: inputs.wasi-sdk == 'true' && steps.wasi-sdk-cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         WASI_SDK_VERSION: ${{ inputs.wasi-sdk-version }}
-        WASI_SDK_SHA256: ${{ inputs.wasi-sdk-sha256 }}
+        WASI_SDK_SLUG: ${{ steps.wasi-sdk-platform.outputs.slug }}
+        WASI_SDK_SHA256: ${{ steps.wasi-sdk-platform.outputs.sha256 }}
       run: |
         curl --fail --location --show-error \
           --output "$RUNNER_TEMP/wasi-sdk.tar.gz" \
-          "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
-        echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum --check
+          "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-${WASI_SDK_SLUG}.tar.gz"
+        # shasum rather than sha256sum: present on both the Ubuntu and macOS images.
+        echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | shasum -a 256 --check
         tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
 
     # Runs on both paths - a cache hit restores the tree but sets no env.
@@ -148,7 +173,8 @@ runs:
       shell: bash
       env:
         WASI_SDK_VERSION: ${{ inputs.wasi-sdk-version }}
-      run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
+        WASI_SDK_SLUG: ${{ steps.wasi-sdk-platform.outputs.slug }}
+      run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-${WASI_SDK_SLUG}" >> "$GITHUB_ENV"
 
     # Two exact pins, resolved once and used as cache keys below. node comes
     # from mise (.mise.toml [tools] node) and decides what `npm ci` produces;
