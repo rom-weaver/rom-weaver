@@ -1430,9 +1430,9 @@ dependencies = [
 
 [[package]]
 name = "proc-bitfield"
-version = "0.2.4"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "095c6eb206c97ddef87ce3d7e3e492b017093d80bce62317afdf0665df514ade"
+checksum = "cb5041a3f8b230c2078ab917516d352f40625245d4c953472eacbe075051c4b7"
 dependencies = [
  "proc-bitfield-macros",
  "static_assertions",
@@ -1440,12 +1440,13 @@ dependencies = [
 
 [[package]]
 name = "proc-bitfield-macros"
-version = "0.2.3"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89409e6b315ead7f4c4d9a79e27dc1e11272f930cbb1fb3d31f2fc64671deb77"
+checksum = "9b34b74711e53c2ff9c879e7a22c6c8dbac847ef2b11c2d69296a890e12a243a"
 dependencies = [
+ "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2048,17 +2049,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "907d9ca9637a22e3a7d7c7818f6105a7898857359e187ad3325d986684b9ec3f"
 dependencies = [
  "cdivsufsort",
-]
-
-[[package]]
-name = "syn"
-version = "1.0.109"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
-dependencies = [
- "proc-macro2",
- "quote",
- "unicode-ident",
 ]
 
 [[package]]
