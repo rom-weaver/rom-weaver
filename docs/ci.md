@@ -239,8 +239,13 @@ assets *and permanently reserves its tag name* - v0.6.0 was lost that way. A
 failure anywhere in the fan-out now leaves a draft, which can be deleted and
 re-cut at the same version.
 
-A draft release has no tag until it is published, so jobs check out
-`needs.release.outputs.sha` rather than `v${version}`.
+A draft release has no tag until it is published, so every job builds from
+`needs.release.outputs.sha` rather than `v${version}` - the reusable npm and
+docker workflows take it as a required `sha` input. That also closes a race
+they had before: under `workflow_call` they checked out `github.ref`, which is
+`main`, so anything merged between the release pull request landing and the
+fan-out finishing would have been built and published as the release.
+`workflow_dispatch` still falls back to `v${version}`, which by then exists.
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being
 called by `release.yml`. crates.io Trusted Publishing rejects the `workflow_run`

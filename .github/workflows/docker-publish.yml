@@ -7,6 +7,13 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
+      sha:
+        description: >-
+          Commit to build from. The release tag does not exist while the release
+          is still a draft, and github.ref points at main, which may already
+          have moved past the released commit.
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -45,7 +52,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: docker/setup-buildx-action@v4
 

@@ -169,6 +169,7 @@ jobs:
     uses: ./.github/workflows/npm-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
 
   publish-homebrew:
     needs: [release, publish-npm]
@@ -228,6 +229,7 @@ jobs:
     uses: ./.github/workflows/docker-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
 
   # Publishing the draft is what creates the tag and stamps the release
   # immutable, so it has to come last: assets can only be attached while the

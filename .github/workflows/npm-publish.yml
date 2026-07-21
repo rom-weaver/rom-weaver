@@ -7,6 +7,13 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
+      sha:
+        description: >-
+          Commit to build from. The release tag does not exist while the release
+          is still a draft, and github.ref points at main, which may already
+          have moved past the released commit.
+        required: true
+        type: string
     secrets:
       NPM_TOKEN:
         description: npm automation token for the CLI packages
@@ -46,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -110,7 +117,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: actions/setup-node@v7
         with:
@@ -132,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: actions/setup-node@v7
         with:
