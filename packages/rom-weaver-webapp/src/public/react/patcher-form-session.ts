@@ -1088,6 +1088,7 @@ const useLocalApplyPatchFormSession = ({
     actions: {
       clearDismissibleErrors,
       emitSessionTrace,
+      invalidateCompletedOutputState,
       invalidatePatchStage: patchStageMachine.invalidateStage,
       setChecksumOverrideChecked,
       setErrorMessage,

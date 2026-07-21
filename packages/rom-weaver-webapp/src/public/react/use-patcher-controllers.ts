@@ -35,6 +35,7 @@ interface InputUiControllerContext {
   > & {
     clearDismissibleErrors: () => void;
     emitSessionTrace: (message: string, details?: Record<string, unknown>) => void;
+    invalidateCompletedOutputState: () => void;
     invalidatePatchStage: () => void;
     setChecksumOverrideChecked: Dispatch<SetStateAction<boolean>>;
     setFailurePlacement: Dispatch<SetStateAction<FailurePlacement>>;
@@ -64,6 +65,13 @@ const useInputUiController = (context: InputUiControllerContext) => {
           previousCount: state.effectiveInputs.length,
         });
         actions.updateInputs([]);
+      },
+      // Routing a dropped file is async (classify, probe, maybe extract), and updateInputs/
+      // updatePatches only invalidate once it resolves. Until then the finished run's "Download"
+      // button stays live, so a quick click hands back the PREVIOUS output. Retire it the moment
+      // new files are accepted.
+      discardCompletedOutput: () => {
+        contextRef.current.actions.invalidateCompletedOutputState();
       },
       dismissNotice: (key: PatcherSectionNoticeKey) => {
         const { actions, state } = contextRef.current;

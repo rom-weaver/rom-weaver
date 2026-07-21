@@ -24,6 +24,8 @@ type StartupState = {
 
 type PatcherUiController = StoreController<PatcherUiState> & {
   clearRomInput?: () => void;
+  /** Retire a finished run's pending download as soon as new files are accepted for routing. */
+  discardCompletedOutput?: () => void;
   provideRomInputFile?: (file: BinarySource | null) => void;
   provideRomInputFiles?: (files: FileList | BinarySource[] | null) => void;
   removeRomInput?: (id: string) => void;

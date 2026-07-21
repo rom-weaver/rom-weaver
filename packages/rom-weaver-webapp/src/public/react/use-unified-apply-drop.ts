@@ -31,6 +31,7 @@ type PendingDrop = {
 type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "bundle" | "name" | "sheet">>;
 
 type UnifiedDropController = {
+  discardCompletedOutput?: () => void;
   provideRomInputFiles?: (files: File[]) => void;
   providePatchInputFiles?: (files: File[]) => void;
 };
@@ -270,6 +271,10 @@ const useUnifiedApplyDrop = (
         outerSignal?.removeEventListener("abort", abortDrop);
         return;
       }
+      // This drop supersedes whatever the last run produced. Retire it now rather than when routing
+      // finally resolves: classification is async, and until it lands the completed run's "Download"
+      // button is still enabled and would hand back output built from the PREVIOUS inputs.
+      if (files.length) controller.discardCompletedOutput?.();
       const { archives } = classification;
       const identifiedFiles = files.filter((file) => archives.includes(file) || isBundleFileName(file.name));
       const pending: PendingDrop[] = identifiedFiles.map((file) => {
