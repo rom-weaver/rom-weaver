@@ -67,7 +67,7 @@ module (per-file VCDIFF apply).
 
 ## Core abstractions (`crates/rom-weaver-core/src/registry.rs`)
 
-Everything pluggable implements one of four traits, registered into a registry
+Every pluggable format handler implements one of two traits, registered into a registry
 keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI
 `--format` matching and path-based probing):
 
@@ -76,8 +76,11 @@ keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI
   format supports (create, dry-run sizing, …).
 - `PatchHandler`: `probe`, `parse`, `apply`, `create`, with a default
   `validate` that dry-run applies to a temp path.
-- `ChecksumEngine`: whole-file and range checksums.
-- `CodecBackend`: standalone encode/decode.
+
+Checksums and codecs are not trait-pluggable: `NativeChecksumEngine`
+(`crates/rom-weaver-checksum/src/core.rs`) covers whole-file and range
+checksums for every algorithm, and the codec helpers in
+`crates/rom-weaver-core/src/codecs` are free functions.
 
 Handlers return `OperationReport` (family, format, stage, label, JSON details,
 percent, thread execution, status) - the single progress/result currency that
@@ -86,7 +89,7 @@ JSON mode, to the browser. `OperationContext` carries cancellation, temp-path
 allocation, progress sinks, and thread budgets downward.
 
 Registry entries are wrapped in tracing decorators
-(`traced_container_handler`/`traced_patch_handler`/`traced_codec_backend`) so
+(`traced_container_handler`/`traced_patch_handler`) so
 every probe/extract/apply gets start/complete `trace!` spans for free.
 
 Errors are one `thiserror` enum, `RomWeaverError`

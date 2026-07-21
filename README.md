@@ -32,9 +32,9 @@
 ## Features
 
 - **Apply and create patches.** IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
-  BSDIFF40, APS, DCP (Dreamcast), and more than twenty formats in total, with
-  ordered multi-patch chains, strict checksum validation, and cheat-code
-  baking.
+  BDF/BSDIFF40, APS, DCP (Dreamcast), and more than twenty formats in total,
+  with ordered multi-patch chains, strict checksum validation, and cheat-code
+  baking. A few - DCP, BSP, and HDiffPatch among them - are apply-only.
 - **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
   Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
@@ -43,8 +43,9 @@
 - **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
   with copier-header detection, header repair, and header-aware checksum
   variants.
-- **Trim and restore.** Reversible trimming for NDS, GBA, 3DS, and XISO with
-  an opt-in revert footer that restores the original file byte-for-byte.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
+  GBA, and 3DS can be reverted, with an opt-in footer that restores the
+  original file byte-for-byte.
 - **Share workflows.** Distributable [`rom-weaver-bundle.json`](docs/rom-weaver-bundle-v1.schema.json)
   bundles pin patch order, checksums, and output naming so others can replay
   the exact workflow.
