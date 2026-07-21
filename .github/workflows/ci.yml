@@ -344,7 +344,9 @@ jobs:
 
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
-  # `main` is unprotected today, so this is currently only a reporting aid.
+  # The `main protection` ruleset requires this context by name. It must fail
+  # rather than skip when a dependency fails, hence `always()` plus the explicit
+  # result assertions below - a skipped check counts as passing.
   rust:
     name: Rust
     runs-on: ubuntu-24.04
