@@ -1,0 +1,107 @@
+name: Cache cleanup
+
+# GitHub gives a repository 10 GiB of Actions cache and evicts least-recently-
+# used entries once that fills. A closed pull request's caches can never be
+# read again - cache scopes are branch-local, so nothing outside that ref may
+# restore them - yet they keep occupying the budget until eviction reaches
+# them. Left alone they push out the main-branch caches that every cold run
+# actually depends on: six closed dependabot PRs had 5.1 GB parked this way,
+# putting the repository 7% over the cap with the 4 MB wasm-prod entry (worth
+# ~6.5 min a run) competing against 450 MB Rust caches for what was left.
+#
+# Deliberately scheduled rather than triggered by `pull_request: closed`.
+# Workflows triggered by Dependabot or by a fork receive a read-only
+# GITHUB_TOKEN, so a close-triggered job could not delete anything for the
+# exact traffic that produces most of the garbage. A scheduled run always
+# carries the base repository's token, and it reaps orphans no close event
+# would have covered.
+on:
+  schedule:
+    # Daily, off-peak. Nothing here is urgent; it only has to outpace the rate
+    # pull requests are closed at.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Reap closed-PR caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      # Deleting caches is an Actions write; nothing here reads repository
+      # contents, and no checkout step exists to need it.
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Delete caches belonging to closed pull requests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          before=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
+            --jq .active_caches_size_in_bytes)
+
+          # Cache a PR's state per number: one PR routinely owns several
+          # entries (rust-host, wasm-check, wasm, node-modules, ...) and there
+          # is no reason to re-query the API for each.
+          declare -A state
+          deleted=0
+          freed=0
+
+          # `gh cache list` paginates at 100; the cap is generous enough that
+          # anything beyond it is handled by tomorrow's run.
+          while IFS=$'\t' read -r id ref size; do
+            [[ "$ref" =~ ^refs/pull/([0-9]+)/merge$ ]] || continue
+            pr="${BASH_REMATCH[1]}"
+
+            if [ -z "${state[$pr]+set}" ]; then
+              state[$pr]=$(gh pr view "$pr" --json state --jq .state 2>/dev/null || echo UNKNOWN)
+            fi
+
+            # Only CLOSED and MERGED are safe to reap. UNKNOWN means the API
+            # call failed - skip rather than guess, since deleting an open
+            # PR's cache just makes its next run slower for no reason.
+            case "${state[$pr]}" in
+              CLOSED|MERGED) ;;
+              *) continue ;;
+            esac
+
+            if gh cache delete "$id" >/dev/null 2>&1; then
+              deleted=$((deleted + 1))
+              freed=$((freed + size))
+              echo "deleted cache $id (PR #${pr}, ${state[$pr]}, $((size / 1048576)) MB)"
+            else
+              echo "::warning::failed to delete cache $id (PR #${pr})"
+            fi
+          done < <(gh cache list --limit 100 --json id,ref,sizeInBytes \
+            --jq '.[] | [.id, .ref, .sizeInBytes] | @tsv')
+
+          after=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
+            --jq .active_caches_size_in_bytes)
+
+          {
+            echo "### Actions cache cleanup"
+            echo ""
+            echo "| | MB |"
+            echo "|---|---|"
+            echo "| before | $((before / 1048576)) |"
+            echo "| after | $((after / 1048576)) |"
+            echo "| reclaimed | $((freed / 1048576)) |"
+            echo "| limit | 10240 |"
+            echo ""
+            echo "Deleted **${deleted}** cache entries belonging to closed pull requests."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A repository sitting at the cap is evicting caches it still needs,
+          # which shows up only as unexplained cold builds. Say so out loud.
+          if [ "$after" -gt $((9 * 1024 * 1024 * 1024)) ]; then
+            echo "::warning::Actions cache is at $((after / 1048576)) MB of 10240 MB after cleanup - entries that are still live are being evicted."
+          fi
