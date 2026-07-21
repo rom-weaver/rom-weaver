@@ -193,8 +193,8 @@ channel named, with no cascade - it is a break-glass override, not a release.
 
 Preview deployments are skipped for forks and Dependabot, which are not given
 the Cloudflare secrets and could only ever fail. The preview URL is published
-as a commit status (`preview/webapp`) rather than a comment, so it updates in
-place instead of accreting comments.
+as a commit status (`preview/webapp`) and in one marker-backed PR comment.
+Repeated deployments update that comment instead of accreting comments.
 
 Projects are created on demand through the Cloudflare REST API rather than
 `wrangler pages project create`: wrangler enumerates accounts internally, which

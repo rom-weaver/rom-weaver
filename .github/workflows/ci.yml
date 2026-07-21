@@ -681,6 +681,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      issues: write
       statuses: write
     # An empty or missing list would be a hard "matrix contains no values"
     # error, so guard rather than trusting the planner to always emit one.
@@ -768,15 +769,18 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "deployed to $url"
 
-      # Surfaced as a commit status rather than a comment, so the link lives in
-      # the PR's checks list and updates in place instead of accreting comments.
-      - name: Publish preview URL as a status check
+      # Keep the status for the checks list, and keep one discoverable comment
+      # on the PR for people who do not open the checks list.
+      - name: Publish preview URL
         if: matrix.target.channel == 'preview' && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALIAS: https://${{ matrix.target.branch }}.rom-weaver-preview.pages.dev
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
+
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
             --method POST \
             --field state=success \
@@ -784,4 +788,29 @@ jobs:
             --field target_url="${ALIAS}" \
             --field description='Preview deployment - click Details' \
             --silent
+
+          body=$(cat <<EOF
+          <!-- rom-weaver-preview -->
+          Preview: [Open the deployed webapp](${ALIAS})
+
+          Updated for commit ${HEAD_SHA:0:7}.
+          EOF
+          )
+          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- rom-weaver-preview -->")) | .id' \
+            | sed -n '1p')
+          if [ -n "$comment_id" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              --method PATCH \
+              --field body="$body" \
+              --silent
+            echo "updated preview comment #${comment_id}"
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --method POST \
+              --field body="$body" \
+              --silent
+            echo "created preview comment"
+          fi
           echo "preview status -> ${ALIAS}"
