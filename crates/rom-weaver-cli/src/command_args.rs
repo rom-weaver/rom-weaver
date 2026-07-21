@@ -1500,6 +1500,86 @@ pub struct PatchCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "solid-system",
+            help = "Override the SOLID patch system description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-game",
+            help = "Override the SOLID patch game description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_game: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-hack",
+            help = "Override the SOLID patch hack description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_hack: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-version",
+            help = "Set the extended SOLID patch version description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_version: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-author",
+            help = "Set the extended SOLID patch author description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_author: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-contact",
+            help = "Set the extended SOLID patch contact description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_contact: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-comment",
+            help = "Set the extended SOLID patch comment description"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub solid_comment: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "solid-extended",
+            help = "Emit the seven-string SOLID metadata header even when extended fields are empty"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub solid_extended: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long = "xdelta-secondary",
             default_value = "none",
             value_parser = ["auto", "lzma", "djw", "fgk", "none"],

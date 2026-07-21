@@ -1,11 +1,8 @@
-use std::{
-    fs,
-    sync::{Mutex, OnceLock},
-};
+use std::fs;
 
 use rom_weaver_core::{
-    PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
-    PatchValidateRequest,
+    PatchApplyRequest, PatchChecksumValidation, PatchCreateFormatOptions, PatchCreateRequest,
+    PatchHandler, PatchValidateRequest, SolidPatchMetadata,
 };
 
 use super::*;
@@ -16,36 +13,6 @@ use crate::{
         test_context_with_threads_in_root as test_context_with_threads,
     },
 };
-
-static SOLID_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-struct EnvRestore {
-    entries: Vec<(&'static str, Option<Option<String>>)>,
-}
-
-impl Drop for EnvRestore {
-    fn drop(&mut self) {
-        for (name, previous) in &self.entries {
-            restore_solid_test_env_override(name, previous.clone());
-        }
-    }
-}
-
-fn set_env_vars(vars: &[(&'static str, Option<&str>)]) -> EnvRestore {
-    let mut entries = Vec::with_capacity(vars.len());
-    for (name, value) in vars {
-        let previous = set_solid_test_env_override(name, *value);
-        entries.push((*name, previous));
-    }
-    EnvRestore { entries }
-}
-
-fn with_solid_env_vars(vars: &[(&'static str, Option<&str>)], run: impl FnOnce()) {
-    let lock = SOLID_ENV_LOCK.get_or_init(|| Mutex::new(()));
-    let _guard = lock.lock().expect("solid env lock");
-    let _restore = set_env_vars(vars);
-    run();
-}
 
 #[test]
 fn parse_rejects_invalid_magic() {
@@ -289,71 +256,102 @@ fn create_is_deterministic_when_diff_crosses_chunk_boundary_and_expands_suffix()
 
 #[test]
 fn create_can_emit_patch_info_flag_with_seven_strings() {
-    with_solid_env_vars(
-        &[
-            (SOLID_PATCH_INFO7_ENV, Some("1")),
-            (SOLID_PATCH_SYSTEM_ENV, Some("NDS")),
-            (SOLID_PATCH_GAME_ENV, Some("Example Game")),
-            (SOLID_PATCH_HACK_ENV, Some("Example Hack")),
-            (SOLID_PATCH_VERSION_ENV, Some("v1.0")),
-            (SOLID_PATCH_AUTHOR_ENV, Some("rom-weaver")),
-            (SOLID_PATCH_CONTACT_ENV, Some("example@example.com")),
-            (SOLID_PATCH_COMMENT_ENV, Some("generated in tests")),
-        ],
-        || {
-            let temp = TestDir::new();
-            let original = temp.child("old.bin");
-            let modified = temp.child("new.bin");
-            let patch = temp.child("update.solid");
-            fs::write(&original, b"abcdefgh").expect("fixture");
-            fs::write(&modified, b"abcXefgh").expect("fixture");
+    let temp = TestDir::new();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.solid");
+    fs::write(&original, b"abcdefgh").expect("fixture");
+    fs::write(&modified, b"abcXefgh").expect("fixture");
 
-            let handler = SolidPatchHandler::new(&SOLID);
-            handler
-                .create(
-                    &PatchCreateRequest {
-                        original,
-                        modified,
-                        output: patch.clone(),
-                        format: "solid".into(),
-                    },
-                    &test_context_with_threads(&temp, 1),
-                )
-                .expect("create");
+    let options = PatchCreateFormatOptions::Solid(SolidPatchMetadata {
+        system: Some("NDS".into()),
+        game: Some("Example Game".into()),
+        hack: Some("Example Hack".into()),
+        version: Some("v1.0".into()),
+        author: Some("rom-weaver".into()),
+        contact: Some("example@example.com".into()),
+        comment: Some("generated in tests".into()),
+        extended: true,
+    });
+    let handler = SolidPatchHandler::new(&SOLID);
+    handler
+        .create_with_options(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            Some(&options),
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
 
-            let patch_bytes = fs::read(&patch).expect("patch bytes");
-            let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
-            assert_ne!(addr_param & PATCH_INFO_FLAG, 0);
+    let patch_bytes = fs::read(&patch).expect("patch bytes");
+    let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
+    assert_ne!(addr_param & PATCH_INFO_FLAG, 0);
 
-            let mut cursor = SOLID_MAGIC.len() + 2;
-            let width = if addr_param & BIG_FILE_FLAG != 0 {
-                8
-            } else {
-                4
-            };
-            let _primitive_count =
-                read_u64_le(&patch_bytes, &mut cursor, width, "SOLID primitive count")
-                    .expect("primitive count");
-            let _source_md5 = read_md5(&patch_bytes, &mut cursor).expect("md5");
-            let _creation_date =
-                read_exact(&patch_bytes, &mut cursor, SOLID_DATE_LEN).expect("date");
+    let mut cursor = SOLID_MAGIC.len() + 2;
+    let width = if addr_param & BIG_FILE_FLAG != 0 {
+        8
+    } else {
+        4
+    };
+    let _primitive_count = read_u64_le(&patch_bytes, &mut cursor, width, "SOLID primitive count")
+        .expect("primitive count");
+    let _source_md5 = read_md5(&patch_bytes, &mut cursor).expect("md5");
+    let _creation_date = read_exact(&patch_bytes, &mut cursor, SOLID_DATE_LEN).expect("date");
 
-            let mut description_strings = Vec::new();
-            for _ in 0..SOLID_MAX_DESCRIPTION_COUNT {
-                description_strings.push(
-                    read_null_terminated_string(&patch_bytes, &mut cursor)
-                        .expect("description string"),
-                );
-            }
+    let mut description_strings = Vec::new();
+    for _ in 0..SOLID_MAX_DESCRIPTION_COUNT {
+        description_strings.push(
+            read_null_terminated_string(&patch_bytes, &mut cursor).expect("description string"),
+        );
+    }
 
-            assert_eq!(description_strings[0], "NDS");
-            assert_eq!(description_strings[1], "Example Game");
-            assert_eq!(description_strings[2], "Example Hack");
-            assert_eq!(description_strings[3], "v1.0");
-            assert_eq!(description_strings[4], "rom-weaver");
-            assert_eq!(description_strings[5], "example@example.com");
-            assert_eq!(description_strings[6], "generated in tests");
-        },
+    assert_eq!(description_strings[0], "NDS");
+    assert_eq!(description_strings[1], "Example Game");
+    assert_eq!(description_strings[2], "Example Hack");
+    assert_eq!(description_strings[3], "v1.0");
+    assert_eq!(description_strings[4], "rom-weaver");
+    assert_eq!(description_strings[5], "example@example.com");
+    assert_eq!(description_strings[6], "generated in tests");
+}
+
+#[test]
+fn create_can_override_basic_metadata_without_extended_header() {
+    let temp = TestDir::new();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.solid");
+    fs::write(&original, b"abcdefgh").expect("fixture");
+    fs::write(&modified, b"abcXefgh").expect("fixture");
+
+    let options = PatchCreateFormatOptions::Solid(SolidPatchMetadata {
+        system: Some("NDS".into()),
+        game: Some("Example Game".into()),
+        hack: Some("Example Hack".into()),
+        ..SolidPatchMetadata::default()
+    });
+    SolidPatchHandler::new(&SOLID)
+        .create_with_options(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            Some(&options),
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    let bytes = fs::read(patch).expect("patch bytes");
+    assert_eq!(bytes[SOLID_MAGIC.len() + 1] & PATCH_INFO_FLAG, 0);
+    assert!(
+        bytes
+            .windows(b"NDS\0Example Game\0Example Hack\0".len())
+            .any(|window| window == b"NDS\0Example Game\0Example Hack\0")
     );
 }
 

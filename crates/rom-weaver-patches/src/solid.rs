@@ -9,8 +9,9 @@ use rayon::prelude::*;
 use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ValidationCodeError,
+    PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    SolidPatchMetadata, ValidationCodeError,
 };
 
 use crate::checksum_validation_suffix;
@@ -42,14 +43,6 @@ const MOD_ACTION_EXPAND: u8 = 1;
 const MOD_ACTION_TRUNCATE: u8 = 2;
 
 const CREATED_BASE_ADDR_FIELD: u8 = 7; // 8-byte base address deltas.
-const SOLID_PATCH_INFO7_ENV: &str = "ROM_WEAVER_SOLID_PATCH_INFO7";
-const SOLID_PATCH_SYSTEM_ENV: &str = "ROM_WEAVER_SOLID_SYSTEM";
-const SOLID_PATCH_GAME_ENV: &str = "ROM_WEAVER_SOLID_GAME";
-const SOLID_PATCH_HACK_ENV: &str = "ROM_WEAVER_SOLID_HACK";
-const SOLID_PATCH_VERSION_ENV: &str = "ROM_WEAVER_SOLID_VERSION";
-const SOLID_PATCH_AUTHOR_ENV: &str = "ROM_WEAVER_SOLID_AUTHOR";
-const SOLID_PATCH_CONTACT_ENV: &str = "ROM_WEAVER_SOLID_CONTACT";
-const SOLID_PATCH_COMMENT_ENV: &str = "ROM_WEAVER_SOLID_COMMENT";
 const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const CREATE_IO_BUFFER_SIZE: usize = 64 * 1024;
 
@@ -205,6 +198,18 @@ impl PatchHandler for SolidPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        self.create_with_options(request, None, context)
+    }
+
+    fn create_with_options(
+        &self,
+        request: &PatchCreateRequest,
+        options: Option<&PatchCreateFormatOptions>,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let metadata = options.map(|options| match options {
+            PatchCreateFormatOptions::Solid(metadata) => metadata,
+        });
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
         let shared_len = original_len.min(modified_len);
@@ -221,7 +226,7 @@ impl PatchHandler for SolidPatchHandler {
         } else {
             MOD_ACTION_NONE
         };
-        let descriptions = build_description_strings(&request.original, &request.output);
+        let descriptions = build_description_strings(&request.original, &request.output, metadata);
         let primitives = build_created_primitives_with_threads_from_paths(
             crate::PatchCreateSources {
                 original_path: &request.original,
@@ -1316,7 +1321,11 @@ fn files_equal(left: &Path, right: &Path) -> Result<bool> {
     Ok(true)
 }
 
-fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescriptionStrings {
+fn build_description_strings(
+    original: &Path,
+    output_patch: &Path,
+    metadata: Option<&SolidPatchMetadata>,
+) -> SolidDescriptionStrings {
     let file_type = original
         .extension()
         .and_then(|value| value.to_str())
@@ -1336,14 +1345,28 @@ fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescr
         .unwrap_or("patch")
         .to_string();
 
-    if solid_patch_info7_enabled() {
-        let system = read_env_string(SOLID_PATCH_SYSTEM_ENV).unwrap_or(file_type);
-        let game = read_env_string(SOLID_PATCH_GAME_ENV).unwrap_or(game);
-        let hack = read_env_string(SOLID_PATCH_HACK_ENV).unwrap_or(hack);
-        let version = read_env_string(SOLID_PATCH_VERSION_ENV).unwrap_or_default();
-        let author = read_env_string(SOLID_PATCH_AUTHOR_ENV).unwrap_or_default();
-        let contact = read_env_string(SOLID_PATCH_CONTACT_ENV).unwrap_or_default();
-        let comment = read_env_string(SOLID_PATCH_COMMENT_ENV).unwrap_or_default();
+    let system = metadata
+        .and_then(|value| value.system.clone())
+        .unwrap_or(file_type);
+    let game = metadata
+        .and_then(|value| value.game.clone())
+        .unwrap_or(game);
+    let hack = metadata
+        .and_then(|value| value.hack.clone())
+        .unwrap_or(hack);
+    if metadata.is_some_and(|value| value.extended) {
+        let version = metadata
+            .and_then(|value| value.version.clone())
+            .unwrap_or_default();
+        let author = metadata
+            .and_then(|value| value.author.clone())
+            .unwrap_or_default();
+        let contact = metadata
+            .and_then(|value| value.contact.clone())
+            .unwrap_or_default();
+        let comment = metadata
+            .and_then(|value| value.comment.clone())
+            .unwrap_or_default();
         return SolidDescriptionStrings {
             values: vec![system, game, hack, version, author, contact, comment],
             patch_info_flag: true,
@@ -1351,58 +1374,9 @@ fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescr
     }
 
     SolidDescriptionStrings {
-        values: vec![file_type, game, hack],
+        values: vec![system, game, hack],
         patch_info_flag: false,
     }
-}
-
-fn solid_patch_info7_enabled() -> bool {
-    match read_env_string(SOLID_PATCH_INFO7_ENV) {
-        Some(value) => {
-            let normalized = value.trim().to_ascii_lowercase();
-            matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
-        }
-        None => false,
-    }
-}
-
-fn read_env_string(name: &str) -> Option<String> {
-    #[cfg(test)]
-    if let Some(value) = solid_test_env_lookup(name) {
-        return value;
-    }
-    std::env::var(name).ok()
-}
-
-#[cfg(test)]
-thread_local! {
-    static SOLID_TEST_ENV_OVERRIDES: std::cell::RefCell<std::collections::HashMap<String, Option<String>>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
-}
-
-#[cfg(test)]
-fn solid_test_env_lookup(name: &str) -> Option<Option<String>> {
-    SOLID_TEST_ENV_OVERRIDES.with(|state| state.borrow().get(name).cloned())
-}
-
-#[cfg(test)]
-fn set_solid_test_env_override(name: &'static str, value: Option<&str>) -> Option<Option<String>> {
-    SOLID_TEST_ENV_OVERRIDES.with(|state| {
-        let mut state = state.borrow_mut();
-        state.insert(name.to_string(), value.map(|entry| entry.to_string()))
-    })
-}
-
-#[cfg(test)]
-fn restore_solid_test_env_override(name: &'static str, previous: Option<Option<String>>) {
-    SOLID_TEST_ENV_OVERRIDES.with(|state| {
-        let mut state = state.borrow_mut();
-        if let Some(value) = previous {
-            state.insert(name.to_string(), value);
-        } else {
-            state.remove(name);
-        }
-    });
 }
 
 fn write_description_string(output: &mut Vec<u8>, value: &str) -> Result<()> {

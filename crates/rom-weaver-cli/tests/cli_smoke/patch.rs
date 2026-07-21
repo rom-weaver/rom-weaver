@@ -136,6 +136,119 @@ round_trip_test!(
         patch_assert: None,
     }
 );
+
+#[test]
+fn patch_create_accepts_typed_solid_metadata() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.solid");
+    fs::write(original.path(), b"abcdefgh").expect("fixture");
+    fs::write(modified.path(), b"abcXefgh").expect("fixture");
+
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--solid-system",
+            "NDS",
+            "--solid-game",
+            "Example Game",
+            "--solid-hack",
+            "Example Hack",
+            "--solid-version",
+            "v1.0",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(event["status"], "succeeded");
+
+    let bytes = fs::read(patch.path()).expect("patch bytes");
+    assert_ne!(bytes[3] & 0x40, 0, "extended metadata flag");
+    assert!(
+        bytes
+            .windows(b"NDS\0Example Game\0Example Hack\0v1.0\0".len())
+            .any(|window| { window == b"NDS\0Example Game\0Example Hack\0v1.0\0" })
+    );
+
+    let blank_extended = temp.child("blank.solid");
+    let blank_event = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            blank_extended.path().to_str().expect("path"),
+            "--solid-extended",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(blank_event["status"], "succeeded");
+    assert_ne!(
+        fs::read(blank_extended.path()).expect("patch bytes")[3] & 0x40,
+        0,
+        "explicit extended metadata flag"
+    );
+}
+
+#[test]
+fn patch_create_rejects_solid_metadata_when_it_cannot_be_used() {
+    let non_solid = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            "missing-old.bin",
+            "--modified",
+            "missing-new.bin",
+            "--output",
+            "update.ips",
+            "--solid-system",
+            "NDS",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        non_solid["label"]
+            .as_str()
+            .expect("label")
+            .contains("require --format solid")
+    );
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            "missing-old.bin",
+            "--modified",
+            "missing-new.bin",
+            "--plan",
+            "--solid-author",
+            "rom-weaver",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        plan["label"]
+            .as_str()
+            .expect("label")
+            .contains("cannot be combined with --plan")
+    );
+}
 round_trip_test!(
     patch_create_treats_vcdiff_as_xdelta_and_round_trips,
     RoundTrip {

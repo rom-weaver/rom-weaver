@@ -12,6 +12,30 @@ use super::patch_commands::{
     PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
 };
 
+fn solid_create_options(args: &PatchCreateCommand) -> Option<PatchCreateFormatOptions> {
+    let extended = args.solid_extended
+        || args.solid_version.is_some()
+        || args.solid_author.is_some()
+        || args.solid_contact.is_some()
+        || args.solid_comment.is_some();
+    let supplied = extended
+        || args.solid_system.is_some()
+        || args.solid_game.is_some()
+        || args.solid_hack.is_some();
+    supplied.then(|| {
+        PatchCreateFormatOptions::Solid(SolidPatchMetadata {
+            system: args.solid_system.clone(),
+            game: args.solid_game.clone(),
+            hack: args.solid_hack.clone(),
+            version: args.solid_version.clone(),
+            author: args.solid_author.clone(),
+            contact: args.solid_contact.clone(),
+            comment: args.solid_comment.clone(),
+            extended,
+        })
+    })
+}
+
 pub(super) fn normalize_create_patch_format(format: &str) -> String {
     let normalized = format.trim().to_ascii_lowercase();
     match CREATE_PATCH_FORMAT_ALIASES
@@ -267,6 +291,7 @@ impl CliApp {
     }
 
     pub(super) fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
+        let solid_options = solid_create_options(&args);
         trace!(
             original = %args.original.display(),
             modified = ?args.modified,
@@ -284,6 +309,18 @@ impl CliApp {
         let base_context = self.context(args.threads);
         let probe_threads = base_context.single_thread_execution();
         if args.plan {
+            if solid_options.is_some() {
+                return self.finish(
+                    "patch-create",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        args.format.clone(),
+                        "validate",
+                        "SOLID metadata options cannot be combined with --plan".to_string(),
+                        probe_threads,
+                    ),
+                );
+            }
             let modified = match args.modified.as_ref() {
                 Some(path) => path,
                 None => {
@@ -421,6 +458,16 @@ impl CliApp {
         };
         let requested_format = resolution.format;
         let format_warning = resolution.warning;
+        if solid_options.is_some() && !requested_format.eq_ignore_ascii_case("solid") {
+            return self.finish(
+                "patch-create",
+                fail(
+                    Some(requested_format),
+                    "validate",
+                    "SOLID metadata options require --format solid or a .solid output".to_string(),
+                ),
+            );
+        }
         if let Some(warning) = format_warning.as_deref() {
             warn!(
                 command = "patch-create",
@@ -601,7 +648,7 @@ impl CliApp {
             Some(0.0),
             None,
         );
-        let report = match handler.create(&request, &context) {
+        let report = match handler.create_with_options(&request, solid_options.as_ref(), &context) {
             Ok(report) => report,
             Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
                 OperationFamily::Patch,

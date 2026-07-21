@@ -1311,6 +1311,34 @@ describe("rom-weaver-wasm browser worker client parity", () => {
     );
   });
 
+  it("browser worker client creates Solid patches from typed metadata", async () => {
+    await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle }) => {
+      const modifiedPath = joinGuestPath(dir, "solid-modified.bin");
+      const patchPath = joinGuestPath(dir, "typed-metadata.solid");
+      await writeGuestFile(opfsHandle, modifiedPath, toBytes("rom-weaver typed Solid metadata fixture"));
+
+      const result = await worker.runJson({
+        type: "patch",
+        args: {
+          type: "create",
+          args: {
+            original: sourcePath,
+            modified: modifiedPath,
+            format: "solid",
+            output: patchPath,
+            solid_system: "SNES",
+            solid_game: "Fixture Game",
+            solid_hack: "Typed Metadata",
+            solid_version: "1.0",
+          },
+        },
+      });
+
+      assertRunJsonSucceeded(result, { command: "patch-create" });
+      expect(await getGuestFileSize(opfsHandle, patchPath)).toBeGreaterThan(0);
+    });
+  });
+
   it("browser worker client rejects runJson before init", async () => {
     const client = createBrowserWorkerClient();
     try {

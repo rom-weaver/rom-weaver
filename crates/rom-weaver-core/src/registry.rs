@@ -275,6 +275,23 @@ pub struct PatchCreateRequest {
     pub format: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SolidPatchMetadata {
+    pub system: Option<String>,
+    pub game: Option<String>,
+    pub hack: Option<String>,
+    pub version: Option<String>,
+    pub author: Option<String>,
+    pub contact: Option<String>,
+    pub comment: Option<String>,
+    pub extended: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatchCreateFormatOptions {
+    Solid(SolidPatchMetadata),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChecksumRequest {
     pub source: PathBuf,
@@ -504,6 +521,20 @@ pub trait PatchHandler: Send + Sync {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport>;
+    fn create_with_options(
+        &self,
+        request: &PatchCreateRequest,
+        options: Option<&PatchCreateFormatOptions>,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if options.is_some() {
+            return Err(RomWeaverError::Validation(format!(
+                "{} patch create does not accept format-specific options",
+                self.descriptor().name
+            )));
+        }
+        self.create(request, context)
+    }
     fn capabilities(&self) -> PatchCapabilities;
 }
 
@@ -813,6 +844,15 @@ impl PatchHandler for TracingPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        self.create_with_options(request, None, context)
+    }
+
+    fn create_with_options(
+        &self,
+        request: &PatchCreateRequest,
+        options: Option<&PatchCreateFormatOptions>,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
         let descriptor = self.inner.descriptor();
         trace!(
             family = ?descriptor.family,
@@ -823,7 +863,7 @@ impl PatchHandler for TracingPatchHandler {
             requested_format = %request.format,
             "patch create start"
         );
-        let result = self.inner.create(request, context);
+        let result = self.inner.create_with_options(request, options, context);
         trace_operation_result("create", descriptor, &result);
         result
     }
