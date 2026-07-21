@@ -94,6 +94,80 @@ type CompletedTrimOutput = {
 };
 type TrimMessagePlacement = "output" | "source";
 
+const TrimNotice = ({
+  id,
+  level,
+  message,
+  onDismiss,
+}: {
+  id: string;
+  level: "error" | "warn";
+  message: string;
+  onDismiss?: () => void;
+}) =>
+  message ? (
+    <Notice id={id} level={level} onDismiss={onDismiss}>
+      {message}
+    </Notice>
+  ) : null;
+
+const buildTrimSourceItems = ({
+  checksumProps,
+  onRemove,
+  resolvedSourceFileName,
+  source,
+  sourceState,
+  stageBytes,
+  stageLabel,
+  stagePct,
+  staging,
+}: {
+  checksumProps: ReturnType<typeof toWorkflowChecksumProgressProps>;
+  onRemove: () => void;
+  resolvedSourceFileName: string;
+  source: BinarySource | null;
+  sourceState: TrimWorkflowSourceState | null;
+  stageBytes?: number;
+  stageLabel: string;
+  stagePct: number | null;
+  staging: boolean;
+}): TrimPatchFormViewModel["sourceStep"]["items"] => {
+  if (!source) return [];
+  return [
+    {
+      card: {
+        extract: {
+          fileName: resolvedSourceFileName,
+          fileSize: sourceState?.size,
+          parentCompressions: sourceState?.parentCompressions,
+          timing: formatOptionalElapsedMs(sourceState?.decompressionTimeMs),
+        },
+        meta: staging ? (
+          <>
+            {typeof stageBytes === "number" ? <span className="fsize mono">{formatByteSize(stageBytes)}</span> : null}
+            <StageStatus id="trim-input-stage" label={stageLabel} percent={stagePct} />
+          </>
+        ) : undefined,
+        onRemove,
+        panels: {
+          info: {
+            bytes: stageBytes,
+            checksums: sourceState?.checksums,
+            defaultOpen: false,
+            progress: checksumProps,
+            timing: formatOptionalElapsedMs(sourceState?.checksumTimeMs),
+            trim: sourceState?.romProbe?.trim,
+          },
+        },
+        removeLabel: "Clear ROM",
+        stageBar: stageBarValue(staging, stagePct),
+        state: hasSourceQueueWarning(sourceState) ? "bad" : sourceState?.status === "ready" ? "ok" : undefined,
+      },
+      id: "trim-input-card",
+    },
+  ];
+};
+
 const TrimOutputAction = ({
   busy,
   completedOutput,
@@ -798,19 +872,31 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const stageBytes = sourceState?.size ?? sourceState?.sourceSize;
   const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
   const runtimeSourceNoticeVisible = !!message && messagePlacement === "source";
-  const sourceNotice = runtimeSourceNoticeVisible ? (
-    <Notice
+  const sourceNotice = (
+    <TrimNotice
       id="trim-builder-source-error-message"
-      level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-      onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-    >
-      {message}
-    </Notice>
-  ) : sourceNoticeMessage ? (
-    <Notice id="trim-builder-source-error-message" level={getSourceNoticeLevel(sourceState)}>
-      {sourceNoticeMessage}
-    </Notice>
-  ) : null;
+      level={
+        runtimeSourceNoticeVisible
+          ? errorCode === "AMBIGUOUS_SELECTION"
+            ? "warn"
+            : "error"
+          : getSourceNoticeLevel(sourceState)
+      }
+      message={runtimeSourceNoticeVisible ? message : sourceNoticeMessage}
+      onDismiss={runtimeSourceNoticeVisible && messageDismissible ? clearWorkflowMessage : undefined}
+    />
+  );
+  const sourceItems = buildTrimSourceItems({
+    checksumProps,
+    onRemove: () => updateSource(null),
+    resolvedSourceFileName,
+    source,
+    sourceState,
+    stageBytes,
+    stageLabel,
+    stagePct,
+    staging,
+  });
   const trimCompressPanel = buildCompressPanel(
     resolvedOutputFormat,
     settings as Record<string, unknown>,
@@ -897,16 +983,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         </InfoPopover>
       ),
       meta: trimTimingText ? <span className="t">{trimTimingText}</span> : undefined,
-      notice:
-        message && messagePlacement === "output" ? (
-          <Notice
-            id="trim-builder-row-error-message"
-            level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-            onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-          >
-            {message}
-          </Notice>
-        ) : null,
+      notice: (
+        <TrimNotice
+          id="trim-builder-row-error-message"
+          level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+          message={messagePlacement === "output" ? message : ""}
+          onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+        />
+      ),
       num: "0x03",
       onFileNameChange: (value) => {
         setOutputName(value);
@@ -930,43 +1014,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           </ul>
         </InfoPopover>
       ),
-      items: source
-        ? [
-            {
-              card: {
-                extract: {
-                  fileName: resolvedSourceFileName,
-                  fileSize: sourceState?.size,
-                  parentCompressions: sourceState?.parentCompressions,
-                  timing: formatOptionalElapsedMs(sourceState?.decompressionTimeMs),
-                },
-                meta: staging ? (
-                  <>
-                    {typeof stageBytes === "number" ? (
-                      <span className="fsize mono">{formatByteSize(stageBytes)}</span>
-                    ) : null}
-                    <StageStatus id="trim-input-stage" label={stageLabel} percent={stagePct} />
-                  </>
-                ) : undefined,
-                onRemove: () => updateSource(null),
-                panels: {
-                  info: {
-                    bytes: stageBytes,
-                    checksums: sourceState?.checksums,
-                    defaultOpen: false,
-                    progress: checksumProps,
-                    timing: formatOptionalElapsedMs(sourceState?.checksumTimeMs),
-                    trim: sourceState?.romProbe?.trim,
-                  },
-                },
-                removeLabel: "Clear ROM",
-                stageBar: stageBarValue(staging, stagePct),
-                state: hasSourceQueueWarning(sourceState) ? "bad" : sourceState?.status === "ready" ? "ok" : undefined,
-              },
-              id: "trim-input-card",
-            },
-          ]
-        : [],
+      items: sourceItems,
       notice: sourceNotice,
       num: "0x02",
       title: "ROM",

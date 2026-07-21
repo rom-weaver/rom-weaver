@@ -460,6 +460,46 @@ const invokeRomWeaverPatchValidateWorker = async (
   };
 };
 
+const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
+  const options = asRecord(input.options);
+  const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
+  const addHeader = Boolean((input.options as { addHeader?: unknown } | undefined)?.addHeader);
+  const rawN64ByteOrders = Array.isArray(options?.n64ByteOrders)
+    ? options.n64ByteOrders
+    : Array.isArray(options?.n64_byte_order)
+      ? options.n64_byte_order
+      : options?.n64ByteOrder
+        ? [options.n64ByteOrder]
+        : [];
+  const rawHeaderModes = Array.isArray(options?.headerModes) ? options.headerModes : [];
+  const outputHeaderRaw = options?.outputHeader ?? options?.output_header;
+  return {
+    headerModes: removeHeader
+      ? (["strip"] as ("keep" | "strip" | "auto")[])
+      : rawHeaderModes.map((mode, index) =>
+          mode === "keep" || mode === "strip" || mode === "auto" ? mode : index === 0 ? "keep" : "auto",
+        ),
+    ignoreChecksumValidation:
+      (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
+    n64ByteOrders: rawN64ByteOrders.map((mode) => normalizeN64ByteOrder(mode) || "auto"),
+    outputHeader: removeHeader
+      ? addHeader
+        ? ("keep" as const)
+        : ("strip" as const)
+      : outputHeaderRaw === "keep" || outputHeaderRaw === "strip"
+        ? outputHeaderRaw
+        : ("auto" as const),
+    repairChecksum: Boolean((input.options as { fixChecksum?: unknown } | undefined)?.fixChecksum),
+    requestedThreadArg: toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads),
+    validateWithChecksums: normalizePatchValidationChecksumEntries(
+      options?.validateWithChecksums ?? options?.validate_with_checksums,
+    ),
+    validateWithOutputChecksums: normalizePatchValidationChecksumEntries(
+      options?.validateWithOutputChecksums ?? options?.validate_with_output_checksums,
+    ),
+  };
+};
+
 const invokeRomWeaverPatchApplyWorker = async (
   input: RuntimePatchApplyWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -471,47 +511,18 @@ const invokeRomWeaverPatchApplyWorker = async (
     outputFileName,
     input.patchFiles.map((patch) => patch.patchFilePath),
     async (outputPath) => {
-      const applyOptionRecord = asRecord(input.options);
-      const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
-      const addHeader = Boolean((input.options as { addHeader?: unknown } | undefined)?.addHeader);
-      const repairChecksum = Boolean((input.options as { fixChecksum?: unknown } | undefined)?.fixChecksum);
-      const rawN64ByteOrders = Array.isArray(applyOptionRecord?.n64ByteOrders)
-        ? applyOptionRecord.n64ByteOrders
-        : Array.isArray(applyOptionRecord?.n64_byte_order)
-          ? applyOptionRecord.n64_byte_order
-          : applyOptionRecord?.n64ByteOrder
-            ? [applyOptionRecord.n64ByteOrder]
-            : [];
-      const n64ByteOrders = rawN64ByteOrders.map((mode) => normalizeN64ByteOrder(mode) || "auto");
-      const ignoreChecksumValidation =
-        (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true;
-      const validateWithChecksums = normalizePatchValidationChecksumEntries(
-        applyOptionRecord?.validateWithChecksums ?? applyOptionRecord?.validate_with_checksums,
-      );
-      const validateWithOutputChecksums = normalizePatchValidationChecksumEntries(
-        applyOptionRecord?.validateWithOutputChecksums ?? applyOptionRecord?.validate_with_output_checksums,
-      );
       // The browser resolves the first header mode to avoid rehashing OPFS input; the engine may
       // resolve later `auto` steps from local intermediates. Legacy booleans map to these enums.
-      const rawHeaderModes = Array.isArray(applyOptionRecord?.headerModes) ? applyOptionRecord.headerModes : [];
-      const headerModes: ("keep" | "strip" | "auto")[] = removeHeader
-        ? ["strip"]
-        : rawHeaderModes.map((mode, index) =>
-            mode === "keep" || mode === "strip" || mode === "auto"
-              ? mode
-              : index === 0
-                ? ("keep" as const)
-                : ("auto" as const),
-          );
-      const outputHeaderRaw = applyOptionRecord?.outputHeader ?? applyOptionRecord?.output_header;
-      const outputHeader = removeHeader
-        ? addHeader
-          ? ("keep" as const)
-          : ("strip" as const)
-        : outputHeaderRaw === "keep" || outputHeaderRaw === "strip"
-          ? outputHeaderRaw
-          : ("auto" as const);
-      const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
+      const {
+        headerModes,
+        ignoreChecksumValidation,
+        n64ByteOrders,
+        outputHeader,
+        repairChecksum,
+        requestedThreadArg,
+        validateWithChecksums,
+        validateWithOutputChecksums,
+      } = getPatchApplyCommandOptions(input);
       const {
         forceSingleThreadReason,
         forcedSingleThread,

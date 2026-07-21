@@ -137,6 +137,48 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
   </FileCard>
 );
 
+const ApplyDropAfter = ({
+  onLoadSample,
+  pendingDrops,
+  sampleError,
+  sampleLoading,
+  workflowEmpty,
+}: {
+  onLoadSample: () => void;
+  pendingDrops: PendingDrop[];
+  sampleError: string;
+  sampleLoading: boolean;
+  workflowEmpty: boolean;
+}) => {
+  if (pendingDrops.length) {
+    return (
+      <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
+        {pendingDrops.map((drop) => (
+          <div className="rw-pending" key={drop.id}>
+            <PendingDropCard drop={drop} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (!workflowEmpty) return null;
+  return (
+    <div className="first-weave-demo">
+      <span>New here?</span>
+      <button
+        aria-busy={sampleLoading}
+        className="btn ghost slim"
+        disabled={sampleLoading}
+        onClick={onLoadSample}
+        type="button"
+      >
+        {sampleLoading ? "Loading sample…" : "Try a sample weave"}
+      </button>
+      {sampleError ? <span role="status">{sampleError}</span> : null}
+    </div>
+  );
+};
+
 /**
  * Purely presentational apply-workflow view: renders the step layout from the
  * ui/patchStack/output/notice/dialog controllers ApplyPatchForm wires up.
@@ -238,6 +280,20 @@ type BundleToolsState = {
   /** Whether the woven final result will be verified against an expected output
    * (`ok`), or why it won't (`warn`); null when nothing declares an output. */
   outputVerification: { level: "ok" | "warn"; message: string } | null;
+};
+
+type BundleExportState = {
+  bundleRom: boolean;
+  busy: boolean;
+  cancelExport: () => void;
+  downloadable: boolean;
+  error: string;
+  format: string;
+  progress: ProgressViewModel | null;
+  ready: boolean;
+  runExport: () => Promise<void>;
+  setBundleRom: (value: boolean) => void;
+  setFormat: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -709,6 +765,90 @@ type PatchEnablement = {
 const APPLY_ACTIVITY_KEY = "react-apply-view";
 const FIRST_WEAVE_URL = "/first-weave.zip";
 
+const getBundleVerificationError = (bundleMeta: Array<BundlePatchMeta | undefined>, patches: PatchStackItemState[]) => {
+  const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
+  for (const [index, meta] of bundleMeta.entries()) {
+    for (const [side, checks] of [
+      ["input", meta?.inputChecks?.checksums],
+      ["output", meta?.outputChecks?.checksums],
+    ] as const) {
+      for (const [algorithm, rawValue] of Object.entries(checks || {})) {
+        const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
+        const value = rawValue.trim().toLowerCase();
+        if (!value) continue;
+        const length = lengths[normalizedAlgorithm];
+        if (!(length && new RegExp(`^[0-9a-f]{${length}}$`).test(value))) {
+          return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} is malformed`;
+        }
+        const prefix = side === "input" ? "in " : "out ";
+        const embedded = patches[index]?.validationValues
+          .map((entry) => entry.split("=", 2))
+          .find(
+            ([label]) => label?.trim().toLowerCase().replace("sha-1", "sha1") === `${prefix}${normalizedAlgorithm}`,
+          )?.[1]
+          ?.trim()
+          .toLowerCase();
+        if (embedded && embedded !== value) {
+          return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`;
+        }
+      }
+    }
+  }
+  return "";
+};
+
+const OutputHeaderField = ({
+  disabled,
+  headeredExtension,
+  headerlessExtension,
+  onChange,
+  retained,
+  value,
+  visible,
+}: {
+  disabled: boolean;
+  headeredExtension?: string;
+  headerlessExtension?: string;
+  onChange: (value: "auto" | "keep" | "strip") => void;
+  retained: boolean;
+  value?: "auto" | "keep" | "strip";
+  visible: boolean;
+}) => {
+  if (!visible) return null;
+  const extensionsDiffer = !!headeredExtension && !!headerlessExtension && headeredExtension !== headerlessExtension;
+  const info = {
+    items: [
+      `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${retained ? "" : " - this ROM's header is copier junk, so auto drops it"}.`,
+      "Keep header: the patched output carries the ROM header (re-added if it was stripped for patching).",
+      "Headerless: the patched output has no ROM header (stripped from the output if the patch ran on the headered bytes).",
+      ...(extensionsDiffer
+        ? [
+            `The output extension follows the choice: ${headeredExtension} with the header, ${headerlessExtension} without.`,
+          ]
+        : []),
+    ],
+    summary:
+      "Whether the patched output carries the ROM's copier header. Separate from the per-patch strip choice, which only controls what bytes the patch applies against.",
+    title: "Output Header",
+  };
+  return (
+    <OutputField label="Output Header" labelInfo={<FieldInfoToggle info={info} label="Output Header" />}>
+      <select
+        aria-label="Output Header"
+        className="select"
+        disabled={disabled}
+        id="rom-weaver-select-output-header"
+        onChange={(event) => onChange(event.currentTarget.value as "auto" | "keep" | "strip")}
+        value={value || "auto"}
+      >
+        <option value="auto">auto ({retained ? "keep" : "strip"})</option>
+        <option value="keep">keep</option>
+        <option value="strip">strip</option>
+      </select>
+    </OutputField>
+  );
+};
+
 function ApplyWorkflowFormView({
   controllers,
   bundleExpectedRomChecks,
@@ -730,19 +870,7 @@ function ApplyWorkflowFormView({
     dialog?: DialogController;
   };
   /** Bundle export controls live directly in the Output options drawer. */
-  bundleExport?: {
-    bundleRom: boolean;
-    busy: boolean;
-    cancelExport: () => void;
-    downloadable: boolean;
-    error: string;
-    format: string;
-    progress: ProgressViewModel | null;
-    ready: boolean;
-    runExport: () => Promise<void>;
-    setBundleRom: (value: boolean) => void;
-    setFormat: (value: string) => void;
-  };
+  bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
   bundleTools?: BundleToolsState;
   /** The bundle's expected base-ROM checks, folded into the staged ROM card. */
@@ -793,37 +921,7 @@ function ApplyWorkflowFormView({
     const id = patchIds[index];
     return bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
   });
-  const bundleVerificationError = (() => {
-    const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
-    for (const [index, meta] of bundleMeta.entries()) {
-      for (const [side, checks] of [
-        ["input", meta?.inputChecks?.checksums],
-        ["output", meta?.outputChecks?.checksums],
-      ] as const) {
-        for (const [algorithm, rawValue] of Object.entries(checks || {})) {
-          const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
-          const value = rawValue.trim().toLowerCase();
-          if (!value) continue;
-          const length = lengths[normalizedAlgorithm];
-          if (!(length && new RegExp(`^[0-9a-f]{${length}}$`).test(value))) {
-            return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} is malformed`;
-          }
-          const prefix = side === "input" ? "in " : "out ";
-          const embedded = patches[index]?.validationValues
-            .map((entry) => entry.split("=", 2))
-            .find(
-              ([label]) => label?.trim().toLowerCase().replace("sha-1", "sha1") === `${prefix}${normalizedAlgorithm}`,
-            )?.[1]
-            ?.trim()
-            .toLowerCase();
-          if (embedded && embedded !== value) {
-            return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`;
-          }
-        }
-      }
-    }
-    return "";
-  })();
+  const bundleVerificationError = getBundleVerificationError(bundleMeta, patches);
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
   const localizer = useUiLocalizer();
@@ -898,40 +996,17 @@ function ApplyWorkflowFormView({
   const outputHeaderRetained = outputHeaderTransform?.retainOnOutput !== false;
   const headeredExtension = outputHeaderTransform?.headeredExtension;
   const headerlessExtension = outputHeaderTransform?.headerlessExtension;
-  const extensionsDiffer = !!headeredExtension && !!headerlessExtension && headeredExtension !== headerlessExtension;
-  const outputHeaderInfo = {
-    items: [
-      `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${outputHeaderRetained ? "" : " - this ROM's header is copier junk, so auto drops it"}.`,
-      "Keep header: the patched output carries the ROM header (re-added if it was stripped for patching).",
-      "Headerless: the patched output has no ROM header (stripped from the output if the patch ran on the headered bytes).",
-      ...(extensionsDiffer
-        ? [
-            `The output extension follows the choice: ${headeredExtension} with the header, ${headerlessExtension} without.`,
-          ]
-        : []),
-    ],
-    summary:
-      "Whether the patched output carries the ROM's copier header. Separate from the per-patch strip choice, which only controls what bytes the patch applies against.",
-    title: "Output Header",
-  };
-  const outputHeaderField = outputHeaderVariant ? (
-    <OutputField label="Output Header" labelInfo={<FieldInfoToggle info={outputHeaderInfo} label="Output Header" />}>
-      <select
-        aria-label="Output Header"
-        className="select"
-        disabled={outputState.disabled}
-        id="rom-weaver-select-output-header"
-        onChange={(event) =>
-          controllers.output.setOutputHeader?.(event.currentTarget.value as "auto" | "keep" | "strip")
-        }
-        value={outputState.outputHeader || "auto"}
-      >
-        <option value="auto">auto ({outputHeaderRetained ? "keep" : "strip"})</option>
-        <option value="keep">keep</option>
-        <option value="strip">strip</option>
-      </select>
-    </OutputField>
-  ) : null;
+  const outputHeaderField = (
+    <OutputHeaderField
+      disabled={outputState.disabled}
+      headeredExtension={headeredExtension}
+      headerlessExtension={headerlessExtension}
+      onChange={(value) => controllers.output.setOutputHeader?.(value)}
+      retained={outputHeaderRetained}
+      value={outputState.outputHeader}
+      visible={!!outputHeaderVariant}
+    />
+  );
   const exportTypeInfo = {
     items: [
       "A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM; it is not a pre-patched ROM.",
@@ -1149,29 +1224,13 @@ function ApplyWorkflowFormView({
         accept={fileInputAccept.unifiedApply}
         addLabel="Replace the ROM or add patches"
         afterDropZone={
-          pendingDrops.length ? (
-            <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
-              {pendingDrops.map((drop) => (
-                <div className="rw-pending" key={drop.id}>
-                  <PendingDropCard drop={drop} />
-                </div>
-              ))}
-            </div>
-          ) : workflowEmpty ? (
-            <div className="first-weave-demo">
-              <span>New here?</span>
-              <button
-                aria-busy={sampleLoading}
-                className="btn ghost slim"
-                disabled={sampleLoading}
-                onClick={() => void loadFirstWeave()}
-                type="button"
-              >
-                {sampleLoading ? "Loading sample…" : "Try a sample weave"}
-              </button>
-              {sampleError ? <span role="status">{sampleError}</span> : null}
-            </div>
-          ) : null
+          <ApplyDropAfter
+            onLoadSample={() => void loadFirstWeave()}
+            pendingDrops={pendingDrops}
+            sampleError={sampleError}
+            sampleLoading={sampleLoading}
+            workflowEmpty={workflowEmpty}
+          />
         }
         big={workflowEmpty}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
