@@ -57,9 +57,9 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 ## `ci.yml` - the required gate
 
 ```
-             ┌── rust-host ──┐
-checkout ────┤               ├── rust (aggregate check name)
-             └── wasm-check ─┘
+             ┌── rust-host ─────┐
+checkout ────┼── wasm-check ────┼── rust (aggregate check name)
+             └── rust-platform ─┘
 
          ┌── webapp ── lint, unit, browser, E2E, build
 wasm ────┤
@@ -97,7 +97,15 @@ security ── advisories (warn only, always green)
 - **`wasm-check`** runs `cargo check` against `wasm32-wasip1-threads`. It has a
   separate Cargo fingerprint from the host checks, so serializing it into
   `rust-host` would only lengthen the required gate.
-- **`rust`** is an aggregator: it fails unless both jobs above succeeded. Its
+- **`rust-platform`** runs the Rust test suite on macOS (`macos-14`, arm64) and
+  Windows (`windows-2025`) - the platforms the release fan-out ships CLI
+  binaries for but that nothing previously tested. Only `cargo test` runs
+  there: fmt, clippy, typegen, and the policy checks are platform-independent
+  and already gate in `rust-host`. It installs the toolchain with
+  `dtolnay/rust-toolchain` (pin read from `.mise.toml`) rather than
+  mise/setup-build-env, because mise's `[env]` exec templates shell out to
+  bash and the release jobs already prove this route on these exact images.
+- **`rust`** is an aggregator: it fails unless the three jobs above succeeded. Its
   only purpose is to present one stable check name (`Rust`) while the work
   runs in parallel, so branch protection would have a single thing to require.
 - **`security`** runs `cargo deny advisories` and `npm audit`. **Deliberately

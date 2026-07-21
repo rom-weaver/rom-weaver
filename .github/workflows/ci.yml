@@ -342,6 +342,66 @@ jobs:
       - name: WASM threaded check
         run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
+  # The release fan-out builds the CLI for macOS and Windows, but until here
+  # nothing ever *tested* on them - a platform-specific regression surfaced at
+  # publish time or from a user report. Runs only the test suite: fmt, clippy,
+  # typegen, and the policy checks are platform-independent and already gate in
+  # `rust-host`, so repeating them here would only lengthen the slowest leg.
+  #
+  # Deliberately not the mise/setup-build-env path: mise's [env] exec templates
+  # shell out to bash, which is untested on the Windows runner, and the release
+  # jobs already prove the dtolnay + rustup route on these exact images. The
+  # toolchain pin is read from .mise.toml so the platforms can never drift from
+  # the version rust-host tests with.
+  rust-platform:
+    name: Rust tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    if: github.ref_type != 'tag'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-14
+          - name: Windows
+            runner: windows-2025
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read pinned Rust version
+        id: pin
+        shell: bash
+        run: |
+          version=$(sed -n 's/^rust = "\(.*\)"$/\1/p' .mise.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no rust pin found in .mise.toml"
+            exit 1
+          fi
+          echo "rust=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.pin.outputs.rust }}
+
+      # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
+      # includes the OS, so the two legs never collide with each other or with
+      # rust-host.
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # The runner images ship cmake and a host C toolchain (Xcode clang / MSVC
+      # + LLVM), which is everything the vendored libarchive build needs - the
+      # npm platform publish builds this same graph with no extra installs.
+      - name: Rust tests
+        run: cargo test --quiet --workspace --locked
+
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
   # The `main protection` ruleset requires this context by name. It must fail
@@ -351,16 +411,18 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [rust-host, wasm-check]
+    needs: [rust-host, wasm-check, rust-platform]
     if: always() && github.ref_type != 'tag'
     steps:
       - name: Verify Rust jobs
         env:
           HOST_RESULT: ${{ needs.rust-host.result }}
           WASM_RESULT: ${{ needs.wasm-check.result }}
+          PLATFORM_RESULT: ${{ needs.rust-platform.result }}
         run: |
           test "$HOST_RESULT" = success
           test "$WASM_RESULT" = success
+          test "$PLATFORM_RESULT" = success
 
   # Consumes the prebuilt wasm module; compiles no Rust of its own.
   webapp:
