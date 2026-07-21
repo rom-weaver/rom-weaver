@@ -12,7 +12,7 @@ import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
-import { LOCAL_STORAGE_SETTINGS_ID } from "./settings/settings-state.ts";
+import { LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
 import {
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
@@ -31,7 +31,6 @@ import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from
 // rawDraft.compressionProfile
 // normalizeOptionalIntegerOverride
 // getCompressionLevelsForSettings(settings)
-// initialSettings.oninitialize = () => { webappController.activateInitialView(initialMode, { fallbackOnError: true }) }
 
 const SERVICE_WORKER_ENABLED = __SERVICE_WORKER_ENABLED__;
 const SERVICE_WORKER_CACHE_PREFIX = "precache-rom-weaver-";
@@ -44,39 +43,9 @@ const SERVICE_WORKER_BOOT_GATE_TIMEOUT_MS = 10000;
 // Cap on gate-initiated reloads so a browser that can never isolate is not stuck reloading.
 const SERVICE_WORKER_BOOT_GATE_MAX_RELOADS = 3;
 
-type RuntimeScalar = string | number | boolean | null | undefined;
-type RuntimeValue =
-  | RuntimeScalar
-  | Blob
-  | File
-  | FileList
-  | ArrayBuffer
-  | ArrayBufferView
-  | Uint8Array
-  | ((...args: never[]) => unknown)
-  | { [key: string]: RuntimeValue | undefined }
-  | RuntimeValue[];
-
-type RuntimeSettings = Record<string, RuntimeValue> & {
-  language?: RuntimeScalar;
-  allowDropFiles?: RuntimeScalar;
-  ondropfiles?: (...args: RuntimeValue[]) => RuntimeValue;
-  oninitialize?: (runtime?: RuntimeValue) => void;
-};
-
-type WebAppConfig = {
-  settings?: RuntimeSettings;
-  initialMode?: RuntimeScalar;
-};
-
 installLogStore();
 
 const logger = createLogger("webapp");
-
-const appConfig: WebAppConfig =
-  typeof window !== "undefined" && window.ROM_WEAVER_APP_CONFIG && typeof window.ROM_WEAVER_APP_CONFIG === "object"
-    ? (window.ROM_WEAVER_APP_CONFIG as WebAppConfig)
-    : {};
 let confirmationDialogState = createEmptyConfirmationDialogState();
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
@@ -166,11 +135,6 @@ if (FORCE_HTTPS_HOSTS.indexOf(location.hostname) !== -1 && location.protocol ===
   location.href = window.location.href.replace("http:", "https:");
 else serviceWorkerClient.initialize();
 
-const getConfiguredRuntimeSettings = (): RuntimeSettings =>
-  appConfig.settings && typeof appConfig.settings === "object" ? { ...appConfig.settings } : {};
-
-const getConfiguredInitialMode = () => (typeof appConfig.initialMode === "string" ? appConfig.initialMode : "");
-
 // `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
 // this boot-time read consumes them.
@@ -182,7 +146,7 @@ for (const warning of urlSessionParse.warnings) {
   logger.warn(`url session: ${warning}`);
 }
 
-const applySettingsToRuntime = (settings: RuntimeSettings) => {
+const applySettingsToRuntime = (settings: SettingsState) => {
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
   logger.debug("Applying runtime settings", {
     logLevel: settings.logLevel,
@@ -206,9 +170,7 @@ logger.info("Browser environment", collectBrowserInfo());
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
 
-const markBootstrapMounted = () => {
-  const bootstrap = window.ROM_WEAVER_APP_BOOTSTRAP;
-  if (bootstrap && typeof bootstrap.markMounted === "function") bootstrap.markMounted();
+const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
   if (appRootElement) appRootElement.removeAttribute("aria-busy");
 };
@@ -386,7 +348,7 @@ const renderWebappRoot = (): undefined => {
       }),
     );
   });
-  markBootstrapMounted();
+  markWebappMounted();
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;
@@ -416,7 +378,6 @@ const initializeWebapp = () => {
     branch: GIT_BRANCH,
     buildVersion: APP_BUILD_VERSION,
     commit: COMMIT_HASH,
-    config: appConfig,
     dirty: !!DIRTY_HASH,
     dirtyHash: DIRTY_HASH || undefined,
     version: APP_VERSION,
@@ -428,13 +389,9 @@ const initializeWebapp = () => {
   renderWebappRoot();
 
   // A URL session always lands on the apply tab, whatever the hash says.
-  const initialMode = urlSessionParse.request
-    ? "patcher"
-    : getConfiguredInitialMode() || readWorkflowViewFromHash() || "patcher";
+  const initialMode = urlSessionParse.request ? "patcher" : readWorkflowViewFromHash() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, { fallbackOnError: true });
-  const configuredOnInitialize = getConfiguredRuntimeSettings().oninitialize;
-  if (typeof configuredOnInitialize === "function") configuredOnInitialize();
 };
 
 const bootWebapp = () => {

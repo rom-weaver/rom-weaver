@@ -219,10 +219,6 @@ export interface RomWeaverBrowserOpfsOptions {
    * leave the request unchanged.
    */
   defaultThreads?: RomWeaverDefaultThreads;
-  program?: string;
-  argv0?: string;
-  /** Base environment for every browser run. */
-  env?: RomWeaverEnv;
   debugWasi?: boolean;
 }
 
@@ -251,7 +247,6 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
    * "off" to leave the request unchanged.
    */
   defaultThreads?: RomWeaverDefaultThreads;
-  program?: string;
   debugWasi?: boolean;
 }
 

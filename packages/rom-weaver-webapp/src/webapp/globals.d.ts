@@ -8,11 +8,6 @@ declare global {
   const __SERVICE_WORKER_UPDATE_INTERVAL_MS__: number;
 
   interface Window {
-    ROM_WEAVER_APP_CONFIG?: Record<string, RuntimeValue>;
-    ROM_WEAVER_APP_BOOTSTRAP?: {
-      markMounted?: () => void;
-      showError?: (messageText?: string) => void;
-    };
     ROM_WEAVER_CONSOLE_LOGS?: {
       clear: () => void;
       copy: () => Promise<string>;

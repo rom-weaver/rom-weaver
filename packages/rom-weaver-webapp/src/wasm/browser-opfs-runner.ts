@@ -170,7 +170,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         trace("[browser-opfs] invalidate mount cache before run done");
       }
       const env = createRunEnv({
-        baseEnv: options.env,
         requestedThreadCount: parseRequestedThreadCount(request),
         runEnv: runOptions.env,
         threaded,
@@ -221,7 +220,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         runMode: runOptions.syncAccessMode,
         threaded,
       });
-      const wasiArgs = [runOptions.program ?? options.program ?? options.argv0 ?? "rom-weaver"];
+      const wasiArgs = ["rom-weaver"];
       const requestStdin = serializeRunRequestForStdin(request);
       const writableRoots = normalizeWritableRoots({
         inherited: baseWritableRoots,
@@ -463,20 +462,15 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
 }
 
 function createRunEnv({
-  baseEnv,
   runEnv,
   requestedThreadCount,
   threaded,
 }: {
-  baseEnv?: RomWeaverEnv;
   runEnv?: RomWeaverEnv;
   requestedThreadCount: number | null;
   threaded: boolean;
 }): RomWeaverEnv {
-  const merged = {
-    ...baseEnv,
-    ...runEnv,
-  };
+  const merged = { ...runEnv };
   if (!threaded) return merged;
   applyBrowserThreadedRayonEnvDefaults(merged, requestedThreadCount);
   return merged;
