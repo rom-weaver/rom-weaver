@@ -13,6 +13,12 @@
   <a href="https://github.com/brandonocasey/rom-weaver/blob/main/LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
+> **Beta software, published so the CLI can be.** This crate exists to build
+> [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the
+> `rom-weaver` command is the only supported interface. The Rust API is not
+> documented beyond this page, changes without notice between minor releases,
+> and using it in another project is unsupported.
+
 ## What this crate is
 
 Every checksum rom-weaver computes comes from here, whether it is verifying a
@@ -28,6 +34,12 @@ patch's expected input, fingerprinting an extracted ROM, or answering a plain
 - **Header-aware variants.** ROM copier headers (SNES/SMC, NES, and friends)
   are detected so a file can report both the raw checksum and the
   headerless checksum databases actually index by.
+- **N64 byte orders.** The three interleavings — `.z64` big-endian, `.v64`
+  byte-swapped, `.n64` little-endian — are detected from the boot magic, and
+  the same pass reports what the file would hash to in each of the other two.
+- **Checksum repair.** Internal header checksums that a patch invalidates can
+  be recomputed in the same streaming pass: the N64 boot-code CRC pair, the
+  Genesis word sum, and the GBA header complement.
 - **ROM identity.** Platform detection and header parsing used to label a file
   with its platform and medium.
 
@@ -49,9 +61,11 @@ rom-weaver-checksum = "0.6"
 
 ## Stability
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0
-breaking changes may happen between minor releases. The Rust API is the least
-settled surface in the project; pin an exact version if you depend on it.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
+minor releases; this crate is the least settled surface in the project. The
+supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this
+crate anyway, pin an exact version and expect to do the migration work
+yourself.
 
 ## Documentation
 

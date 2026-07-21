@@ -13,6 +13,11 @@
   <a href="https://github.com/brandonocasey/rom-weaver/blob/main/LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
+> **Beta software.** The `rom-weaver` command is the supported interface, and
+> the one to install. The four library crates it is built from
+> (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only
+> so this one can be; using them directly is unsupported.
+
 ## What this crate is
 
 The installable end of rom-weaver. It ships the `rom-weaver` binary and the
@@ -105,11 +110,13 @@ output, man pages, Docker usage, and file permissions.
 
 ## Stability
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0
-breaking changes may happen between minor releases. Patching, compressing,
-extracting, and bundling are tested extensively; CLI flags and the Rust API may
-still change on the way to v1.0. `trim` and `tools` are untested but
-theoretically working, and are disabled in the webapp for that reason.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
+minor releases. Patching, compressing, extracting, and bundling are tested
+extensively; the flags and JSON shapes around them may still change on the way
+to v1.0. `trim` and `tools` are untested but theoretically working, and are
+disabled in the webapp for that reason. The `rom_weaver_app` library this crate
+also exposes is an internal seam between the native and wasm frontends, not a
+supported API.
 
 ## Documentation
 

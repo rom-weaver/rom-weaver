@@ -13,6 +13,12 @@
   <a href="https://github.com/brandonocasey/rom-weaver/blob/main/LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
+> **Beta software, published so the CLI can be.** This crate exists to build
+> [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the
+> `rom-weaver` command is the only supported interface. The Rust API is not
+> documented beyond this page, changes without notice between minor releases,
+> and using it in another project is unsupported.
+
 ## What this crate is
 
 The container registry and one handler per format, each implementing
@@ -63,9 +69,11 @@ Notable toggles:
 
 ## Stability
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0
-breaking changes may happen between minor releases. The Rust API is the least
-settled surface in the project; pin an exact version if you depend on it.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
+minor releases; this crate is the least settled surface in the project. The
+supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this
+crate anyway, pin an exact version and expect to do the migration work
+yourself.
 
 ## Documentation
 

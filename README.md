@@ -67,7 +67,10 @@ compressing, extracting, and bundling have all been tested extensively. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0. Trim and Tools are
 currently untested but theoretically working, so they are disabled in the
-current webapp.
+current webapp. The `rom-weaver-core`, `-checksum`, `-containers`, and
+`-patches` crates are published to crates.io only so `rom-weaver-cli` can be;
+the CLI and the webapp are the supported interfaces, and using those crates as
+libraries elsewhere is not supported.
 
 ### LLM-assisted development
 
