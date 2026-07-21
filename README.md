@@ -64,7 +64,9 @@ rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
 breaking changes may still happen between minor releases. Patching,
 compressing, extracting, and bundling have all been tested extensively. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
-interfaces may still change as the project heads toward v1.0.
+interfaces may still change as the project heads toward v1.0. Trim and Tools are
+currently untested but theoretically working, so they are disabled in the
+current webapp.
 
 ### LLM-assisted development
 
@@ -82,8 +84,7 @@ Open the hosted webapp at **[rom-weaver.com](https://rom-weaver.com/)**. There
 is nothing to install and no account: choose **Weave**, add a ROM and one or
 more patches, review the detected formats and checksums, then run the workflow
 and save the result. Use **Create** to generate a distributable patch from
-an original and a modified file; optional Trim and Tools workflows can be
-enabled in the webapp settings. Your files are processed locally and never
+an original and a modified file. Your files are processed locally and never
 leave the device. Install it as a PWA from the browser menu to use it offline.
 New here? [Try the sample weave](https://rom-weaver.com/?bundle=first-weave.zip#/weave)
 with tiny synthetic files.
@@ -214,4 +215,6 @@ Copyright (C) Brandon Casey
 
 See [LICENSE.md](LICENSE.md) for the license terms. Bundled third-party
 components retain their own licenses. Release builds include a generated
-`NOTICE`, `THIRD_PARTY_LICENSES.md`, and corresponding license texts.
+[attribution notice](https://rom-weaver.com/NOTICE),
+[third-party license inventory](https://rom-weaver.com/THIRD_PARTY_LICENSES.md),
+and corresponding license texts.
