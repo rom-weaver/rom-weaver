@@ -209,6 +209,52 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
 
+  publish-homebrew:
+    needs: [release, publish-npm]
+    if: >-
+      needs.release.outputs.release_created == 'true' &&
+      !contains(needs.release.outputs.version, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - name: Download release checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir checksums
+          gh release download "v${{ needs.release.outputs.version }}" \
+            --pattern 'rom-weaver-*.sha256' \
+            --dir checksums
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v7
+        with:
+          repository: brandonocasey/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: node scripts/generate-homebrew-formula.mjs "$VERSION" checksums homebrew-tap/Formula/rom-weaver.rb
+
+      - name: Publish formula
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Formula/rom-weaver.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "rom-weaver $VERSION"
+          git push
+
   publish-containers:
     needs: release
     if: needs.release.outputs.release_created == 'true'

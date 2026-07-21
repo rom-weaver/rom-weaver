@@ -90,7 +90,11 @@ jobs:
             asset_name+=".exe"
           fi
           cp "$binary_path" "$asset_name"
-          gh release upload "v${{ inputs.version }}" "$asset_name" \
+          checksum=$(node -e \
+            "const fs=require('fs'),c=require('crypto');process.stdout.write(c.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" \
+            "$asset_name")
+          printf '%s  %s\n' "$checksum" "$asset_name" > "$asset_name.sha256"
+          gh release upload "v${{ inputs.version }}" "$asset_name" "$asset_name.sha256" \
             --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish platform package
