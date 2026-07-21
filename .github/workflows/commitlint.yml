@@ -1,4 +1,4 @@
-name: Commitlint
+name: Conventional commits
 
 # Only the pull request title is linted. Merge commits are disabled and squash
 # merges take `PR_TITLE` as the subject, so the title is the only text that ever

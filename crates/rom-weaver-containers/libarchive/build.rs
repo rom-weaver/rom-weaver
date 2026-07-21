@@ -624,14 +624,11 @@ fn build_libarchive(libarchive_dir: &Path) {
         }
     }
 
-    println!(
-        "cargo:rustc-link-lib=static={}",
-        if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
-            "archive_static"
-        } else {
-            "archive"
-        }
-    );
+    // The cmake target is `archive_static`, but upstream renames its output to
+    // plain `archive` whenever BUILD_SHARED_LIBS is off (which this build
+    // always sets), on Windows included - so the artifact is archive.lib /
+    // libarchive.a everywhere and the link name is unconditional.
+    println!("cargo:rustc-link-lib=static=archive");
 
     if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
         println!("cargo:rustc-link-lib=User32");

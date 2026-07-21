@@ -844,9 +844,9 @@ __LA_DECL int archive_write_set_format_by_name(struct archive *,
 /* To minimize link pollution, use one or more of the following. */
 __LA_DECL int archive_write_set_format_7zip(struct archive *);
 __LA_DECL int archive_write_set_format_7zip_progress_callback(struct archive *,
-		     void (*_progress_func)(void *, uint64_t), void *_user_data);
+		     void (*_progress_func)(void *, la_uint64_t), void *_user_data);
 __LA_DECL int archive_write_set_format_7zip_size_hint(struct archive *,
-		     uint64_t _uncompressed_bytes);
+		     la_uint64_t _uncompressed_bytes);
 __LA_DECL int archive_write_set_format_ar_bsd(struct archive *);
 __LA_DECL int archive_write_set_format_ar_svr4(struct archive *);
 __LA_DECL int archive_write_set_format_cpio(struct archive *);

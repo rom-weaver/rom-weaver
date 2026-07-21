@@ -21,6 +21,8 @@ rust = "1.95.0"
 "aqua:BurntSushi/ripgrep" = "14.1.1"           # provides rg (thread-guard checks)
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
+# Version is the release tag: nextest's repo prefixes tags with the crate name.
+"ubi:nextest-rs/nextest" = { version = "cargo-nextest-0.9.140", exe = "cargo-nextest" }
 "ubi:obi1kenobi/cargo-semver-checks" = "0.46.0"
 "aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
@@ -201,9 +203,13 @@ run = "cargo semver-checks check-release --workspace"
 
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
-# --quiet collapses the ~1400 per-test `... ok` lines into progress dots; a
-# failing test still prints its full name and panic output.
-run = "cargo test --quiet --workspace"
+# nextest schedules the run phase (per-test processes, better parallelism);
+# it does not execute doctests, so those keep a plain `cargo test --doc` pass
+# - dropping them would silently shrink the suite.
+run = [
+  "cargo nextest run --workspace",
+  "cargo test --quiet --doc --workspace",
+]
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"

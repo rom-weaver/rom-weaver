@@ -14,13 +14,19 @@
 # is an error rather than a silent no-op.
 #
 # Usage: mise-disable-tools.sh <mise.toml> [wanted...]
+#
+# Sticks to bash 3.2 (no mapfile, no associative arrays): the macOS CI leg
+# runs this under the runner's /bin/bash, which Apple froze at 3.2.
 set -euo pipefail
 
 config="${1:?usage: mise-disable-tools.sh <mise.toml> [wanted...]}"
 shift
 
 # Tool ids are the keys of the [tools] table: `node = "24"`, `"aqua:x/y" = "1"`.
-mapfile -t ids < <(
+ids=()
+while IFS= read -r id; do
+  [ -n "$id" ] && ids+=("$id")
+done < <(
   sed -n '/^\[tools\]/,/^\[/p' "$config" |
     sed -n 's/^"\{0,1\}\([^"= ]*\)"\{0,1\}[[:space:]]*=.*/\1/p'
 )
@@ -30,24 +36,31 @@ if [ "${#ids[@]}" -eq 0 ]; then
   exit 1
 fi
 
-declare -A wanted=()
-for name in "$@"; do
-  wanted["$name"]=1
-done
+# Space-delimited membership sets; every name is a known short id, so the
+# delimiters cannot collide with content.
+wanted=" $* "
+matched=" "
 
 disable=()
 for id in "${ids[@]}"; do
   short="${id##*/}"
   short="${short##*:}"
-  if [ -n "${wanted[$short]+set}" ]; then
-    unset "wanted[$short]"
-  else
-    disable+=("$id")
-  fi
+  case "$wanted" in
+    *" $short "*) matched="$matched$short " ;;
+    *) disable+=("$id") ;;
+  esac
 done
 
-if [ "${#wanted[@]}" -ne 0 ]; then
-  echo "unknown tool(s): ${!wanted[*]} - not pinned in $config" >&2
+unknown=""
+for name in "$@"; do
+  case "$matched" in
+    *" $name "*) ;;
+    *) unknown="$unknown $name" ;;
+  esac
+done
+
+if [ -n "$unknown" ]; then
+  echo "unknown tool(s):$unknown - not pinned in $config" >&2
   exit 1
 fi
 

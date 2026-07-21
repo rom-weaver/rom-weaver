@@ -17,31 +17,17 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
         || native_file_identity_matches(left, right)
 }
 
-#[cfg(unix)]
+// same-file compares dev/inode on Unix and volume serial + file index on
+// Windows. The Windows half cannot be written against std on stable: the
+// MetadataExt equivalents are still unstable behind `windows_by_handle`
+// (rust-lang/rust#63010), which is why the previous hand-rolled cfg(windows)
+// branch never compiled.
+#[cfg(not(target_arch = "wasm32"))]
 fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-
-    matches!(
-        (fs::metadata(left), fs::metadata(right)),
-        (Ok(left), Ok(right)) if left.dev() == right.dev() && left.ino() == right.ino()
-    )
+    same_file::is_same_file(left, right).unwrap_or(false)
 }
 
-#[cfg(windows)]
-fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
-    use std::os::windows::fs::MetadataExt;
-
-    matches!(
-        (fs::metadata(left), fs::metadata(right)),
-        (Ok(left), Ok(right))
-            if left.volume_serial_number().is_some()
-                && left.volume_serial_number() == right.volume_serial_number()
-                && left.file_index().is_some()
-                && left.file_index() == right.file_index()
-    )
-}
-
-#[cfg(not(any(unix, windows)))]
+#[cfg(target_arch = "wasm32")]
 fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
     false
 }

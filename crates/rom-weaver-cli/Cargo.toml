@@ -36,6 +36,9 @@ zstd.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap.workspace = true
+# File-identity comparison for in-place apply safety; stable-Rust route to
+# the Windows by-handle info std still gates behind an unstable feature.
+same-file.workspace = true
 clap_complete = "4.5"
 # Light interactive prompts for `apply --tui`; built on `console`, already in
 # the tree via indicatif. default-features off drops editor/password/fuzzy.

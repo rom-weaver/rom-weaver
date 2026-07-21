@@ -487,7 +487,7 @@ archive_write_set_format_7zip(struct archive *_a)
 
 int
 archive_write_set_format_7zip_progress_callback(struct archive *_a,
-    void (*progress_func)(void *, uint64_t), void *user_data)
+    void (*progress_func)(void *, la_uint64_t), void *user_data)
 {
 	struct archive_write *a = (struct archive_write *)_a;
 	struct _7zip *zip;
@@ -511,7 +511,7 @@ archive_write_set_format_7zip_progress_callback(struct archive *_a,
 
 int
 archive_write_set_format_7zip_size_hint(struct archive *_a,
-    uint64_t uncompressed_bytes)
+    la_uint64_t uncompressed_bytes)
 {
 	struct archive_write *a = (struct archive_write *)_a;
 	struct _7zip *zip;
