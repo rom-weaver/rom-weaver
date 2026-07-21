@@ -499,14 +499,18 @@ jobs:
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
   # The `main protection` ruleset requires this context by name. It must fail
-  # rather than skip when a dependency fails, hence `always()` plus the explicit
-  # result assertions below - a skipped check counts as passing.
+  # rather than skip when a dependency fails, hence `!cancelled()` plus the
+  # explicit result assertions below - a skipped check counts as passing.
+  # `!cancelled()` rather than `always()`: when the run itself is cancelled
+  # (superseded by a newer push, or by hand) the dependencies report
+  # `cancelled`, and `always()` would turn that into a red Rust check on a
+  # build nobody finished.
   rust:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: [rust-host, wasm-check, rust-macos, rust-windows]
-    if: always() && github.ref_type != 'tag'
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Verify Rust jobs
         env:
