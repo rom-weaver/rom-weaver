@@ -12,24 +12,16 @@
 </p>
 
 <p align="center">
- <a href="https://rom-weaver.com/">Open the webapp</a>
- · <a href="#screenshots">Screenshots</a>
- · <a href="#install">Install</a>
- · <a href="docs/README.md">Documentation</a>
- · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
+  <a href="https://rom-weaver.com/">Open the webapp</a>
+  · <a href="docs/README.md">Docs index</a>
+  · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
 <!-- START doctoc -->
-## Table of contents
 
 - [Features](#features)
 - [Notices](#notices)
-  - [Beta status](#beta-status)
-  - [LLM-assisted development](#llm-assisted-development)
 - [Install](#install)
-  - [Webapp](#webapp)
-  - [CLI](#cli)
-  - [Self-host the webapp](#self-host-the-webapp)
 - [Screenshots](#screenshots)
 - [Documentation](#documentation)
 - [Contributing and support](#contributing-and-support)

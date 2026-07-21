@@ -16,10 +16,28 @@ if ((${#files[@]} == 0)); then
   )
 fi
 
-npx --no-install doctoc \
-  --github \
-  --title "## Table of contents" \
-  --toc-pragma-style compact \
-  --toc-location before \
-  --minlevel 2 \
-  "${files[@]}"
+readme=false
+other_files=()
+for file in "${files[@]}"; do
+  if [[ "$file" == README.md ]]; then
+    readme=true
+  else
+    other_files+=("$file")
+  fi
+done
+
+doctoc=(
+  npx --no-install doctoc
+  --github
+  --toc-pragma-style compact
+  --toc-location before
+  --minlevel 2
+)
+
+if [[ "$readme" == true ]]; then
+  "${doctoc[@]}" --notitle --maxlevel 2 README.md
+fi
+
+if ((${#other_files[@]})); then
+  "${doctoc[@]}" --title "## Table of contents" "${other_files[@]}"
+fi
