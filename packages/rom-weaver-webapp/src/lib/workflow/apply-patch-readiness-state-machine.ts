@@ -35,6 +35,49 @@ const assignApplyPatchTarget = <TSource>(stage: StagedSource<TSource>, target: I
   stage.state.targetInputFileName = target.fileName;
 };
 
+const createChecksumPreflightVerdict = ({
+  actualCrc32,
+  actualSize,
+  minimumSourceSize,
+  requiredCrc32,
+  requiredSize,
+}: Pick<
+  InternalPatchChecksumPreflight,
+  "actualCrc32" | "actualSize" | "minimumSourceSize" | "requiredCrc32" | "requiredSize"
+>): InternalPatchChecksumPreflight => {
+  if (requiredSize === undefined && minimumSourceSize === undefined && !requiredCrc32) {
+    return { actualCrc32, actualSize, status: "unknown" };
+  }
+  const sizeMismatch = requiredSize !== undefined && actualSize !== undefined && actualSize !== requiredSize;
+  const minimumSizeMismatch =
+    minimumSourceSize !== undefined && actualSize !== undefined && actualSize < minimumSourceSize;
+  const crcMismatch = !!(requiredCrc32 && actualCrc32 && actualCrc32 !== requiredCrc32);
+  if (sizeMismatch || minimumSizeMismatch || crcMismatch) {
+    const hasSizeMismatch = sizeMismatch || minimumSizeMismatch;
+    const mismatchReason = hasSizeMismatch && crcMismatch ? "size+crc32" : hasSizeMismatch ? "size" : "crc32";
+    return {
+      actualCrc32,
+      actualSize,
+      minimumSourceSize,
+      mismatchReason,
+      requiredCrc32,
+      requiredSize,
+      status: "invalid",
+    };
+  }
+  const missingActual =
+    ((requiredSize !== undefined || minimumSourceSize !== undefined) && actualSize === undefined) ||
+    (requiredCrc32 && !actualCrc32);
+  return {
+    actualCrc32,
+    actualSize,
+    minimumSourceSize,
+    requiredCrc32,
+    requiredSize,
+    status: missingActual ? "pending" : "valid",
+  };
+};
+
 const createApplyPatchChecksumPreflight = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
@@ -102,51 +145,13 @@ const createApplyPatchChecksumPreflight = <TSource>(
     toNormalizedCrc32(requirements?.sourceCrc32) ??
     toNormalizedCrc32(requirements?.filenameCrc32) ??
     toNormalizedCrc32(userInputCrc32);
-  if (requiredSize === undefined && minimumSourceSize === undefined && !requiredCrc32) {
-    return {
-      actualCrc32,
-      actualSize,
-      status: "unknown",
-    };
-  }
-  const sizeMismatch = requiredSize !== undefined && actualSize !== undefined && actualSize !== requiredSize;
-  const minimumSizeMismatch =
-    minimumSourceSize !== undefined && actualSize !== undefined && actualSize < minimumSourceSize;
-  const crcMismatch = !!(requiredCrc32 && actualCrc32 && actualCrc32 !== requiredCrc32);
-  if (sizeMismatch || minimumSizeMismatch || crcMismatch) {
-    const hasSizeMismatch = sizeMismatch || minimumSizeMismatch;
-    const mismatchReason = hasSizeMismatch && crcMismatch ? "size+crc32" : hasSizeMismatch ? "size" : "crc32";
-    return {
-      actualCrc32,
-      actualSize,
-      minimumSourceSize,
-      mismatchReason,
-      requiredCrc32,
-      requiredSize,
-      status: "invalid",
-    };
-  }
-  const missingActual =
-    ((requiredSize !== undefined || minimumSourceSize !== undefined) && actualSize === undefined) ||
-    (requiredCrc32 && !actualCrc32);
-  if (missingActual) {
-    return {
-      actualCrc32,
-      actualSize,
-      minimumSourceSize,
-      requiredCrc32,
-      requiredSize,
-      status: "pending",
-    };
-  }
-  return {
+  return createChecksumPreflightVerdict({
     actualCrc32,
     actualSize,
     minimumSourceSize,
     requiredCrc32,
     requiredSize,
-    status: "valid",
-  };
+  });
 };
 
 const createApplyPatchValidationKey = <TSource>(

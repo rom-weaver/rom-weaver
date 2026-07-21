@@ -327,6 +327,11 @@ const parsePatchValidatePlan = (terminal: ReturnType<typeof getTerminalEvent>): 
   return validation as unknown as PatchValidationPlan;
 };
 
+const isPatchValidationChecksumIgnored = (options: unknown) => {
+  const record = options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined;
+  return Boolean(record?.ignoreChecksumValidation || record?.ignore_checksum_validation);
+};
+
 const invokeRomWeaverPatchValidateWorker = async (
   input: RuntimePatchValidateWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -365,12 +370,7 @@ const invokeRomWeaverPatchValidateWorker = async (
   const validateWithSize = toOptionalInt(requirements?.sourceSize ?? requirements?.source_size);
   const validateWithMinSize = toOptionalInt(requirements?.minimumSourceSize ?? requirements?.minimum_source_size);
   const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
-  const ignoreChecksumValidation = Boolean(
-    (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
-      ?.ignoreChecksumValidation ||
-    (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
-      ?.ignore_checksum_validation,
-  );
+  const ignoreChecksumValidation = isPatchValidationChecksumIgnored(input.options);
   const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
@@ -994,6 +994,50 @@ const getAlignedOptionalFlags = (values: boolean[] | undefined, length: number) 
   return values;
 };
 
+type BundleCreateMetadataInput = {
+  patchAuthors?: string[];
+  patchBases?: Array<"auto" | "base" | "previous">;
+  patchDescriptions?: string[];
+  patchHeaders?: BundleHeaderMode[];
+  patchIds?: string[];
+  patchInputChecks?: string[];
+  patchLabels?: string[];
+  patchNames?: string[];
+  patchOptionals?: boolean[];
+  patchOutputChecks?: string[];
+  patchVersions?: string[];
+};
+
+const createAlignedBundleMetadata = (input: BundleCreateMetadataInput, patchCount: number) => {
+  const alignedStrings = (values: string[] | undefined): string[] | undefined => {
+    const normalized = (values || []).map((value) => String(value ?? "").trim());
+    if (!normalized.some((value) => !!value)) return undefined;
+    while (normalized.length < patchCount) normalized.push("");
+    return normalized.slice(0, patchCount);
+  };
+  const patchHeaders =
+    input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
+      ? Array.from({ length: patchCount }, (_, index) => input.patchHeaders?.[index] || "auto")
+      : undefined;
+  const patchBases =
+    input.patchBases?.length && input.patchBases.some((mode) => mode !== "auto")
+      ? Array.from({ length: patchCount }, (_, index) => input.patchBases?.[index] || "auto")
+      : undefined;
+  return {
+    patchAuthors: alignedStrings(input.patchAuthors),
+    patchBases,
+    patchDescriptions: alignedStrings(input.patchDescriptions),
+    patchHeaders,
+    patchIds: alignedStrings(input.patchIds),
+    patchInputChecks: alignedStrings(input.patchInputChecks),
+    patchLabels: alignedStrings(input.patchLabels),
+    patchNames: alignedStrings(input.patchNames),
+    patchOptionals: getAlignedOptionalFlags(input.patchOptionals, patchCount),
+    patchOutputChecks: alignedStrings(input.patchOutputChecks),
+    patchVersions: alignedStrings(input.patchVersions),
+  };
+};
+
 const invokeRomWeaverBundleCreateWorker = async (
   input: {
     bundlePath?: string;
@@ -1037,30 +1081,20 @@ const invokeRomWeaverBundleCreateWorker = async (
   const bundleRomPath = String(input.bundleRomPath || "").trim();
   // The Rust side requires each metadata array to match the patch count exactly (or be empty), so a
   // partially-filled array is padded with empty strings; empty values round-trip as absent metadata.
-  const alignedStrings = (values: string[] | undefined): string[] | undefined => {
-    const normalized = (values || []).map((value) => String(value ?? "").trim());
-    if (!normalized.some((value) => !!value)) return undefined;
-    while (normalized.length < patchPaths.length) normalized.push("");
-    return normalized.slice(0, patchPaths.length);
-  };
-  const patchNames = alignedStrings(input.patchNames);
-  const patchIds = alignedStrings(input.patchIds);
-  const patchDescriptions = alignedStrings(input.patchDescriptions);
-  const patchVersions = alignedStrings(input.patchVersions);
-  const patchAuthors = alignedStrings(input.patchAuthors);
-  const patchLabels = alignedStrings(input.patchLabels);
-  const patchInputChecks = alignedStrings(input.patchInputChecks);
-  const patchOutputChecks = alignedStrings(input.patchOutputChecks);
+  const {
+    patchAuthors,
+    patchBases,
+    patchDescriptions,
+    patchHeaders,
+    patchIds,
+    patchInputChecks,
+    patchLabels,
+    patchNames,
+    patchOptionals,
+    patchOutputChecks,
+    patchVersions,
+  } = createAlignedBundleMetadata(input, patchPaths.length);
   const outputCheck = String(input.outputCheck || "").trim();
-  const patchOptionals = getAlignedOptionalFlags(input.patchOptionals, patchPaths.length);
-  const patchHeaders =
-    input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
-      ? patchPaths.map((_, index) => input.patchHeaders?.[index] || "auto")
-      : undefined;
-  const patchBases =
-    input.patchBases?.length && input.patchBases.some((mode) => mode !== "auto")
-      ? patchPaths.map((_, index) => input.patchBases?.[index] || "auto")
-      : undefined;
   const command = createRomWeaverCommand("bundle-create", {
     output: outputPath,
     patch: patchPaths,

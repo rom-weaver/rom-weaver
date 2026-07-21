@@ -62,6 +62,12 @@ type DropRouteLifecycle = {
   onBundleDetected?: () => void;
 };
 
+const getDropKind = (files: File[], classification: ReturnType<typeof classifyDroppedFiles>): ActiveDropKind => {
+  const hasBundle = files.some((file) => isBundleFileName(file.name));
+  const hasRom = classification.inputs.length > 0 || files.some((file) => isRomFileName(file.name));
+  return hasBundle ? "bundle" : hasRom ? "rom" : classification.archives.length ? "unknown" : "patch";
+};
+
 /**
  * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-bundle verdict
  * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
@@ -233,18 +239,10 @@ const useUnifiedApplyDrop = (
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
       const classification = classifyDroppedFiles(files);
-      const hasBundle = files.some((file) => isBundleFileName(file.name));
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
       // keep the name predicate for ROM/container overlaps such as RVZ and CHD that probe as archives.
-      const hasRom = classification.inputs.length > 0 || files.some((file) => isRomFileName(file.name));
-      const dropKind: ActiveDropKind = hasBundle
-        ? "bundle"
-        : hasRom
-          ? "rom"
-          : classification.archives.length
-            ? "unknown"
-            : "patch";
+      const dropKind = getDropKind(files, classification);
       // Dynamic bundle promotion must mirror a direct canonical bundle submitted at this moment:
       // it supersedes only routes that already existed, never newer user actions added while probing.
       const precedingDropControllers = new Set(activeDropsRef.current.keys());

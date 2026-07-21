@@ -64,6 +64,50 @@ const CROSS_ORIGIN_ISOLATION_HEADERS = {
   "Cross-Origin-Resource-Policy": "same-origin",
 };
 
+const parseArgument = (arg, args, options) => {
+  if (arg === "--") return;
+  if (arg === "--host") {
+    if (args[0] && !args[0].startsWith("-")) args.shift();
+    options.help = true;
+    options.invalid = true;
+    return;
+  }
+  if (arg.startsWith("--host=") || arg === "-H") {
+    options.help = true;
+    options.invalid = true;
+    return;
+  }
+  if (arg === "--port" || arg === "-p") {
+    options.port = parseInt(args.shift() || "", 10);
+    return;
+  }
+  if (arg.startsWith("--port=")) {
+    options.port = parseInt(arg.slice("--port=".length), 10);
+    return;
+  }
+  if (arg === "--open" || arg === "-o") {
+    options.open = true;
+    return;
+  }
+  if (arg === "--no-coop-coep") {
+    options.noCoopCoep = true;
+    return;
+  }
+  // Explicit positive form (default already on): force server-set COOP/COEP/CORP headers so cross-origin
+  // isolation does not depend on the service worker. Useful for verifying the production bundle in
+  // `preview` - the SW can fail to register behind the self-signed cert, but server headers still isolate.
+  if (arg === "--coop-coep") {
+    options.noCoopCoep = false;
+    return;
+  }
+  if (arg === "--help" || arg === "-h") {
+    options.help = true;
+    return;
+  }
+  options.help = true;
+  options.invalid = true;
+};
+
 const parseArguments = (argv) => {
   const args = argv.slice();
   const options = {
@@ -76,50 +120,7 @@ const parseArguments = (argv) => {
 
   if (args[0] && !args[0].startsWith("-")) options.mode = args.shift();
 
-  while (args.length > 0) {
-    const arg = args.shift();
-    if (arg === "--") continue;
-    if (arg === "--host") {
-      if (args[0] && !args[0].startsWith("-")) args.shift();
-      options.help = true;
-      options.invalid = true;
-      continue;
-    }
-    if (arg.startsWith("--host=") || arg === "-H") {
-      options.help = true;
-      options.invalid = true;
-      continue;
-    }
-    if (arg === "--port" || arg === "-p") {
-      options.port = parseInt(args.shift() || "", 10);
-      continue;
-    }
-    if (arg.startsWith("--port=")) {
-      options.port = parseInt(arg.slice("--port=".length), 10);
-      continue;
-    }
-    if (arg === "--open" || arg === "-o") {
-      options.open = true;
-      continue;
-    }
-    if (arg === "--no-coop-coep") {
-      options.noCoopCoep = true;
-      continue;
-    }
-    // Explicit positive form (default already on): force server-set COOP/COEP/CORP headers so cross-origin
-    // isolation does not depend on the service worker. Useful for verifying the production bundle in
-    // `preview` - the SW can fail to register behind the self-signed cert, but server headers still isolate.
-    if (arg === "--coop-coep") {
-      options.noCoopCoep = false;
-      continue;
-    }
-    if (arg === "--help" || arg === "-h") {
-      options.help = true;
-      continue;
-    }
-    options.help = true;
-    options.invalid = true;
-  }
+  while (args.length > 0) parseArgument(args.shift(), args, options);
 
   if (options.mode !== "dev" && options.mode !== "preview") {
     options.help = true;

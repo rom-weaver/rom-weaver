@@ -373,6 +373,16 @@ function createCommandRequest(command, subcommand) {
   return createRomWeaverCommand(command, {});
 }
 
+function readCommandOptionValue(args, index, commandIndex, name, value) {
+  if (value !== null) return { index, value };
+  const canConsumeNext =
+    (index > commandIndex || name === "log-level") &&
+    !["json", "progress", "no-progress", "dep-trace", "verbose", "quiet"].includes(name) &&
+    index + 1 < args.length &&
+    !String(args[index + 1] ?? "").startsWith("--");
+  return canConsumeNext ? { index: index + 1, value: String(args[index + 1]) } : { index, value };
+}
+
 function parseCommandTokens(args, commandIndex) {
   const flags = new Set();
   const flagCounts = new Map();
@@ -405,17 +415,15 @@ function parseCommandTokens(args, commandIndex) {
     const withoutPrefix = raw.slice(2);
     const equalsIndex = withoutPrefix.indexOf("=");
     const name = equalsIndex >= 0 ? withoutPrefix.slice(0, equalsIndex) : withoutPrefix;
-    let value = equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : null;
-    if (
-      value === null &&
-      (index > commandIndex || name === "log-level") &&
-      !["json", "progress", "no-progress", "dep-trace", "verbose", "quiet"].includes(name) &&
-      index + 1 < args.length &&
-      !String(args[index + 1] ?? "").startsWith("--")
-    ) {
-      value = String(args[index + 1]);
-      index += 1;
-    }
+    const optionValue = readCommandOptionValue(
+      args,
+      index,
+      commandIndex,
+      name,
+      equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : null,
+    );
+    index = optionValue.index;
+    const value = optionValue.value;
     if (value === null) {
       flags.add(name);
       flagCounts.set(name, (flagCounts.get(name) ?? 0) + 1);

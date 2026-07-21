@@ -59,6 +59,48 @@ type UseListReorderArgs = {
   onReorder: (from: number, to: number) => void;
 };
 
+const getGridReorderTarget = (row: RowSnapshot, snapshot: RowSnapshot[], from: number, dx: number, dy: number) => {
+  const projectedX = row.midX + dx;
+  const projectedY = row.midY + dy;
+  let target = from;
+  let bestDistance = 0.7;
+  for (let index = 0; index < snapshot.length; index += 1) {
+    if (index === from) continue;
+    const candidate = snapshot[index];
+    if (!candidate) continue;
+    const distance = Math.hypot(
+      (projectedX - candidate.midX) / Math.max(row.width, candidate.width),
+      (projectedY - candidate.midY) / Math.max(row.height, candidate.height),
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      target = index;
+    }
+  }
+  return target;
+};
+
+const getLinearReorderTarget = (row: RowSnapshot, snapshot: RowSnapshot[], from: number, dy: number) => {
+  const half = (row.bottomRel - row.topRel) / 2;
+  let target = from;
+  if (dy > 0) {
+    const lead = row.mid + half + dy;
+    for (let index = from + 1; index < snapshot.length; index += 1) {
+      const next = snapshot[index];
+      if (!next || lead <= next.mid) break;
+      target = index;
+    }
+  } else if (dy < 0) {
+    const lead = row.mid - half + dy;
+    for (let index = from - 1; index >= 0; index -= 1) {
+      const next = snapshot[index];
+      if (!next || lead >= next.mid) break;
+      target = index;
+    }
+  }
+  return target;
+};
+
 const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<Map<number, HTMLElement>>(new Map());
@@ -143,44 +185,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     const snapshot = snapshotRef.current;
     const row = snapshot[from];
     if (!row) return from;
-    if (grid) {
-      const projectedX = row.midX + dx;
-      const projectedY = row.midY + dy;
-      let target = from;
-      let bestDistance = 0.7;
-      for (let index = 0; index < snapshot.length; index += 1) {
-        if (index === from) continue;
-        const candidate = snapshot[index];
-        if (!candidate) continue;
-        const distance = Math.hypot(
-          (projectedX - candidate.midX) / Math.max(row.width, candidate.width),
-          (projectedY - candidate.midY) / Math.max(row.height, candidate.height),
-        );
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          target = index;
-        }
-      }
-      return target;
-    }
-    const half = (row.bottomRel - row.topRel) / 2;
-    let to = from;
-    if (dy > 0) {
-      const lead = row.mid + half + dy;
-      for (let index = from + 1; index < snapshot.length; index += 1) {
-        const next = snapshot[index];
-        if (!next || lead <= next.mid) break;
-        to = index;
-      }
-    } else if (dy < 0) {
-      const lead = row.mid - half + dy;
-      for (let index = from - 1; index >= 0; index -= 1) {
-        const next = snapshot[index];
-        if (!next || lead >= next.mid) break;
-        to = index;
-      }
-    }
-    return to;
+    return grid ? getGridReorderTarget(row, snapshot, from, dx, dy) : getLinearReorderTarget(row, snapshot, from, dy);
   };
 
   const updateDrag = (clientX: number, clientY: number) => {

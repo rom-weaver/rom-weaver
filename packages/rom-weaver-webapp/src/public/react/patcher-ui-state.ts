@@ -285,6 +285,79 @@ const normalizeInputProgress = (progress: JsonValue | object | null | undefined)
   return createProgressViewModelFromEvent(progress, { stage: "input" });
 };
 
+const normalizeRomInputInfo = (
+  info: JsonValue | object | null | undefined,
+  fallbackChecksumTiming = "",
+): RomInputInfoState => {
+  const source = isRecord(info) ? info : {};
+  const checksumVariants = Array.isArray(source.checksumVariants)
+    ? source.checksumVariants.filter(
+        (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
+      )
+    : undefined;
+  return {
+    archiveName: typeof source.archiveName === "string" ? source.archiveName : "",
+    checksumsExpanded: source.checksumsExpanded !== false,
+    checksumTiming: typeof source.checksumTiming === "string" ? source.checksumTiming : fallbackChecksumTiming,
+    checksumVariants,
+    crc32: typeof source.crc32 === "string" ? source.crc32 : "",
+    fileName: typeof source.fileName === "string" ? source.fileName : "",
+    md5: typeof source.md5 === "string" ? source.md5 : "",
+    romInfo: typeof source.romInfo === "string" ? source.romInfo : "",
+    romProbe: normalizeRomProbe(source.romProbe),
+    romType: isRecord(source.romType)
+      ? {
+          discFormat: typeof source.romType.discFormat === "string" ? source.romType.discFormat : undefined,
+          platform: typeof source.romType.platform === "string" ? source.romType.platform : undefined,
+          recommendedFormat:
+            typeof source.romType.recommendedFormat === "string" ? source.romType.recommendedFormat : undefined,
+        }
+      : undefined,
+    sha1: typeof source.sha1 === "string" ? source.sha1 : "",
+    validationPhase: typeof source.validationPhase === "string" ? source.validationPhase : "idle",
+  };
+};
+
+const normalizeRomInputRow = (
+  row: JsonValue | object | null | undefined,
+  index: number,
+  fallbackChecksumTiming = "",
+): RomInputRowState => {
+  const source = isRecord(row) ? row : {};
+  const archivePathEntries = Array.isArray(source.archivePathEntries)
+    ? source.archivePathEntries
+        .map((entry) => (isRecord(entry) ? entry : {}))
+        .map((entry) => ({
+          decompressionTimeMs: typeof entry.decompressionTimeMs === "number" ? entry.decompressionTimeMs : undefined,
+          fileName: typeof entry.fileName === "string" ? entry.fileName : "",
+          outputSize: typeof entry.outputSize === "number" ? entry.outputSize : undefined,
+          sourceSize: typeof entry.sourceSize === "number" ? entry.sourceSize : undefined,
+        }))
+        .filter((entry) => !!entry.fileName)
+    : undefined;
+  return {
+    archivePathEntries,
+    chdMode: typeof source.chdMode === "string" ? source.chdMode : undefined,
+    cueText: typeof source.cueText === "string" ? source.cueText : undefined,
+    decompressionTimeMs: typeof source.decompressionTimeMs === "number" ? source.decompressionTimeMs : undefined,
+    disabled: !!source.disabled,
+    gdiText: typeof source.gdiText === "string" ? source.gdiText : undefined,
+    groupId: typeof source.groupId === "string" ? source.groupId : "",
+    id: typeof source.id === "string" ? source.id : `rom-input-${index + 1}`,
+    info: normalizeRomInputInfo(isRecord(source.info) ? source.info : source, fallbackChecksumTiming),
+    invalid: !!source.invalid,
+    kind: typeof source.kind === "string" ? source.kind : "",
+    loading: !!source.loading,
+    order: typeof source.order === "number" ? source.order : index,
+    progress: normalizeInputProgress(source.progress),
+    size: typeof source.size === "number" ? source.size : undefined,
+    sourceSize: typeof source.sourceSize === "number" ? source.sourceSize : undefined,
+    splitBinAvailable: source.splitBinAvailable === true,
+    valid: !!source.valid,
+    wasDecompressed: source.wasDecompressed === true,
+  };
+};
+
 const normalizeEmbeddedPatchOptions = (options: JsonValue | object | null | undefined): EmbeddedPatchSelectOption[] =>
   Array.isArray(options)
     ? options.map((option, index) => {
@@ -358,79 +431,6 @@ const normalizePatcherUiState = (
   const checksumOverride = isRecord(nextState.checksumOverride) ? nextState.checksumOverride : {};
   const outputChecksumWarning = isRecord(nextState.outputChecksumWarning) ? nextState.outputChecksumWarning : {};
   const sectionTimings = isRecord(nextState.sectionTimings) ? nextState.sectionTimings : {};
-  const normalizeRomInputInfo = (
-    info: JsonValue | object | null | undefined,
-    fallbackChecksumTiming = "",
-  ): RomInputInfoState => {
-    const source = isRecord(info) ? info : {};
-    const checksumVariants = Array.isArray(source.checksumVariants)
-      ? source.checksumVariants.filter(
-          (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
-        )
-      : undefined;
-    return {
-      archiveName: typeof source.archiveName === "string" ? source.archiveName : "",
-      checksumsExpanded: source.checksumsExpanded !== false,
-      checksumTiming: typeof source.checksumTiming === "string" ? source.checksumTiming : fallbackChecksumTiming,
-      checksumVariants,
-      crc32: typeof source.crc32 === "string" ? source.crc32 : "",
-      fileName: typeof source.fileName === "string" ? source.fileName : "",
-      md5: typeof source.md5 === "string" ? source.md5 : "",
-      romInfo: typeof source.romInfo === "string" ? source.romInfo : "",
-      romProbe: normalizeRomProbe(source.romProbe),
-      romType: isRecord(source.romType)
-        ? {
-            discFormat: typeof source.romType.discFormat === "string" ? source.romType.discFormat : undefined,
-            platform: typeof source.romType.platform === "string" ? source.romType.platform : undefined,
-            recommendedFormat:
-              typeof source.romType.recommendedFormat === "string" ? source.romType.recommendedFormat : undefined,
-          }
-        : undefined,
-      sha1: typeof source.sha1 === "string" ? source.sha1 : "",
-      validationPhase: typeof source.validationPhase === "string" ? source.validationPhase : "idle",
-    };
-  };
-  const normalizeRomInputRow = (
-    row: JsonValue | object | null | undefined,
-    index: number,
-    fallback: { input: typeof romInput; info: typeof nextState.romInfo; checksumTiming: string } | null = null,
-  ): RomInputRowState => {
-    const source = isRecord(row) ? row : {};
-    const rowInput = isRecord(source) ? source : {};
-    const info = normalizeRomInputInfo(isRecord(source.info) ? source.info : source, fallback?.checksumTiming || "");
-    const archivePathEntries = Array.isArray(rowInput.archivePathEntries)
-      ? rowInput.archivePathEntries
-          .map((entry) => (isRecord(entry) ? entry : {}))
-          .map((entry) => ({
-            decompressionTimeMs: typeof entry.decompressionTimeMs === "number" ? entry.decompressionTimeMs : undefined,
-            fileName: typeof entry.fileName === "string" ? entry.fileName : "",
-            outputSize: typeof entry.outputSize === "number" ? entry.outputSize : undefined,
-            sourceSize: typeof entry.sourceSize === "number" ? entry.sourceSize : undefined,
-          }))
-          .filter((entry) => !!entry.fileName)
-      : undefined;
-    return {
-      archivePathEntries,
-      chdMode: typeof rowInput.chdMode === "string" ? rowInput.chdMode : undefined,
-      cueText: typeof rowInput.cueText === "string" ? rowInput.cueText : undefined,
-      decompressionTimeMs: typeof rowInput.decompressionTimeMs === "number" ? rowInput.decompressionTimeMs : undefined,
-      disabled: !!rowInput.disabled,
-      gdiText: typeof rowInput.gdiText === "string" ? rowInput.gdiText : undefined,
-      groupId: typeof rowInput.groupId === "string" ? rowInput.groupId : "",
-      id: typeof rowInput.id === "string" ? rowInput.id : `rom-input-${index + 1}`,
-      info,
-      invalid: !!rowInput.invalid,
-      kind: typeof rowInput.kind === "string" ? rowInput.kind : "",
-      loading: !!rowInput.loading,
-      order: typeof rowInput.order === "number" ? rowInput.order : index,
-      progress: normalizeInputProgress(rowInput.progress),
-      size: typeof rowInput.size === "number" ? rowInput.size : undefined,
-      sourceSize: typeof rowInput.sourceSize === "number" ? rowInput.sourceSize : undefined,
-      splitBinAvailable: rowInput.splitBinAvailable === true,
-      valid: !!rowInput.valid,
-      wasDecompressed: rowInput.wasDecompressed === true,
-    };
-  };
   const normalizedRomInputs = romInputs.map((row, index) => normalizeRomInputRow(row, index));
   const shouldUseSingleRomInputFallback =
     !normalizedRomInputs.length &&
@@ -512,11 +512,11 @@ const normalizePatcherUiState = (
     },
     romInputs: shouldUseSingleRomInputFallback
       ? [
-          normalizeRomInputRow({ ...romInput, id: "input", info: romInfo }, 0, {
-            checksumTiming: typeof sectionTimings.checksum === "string" ? sectionTimings.checksum : "",
-            info: romInfo,
-            input: romInput,
-          }),
+          normalizeRomInputRow(
+            { ...romInput, id: "input", info: romInfo },
+            0,
+            typeof sectionTimings.checksum === "string" ? sectionTimings.checksum : "",
+          ),
         ]
       : normalizedRomInputs,
     sectionTimings: {

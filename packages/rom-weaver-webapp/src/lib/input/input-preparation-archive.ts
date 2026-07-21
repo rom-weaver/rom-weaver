@@ -386,6 +386,34 @@ const readSucceededExtractStep = (progressDetails: unknown): ExtractStepDetails 
   return step as unknown as ExtractStepDetails;
 };
 
+const appendDescentExtractStep = (progressDetails: unknown, steps: DescentExtractStep[], compressionFormat: string) => {
+  const step = readSucceededExtractStep(progressDetails);
+  if (!step) return;
+  const stepOutputs = Array.isArray(step.outputs) ? step.outputs : [];
+  const outputSize = stepOutputs.reduce((total, output) => total + toFiniteBytes(output?.size_bytes), 0);
+  steps.push({
+    depth: typeof step.depth === "number" ? step.depth : steps.length,
+    format: typeof step.format === "string" && step.format ? step.format : compressionFormat,
+    outDir: typeof step.out_dir === "string" ? step.out_dir : "",
+    outputSize,
+    source: typeof step.source === "string" ? step.source : "",
+    sourceName: getBaseFileName(step.source_name),
+    ...(step.extract_time_ms !== null &&
+    step.extract_time_ms !== undefined &&
+    Number.isFinite(Number(step.extract_time_ms))
+      ? { extractTimeMs: Number(step.extract_time_ms) }
+      : {}),
+  });
+};
+
+const getChdMode = (assets: Array<{ discFormat?: string; kind?: string }>) => {
+  const discFormats = assets.map((asset) => String(asset.discFormat || "").toLowerCase());
+  return assets.some((asset) => asset.kind === "cue" || asset.kind === "gdi") ||
+    discFormats.some((format) => format === "cd" || format.includes("gd"))
+    ? "cd"
+    : "dvd";
+};
+
 /** Discover a compressed archive's input assets with a SINGLE recursive ingest (classify + descend +
  * checksum): the Rust core descends nested containers, resolving one payload per level (auto-pick when
  * unambiguous, host prompt when not, plus the multi-track CHD CD split-bin prompt), and returns the
@@ -427,35 +455,13 @@ const resolveArchiveInputAssetsByDescent = async (
     onLog: options?.onLog,
     onProgress: (progress) => {
       const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
-      const step = readSucceededExtractStep(details);
-      if (step) {
-        const stepOutputs = Array.isArray(step.outputs) ? step.outputs : [];
-        const outputSize = stepOutputs.reduce((total, output) => total + toFiniteBytes(output?.size_bytes), 0);
-        steps.push({
-          depth: typeof step.depth === "number" ? step.depth : steps.length,
-          format: typeof step.format === "string" && step.format ? step.format : compressionFormat,
-          outDir: typeof step.out_dir === "string" ? step.out_dir : "",
-          outputSize,
-          source: typeof step.source === "string" ? step.source : "",
-          sourceName: getBaseFileName(step.source_name),
-          ...(step.extract_time_ms !== null &&
-          step.extract_time_ms !== undefined &&
-          Number.isFinite(Number(step.extract_time_ms))
-            ? { extractTimeMs: Number(step.extract_time_ms) }
-            : {}),
-        });
-      }
+      appendDescentExtractStep(details, steps, compressionFormat);
       options?.onProgress?.(progress as never);
     },
     ...(options?.signal ? { signal: options.signal } : {}),
   });
   if (compressionFormat === "chd") {
-    const discFormats = ingestResult.assets.map((asset) => String(asset.discFormat || "").toLowerCase());
-    const chdMode =
-      ingestResult.assets.some((asset) => asset.kind === "cue" || asset.kind === "gdi") ||
-      discFormats.some((format) => format === "cd" || format.includes("gd"))
-        ? "cd"
-        : "dvd";
+    const chdMode = getChdMode(ingestResult.assets);
     options?.onProgress?.({
       details: { chdMode },
       label: `Extracting ${archiveFile.fileName || "CHD"}...`,

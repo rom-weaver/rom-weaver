@@ -354,6 +354,68 @@ const runExhaustiveContainerCasesIfNeeded = async (
   if (profile === "exhaustive") await runExhaustiveContainerCases(context);
 };
 
+const runContainerFailureCases = async ({
+  archiveSourcePath,
+  dir,
+  opfsHandle,
+  runCommand,
+}: {
+  archiveSourcePath: string;
+  dir: string;
+  opfsHandle: FileSystemDirectoryHandle;
+  runCommand: BrowserFormatMatrixRunCommand;
+}) => {
+  const compressExpectations = createContainerCompressFailureExpectations();
+  for (const [format, pattern] of compressExpectations.entries()) {
+    const archivePath = joinGuestPath(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
+    const compressResult = await runCommand(
+      `compress unsupported ${format}`,
+      createRomWeaverCommand("compress", { format, input: [archiveSourcePath], output: archivePath, threads: 1 }),
+    );
+    assertFailedByPattern(compressResult, pattern, `compress ${format}`);
+  }
+  const extractExpectations = new Map([
+    ["rar", /archive is invalid|unsupported archive signature/i],
+    ["tar", /failed to read entire block|unrecognized archive format|archive is invalid/i],
+    ["tar.gz", /invalid gzip header|unrecognized archive format|archive is invalid/i],
+    ["tar.bz2", /bz2 header missing|unrecognized archive format|archive is invalid/i],
+    ["tar.xz", /invalid xz magic bytes|unrecognized archive format|archive is invalid/i],
+    ["pbp", /too small to be a pbp container/i],
+    ["gcz", /failed to open gcz source/i],
+    ["wbfs", /failed to open wbfs source/i],
+    ["wia", /failed to open wia source/i],
+    ["tgc", /failed to open tgc source/i],
+    ["nfs", /failed to open nfs source/i],
+    ["rvz", /failed to open rvz source/i],
+    ["xiso", /xiso extract is not supported yet|not an Xbox XDVDFS image|not an XDVDFS volume/i],
+  ]);
+  for (const [format, pattern] of extractExpectations.entries()) {
+    const badSourcePath = joinGuestPath(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
+    await writeGuestFile(opfsHandle, badSourcePath, toBytes("not-a-real-container"));
+    const extractResult = await runCommand(
+      `ingest invalid ${format}`,
+      createRomWeaverCommand("ingest", {
+        output: joinGuestPath(dir, `extract-${formatToken(format)}-out`),
+        input: badSourcePath,
+        threads: 1,
+      }),
+    );
+    assertFailedByPattern(extractResult, pattern, `ingest ${format}`);
+  }
+};
+
+const createMatrixPatchInputs = async ({ dir, opfsHandle }: { dir: string; opfsHandle: FileSystemDirectoryHandle }) => {
+  const originalPath = joinGuestPath(dir, "all-format-original.bin");
+  const modifiedPath = joinGuestPath(dir, "all-format-modified.bin");
+  const original = new Uint8Array(4096);
+  for (let index = 0; index < original.length; index += 1) original[index] = index % 251;
+  const modified = new Uint8Array(original);
+  for (let index = 0; index < 300; index += 1) modified[100 + index] = ((modified[100 + index] ?? 0) + 17) % 256;
+  await writeGuestFile(opfsHandle, originalPath, original);
+  await writeGuestFile(opfsHandle, modifiedPath, modified);
+  return { modified, modifiedPath, original, originalPath };
+};
+
 export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixCoreOptions) {
   const { dir, fixtures, onEvent, onStep, opfsHandle, profile = "fast", runJson } = input;
   const state = createMatrixState({ onEvent, onStep });
@@ -372,63 +434,9 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   await runContainerRoundTrips(containerRunContext);
   await runExhaustiveContainerCasesIfNeeded(profile, containerRunContext);
 
-  const containerCompressFailureExpectations = createContainerCompressFailureExpectations();
-  for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
-    const archivePath = joinGuestPath(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
-    const compressResult = await runCommand(
-      `compress unsupported ${format}`,
-      createRomWeaverCommand("compress", {
-        format,
-        input: [archiveSourcePath],
-        output: archivePath,
-        threads: 1,
-      }),
-    );
-    assertFailedByPattern(compressResult, pattern, `compress ${format}`);
-  }
+  await runContainerFailureCases({ archiveSourcePath, dir, opfsHandle, runCommand });
 
-  const containerExtractFailureExpectations = new Map([
-    ["rar", /archive is invalid|unsupported archive signature/i],
-    ["tar", /failed to read entire block|unrecognized archive format|archive is invalid/i],
-    ["tar.gz", /invalid gzip header|unrecognized archive format|archive is invalid/i],
-    ["tar.bz2", /bz2 header missing|unrecognized archive format|archive is invalid/i],
-    ["tar.xz", /invalid xz magic bytes|unrecognized archive format|archive is invalid/i],
-    ["pbp", /too small to be a pbp container/i],
-    ["gcz", /failed to open gcz source/i],
-    ["wbfs", /failed to open wbfs source/i],
-    ["wia", /failed to open wia source/i],
-    ["tgc", /failed to open tgc source/i],
-    ["nfs", /failed to open nfs source/i],
-    ["rvz", /failed to open rvz source/i],
-    ["xiso", /xiso extract is not supported yet|not an Xbox XDVDFS image|not an XDVDFS volume/i],
-  ]);
-  for (const [format, pattern] of containerExtractFailureExpectations.entries()) {
-    const badSourcePath = joinGuestPath(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
-    await writeGuestFile(opfsHandle, badSourcePath, toBytes("not-a-real-container"));
-    const outDir = joinGuestPath(dir, `extract-${formatToken(format)}-out`);
-    const extractResult = await runCommand(
-      `ingest invalid ${format}`,
-      createRomWeaverCommand("ingest", {
-        output: outDir,
-        input: badSourcePath,
-        threads: 1,
-      }),
-    );
-    assertFailedByPattern(extractResult, pattern, `ingest ${format}`);
-  }
-
-  const originalPath = joinGuestPath(dir, "all-format-original.bin");
-  const modifiedPath = joinGuestPath(dir, "all-format-modified.bin");
-  const original = new Uint8Array(4096);
-  for (let index = 0; index < original.length; index += 1) {
-    original[index] = index % 251;
-  }
-  const modified = new Uint8Array(original);
-  for (let index = 0; index < 300; index += 1) {
-    modified[100 + index] = ((modified[100 + index] ?? 0) + 17) % 256;
-  }
-  await writeGuestFile(opfsHandle, originalPath, original);
-  await writeGuestFile(opfsHandle, modifiedPath, modified);
+  const { modified, modifiedPath, original, originalPath } = await createMatrixPatchInputs({ dir, opfsHandle });
 
   const patchFormats = BROWSER_FORMAT_MATRIX_PATCH_FORMATS;
 
