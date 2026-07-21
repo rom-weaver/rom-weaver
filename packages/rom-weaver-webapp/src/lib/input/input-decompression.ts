@@ -66,6 +66,78 @@ const throwRecursiveDecompressionStall = (file: PatchFileInstance): never => {
   );
 };
 
+const finalizeContainerDisabledInput = ({
+  current,
+  decompressionTimeMs,
+  harvestedSidecarPatches,
+  options,
+  parentCompressions,
+  pass,
+  sourceIndex,
+  sourceSize,
+  wasDecompressed,
+}: {
+  current: PatchFileInstance;
+  decompressionTimeMs: number;
+  harvestedSidecarPatches: PreparedSidecarPatch[];
+  options: ApplyWorkflowOptions | undefined;
+  parentCompressions: InputParentCompression[];
+  pass: number;
+  sourceIndex: number;
+  sourceSize: number;
+  wasDecompressed: boolean;
+}) => {
+  traceInputDecompression(options, "input.decompression.assets.finalize", {
+    file: describeArchiveFileForTrace(current),
+    pass,
+    reason: "container-inputs-disabled",
+    sourceIndex,
+  });
+  return finalizePreparedInputAssets(
+    [makeRomAsset(makeInputId(sourceIndex, current.fileName, normalizeArchiveEntryName), current)],
+    sourceSize,
+    wasDecompressed,
+    decompressionTimeMs,
+    parentCompressions,
+    harvestedSidecarPatches,
+  );
+};
+
+const recordDecompressionMetrics = ({
+  assets,
+  current,
+  durationMs,
+  parentCompressions,
+}: {
+  assets: InputAsset[];
+  current: PatchFileInstance;
+  durationMs: number;
+  parentCompressions: InputParentCompression[];
+}) => {
+  const nestedPreparation = getInputPreparationMetrics(assets);
+  const nestedSteps = [...(nestedPreparation?.parentCompressions || [])].sort(
+    (left, right) => left.depth - right.depth,
+  );
+  if (nestedSteps.length) {
+    for (const entry of nestedSteps) parentCompressions.push({ ...entry, depth: parentCompressions.length });
+    const nestedDurationMs =
+      typeof nestedPreparation?.decompressionTimeMs === "number" &&
+      Number.isFinite(nestedPreparation.decompressionTimeMs)
+        ? nestedPreparation.decompressionTimeMs
+        : getKnownDecompressionTimeMs(nestedSteps);
+    return typeof nestedDurationMs === "number" && Number.isFinite(nestedDurationMs) ? nestedDurationMs : durationMs;
+  }
+  parentCompressions.push({
+    decompressionTimeMs: durationMs,
+    depth: parentCompressions.length,
+    fileName: current.fileName || "input.bin",
+    kind: getCompressionKind(current),
+    outputSize: assets.reduce((total, asset) => total + asset.size, 0),
+    sourceSize: current.fileSize,
+  });
+  return durationMs;
+};
+
 const hasSameFileIdentity = (previous: PatchFileInstance, next: PatchFileInstance) =>
   previous === next ||
   (String(previous.fileName || "") === String(next.fileName || "") &&
@@ -347,22 +419,18 @@ const resolveCompressedInputAssets = async (
   let wasDecompressed = false;
   const sourceSize = file.fileSize;
   for (let pass = 0; pass < MAX_DECOMPRESSION_PASSES; pass += 1) {
-    if (options?.input?.containerInputsEnabled === false) {
-      traceInputDecompression(options, "input.decompression.assets.finalize", {
-        file: describeArchiveFileForTrace(current),
+    if (options?.input?.containerInputsEnabled === false)
+      return finalizeContainerDisabledInput({
+        current,
+        decompressionTimeMs,
+        harvestedSidecarPatches,
+        options,
+        parentCompressions,
         pass,
-        reason: "container-inputs-disabled",
         sourceIndex,
-      });
-      return finalizePreparedInputAssets(
-        [makeRomAsset(makeInputId(sourceIndex, current.fileName, normalizeArchiveEntryName), current)],
         sourceSize,
         wasDecompressed,
-        decompressionTimeMs,
-        parentCompressions,
-        harvestedSidecarPatches,
-      );
-    }
+      });
     const classification = getCompressionClassification(current);
     traceInputDecompression(options, "input.decompression.assets.pass", {
       classificationKind: classification.kind,
@@ -467,35 +535,7 @@ const resolveCompressedInputAssets = async (
       sourceIndex,
     });
     wasDecompressed = true;
-    const nestedPreparation = getInputPreparationMetrics(assets);
-    const nestedSteps = [...(nestedPreparation?.parentCompressions || [])].sort(
-      (left, right) => left.depth - right.depth,
-    );
-    if (nestedSteps.length) {
-      for (const entry of nestedSteps) {
-        parentCompressions.push({
-          ...entry,
-          depth: parentCompressions.length,
-        });
-      }
-      const nestedDurationMs =
-        typeof nestedPreparation?.decompressionTimeMs === "number" &&
-        Number.isFinite(nestedPreparation.decompressionTimeMs)
-          ? nestedPreparation.decompressionTimeMs
-          : getKnownDecompressionTimeMs(nestedSteps);
-      decompressionTimeMs +=
-        typeof nestedDurationMs === "number" && Number.isFinite(nestedDurationMs) ? nestedDurationMs : durationMs;
-    } else {
-      decompressionTimeMs += durationMs;
-      parentCompressions.push({
-        decompressionTimeMs: durationMs,
-        depth: parentCompressions.length,
-        fileName: current.fileName || "input.bin",
-        kind: getCompressionKind(current),
-        outputSize: assets.reduce((total, asset) => total + asset.size, 0),
-        sourceSize: current.fileSize,
-      });
-    }
+    decompressionTimeMs += recordDecompressionMetrics({ assets, current, durationMs, parentCompressions });
     selectedEntryName = undefined;
     if (assets.length !== 1 || assets[0]?.kind !== "rom") {
       traceInputDecompression(options, "input.decompression.assets.finalize", {

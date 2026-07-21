@@ -347,6 +347,13 @@ const runExhaustiveContainerCases = async ({
   }
 };
 
+const runExhaustiveContainerCasesIfNeeded = async (
+  profile: BrowserFormatMatrixProfile,
+  context: Parameters<typeof runExhaustiveContainerCases>[0],
+) => {
+  if (profile === "exhaustive") await runExhaustiveContainerCases(context);
+};
+
 export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixCoreOptions) {
   const { dir, fixtures, onEvent, onStep, opfsHandle, profile = "fast", runJson } = input;
   const state = createMatrixState({ onEvent, onStep });
@@ -363,7 +370,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
 
   const containerRunContext = { archiveSourcePath, dir, opfsHandle, profile, runCommand };
   await runContainerRoundTrips(containerRunContext);
-  if (profile === "exhaustive") await runExhaustiveContainerCases(containerRunContext);
+  await runExhaustiveContainerCasesIfNeeded(profile, containerRunContext);
 
   const containerCompressFailureExpectations = createContainerCompressFailureExpectations();
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {

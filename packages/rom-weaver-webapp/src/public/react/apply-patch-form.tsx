@@ -82,6 +82,129 @@ const buildEagerPatchStageInfo = (
   return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
 };
 
+const getApplyOutputVerification = ({
+  bundleChainStatus,
+  bundleOutputChecksum,
+  chainPlans,
+  enabledPatchCount,
+  localizer,
+}: {
+  bundleChainStatus: string | null;
+  bundleOutputChecksum: string | null;
+  chainPlans: ReadonlyMap<string, PatchValidationPlan>;
+  enabledPatchCount: number;
+  localizer: ReturnType<typeof useUiLocalizer>;
+}): { level: "ok" | "warn"; message: string } | null => {
+  if (enabledPatchCount <= 0) return null;
+  const finalEntries: Array<{ enforceable: boolean }> = [];
+  let orderIssue = false;
+  let inputIssue = false;
+  for (const plan of chainPlans.values()) {
+    for (const entry of plan.output_verification) {
+      if (entry.patch_index === plan.patch_count - 1) finalEntries.push(entry);
+    }
+    for (const verdict of plan.per_patch) {
+      if (verdict.expected_predecessor !== undefined) orderIssue = true;
+      if (verdict.input_verdict === "failed") inputIssue = true;
+    }
+  }
+  if (finalEntries.length) {
+    if (finalEntries.every((entry) => entry.enforceable))
+      return { level: "ok", message: localizer.message("ui.output.verified") };
+    if (orderIssue) return { level: "warn", message: localizer.message("ui.output.outOfOrder") };
+    if (inputIssue) return { level: "warn", message: localizer.message("ui.output.inputMismatch") };
+    return { level: "warn", message: localizer.message("ui.output.differentChain") };
+  }
+  if (bundleOutputChecksum && bundleChainStatus) {
+    if (bundleChainStatus === "full") return { level: "ok", message: localizer.message("ui.output.verified") };
+    return {
+      level: "warn",
+      message:
+        bundleChainStatus === "partial"
+          ? localizer.message("ui.output.bundlePartial")
+          : localizer.message("ui.output.bundleDiverged"),
+    };
+  }
+  return null;
+};
+
+const getSinglePatchReplaceIndex = ({
+  forcePatchWorkflowRefresh,
+  inputsChanged,
+  patchesAppended,
+  patchesChanged,
+  preparationSettingsChanged,
+  previousPatches,
+  snapshotPatches,
+}: {
+  forcePatchWorkflowRefresh: boolean;
+  inputsChanged: boolean;
+  patchesAppended: boolean;
+  patchesChanged: boolean;
+  preparationSettingsChanged: boolean;
+  previousPatches: BinarySource[];
+  snapshotPatches: BinarySource[];
+}) => {
+  if (
+    !patchesChanged ||
+    patchesAppended ||
+    forcePatchWorkflowRefresh ||
+    preparationSettingsChanged ||
+    inputsChanged ||
+    !snapshotPatches.length ||
+    snapshotPatches.length !== previousPatches.length
+  )
+    return -1;
+  const previousIds = getBinarySourceListStableIds(previousPatches);
+  const nextIds = getBinarySourceListStableIds(snapshotPatches);
+  let replaceIndex = -1;
+  for (let index = 0; index < nextIds.length; index += 1) {
+    if (previousIds[index] === nextIds[index]) continue;
+    if (replaceIndex !== -1) return -1;
+    replaceIndex = index;
+  }
+  return replaceIndex;
+};
+
+const arePatchesAppended = ({
+  forcePatchWorkflowRefresh,
+  inputsChanged,
+  patchesChanged,
+  preparationSettingsChanged,
+  previousPatches,
+  snapshotPatches,
+}: {
+  forcePatchWorkflowRefresh: boolean;
+  inputsChanged: boolean;
+  patchesChanged: boolean;
+  preparationSettingsChanged: boolean;
+  previousPatches: BinarySource[];
+  snapshotPatches: BinarySource[];
+}) =>
+  patchesChanged &&
+  !forcePatchWorkflowRefresh &&
+  !preparationSettingsChanged &&
+  !inputsChanged &&
+  snapshotPatches.length > previousPatches.length &&
+  sameBinarySourceLists(previousPatches, snapshotPatches.slice(0, previousPatches.length));
+
+const setWorkflowSettingsIfChanged = async ({
+  baseSettings,
+  changed,
+  snapshot,
+  workflow,
+}: {
+  baseSettings: ReturnType<typeof createBaseApplyWorkflowSettings>;
+  changed: boolean;
+  snapshot: ApplyWorkflowSessionInput;
+  workflow: ApplyWorkflow;
+}) => {
+  if (!changed) return;
+  emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings start");
+  await workflow.setSettings(baseSettings);
+  emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings finish");
+};
+
 function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const providerSettings = useApplySettings();
@@ -344,39 +467,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // authored chain is enabled in order) is the fallback source.
   const enabledPatchCount = currentPatchNames.length - disabledPatchIds.size;
   const localizer = useUiLocalizer();
-  const outputVerification = useMemo((): { level: "ok" | "warn"; message: string } | null => {
-    if (enabledPatchCount <= 0) return null;
-    const finalEntries: Array<{ enforceable: boolean }> = [];
-    let orderIssue = false;
-    let inputIssue = false;
-    for (const plan of chainPlans.values()) {
-      for (const entry of plan.output_verification) {
-        if (entry.patch_index === plan.patch_count - 1) finalEntries.push(entry);
-      }
-      for (const verdict of plan.per_patch) {
-        if (verdict.expected_predecessor !== undefined) orderIssue = true;
-        if (verdict.input_verdict === "failed") inputIssue = true;
-      }
-    }
-    if (finalEntries.length) {
-      if (finalEntries.every((entry) => entry.enforceable))
-        return { level: "ok", message: localizer.message("ui.output.verified") };
-      if (orderIssue) return { level: "warn", message: localizer.message("ui.output.outOfOrder") };
-      if (inputIssue) return { level: "warn", message: localizer.message("ui.output.inputMismatch") };
-      return { level: "warn", message: localizer.message("ui.output.differentChain") };
-    }
-    if (bundleOutputChecksum && bundleChainStatus) {
-      if (bundleChainStatus === "full") return { level: "ok", message: localizer.message("ui.output.verified") };
-      return {
-        level: "warn",
-        message:
-          bundleChainStatus === "partial"
-            ? localizer.message("ui.output.bundlePartial")
-            : localizer.message("ui.output.bundleDiverged"),
-      };
-    }
-    return null;
-  }, [bundleChainStatus, bundleOutputChecksum, chainPlans, enabledPatchCount, localizer]);
+  const outputVerification = useMemo(
+    () =>
+      getApplyOutputVerification({ bundleChainStatus, bundleOutputChecksum, chainPlans, enabledPatchCount, localizer }),
+    [bundleChainStatus, bundleOutputChecksum, chainPlans, enabledPatchCount, localizer],
+  );
 
   const queueMutation = useCallback(<TValue,>(callback: () => Promise<TValue>) => {
     const run = mutationQueueRef.current.catch(() => undefined).then(callback);
@@ -503,38 +598,27 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         // Appending patches keeps the existing prefix staged in the workflow (and OPFS).
         // Only the new tail needs addPatch, so skip the clear-and-re-add of everything.
         const previousPatches = previousSync.patches;
-        const patchesAppended =
-          patchesChanged &&
-          !forcePatchWorkflowRefreshRef.current &&
-          !preparationSettingsChanged &&
-          !inputsChanged &&
-          snapshot.patches.length > previousPatches.length &&
-          sameBinarySourceLists(previousPatches, snapshot.patches.slice(0, previousPatches.length));
+        const patchesAppended = arePatchesAppended({
+          forcePatchWorkflowRefresh: forcePatchWorkflowRefreshRef.current,
+          inputsChanged,
+          patchesChanged,
+          preparationSettingsChanged,
+          previousPatches,
+          snapshotPatches: snapshot.patches,
+        });
         // A single in-place replacement (same length, exactly one slot swapped, every other patch
         // identical): the untouched patches keep their staged state + cached verdicts, so only the
         // swapped slot re-stages and re-validates. An append is handled above; a multi-slot or
         // length change falls back to clear-and-re-add.
-        const singleReplaceIndex = (() => {
-          if (
-            !patchesChanged ||
-            patchesAppended ||
-            forcePatchWorkflowRefreshRef.current ||
-            preparationSettingsChanged ||
-            inputsChanged ||
-            !snapshot.patches.length ||
-            snapshot.patches.length !== previousPatches.length
-          )
-            return -1;
-          const previousIds = getBinarySourceListStableIds(previousPatches);
-          const nextIds = getBinarySourceListStableIds(snapshot.patches);
-          let replaceIndex = -1;
-          for (let index = 0; index < nextIds.length; index += 1) {
-            if (previousIds[index] === nextIds[index]) continue;
-            if (replaceIndex !== -1) return -1;
-            replaceIndex = index;
-          }
-          return replaceIndex;
-        })();
+        const singleReplaceIndex = getSinglePatchReplaceIndex({
+          forcePatchWorkflowRefresh: forcePatchWorkflowRefreshRef.current,
+          inputsChanged,
+          patchesAppended,
+          patchesChanged,
+          preparationSettingsChanged,
+          previousPatches,
+          snapshotPatches: snapshot.patches,
+        });
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow diff", {
           executionSettingsChanged,
           inputsChanged,
@@ -543,11 +627,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           preparationSettingsChanged,
           singleReplaceIndex,
         });
-        if (executionSettingsChanged) {
-          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings start");
-          await workflow.setSettings(baseSettings);
-          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings finish");
-        }
+        await setWorkflowSettingsIfChanged({ baseSettings, changed: executionSettingsChanged, snapshot, workflow });
         if (patchesChanged && !patchesAppended && singleReplaceIndex < 0) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches start");
           await workflow.clearPatches();

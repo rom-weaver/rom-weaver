@@ -46,6 +46,35 @@ const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): str
 
 const stripPrimaryChdTrackSuffix = (fileName: string): string => fileName.replace(/ \(Track 0*1\)(?=\.bin$)/i, "");
 
+const getChdExtractedOutputName = ({
+  directOutputFileName,
+  entry,
+  fileName,
+  normalizedFileName,
+  outputName,
+  primaryFile,
+  shouldSplitBin,
+}: {
+  directOutputFileName: string;
+  entry: ExtractedFileEntry;
+  fileName: string;
+  normalizedFileName: string | undefined;
+  outputName: string | undefined;
+  primaryFile: ExtractedFileEntry | null | undefined;
+  shouldSplitBin: boolean;
+}) => {
+  const isCue = String(entry.kind || "").toLowerCase() === "cue" || /\.cue$/i.test(entry.fileName || entry.path || "");
+  const isPrimaryDataOutput =
+    !isCue &&
+    !!primaryFile &&
+    normalizeEntryPath(entry.path || entry.fileName) === normalizeEntryPath(primaryFile.path || primaryFile.fileName);
+  if (isPrimaryDataOutput && outputName) return stripPrimaryChdTrackSuffix(outputName);
+  if (isPrimaryDataOutput && shouldSplitBin)
+    return stripPrimaryChdTrackSuffix(normalizedFileName || entry.fileName || "");
+  if (isPrimaryDataOutput && !shouldSplitBin && outputName) return outputName;
+  return normalizedFileName || entry.fileName || directOutputFileName || fileName;
+};
+
 const getChdCreateFormat = (requestedMode: string): string => {
   if (requestedMode === "cd" || requestedMode === "chd-cd") return "chd-cd";
   if (requestedMode === "gd" || requestedMode === "chd-gd") return "chd-gd";
@@ -340,18 +369,15 @@ const createBrowserChdRuntime = (
               stagedSourceFileName,
               fileName,
             );
-            const isPrimaryDataOutput = !isCue && sameExtractedFile(entry, primaryFile);
-            const primaryOutputName =
-              isPrimaryDataOutput && outputName
-                ? stripPrimaryChdTrackSuffix(outputName)
-                : isPrimaryDataOutput && shouldSplitBin
-                  ? stripPrimaryChdTrackSuffix(normalizedFileName || entry.fileName || "")
-                  : "";
-            const fileNameForOutput =
-              primaryOutputName ||
-              (isPrimaryDataOutput && !shouldSplitBin && outputName
-                ? outputName
-                : normalizedFileName || entry.fileName || directOutputFileName || fileName);
+            const fileNameForOutput = getChdExtractedOutputName({
+              directOutputFileName,
+              entry,
+              fileName,
+              normalizedFileName,
+              outputName,
+              primaryFile,
+              shouldSplitBin,
+            });
             const output = await workerIo.createWorkerOutput(
               {
                 checksums: isCue ? undefined : entry.checksums,

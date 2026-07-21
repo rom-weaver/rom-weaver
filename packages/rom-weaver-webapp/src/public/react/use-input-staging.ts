@@ -22,6 +22,7 @@ import { isWorkflowDisposedError, toError } from "./patcher-form-session-utils.t
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
 import { createWaitingWorkflowProgress } from "./workflow-run-hooks.ts";
+import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 
 // A patch-only archive that was optimistically staged in the ROM bucket throws this (carrying the
 // `reclassifiedToPatch` detail) once its descent surfaces patch leaves but no ROM payload, so the ROM
@@ -33,6 +34,214 @@ const isArchiveReclassifiedToPatchError = (error: unknown): boolean =>
 
 type SessionState = ReturnType<typeof useLocalPatcherSessionState>;
 type RomInputPatch = Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> };
+
+const buildFinalRomInputRow = ({
+  busy,
+  current,
+  disabled,
+  finalized,
+  getInputKey,
+  index,
+  inputs,
+  initialProgress,
+  rawInfo,
+  resolveRowInfo,
+}: {
+  busy: boolean;
+  current: RomInputRowState[];
+  disabled: boolean;
+  finalized: boolean;
+  getInputKey: (source: BinarySource, sources?: BinarySource[]) => string;
+  index: number;
+  inputs: BinarySource[];
+  initialProgress: ReturnType<typeof createWaitingWorkflowProgress>;
+  rawInfo: StagedInputInfo;
+  resolveRowInfo: (info: StagedInputInfo) => StagedInputInfo;
+}) => {
+  const info = resolveRowInfo(rawInfo);
+  const id = info.id || getInputKey(inputs[index] as BinarySource, inputs);
+  const existing =
+    current.find((entry) => entry.id === id) || current.find((entry) => entry.order === (info.order ?? index));
+  return createRomInputRow({
+    ...existing,
+    archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
+    chdMode: info.chdMode ?? existing?.chdMode,
+    cueText: info.cueText ?? existing?.cueText,
+    disabled: finalized ? disabled || busy : true,
+    gdiText: info.gdiText ?? existing?.gdiText,
+    groupId: info.groupId ?? existing?.groupId,
+    id,
+    info: {
+      archiveName: info.archiveName || existing?.info.archiveName || "",
+      checksumTiming: info.checksumTiming || existing?.info.checksumTiming || "",
+      checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
+      crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
+      fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
+      md5: info.checksums?.md5 || existing?.info.md5 || "",
+      romProbe: info.romProbe ?? existing?.info.romProbe,
+      romType: info.romType ?? existing?.info.romType,
+      sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
+      validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",
+    },
+    kind: info.kind ?? existing?.kind,
+    loading: !finalized,
+    order: info.order ?? index,
+    patchable: info.patchable ?? existing?.patchable,
+    progress: finalized ? null : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
+    size: info.size ?? existing?.size,
+    sourceSize: info.sourceSize ?? existing?.sourceSize,
+    splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
+    valid: finalized,
+    wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
+  });
+};
+
+const buildPendingRomInputRow = ({
+  current,
+  getInputKey,
+  index,
+  initialProgress,
+  input,
+  inputs,
+  retained,
+  hasRetainedInputs,
+}: {
+  current: RomInputRowState[];
+  getInputKey: (source: BinarySource, sources?: BinarySource[]) => string;
+  index: number;
+  initialProgress: ReturnType<typeof createWaitingWorkflowProgress>;
+  input: BinarySource;
+  inputs: BinarySource[];
+  retained: boolean;
+  hasRetainedInputs: boolean;
+}) => {
+  const id = getInputKey(input, inputs);
+  const existing = current.find((entry) => entry.id === id) || current.find((entry) => entry.order === index);
+  const existingProgress = existing?.progress || null;
+  const isQueued = index > 0 || hasRetainedInputs;
+  return createRomInputRow({
+    ...existing,
+    disabled: true,
+    id,
+    info: {
+      ...existing?.info,
+      archiveName: existing?.info.archiveName || "",
+      fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
+      validationPhase:
+        existing?.info.validationPhase === "extract" || existing?.info.validationPhase === "checksum"
+          ? existing.info.validationPhase
+          : isCompressedInputFileName(getBinarySourceFileName(input, ""))
+            ? "extract"
+            : existing?.info.validationPhase,
+    },
+    loading: retained && existing ? existing.loading : true,
+    order: index,
+    progress:
+      existingProgress || (retained && existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
+    valid: retained && existing ? existing.valid : false,
+  });
+};
+
+const handleInputProgress = (
+  event: ProgressEvent,
+  {
+    emitSessionTrace,
+    generation,
+    getInputKey,
+    inputProgressGenerationRef,
+    inputStageGenerationRef,
+    mergeRomInput,
+    progressGeneration,
+    reclassifyArchiveToPatch,
+    reclassifiedInputKeys,
+    retainedInputKeys,
+    resolveRowInfo,
+    snapshotInputs,
+  }: {
+    emitSessionTrace: (message: string, details?: Record<string, unknown>) => void;
+    generation: number;
+    getInputKey: (source: BinarySource, sources?: BinarySource[]) => string;
+    inputProgressGenerationRef: MutableRefObject<number>;
+    inputStageGenerationRef: MutableRefObject<number>;
+    mergeRomInput: (info: StagedInputInfo, patch?: RomInputPatch) => void;
+    progressGeneration: number;
+    reclassifyArchiveToPatch: (source: BinarySource) => void;
+    reclassifiedInputKeys: Set<string>;
+    retainedInputKeys: Set<string>;
+    resolveRowInfo: (info: StagedInputInfo) => StagedInputInfo;
+    snapshotInputs: BinarySource[];
+  },
+) => {
+  const details = getProgressDetails(event);
+  if (inputStageGenerationRef.current !== generation || inputProgressGenerationRef.current !== progressGeneration) {
+    emitSessionTrace("stageInput progress ignored", {
+      currentGeneration: inputStageGenerationRef.current,
+      currentProgressGeneration: inputProgressGenerationRef.current,
+      generation,
+      progress: {
+        fileName: details.fileName,
+        order: details.order,
+        percent: event.percent,
+        sourceId: details.sourceId,
+        stage: details.stage,
+      },
+      progressGeneration,
+      reason: "stale-generation",
+    });
+    return;
+  }
+  const sourceId = typeof details.sourceId === "string" ? details.sourceId : "";
+  if (!sourceId) {
+    emitSessionTrace("stageInput progress ignored", {
+      generation,
+      progress: { fileName: details.fileName, order: details.order, percent: event.percent, stage: details.stage },
+      progressGeneration,
+      reason: "missing-sourceId",
+    });
+    return;
+  }
+  const info = resolveRowInfo(getProgressStagedInputInfo(event));
+  const source = typeof info.order === "number" ? snapshotInputs[info.order] : undefined;
+  if (source && info.isRom === false) {
+    const inputKey = getInputKey(source, snapshotInputs);
+    if (!reclassifiedInputKeys.has(inputKey)) {
+      reclassifiedInputKeys.add(inputKey);
+      emitSessionTrace("stageInput reclassify archive to patch bucket", {
+        fileName: info.fileName,
+        generation,
+        order: info.order,
+        sourceId,
+      });
+      reclassifyArchiveToPatch(source);
+    }
+    return;
+  }
+  if (source && retainedInputKeys.has(getInputKey(source, snapshotInputs))) {
+    emitSessionTrace("stageInput progress ignored", {
+      generation,
+      order: info.order,
+      progressGeneration,
+      reason: "retained-input",
+      sourceId,
+    });
+    return;
+  }
+  emitSessionTrace("stageInput progress", {
+    fileName: info.fileName,
+    generation,
+    order: info.order,
+    percent: event.percent,
+    progressGeneration,
+    sourceId,
+    stage: details.stage,
+  });
+  const extractLabel =
+    info.fileName && /extract/i.test(String(event.label || "")) ? `Extracting ${info.fileName}` : undefined;
+  mergeRomInput(info, {
+    ...getChecksumProgressInfoPatch(details),
+    progress: toInputProgress(extractLabel ? { ...event, label: extractLabel } : event),
+  });
+};
 
 interface InputStagingContext {
   machines: {
@@ -316,95 +525,40 @@ const useInputStaging = (context: InputStagingContext) => {
         message: "Preparing input...",
       };
       const resolveRowInfo = (info: StagedInputInfo) => getStableInputInfo(info, snapshot.inputs);
-      const createFinalRomInputRow = (
-        rawInfo: StagedInputInfo,
-        index: number,
-        current: RomInputRowState[],
-        byId: Map<string, RomInputRowState>,
-        finalized: boolean,
-      ) => {
-        const info = resolveRowInfo(rawInfo);
-        const id = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
-        const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
-        return createRomInputRow({
-          ...existing,
-          archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
-          chdMode: info.chdMode ?? existing?.chdMode,
-          cueText: info.cueText ?? existing?.cueText,
-          disabled: finalized ? disabledRef.current || busyRef.current : true,
-          gdiText: info.gdiText ?? existing?.gdiText,
-          groupId: info.groupId ?? existing?.groupId,
-          id,
-          info: {
-            archiveName: info.archiveName || existing?.info.archiveName || "",
-            checksumTiming: info.checksumTiming || existing?.info.checksumTiming || "",
-            checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
-            crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
-            fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
-            md5: info.checksums?.md5 || existing?.info.md5 || "",
-            romProbe: info.romProbe ?? existing?.info.romProbe,
-            romType: info.romType ?? existing?.info.romType,
-            sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
-            validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",
-          },
-          kind: info.kind ?? existing?.kind,
-          loading: !finalized,
-          order: info.order ?? index,
-          patchable: info.patchable ?? existing?.patchable,
-          progress: finalized
-            ? null
-            : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
-          size: info.size ?? existing?.size,
-          sourceSize: info.sourceSize ?? existing?.sourceSize,
-          splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
-          valid: finalized,
-          wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
-        });
-      };
       const replaceRomInputs = (infos: StagedInputInfo[], finalized: boolean) => {
         setRomInputs((current) => {
-          const byId = new Map(current.map((entry) => [entry.id, entry]));
           return sortRomInputs(
-            infos.map((rawInfo, index) => createFinalRomInputRow(rawInfo, index, current, byId, finalized)),
+            infos.map((rawInfo, index) =>
+              buildFinalRomInputRow({
+                busy: busyRef.current,
+                current,
+                disabled: disabledRef.current,
+                finalized,
+                getInputKey,
+                index,
+                initialProgress,
+                inputs: snapshot.inputs,
+                rawInfo,
+                resolveRowInfo,
+              }),
+            ),
           );
         });
       };
       setRomInputs((current) =>
         sortRomInputs(
-          snapshot.inputs.map((input, index) => {
-            const id = getInputKey(input, snapshot.inputs);
-            const existing = current.find((entry) => entry.id === id) || current.find((entry) => entry.order === index);
-            const existingProgress = existing?.progress || null;
-            const retained = retainedInputKeys.has(id);
-            const isQueued = index > 0 || retainedInputKeys.size > 0;
-            return createRomInputRow({
-              ...existing,
-              disabled: true,
-              id,
-              info: {
-                ...existing?.info,
-                archiveName: existing?.info.archiveName || "",
-                fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
-                // A dropped container extracts before/while it hashes, so seed the extract
-                // phase up front - the card reads "Extracting & Checksumming…" from the first
-                // frame instead of flashing a bare "Checksumming…" until the first extract
-                // event lands. A real phase already observed (extract/checksum) wins; the seed
-                // only overrides the "idle" default, and a bare ROM stays "idle" → "Checksumming…".
-                validationPhase:
-                  existing?.info.validationPhase === "extract" || existing?.info.validationPhase === "checksum"
-                    ? existing.info.validationPhase
-                    : isCompressedInputFileName(getBinarySourceFileName(input, ""))
-                      ? "extract"
-                      : existing?.info.validationPhase,
-              },
-              loading: retained && existing ? existing.loading : true,
-              order: index,
-              progress:
-                existingProgress ||
-                (retained && existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
-              valid: retained && existing ? existing.valid : false,
-            });
-          }),
+          snapshot.inputs.map((input, index) =>
+            buildPendingRomInputRow({
+              current,
+              getInputKey,
+              hasRetainedInputs: retainedInputKeys.size > 0,
+              index,
+              initialProgress,
+              input,
+              inputs: snapshot.inputs,
+              retained: retainedInputKeys.has(getInputKey(input, snapshot.inputs)),
+            }),
+          ),
         ),
       );
       emitSessionTrace("stageInput dispatched", {
@@ -467,91 +621,21 @@ const useInputStaging = (context: InputStagingContext) => {
           emitSessionTrace("stageInput prepared", { generation, infoCount: infos.length });
           replaceRomInputs(infos, false);
         },
-        onProgress: (event) => {
-          const details = getProgressDetails(event);
-          if (
-            inputStageGenerationRef.current !== generation ||
-            inputProgressGenerationRef.current !== progressGeneration
-          ) {
-            emitSessionTrace("stageInput progress ignored", {
-              currentGeneration: inputStageGenerationRef.current,
-              currentProgressGeneration: inputProgressGenerationRef.current,
-              generation,
-              progress: {
-                fileName: details.fileName,
-                order: details.order,
-                percent: event.percent,
-                sourceId: details.sourceId,
-                stage: details.stage,
-              },
-              progressGeneration,
-              reason: "stale-generation",
-            });
-            return;
-          }
-          const sourceId = typeof details.sourceId === "string" ? details.sourceId : "";
-          if (!sourceId) {
-            emitSessionTrace("stageInput progress ignored", {
-              generation,
-              progress: {
-                fileName: details.fileName,
-                order: details.order,
-                percent: event.percent,
-                stage: details.stage,
-              },
-              progressGeneration,
-              reason: "missing-sourceId",
-            });
-            return;
-          }
-          const info = resolveRowInfo(getProgressStagedInputInfo(event));
-          const source = typeof info.order === "number" ? snapshot.inputs[info.order] : undefined;
-          // Rust's probe-manifest identified this archive as a patch-only container - move it to the
-          // patch bucket instead of dead-ending the ROM extract. The move re-stages without this source
-          // (superseding this run), and the patch bucket's extract-all fans the bundle's patches out.
-          if (source && info.isRom === false) {
-            const inputKey = getInputKey(source, snapshot.inputs);
-            if (!reclassifiedInputKeys.has(inputKey)) {
-              reclassifiedInputKeys.add(inputKey);
-              emitSessionTrace("stageInput reclassify archive to patch bucket", {
-                fileName: info.fileName,
-                generation,
-                order: info.order,
-                sourceId,
-              });
-              reclassifyArchiveToPatch(source);
-            }
-            return;
-          }
-          if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) {
-            emitSessionTrace("stageInput progress ignored", {
-              generation,
-              order: info.order,
-              progressGeneration,
-              reason: "retained-input",
-              sourceId,
-            });
-            return;
-          }
-          emitSessionTrace("stageInput progress", {
-            fileName: info.fileName,
+        onProgress: (event) =>
+          handleInputProgress(event, {
+            emitSessionTrace,
             generation,
-            order: info.order,
-            percent: event.percent,
+            getInputKey,
+            inputProgressGenerationRef,
+            inputStageGenerationRef,
+            mergeRomInput,
             progressGeneration,
-            sourceId,
-            stage: details.stage,
-          });
-          // Surface a clean "Extracting <name>" label for the extraction stage
-          // (the runtime emits an internal VFS path like "preparing extraction
-          // for `/work/x.chd`"); leave read/checksum stage labels untouched.
-          const extractLabel =
-            info.fileName && /extract/i.test(String(event.label || "")) ? `Extracting ${info.fileName}` : undefined;
-          mergeRomInput(info, {
-            ...getChecksumProgressInfoPatch(details),
-            progress: toInputProgress(extractLabel ? { ...event, label: extractLabel } : event),
-          });
-        },
+            reclassifyArchiveToPatch,
+            reclassifiedInputKeys,
+            retainedInputKeys,
+            resolveRowInfo,
+            snapshotInputs: snapshot.inputs,
+          }),
         onState: (info) => {
           if (inputStageGenerationRef.current !== generation) {
             emitSessionTrace("stageInput state ignored", {

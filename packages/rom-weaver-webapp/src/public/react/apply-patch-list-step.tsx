@@ -1090,6 +1090,13 @@ const PatchActionsMenu = ({
 /** One patch card: staging presentation, a three-dot actions menu (edit
  * details / replace file / remove) at the head of the name line, the Extract
  * drawer, and the unified Checks drawer (which owns the dry-run verdict). */
+const getPatchCardVerdict = (validationState: string | undefined, isDisabled: boolean): "bad" | "ok" | undefined => {
+  if (isDisabled) return undefined;
+  if (validationState === "invalid") return "bad";
+  if (validationState === "valid") return "ok";
+  return undefined;
+};
+
 const PatchCard = ({
   basisSelectVisible,
   canReorder,
@@ -1160,10 +1167,7 @@ const PatchCard = ({
   const disabledClass = isDisabled ? "is-disabled" : undefined;
   // A disabled patch is out of the run: its (stale) verification verdict
   // stays off the card; the Checks drawer stays editable (metadata only).
-  let verdict: "bad" | "ok" | undefined;
-  if (item.validationState === "invalid") verdict = "bad";
-  else if (item.validationState === "valid") verdict = "ok";
-  if (isDisabled) verdict = undefined;
+  const verdict = getPatchCardVerdict(item.validationState, isDisabled);
   // Verification is the second phase: once the ROM is ready, the deferred dry-run runs while
   // the card already shows its full body (Extract + Checks). A top-edge bar carries
   // that async work - a later phase following the "Reading…" staging bar.

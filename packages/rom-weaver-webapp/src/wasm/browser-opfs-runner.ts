@@ -97,6 +97,10 @@ const invalidateMountCacheBeforeRun = async ({
   trace("[browser-opfs] invalidate mount cache before run done");
 };
 
+const assertThreadedRuntimeIfNeeded = (threaded: boolean, wasmUrl: string | null) => {
+  if (threaded) assertThreadedWasmRuntimeSupported({ wasmUrl });
+};
+
 const registerProxyBlobInputs = (
   virtualFiles: NormalizedVirtualFile[],
   opfsProxy: BrowserOpfsProxyRuntime,
@@ -125,10 +129,23 @@ const createRunThreadSpawner = ({
 }) =>
   createBrowserWasiThreadSpawner({
     ...runtime,
-    threadWorkerPool:
-      runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl ? null : threadWorkerPool,
+    threadWorkerPool: getRunThreadWorkerPool(options, runOptions, threadWorkerPool),
     threadWorkerUrl: runOptions.threadWorkerUrl ?? options.threadWorkerUrl,
   });
+
+const getRunThreadWorkerPool = (
+  options: BrowserOpfsCreateOptions,
+  runOptions: BrowserOpfsRunOptions,
+  threadWorkerPool: ReturnType<typeof createBrowserWasiThreadWorkerPool> | null,
+) => (runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl ? null : threadWorkerPool);
+
+const createRunWasmMemory = (importsEnvMemory: boolean, options: BrowserOpfsCreateOptions) =>
+  importsEnvMemory
+    ? createSharedThreadMemory({
+        initialPages: options.sharedMemoryInitialPages,
+        maximumPages: options.sharedMemoryMaximumPages,
+      })
+    : undefined;
 
 const createThreadSpawnerDrain = (threadSpawner: BrowserThreadSpawner) => {
   let drained = false;
@@ -162,7 +179,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   const importsEnvMemory = needsEnvMemoryImport(moduleImports);
   const importsWasiThreadSpawn = needsWasiThreadSpawnImport(moduleImports);
   const threaded = importsEnvMemory || importsWasiThreadSpawn;
-  if (threaded) assertThreadedWasmRuntimeSupported({ wasmUrl });
+  assertThreadedRuntimeIfNeeded(threaded, wasmUrl);
   const runtimeMounts = normalizeRuntimeMounts(options.runtimeMounts ?? [workGuestPath]);
   const baseMountHandles = normalizeMountHandleMap({
     mountHandles: {
@@ -243,12 +260,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         threaded,
       });
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
-      const wasmMemory = importsEnvMemory
-        ? createSharedThreadMemory({
-            initialPages: options.sharedMemoryInitialPages,
-            maximumPages: options.sharedMemoryMaximumPages,
-          })
-        : undefined;
+      const wasmMemory = createRunWasmMemory(importsEnvMemory, options);
       const threadIdState = createThreadIdState();
       const mountHandles = {
         ...baseMountHandles,
@@ -296,10 +308,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       const threadSpawner = createRunThreadSpawner({
         options,
         runOptions,
-        threadWorkerPool:
-          runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl
-            ? null
-            : threadWorkerPool,
+        threadWorkerPool,
         envList,
         moduleImports,
         runtime: {

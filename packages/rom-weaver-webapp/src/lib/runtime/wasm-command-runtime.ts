@@ -500,6 +500,50 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
   };
 };
 
+type RomWeaverJsonResult = Awaited<ReturnType<typeof runRomWeaverJson>>;
+
+const throwPatchApplyFailure = async ({
+  forceSingleThreadReason,
+  forcedSingleThread,
+  hasBpsPatch,
+  hasXdeltaPatch,
+  input,
+  result,
+  threadArg,
+}: {
+  forceSingleThreadReason: string;
+  forcedSingleThread: boolean;
+  hasBpsPatch: boolean;
+  hasXdeltaPatch: boolean;
+  input: RuntimePatchApplyWorkerInput;
+  result: RomWeaverJsonResult;
+  threadArg: ReturnType<typeof toThreadBudget>;
+}): Promise<never> => {
+  const failureMessage = await appendBrowserStorageContext(
+    getRomWeaverFailureMessage(result, "Patch apply failed"),
+    "apply patch output",
+  );
+  const traceContext = isTraceEnabled(input.logLevel)
+    ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
+        hasXdeltaPatch,
+      )} forcedSingleThread=${String(forcedSingleThread)} reason=${forceSingleThreadReason || "none"} threadArg=${
+        threadArg || "none"
+      }]`
+    : "";
+  if (isTraceEnabled(input.logLevel)) {
+    const traceTail = Array.isArray(result.traceNonJsonLines)
+      ? result.traceNonJsonLines
+          .map((line) => String(line || "").trim())
+          .filter((line) => !!line)
+          .slice(-8)
+          .join(" | ")
+      : "";
+    if (traceTail)
+      throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`), result);
+  }
+  throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext}`), result);
+};
+
 const invokeRomWeaverPatchApplyWorker = async (
   input: RuntimePatchApplyWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -584,31 +628,16 @@ const invokeRomWeaverPatchApplyWorker = async (
           virtualOnlyMounts,
         }),
       );
-      if (!(result.ok && result.exitCode === 0)) {
-        const failureMessage = await appendBrowserStorageContext(
-          getRomWeaverFailureMessage(result, "Patch apply failed"),
-          "apply patch output",
-        );
-        const traceContext = isTraceEnabled(input.logLevel)
-          ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
-              hasXdeltaPatch,
-            )} forcedSingleThread=${String(forcedSingleThread)} reason=${forceSingleThreadReason || "none"} threadArg=${
-              threadArg || "none"
-            }]`
-          : "";
-        if (isTraceEnabled(input.logLevel)) {
-          const traceTail = Array.isArray(result.traceNonJsonLines)
-            ? result.traceNonJsonLines
-                .map((line) => String(line || "").trim())
-                .filter((line) => !!line)
-                .slice(-8)
-                .join(" | ")
-            : "";
-          if (traceTail)
-            throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`), result);
-        }
-        throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext}`), result);
-      }
+      if (!(result.ok && result.exitCode === 0))
+        await throwPatchApplyFailure({
+          forceSingleThreadReason,
+          forcedSingleThread,
+          hasBpsPatch,
+          hasXdeltaPatch,
+          input,
+          result,
+          threadArg,
+        });
 
       const emitted = getEmittedFileDetails(result);
       const lastEvent = getLastEvent(result);
@@ -960,6 +989,11 @@ const invokeRomWeaverBundleParseWorker = async (
 // the `bundle create` command. Cached ROM checks are forwarded when available;
 // Rust hashes only as a compatibility fallback. Per-patch metadata arrays are
 // index-aligned with `patchPaths` (or empty).
+const getAlignedOptionalFlags = (values: boolean[] | undefined, length: number) => {
+  if (!values || values.length !== length || !values.some(Boolean)) return undefined;
+  return values;
+};
+
 const invokeRomWeaverBundleCreateWorker = async (
   input: {
     bundlePath?: string;
@@ -1018,10 +1052,7 @@ const invokeRomWeaverBundleCreateWorker = async (
   const patchInputChecks = alignedStrings(input.patchInputChecks);
   const patchOutputChecks = alignedStrings(input.patchOutputChecks);
   const outputCheck = String(input.outputCheck || "").trim();
-  const patchOptionals =
-    input.patchOptionals && input.patchOptionals.length === patchPaths.length && input.patchOptionals.some(Boolean)
-      ? input.patchOptionals
-      : undefined;
+  const patchOptionals = getAlignedOptionalFlags(input.patchOptionals, patchPaths.length);
   const patchHeaders =
     input.patchHeaders?.length && input.patchHeaders.some((mode) => mode !== "auto")
       ? patchPaths.map((_, index) => input.patchHeaders?.[index] || "auto")

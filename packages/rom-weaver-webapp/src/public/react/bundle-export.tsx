@@ -49,6 +49,29 @@ type BundleExportRow = {
 };
 
 type BundleExportSources = ApplyWorkflowBundleSources;
+type BundleExportCreate = NonNullable<NonNullable<typeof browserRuntime.bundle>["create"]>;
+type BundleExportStart =
+  | { create: BundleExportCreate; rom: NonNullable<BundleExportSources["rom"]> }
+  | { error: string };
+
+const validateBundleExportStart = ({
+  create,
+  patches,
+  rom,
+}: {
+  create: BundleExportCreate | undefined;
+  patches: BundleExportSources["patches"];
+  rom: BundleExportSources["rom"];
+}): BundleExportStart => {
+  if (!create) return { error: "Bundle export is not available in this runtime" };
+  if (!rom) return { error: "A staged ROM is required to export a bundle" };
+  if (!patches.length) return { error: "At least one staged patch is required to export a bundle" };
+  return { create, rom };
+};
+
+const reportBundleExportError = (aborted: boolean, error: unknown, setError: (message: string) => void) => {
+  if (!aborted) setError(error instanceof Error ? error.message : String(error));
+};
 
 type BundleExportProgress = ProgressViewModel;
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
@@ -331,18 +354,12 @@ const useBundleExport = ({
     const sources = getSessionSources();
     sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
     const { rom, patches } = sources;
-    if (!create) {
-      setError("Bundle export is not available in this runtime");
+    const validation = validateBundleExportStart({ create, patches, rom });
+    if ("error" in validation) {
+      setError(validation.error);
       return;
     }
-    if (!rom) {
-      setError("A staged ROM is required to export a bundle");
-      return;
-    }
-    if (!patches.length) {
-      setError("At least one staged patch is required to export a bundle");
-      return;
-    }
+    const { create: exportCreate, rom: exportRom } = validation;
     const items = getStackItems();
     const exportRows = buildBundleExportRows({ bundleMetaById, disabledPatchIds, getPatchIds, getStackItems, patches });
     const stepProgress = (label: string) =>
@@ -367,14 +384,20 @@ const useBundleExport = ({
       stepProgress("Writing bundle");
       const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
-      const packagedRom = await preparePackagedRom({ bundleRom, compressedRomOutputs, rom, stepProgress, wantsBundle });
+      const packagedRom = await preparePackagedRom({
+        bundleRom,
+        compressedRomOutputs,
+        rom: exportRom,
+        stepProgress,
+        wantsBundle,
+      });
       const outputHeader = getOutputHeader?.();
       // The exported rom.checks are the staged ROM's computed values; a
       // different expected base ROM is expressed as the first patch's input
       // checks (which the bundle schema prefers over rom.checks).
-      const romChecksums = { ...rom.checksums };
-      const romSize = rom.size;
-      const { result, bundleOutput, archiveOutput } = await create({
+      const romChecksums = { ...exportRom.checksums };
+      const romSize = exportRom.size;
+      const { result, bundleOutput, archiveOutput } = await exportCreate({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
         ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
@@ -388,7 +411,7 @@ const useBundleExport = ({
           setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "bundle" }));
         },
         patches: buildBundlePatchInputs(patches, exportRows),
-        rom: { fileName: rom.fileName, source: rom.source },
+        rom: { fileName: exportRom.fileName, source: exportRom.source },
         signal: abortController.signal,
       });
       outputs.push(bundleOutput, ...(archiveOutput ? [archiveOutput] : []));
@@ -406,9 +429,7 @@ const useBundleExport = ({
       );
       await browserRuntime.publicOutput.saveAs(downloadOutput);
     } catch (runError) {
-      if (!abortController.signal.aborted) {
-        setError(runError instanceof Error ? runError.message : String(runError));
-      }
+      reportBundleExportError(abortController.signal.aborted, runError, setError);
     } finally {
       if (abortControllerRef.current === abortController) abortControllerRef.current = null;
       await Promise.all(

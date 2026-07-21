@@ -365,31 +365,27 @@ const parseChainInputExpectation = (
   return chainInput ? parsePatchInputExpectation(chainInput) : undefined;
 };
 
-/**
- * Plan-fed base expectation for a single-ROM bench: union the checks of every
- * base-basis patch with the bundle's rom.checks. On disagreement the value
- * matching the staged ROM wins and a base conflict is flagged (the losing
- * patch's own card shows the mismatch). Null when the plan offered no
- * base-basis verdicts - callers fall back to the chain-input parse.
- */
-const buildPlanBaseExpectation = (
+const collectPlanBaseContributions = (
   patches: PatchStackItemState[],
   disabledFlags: readonly boolean[],
   bundleMeta: ReadonlyArray<BundlePatchMeta | undefined>,
   bundleRomChecks: ParsedBundleChecks | undefined,
-  romInfo: RomInputRowState["info"] | undefined,
-): { conflict: boolean; expected: ParsedBundleChecks } | null => {
-  const contributions: ParsedBundleChecks[] = [];
-  if (bundleRomChecks) contributions.push(bundleRomChecks);
+) => {
+  const contributions: ParsedBundleChecks[] = bundleRomChecks ? [bundleRomChecks] : [];
   let sawBaseVerdict = false;
   for (const [index, patch] of patches.entries()) {
-    if (disabledFlags[index]) continue;
-    if (patch.chainVerdict?.basis !== "base") continue;
+    if (disabledFlags[index] || patch.chainVerdict?.basis !== "base") continue;
     sawBaseVerdict = true;
     const expectation = bundleMeta[index]?.inputChecks ?? parsePatchInputExpectation(patch);
     if (expectation) contributions.push(expectation);
   }
-  if (!(sawBaseVerdict && contributions.length)) return null;
+  return { contributions, sawBaseVerdict };
+};
+
+const mergePlanBaseContributions = (
+  contributions: ParsedBundleChecks[],
+  romInfo: RomInputRowState["info"] | undefined,
+) => {
   const checksums: Record<string, string> = {};
   let size: number | undefined;
   let conflict = false;
@@ -413,6 +409,31 @@ const buildPlanBaseExpectation = (
       else if (size !== contribution.size) conflict = true;
     }
   }
+  return { checksums, conflict, size };
+};
+
+/**
+ * Plan-fed base expectation for a single-ROM bench: union the checks of every
+ * base-basis patch with the bundle's rom.checks. On disagreement the value
+ * matching the staged ROM wins and a base conflict is flagged (the losing
+ * patch's own card shows the mismatch). Null when the plan offered no
+ * base-basis verdicts - callers fall back to the chain-input parse.
+ */
+const buildPlanBaseExpectation = (
+  patches: PatchStackItemState[],
+  disabledFlags: readonly boolean[],
+  bundleMeta: ReadonlyArray<BundlePatchMeta | undefined>,
+  bundleRomChecks: ParsedBundleChecks | undefined,
+  romInfo: RomInputRowState["info"] | undefined,
+): { conflict: boolean; expected: ParsedBundleChecks } | null => {
+  const { contributions, sawBaseVerdict } = collectPlanBaseContributions(
+    patches,
+    disabledFlags,
+    bundleMeta,
+    bundleRomChecks,
+  );
+  if (!(sawBaseVerdict && contributions.length)) return null;
+  const { checksums, conflict, size } = mergePlanBaseContributions(contributions, romInfo);
   if (!(Object.keys(checksums).length || size !== undefined)) return null;
   return { conflict, expected: { checksums, ...(size === undefined ? {} : { size }) } };
 };
@@ -626,6 +647,26 @@ const discGroupDisplayName = (
   );
 };
 
+const getDiscOverallPercent = (
+  staging: boolean,
+  totalBytes: number,
+  trackRows: RomInputRowState[],
+  tracks: Array<{ progress: ReturnType<typeof toWorkflowChecksumProgressProps> }>,
+): number | null => {
+  if (!staging || totalBytes <= 0) return null;
+  let completedBytes = 0;
+  for (const [index, row] of trackRows.entries()) {
+    const bytes = row.size ?? row.sourceSize;
+    if (!(typeof bytes === "number" && Number.isFinite(bytes))) return null;
+    const progress = tracks[index]?.progress;
+    if (!row.progress && (row.info.crc32 || row.info.md5 || row.info.sha1)) completedBytes += bytes;
+    else if (row.progress?.value === "waiting") continue;
+    else if (typeof progress?.percent === "number") completedBytes += bytes * (progress.percent / 100);
+    else return null;
+  }
+  return (completedBytes / totalBytes) * 100;
+};
+
 /** Render a multi-track disc as one card with per-track checksums + cue view. */
 const renderDiscGroup = (
   rows: Array<{ row: RomInputRowState; index: number }>,
@@ -697,27 +738,7 @@ const renderDiscGroup = (
     };
   });
   const staging = trackRows.some((row) => !!row.progress);
-  let overallPercent: number | null = null;
-  if (staging && totalBytes > 0) {
-    let completedBytes = 0;
-    let determinate = true;
-    for (const [index, row] of trackRows.entries()) {
-      const bytes = row.size ?? row.sourceSize;
-      if (!(typeof bytes === "number" && Number.isFinite(bytes))) {
-        determinate = false;
-        break;
-      }
-      const progress = tracks[index]?.progress;
-      if (!row.progress && (row.info.crc32 || row.info.md5 || row.info.sha1)) completedBytes += bytes;
-      else if (row.progress?.value === "waiting") continue;
-      else if (typeof progress?.percent === "number") completedBytes += bytes * (progress.percent / 100);
-      else {
-        determinate = false;
-        break;
-      }
-    }
-    if (determinate) overallPercent = (completedBytes / totalBytes) * 100;
-  }
+  const overallPercent = getDiscOverallPercent(staging, totalBytes, trackRows, tracks);
   return {
     card: {
       extract: {

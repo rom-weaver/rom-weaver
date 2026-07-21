@@ -80,6 +80,12 @@ const normalizeRomProbe = (value: JsonValue | object | null | undefined): Checks
   };
 };
 
+const normalizeEmbeddedPatchMode = (value: unknown): "" | "multiple" | "single" => {
+  if (value === "multiple") return "multiple";
+  if (value === "single") return "single";
+  return "";
+};
+
 type ArchivePathEntryState = {
   fileName: string;
   kind?: string;
@@ -469,15 +475,7 @@ const normalizePatcherUiState = (
       embeddedPatchLoadingMessage:
         typeof patchInput.embeddedPatchLoadingMessage === "string" ? patchInput.embeddedPatchLoadingMessage : "",
       embeddedPatchLoadingVisible: !!patchInput.embeddedPatchLoadingVisible,
-      embeddedPatchMode:
-        embeddedPatchModeSource === "multiple"
-          ? "multiple"
-          : (() => {
-              if (embeddedPatchModeSource === "single") {
-                return "single";
-              }
-              return "";
-            })(),
+      embeddedPatchMode: normalizeEmbeddedPatchMode(embeddedPatchModeSource),
       embeddedPatchOptions: normalizeEmbeddedPatchOptions(patchInput.embeddedPatchOptions),
       embeddedPatchValue: typeof patchInput.embeddedPatchValue === "string" ? patchInput.embeddedPatchValue : "",
       invalid: !!patchInput.invalid,
