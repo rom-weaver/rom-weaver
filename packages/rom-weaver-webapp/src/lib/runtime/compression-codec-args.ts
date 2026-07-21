@@ -11,36 +11,23 @@ const normalizeCodecEntries = (value: unknown): string[] => {
     seen.add(normalized);
     out.push(normalized);
   };
-  const collect = (candidate: unknown) => {
-    if (candidate == null) return;
-    if (Array.isArray(candidate)) {
-      for (const entry of candidate) collect(entry);
-      return;
-    }
-    if (typeof candidate === "string") {
-      const trimmed = candidate.trim();
-      if (!trimmed) return;
-      if (trimmed.includes(",")) for (const entry of trimmed.split(",")) collect(entry);
-      else if (trimmed.includes("+")) for (const entry of trimmed.split("+")) collect(entry);
-      else push(trimmed);
-      return;
-    }
-    if (typeof candidate === "number") {
-      if (Number.isFinite(candidate)) push(String(Math.floor(candidate)));
-      return;
-    }
-    if (typeof candidate !== "object") return;
-    for (const [codecName, codecValue] of Object.entries(candidate as Record<string, unknown>)) {
+  const collectString = (candidate: string) => {
+    const trimmed = candidate.trim();
+    if (!trimmed) return;
+    if (trimmed.includes(",")) for (const entry of trimmed.split(",")) collect(entry);
+    else if (trimmed.includes("+")) for (const entry of trimmed.split("+")) collect(entry);
+    else push(trimmed);
+  };
+  const collectObject = (candidate: Record<string, unknown>) => {
+    for (const [codecName, codecValue] of Object.entries(candidate)) {
       const name = codecName.trim();
-      if (!name) continue;
-      if (codecValue == null || codecValue === false) continue;
+      if (!name || codecValue == null || codecValue === false) continue;
       if (codecValue === true) {
         push(name);
         continue;
       }
       if (typeof codecValue === "number") {
-        if (!Number.isFinite(codecValue)) continue;
-        push(`${name}:${Math.floor(codecValue)}`);
+        if (Number.isFinite(codecValue)) push(`${name}:${Math.floor(codecValue)}`);
         continue;
       }
       if (typeof codecValue === "string") {
@@ -50,6 +37,22 @@ const normalizeCodecEntries = (value: unknown): string[] => {
         else push(`${name}:${normalized}`);
       }
     }
+  };
+  const collect = (candidate: unknown) => {
+    if (candidate == null) return;
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) collect(entry);
+      return;
+    }
+    if (typeof candidate === "string") {
+      collectString(candidate);
+      return;
+    }
+    if (typeof candidate === "number") {
+      if (Number.isFinite(candidate)) push(String(Math.floor(candidate)));
+      return;
+    }
+    if (typeof candidate === "object") collectObject(candidate as Record<string, unknown>);
   };
   collect(value);
   return out;

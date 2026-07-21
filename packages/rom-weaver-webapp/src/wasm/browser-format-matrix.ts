@@ -263,6 +263,90 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
   }
 }
 
+type BrowserFormatMatrixContainerRunContext = {
+  archiveSourcePath: string;
+  dir: string;
+  opfsHandle: FileSystemDirectoryHandle;
+  profile: BrowserFormatMatrixProfile;
+  runCommand: BrowserFormatMatrixRunCommand;
+};
+
+const runContainerRoundTrips = async ({
+  archiveSourcePath,
+  dir,
+  opfsHandle,
+  profile,
+  runCommand,
+}: BrowserFormatMatrixContainerRunContext) => {
+  for (const format of BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS) {
+    for (const threads of profile === "exhaustive" ? ([1, 2, "auto"] as const) : ([1] as const)) {
+      const token = `${formatToken(format)}-${threads}`;
+      const archivePath = joinGuestPath(dir, `roundtrip-${token}.${containerSuffix(format)}`);
+      const compressResult = await runCommand(
+        `compress ${format} threads=${threads}`,
+        createRomWeaverCommand("compress", { format, input: [archiveSourcePath], output: archivePath, threads }),
+        { invalidateMountCacheAfterRun: true },
+      );
+      assertRunJsonSucceeded(compressResult, { command: "compress" });
+      await waitForGuestFile(opfsHandle, archivePath, compressResult);
+      const archiveBytes = await readGuestFile(opfsHandle, archivePath);
+      assertRunJsonSucceeded(
+        await runCommand(
+          `ingest ${format} threads=${threads}`,
+          createRomWeaverCommand("ingest", {
+            output: joinGuestPath(dir, `roundtrip-${token}-extract`),
+            input: archivePath,
+            threads,
+          }),
+          { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
+        ),
+        { command: "ingest" },
+      );
+    }
+  }
+};
+
+const runExhaustiveContainerCases = async ({
+  archiveSourcePath,
+  dir,
+  opfsHandle,
+  runCommand,
+}: BrowserFormatMatrixContainerRunContext) => {
+  for (const matrixCase of createExhaustiveContainerCases()) {
+    const token = [matrixCase.format, matrixCase.codec, matrixCase.level || "no-level", matrixCase.threads]
+      .map((value) => formatToken(String(value)))
+      .join("-");
+    const archivePath = joinGuestPath(dir, `options-${token}.${containerSuffix(matrixCase.format)}`);
+    const compressResult = await runCommand(
+      `compress ${matrixCase.format} codec=${matrixCase.codec} level=${matrixCase.level || "none"} threads=${matrixCase.threads}`,
+      createRomWeaverCommand("compress", {
+        codec: [matrixCase.codec],
+        format: matrixCase.format,
+        input: [archiveSourcePath],
+        ...(matrixCase.level ? { level: matrixCase.level } : {}),
+        output: archivePath,
+        threads: matrixCase.threads,
+      }),
+      { invalidateMountCacheAfterRun: true },
+    );
+    assertRunJsonSucceeded(compressResult, { command: "compress" });
+    await waitForGuestFile(opfsHandle, archivePath, compressResult);
+    const archiveBytes = await readGuestFile(opfsHandle, archivePath);
+    assertRunJsonSucceeded(
+      await runCommand(
+        `ingest options ${token}`,
+        createRomWeaverCommand("ingest", {
+          output: joinGuestPath(dir, `options-${token}-extract`),
+          input: archivePath,
+          threads: matrixCase.threads,
+        }),
+        { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
+      ),
+      { command: "ingest" },
+    );
+  }
+};
+
 export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixCoreOptions) {
   const { dir, fixtures, onEvent, onStep, opfsHandle, profile = "fast", runJson } = input;
   const state = createMatrixState({ onEvent, onStep });
@@ -277,76 +361,9 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   archiveSource[archiveSource.length - 1] = 0;
   await writeGuestFile(opfsHandle, archiveSourcePath, archiveSource);
 
-  const containerRoundTripFormats = BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS;
-  for (const format of containerRoundTripFormats) {
-    for (const threads of profile === "exhaustive" ? ([1, 2, "auto"] as const) : ([1] as const)) {
-      const token = `${formatToken(format)}-${threads}`;
-      const archivePath = joinGuestPath(dir, `roundtrip-${token}.${containerSuffix(format)}`);
-      const compressResult = await runCommand(
-        `compress ${format} threads=${threads}`,
-        createRomWeaverCommand("compress", {
-          format,
-          input: [archiveSourcePath],
-          output: archivePath,
-          threads,
-        }),
-        { invalidateMountCacheAfterRun: true },
-      );
-      assertRunJsonSucceeded(compressResult, { command: "compress" });
-      await waitForGuestFile(opfsHandle, archivePath, compressResult);
-      const archiveBytes = await readGuestFile(opfsHandle, archivePath);
-
-      const extractDir = joinGuestPath(dir, `roundtrip-${token}-extract`);
-      assertRunJsonSucceeded(
-        await runCommand(
-          `ingest ${format} threads=${threads}`,
-          createRomWeaverCommand("ingest", {
-            output: extractDir,
-            input: archivePath,
-            threads,
-          }),
-          { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
-        ),
-        { command: "ingest" },
-      );
-    }
-  }
-
-  if (profile === "exhaustive") {
-    for (const matrixCase of createExhaustiveContainerCases()) {
-      const token = [matrixCase.format, matrixCase.codec, matrixCase.level || "no-level", matrixCase.threads]
-        .map((value) => formatToken(String(value)))
-        .join("-");
-      const archivePath = joinGuestPath(dir, `options-${token}.${containerSuffix(matrixCase.format)}`);
-      const compressResult = await runCommand(
-        `compress ${matrixCase.format} codec=${matrixCase.codec} level=${matrixCase.level || "none"} threads=${matrixCase.threads}`,
-        createRomWeaverCommand("compress", {
-          codec: [matrixCase.codec],
-          format: matrixCase.format,
-          input: [archiveSourcePath],
-          ...(matrixCase.level ? { level: matrixCase.level } : {}),
-          output: archivePath,
-          threads: matrixCase.threads,
-        }),
-        { invalidateMountCacheAfterRun: true },
-      );
-      assertRunJsonSucceeded(compressResult, { command: "compress" });
-      await waitForGuestFile(opfsHandle, archivePath, compressResult);
-      const archiveBytes = await readGuestFile(opfsHandle, archivePath);
-      assertRunJsonSucceeded(
-        await runCommand(
-          `ingest options ${token}`,
-          createRomWeaverCommand("ingest", {
-            output: joinGuestPath(dir, `options-${token}-extract`),
-            input: archivePath,
-            threads: matrixCase.threads,
-          }),
-          { virtualFiles: [{ bytes: archiveBytes, path: archivePath }] },
-        ),
-        { command: "ingest" },
-      );
-    }
-  }
+  const containerRunContext = { archiveSourcePath, dir, opfsHandle, profile, runCommand };
+  await runContainerRoundTrips(containerRunContext);
+  if (profile === "exhaustive") await runExhaustiveContainerCases(containerRunContext);
 
   const containerCompressFailureExpectations = createContainerCompressFailureExpectations();
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {

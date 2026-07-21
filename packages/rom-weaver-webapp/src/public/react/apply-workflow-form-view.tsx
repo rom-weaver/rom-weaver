@@ -38,7 +38,7 @@ import type {
   StartupState,
 } from "./patcher-form.ts";
 import { inertUiController } from "./patcher-form-session.ts";
-import type { PatchStackItemState } from "./patcher-presentation.ts";
+import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -849,6 +849,176 @@ const OutputHeaderField = ({
   );
 };
 
+const ApplyOutputAction = ({
+  applyTotalTime,
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  bundleVerificationError,
+  controllers,
+  disabledPatchCount,
+  enabledPatchCount,
+  errorNotice,
+  localizer,
+  noticeController,
+  outputState,
+  patches,
+  romInputs,
+  uiController,
+  uiState,
+}: {
+  applyTotalTime: PatcherOutputState["totalTiming"];
+  bundleActionLabel: string;
+  bundleExport?: BundleExportState;
+  bundleTools?: BundleToolsState;
+  bundleVerificationError: string | null;
+  controllers: { output: PatcherOutputController };
+  disabledPatchCount: number;
+  enabledPatchCount: number;
+  errorNotice: NoticeState | null;
+  localizer: ReturnType<typeof useUiLocalizer>;
+  noticeController?: NoticeController;
+  outputState: PatcherOutputState;
+  patches: PatchStackItemState[];
+  romInputs: RomInputRowState[];
+  uiController: PatcherUiController;
+  uiState: ReturnType<PatcherUiController["getState"]>;
+}) => (
+  <>
+    {errorNotice?.visible ? (
+      <Notice
+        id="rom-weaver-row-error-message"
+        level={errorNotice.level === "warning" ? "warn" : "error"}
+        onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+      >
+        {errorNotice.message}
+      </Notice>
+    ) : null}
+    {uiState.checksumOverride.visible ? (
+      <label className="checkrow warn">
+        <input
+          checked={uiState.checksumOverride.checked}
+          disabled={uiState.checksumOverride.disabled}
+          id="rom-weaver-checkbox-checksum-override"
+          onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>{uiState.checksumOverride.label}</span>
+      </label>
+    ) : null}
+    {uiState.outputChecksumWarning.visible ? (
+      <div id="rom-weaver-row-output-checksum-warning">
+        <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
+        <label className="checkrow warn">
+          <input
+            checked={uiState.outputChecksumWarning.checked}
+            disabled={uiState.outputChecksumWarning.disabled}
+            id="rom-weaver-checkbox-output-checksum-override"
+            onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          <span>{uiState.outputChecksumWarning.label}</span>
+        </label>
+      </div>
+    ) : null}
+    <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
+      <p aria-live="polite" className="patch-off-note">
+        <TriangleAlert aria-hidden="true" />
+        <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
+      </p>
+    </div>
+    <PatcherPrimaryAction
+      controller={controllers.output}
+      disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+      totalTime={applyTotalTime || undefined}
+    />
+    {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
+    {bundleTools?.outputVerification ? (
+      bundleTools.outputVerification.level === "warn" ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+          <TriangleAlert aria-hidden="true" />
+          <span>{bundleTools.outputVerification.message}</span>
+        </p>
+      ) : (
+        <p aria-live="polite" className="patch-off-note is-ok" id="rom-weaver-output-verified">
+          <ShieldCheck aria-hidden="true" />
+          <span>{bundleTools.outputVerification.message}</span>
+        </p>
+      )
+    ) : null}
+    {bundleExport && bundleTools?.exportVisible ? (
+      bundleExport.busy ? (
+        <ProgressActionButton
+          cancelLabel="Cancel bundle export"
+          disabled
+          label={bundleActionLabel}
+          onCancel={bundleExport.cancelExport}
+          onClick={() => undefined}
+          progress={bundleExport.progress}
+          progressId="rom-weaver-bundle-export-progress"
+        />
+      ) : (
+        <button
+          className="btn ghost slim bundle-dl"
+          disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+          id="rom-weaver-button-export-bundle"
+          onClick={() => void bundleExport.runExport()}
+          type="button"
+        >
+          {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+          {bundleActionLabel}
+        </button>
+      )
+    ) : null}
+    {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+  </>
+);
+
+const buildRomActualsById = (romInputs: RomInputRowState[]) => {
+  const actualsById = new Map<string, RomCheckActuals>();
+  for (const row of romInputs) {
+    const actuals = {
+      bytes: typeof row.size === "number" ? row.size : row.sourceSize,
+      crc32: row.info.crc32 || undefined,
+      md5: row.info.md5 || undefined,
+      sha1: row.info.sha1 || undefined,
+    };
+    actualsById.set(row.id, actuals);
+    if (row.kind === "track" && row.info.fileName && !actualsById.has(row.info.fileName)) {
+      actualsById.set(row.info.fileName, actuals);
+    }
+  }
+  return actualsById;
+};
+
+const getBundleActionLabel = (
+  bundleExport: BundleExportState | undefined,
+  localizer: ReturnType<typeof useUiLocalizer>,
+  downloadable: boolean,
+) => {
+  if (!downloadable) {
+    if (!bundleExport) return "";
+    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
+    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
+    return localizer.message(createKey, { format: formatName });
+  }
+  if (!bundleExport?.downloadable) return "";
+  const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+  const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
+  const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
+  return localizer.message(downloadKey, { format: formatName });
+};
+
+const getBundleFormatValue = (
+  bundleExport: BundleExportState | undefined,
+  bundleTools: BundleToolsState | undefined,
+) => {
+  const format = bundleTools?.exportVisible ? bundleExport?.format : "";
+  if (!format || format === "bundle") return "";
+  return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
+};
+
 function ApplyWorkflowFormView({
   controllers,
   bundleExpectedRomChecks,
@@ -950,19 +1120,7 @@ function ApplyWorkflowFormView({
   // Each ROM's computed identity, keyed by id, for patch-card check verification.
   // Disc-track rows are targeted by FILE NAME (their row id is not what the
   // target select resolves), so those alias their actuals under the file name too.
-  const romActualsById = new Map<string, RomCheckActuals>();
-  for (const row of romInputs) {
-    const actuals = {
-      bytes: typeof row.size === "number" ? row.size : row.sourceSize,
-      crc32: row.info.crc32 || undefined,
-      md5: row.info.md5 || undefined,
-      sha1: row.info.sha1 || undefined,
-    };
-    romActualsById.set(row.id, actuals);
-    if (row.kind === "track" && row.info.fileName && !romActualsById.has(row.info.fileName)) {
-      romActualsById.set(row.info.fileName, actuals);
-    }
-  }
+  const romActualsById = buildRomActualsById(romInputs);
   // The expected-ROM group describes THE base ROM, so it only renders for an
   // unambiguous single-ROM bench. Plan base-basis verdicts feed it; without plan
   // evidence the bundle expectation, then the chain-input patch's checks, stand in.
@@ -1019,27 +1177,13 @@ function ApplyWorkflowFormView({
     title: "Bundle",
   };
   // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
-  const bundleCreateLabel = (() => {
-    if (!bundleExport) return "";
-    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
-    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
-    return localizer.message(createKey, { format: formatName });
-  })();
-  const bundleActionLabel = (() => {
-    if (!bundleExport?.downloadable) return bundleCreateLabel;
-    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
-    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-    const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
-    return localizer.message(downloadKey, { format: formatName });
-  })();
+  const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
+  const bundleActionLabel = bundleExport?.downloadable
+    ? getBundleActionLabel(bundleExport, localizer, true)
+    : bundleCreateLabel;
   // The bundle package select mirrors the persisted "Bundle" user setting - ""
   // is the hide sentinel (matches the stored value), a format arms the action.
-  const bundleFormatValue = (() => {
-    const format = bundleTools?.exportVisible ? bundleExport?.format : "";
-    if (!format || format === "bundle") return "";
-    return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
-  })();
+  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
   const bundleOutputFields = bundleExport ? (
     <>
       {outputHeaderField}
@@ -1117,95 +1261,25 @@ function ApplyWorkflowFormView({
       Add patches in <b className="hexref mono">0x01</b> or click for any input
     </NeedsInput>
   );
-  const renderOutputAction = () => (
-    <>
-      {errorNotice?.visible ? (
-        <Notice
-          id="rom-weaver-row-error-message"
-          level={errorNotice.level === "warning" ? "warn" : "error"}
-          onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
-        >
-          {errorNotice.message}
-        </Notice>
-      ) : null}
-      {uiState.checksumOverride.visible ? (
-        <label className="checkrow warn">
-          <input
-            checked={uiState.checksumOverride.checked}
-            disabled={uiState.checksumOverride.disabled}
-            id="rom-weaver-checkbox-checksum-override"
-            onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-            type="checkbox"
-          />
-          <span>{uiState.checksumOverride.label}</span>
-        </label>
-      ) : null}
-      {uiState.outputChecksumWarning.visible ? (
-        <div id="rom-weaver-row-output-checksum-warning">
-          <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
-          <label className="checkrow warn">
-            <input
-              checked={uiState.outputChecksumWarning.checked}
-              disabled={uiState.outputChecksumWarning.disabled}
-              id="rom-weaver-checkbox-output-checksum-override"
-              onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
-              type="checkbox"
-            />
-            <span>{uiState.outputChecksumWarning.label}</span>
-          </label>
-        </div>
-      ) : null}
-      <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
-        <p aria-live="polite" className="patch-off-note">
-          <TriangleAlert aria-hidden="true" />
-          <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
-        </p>
-      </div>
-      <PatcherPrimaryAction
-        controller={controllers.output}
-        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-        totalTime={applyTotalTime || undefined}
-      />
-      {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-      {bundleTools?.outputVerification ? (
-        bundleTools.outputVerification.level === "warn" ? (
-          <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
-            <TriangleAlert aria-hidden="true" />
-            <span>{bundleTools.outputVerification.message}</span>
-          </p>
-        ) : (
-          <p aria-live="polite" className="patch-off-note is-ok" id="rom-weaver-output-verified">
-            <ShieldCheck aria-hidden="true" />
-            <span>{bundleTools.outputVerification.message}</span>
-          </p>
-        )
-      ) : null}
-      {bundleExport && bundleTools?.exportVisible ? (
-        bundleExport.busy ? (
-          <ProgressActionButton
-            cancelLabel="Cancel bundle export"
-            disabled
-            label={bundleActionLabel}
-            onCancel={bundleExport.cancelExport}
-            onClick={() => undefined}
-            progress={bundleExport.progress}
-            progressId="rom-weaver-bundle-export-progress"
-          />
-        ) : (
-          <button
-            className="btn ghost slim bundle-dl"
-            disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-            id="rom-weaver-button-export-bundle"
-            onClick={() => void bundleExport.runExport()}
-            type="button"
-          >
-            {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
-            {bundleActionLabel}
-          </button>
-        )
-      ) : null}
-      {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-    </>
+  const renderOutputAction = (
+    <ApplyOutputAction
+      applyTotalTime={applyTotalTime}
+      bundleActionLabel={bundleActionLabel}
+      bundleExport={bundleExport}
+      bundleTools={bundleTools}
+      bundleVerificationError={bundleVerificationError}
+      controllers={{ output: controllers.output }}
+      disabledPatchCount={disabledPatchCount}
+      enabledPatchCount={enabledPatchCount}
+      errorNotice={errorNotice}
+      localizer={localizer}
+      noticeController={noticeController}
+      outputState={outputState}
+      patches={patches}
+      romInputs={romInputs}
+      uiController={uiController}
+      uiState={uiState}
+    />
   );
 
   if (startup.status === "error") {
@@ -1360,7 +1434,7 @@ function ApplyWorkflowFormView({
             </div>
           ) : null}
           <WorkflowOutputStep
-            action={renderOutputAction()}
+            action={renderOutputAction}
             compress={buildOutputCompressionPanel({
               disabled: outputState.disabled,
               extraChildren: bundleOutputFields,

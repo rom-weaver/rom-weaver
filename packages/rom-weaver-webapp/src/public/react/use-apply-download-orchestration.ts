@@ -2,7 +2,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useMemo } fr
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
-import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
+import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import {
   getChecksumProgressInfoPatch,
   getProgressDetails,
@@ -127,6 +127,104 @@ interface ApplyDownloadOrchestrationContext {
   workflow: ApplyRunWorkflow;
 }
 
+const createApplyProgressHandler = ({
+  abortController,
+  activePatches,
+  applyExecutionTimingRef,
+  effectiveInputs,
+  getPatchKey,
+  getStableInputInfo,
+  mergeRomInput,
+  onProgress,
+  setCompletedApplyTimeMs,
+  setPatchProgress,
+  setPatchProgressByKey,
+  setProgress,
+}: {
+  abortController: AbortController;
+  activePatches: BinarySource[];
+  applyExecutionTimingRef: MutableRefObject<ApplyExecutionTimingTracker>;
+  effectiveInputs: BinarySource[];
+  getPatchKey: ApplyRunLifecycle["getPatchKey"];
+  getStableInputInfo: ApplyRunLifecycle["getStableInputInfo"];
+  mergeRomInput: ApplyRunLifecycle["mergeRomInput"];
+  onProgress?: ApplyRunWorkflow["onProgress"];
+  setCompletedApplyTimeMs: SessionState["setCompletedApplyTimeMs"];
+  setPatchProgress: SessionState["setPatchProgress"];
+  setPatchProgressByKey: SessionState["setPatchProgressByKey"];
+  setProgress: SessionState["setProgress"];
+}) => {
+  let clearedPatchRowProgress = false;
+  return (event: ProgressEvent) => {
+    if (abortController.signal.aborted) return;
+    const details = getProgressDetails(event);
+    if (details.stage === "compress" && applyExecutionTimingRef.current.compressionStartedAt === null) {
+      const now = Date.now();
+      applyExecutionTimingRef.current.compressionStartedAt = now;
+      if (typeof applyExecutionTimingRef.current.applyStartedAt === "number") {
+        setCompletedApplyTimeMs(Math.max(0, now - applyExecutionTimingRef.current.applyStartedAt));
+      }
+    }
+    if (details.role === "input" && details.stage !== "apply") {
+      const info = getStableInputInfo(getProgressStagedInputInfo(event), effectiveInputs);
+      if (info.id) {
+        mergeRomInput(info, {
+          ...getChecksumProgressInfoPatch(details),
+          progress: toInputProgress(event),
+        });
+      }
+    } else if (details.role === "patch" && details.stage !== "apply") {
+      const order = typeof details.order === "number" ? details.order : -1;
+      const patch = (order >= 0 ? activePatches[order] : undefined) || activePatches[0] || null;
+      if (patch) {
+        const key = getPatchKey(patch);
+        setPatchProgressByKey((current) => ({ ...current, [key]: toInputProgress(event) }));
+        setPatchProgress(null);
+      } else {
+        setPatchProgress(toInputProgress(event));
+      }
+    } else {
+      if (!clearedPatchRowProgress) {
+        setPatchProgressByKey({});
+        clearedPatchRowProgress = true;
+      }
+      setPatchProgress(null);
+      setProgress(toInputProgress(event));
+    }
+    onProgress?.(event);
+  };
+};
+
+const downloadPendingOutput = async ({
+  activeSettings,
+  downloadOutput,
+  fileName,
+  onError,
+  output,
+  setOutputErrorMessage,
+}: {
+  activeSettings: ApplyPatchFormSettings;
+  downloadOutput: NonNullable<ApplyRunWorkflow["downloadOutput"]>;
+  fileName: string;
+  onError?: ApplyRunWorkflow["onError"];
+  output: ApplyWorkflowResult;
+  setOutputErrorMessage: SessionState["setOutputErrorMessage"];
+}) => {
+  try {
+    await Promise.resolve(downloadOutput(output, fileName, { interactive: true }));
+  } catch (downloadError) {
+    const normalizedDownloadError = toError(downloadError);
+    logUiError("Output download failed", normalizedDownloadError);
+    setOutputErrorMessage(
+      formatCodedErrorForDisplay(
+        normalizedDownloadError,
+        createBrowserLocalizer((activeSettings as { language?: string }).language),
+      ),
+    );
+    onError?.(normalizedDownloadError);
+  }
+};
+
 // Owns the apply-and-download workflow for the patcher session: queueing/cancellation gating, the
 // AbortController lifecycle, per-stage progress fan-out, completion timing/size summary, and the
 // download hand-off. Returns the primary-action handlers consumed by the output controller. The live
@@ -207,28 +305,15 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
         const pendingDownloadResult = pendingDownloadResultRef.current;
         if (pendingDownloadResult && hasPendingDownload) {
-          try {
-            await Promise.resolve(
-              downloadOutput(
-                pendingDownloadResult,
-                pendingDownloadFileNameRef.current ||
-                  pendingDownloadFileName ||
-                  effectiveResolvedOutputName ||
-                  "output",
-                { interactive: true },
-              ),
-            );
-          } catch (downloadError) {
-            const normalizedDownloadError = toError(downloadError);
-            logUiError("Output download failed", normalizedDownloadError);
-            setOutputErrorMessage(
-              formatCodedErrorForDisplay(
-                normalizedDownloadError,
-                createBrowserLocalizer((activeSettings as { language?: string }).language),
-              ),
-            );
-            onError?.(normalizedDownloadError);
-          }
+          await downloadPendingOutput({
+            activeSettings,
+            downloadOutput,
+            fileName:
+              pendingDownloadFileNameRef.current || pendingDownloadFileName || effectiveResolvedOutputName || "output",
+            onError,
+            output: pendingDownloadResult,
+            setOutputErrorMessage,
+          });
           return;
         }
         if (applyQueueBlocked) {
@@ -261,7 +346,6 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         setProgress(createIndeterminateWorkflowProgress({ label: "Weaving patch...", stage: "apply" }));
         try {
           await waitForNextUiPaint();
-          let clearedPatchRowProgress = false;
           const result = await applyPatches({
             inputs: effectiveInputs,
             options: {
@@ -270,47 +354,20 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
                 ...activeSettings.input,
                 containerInputsEnabled,
               },
-              onProgress: (event) => {
-                if (abortController.signal.aborted) return;
-                const details = getProgressDetails(event);
-                if (details.stage === "compress" && applyExecutionTimingRef.current.compressionStartedAt === null) {
-                  const now = Date.now();
-                  applyExecutionTimingRef.current.compressionStartedAt = now;
-                  if (typeof applyExecutionTimingRef.current.applyStartedAt === "number") {
-                    setCompletedApplyTimeMs(Math.max(0, now - applyExecutionTimingRef.current.applyStartedAt));
-                  }
-                }
-                if (details.role === "input" && details.stage !== "apply") {
-                  const info = getStableInputInfo(getProgressStagedInputInfo(event), effectiveInputs);
-                  if (info.id) {
-                    mergeRomInput(info, {
-                      ...getChecksumProgressInfoPatch(details),
-                      progress: toInputProgress(event),
-                    });
-                  }
-                } else if (details.role === "patch" && details.stage !== "apply") {
-                  const order = typeof details.order === "number" ? details.order : -1;
-                  const patch = (order >= 0 ? activePatches[order] : undefined) || activePatches[0] || null;
-                  if (patch) {
-                    const key = getPatchKey(patch);
-                    setPatchProgressByKey((current) => ({
-                      ...current,
-                      [key]: toInputProgress(event),
-                    }));
-                    setPatchProgress(null);
-                  } else {
-                    setPatchProgress(toInputProgress(event));
-                  }
-                } else {
-                  if (!clearedPatchRowProgress) {
-                    setPatchProgressByKey({});
-                    clearedPatchRowProgress = true;
-                  }
-                  setPatchProgress(null);
-                  setProgress(toInputProgress(event));
-                }
-                onProgress?.(event);
-              },
+              onProgress: createApplyProgressHandler({
+                abortController,
+                activePatches,
+                applyExecutionTimingRef,
+                effectiveInputs,
+                getPatchKey,
+                getStableInputInfo,
+                mergeRomInput,
+                onProgress,
+                setCompletedApplyTimeMs,
+                setPatchProgress,
+                setPatchProgressByKey,
+                setProgress,
+              }),
               output: {
                 ...activeSettings.output,
                 compression: requestedCompression,

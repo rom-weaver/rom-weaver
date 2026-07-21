@@ -27,10 +27,10 @@
     "enabled": true,
     "rules": {
       "complexity": {
-        // Start with the established top outlier cluster; lower this ratchet as legacy hotspots are simplified.
+        // Keep ratcheting toward Biome's default of 15 as hotspots are simplified.
         "noExcessiveCognitiveComplexity": {
           "level": "error",
-          "options": { "maxAllowedComplexity": 60 },
+          "options": { "maxAllowedComplexity": 50 },
         },
         "noForEach": "error",
         "noUselessStringConcat": "error",

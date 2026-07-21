@@ -310,6 +310,29 @@ const getProgressDetails = (event: WorkflowProgress): Record<string, unknown> =>
     ? (event.details as Record<string, unknown>)
     : {};
 
+const resolveTrimAutomaticOutputFormat = ({
+  automaticCompressionFormat,
+  defaultArchiveFormat,
+  defaultCompressionMode,
+  rawOutputFormat,
+}: {
+  automaticCompressionFormat: string;
+  defaultArchiveFormat: string;
+  defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0];
+  rawOutputFormat: string;
+}) => {
+  const automaticSpecialOutputFormat =
+    allowsDefaultCompressionSpecial(defaultCompressionMode) &&
+    ["chd", "rvz", "z3ds"].includes(automaticCompressionFormat)
+      ? automaticCompressionFormat
+      : "";
+  const automaticDefaultFormat =
+    defaultCompressionMode === "auto"
+      ? automaticCompressionFormat
+      : automaticSpecialOutputFormat || defaultArchiveFormat;
+  return automaticSpecialOutputFormat || (automaticDefaultFormat === "none" ? rawOutputFormat : automaticDefaultFormat);
+};
+
 type InternalTrimPatchFormProps = TrimPatchFormProps & {
   trimWorkflow?: typeof TrimWorkflow;
 };
@@ -427,19 +450,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     sourceFileName: resolvedSourceFileName,
     sourceSize: sourceState?.size,
   });
-  const automaticSpecialOutputFormat =
-    allowsDefaultCompressionSpecial(defaultCompressionMode) &&
-    (automaticCompressionFormat === "chd" ||
-      automaticCompressionFormat === "rvz" ||
-      automaticCompressionFormat === "z3ds")
-      ? automaticCompressionFormat
-      : "";
-  const automaticDefaultFormat =
-    defaultCompressionMode === "auto"
-      ? automaticCompressionFormat
-      : automaticSpecialOutputFormat || defaultArchiveFormat;
-  const automaticOutputFormat =
-    automaticSpecialOutputFormat || (automaticDefaultFormat === "none" ? rawOutputFormat : automaticDefaultFormat);
+  const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
+    automaticCompressionFormat,
+    defaultArchiveFormat,
+    defaultCompressionMode,
+    rawOutputFormat,
+  });
   const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const generatedOutputName = configuredOutputName || (source ? getDefaultTrimOutputName(resolvedSourceFileName) : "");
@@ -914,7 +930,73 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: trimQueued });
 
-  const model: TrimPatchFormViewModel = {
+  const createOutputModel = (): TrimPatchFormViewModel["output"] => ({
+    action: (
+      <TrimOutputAction
+        busy={busy}
+        completedOutput={completedOutput}
+        disabled={actionDisabled}
+        onCancelProgress={cancelTrimOutputProgress}
+        onDownload={() => void runTrim()}
+        onRun={onRunClick}
+        progressProps={progressProps}
+        progressStage={progress?.stage}
+        queued={trimQueued}
+        sourceInputSize={sourceState?.size}
+        waitingProgressProps={waitingProgressProps}
+      />
+    ),
+    compress: buildOutputCompressionPanel({
+      disabled: outputDisabled,
+      fields: trimCompressPanel?.fields,
+      format: compressHeaderFormat,
+      formatId: "trim-builder-select-output-compression",
+      formatOptions: compressFormatOptions,
+      formatValue: resolvedOutputFormat,
+      onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
+      onFormatChange: updateOutputFormat,
+      summary: trimCompressPanel?.summary,
+      timing: compressTimingText,
+    }),
+    disabled: outputDisabled,
+    fileName: resolvedOutputName,
+    fileNameId: "trim-builder-output-file",
+    fileNamePlaceholder: "Trimmed filename (no extension)",
+    format: resolvedOutputFormat,
+    formatId: "trim-builder-select-output-format",
+    formatOptions,
+    info: (
+      <InfoPopover title="Output options">
+        <strong>Output</strong>
+        <ul>
+          <li>Set the filename without an extension - the format selector controls it.</li>
+          <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
+          <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
+        </ul>
+      </InfoPopover>
+    ),
+    meta: trimTimingText ? <span className="t">{trimTimingText}</span> : undefined,
+    notice: (
+      <TrimNotice
+        id="trim-builder-row-error-message"
+        level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+        message={messagePlacement === "output" ? message : ""}
+        onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+      />
+    ),
+    num: "0x03",
+    onFileNameChange: (value) => {
+      setOutputName(value);
+      updateSettings({
+        ...settings,
+        output: { ...settings.output, outputName: value.trim() || undefined },
+      });
+    },
+    onFormatChange: updateOutputFormat,
+    title: "Trim",
+  });
+
+  const createModel = (): TrimPatchFormViewModel => ({
     confirm: {
       body: `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
       cancelLabel: "Cancel",
@@ -937,71 +1019,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       onFiles: handleUnifiedDrop,
       supported: TRIM_SUPPORTED_FILES,
     },
-    output: {
-      action: (
-        <TrimOutputAction
-          busy={busy}
-          completedOutput={completedOutput}
-          disabled={actionDisabled}
-          onCancelProgress={cancelTrimOutputProgress}
-          onDownload={() => void runTrim()}
-          onRun={onRunClick}
-          progressProps={progressProps}
-          progressStage={progress?.stage}
-          queued={trimQueued}
-          sourceInputSize={sourceState?.size}
-          waitingProgressProps={waitingProgressProps}
-        />
-      ),
-      compress: buildOutputCompressionPanel({
-        disabled: outputDisabled,
-        fields: trimCompressPanel?.fields,
-        format: compressHeaderFormat,
-        formatId: "trim-builder-select-output-compression",
-        formatOptions: compressFormatOptions,
-        formatValue: resolvedOutputFormat,
-        onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
-        onFormatChange: updateOutputFormat,
-        summary: trimCompressPanel?.summary,
-        timing: compressTimingText,
-      }),
-      disabled: outputDisabled,
-      fileName: resolvedOutputName,
-      fileNameId: "trim-builder-output-file",
-      fileNamePlaceholder: "Trimmed filename (no extension)",
-      format: resolvedOutputFormat,
-      formatId: "trim-builder-select-output-format",
-      formatOptions: formatOptions,
-      info: (
-        <InfoPopover title="Output options">
-          <strong>Output</strong>
-          <ul>
-            <li>Set the filename without an extension - the format selector controls it.</li>
-            <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
-            <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
-          </ul>
-        </InfoPopover>
-      ),
-      meta: trimTimingText ? <span className="t">{trimTimingText}</span> : undefined,
-      notice: (
-        <TrimNotice
-          id="trim-builder-row-error-message"
-          level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
-          message={messagePlacement === "output" ? message : ""}
-          onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
-        />
-      ),
-      num: "0x03",
-      onFileNameChange: (value) => {
-        setOutputName(value);
-        updateSettings({
-          ...settings,
-          output: { ...settings.output, outputName: value.trim() || undefined },
-        });
-      },
-      onFormatChange: updateOutputFormat,
-      title: "Trim",
-    },
+    output: createOutputModel(),
     sourceEmpty: trimSourceActuallyEmpty,
     sourceStep: {
       id: "trim-builder-row-source",
@@ -1019,7 +1037,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       num: "0x02",
       title: "ROM",
     },
-  };
+  });
+  const model = createModel();
 
   return <TrimPatchFormView {...model} />;
 }

@@ -516,27 +516,51 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       );
       return queued;
     };
+    const stageCreateRole = async (
+      role: "modified" | "original",
+      changed: boolean,
+      source: BinarySource | null,
+      roleGeneration: number,
+      setSource: () => Promise<void>,
+      commit: () => void,
+    ) => {
+      if (!changed) return true;
+      if (!source) return true;
+      await enqueueSourceStage(role, setSource);
+      if (!isCurrentStaging()) return false;
+      if (isCurrentRoleStaging(role, roleGeneration)) {
+        commit();
+        clearProgressForStage("input");
+      }
+      return true;
+    };
     const finishStaging = async () => {
       let activeRole: "modified" | "original" | null = null;
       try {
         if (originalChanged && original) {
           activeRole = "original";
-          await enqueueSourceStage("original", () => activeWorkflow.setOriginal(original));
-          if (!isCurrentStaging()) return;
-          if (isCurrentRoleStaging("original", originalGeneration)) {
-            setOriginalState(activeWorkflow.getOriginal());
-            clearProgressForStage("input");
-          }
+          const originalStaged = await stageCreateRole(
+            "original",
+            originalChanged,
+            original,
+            originalGeneration,
+            () => activeWorkflow.setOriginal(original),
+            () => setOriginalState(activeWorkflow.getOriginal()),
+          );
+          if (!originalStaged) return;
           activeRole = null;
         }
         if (modifiedChanged && modified) {
           activeRole = "modified";
-          await enqueueSourceStage("modified", () => activeWorkflow.setModified(modified));
-          if (!isCurrentStaging()) return;
-          if (isCurrentRoleStaging("modified", modifiedGeneration)) {
-            setModifiedState(activeWorkflow.getModified());
-            clearProgressForStage("input");
-          }
+          const modifiedStaged = await stageCreateRole(
+            "modified",
+            modifiedChanged,
+            modified,
+            modifiedGeneration,
+            () => activeWorkflow.setModified(modified),
+            () => setModifiedState(activeWorkflow.getModified()),
+          );
+          if (!modifiedStaged) return;
           activeRole = null;
         }
       } catch (error) {
@@ -760,7 +784,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
-  const model: CreatePatchFormViewModel = {
+  const createModel = (): CreatePatchFormViewModel => ({
     dialog: candidateSelectionDialog,
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
@@ -894,7 +918,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     swap: createInputsSelected
       ? { disabled: uploadDisabled || createPreparationPending || createQueued, onSwap: swapCreateSources }
       : null,
-  };
+  });
+  const model = createModel();
 
   return <CreatePatchFormView {...model} />;
 }

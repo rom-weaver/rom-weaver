@@ -8,7 +8,6 @@ import {
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
-import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -132,6 +131,144 @@ const slugFileName = (value: string): string =>
     .trim()
     .replace(/\s+/g, "-");
 
+const buildBundleExportRows = ({
+  bundleMetaById,
+  disabledPatchIds,
+  getPatchIds,
+  getStackItems,
+  patches,
+}: {
+  bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
+  disabledPatchIds: ReadonlySet<string>;
+  getPatchIds: () => string[];
+  getStackItems: () => PatchStackItemState[];
+  patches: ApplyWorkflowBundleSources["patches"];
+}): BundleExportRow[] => {
+  const items = getStackItems();
+  const ids = getPatchIds();
+  return patches.map((patch, index) => {
+    const id = ids[index] || "";
+    const meta = id ? bundleMetaById.get(id) : undefined;
+    const item = items[index];
+    const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
+    const archiveFileName = item?.archiveFileName?.trim();
+    const headerChoice = item?.headerChoice;
+    const checks = Object.entries(meta?.inputChecks?.checksums || {})
+      .filter(([, value]) => value.trim())
+      .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
+      .join(",");
+    const outputChecks = Object.entries(meta?.outputChecks?.checksums || {})
+      .filter(([, value]) => value.trim())
+      .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
+      .join(",");
+    const chainVerdict = item?.chainVerdict;
+    const basis =
+      meta?.basis ??
+      (chainVerdict?.basis === "base" && chainVerdict.basisSource === "inferred_base" ? ("base" as const) : undefined);
+    return {
+      fileName,
+      ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
+      default: !disabledPatchIds.has(id),
+      id: meta?.id || id,
+      ...(meta?.version ? { version: meta.version } : {}),
+      ...(meta?.author ? { author: meta.author } : {}),
+      ...(meta?.name ? { name: meta.name } : {}),
+      checks,
+      description: meta?.description || "",
+      outputChecks,
+      ...(meta?.label ? { label: meta.label } : {}),
+      ...(headerChoice === "keep" || headerChoice === "strip" ? { header: headerChoice } : {}),
+      ...(basis ? { basis } : {}),
+    };
+  });
+};
+
+const buildBundlePatchInputs = (patches: ApplyWorkflowBundleSources["patches"], rows: BundleExportRow[]) =>
+  patches.map((patch, index) => {
+    const row = rows[index];
+    return {
+      fileName: patch.fileName,
+      source: patch.source,
+      ...(row?.id ? { id: row.id } : {}),
+      ...(row?.version?.trim() ? { version: row.version.trim() } : {}),
+      ...(row?.author?.trim() ? { author: row.author.trim() } : {}),
+      ...(row?.default === false ? { optional: true } : {}),
+      ...(row?.name ? { name: row.name } : {}),
+      ...(row?.description.trim() ? { description: row.description.trim() } : {}),
+      ...(row?.checks.trim() ? { inputChecks: row.checks.trim() } : {}),
+      ...(row?.outputChecks.trim() ? { outputChecks: row.outputChecks.trim() } : {}),
+      ...(row?.label ? { label: row.label } : {}),
+      ...(row?.header ? { header: row.header } : {}),
+      ...(row?.basis ? { basis: row.basis } : {}),
+    };
+  });
+
+const validateBundleRows = (rows: BundleExportRow[], items: PatchStackItemState[]) => {
+  const validateRowChecks = (raw: string, builtIn: Record<string, string>, label: string): string => {
+    const explicit = parseChecks(raw, label);
+    for (const algorithm of CHECK_ALGORITHMS) {
+      if (builtIn[algorithm] && explicit[algorithm] && builtIn[algorithm] !== explicit[algorithm]) {
+        throw new Error(`${label} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`);
+      }
+    }
+    return formatChecks(explicit);
+  };
+  for (const [index] of rows.entries()) {
+    const row = rows[index];
+    if (!row) continue;
+    row.checks = validateRowChecks(row.checks, embeddedChecks(items[index], "in"), `Patch ${index + 1} input`);
+    row.outputChecks = validateRowChecks(
+      row.outputChecks,
+      embeddedChecks(items[index], "out"),
+      `Patch ${index + 1} output`,
+    );
+  }
+};
+
+const preparePackagedRom = async ({
+  bundleRom,
+  compressedRomOutputs,
+  rom,
+  stepProgress,
+  wantsBundle,
+}: {
+  bundleRom: boolean;
+  compressedRomOutputs: PublicOutput[];
+  rom: NonNullable<ApplyWorkflowBundleSources["rom"]>;
+  stepProgress: (label: string) => void;
+  wantsBundle: boolean;
+}) => {
+  if (!bundleRom) return undefined;
+  if (!wantsBundle) return undefined;
+  const originalName = getReactBinarySourceFileName(rom.originalSource as BinarySource, rom.fileName);
+  const existingFormat = originalName.split(".").pop()?.toLowerCase();
+  const recommendedRomFormat = rom.recommendedFormat?.toLowerCase();
+  if (["chd", "rvz", "z3ds"].includes(existingFormat || "")) {
+    return { fileName: originalName, source: rom.originalSource };
+  }
+  if (!["chd", "rvz", "z3ds"].includes(recommendedRomFormat || "")) {
+    return { fileName: rom.fileName, source: rom.source };
+  }
+  const targetFormat = recommendedRomFormat as "chd" | "rvz" | "z3ds";
+  const createCompression = browserRuntime.compression.create;
+  if (!createCompression) throw new Error("ROM compression is not available in this runtime");
+  stepProgress(`ROM compression · ${targetFormat.toUpperCase()}`);
+  const outputName = `${stripFileExtension(rom.fileName)}.${targetFormat}`;
+  const compressed = await createCompression({
+    fileName: rom.fileName,
+    format: targetFormat,
+    outputName,
+    romSpecific: { [targetFormat]: { sourceFileName: rom.fileName } },
+    source: rom.source,
+  });
+  const output = "output" in compressed ? compressed.output : compressed;
+  compressedRomOutputs.push(output);
+  return {
+    fileName: outputName,
+    source: createVfsFileRef(output.vfs, output.path, { fileName: outputName }),
+  };
+};
+
 const useBundleExport = ({
   getSessionSources,
   getPatchIds,
@@ -207,44 +344,7 @@ const useBundleExport = ({
       return;
     }
     const items = getStackItems();
-    const ids = getPatchIds();
-    const exportRows: BundleExportRow[] = patches.map((patch, index) => {
-      const id = ids[index] || "";
-      const meta = id ? bundleMetaById.get(id) : undefined;
-      const item = items[index];
-      const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
-      const archiveFileName = item?.archiveFileName?.trim();
-      const headerChoice = item?.headerChoice;
-      const checks = Object.entries(meta?.inputChecks?.checksums || {})
-        .filter(([, value]) => value.trim())
-        .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
-        .join(",");
-      const outputChecks = Object.entries(meta?.outputChecks?.checksums || {})
-        .filter(([, value]) => value.trim())
-        .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
-        .join(",");
-      const chainVerdict = item?.chainVerdict;
-      const basis =
-        meta?.basis ??
-        (chainVerdict?.basis === "base" && chainVerdict.basisSource === "inferred_base"
-          ? ("base" as const)
-          : undefined);
-      return {
-        fileName,
-        ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
-        default: !disabledPatchIds.has(id),
-        id: meta?.id || id,
-        ...(meta?.version ? { version: meta.version } : {}),
-        ...(meta?.author ? { author: meta.author } : {}),
-        ...(meta?.name ? { name: meta.name } : {}),
-        checks,
-        description: meta?.description || "",
-        outputChecks,
-        ...(meta?.label ? { label: meta.label } : {}),
-        ...(headerChoice === "keep" || headerChoice === "strip" ? { header: headerChoice } : {}),
-        ...(basis ? { basis } : {}),
-      };
-    });
+    const exportRows = buildBundleExportRows({ bundleMetaById, disabledPatchIds, getPatchIds, getStackItems, patches });
     const stepProgress = (label: string) =>
       setProgress(
         createProgressViewModel({
@@ -263,62 +363,11 @@ const useBundleExport = ({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     try {
-      // Per-patch entries carry ONLY checks the author specified (typed in the
-      // dialog or the patch's Options) - chain intermediates are never hashed
-      // or attached. A typed check may not contradict one built into the patch
-      // file itself.
-      const validateRowChecks = (raw: string, builtIn: Record<string, string>, label: string): string => {
-        const explicit = parseChecks(raw, label);
-        for (const algorithm of CHECK_ALGORITHMS) {
-          if (builtIn[algorithm] && explicit[algorithm] && builtIn[algorithm] !== explicit[algorithm]) {
-            throw new Error(`${label} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`);
-          }
-        }
-        return formatChecks(explicit);
-      };
-      for (const [index] of patches.entries()) {
-        const row = exportRows[index];
-        if (!row) continue;
-        row.checks = validateRowChecks(row.checks, embeddedChecks(items[index], "in"), `Patch ${index + 1} input`);
-        row.outputChecks = validateRowChecks(
-          row.outputChecks,
-          embeddedChecks(items[index], "out"),
-          `Patch ${index + 1} output`,
-        );
-      }
+      validateBundleRows(exportRows, items);
       stepProgress("Writing bundle");
       const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
-      let packagedRom: { fileName: string; source: SourceRef } | undefined;
-      if (bundleRom && wantsBundle) {
-        const originalName = getReactBinarySourceFileName(rom.originalSource as BinarySource, rom.fileName);
-        const existingFormat = originalName.split(".").pop()?.toLowerCase();
-        const recommendedRomFormat = rom.recommendedFormat?.toLowerCase();
-        if (["chd", "rvz", "z3ds"].includes(existingFormat || "")) {
-          packagedRom = { fileName: originalName, source: rom.originalSource };
-        } else if (["chd", "rvz", "z3ds"].includes(recommendedRomFormat || "")) {
-          const targetFormat = recommendedRomFormat as "chd" | "rvz" | "z3ds";
-          const createCompression = browserRuntime.compression.create;
-          if (!createCompression) throw new Error("ROM compression is not available in this runtime");
-          stepProgress(`ROM compression · ${targetFormat.toUpperCase()}`);
-          const outputName = `${stripFileExtension(rom.fileName)}.${targetFormat}`;
-          const compressed = await createCompression({
-            fileName: rom.fileName,
-            format: targetFormat,
-            outputName,
-            romSpecific: { [targetFormat]: { sourceFileName: rom.fileName } },
-            source: rom.source,
-          });
-          const output = "output" in compressed ? compressed.output : compressed;
-          compressedRomOutputs.push(output);
-          packagedRom = {
-            fileName: outputName,
-            source: createVfsFileRef(output.vfs, output.path, { fileName: outputName }),
-          };
-        } else {
-          packagedRom = { fileName: rom.fileName, source: rom.source };
-        }
-      }
+      const packagedRom = await preparePackagedRom({ bundleRom, compressedRomOutputs, rom, stepProgress, wantsBundle });
       const outputHeader = getOutputHeader?.();
       // The exported rom.checks are the staged ROM's computed values; a
       // different expected base ROM is expressed as the first patch's input
@@ -338,24 +387,7 @@ const useBundleExport = ({
         onProgress: (event) => {
           setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "bundle" }));
         },
-        patches: patches.map((patch, index) => {
-          const row = exportRows[index];
-          return {
-            fileName: patch.fileName,
-            source: patch.source,
-            ...(row?.id ? { id: row.id } : {}),
-            ...(row?.version?.trim() ? { version: row.version.trim() } : {}),
-            ...(row?.author?.trim() ? { author: row.author.trim() } : {}),
-            ...(row?.default === false ? { optional: true } : {}),
-            ...(row?.name ? { name: row.name } : {}),
-            ...(row?.description.trim() ? { description: row.description.trim() } : {}),
-            ...(row?.checks.trim() ? { inputChecks: row.checks.trim() } : {}),
-            ...(row?.outputChecks.trim() ? { outputChecks: row.outputChecks.trim() } : {}),
-            ...(row?.label ? { label: row.label } : {}),
-            ...(row?.header ? { header: row.header } : {}),
-            ...(row?.basis ? { basis: row.basis } : {}),
-          };
-        }),
+        patches: buildBundlePatchInputs(patches, exportRows),
         rom: { fileName: rom.fileName, source: rom.source },
         signal: abortController.signal,
       });

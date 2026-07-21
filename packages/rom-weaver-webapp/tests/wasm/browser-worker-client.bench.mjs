@@ -145,161 +145,100 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
     fixtureName = null;
   });
 
-  if (SELECTED_COMMANDS.has("compress")) {
-    for (const formatName of SELECTED_CONTAINER_FORMATS) {
-      for (const [codecLabel, codecValue] of selectedCodecCasesForFormat(formatName)) {
-        const pathId = formatCodecPathId(formatName, codecLabel);
-        const skipReason = EXPECTED_COMPRESS_SKIPS[formatName] ?? null;
-        const benchName = `compress ${pathId}`;
-        if (skipReason) {
-          bench.skip(`${benchName} (skip: ${skipReason})`, () => {
-            // skipped: placeholder body for a skipped benchmark
-          });
-          continue;
-        }
-        bench(
-          benchName,
-          async () => {
-            await ensureRuntimeReady();
-            const outputPath = compressOutputPath(formatName, codecLabel);
-            const inputPath = compressInputForFormat(formatName);
-            const args = romWeaverCompressArgs({
-              codecOverride: codecValue,
-              formatName,
-              inputPath,
-              outputPath,
-              threads: THREAD_COUNT,
+  const registerCompressBenches = () => {
+    if (SELECTED_COMMANDS.has("compress")) {
+      for (const formatName of SELECTED_CONTAINER_FORMATS) {
+        for (const [codecLabel, codecValue] of selectedCodecCasesForFormat(formatName)) {
+          const pathId = formatCodecPathId(formatName, codecLabel);
+          const skipReason = EXPECTED_COMPRESS_SKIPS[formatName] ?? null;
+          const benchName = `compress ${pathId}`;
+          if (skipReason) {
+            bench.skip(`${benchName} (skip: ${skipReason})`, () => {
+              // skipped: placeholder body for a skipped benchmark
             });
-            await runBenchmarkCommand(args, "compress", {
-              wasmRuntime: defaultWasmRuntime(),
-            });
-            await markArchiveSourceReady(formatName, codecLabel);
-          },
-          benchOptions({
-            setup: () => prepareArchiveOutputFile(formatName, codecLabel),
-          }),
-        );
-      }
-    }
-  }
-
-  if (SELECTED_COMMANDS.has("extract")) {
-    for (const formatName of SELECTED_CONTAINER_FORMATS) {
-      for (const [codecLabel] of selectedCodecCasesForFormat(formatName)) {
-        const pathId = formatCodecPathId(formatName, codecLabel);
-        const sourceKey = archiveSourceKey(formatName, codecLabel);
-        const benchName = `extract ${pathId}`;
-        const skipReason = extractSkipReason(formatName);
-        if (skipReason) {
-          bench.skip(`${benchName} (skip: ${skipReason})`, () => {
-            // skipped: placeholder body for a skipped benchmark
-          });
-          continue;
+            continue;
+          }
+          bench(
+            benchName,
+            async () => {
+              await ensureRuntimeReady();
+              const outputPath = compressOutputPath(formatName, codecLabel);
+              const inputPath = compressInputForFormat(formatName);
+              const args = romWeaverCompressArgs({
+                codecOverride: codecValue,
+                formatName,
+                inputPath,
+                outputPath,
+                threads: THREAD_COUNT,
+              });
+              await runBenchmarkCommand(args, "compress", {
+                wasmRuntime: defaultWasmRuntime(),
+              });
+              await markArchiveSourceReady(formatName, codecLabel);
+            },
+            benchOptions({
+              setup: () => prepareArchiveOutputFile(formatName, codecLabel),
+            }),
+          );
         }
-        bench(
-          benchName,
-          async () => {
-            await ensureRuntimeReady();
-            const source = archiveSources.get(sourceKey);
-            if (!source) {
-              throw new Error(`extract source unavailable for ${pathId}: ${archiveSourceUnavailableReason(sourceKey)}`);
-            }
-            const outputDir = extractOutputDirPath(formatName, codecLabel);
-            await runBenchmarkCommand(
-              ["extract", "--input", source.path, "--out-dir", outputDir, "--threads", String(THREAD_COUNT)],
-              "extract",
-            );
-          },
-          benchOptions({
-            setup: () => prepareExtractBenchmarkSource(formatName, codecLabel),
-            teardown: () => cleanupExtractBenchmarkSource(formatName, codecLabel),
-          }),
-        );
       }
     }
-  }
+  };
+  registerCompressBenches();
 
-  if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("raw")) {
-    for (const algorithm of SELECTED_CHECKSUM_ALGORITHMS) {
-      bench(
-        `checksum raw:algo:${algorithm}`,
-        async () => {
-          await ensureRuntimeReady();
-          await runBenchmarkCommand(
-            [
-              "checksum",
-              "--input",
-              SOURCE_PATH,
-              "--algo",
-              algorithm,
-              "--no-extract",
-              "--threads",
-              String(THREAD_COUNT),
-            ],
-            "checksum",
+  const registerExtractBenches = () => {
+    if (SELECTED_COMMANDS.has("extract")) {
+      for (const formatName of SELECTED_CONTAINER_FORMATS) {
+        for (const [codecLabel] of selectedCodecCasesForFormat(formatName)) {
+          const pathId = formatCodecPathId(formatName, codecLabel);
+          const sourceKey = archiveSourceKey(formatName, codecLabel);
+          const benchName = `extract ${pathId}`;
+          const skipReason = extractSkipReason(formatName);
+          if (skipReason) {
+            bench.skip(`${benchName} (skip: ${skipReason})`, () => {
+              // skipped: placeholder body for a skipped benchmark
+            });
+            continue;
+          }
+          bench(
+            benchName,
+            async () => {
+              await ensureRuntimeReady();
+              const source = archiveSources.get(sourceKey);
+              if (!source) {
+                throw new Error(
+                  `extract source unavailable for ${pathId}: ${archiveSourceUnavailableReason(sourceKey)}`,
+                );
+              }
+              const outputDir = extractOutputDirPath(formatName, codecLabel);
+              await runBenchmarkCommand(
+                ["extract", "--input", source.path, "--out-dir", outputDir, "--threads", String(THREAD_COUNT)],
+                "extract",
+              );
+            },
+            benchOptions({
+              setup: () => prepareExtractBenchmarkSource(formatName, codecLabel),
+              teardown: () => cleanupExtractBenchmarkSource(formatName, codecLabel),
+            }),
           );
-        },
-        BENCH_OPTIONS,
-      );
-    }
-
-    if (CHECKSUM_COMBO_ALGORITHMS.length > 0) {
-      const comboLabel = CHECKSUM_COMBO_ALGORITHMS.join("+");
-      bench(
-        `checksum raw:combo:${comboLabel}`,
-        async () => {
-          await ensureRuntimeReady();
-          const comboArgs = checksumMultiAlgorithmArgs(CHECKSUM_COMBO_ALGORITHMS);
-          await runBenchmarkCommand(
-            ["checksum", "--input", SOURCE_PATH, ...comboArgs, "--no-extract", "--threads", String(THREAD_COUNT)],
-            "checksum",
-          );
-        },
-        BENCH_OPTIONS,
-      );
-    }
-  }
-
-  if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("auto-extract")) {
-    for (const formatName of SELECTED_CONTAINER_FORMATS) {
-      for (const algorithm of SELECTED_CHECKSUM_ALGORITHMS) {
-        const benchName = `checksum auto-extract:${formatName},algo:${algorithm}`;
-        bench(
-          benchName,
-          async () => {
-            await ensureRuntimeReady();
-            const currentSource = archiveSourcesDefault.get(formatName);
-            if (!currentSource) {
-              return;
-            }
-            await runBenchmarkCommand(
-              ["checksum", "--input", currentSource.path, "--algo", algorithm, "--threads", String(THREAD_COUNT)],
-              "checksum",
-            );
-          },
-          BENCH_OPTIONS,
-        );
+        }
       }
     }
-  }
+  };
+  registerExtractBenches();
 
-  if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("archive-no-extract")) {
-    for (const formatName of SELECTED_CONTAINER_FORMATS) {
+  const registerRawChecksumBenches = () => {
+    if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("raw")) {
       for (const algorithm of SELECTED_CHECKSUM_ALGORITHMS) {
-        const benchName = `checksum no-extract:${formatName},algo:${algorithm}`;
         bench(
-          benchName,
+          `checksum raw:algo:${algorithm}`,
           async () => {
             await ensureRuntimeReady();
-            const currentSource = archiveSourcesDefault.get(formatName);
-            if (!currentSource) {
-              return;
-            }
             await runBenchmarkCommand(
               [
                 "checksum",
                 "--input",
-                currentSource.path,
+                SOURCE_PATH,
                 "--algo",
                 algorithm,
                 "--no-extract",
@@ -312,97 +251,181 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
           BENCH_OPTIONS,
         );
       }
-    }
-  }
 
-  if (SELECTED_COMMANDS.has("patch-create")) {
-    for (const formatName of SELECTED_PATCH_FORMATS) {
-      const skipReason = patchCreateSkipReason(formatName);
-      const benchName = `patch-create format:${formatName}`;
-      if (skipReason) {
-        bench.skip(`${benchName} (skip: ${skipReason})`, () => {
-          // skipped: placeholder body for a skipped benchmark
-        });
-        continue;
+      if (CHECKSUM_COMBO_ALGORITHMS.length > 0) {
+        const comboLabel = CHECKSUM_COMBO_ALGORITHMS.join("+");
+        bench(
+          `checksum raw:combo:${comboLabel}`,
+          async () => {
+            await ensureRuntimeReady();
+            const comboArgs = checksumMultiAlgorithmArgs(CHECKSUM_COMBO_ALGORITHMS);
+            await runBenchmarkCommand(
+              ["checksum", "--input", SOURCE_PATH, ...comboArgs, "--no-extract", "--threads", String(THREAD_COUNT)],
+              "checksum",
+            );
+          },
+          BENCH_OPTIONS,
+        );
       }
-      bench(
-        benchName,
-        async () => {
-          await ensureRuntimeReady();
-          const patchArtifactPath = patchArtifactPathForBench("patch-create", formatName);
-          const { originalPath, modifiedPath } = patchFixturePairForFormat(formatName);
-          await runBenchmarkCommand(
-            [
+    }
+  };
+  registerRawChecksumBenches();
+
+  const registerAutoExtractChecksumBenches = () => {
+    if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("auto-extract")) {
+      for (const formatName of SELECTED_CONTAINER_FORMATS) {
+        for (const algorithm of SELECTED_CHECKSUM_ALGORITHMS) {
+          const benchName = `checksum auto-extract:${formatName},algo:${algorithm}`;
+          bench(
+            benchName,
+            async () => {
+              await ensureRuntimeReady();
+              const currentSource = archiveSourcesDefault.get(formatName);
+              if (!currentSource) {
+                return;
+              }
+              await runBenchmarkCommand(
+                ["checksum", "--input", currentSource.path, "--algo", algorithm, "--threads", String(THREAD_COUNT)],
+                "checksum",
+              );
+            },
+            BENCH_OPTIONS,
+          );
+        }
+      }
+    }
+  };
+  registerAutoExtractChecksumBenches();
+
+  const registerArchiveChecksumBenches = () => {
+    if (SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_MODES.has("archive-no-extract")) {
+      for (const formatName of SELECTED_CONTAINER_FORMATS) {
+        for (const algorithm of SELECTED_CHECKSUM_ALGORITHMS) {
+          const benchName = `checksum no-extract:${formatName},algo:${algorithm}`;
+          bench(
+            benchName,
+            async () => {
+              await ensureRuntimeReady();
+              const currentSource = archiveSourcesDefault.get(formatName);
+              if (!currentSource) {
+                return;
+              }
+              await runBenchmarkCommand(
+                [
+                  "checksum",
+                  "--input",
+                  currentSource.path,
+                  "--algo",
+                  algorithm,
+                  "--no-extract",
+                  "--threads",
+                  String(THREAD_COUNT),
+                ],
+                "checksum",
+              );
+            },
+            BENCH_OPTIONS,
+          );
+        }
+      }
+    }
+  };
+  registerArchiveChecksumBenches();
+
+  const registerPatchCreateBenches = () => {
+    if (SELECTED_COMMANDS.has("patch-create")) {
+      for (const formatName of SELECTED_PATCH_FORMATS) {
+        const skipReason = patchCreateSkipReason(formatName);
+        const benchName = `patch-create format:${formatName}`;
+        if (skipReason) {
+          bench.skip(`${benchName} (skip: ${skipReason})`, () => {
+            // skipped: placeholder body for a skipped benchmark
+          });
+          continue;
+        }
+        bench(
+          benchName,
+          async () => {
+            await ensureRuntimeReady();
+            const patchArtifactPath = patchArtifactPathForBench("patch-create", formatName);
+            const { originalPath, modifiedPath } = patchFixturePairForFormat(formatName);
+            await runBenchmarkCommand(
+              [
+                "patch",
+                "create",
+                "--original",
+                originalPath,
+                "--modified",
+                modifiedPath,
+                "--format",
+                formatName,
+                "--output",
+                patchArtifactPath,
+                "--threads",
+                String(THREAD_COUNT),
+              ],
+              "patch-create",
+            );
+          },
+          BENCH_OPTIONS,
+        );
+      }
+    }
+  };
+  registerPatchCreateBenches();
+
+  const registerPatchApplyBenches = () => {
+    if (SELECTED_COMMANDS.has("patch-apply")) {
+      for (const formatName of SELECTED_PATCH_FORMATS) {
+        const skipReason = patchApplySkipReason(formatName);
+        const benchName = `patch-apply format:${formatName}`;
+        if (skipReason) {
+          bench.skip(`${benchName} (skip: ${skipReason})`, () => {
+            // skipped: placeholder body for a skipped benchmark
+          });
+          continue;
+        }
+        bench(
+          benchName,
+          async () => {
+            await ensureRuntimeReady();
+            const patchSource = resolvePatchApplySource(formatName);
+            if (!patchSource) {
+              throw new Error(
+                `patch source unavailable for format:${formatName}: ${patchSourceUnavailableReason(formatName)}`,
+              );
+            }
+            const outputPath = patchApplyOutputPath(formatName);
+            const args = [
               "patch",
-              "create",
-              "--original",
-              originalPath,
-              "--modified",
-              modifiedPath,
-              "--format",
-              formatName,
+              "apply",
+              "--input",
+              patchSource.inputPath,
+              "--patch",
+              patchSource.patchPath,
               "--output",
-              patchArtifactPath,
+              outputPath,
+              "--no-compress",
               "--threads",
               String(THREAD_COUNT),
-            ],
-            "patch-create",
-          );
-        },
-        BENCH_OPTIONS,
-      );
-    }
-  }
-
-  if (SELECTED_COMMANDS.has("patch-apply")) {
-    for (const formatName of SELECTED_PATCH_FORMATS) {
-      const skipReason = patchApplySkipReason(formatName);
-      const benchName = `patch-apply format:${formatName}`;
-      if (skipReason) {
-        bench.skip(`${benchName} (skip: ${skipReason})`, () => {
-          // skipped: placeholder body for a skipped benchmark
-        });
-        continue;
+            ];
+            if (formatName === "mod") {
+              args.splice(args.length - 2, 0, "--ignore-checksum-validation");
+            }
+            const result = await runBenchmarkCommandAllowFailure(args);
+            if (!result.ok) {
+              throw new Error(`patch-apply format:${formatName} failed: ${terminalLabelFromResult(result)}`);
+            }
+          },
+          benchOptions({
+            setup: () => prepareOutputFile(patchApplyOutputPath(formatName)),
+            teardown: () => removeGuestPath(fixtureRootHandle, patchApplyOutputPath(formatName), { recursive: false }),
+          }),
+        );
       }
-      bench(
-        benchName,
-        async () => {
-          await ensureRuntimeReady();
-          const patchSource = resolvePatchApplySource(formatName);
-          if (!patchSource) {
-            throw new Error(
-              `patch source unavailable for format:${formatName}: ${patchSourceUnavailableReason(formatName)}`,
-            );
-          }
-          const outputPath = patchApplyOutputPath(formatName);
-          const args = [
-            "patch",
-            "apply",
-            "--input",
-            patchSource.inputPath,
-            "--patch",
-            patchSource.patchPath,
-            "--output",
-            outputPath,
-            "--no-compress",
-            "--threads",
-            String(THREAD_COUNT),
-          ];
-          if (formatName === "mod") {
-            args.splice(args.length - 2, 0, "--ignore-checksum-validation");
-          }
-          const result = await runBenchmarkCommandAllowFailure(args);
-          if (!result.ok) {
-            throw new Error(`patch-apply format:${formatName} failed: ${terminalLabelFromResult(result)}`);
-          }
-        },
-        benchOptions({
-          setup: () => prepareOutputFile(patchApplyOutputPath(formatName)),
-          teardown: () => removeGuestPath(fixtureRootHandle, patchApplyOutputPath(formatName), { recursive: false }),
-        }),
-      );
     }
-  }
+  };
+  registerPatchApplyBenches();
 });
 
 async function ensureSourceFixture() {

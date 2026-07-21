@@ -196,6 +196,74 @@ const groupKeyFor = <TSource>(prepared: PreparedValidation<TSource>, settings: P
     threads: settings.workers?.threads ?? null,
   });
 
+type PlanValidationVerdict = NonNullable<PatchValidateResult["plan"]>["per_patch"][number];
+
+const applyPlanValidationResult = <TSource>(
+  prepared: PreparedValidation<TSource>,
+  planVerdict: PlanValidationVerdict,
+  startedAt: number,
+  validationKey: string,
+) => {
+  const status =
+    planVerdict.input_verdict === "passed"
+      ? "valid"
+      : planVerdict.input_verdict === "failed"
+        ? "invalid"
+        : planVerdict.input_verdict === "chain_deferred"
+          ? "deferred"
+          : "unknown";
+  applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
+    message:
+      planVerdict.message ||
+      (status === "valid"
+        ? "Patch validation passed"
+        : status === "invalid"
+          ? "Patch cannot be woven into this ROM"
+          : "Input state is only provable during the weave"),
+    status,
+  });
+  prepared.entry.stage.state.chainVerdict = {
+    basis: planVerdict.basis,
+    basisSource: planVerdict.basis_source,
+    matched:
+      planVerdict.matched.kind === "patch_output"
+        ? { index: planVerdict.matched.index, kind: "patch_output" }
+        : planVerdict.matched.kind === "base"
+          ? { kind: "base", variant: planVerdict.matched.variant }
+          : { kind: "none" },
+    ...(planVerdict.expected_predecessor === undefined
+      ? {}
+      : { expectedPredecessor: planVerdict.expected_predecessor }),
+  };
+};
+
+const applyPerPatchValidationResult = <TSource>(
+  prepared: PreparedValidation<TSource>,
+  verdict: PatchValidatePerPatchVerdict,
+  startedAt: number,
+  validationKey: string,
+) => {
+  applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
+    message:
+      verdict.message ||
+      (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be woven into this ROM"),
+    status: verdict.status === "passed" ? "valid" : "invalid",
+  });
+};
+
+const applyFallbackValidationResult = <TSource>(
+  prepared: PreparedValidation<TSource>,
+  result: PatchValidateResult,
+  startedAt: number,
+  validationKey: string,
+) => {
+  // A resolved call means the batch passed unless the aggregate is explicitly mixed.
+  applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
+    message: result.message || "Patch validation passed",
+    status: result.status === "mixed" ? "unknown" : "valid",
+  });
+};
+
 const applyPreparedValidationResult = <TSource>(
   prepared: PreparedValidation<TSource>[],
   result: PatchValidateResult,
@@ -207,59 +275,19 @@ const applyPreparedValidationResult = <TSource>(
   for (const verdict of result.plan?.per_patch || []) planVerdicts.set(verdict.index, verdict);
   const perPatch = new Map<number, PatchValidatePerPatchVerdict>();
   for (const verdict of result.perPatch || []) perPatch.set(verdict.index, verdict);
-  for (const [index, { entry, startedAt, validationKey }] of prepared.entries()) {
+  for (const [index, preparedEntry] of prepared.entries()) {
+    const { startedAt, validationKey } = preparedEntry;
     const planVerdict = planVerdicts.get(index);
     if (planVerdict) {
-      const status =
-        planVerdict.input_verdict === "passed"
-          ? "valid"
-          : planVerdict.input_verdict === "failed"
-            ? "invalid"
-            : planVerdict.input_verdict === "chain_deferred"
-              ? "deferred"
-              : "unknown";
-      applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
-        message:
-          planVerdict.message ||
-          (status === "valid"
-            ? "Patch validation passed"
-            : status === "invalid"
-              ? "Patch cannot be woven into this ROM"
-              : "Input state is only provable during the weave"),
-        status,
-      });
-      entry.stage.state.chainVerdict = {
-        basis: planVerdict.basis,
-        basisSource: planVerdict.basis_source,
-        matched:
-          planVerdict.matched.kind === "patch_output"
-            ? { index: planVerdict.matched.index, kind: "patch_output" }
-            : planVerdict.matched.kind === "base"
-              ? { kind: "base", variant: planVerdict.matched.variant }
-              : { kind: "none" },
-        ...(planVerdict.expected_predecessor === undefined
-          ? {}
-          : { expectedPredecessor: planVerdict.expected_predecessor }),
-      };
+      applyPlanValidationResult(preparedEntry, planVerdict, startedAt, validationKey);
       continue;
     }
     const verdict = perPatch.get(index);
     if (verdict) {
-      applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
-        message:
-          verdict.message ||
-          (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be woven into this ROM"),
-        status: verdict.status === "passed" ? "valid" : "invalid",
-      });
+      applyPerPatchValidationResult(preparedEntry, verdict, startedAt, validationKey);
       continue;
     }
-    // No index-aligned verdict (a non-plan runtime, or a mock): a resolved call means the
-    // batch passed, so mark valid - unless the aggregate is explicitly "mixed" and this patch's
-    // fate is genuinely unknown.
-    applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
-      message: result.message || "Patch validation passed",
-      status: result.status === "mixed" ? "unknown" : "valid",
-    });
+    applyFallbackValidationResult(preparedEntry, result, startedAt, validationKey);
   }
 };
 

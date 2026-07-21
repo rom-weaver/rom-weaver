@@ -251,6 +251,69 @@ const prepareExplicitPatchFiles = async (input: PatchInput, runtime: WorkflowRun
   return { patchFiles, patchSources };
 };
 
+const discoverImplicitPatches = async (
+  inputAssets: InputAsset[],
+  inputSources: SourceRef[],
+  patchFiles: PatchFileInstance[],
+  options: PatchInput["options"],
+  runtime: WorkflowRuntime,
+  deps: PatchWorkflowDeps,
+) => {
+  const listSiblingFiles = runtime.sidecars.list;
+  await traceWorkflowStageBlock(
+    options,
+    "patch.autodiscover",
+    "patch",
+    async () => {
+      const sidecars = inputAssets
+        .flatMap((asset) => asset.sidecarPatches ?? [])
+        .filter((leaf) => typeof leaf.sidecarOrder === "number")
+        .sort((left, right) => (left.sidecarOrder ?? 0) - (right.sidecarOrder ?? 0));
+      for (const leaf of sidecars) {
+        applySidecarPatchOutputLabel(leaf.file, getSidecarPatchOutputLabel(leaf.file.fileName));
+        patchFiles.push(leaf.file);
+      }
+    },
+    () => ({ inputCount: inputSources.length, patchCount: patchFiles.length }),
+  );
+  if (!patchFiles.length && inputSources.length === 1 && listSiblingFiles) {
+    await traceWorkflowStageBlock(
+      options,
+      "patch.sidecar",
+      "patch",
+      async () => {
+        const source = inputSources[0];
+        const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]);
+        if (!sourcePath) return;
+        const siblingSources = await listSiblingFiles(sourcePath);
+        const sidecarPatches = await resolveSidecarPatchEntries(
+          getBaseFileName(getInputSourceFileName(source) || sourcePath),
+          siblingSources.map((siblingSource) => ({
+            fileName: getBaseFileName(getInputSourceFileName(siblingSource)),
+            source: siblingSource,
+          })),
+        );
+        for (const sidecarPatch of sidecarPatches) {
+          const patchFile = await deps.prepareInput(sidecarPatch.entry.source as SourceRef, "patch", options, runtime);
+          applySidecarPatchOutputLabel(patchFile, sidecarPatch.outputLabel);
+          patchFiles.push(patchFile);
+        }
+      },
+      () => ({ patchCount: patchFiles.length }),
+    );
+  } else if (patchFiles.length) {
+    traceWorkflowStage(options, "stage.skip", "patch.sidecar", "patch", {
+      patchCount: patchFiles.length,
+      reason: "patch files already prepared",
+    });
+  } else {
+    traceWorkflowStage(options, "stage.skip", "patch.sidecar", "patch", {
+      inputCount: inputSources.length,
+      reason: listSiblingFiles ? "requires single input source" : "sidecar capability unavailable",
+    });
+  }
+};
+
 const runApplyWorkflow = async (
   input: PatchInput,
   runtime: WorkflowRuntime,
@@ -273,7 +336,6 @@ const runApplyWorkflow = async (
 
   const shouldDiscoverImplicitPatches =
     input.patches === undefined && input.preparedPatchFiles === undefined && input.parsedPatches === undefined;
-  const listSiblingFiles = runtime.sidecars.list;
   if (patchFiles.length) {
     traceWorkflowStage(options, "stage.skip", "patch.autodiscover", "patch", {
       patchCount: patchFiles.length,
@@ -284,71 +346,7 @@ const runApplyWorkflow = async (
       reason: "patch files already prepared",
     });
   } else if (shouldDiscoverImplicitPatches) {
-    await traceWorkflowStageBlock(
-      options,
-      "patch.autodiscover",
-      "patch",
-      async () => {
-        // Name-matched sidecar patches the ROM-staging ingest already extracted from the input
-        // archive (no separate scan); ordered by ingest's libretro apply order.
-        const sidecars = inputAssets
-          .flatMap((asset) => asset.sidecarPatches ?? [])
-          .filter((leaf) => typeof leaf.sidecarOrder === "number")
-          .sort((left, right) => (left.sidecarOrder ?? 0) - (right.sidecarOrder ?? 0));
-        for (const leaf of sidecars) {
-          applySidecarPatchOutputLabel(leaf.file, getSidecarPatchOutputLabel(leaf.file.fileName));
-          patchFiles.push(leaf.file);
-        }
-      },
-      () => ({
-        inputCount: inputSources.length,
-        patchCount: patchFiles.length,
-      }),
-    );
-    if (!patchFiles.length && inputSources.length === 1 && listSiblingFiles) {
-      await traceWorkflowStageBlock(
-        options,
-        "patch.sidecar",
-        "patch",
-        async () => {
-          const source = inputSources[0];
-          const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]);
-          if (sourcePath) {
-            const siblingSources = await listSiblingFiles(sourcePath);
-            const sidecarPatches = await resolveSidecarPatchEntries(
-              getBaseFileName(getInputSourceFileName(source) || sourcePath),
-              siblingSources.map((siblingSource) => ({
-                fileName: getBaseFileName(getInputSourceFileName(siblingSource)),
-                source: siblingSource,
-              })),
-            );
-            for (const sidecarPatch of sidecarPatches) {
-              const patchFile = await deps.prepareInput(
-                sidecarPatch.entry.source as SourceRef,
-                "patch",
-                options,
-                runtime,
-              );
-              applySidecarPatchOutputLabel(patchFile, sidecarPatch.outputLabel);
-              patchFiles.push(patchFile);
-            }
-          }
-        },
-        () => ({
-          patchCount: patchFiles.length,
-        }),
-      );
-    } else if (patchFiles.length) {
-      traceWorkflowStage(options, "stage.skip", "patch.sidecar", "patch", {
-        patchCount: patchFiles.length,
-        reason: "patch files already prepared",
-      });
-    } else {
-      traceWorkflowStage(options, "stage.skip", "patch.sidecar", "patch", {
-        inputCount: inputSources.length,
-        reason: listSiblingFiles ? "requires single input source" : "sidecar capability unavailable",
-      });
-    }
+    await discoverImplicitPatches(inputAssets, inputSources, patchFiles, options, runtime, deps);
   } else {
     traceWorkflowStage(options, "stage.skip", "patch.autodiscover", "patch", {
       patchCount: 0,

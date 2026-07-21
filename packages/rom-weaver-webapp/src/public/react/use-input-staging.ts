@@ -316,49 +316,56 @@ const useInputStaging = (context: InputStagingContext) => {
         message: "Preparing input...",
       };
       const resolveRowInfo = (info: StagedInputInfo) => getStableInputInfo(info, snapshot.inputs);
+      const createFinalRomInputRow = (
+        rawInfo: StagedInputInfo,
+        index: number,
+        current: RomInputRowState[],
+        byId: Map<string, RomInputRowState>,
+        finalized: boolean,
+      ) => {
+        const info = resolveRowInfo(rawInfo);
+        const id = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
+        const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
+        return createRomInputRow({
+          ...existing,
+          archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
+          chdMode: info.chdMode ?? existing?.chdMode,
+          cueText: info.cueText ?? existing?.cueText,
+          disabled: finalized ? disabledRef.current || busyRef.current : true,
+          gdiText: info.gdiText ?? existing?.gdiText,
+          groupId: info.groupId ?? existing?.groupId,
+          id,
+          info: {
+            archiveName: info.archiveName || existing?.info.archiveName || "",
+            checksumTiming: info.checksumTiming || existing?.info.checksumTiming || "",
+            checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
+            crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
+            fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
+            md5: info.checksums?.md5 || existing?.info.md5 || "",
+            romProbe: info.romProbe ?? existing?.info.romProbe,
+            romType: info.romType ?? existing?.info.romType,
+            sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
+            validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",
+          },
+          kind: info.kind ?? existing?.kind,
+          loading: !finalized,
+          order: info.order ?? index,
+          patchable: info.patchable ?? existing?.patchable,
+          progress: finalized
+            ? null
+            : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
+          size: info.size ?? existing?.size,
+          sourceSize: info.sourceSize ?? existing?.sourceSize,
+          splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
+          valid: finalized,
+          wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
+        });
+      };
       const replaceRomInputs = (infos: StagedInputInfo[], finalized: boolean) => {
         setRomInputs((current) => {
           const byId = new Map(current.map((entry) => [entry.id, entry]));
           return sortRomInputs(
-            infos.map((rawInfo, index) => {
-              const info = resolveRowInfo(rawInfo);
-              const id = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
-              const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
-              return createRomInputRow({
-                ...existing,
-                archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
-                chdMode: info.chdMode ?? existing?.chdMode,
-                cueText: info.cueText ?? existing?.cueText,
-                disabled: finalized ? disabledRef.current || busyRef.current : true,
-                gdiText: info.gdiText ?? existing?.gdiText,
-                groupId: info.groupId ?? existing?.groupId,
-                id,
-                info: {
-                  archiveName: info.archiveName || existing?.info.archiveName || "",
-                  checksumTiming: info.checksumTiming || existing?.info.checksumTiming || "",
-                  checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
-                  crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
-                  fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
-                  md5: info.checksums?.md5 || existing?.info.md5 || "",
-                  romProbe: info.romProbe ?? existing?.info.romProbe,
-                  romType: info.romType ?? existing?.info.romType,
-                  sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
-                  validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",
-                },
-                kind: info.kind ?? existing?.kind,
-                loading: !finalized,
-                order: info.order ?? index,
-                patchable: info.patchable ?? existing?.patchable,
-                progress: finalized
-                  ? null
-                  : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
-                size: info.size ?? existing?.size,
-                sourceSize: info.sourceSize ?? existing?.sourceSize,
-                splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
-                valid: finalized,
-                wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
-              });
-            }),
+            infos.map((rawInfo, index) => createFinalRomInputRow(rawInfo, index, current, byId, finalized)),
           );
         });
       };
