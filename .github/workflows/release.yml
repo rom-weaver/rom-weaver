@@ -32,42 +32,6 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      - name: Checkout release tag for static webapp
-        if: steps.release.outputs.release_created == 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: v${{ steps.release.outputs.version }}
-          fetch-depth: 0
-          submodules: recursive
-
-      - name: Set up static webapp build
-        if: steps.release.outputs.release_created == 'true'
-        uses: ./.github/actions/setup-build-env
-        with:
-          apt-packages: cmake ninja-build pkg-config clang libclang-dev
-          rust-targets: wasm32-wasip1-threads
-          wasi-sdk: "true"
-          webapp-deps: "true"
-
-      - name: Package static webapp release asset
-        if: steps.release.outputs.release_created == 'true'
-        run: |
-          mise run build-wasm-prod
-          npm --prefix packages/rom-weaver-webapp run build
-          tar --create --gzip \
-            --file rom-weaver-webapp.tar.gz \
-            --directory packages/rom-weaver-webapp/dist .
-          sha256sum rom-weaver-webapp.tar.gz > rom-weaver-webapp.tar.gz.sha256
-
-      - name: Upload static webapp release asset
-        if: steps.release.outputs.release_created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "v${{ steps.release.outputs.version }}" \
-            rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
-            --repo "$GITHUB_REPOSITORY" --clobber
-
       - name: Mark GitHub prerelease
         if: >-
           steps.release.outputs.release_created == 'true' &&
@@ -113,6 +77,115 @@ jobs:
           RELEASE_PR: ${{ steps.release-pr.outputs.number }}
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
+
+  # Package the static site beside the registry publishes rather than making all
+  # of them wait for another production WASM build. Normal workflow_run releases
+  # reuse the exact artifact produced by the successful CI run; manual releases
+  # fall back to a source build when no matching, unexpired artifact exists.
+  static-webapp:
+    name: Package static webapp
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Resolve tested WASM artifact
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          target_sha=$(git rev-parse HEAD)
+          run_id="$TRIGGER_RUN_ID"
+          if [ -n "$run_id" ]; then
+            run_sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq .head_sha)
+            if [ "$run_sha" != "$target_sha" ]; then
+              run_id=""
+            fi
+          fi
+          if [ -z "$run_id" ]; then
+            run_id=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow ci.yml \
+              --commit "$target_sha" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')
+          fi
+          available=false
+          if [ -n "$run_id" ]; then
+            count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+              --jq '[.artifacts[] | select(.name == "wasm-prod" and .expired == false)] | length')
+            if [ "$count" -gt 0 ]; then
+              available=true
+            fi
+          fi
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Set up static webapp build
+        uses: ./.github/actions/setup-build-env
+        env:
+          MISE_DISABLE_TOOLS: >-
+            rust,aqua:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+        with:
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Download tested WASM artifact
+        if: steps.ci.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.ci.outputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name wasm-prod \
+            --dir packages/rom-weaver-webapp/src/wasm
+
+      - name: Set up fallback WASM build
+        if: steps.ci.outputs.available != 'true'
+        uses: ./.github/actions/setup-build-env
+        env:
+          MISE_DISABLE_TOOLS: >-
+            aqua:BurntSushi/ripgrep,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint
+        with:
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+
+      - name: Build fallback WASM artifact
+        if: steps.ci.outputs.available != 'true'
+        run: mise run build-wasm-prod
+
+      - name: Verify WASM artifact
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+
+      - name: Package static webapp release asset
+        run: |
+          npm --prefix packages/rom-weaver-webapp run build
+          tar --create --gzip \
+            --file rom-weaver-webapp.tar.gz \
+            --directory packages/rom-weaver-webapp/dist .
+          sha256sum rom-weaver-webapp.tar.gz > rom-weaver-webapp.tar.gz.sha256
+
+      - name: Upload static webapp release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ needs.release.outputs.version }}" \
+            rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
 
   publish-cargo:
     needs: release
