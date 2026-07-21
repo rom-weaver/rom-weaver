@@ -10,6 +10,11 @@ ARG BINARYEN_VERSION=129
 ENV DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
+# Several RUNs below pipe a download into a consumer (rustup, sha256sum). The
+# default /bin/sh takes the exit status of the last stage only, so a failed
+# fetch would feed an empty stream to a command that happily succeeds.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         build-essential \
