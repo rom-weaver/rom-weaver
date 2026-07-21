@@ -7,6 +7,13 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
+      sha:
+        description: >-
+          Commit to build from. The release tag does not exist while the release
+          is still a draft, and github.ref points at main, which may already
+          have moved past the released commit.
+        required: true
+        type: string
     secrets:
       NPM_TOKEN:
         description: npm automation token for the CLI packages
@@ -46,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -76,6 +83,14 @@ jobs:
       - name: Prepare platform package
         run: node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
 
+      - name: Publish platform package
+        shell: bash
+        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # After the npm publish, not before: npm is the irreversible half, so a
+      # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
         shell: bash
         env:
@@ -96,19 +111,13 @@ jobs:
           gh release upload "v${{ inputs.version }}" "$asset_name" "$asset_name.sha256" \
             --repo "$GITHUB_REPOSITORY" --clobber
 
-      - name: Publish platform package
-        shell: bash
-        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   launcher:
     needs: platform
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: actions/setup-node@v7
         with:
@@ -130,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: actions/setup-node@v7
         with:

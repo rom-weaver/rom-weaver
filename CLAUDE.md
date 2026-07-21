@@ -60,10 +60,17 @@ instructions do **not** apply here.
   `optionalDependencies` pins, `workspace.package.version`, ~43 path-dependency
   pins across `crates/*`, `vendor/*`, and `Cargo.lock`.
 - **Flow:** merge conventional commits to `main` → CI goes green → release-please
-  opens/updates a `chore(main): release X.Y.Z` PR → merging that PR tags
-  `vX.Y.Z` and sets `release_created=true`, which unlocks the cargo/npm/docker
-  publish jobs. Merging the release PR is the release decision; nothing
-  publishes before it.
+  opens/updates a `chore(main): release X.Y.Z` PR → merging that PR creates a
+  **draft** GitHub release and sets `release_created=true`, which unlocks the
+  npm/docker/homebrew publish jobs. Each attaches its assets to the draft; the
+  final `publish-release` job publishes it, which creates the `vX.Y.Z` tag,
+  stamps the release immutable, and triggers `cargo-publish.yml`. Merging the
+  release PR is the release decision; nothing publishes before it.
+- **Immutable releases are ON.** A published release accepts no new assets and
+  permanently reserves its tag name - the version can never be re-cut. That is
+  why the fan-out is draft-first: a failed release leaves a deletable draft
+  instead of burning the version (v0.6.0 was lost this way). Never publish a
+  draft release by hand before the fan-out finishes.
 - **Prerelease:** `Release-As: X.Y.Z-alpha.N` commit footer for a one-off, or
   `prerelease`/`prerelease-type` in the config for a sustained track. Routing is
   automatic and keys off a hyphen in the version - no dist-tag step to remember:

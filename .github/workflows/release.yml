@@ -26,6 +26,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v5
@@ -91,10 +92,12 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Checkout release tag
+      # The release is still a draft here, so its tag does not exist yet - check
+      # out the commit release-please released instead.
+      - name: Checkout release commit
         uses: actions/checkout@v7
         with:
-          ref: v${{ needs.release.outputs.version }}
+          ref: ${{ needs.release.outputs.sha }}
           fetch-depth: 0
 
       - name: Resolve tested WASM artifact
@@ -155,16 +158,6 @@ jobs:
             rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
-  publish-cargo:
-    needs: release
-    if: needs.release.outputs.release_created == 'true'
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/cargo-publish.yml
-    with:
-      version: ${{ needs.release.outputs.version }}
-
   publish-npm:
     needs: release
     if: needs.release.outputs.release_created == 'true'
@@ -176,6 +169,7 @@ jobs:
     uses: ./.github/workflows/npm-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
 
   publish-homebrew:
     needs: [release, publish-npm]
@@ -188,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: v${{ needs.release.outputs.version }}
+          ref: ${{ needs.release.outputs.sha }}
 
       - name: Download release checksums
         env:
@@ -235,3 +229,34 @@ jobs:
     uses: ./.github/workflows/docker-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
+
+  # Publishing the draft is what creates the tag and stamps the release
+  # immutable, so it has to come last: assets can only be attached while the
+  # release is still a draft. A failure anywhere above leaves the draft in
+  # place, which is deletable and frees the version to be cut again - a
+  # published immutable release permanently reserves its tag name.
+  # Creating the tag here is also what triggers cargo-publish.yml.
+  publish-release:
+    name: Publish draft release
+    needs: [release, static-webapp, publish-npm, publish-homebrew, publish-containers]
+    if: >-
+      always() &&
+      needs.release.outputs.release_created == 'true' &&
+      needs.static-webapp.result == 'success' &&
+      needs.publish-npm.result == 'success' &&
+      needs.publish-containers.result == 'success' &&
+      (needs.publish-homebrew.result == 'success' || needs.publish-homebrew.result == 'skipped')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # Deliberately not github.token: a tag push made with GITHUB_TOKEN does not
+      # start new workflow runs, so cargo-publish.yml would never fire.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          gh release edit "v${{ needs.release.outputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false
