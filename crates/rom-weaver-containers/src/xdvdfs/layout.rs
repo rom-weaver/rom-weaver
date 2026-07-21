@@ -48,7 +48,9 @@ pub struct VolumeDescriptor {
 }
 
 bitfield!(
-#[repr(C)]
+// proc-bitfield 0.5 made bitfields `#[repr(transparent)]` themselves, so an
+// explicit `#[repr(C)]` here is now a hard error. Layout is unchanged - this
+// is a single-field newtype over `u8`.
 #[derive(Deserialize, Serialize, Copy, Clone, Eq, PartialEq)]
 pub struct DirentAttributes(pub u8): Debug {
     pub attrs: u8 @ ..,

@@ -28,7 +28,9 @@ impl ExactCsoFileReader {
     }
 }
 
-impl ciso::read::Read<io::Error> for ExactCsoFileReader {
+impl ciso::read::Read for ExactCsoFileReader {
+    type ReadError = io::Error;
+
     fn size(&mut self) -> std::result::Result<u64, io::Error> {
         self.file.seek(SeekFrom::End(0))
     }
@@ -45,7 +47,9 @@ enum CsoSourceReader {
     Split(SplitFileReader<io::Error, ExactCsoFileReader>),
 }
 
-impl ciso::read::Read<io::Error> for CsoSourceReader {
+impl ciso::read::Read for CsoSourceReader {
+    type ReadError = io::Error;
+
     fn size(&mut self) -> std::result::Result<u64, io::Error> {
         match self {
             Self::Single(reader) => ciso::read::Read::size(reader),
