@@ -242,6 +242,35 @@ impl CliApp {
         Ok(())
     }
 
+    /// Preflight every path `patch apply` is about to touch: each patch must be
+    /// readable and the destination writable, checked before the ROM is opened
+    /// so an access problem costs nothing.
+    fn validate_patch_apply_access(
+        &self,
+        patches: &[PathBuf],
+        output: &Path,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        for patch_path in patches {
+            if let Some(report) = self.require_readable_path(
+                "patch-apply",
+                OperationFamily::Patch,
+                None,
+                patch_path,
+                thread_execution.clone(),
+            ) {
+                return Some(report);
+            }
+        }
+        self.require_writable_output_parent(
+            "patch-apply",
+            OperationFamily::Patch,
+            None,
+            output,
+            thread_execution,
+        )
+    }
+
     /// The body of `patch apply` after bundle resolution: `args` is a plain,
     /// fully-merged command.
     fn run_patch_apply_resolved(
@@ -389,7 +418,7 @@ impl CliApp {
                 return self.finish("patch-apply", fail("validate", error.to_string()));
             }
         };
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-apply",
             OperationFamily::Patch,
             None,
@@ -442,16 +471,10 @@ impl CliApp {
                 ),
             );
         }
-        for patch_path in &patches {
-            if let Some(report) = self.require_existing_path(
-                "patch-apply",
-                OperationFamily::Patch,
-                None,
-                patch_path,
-                probe_threads.clone(),
-            ) {
-                return self.finish("patch-apply", report);
-            }
+        if let Some(report) =
+            self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
+        {
+            return self.finish("patch-apply", report);
         }
 
         let mut expected_input_size: Option<u64> = None;

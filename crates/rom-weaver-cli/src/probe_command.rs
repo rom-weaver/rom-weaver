@@ -38,7 +38,7 @@ impl CliApp {
         );
         let context = self.context(ThreadBudget::Fixed(1));
         if let Some(report) =
-            self.require_existing_path("probe", OperationFamily::Command, None, &source, None)
+            self.require_readable_path("probe", OperationFamily::Command, None, &source, None)
         {
             return self.finish("probe", report);
         }

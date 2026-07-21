@@ -103,7 +103,7 @@ impl CliApp {
         {
             return self.finish("patch-validate", report);
         }
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-validate",
             OperationFamily::Patch,
             None,
@@ -113,7 +113,7 @@ impl CliApp {
             return self.finish("patch-validate", report);
         }
         for patch_path in &patches {
-            if let Some(report) = self.require_existing_path(
+            if let Some(report) = self.require_readable_path(
                 "patch-validate",
                 OperationFamily::Patch,
                 None,

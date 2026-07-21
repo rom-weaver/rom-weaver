@@ -83,7 +83,7 @@ impl CliApp {
         }
 
         let dcp_path = args.patches[0].clone();
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-apply",
             OperationFamily::Patch,
             None,
@@ -92,7 +92,7 @@ impl CliApp {
         ) {
             return self.finish("patch-apply", report);
         }
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-apply",
             OperationFamily::Patch,
             None,

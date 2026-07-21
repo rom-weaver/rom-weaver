@@ -58,11 +58,20 @@ impl CliApp {
             .with_extract_checksum_algorithms(checksum_algorithms)
             .with_extract_checksum_rom_only(checksum_rom_only);
         let probe_threads = context.single_thread_execution();
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "extract",
             OperationFamily::Container,
             None,
             &source,
+            probe_threads.clone(),
+        ) {
+            return self.finish("extract", report);
+        }
+        if let Some(report) = self.require_writable_output_dir(
+            "extract",
+            OperationFamily::Container,
+            None,
+            &out_dir,
             probe_threads.clone(),
         ) {
             return self.finish("extract", report);

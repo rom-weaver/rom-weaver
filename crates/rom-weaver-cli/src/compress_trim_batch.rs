@@ -75,7 +75,7 @@ impl CliApp {
             )
         };
         for input in &input {
-            if let Some(report) = self.require_existing_path(
+            if let Some(report) = self.require_readable_path(
                 "compress",
                 OperationFamily::Container,
                 requested_format.clone(),
@@ -84,6 +84,15 @@ impl CliApp {
             ) {
                 return self.finish("compress", report);
             }
+        }
+        if let Some(report) = self.require_writable_output_parent(
+            "compress",
+            OperationFamily::Container,
+            requested_format.clone(),
+            &output,
+            probe_threads.clone(),
+        ) {
+            return self.finish("compress", report);
         }
         // The output format is derived from the output filename's extension; an explicit --format
         // overrides it (with a warning when they disagree) and is required when the output has no
@@ -331,6 +340,19 @@ impl CliApp {
                     thread_execution,
                 ),
             );
+        }
+
+        if let Some(report) = output.as_deref().and_then(|output| {
+            self.require_writable_output_parent(
+                "trim",
+                OperationFamily::Container,
+                Some(report_format.clone()),
+                output,
+                thread_execution.clone(),
+            )
+        }) {
+            Self::cleanup_temp_paths(&cleanup_paths);
+            return self.finish("trim", report);
         }
 
         if output.is_some() && trim_sources.len() != 1 {

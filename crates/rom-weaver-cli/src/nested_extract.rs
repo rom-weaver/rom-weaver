@@ -11,27 +11,6 @@ pub(super) struct NestedExtractOutcome {
 }
 
 impl CliApp {
-    pub(super) fn require_existing_path(
-        &self,
-        _command: &str,
-        family: OperationFamily,
-        format: Option<String>,
-        path: &Path,
-        thread_execution: Option<ThreadExecution>,
-    ) -> Option<OperationReport> {
-        if path.exists() {
-            None
-        } else {
-            Some(OperationReport::failed(
-                family,
-                format,
-                "validate",
-                format!("input path does not exist: `{}`", path.display()),
-                thread_execution,
-            ))
-        }
-    }
-
     pub(super) fn finish(&self, command: &str, report: OperationReport) -> AppRunOutcome {
         trace!(
             command,

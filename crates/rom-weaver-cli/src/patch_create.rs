@@ -336,7 +336,7 @@ impl CliApp {
                     );
                 }
             };
-            if let Some(report) = self.require_existing_path(
+            if let Some(report) = self.require_readable_path(
                 "patch-create",
                 OperationFamily::Patch,
                 None,
@@ -345,7 +345,7 @@ impl CliApp {
             ) {
                 return self.finish("patch-create", report);
             }
-            if let Some(report) = self.require_existing_path(
+            if let Some(report) = self.require_readable_path(
                 "patch-create",
                 OperationFamily::Patch,
                 None,
@@ -476,11 +476,20 @@ impl CliApp {
                 "{warning}"
             );
         }
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-create",
             OperationFamily::Patch,
             Some(requested_format.clone()),
             &args.original,
+            probe_threads.clone(),
+        ) {
+            return self.finish("patch-create", report);
+        }
+        if let Some(report) = self.require_writable_output_parent(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            &output,
             probe_threads.clone(),
         ) {
             return self.finish("patch-create", report);
@@ -539,7 +548,7 @@ impl CliApp {
                 }
             }
         };
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "patch-create",
             OperationFamily::Patch,
             Some(requested_format.clone()),

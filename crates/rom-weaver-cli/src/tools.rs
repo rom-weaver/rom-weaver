@@ -11,7 +11,7 @@ impl CliApp {
         let command = "tools-ppf-undo";
         let execution = None;
         for (label, path) in [("ROM", &args.rom), ("PPF patch", &args.patch)] {
-            if let Some(report) = self.require_existing_path(
+            if let Some(report) = self.require_readable_path(
                 command,
                 OperationFamily::Patch,
                 Some("PPF".to_string()),

@@ -64,7 +64,7 @@ impl CliApp {
         let context = self.context(threads);
         let thread_execution =
             Some(context.plan_threads(ThreadCapability::parallel(Some(algo.len().max(1)))));
-        if let Some(report) = self.require_existing_path(
+        if let Some(report) = self.require_readable_path(
             "checksum",
             OperationFamily::Checksum,
             Some(self.checksum.name().to_string()),

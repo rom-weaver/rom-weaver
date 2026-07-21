@@ -33,3 +33,6 @@ mod patch_disc;
 
 #[path = "cli_smoke/cheats.rs"]
 mod cheats;
+
+#[path = "cli_smoke/permissions.rs"]
+mod permissions;
