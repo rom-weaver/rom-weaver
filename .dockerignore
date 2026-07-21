@@ -10,9 +10,15 @@ prototype
 third_party
 *.log
 
-# Not build inputs. These change often (docs and CI commits), and anything left
-# here invalidates the `COPY . .` layer and with it the whole wasm+cargo build.
-# Root *.md stays: several are read at build time (README as the workspace
-# `readme`, CHANGELOG by the webapp version script's fallbacks).
+# Not build inputs. These change often (docs, CI and browser-test commits), and
+# anything left here invalidates the `COPY . .` layer and with it the whole
+# wasm+cargo build. Root *.md stays: several are read at build time (README as
+# the workspace `readme`, CHANGELOG by the webapp version script's fallbacks).
+#
+# This is the only ignore file either image gets. Both builds use the repo root
+# as context, and BuildKit reads `<context>/.dockerignore` or a sibling
+# `<dockerfile>.dockerignore` - never a `.dockerignore` that merely lives beside
+# the image's other sources.
 .github
 docs
+packages/rom-weaver-webapp/tests

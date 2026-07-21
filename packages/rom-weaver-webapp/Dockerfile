@@ -93,13 +93,19 @@ RUN npm ci
 WORKDIR /app
 COPY . .
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
-# across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit does
-# not export cache mounts to `type=gha`, so CI still pays a cold compile.
+# across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit
+# exports no cache mount to a registry or gha cache, so CI still pays a cold
+# compile and only the layers above this one are restored.
 #
 # No manifest-only prefetch: Cargo needs every workspace target, so preserving
 # that layer would require brittle stub source trees for little benefit.
-RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
-    --mount=type=cache,target=/app/target,sharing=locked \
+#
+# The registry holds arch-neutral sources and is shared; `target` holds compiled
+# artifacts, so it is keyed by arch. Unkeyed, a multi-arch build would point
+# both arches at one `sharing=locked` directory and serialize them onto each
+# other's objects.
+RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
     bash scripts/wasm/build-app.sh prod \
     && npm --prefix packages/rom-weaver-webapp run build -- --mode docker
 

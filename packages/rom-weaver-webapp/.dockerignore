@@ -1,8 +1,0 @@
-node_modules
-dist
-tests
-.vitest-attachments
-**/__screenshots__
-*.log
-Dockerfile
-.dockerignore
