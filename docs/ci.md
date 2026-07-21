@@ -63,7 +63,9 @@ checkout ────┤               ├── rust (aggregate check name)
 
          ┌── webapp ── lint, unit, browser, E2E, build
 wasm ────┤
-         └── deploy ── Cloudflare Pages (non-gating)
+         └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
+                 ↑
+           deploy-plan ── ref -> channel list
 
 security ── advisories (warn only, always green)
 ```
@@ -106,33 +108,59 @@ security ── advisories (warn only, always green)
 - **`webapp`** consumes the prebuilt module and compiles no Rust: build-script
   tests, lint, unit tests, two browser suites, the webapp E2E, and the vite
   build.
-- **`deploy`** ships the site (below). `continue-on-error: true`, so a
-  Cloudflare outage cannot turn a green `main` red and suppress release
-  automation.
+- **`deploy-plan`** turns the ref into the list of channels to publish (below).
+  It exists as its own job because a matrix can only be fed by an upstream
+  job's output.
+- **`deploy`** ships the site, one matrix leg per channel (below). Both jobs
+  are `continue-on-error: true`, so a Cloudflare outage cannot turn a green
+  `main` red and suppress release automation.
 
 ### Tag runs
 
 Release tags (`v*`) trigger this workflow, but every test job carries
 `if: github.ref_type != 'tag'`. The commit being tagged already passed the same
 gate on `main`; a tag run exists only to build and deploy the webapp to the
-production or beta channel.
+channels that tag publishes.
 
 ### Deploy channels
 
-`deploy` resolves a channel from the ref and deploys with Cloudflare Direct
-Upload, reusing the CI-tested WASM artifact rather than spending Cloudflare
-build minutes on a second toolchain.
+`deploy-plan` resolves the channel list from the ref; `deploy` runs one matrix
+leg per channel, deploying with Cloudflare Direct Upload and reusing the
+CI-tested WASM artifact rather than spending Cloudflare build minutes on a
+second toolchain.
 
-| Ref | Channel | Cloudflare project | URL |
-| --- | --- | --- | --- |
-| `vX.Y.Z` tag | `prod` | `rom-weaver` | rom-weaver.com |
-| `vX.Y.Z-alpha.N` tag | `beta` | `rom-weaver-beta` | beta.rom-weaver.com |
-| push to `main` | `nightly` | `rom-weaver-nightly` | nightly.rom-weaver.com |
-| pull request | `preview` | `rom-weaver-preview` | `pr-<n>.rom-weaver-preview.pages.dev` |
+| Channel | Cloudflare project | URL |
+| --- | --- | --- |
+| `prod` | `rom-weaver` | rom-weaver.com |
+| `beta` | `rom-weaver-beta` | beta.rom-weaver.com |
+| `nightly` | `rom-weaver-nightly` | nightly.rom-weaver.com |
+| `preview` | `rom-weaver-preview` | `pr-<n>.rom-weaver-preview.pages.dev` |
+
+The channels form a stability ladder - `prod` above `beta` above `nightly` -
+and a ref deploys to the channel it enters at **plus every less-stable channel
+below it**. Otherwise a quiet stretch on `main` would leave beta and nightly
+serving code older than production, which makes them useless for reproducing a
+release-day bug.
+
+| Ref | Deploys to |
+| --- | --- |
+| `vX.Y.Z` tag | `prod`, `beta`, `nightly` |
+| `vX.Y.Z-alpha.N` tag | `beta`, `nightly` |
+| push to `main` | `nightly` |
+| pull request | `preview` |
+
+Legs are independent Pages projects with no shared state, so they upload in
+parallel and a release's three channels land in the time of one. Each leg
+builds its own bundle because the channel is baked in at build time
+(`ROM_WEAVER_CHANNEL`), so there is no artifact to share between them. Failure
+is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
 
 A hyphen after the version is what makes a tag a prerelease. The same rule
 routes the npm dist-tag and the docker `beta` tag - see
 [prerelease routing](#prerelease-routing).
+
+`workflow_dispatch` takes a `deploy_channel` input that deploys exactly the
+channel named, with no cascade - it is a break-glass override, not a release.
 
 Preview deployments are skipped for forks and Dependabot, which are not given
 the Cloudflare secrets and could only ever fail. The preview URL is published

@@ -418,27 +418,25 @@ jobs:
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
 
-  # Deploy three isolated Cloudflare origins:
+  # Decide which channels this ref publishes to. Channels are ordered
+  # prod -> beta -> nightly, and a deploy refreshes its own channel plus every
+  # less-stable one below it, so beta and nightly can never sit on code older
+  # than production:
   #
-  #   rom-weaver.com          <- release tags (vX.Y.Z)
-  #   beta.rom-weaver.com     <- prerelease tags (vX.Y.Z-alpha.N, -beta.N, ...)
-  #   nightly.rom-weaver.com  <- every push to main
+  #   vX.Y.Z tag          -> prod, beta, nightly
+  #   vX.Y.Z-alpha.N tag  -> beta, nightly
+  #   push to main        -> nightly
+  #   pull request        -> preview
   #
-  # PRs get disposable previews. Direct Upload reuses the CI-tested WASM artifact
-  # without Cloudflare build minutes or a second toolchain. Depend only on `wasm`
-  # so preview URLs arrive while the rest of the suite is running.
-  deploy:
-    name: Deploy web
+  # Split out of `deploy` because the channel list drives that job's matrix, and
+  # a matrix can only be fed by an upstream job's output.
+  deploy-plan:
+    name: Plan web deploy
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: wasm
-    # Deployment was a separate, non-gating workflow before it moved here to
-    # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
-    # not turn a green main build red and suppress release automation.
+    timeout-minutes: 5
+    # Same non-gating boundary as `deploy` below: a failure here must skip
+    # deployment, not fail the build that release automation waits on.
     continue-on-error: true
-    permissions:
-      contents: read
-      statuses: write
     # Secrets are withheld from fork and Dependabot pull requests, so those
     # previews could only ever fail. Skip them instead of creating red checks.
     # A manual run deploys nothing unless a channel is picked explicitly.
@@ -447,6 +445,92 @@ jobs:
       (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]'))
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+      # A tag containing a hyphen after the version is a prerelease
+      # (v1.2.3-alpha.1) and enters the ladder at beta; a bare vX.Y.Z enters at
+      # prod. A manual run deploys exactly the channel asked for - it is a
+      # break-glass override, so it does not cascade.
+      - name: Resolve channels
+        id: plan
+        env:
+          MANUAL: ${{ github.event.inputs.deploy_channel }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          if [ -n "$MANUAL" ] && [ "$MANUAL" != "none" ]; then
+            channels="$MANUAL"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            channels="preview"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              *-*) channels="beta nightly" ;;
+              *)   channels="prod beta nightly" ;;
+            esac
+          else
+            channels="nightly"
+          fi
+          targets=""
+          for channel in $channels; do
+            # `branch` is what makes a deployment production vs preview: wrangler
+            # treats the project's production branch (main) as a live deploy and
+            # anything else as a throwaway preview.
+            branch=main
+            # `label` is what the bundle shows in its masthead badge and PWA name.
+            label="$channel"
+            case "$channel" in
+              prod)    project=rom-weaver ;;
+              beta)    project=rom-weaver-beta ;;
+              nightly) project=rom-weaver-nightly ;;
+              preview)
+                project=rom-weaver-preview
+                branch="pr-${PR_NUMBER}"
+                label="pr-${PR_NUMBER}"
+                ;;
+              *) echo "::error::unknown channel '$channel'"; exit 1 ;;
+            esac
+            targets="$targets$(jq -cn \
+              --arg channel "$channel" \
+              --arg branch "$branch" \
+              --arg label "$label" \
+              --arg project "$project" \
+              '{$channel, $branch, $label, $project}')"$'\n'
+          done
+          matrix=$(printf '%s' "$targets" | jq -cs .)
+          echo "targets=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Deploying ref ${GITHUB_REF_NAME} to: $channels"
+
+  # Build and publish one channel per matrix leg, to isolated Cloudflare origins
+  # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
+  # per-PR previews). `deploy-plan` above decides which legs exist.
+  #
+  # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
+  # minutes or a second toolchain. Depend only on `wasm` so preview URLs arrive
+  # while the rest of the suite is still running.
+  deploy:
+    name: Deploy web (${{ matrix.target.channel }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [wasm, deploy-plan]
+    # Deployment was a separate, non-gating workflow before it moved here to
+    # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
+    # not turn a green main build red and suppress release automation.
+    continue-on-error: true
+    permissions:
+      contents: read
+      statuses: write
+    # An empty or missing list would be a hard "matrix contains no values"
+    # error, so guard rather than trusting the planner to always emit one.
+    if: needs.deploy-plan.outputs.targets != '' && needs.deploy-plan.outputs.targets != '[]'
+    strategy:
+      # Separate Pages projects with no shared state, so they upload in
+      # parallel; a release's three channels land in the time of one. The
+      # channel is baked into the bundle, so each needs its own build - there is
+      # no artifact to share between them.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.deploy-plan.outputs.targets) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -467,59 +551,13 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      # A tag containing a hyphen after the version is a prerelease (v1.2.3-alpha.1)
-      # and goes to beta; a bare vX.Y.Z goes to production.
-      - name: Resolve channel
-        id: channel
-        env:
-          MANUAL: ${{ github.event.inputs.deploy_channel }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.number }}
-        run: |
-          if [ -n "$MANUAL" ] && [ "$MANUAL" != "none" ]; then
-            channel="$MANUAL"
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
-            channel=preview
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            case "${GITHUB_REF_NAME}" in
-              *-*) channel=beta ;;
-              *)   channel=prod ;;
-            esac
-          else
-            channel=nightly
-          fi
-          # `branch` is what makes a deployment production vs preview: wrangler
-          # treats the project's production branch (main) as a live deploy and
-          # anything else as a throwaway preview.
-          branch=main
-          # `label` is what the bundle shows in its masthead badge and PWA name.
-          label="$channel"
-          case "$channel" in
-            prod)    project=rom-weaver ;;
-            beta)    project=rom-weaver-beta ;;
-            nightly) project=rom-weaver-nightly ;;
-            preview)
-              project=rom-weaver-preview
-              branch="pr-${PR_NUMBER}"
-              label="pr-${PR_NUMBER}"
-              ;;
-            *) echo "::error::unknown channel '$channel'"; exit 1 ;;
-          esac
-          {
-            echo "channel=$channel"
-            echo "branch=$branch"
-            echo "label=$label"
-            echo "project=$project"
-          } >> "$GITHUB_OUTPUT"
-          echo "Deploying ref ${GITHUB_REF_NAME} to channel '$channel' (project '$project')"
-
       # The channel stamps the bundle's visible identity - masthead badge, tab
       # title, PWA name and accent tokens - so a nightly or preview tab is never
       # mistaken for production. Unset (any local build) resolves to "dev".
       - name: Build webapp
         env:
-          ROM_WEAVER_CHANNEL: ${{ steps.channel.outputs.channel }}
-          ROM_WEAVER_CHANNEL_LABEL: ${{ steps.channel.outputs.label }}
+          ROM_WEAVER_CHANNEL: ${{ matrix.target.channel }}
+          ROM_WEAVER_CHANNEL_LABEL: ${{ matrix.target.label }}
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Idempotent, so the first run on a channel bootstraps its own project and
@@ -533,7 +571,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ steps.channel.outputs.project }}
+          PROJECT: ${{ matrix.target.project }}
         run: |
           set -o pipefail
           api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
@@ -556,8 +594,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ steps.channel.outputs.project }}
-          BRANCH: ${{ steps.channel.outputs.branch }}
+          PROJECT: ${{ matrix.target.project }}
+          BRANCH: ${{ matrix.target.branch }}
         run: |
           set -o pipefail
           npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
@@ -571,10 +609,10 @@ jobs:
       # Surfaced as a commit status rather than a comment, so the link lives in
       # the PR's checks list and updates in place instead of accreting comments.
       - name: Publish preview URL as a status check
-        if: steps.channel.outputs.channel == 'preview' && steps.deploy.outputs.url != ''
+        if: matrix.target.channel == 'preview' && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ALIAS: https://${{ steps.channel.outputs.branch }}.rom-weaver-preview.pages.dev
+          ALIAS: https://${{ matrix.target.branch }}.rom-weaver-preview.pages.dev
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \

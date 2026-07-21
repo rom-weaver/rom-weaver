@@ -145,16 +145,24 @@ Cloudflare Pages origins. They are not subpaths of one site because OPFS,
 service-worker scope, and Cache Storage are all per-origin; a shared origin
 would let a nightly build read and corrupt production's OPFS state.
 
-| Channel | Domain | Trigger | Pages project |
+| Channel | Domain | Publishes on | Pages project |
 | --- | --- | --- | --- |
-| Production | `rom-weaver.com` | tag `vX.Y.Z` | `rom-weaver` |
-| Beta | `beta.rom-weaver.com` | prerelease tag `vX.Y.Z-*` | `rom-weaver-beta` |
-| Nightly | `nightly.rom-weaver.com` | every push to `main` | `rom-weaver-nightly` |
+| Production | `rom-weaver.com` | stable tag `vX.Y.Z` | `rom-weaver` |
+| Beta | `beta.rom-weaver.com` | any release tag, stable or prerelease | `rom-weaver-beta` |
+| Nightly | `nightly.rom-weaver.com` | every push to `main`, and any release tag | `rom-weaver-nightly` |
 | Preview | generated `pages.dev` alias | internal pull request | `rom-weaver-preview` |
+
+The three permanent channels are a stability ladder, and a deploy refreshes its
+own channel **plus every less-stable one below it**. A stable release therefore
+publishes to production, beta *and* nightly; a prerelease publishes to beta and
+nightly. Without that cascade a quiet stretch on `main` would leave beta and
+nightly serving code older than production - the opposite of what their names
+promise, and useless for reproducing a release-day bug.
 
 Production is CI-gated by construction: release-please only tags after CI is
 green, so an unreviewed push can never reach `rom-weaver.com`. `workflow_dispatch`
-accepts a `deploy_channel` input to force any channel manually.
+accepts a `deploy_channel` input to force one channel manually; that override
+deploys only the channel named and does not cascade.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
 Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
