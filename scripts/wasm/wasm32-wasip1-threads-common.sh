@@ -1,3 +1,8 @@
+# Sourced fragment, not an executable script - no shebang to infer the dialect
+# from. The cc/cxx wrappers that source it are bash, and it uses [[ ]] and
+# arrays, so tell shellcheck which shell to check it against.
+# shellcheck shell=bash
+
 base=()
 if [[ -n "$SYSROOT" ]]; then
   base+=(--sysroot="$SYSROOT")

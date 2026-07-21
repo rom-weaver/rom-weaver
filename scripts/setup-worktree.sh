@@ -36,8 +36,10 @@ done
 
 # Fresh worktrees leave the libarchive gitlink empty; link the populated main
 # copy to avoid rebuilding it. Re-runs preserve existing data.
+vendor_submodules=(libarchive)
+
 echo "setup-worktree: link vendor submodules from main checkout"
-for submodule in libarchive; do
+for submodule in "${vendor_submodules[@]}"; do
   worktree_vendor="$worktree_dir/vendor/$submodule"
   main_vendor="$main_dir/vendor/$submodule"
   if [ -L "$worktree_vendor" ]; then
@@ -59,7 +61,7 @@ done
 # because Git requires force for worktrees containing submodules.
 echo "setup-worktree: silence vendor typechange noise (worktree-scoped)"
 git config extensions.worktreeConfig true
-for submodule in libarchive; do
+for submodule in "${vendor_submodules[@]}"; do
   git config --worktree "submodule.vendor/$submodule.ignore" all
 done
 
