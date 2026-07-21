@@ -1,6 +1,8 @@
 use std::{io, path::PathBuf};
 
-use super::{RomWeaverError, RomWeaverErrorKind, UnsupportedOp, ValidationCodeError};
+use super::{
+    IoOp, IoResultExt, RomWeaverError, RomWeaverErrorKind, UnsupportedOp, ValidationCodeError,
+};
 
 fn assert_error_contract(error: RomWeaverError, expected: RomWeaverErrorKind) {
     assert_eq!(
@@ -90,6 +92,65 @@ fn io_maps_to_io_kind_and_prefix() {
 }
 
 #[test]
+fn io_path_maps_to_io_kind_and_prefix() {
+    assert_error_contract(
+        RomWeaverError::io_path(IoOp::Open, "/roms/game.iso", io::Error::other("disk gone")),
+        RomWeaverErrorKind::Io,
+    );
+}
+
+#[test]
+fn io_path_names_the_operation_and_the_path() {
+    let error = RomWeaverError::io_path(
+        IoOp::Create,
+        "/out/patched.iso",
+        io::Error::from(io::ErrorKind::NotFound),
+    );
+    let rendered = error.to_string();
+    assert!(
+        rendered.starts_with("i/o error: cannot create `/out/patched.iso`: "),
+        "IoPath must name the verb and the path: {rendered}"
+    );
+    // Only access denials collect advice; everything else stays terse.
+    assert!(
+        !rendered.contains('('),
+        "unexpected advice suffix: {rendered}"
+    );
+    assert_eq!(error.permission_denied_path(), None);
+}
+
+#[test]
+fn permission_denied_path_reports_the_blamed_path() {
+    let error = RomWeaverError::io_path(
+        IoOp::Open,
+        "/roms/locked.iso",
+        io::Error::from(io::ErrorKind::PermissionDenied),
+    );
+    assert_eq!(
+        error.permission_denied_path(),
+        Some(PathBuf::from("/roms/locked.iso").as_path())
+    );
+    // A bare `Io` carries no path, so it can never answer the question.
+    assert_eq!(
+        RomWeaverError::Io(io::Error::from(io::ErrorKind::PermissionDenied))
+            .permission_denied_path(),
+        None
+    );
+}
+
+#[test]
+fn io_op_extension_attaches_context_to_a_bare_io_result() {
+    let result: std::result::Result<(), io::Error> = Err(io::Error::other("nope"));
+    let error = result
+        .io_op(IoOp::ReadDir, "/roms")
+        .expect_err("io_op must preserve the failure");
+    assert_eq!(
+        error.to_string(),
+        "i/o error: cannot list directory `/roms`: nope"
+    );
+}
+
+#[test]
 fn thread_pool_build_maps_to_thread_pool_build_kind_and_prefix() {
     assert_error_contract(
         RomWeaverError::ThreadPoolBuild("no threads".to_string()),
@@ -112,6 +173,7 @@ fn every_variant_is_covered_by_the_contract() {
             RomWeaverError::Unsupported(_) => RomWeaverErrorKind::Unsupported,
             RomWeaverError::Cancelled => RomWeaverErrorKind::Cancelled,
             RomWeaverError::Io(_) => RomWeaverErrorKind::Io,
+            RomWeaverError::IoPath { .. } => RomWeaverErrorKind::Io,
             RomWeaverError::ThreadPoolBuild(_) => RomWeaverErrorKind::ThreadPoolBuild,
         }
     }
@@ -125,6 +187,7 @@ fn every_variant_is_covered_by_the_contract() {
         RomWeaverError::Unsupported(UnsupportedOp::ChdStoreModeOnly),
         RomWeaverError::Cancelled,
         RomWeaverError::Io(io::Error::other("x")),
+        RomWeaverError::io_path(IoOp::Open, "/x", io::Error::other("x")),
         RomWeaverError::ThreadPoolBuild("x".to_string()),
     ];
 

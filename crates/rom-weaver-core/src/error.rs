@@ -1,4 +1,7 @@
-use std::{fmt, io, path::PathBuf};
+use std::{
+    fmt, io,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -205,11 +208,100 @@ pub enum RomWeaverError {
     Cancelled,
     #[error("i/o error: {0}")]
     Io(#[from] io::Error),
+    /// An i/o failure that knows which path and operation produced it. Prefer
+    /// this over the bare [`RomWeaverError::Io`] anywhere a user-supplied path
+    /// is opened, created, or removed: `Permission denied (os error 13)` on its
+    /// own tells nobody which file to fix.
+    #[error("i/o error: cannot {op} `{}`: {source}{}", path.display(), advice_suffix(advice.as_deref()))]
+    IoPath {
+        op: IoOp,
+        path: PathBuf,
+        /// Actionable, platform-specific guidance captured when the error was
+        /// built (see [`crate::access_advice`]). Held as text so `Display` stays
+        /// syscall-free.
+        advice: Option<String>,
+        source: io::Error,
+    },
     #[error("thread pool build failed: {0}")]
     ThreadPoolBuild(String),
 }
 
+fn advice_suffix(advice: Option<&str>) -> String {
+    advice
+        .map(|advice| format!(" ({advice})"))
+        .unwrap_or_default()
+}
+
+/// The filesystem operation an [`RomWeaverError::IoPath`] failed during. The
+/// `Display` verb is spliced straight into the message, so it reads as
+/// "cannot open `/roms/game.iso`".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IoOp {
+    Open,
+    Create,
+    Write,
+    CreateDir,
+    ReadDir,
+    Inspect,
+}
+
+impl fmt::Display for IoOp {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let verb = match self {
+            Self::Open => "open",
+            Self::Create => "create",
+            Self::Write => "write to",
+            Self::CreateDir => "create directory",
+            Self::ReadDir => "list directory",
+            Self::Inspect => "inspect",
+        };
+        formatter.write_str(verb)
+    }
+}
+
+/// Attaches the failing operation and path to a bare [`io::Error`], turning it
+/// into a [`RomWeaverError::IoPath`]. The path is only cloned - and the advice
+/// only gathered - on the error branch.
+pub trait IoResultExt<T> {
+    fn io_op(self, op: IoOp, path: impl AsRef<Path>) -> Result<T>;
+}
+
+impl<T> IoResultExt<T> for std::result::Result<T, io::Error> {
+    fn io_op(self, op: IoOp, path: impl AsRef<Path>) -> Result<T> {
+        self.map_err(|source| RomWeaverError::io_path(op, path.as_ref(), source))
+    }
+}
+
 impl RomWeaverError {
+    /// Build an [`RomWeaverError::IoPath`], gathering permission advice when the
+    /// failure is an access denial. Callers usually reach this through
+    /// [`IoResultExt::io_op`].
+    pub fn io_path(op: IoOp, path: impl AsRef<Path>, source: io::Error) -> Self {
+        let path = path.as_ref();
+        let advice = (source.kind() == io::ErrorKind::PermissionDenied)
+            .then(|| crate::access_advice(path))
+            .flatten();
+        Self::IoPath {
+            op,
+            path: path.to_path_buf(),
+            advice,
+            source,
+        }
+    }
+
+    /// The path this error blames for an access denial, when it is one. Lets
+    /// callers react to permission problems without matching on message text.
+    pub fn permission_denied_path(&self) -> Option<&Path> {
+        match self {
+            Self::IoPath { path, source, .. }
+                if source.kind() == io::ErrorKind::PermissionDenied =>
+            {
+                Some(path)
+            }
+            _ => None,
+        }
+    }
+
     /// The canonical [`RomWeaverErrorKind`] for this error. The mapping (and
     /// each variant's `Display` prefix) is locked by the contract test in this
     /// module so the JS worker-error classifier cannot silently drift.
@@ -219,7 +311,7 @@ impl RomWeaverError {
             Self::UnknownFormat { .. } => RomWeaverErrorKind::UnknownFormat,
             Self::Unsupported(_) => RomWeaverErrorKind::Unsupported,
             Self::Cancelled => RomWeaverErrorKind::Cancelled,
-            Self::Io(_) => RomWeaverErrorKind::Io,
+            Self::Io(_) | Self::IoPath { .. } => RomWeaverErrorKind::Io,
             Self::ThreadPoolBuild(_) => RomWeaverErrorKind::ThreadPoolBuild,
         }
     }

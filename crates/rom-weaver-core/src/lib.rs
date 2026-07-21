@@ -1,5 +1,6 @@
 pub mod codecs;
 
+mod access;
 mod cancel;
 mod common_files;
 mod concurrency;
@@ -17,6 +18,7 @@ mod report_details;
 mod selection;
 mod threads;
 
+pub use access::{access_advice, effective_ids, in_container};
 pub use cancel::CancellationToken;
 pub use common_files::{
     ArchiveEntryKindFilter, COMMON_CONTAINER_FILE_EXTENSIONS, CONTAINER_FILTER_FILE_EXTENSIONS,
@@ -37,8 +39,8 @@ pub use disc_sheet::{
 };
 pub use env::{env_u64, env_u64_opt};
 pub use error::{
-    ChdMediaScope, FormatOperationKind, Result, RomWeaverError, RomWeaverErrorKind, UnsupportedOp,
-    ValidationCodeError, ValidationField, ValidationFieldValue,
+    ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, Result, RomWeaverError,
+    RomWeaverErrorKind, UnsupportedOp, ValidationCodeError, ValidationField, ValidationFieldValue,
 };
 pub use formatting::format_human_bytes;
 pub use io::{

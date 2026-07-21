@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{ErrorKind, Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::{Path, PathBuf},
     sync::{
@@ -16,7 +16,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, RomWeaverError};
+use crate::{IoOp, IoResultExt, Result, RomWeaverError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileChunk {
@@ -96,17 +96,23 @@ pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
 
 pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result<File> {
     if overwrite {
-        return File::create(output_path).map_err(RomWeaverError::from);
+        return File::create(output_path).io_op(IoOp::Create, output_path);
     }
     OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(output_path)
         .map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "refusing to overwrite existing output `{}`: {error}",
-                output_path.display()
-            ))
+            // `create_new` fails for two very different reasons. Only an existing
+            // file is an overwrite refusal; a denied directory reported as one
+            // sends the user hunting for a file that was never there.
+            if error.kind() == ErrorKind::AlreadyExists {
+                return RomWeaverError::Validation(format!(
+                    "refusing to overwrite existing output `{}`: {error}",
+                    output_path.display()
+                ));
+            }
+            RomWeaverError::io_path(IoOp::Create, output_path, error)
         })
 }
 
