@@ -4,8 +4,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
-const BUNDLED_LIBARCHIVE: &str = "libarchive/vendor/libarchive.tar.gz";
+const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const WRAPPER_HEADER: &str = "libarchive/wrapper.h";
+// Every directory whose CMakeLists.txt adds a `test` subdirectory that
+// scripts/vendor-libarchive.sh prunes.
+const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
 const WASM_PATCH_FILES: &[&str] = &[
     "archive_write_set_format_wasm_shim.c",
     "archive_util_tempdir.original.txt",
@@ -178,20 +181,13 @@ fn lib_path<'a>(
 pub fn build() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let libarchive_dir = manifest_dir.join("../../vendor/libarchive");
-    let bundled_libarchive = manifest_dir.join(BUNDLED_LIBARCHIVE);
+    let libarchive_dir = manifest_dir.join(VENDORED_LIBARCHIVE);
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
-    println!("cargo:rerun-if-changed={}", bundled_libarchive.display());
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_LIBARCHIVE_WRITE_EXTRA");
     emit_wasm_patch_rerun_if_changed(&manifest_dir);
 
-    let source_dir = prepare_source_tree(
-        &manifest_dir,
-        &libarchive_dir,
-        &bundled_libarchive,
-        &out_dir,
-    );
+    let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
 
     build_libarchive(&source_dir);
     generate_bindings(&source_dir);
@@ -267,21 +263,7 @@ fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
     }
 }
 
-// A checkout that never initialized the submodule still has `vendor/libarchive`
-// as an empty directory, so an `is_dir` test would stage nothing and skip the
-// bundled tarball, leaving the build to fail much later on a missing source
-// file. Key off the tree's root CMakeLists.txt instead: present means real
-// sources, absent means fall back.
-fn has_libarchive_sources(libarchive_dir: &Path) -> bool {
-    libarchive_dir.join("CMakeLists.txt").is_file()
-}
-
-fn prepare_source_tree(
-    manifest_dir: &Path,
-    libarchive_dir: &Path,
-    bundled_libarchive: &Path,
-    out_dir: &Path,
-) -> PathBuf {
+fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
     let wasm_target = is_wasm32_target();
     let staged = out_dir.join(if wasm_target {
         "libarchive-wasm-src"
@@ -291,22 +273,16 @@ fn prepare_source_tree(
     if staged.exists() {
         fs::remove_dir_all(&staged).expect("failed to clear staged libarchive source tree");
     }
-    if has_libarchive_sources(libarchive_dir) {
-        copy_dir_recursive(libarchive_dir, &staged)
-            .expect("failed to stage libarchive source tree");
-    } else {
-        let archive = fs::File::open(bundled_libarchive).unwrap_or_else(|error| {
-            panic!(
-                "libarchive source is unavailable (expected {} or {}): {error}",
-                libarchive_dir.display(),
-                bundled_libarchive.display()
-            )
-        });
-        fs::create_dir_all(&staged).expect("failed to create bundled libarchive staging directory");
-        tar::Archive::new(flate2::read::GzDecoder::new(archive))
-            .unpack(&staged)
-            .expect("failed to unpack bundled libarchive source");
+    if !libarchive_dir.join("CMakeLists.txt").is_file() {
+        panic!(
+            "vendored libarchive source is missing from {}; refresh it with scripts/vendor-libarchive.sh",
+            libarchive_dir.display()
+        );
     }
+    // Every step below rewrites sources in place, so they all run against this
+    // staged copy; the vendored tree stays a verbatim snapshot of the fork.
+    copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
+    drop_test_subdirectories(&staged).expect("failed to drop libarchive test subdirectories");
     let write_archives = write_archives_enabled();
     let write_extra = write_extra_enabled();
     if write_archives {
@@ -434,6 +410,38 @@ fn patch_archive_write_set_format_7zip_for_wasm(sevenz_path: &Path) -> std::io::
     }
 
     fs::write(sevenz_path, patched_workers)?;
+    Ok(())
+}
+
+// Upstream adds each `test` subdirectory unconditionally and lets the test tree
+// itself check ENABLE_TEST, so a source tree pruned of test data fails to
+// configure even with tests off. Drop the calls in the staged copy rather than
+// in the vendored tree, which stays a verbatim snapshot of the fork.
+fn drop_test_subdirectories(staged: &Path) -> std::io::Result<()> {
+    for component in TEST_SUBDIRECTORY_OWNERS {
+        let cmakelists_path = staged.join(component).join("CMakeLists.txt");
+        if !cmakelists_path.is_file() {
+            continue;
+        }
+        let content = fs::read_to_string(&cmakelists_path)?;
+        let mut patched = String::with_capacity(content.len());
+        let mut dropped = false;
+        for line in content.lines() {
+            if line.trim().eq_ignore_ascii_case("add_subdirectory(test)") {
+                dropped = true;
+                continue;
+            }
+            patched.push_str(line);
+            patched.push('\n');
+        }
+        if !dropped {
+            panic!(
+                "expected an add_subdirectory(test) call in {}; the vendored libarchive layout changed",
+                cmakelists_path.display()
+            );
+        }
+        fs::write(&cmakelists_path, patched)?;
+    }
     Ok(())
 }
 

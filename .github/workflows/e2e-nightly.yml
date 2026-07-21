@@ -21,7 +21,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          submodules: recursive
 
       # The nightly suite uses a dev wasm module (no wasm-opt/brotli), so it
       # cannot consume CI's production artifact. Cache the exact dev build

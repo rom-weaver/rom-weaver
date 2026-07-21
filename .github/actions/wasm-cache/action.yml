@@ -30,8 +30,9 @@ runs:
   using: composite
   steps:
     # Hash every source, dependency, toolchain, and build-script input to the
-    # emitted module. git ls-tree includes submodule SHAs and the PR merge tree,
-    # unlike hashFiles. The key is deliberately broad: a miss costs one build;
+    # emitted module. git ls-tree resolves the PR merge tree, unlike hashFiles,
+    # and the `crates` tree SHA covers the vendored libarchive sources under it.
+    # The key is deliberately broad: a miss costs one build;
     # a false hit ships stale WASM.
     - name: Compute wasm cache key
       id: key
@@ -41,7 +42,7 @@ runs:
         CACHE_EPOCH: ${{ inputs.cache-epoch }}
       run: |
         basis=$(git ls-tree HEAD -- \
-          crates vendor/libarchive Cargo.lock Cargo.toml .cargo scripts/wasm \
+          crates Cargo.lock Cargo.toml .cargo scripts/wasm \
           scripts/gen-third-party-licenses.mjs .mise.toml \
           .github/actions/setup-build-env)
         if [ -z "$basis" ]; then

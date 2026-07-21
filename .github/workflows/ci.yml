@@ -69,8 +69,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Restore built wasm module
         id: wasm-cache
@@ -137,7 +135,6 @@ jobs:
         with:
           # The whitespace check below diffs against the PR base.
           fetch-depth: 0
-          submodules: recursive
 
       - uses: ./.github/actions/setup-build-env
         with:
@@ -158,12 +155,9 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
-        run: |
-          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
-            git diff --check "$BASE_SHA" "$HEAD_SHA"
-          else
-            git diff-tree --check --no-commit-id --exit-code -r "$HEAD_SHA"
-          fi
+        # The task reads BASE_SHA/HEAD_SHA above; the lefthook hook runs the same
+        # task with neither set and checks the staged diff instead.
+        run: mise run whitespace
 
       - name: Thread guard regressions
         run: mise run thread-guards
@@ -235,8 +229,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: ./.github/actions/setup-build-env
         with:

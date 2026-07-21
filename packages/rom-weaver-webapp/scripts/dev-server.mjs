@@ -50,7 +50,6 @@ const WASM_WATCH_PATHS = [
   path.join(REPO_ROOT, "Cargo.toml"),
   path.join(REPO_ROOT, "crates"),
   path.join(REPO_ROOT, "scripts", "wasm"),
-  path.join(REPO_ROOT, "vendor", "libarchive"),
 ];
 
 const BASE_SECURITY_HEADERS = {

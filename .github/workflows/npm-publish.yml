@@ -47,7 +47,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
-          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 

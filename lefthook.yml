@@ -99,7 +99,10 @@ pre-commit:
       run: bash scripts/update-markdown-toc.sh {files}
       stage_fixed: true
     whitespace:
-      run: git diff --cached --check
+      # Same task CI runs, so an exclusion can never apply to one and not the
+      # other. Vendored trees are skipped: they are verbatim upstream snapshots,
+      # and restyling them would turn every refresh into a merge.
+      run: mise run whitespace
     thread-guard-regressions:
       glob: "*.rs"
       run: mise run thread-guards

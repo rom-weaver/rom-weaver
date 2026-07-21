@@ -96,7 +96,6 @@ jobs:
         with:
           ref: v${{ needs.release.outputs.version }}
           fetch-depth: 0
-          submodules: recursive
 
       - name: Resolve tested WASM artifact
         id: ci

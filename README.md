@@ -131,7 +131,7 @@ See [Run in Docker](docs/cli.md#run-in-docker).
 To install the current source build instead:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --help
@@ -156,7 +156,7 @@ routing, service-worker scope, and the required COOP/COEP headers.
 Build and start it with Docker Compose:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 docker compose up --build --detach
 curl --fail --silent --show-error http://localhost:8080/health

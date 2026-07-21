@@ -84,14 +84,16 @@ instructions do **not** apply here.
 - Browser wasm runtime (OPFS, thread pool, worker client):
   `packages/rom-weaver-webapp/src/wasm`
 - Webapp workflows/forms: `packages/rom-weaver-webapp/src`
-- Vendored source: `vendor/libarchive` is a submodule used for native builds;
-  the nod Rust source is inlined under `crates/rom-weaver-containers/src/nod`.
+- Vendored source is all in-tree under `crates/rom-weaver-containers`: the
+  libarchive C sources at `libarchive/vendor/libarchive` (refresh with
+  `scripts/vendor-libarchive.sh`), the nod and xdvdfs Rust sources under
+  `src/nod` and `src/xdvdfs`. There are no git submodules.
 
 ## Worktrees
 
 Fresh worktrees need `scripts/setup-worktree.sh` (real `npm ci` installs +
 wasm artifact copy - symlink-mirrored node_modules silently stall vitest's
-browser mode) and `vendor/libarchive` symlinked from the main checkout. Don't share the
+browser mode). Don't share the
 main checkout's `target/` for wasm builds - cmake-built C deps (libarchive) break;
 use a fresh target dir. Never put `/` or `+` in a worktree name (vitest
 browser mode hangs on `+` in test paths).

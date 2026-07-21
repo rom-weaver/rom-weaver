@@ -10,6 +10,9 @@ why, and the exact steps to go back to upstream.
 
 - [The publishing constraint](#the-publishing-constraint)
 - [What is vendored](#what-is-vendored)
+- [`libarchive`, inlined into `rom-weaver-containers`](#libarchive-inlined-into-rom-weaver-containers)
+  - [Refreshing the snapshot](#refreshing-the-snapshot)
+  - [Going back to upstream](#going-back-to-upstream)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
@@ -44,7 +47,7 @@ See [`src/xdvdfs`](#xdvdfs-inlined-into-rom-weaver-containers) below.
 
 | Code | Form | Packaged as | Reason |
 | --- | --- | --- | --- |
-| `vendor/libarchive` | Git submodule | part of `rom-weaver-containers` | C sources built by `crates/rom-weaver-containers/libarchive/build.rs`; a tarball fallback ships in that package |
+| `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Built by `crates/rom-weaver-containers/libarchive/build.rs`; carries local patches upstream has not taken |
 | `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
@@ -54,6 +57,56 @@ is the preferred outcome whenever upstream can serve the need — inlining is th
 fallback for when it cannot, and a published fork is the last resort.
 
 No vendored dependency has its own `rom-weaver-*` package.
+
+## `libarchive`, inlined into `rom-weaver-containers`
+
+The libarchive C sources live at
+`crates/rom-weaver-containers/libarchive/vendor/libarchive/`, and
+`libarchive/build.rs` builds them with CMake. They are the only libarchive
+source rom-weaver builds - a local `cargo build` and a `cargo install
+rom-weaver-cli` compile the same tree.
+
+Local patches are developed in the fork
+[brandonocasey/libarchive](https://github.com/brandonocasey/libarchive), which
+keeps the reviewable history against upstream and is where a contribution back
+to upstream starts. The inlined copy is a snapshot of one fork commit, recorded
+in `crates/rom-weaver-containers/libarchive/vendor/LIBARCHIVE_VERSION`.
+
+### Refreshing the snapshot
+
+```bash
+scripts/vendor-libarchive.sh <path-to-libarchive-checkout> [ref]
+```
+
+The script copies `git archive` output and prunes what the build never
+compiles: the five test trees (`libarchive/test` alone is ~13 MB of test data,
+plus `cat`, `cpio`, `tar`, and `unzip`), `test_utils`, `doc`, `examples`,
+`contrib`, and `.github`. `build.rs` sets `ENABLE_TEST=OFF`, so none of it is
+ever built. **Do not prune anything else CMake reads** - that would force an
+edit to the vendored tree and turn every future refresh from a copy into a
+merge.
+
+There is one wrinkle: upstream calls `add_subdirectory(test)` unconditionally in
+all five directories and lets the test tree itself check `ENABLE_TEST`, so a
+pruned tree fails to *configure* even with tests off. `build.rs` strips those
+five calls (`TEST_SUBDIRECTORY_OWNERS`). If a refresh ever fails with
+`add_subdirectory given source "test" which is not an existing directory`, that
+list and the script's prune list have drifted apart.
+
+Pruning is also what keeps the published crate viable: the full tree packages to
+about 6.3 MB against crates.io's 10 MiB limit, the pruned one to about 1.3 MB.
+
+Every transformation - the test-subdirectory strip, the wasm patches in
+`libarchive/patches/wasm/`, and the `CMakeLists.txt` source-list edits - is
+applied to a staged copy under `OUT_DIR`, never to the committed tree.
+
+### Going back to upstream
+
+There is no version of this that ends in a crates.io dependency - libarchive is
+a C library, and `libarchive-sys` style crates do not carry the local patches or
+the wasm build. The realistic end state is upstream accepting the fork's
+commits, at which point the fork resets to an upstream tag and the snapshot is
+refreshed from it. Track that in the fork's branches, not here.
 
 ## `nod`, inlined into `rom-weaver-containers`
 
@@ -178,9 +231,8 @@ than a silent no-op — which is the safer failure, but it is new.
 
 ## Validate after any vendor change
 
-Run the publish check from a normal checkout with `vendor/libarchive`
-populated. Linked worktrees replace that directory with a symlink, and Cargo
-does not package through the symlink.
+Every vendored source is a normal committed file, so these run the same from a
+linked worktree as from the main checkout.
 
 ```bash
 cargo check -p rom-weaver-patches

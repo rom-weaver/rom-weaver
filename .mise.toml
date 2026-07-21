@@ -185,9 +185,8 @@ description = "Find unused Rust dependencies"
 # globally. --skip-target-dir keeps it off build artifacts.
 #
 # Paths are explicit because cargo-machete walks directories rather than
-# workspace members, so a bare run also scans the vendor/libarchive submodule -
-# an upstream manifest we don't control and don't build. The workspace crates
-# stay covered; bump these paths if another source checkout is added.
+# workspace members. The workspace crates stay covered; bump these paths if
+# another source checkout is added outside crates/.
 run = """cargo-machete --skip-target-dir \
   crates \
  """
@@ -234,8 +233,9 @@ run = "actionlint"
 
 [tasks.shellcheck]
 description = "Lint shell scripts"
-# git ls-files rather than a find walk: it skips the vendored submodule and
-# node_modules for free, and only tracked scripts are ours to fix.
+# git ls-files rather than a find walk: it skips node_modules for free, and only
+# tracked scripts are ours to fix - hence the vendored exclusions, upstream
+# snapshots we do not restyle (scripts/vendored-pathspecs.sh owns that list).
 #
 # -x follows `source` directives so the wasm cc/cxx wrappers are checked
 # against the fragment they share; -P SCRIPTDIR resolves those relative paths
@@ -244,11 +244,44 @@ run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 cd "{{ config_root }}"
-if [ -z "$(git ls-files -- '*.sh')" ]; then
+read_vendored_exclusions() {
+  exclusions=()
+  while IFS= read -r pathspec; do
+    exclusions+=("$pathspec")
+  done < <(bash scripts/vendored-pathspecs.sh)
+}
+read_vendored_exclusions
+if [ -z "$(git ls-files -- '*.sh' "${exclusions[@]}")" ]; then
   echo "shellcheck: no tracked shell scripts" >&2
   exit 0
 fi
-git ls-files -z -- '*.sh' | xargs -0 shellcheck -x -P SCRIPTDIR
+git ls-files -z -- '*.sh' "${exclusions[@]}" | xargs -0 shellcheck -x -P SCRIPTDIR
+'''
+
+[tasks.whitespace]
+description = "Check for whitespace errors, skipping vendored third-party trees"
+# One implementation for both callers - the lefthook pre-commit hook (no env,
+# checks the staged diff) and CI (BASE_SHA/HEAD_SHA set, diffs the pull request
+# range). They used to be separate copies of the same git invocation, so an
+# exclusion added to one silently missed the other.
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cd "{{ config_root }}"
+read_vendored_exclusions() {
+  exclusions=()
+  while IFS= read -r pathspec; do
+    exclusions+=("$pathspec")
+  done < <(bash scripts/vendored-pathspecs.sh)
+}
+read_vendored_exclusions
+if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA:-}" != "0000000000000000000000000000000000000000" ] && [ -n "${HEAD_SHA:-}" ]; then
+  git diff --check "$BASE_SHA" "$HEAD_SHA" -- . "${exclusions[@]}"
+elif [ -n "${HEAD_SHA:-}" ]; then
+  git diff-tree --check --no-commit-id --exit-code -r "$HEAD_SHA" -- . "${exclusions[@]}"
+else
+  git diff --cached --check -- . "${exclusions[@]}"
+fi
 '''
 
 [tasks.hadolint]
@@ -257,11 +290,18 @@ run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 cd "{{ config_root }}"
-if [ -z "$(git ls-files -- '*Dockerfile' '*Dockerfile.*')" ]; then
+read_vendored_exclusions() {
+  exclusions=()
+  while IFS= read -r pathspec; do
+    exclusions+=("$pathspec")
+  done < <(bash scripts/vendored-pathspecs.sh)
+}
+read_vendored_exclusions
+if [ -z "$(git ls-files -- '*Dockerfile' '*Dockerfile.*' "${exclusions[@]}")" ]; then
   echo "hadolint: no tracked Dockerfiles" >&2
   exit 0
 fi
-git ls-files -z -- '*Dockerfile' '*Dockerfile.*' | xargs -0 hadolint
+git ls-files -z -- '*Dockerfile' '*Dockerfile.*' "${exclusions[@]}" | xargs -0 hadolint
 '''
 
 [tasks.thread-guards]
