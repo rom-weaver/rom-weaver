@@ -97,9 +97,7 @@ openssl-sys = { version = "0.9.80", features = ["vendored"] }
 [build-dependencies]
 bindgen = "0.72.1"
 cmake = "0.1.58"
-flate2.workspace = true
 path-slash = "0.2.1"
-tar.workspace = true
 
 [dev-dependencies]
 claxon.workspace = true

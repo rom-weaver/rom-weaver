@@ -28,7 +28,7 @@ Docker Compose builds the WASM module, bundles the webapp, and starts the
 included static server from a checkout:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 docker compose up --build --detach
 curl --fail --silent --show-error http://localhost:8080/health
@@ -77,7 +77,7 @@ Install the system tools from the [development guide](development.md#prerequisit
 then build the static files from a checkout:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 mise trust
 mise install

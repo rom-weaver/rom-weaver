@@ -24,7 +24,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          submodules: recursive
 
       # This job builds only the native CLI - scripts/parity-check.sh never
       # touches wasm - so the WASI SDK download and the wasm32-wasip1-threads

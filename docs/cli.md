@@ -62,7 +62,7 @@ Install the current source build. This requires Rust 1.95, CMake, Clang, and a
 native compiler toolchain.
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version

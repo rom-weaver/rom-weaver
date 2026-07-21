@@ -185,9 +185,8 @@ description = "Find unused Rust dependencies"
 # globally. --skip-target-dir keeps it off build artifacts.
 #
 # Paths are explicit because cargo-machete walks directories rather than
-# workspace members, so a bare run also scans the vendor/libarchive submodule -
-# an upstream manifest we don't control and don't build. The workspace crates
-# stay covered; bump these paths if another source checkout is added.
+# workspace members. The workspace crates stay covered; bump these paths if
+# another source checkout is added outside crates/.
 run = """cargo-machete --skip-target-dir \
   crates \
  """
@@ -234,8 +233,9 @@ run = "actionlint"
 
 [tasks.shellcheck]
 description = "Lint shell scripts"
-# git ls-files rather than a find walk: it skips the vendored submodule and
-# node_modules for free, and only tracked scripts are ours to fix.
+# git ls-files rather than a find walk: it skips node_modules for free, and only
+# tracked scripts are ours to fix - hence the vendored libarchive exclusion, an
+# upstream snapshot we do not restyle.
 #
 # -x follows `source` directives so the wasm cc/cxx wrappers are checked
 # against the fragment they share; -P SCRIPTDIR resolves those relative paths
@@ -248,7 +248,7 @@ if [ -z "$(git ls-files -- '*.sh')" ]; then
   echo "shellcheck: no tracked shell scripts" >&2
   exit 0
 fi
-git ls-files -z -- '*.sh' | xargs -0 shellcheck -x -P SCRIPTDIR
+git ls-files -z -- '*.sh' ':!crates/rom-weaver-containers/libarchive/vendor' | xargs -0 shellcheck -x -P SCRIPTDIR
 '''
 
 [tasks.hadolint]
@@ -261,7 +261,7 @@ if [ -z "$(git ls-files -- '*Dockerfile' '*Dockerfile.*')" ]; then
   echo "hadolint: no tracked Dockerfiles" >&2
   exit 0
 fi
-git ls-files -z -- '*Dockerfile' '*Dockerfile.*' | xargs -0 hadolint
+git ls-files -z -- '*Dockerfile' '*Dockerfile.*' ':!crates/rom-weaver-containers/libarchive/vendor' | xargs -0 hadolint
 '''
 
 [tasks.thread-guards]

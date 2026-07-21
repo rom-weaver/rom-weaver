@@ -99,7 +99,10 @@ pre-commit:
       run: bash scripts/update-markdown-toc.sh {files}
       stage_fixed: true
     whitespace:
-      run: git diff --cached --check
+      # Vendored libarchive is excluded everywhere it would be graded on style:
+      # it is a verbatim upstream snapshot, and normalizing it would turn every
+      # scripts/vendor-libarchive.sh refresh into a merge.
+      run: "git diff --cached --check -- . ':(exclude)crates/rom-weaver-containers/libarchive/vendor'"
     thread-guard-regressions:
       glob: "*.rs"
       run: mise run thread-guards

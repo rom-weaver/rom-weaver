@@ -43,17 +43,11 @@ installed elsewhere.
 
 ## Clone and bootstrap
 
-The repository contains the `vendor/libarchive` submodule, so clone recursively:
+All vendored source is committed in-tree, so a plain clone is complete:
 
 ```bash
-git clone --recurse-submodules https://github.com/brandonocasey/rom-weaver.git
+git clone https://github.com/brandonocasey/rom-weaver.git
 cd rom-weaver
-```
-
-For an existing clone:
-
-```bash
-git submodule update --init --recursive
 ```
 
 Trust and install the pinned toolchains, install both JavaScript dependency
@@ -251,13 +245,11 @@ testing:
 ./scripts/setup-worktree.sh
 ```
 
-It installs package dependencies, copies existing WASM artifacts when
-available, and links the populated `vendor/libarchive` submodule from the main
-checkout. The expected vendor symlink appears as a gitlink-to-symlink type
-change unless the helper's worktree-scoped Git configuration is present.
+It installs package dependencies and copies existing WASM artifacts when
+available.
 
-Git refuses to remove worktrees containing submodules. After verifying that a
-worktree has no real changes, remove it from the main checkout with:
+After verifying that a worktree has no real changes, remove it from the main
+checkout with:
 
 ```bash
 scripts/remove-worktree.sh .worktrees/<name>

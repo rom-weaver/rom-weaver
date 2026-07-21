@@ -172,8 +172,9 @@ Caching decisions that live here:
 Restores a prebuilt WASM module (`variant: prod` for CI, `dev` for the nightly
 E2E suite, which needs an unoptimized module CI never builds). The key is a
 SHA-256 over `git ls-tree` of every source, dependency, toolchain, and
-build-script input - `git ls-tree` rather than `hashFiles` because it covers
-submodule SHAs and the pull request merge tree.
+build-script input - `git ls-tree` rather than `hashFiles` because it resolves
+the pull request merge tree, and because the `crates` tree SHA covers the
+vendored libarchive sources under it.
 
 Deliberately no `restore-keys`: a partial-prefix hit could serve a module built
 from different source. A miss costs one build; a false hit ships stale WASM.
@@ -303,7 +304,3 @@ so also lints the inline `run:` scripts.
   entries.** The scope is not fully published, so a plain `npm install` strips
   them and `npm ci` then breaks every job. A lefthook `root-lock-sync` hook
   guards this.
-- **Do not use `git add -A` in a worktree.** `scripts/setup-worktree.sh`
-  symlinks `vendor/*` and sets `submodule.ignore=all`, which hides the
-  typechange and silently converts gitlinks (160000) into symlinks (120000). A
-  lefthook `vendor-gitlinks` hook guards this.

@@ -46,7 +46,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
-          submodules: recursive
 
       - uses: docker/setup-buildx-action@v4
 

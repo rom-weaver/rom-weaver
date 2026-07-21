@@ -38,7 +38,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          submodules: recursive
 
       # Coverage must measure the module CI actually tested, so an expired or
       # missing artifact is fatal here rather than a reason to build a new one.
