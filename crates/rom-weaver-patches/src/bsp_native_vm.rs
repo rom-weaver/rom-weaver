@@ -903,6 +903,10 @@ impl<'pool> BspVm<'pool> {
         Ok(args)
     }
 
+    #[expect(
+        clippy::cognitive_complexity,
+        reason = "the opcode dispatch table mirrors the BSP instruction set"
+    )]
     fn execute_opcode(&mut self, opcode: u8, args: &[u32]) -> VmResult<StepControl> {
         match opcode {
             0x00 => Ok(StepControl::Continue),

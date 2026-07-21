@@ -28,6 +28,7 @@ version = "0.5.0"
 # the workspace's lint policy when it is inlined.
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
 
 [workspace.dependencies]
 adler2 = "2.0.1"

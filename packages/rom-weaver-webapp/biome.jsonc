@@ -27,6 +27,11 @@
     "enabled": true,
     "rules": {
       "complexity": {
+        // Start with the established top outlier cluster; lower this ratchet as legacy hotspots are simplified.
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 75 },
+        },
         "noForEach": "error",
         "noUselessStringConcat": "error",
         "useSimplifiedLogicExpression": "error",
