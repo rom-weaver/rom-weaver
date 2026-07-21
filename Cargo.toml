@@ -84,7 +84,7 @@ bincode = "1.3.3"
 encoding_rs = "0.8.32"
 maybe-async = "0.2.7"
 proc-bitfield = "0.2.2"
-rand = "0.9"
+rand = "0.10"
 serde-big-array = "0.5.1"
 simple_moving_average = "1.0"
 serde = { version = "1.0.228", features = ["derive"] }
