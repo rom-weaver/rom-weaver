@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/darwin-arm64",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "macOS arm64 binary for rom-weaver",
   "author": "Brandon Casey",
   "repository": {

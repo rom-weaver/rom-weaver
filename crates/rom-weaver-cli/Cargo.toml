@@ -24,10 +24,10 @@ crc32fast.workspace = true
 flate2.workspace = true
 miniz_oxide.workspace = true
 rayon.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.6.0" }
-rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.6.0" }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.0" }
-rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.6.0" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.6.1" }
+rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.6.1" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.1" }
+rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.6.1" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
