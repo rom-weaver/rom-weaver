@@ -154,6 +154,22 @@ const createApplyPatchChecksumPreflight = <TSource>(
   });
 };
 
+/** Separates the target/preflight key from the chain fingerprint the validation pass appends. */
+const VALIDATION_CHAIN_KEY_SEPARATOR = "|chain:";
+
+/**
+ * Compose the stored validation key. The chain fingerprint is a second, independent invalidation
+ * axis owned by the validation pass; readiness compares only the base half (see
+ * `getApplyPatchValidationBaseKey`), so both sides must go through these helpers or a stored verdict
+ * can never match and is dropped on every readiness pass.
+ */
+const composeApplyPatchValidationKey = (baseKey: string, chainFingerprint?: string): string =>
+  chainFingerprint ? `${baseKey}${VALIDATION_CHAIN_KEY_SEPARATOR}${chainFingerprint}` : baseKey;
+
+/** Strip the chain fingerprint so a chained verdict still matches its target/preflight key. */
+const getApplyPatchValidationBaseKey = (validationKey: string | undefined): string | undefined =>
+  validationKey?.split(VALIDATION_CHAIN_KEY_SEPARATOR)[0] ?? validationKey;
+
 const createApplyPatchValidationKey = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
@@ -252,7 +268,14 @@ const evaluateApplyPatchReadiness = async <TSource>(
       // verdict that no longer matches this target/preflight so the row falls back to the preflight
       // result until the background dry-run refreshes it.
       const validationKey = createApplyPatchValidationKey(stage, target, preflight);
-      if (stage.state.patchValidation && stage.state.patchValidation.validationKey !== validationKey)
+      // Compare base keys only: the validation pass stores its key with a `|chain:` fingerprint
+      // appended, and it owns re-running the dry run when that fingerprint moves. Comparing the
+      // composed key here would never match a chained verdict, silently discarding a good result
+      // and stranding the row on "verifying" with nothing left to refresh it.
+      if (
+        stage.state.patchValidation &&
+        getApplyPatchValidationBaseKey(stage.state.patchValidation.validationKey) !== validationKey
+      )
         stage.state.patchValidation = undefined;
     } else {
       stage.state.patchValidation = undefined;
@@ -276,4 +299,10 @@ const evaluateApplyPatchReadiness = async <TSource>(
   return previousStatus !== stage.state.status;
 };
 
-export { assignApplyPatchTarget, clearApplyPatchTarget, createApplyPatchValidationKey, evaluateApplyPatchReadiness };
+export {
+  assignApplyPatchTarget,
+  clearApplyPatchTarget,
+  composeApplyPatchValidationKey,
+  createApplyPatchValidationKey,
+  evaluateApplyPatchReadiness,
+};

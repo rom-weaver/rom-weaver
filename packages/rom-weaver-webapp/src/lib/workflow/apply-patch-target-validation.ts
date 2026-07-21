@@ -8,7 +8,10 @@ import type {
 import { toRomWeaverError } from "../errors.ts";
 import { getPatchFileExternalSource } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { createApplyPatchValidationKey } from "./apply-patch-readiness-state-machine.ts";
+import {
+  composeApplyPatchValidationKey,
+  createApplyPatchValidationKey,
+} from "./apply-patch-readiness-state-machine.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
@@ -150,9 +153,10 @@ const prepareValidation = <TSource>(
   adapters: PatchTargetValidationAdapters,
 ): PreparedValidation<TSource> | null => {
   const { stage, target, preflight } = entry;
-  const validationKey = `${createApplyPatchValidationKey(stage, target, preflight)}${
-    entry.chainFingerprint ? `|chain:${entry.chainFingerprint}` : ""
-  }`;
+  const validationKey = composeApplyPatchValidationKey(
+    createApplyPatchValidationKey(stage, target, preflight),
+    entry.chainFingerprint,
+  );
   const existingValidation = stage.state.patchValidation;
   const cached = isCachedValidation(existingValidation, validationKey);
   const startedAt = Date.now();
