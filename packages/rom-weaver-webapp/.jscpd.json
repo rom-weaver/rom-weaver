@@ -1,0 +1,10 @@
+{
+  "path": ["src"],
+  "format": ["typescript", "tsx"],
+  "minLines": 10,
+  "minTokens": 70,
+  "mode": "strict",
+  "threshold": 0.5,
+  "ignore": ["**/*.test.*", "**/*.spec.*", "**/generated/**", "**/*.d.ts"],
+  "reporters": ["console"]
+}

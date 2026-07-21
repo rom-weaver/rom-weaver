@@ -48,6 +48,12 @@ pre-commit:
     react-knip:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:knip
+    # jscpd (copy/paste detection) is a CI `npm run lint` step too; gating it
+    # here keeps a duplication regression over the .jscpd.json threshold from
+    # passing the local hook and only failing in CI. Static analysis, no build.
+    react-jscpd:
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run lint:jscpd
     react-browser-compat:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:browser-compat
