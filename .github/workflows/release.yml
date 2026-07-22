@@ -227,11 +227,28 @@ jobs:
       - name: Download release checksums
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v${{ needs.release.outputs.version }}
         run: |
+          set -euo pipefail
           mkdir checksums
-          gh release download "v${{ needs.release.outputs.version }}" \
-            --pattern 'rom-weaver-*.sha256' \
-            --dir checksums
+          release_ids="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+              --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" and .draft) | .id"
+          )"
+          release_id="${release_ids%%$'\n'*}"
+          test -n "$release_id"
+
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+            --jq '.[] | select(.name | test("^rom-weaver-.*\\.sha256$")) | [.name, .url] | @tsv' |
+            while IFS=$'\t' read -r name url; do
+              test -n "$name" && test -n "$url"
+              gh api \
+                -H 'Accept: application/octet-stream' \
+                "$url" > "checksums/$name"
+            done
+
+          test -n "$(find checksums -type f -name 'rom-weaver-*.sha256' -print -quit)"
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v7
