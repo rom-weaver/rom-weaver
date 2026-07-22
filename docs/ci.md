@@ -478,3 +478,11 @@ the source-build commands in the [self-hosting guide](self-hosting.md).
   entries.** The scope is not fully published, so a plain `npm install` strips
   them and `npm ci` then breaks every job. A lefthook `root-lock-sync` hook
   guards this.
+- **`COPY --chmod` silently drops the sticky bit.** It takes the low nine bits
+  only, so `--chmod=1777` yields `drwxrwxrwx`, not `drwxrwxrwt`. Naming a
+  directory as the COPY *source* does not preserve its mode either - only its
+  contents are contributed, and the destination is recreated 0755. The CLI
+  image needs a sticky-writable `/work` and has no shell to `mkdir` with, so it
+  builds the directory in a throwaway stage and copies the **parent**, which
+  does preserve the mode of everything inside. Verify with `ls -ld /work` from
+  a shell-bearing stage; `drwxrwxrwt` is the passing result.
