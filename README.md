@@ -5,7 +5,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/brandonocasey/rom-weaver/tags"><img alt="Latest tag" src="https://img.shields.io/github/v/tag/brandonocasey/rom-weaver?sort=semver&amp;label=version&amp;color=d9690f"></a>
+  <a href="https://www.npmjs.com/package/rom-weaver"><img alt="npm version" src="https://img.shields.io/npm/v/rom-weaver?logo=npm&amp;logoColor=white&amp;label=npm&amp;color=d9690f"></a>
+  <a href="https://crates.io/crates/rom-weaver-cli"><img alt="crates.io version" src="https://img.shields.io/crates/v/rom-weaver-cli?logo=rust&amp;logoColor=white&amp;label=crates.io&amp;color=d9690f"></a>
+  <a href="https://github.com/brandonocasey/rom-weaver/pkgs/container/rom-weaver-cli"><img alt="Container images on GitHub Container Registry" src="https://img.shields.io/badge/ghcr.io-rom--weaver-d9690f?logo=docker&amp;logoColor=white"></a>
+  <a href="https://github.com/brandonocasey/homebrew-tap"><img alt="Homebrew tap" src="https://img.shields.io/badge/homebrew-brandonocasey%2Ftap-d9690f?logo=homebrew&amp;logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/brandonocasey/rom-weaver/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/brandonocasey/rom-weaver/ci.yml?branch=main&amp;logo=githubactions&amp;logoColor=white&amp;label=CI&amp;color=4a6d63"></a>
   <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-4a6d63?logo=nodedotjs&logoColor=white"></a>
   <a href=".mise.toml"><img alt="Rust 1.95" src="https://img.shields.io/badge/Rust-1.95-2c323b?logo=rust&logoColor=white"></a>
   <a href="LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
