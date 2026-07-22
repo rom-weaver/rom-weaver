@@ -1,11 +1,13 @@
 name: Publish Cargo crates
 
-# Triggered by the release tag rather than called from release.yml: crates.io
-# Trusted Publishing rejects the `workflow_run` event that gates release.yml
-# ("Trusted Publishing does not support the 'workflow_run' event trigger due to
-# security concerns"), and a reusable workflow inherits its caller's event. The
-# tag only appears once release.yml publishes the draft, so this still runs
-# strictly after the rest of the release succeeded.
+# Triggered by the release tag rather than called from release.yml: neither
+# event release.yml runs on is one crates.io Trusted Publishing accepts.
+# Ordinary commits reach it through `workflow_run` ("Trusted Publishing does not
+# support the 'workflow_run' event trigger due to security concerns"), and the
+# runs that set release_created arrive through `pull_request`, which it will not
+# accept either. A job inherits its workflow's event. The tag only appears once
+# release.yml publishes the draft, so this still runs strictly after the rest of
+# the release succeeded.
 on:
   push:
     tags:
@@ -46,52 +48,10 @@ jobs:
           shared-key: cargo-publish
           cache-on-failure: true
 
-      - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@cargo-semver-checks
-
-      # semver-checks builds rustdoc for each crate's published baseline before
-      # it can diff. Baselines only change when a version is released, so this
-      # survives across releases even though the current-tree half does not.
-      - name: Cache cargo-semver-checks baselines
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/cargo-semver-checks
-          key: semver-checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            semver-checks-${{ runner.os }}-
-
-      - name: Check for accidental breaking API changes
-        shell: bash
-        # Runs per-crate rather than --workspace so a crate with no published
-        # baseline (first release, or a newly added crate) is skipped instead of
-        # failing the whole job. cargo-semver-checks compares the working tree
-        # against the latest release on crates.io; a major-version bump is the
-        # intended way to land a genuine break.
-        run: |
-          mapfile -t names < <(
-            cargo metadata --no-deps --format-version 1 |
-              jq --raw-output '
-                .workspace_members as $members
-                | .packages[]
-                | select(.id as $id | $members | index($id))
-                | select(.publish != [])
-                | .name
-              '
-          )
-
-          for name in "${names[@]}"; do
-            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-              --user-agent "$CRATES_IO_USER_AGENT" \
-              "https://crates.io/api/v1/crates/$name")
-            if [[ "$status" != 200 ]]; then
-              echo "::notice::$name has no published baseline yet - skipping semver check"
-              continue
-            fi
-            cargo semver-checks check-release --package "$name"
-          done
-        env:
-          CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
-
+      # The cargo-semver-checks gate that used to sit here now runs in
+      # release.yml, before the draft is published. By the time this workflow's
+      # tag exists the release is immutable and the version is spent, so a
+      # break found here could not be acted on.
       - name: Publish workspace crates
         shell: bash
         run: |

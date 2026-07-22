@@ -95,6 +95,84 @@ jobs:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
 
+  # Lives here rather than in cargo-publish.yml, where it used to run, because
+  # there it was too late to act on: cargo-publish.yml is triggered by the
+  # release tag, which only exists once the draft has been published and made
+  # immutable. A break found at that point left the release out, the crates
+  # unpublished, and the version unrepeatable. Here it gates publish-release, so
+  # a failure leaves a deletable draft and the version free to be cut again.
+  #
+  # Safe to run alongside the publishing jobs: it publishes nothing, so it needs
+  # no registry credentials and cannot half-release anything on failure.
+  semver-check:
+    name: Check for breaking API changes
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-publish
+          cache-on-failure: true
+
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@cargo-semver-checks
+
+      # semver-checks builds rustdoc for each crate's published baseline before
+      # it can diff. Baselines only change when a version is released, so this
+      # survives across releases even though the current-tree half does not.
+      - name: Cache cargo-semver-checks baselines
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/cargo-semver-checks
+          key: semver-checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            semver-checks-${{ runner.os }}-
+
+      - name: Check for accidental breaking API changes
+        shell: bash
+        # Runs per-crate rather than --workspace so a crate with no published
+        # baseline (first release, or a newly added crate) is skipped instead of
+        # failing the whole job. cargo-semver-checks compares the working tree
+        # against the latest release on crates.io; a major-version bump is the
+        # intended way to land a genuine break.
+        run: |
+          mapfile -t names < <(
+            cargo metadata --no-deps --format-version 1 |
+              jq --raw-output '
+                .workspace_members as $members
+                | .packages[]
+                | select(.id as $id | $members | index($id))
+                | select(.publish != [])
+                | .name
+              '
+          )
+
+          for name in "${names[@]}"; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --user-agent "$CRATES_IO_USER_AGENT" \
+              "https://crates.io/api/v1/crates/$name")
+            if [[ "$status" != 200 ]]; then
+              echo "::notice::$name has no published baseline yet - skipping semver check"
+              continue
+            fi
+            cargo semver-checks check-release --package "$name"
+          done
+        env:
+          CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
+
   # Package the static site beside the registry publishes rather than making all
   # of them wait for another production WASM build. The release PR head's CI
   # artifact is reused; manual releases fall back to a source build when no
@@ -370,10 +448,19 @@ jobs:
   publish-release:
     name: Publish draft release
     needs:
-      [release, static-webapp, publish-npm, publish-homebrew, publish-scoop, publish-containers]
+      [
+        release,
+        semver-check,
+        static-webapp,
+        publish-npm,
+        publish-homebrew,
+        publish-scoop,
+        publish-containers,
+      ]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&
+      needs.semver-check.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
       needs.publish-containers.result == 'success' &&

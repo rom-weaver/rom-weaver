@@ -41,7 +41,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `e2e-nightly.yml` | nightly 07:41 UTC, manual | No | Exhaustive Chromium + WebKit E2E matrix |
 | `cache-cleanup.yml` | daily 09:00 UTC, manual | No | Reap closed-PR Actions caches |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
-| `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish + semver check |
+| `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 4 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
@@ -290,6 +290,7 @@ spec would tag every platform package as a prerelease.
 
 | Job | Produces |
 | --- | --- |
+| `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
 | `publish-npm` | 4 platform packages → launcher → unscoped alias, in that order |
 | `publish-homebrew` | formula commit to `brandonocasey/homebrew-tap` (stable only) |
@@ -356,14 +357,24 @@ The standalone Cargo and Docker dispatches fall back to `v${version}`, which by
 then exists.
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being
-called by `release.yml`. crates.io Trusted Publishing rejects the `workflow_run`
-event that gates `release.yml`, and a reusable workflow inherits its caller's
-event, so OIDC could never authenticate from inside the fan-out. Keying off the
-tag also orders it naturally last.
+called by `release.yml`. `release.yml` never runs on an event crates.io Trusted
+Publishing accepts: ordinary commits reach it through `workflow_run`, which
+Trusted Publishing rejects outright, and the runs that actually set
+`release_created` arrive through `pull_request` (the release pull request
+closing), which it will not accept either. A job inherits its workflow's event,
+so OIDC could never authenticate from inside the fan-out. Keying off the tag
+also orders it naturally last.
 
-`cargo-semver-checks` runs per-crate rather than `--workspace` so a crate with
-no published baseline (a first release, or a newly added crate) is skipped
-instead of failing the whole job.
+`cargo-semver-checks` runs in `release.yml` as the `semver-check` job, not in
+`cargo-publish.yml` where it used to live. By the time the tag exists the
+release is published and immutable and the version can never be re-cut, so a
+break found there could not be acted on; as a gate on `publish-release` a
+failure leaves a deletable draft instead. It publishes nothing, so it needs no
+registry credentials and runs alongside the publishing jobs.
+
+It runs per-crate rather than `--workspace` so a crate with no published
+baseline (a first release, or a newly added crate) is skipped instead of
+failing the whole job.
 
 ### Prerelease routing
 
