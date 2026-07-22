@@ -48,6 +48,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: main
+          skip-github-pull-request: ${{ github.event_name == 'pull_request' }}
 
       - name: Mark GitHub prerelease
         if: >-
