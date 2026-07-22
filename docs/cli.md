@@ -150,11 +150,15 @@ there and pass paths under `/work`. Arguments after the image name go straight t
 `rom-weaver`, so `--help` and every subcommand work unchanged.
 
 `--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files
-keep their host ownership, and without it the container runs as its own
-`rom-weaver` user (uid 10001): reading your files may be refused, and anything it
+keep their host ownership, and without it the container runs as the base image's
+`nonroot` user (uid 65532): reading your files may be refused, and anything it
 does write ends up owned by a uid that does not exist on the host. rom-weaver
 reads no home directory or user config, so an arbitrary uid needs no matching
 account inside the image.
+
+The image is distroless - it contains the `rom-weaver` binary and its C runtime
+and nothing else, so there is no shell inside and `--entrypoint sh` will not get
+you a prompt.
 
 Mount read-only sources with `:ro` and give writes their own destination:
 

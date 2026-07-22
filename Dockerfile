@@ -52,28 +52,39 @@ COPY prebuilt/rom-weaver /rom-weaver
 # hadolint ignore=DL3006
 FROM binary-${BINARY} AS binary
 
-# trixie, not bookworm: the prebuilt binary is linked against the glibc of the
-# ubuntu-24.04 runner npm-publish builds on (2.39), which bookworm's 2.36 cannot
-# load. trixie ships 2.41, so one runtime accepts both halves of the switch
-# above and the image stays a single moving target.
-FROM debian:trixie-slim AS runtime
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10001 rom-weaver
-
-COPY --from=binary /rom-weaver /usr/local/bin/rom-weaver
-
-# The chmod is not redundant: GitHub Actions artifacts do not round-trip the
-# executable bit, so the prebuilt half arrives 0644.
-#
 # Left to `WORKDIR`, /work is created 0755 owned by the image's own user, so an
 # overridden `--user` cannot write there when nothing is mounted over it.
 # Sticky-and-writable (the /tmp convention) keeps it usable for any uid without
 # letting one delete another's files.
-RUN chmod 0755 /usr/local/bin/rom-weaver \
-    && install --directory --mode 1777 /work
+#
+# The runtime below has no shell to mkdir with, and neither `COPY /work /work`
+# nor `COPY --chmod=1777` reproduces the mode: a directory named as the COPY
+# source contributes only its contents, so the destination is recreated 0755,
+# and `--chmod` takes the low nine bits only, silently dropping the sticky bit.
+# Copying the *parent* preserves the mode of everything inside it.
+FROM debian:trixie-slim AS workdir
+RUN install --directory --mode 1777 /rootfs/work
 
-USER rom-weaver
+# distroless over debian:trixie-slim: same trixie glibc 2.41 (see below), but
+# ~20 MB smaller compressed because it carries no shell, package manager or
+# base userland. ca-certificates and a nonroot user (uid 65532) are built in,
+# so the apt/useradd layer this replaced is gone too. The trade is that
+# `docker run --entrypoint sh` no longer works for poking around inside.
+#
+# -cc, not -base: it adds libgcc/libstdc++, which the cmake-built C deps
+# (libarchive) linked into the binary expect.
+#
+# debian13/trixie, not bookworm: the prebuilt binary is linked against the glibc
+# of the ubuntu-24.04 runner npm-publish builds on (2.39), which bookworm's 2.36
+# cannot load. trixie ships 2.41, so one runtime accepts both halves of the
+# switch above and the image stays a single moving target.
+FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
+
+# `--chmod` is not redundant: GitHub Actions artifacts do not round-trip the
+# executable bit, so the prebuilt half arrives 0644. Setting it here rather than
+# in a later `RUN chmod` keeps the 5 MB binary out of a second layer.
+COPY --from=binary --chmod=0755 /rom-weaver /usr/local/bin/rom-weaver
+COPY --from=workdir /rootfs /
+
 WORKDIR /work
 ENTRYPOINT ["rom-weaver"]

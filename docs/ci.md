@@ -329,13 +329,17 @@ to `source` when there is none, and so still works standalone under
 
 Two consequences worth knowing:
 
-- The CLI runtime is `debian:trixie-slim`, not bookworm. The reused binary is
+- The CLI runtime is `gcr.io/distroless/cc-debian13`, and the `debian13`
+  (trixie) half of that is load-bearing, not bookworm. The reused binary is
   linked against the glibc of the `ubuntu-24.04` runner `publish-npm` builds on
   (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both
-  halves of the switch.
+  halves of the switch. `-cc` rather than `-base` supplies the
+  libgcc/libstdc++ the vendored C deps expect. There is no shell in the image.
 - `static-webapp` packages a raw webapp tarball. The webapp Dockerfile adds the
-  `.br`/`.gz` siblings that its static-web-server expects
-  (`compression-static` in `sws.toml`) after the shared raw artifact is copied.
+  `.br` siblings that its static-web-server expects (`compression-static` in
+  `sws.toml`) after the shared raw artifact is copied. No `.gz` siblings: sws
+  gzips on demand for the rare client without brotli, which keeps ~2.8 MB out
+  of the image.
 
 A prebuilt build deliberately does **not** write the `buildcache` tag: it has
 nothing expensive to cache, and exporting its handful of `COPY` layers would
@@ -507,3 +511,11 @@ the source-build commands in the [self-hosting guide](self-hosting.md).
   entries.** The scope is not fully published, so a plain `npm install` strips
   them and `npm ci` then breaks every job. A lefthook `root-lock-sync` hook
   guards this.
+- **`COPY --chmod` silently drops the sticky bit.** It takes the low nine bits
+  only, so `--chmod=1777` yields `drwxrwxrwx`, not `drwxrwxrwt`. Naming a
+  directory as the COPY *source* does not preserve its mode either - only its
+  contents are contributed, and the destination is recreated 0755. The CLI
+  image needs a sticky-writable `/work` and has no shell to `mkdir` with, so it
+  builds the directory in a throwaway stage and copies the **parent**, which
+  does preserve the mode of everything inside. Verify with `ls -ld /work` from
+  a shell-bearing stage; `drwxrwxrwt` is the passing result.

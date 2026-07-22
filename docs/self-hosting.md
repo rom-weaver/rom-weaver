@@ -1,7 +1,8 @@
 # Self-hosting the webapp
 
-rom-weaver is a static webapp. Host it on its own HTTPS subdomain or under a
-dedicated path such as `https://example.com/rom-weaver/`. A subdomain is the
+rom-weaver is a static webapp. The browser-facing URL must use HTTPS (except
+for localhost). Host it on its own HTTPS subdomain or under a dedicated path
+such as `https://example.com/rom-weaver/`. A subdomain is the
 safest choice; a subpath is also supported because the build uses relative
 asset URLs and registers its service worker with a relative scope.
 
@@ -16,6 +17,7 @@ At the root, its service worker can control every path on that origin. Under
   - [Build from source with Compose](#build-from-source-with-compose)
 - [Static files](#static-files)
 - [Cross-origin isolation](#cross-origin-isolation)
+- [Service worker and subpaths](#service-worker-and-subpaths)
 - [Host integration](#host-integration)
 
 <!-- END doctoc -->
@@ -45,7 +47,10 @@ To use another host port:
 PORT=3000 docker compose up --build --detach
 ```
 
-The container listens on port 8080 over plain HTTP. For an Nginx subpath route:
+The container listens on port 8080 over plain HTTP. This is suitable when an
+HTTPS reverse proxy terminates TLS. The proxy must present a certificate that
+the browser trusts and forward the request to the container. For an Nginx
+subpath route:
 
 ```nginx
 location = /rom-weaver {
@@ -63,6 +68,33 @@ the required COOP/COEP headers, serves SPA fallbacks, and serves the build's
 precompressed Brotli files.
 
 For a dedicated subdomain, route its `/` location to the same container.
+
+If you do not have a reverse proxy, Compose can terminate HTTPS in the
+container. If you do not provide a certificate pair, it generates a temporary
+self-signed certificate for `localhost` that expires after seven days:
+
+```bash
+HTTPS_PORT=8443 docker compose up --build --detach
+```
+
+Open `https://localhost:8443/`. A browser may allow you to proceed through the
+warning for local testing, but an expired or untrusted certificate can still
+prevent service-worker registration. For reliable service-worker and WASM
+thread support, install/trust the certificate or use a trusted certificate.
+
+For a trusted certificate, put `fullchain.pem` and `privkey.pem` in a host
+directory and mount it with `HTTPS_CERT_DIR`. The container uses those default
+filenames when both are present:
+
+```bash
+HTTPS_PORT=8443 HTTPS_CERT_DIR=/path/to/certs \
+  docker compose up --build --detach
+```
+
+To use different filenames or mounted paths, set both `HTTPS_CERT` and
+`HTTPS_KEY` to paths inside `/certs`. `HTTPS_PORT` is the host port and enables
+the container's TLS listener; it is not used together with `PORT`. The
+generated certificate is never suitable for production or public/LAN use.
 
 Useful lifecycle commands:
 
@@ -90,8 +122,9 @@ npm --prefix packages/rom-weaver-webapp run build
 Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host.
 Preserve the directory structure. The build emits raw assets; generic hosts
 should enable Brotli or gzip compression when available, especially for the
-WASM file. The Docker image is the only distribution that adds static
-`.br`/`.gz` siblings because its bundled server is configured to consume them.
+WASM file. The Docker image is the only distribution that adds static `.br`
+siblings, because its bundled server is configured to consume them; it gzips
+on demand for clients that cannot take brotli.
 
 The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
 build, so unpacking it is an alternative to building from a checkout.
@@ -119,10 +152,14 @@ to use those policies. Under `Cross-Origin-Embedder-Policy: require-corp`, any
 cross-origin resource loaded by the app must opt in through CORS or a compatible
 `Cross-Origin-Resource-Policy` header.
 
+These headers can be scoped to the rom-weaver subpath. They do not need to be
+applied to unrelated applications on the same origin. The Docker image sends
+them on every response from its container; a reverse proxy or static host must
+preserve them, or add the same headers to responses under `/rom-weaver/`.
+
 When a static host cannot set these headers, rom-weaver's service worker can add
-them for responses within its scope. The first visit may reload once after the
-worker takes control. This fallback still requires HTTPS and service-worker
-support.
+them for responses within its scope. See [Service worker and subpaths](#service-worker-and-subpaths)
+for the bounded reload and fallback behavior.
 
 After deployment, open the browser console and confirm:
 
@@ -132,6 +169,28 @@ crossOriginIsolated === true
 
 If it is false, check the document's COOP/COEP response headers, HTTPS trust,
 and whether `cache-service-worker.js` controls the page.
+
+## Service worker and subpaths
+
+Production builds register `cache-service-worker.js` using the app's relative
+asset base. When the app is served at `/rom-weaver/`, the service worker's
+default scope is `/rom-weaver/`; it does not control the origin root or sibling
+applications. Redirect `/rom-weaver` to `/rom-weaver/` so relative assets,
+registration, and scope resolve to the same directory.
+
+The service worker precaches the build, checks for updates, and can serve
+same-origin navigation and manifest requests from its cache. It can also add
+the cross-origin isolation headers to responses inside its scope when the host
+cannot configure them. It cannot alter the very first document response before
+it controls the page, so server or proxy headers remain the preferred setup.
+
+On first install, the worker claims the app and the client may reload once to
+gain control and establish isolation. The boot gate retries a stalled
+controlled-but-unisolated page only within a bounded budget, then releases the
+page instead of reloading forever. If `crossOriginIsolated` is still false,
+the threaded WASM runtime will not be available; fix the response headers,
+HTTPS trust, service-worker scope, or browser support rather than treating the
+fallback as equivalent to a correctly configured deployment.
 
 ## Host integration
 

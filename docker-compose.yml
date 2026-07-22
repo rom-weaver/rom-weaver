@@ -2,8 +2,8 @@
 # Open:        http://localhost:8080
 # Custom port: PORT=3000 docker compose up --build --detach
 #
-# The container serves HTTP on 8080 for an HTTPS reverse proxy. For standalone TLS, mount a
-# certificate and key and set the SERVER_HTTP2_TLS variables.
+# The container serves HTTP on 8080 for an HTTPS reverse proxy. Set HTTPS_PORT
+# for standalone TLS; mount the certificate directory as described in the guide.
 services:
   webapp:
     build:
@@ -11,5 +11,12 @@ services:
       dockerfile: packages/rom-weaver-webapp/Dockerfile
     image: rom-weaver-webapp
     ports:
-      - "${PORT:-8080}:8080"
+      - "${HTTPS_PORT:-${PORT:-8080}}:8080"
+    environment:
+      HTTPS_CERT: "${HTTPS_CERT:-}"
+      HTTPS_KEY: "${HTTPS_KEY:-}"
+      HTTPS_PORT: "${HTTPS_PORT:-}"
+    volumes:
+      - "${HTTPS_CERT_DIR:-./certs}:/certs:ro"
+    command: ["--config-file", "/etc/sws.toml"]
     restart: unless-stopped

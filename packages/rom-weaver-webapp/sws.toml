@@ -5,8 +5,15 @@ host = "0.0.0.0"
 port = 8080
 root = "/srv"
 
-# Serve the Docker-generated *.br / *.gz siblings directly instead of compressing live.
+# Serve the Docker-generated *.br siblings directly instead of compressing live.
 compression-static = true
+
+# Fallback for the few clients that do not accept brotli: no *.gz is baked into
+# the image, so they get gzipped on demand instead. Default-on in sws, set here
+# because `compression-static` above now depends on it for full coverage.
+# Leave the level alone - `best` would mean brotli quality 11 per request, and
+# sws compresses every response from scratch.
+compression = true
 
 # SPA fallback for client-side routes; no-log /health endpoint for probes.
 page-fallback = "/srv/index.html"
