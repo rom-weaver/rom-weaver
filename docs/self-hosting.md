@@ -17,6 +17,7 @@ At the root, its service worker can control every path on that origin. Under
   - [Build from source with Compose](#build-from-source-with-compose)
 - [Static files](#static-files)
 - [Cross-origin isolation](#cross-origin-isolation)
+- [Service worker and subpaths](#service-worker-and-subpaths)
 - [Host integration](#host-integration)
 
 <!-- END doctoc -->
@@ -69,22 +70,31 @@ precompressed Brotli files.
 For a dedicated subdomain, route its `/` location to the same container.
 
 If you do not have a reverse proxy, Compose can terminate HTTPS in the
-container. Put a certificate and matching private key in a directory, using
-`fullchain.pem` and `privkey.pem` as the default filenames:
+container. If you do not provide a certificate pair, it generates a temporary
+self-signed certificate for `localhost` that expires after seven days:
 
 ```bash
-mkdir -p certs
-cp /path/to/fullchain.pem certs/fullchain.pem
-cp /path/to/privkey.pem certs/privkey.pem
 HTTPS_PORT=8443 docker compose up --build --detach
 ```
 
-Open `https://your-host:8443/`. `HTTPS_PORT` is the host port and enables the
-container's TLS listener; it is not used together with `PORT`. To use different
-filenames, set `HTTPS_CERT` and `HTTPS_KEY` to paths inside the mounted
-certificate directory. Use a certificate trusted by the browser. A
-self-signed certificate is suitable only when every client explicitly trusts
-it; dismissing a browser warning is not a production certificate setup.
+Open `https://localhost:8443/`. A browser may allow you to proceed through the
+warning for local testing, but an expired or untrusted certificate can still
+prevent service-worker registration. For reliable service-worker and WASM
+thread support, install/trust the certificate or use a trusted certificate.
+
+For a trusted certificate, put `fullchain.pem` and `privkey.pem` in a host
+directory and mount it with `HTTPS_CERT_DIR`. The container uses those default
+filenames when both are present:
+
+```bash
+HTTPS_PORT=8443 HTTPS_CERT_DIR=/path/to/certs \
+  docker compose up --build --detach
+```
+
+To use different filenames or mounted paths, set both `HTTPS_CERT` and
+`HTTPS_KEY` to paths inside `/certs`. `HTTPS_PORT` is the host port and enables
+the container's TLS listener; it is not used together with `PORT`. The
+generated certificate is never suitable for production or public/LAN use.
 
 Useful lifecycle commands:
 
@@ -141,10 +151,14 @@ to use those policies. Under `Cross-Origin-Embedder-Policy: require-corp`, any
 cross-origin resource loaded by the app must opt in through CORS or a compatible
 `Cross-Origin-Resource-Policy` header.
 
+These headers can be scoped to the rom-weaver subpath. They do not need to be
+applied to unrelated applications on the same origin. The Docker image sends
+them on every response from its container; a reverse proxy or static host must
+preserve them, or add the same headers to responses under `/rom-weaver/`.
+
 When a static host cannot set these headers, rom-weaver's service worker can add
-them for responses within its scope. The first visit may reload once after the
-worker takes control. This fallback still requires HTTPS and service-worker
-support.
+them for responses within its scope. See [Service worker and subpaths](#service-worker-and-subpaths)
+for the bounded reload and fallback behavior.
 
 After deployment, open the browser console and confirm:
 
@@ -154,6 +168,28 @@ crossOriginIsolated === true
 
 If it is false, check the document's COOP/COEP response headers, HTTPS trust,
 and whether `cache-service-worker.js` controls the page.
+
+## Service worker and subpaths
+
+Production builds register `cache-service-worker.js` using the app's relative
+asset base. When the app is served at `/rom-weaver/`, the service worker's
+default scope is `/rom-weaver/`; it does not control the origin root or sibling
+applications. Redirect `/rom-weaver` to `/rom-weaver/` so relative assets,
+registration, and scope resolve to the same directory.
+
+The service worker precaches the build, checks for updates, and can serve
+same-origin navigation and manifest requests from its cache. It can also add
+the cross-origin isolation headers to responses inside its scope when the host
+cannot configure them. It cannot alter the very first document response before
+it controls the page, so server or proxy headers remain the preferred setup.
+
+On first install, the worker claims the app and the client may reload once to
+gain control and establish isolation. The boot gate retries a stalled
+controlled-but-unisolated page only within a bounded budget, then releases the
+page instead of reloading forever. If `crossOriginIsolated` is still false,
+the threaded WASM runtime will not be available; fix the response headers,
+HTTPS trust, service-worker scope, or browser support rather than treating the
+fallback as equivalent to a correctly configured deployment.
 
 ## Host integration
 

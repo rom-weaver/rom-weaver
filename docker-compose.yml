@@ -13,22 +13,10 @@ services:
     ports:
       - "${HTTPS_PORT:-${PORT:-8080}}:8080"
     environment:
-      HTTPS_CERT: "${HTTPS_CERT:-/certs/fullchain.pem}"
-      HTTPS_KEY: "${HTTPS_KEY:-/certs/privkey.pem}"
+      HTTPS_CERT: "${HTTPS_CERT:-}"
+      HTTPS_KEY: "${HTTPS_KEY:-}"
       HTTPS_PORT: "${HTTPS_PORT:-}"
     volumes:
       - "${HTTPS_CERT_DIR:-./certs}:/certs:ro"
-    command:
-      - /bin/sh
-      - -c
-      - |
-          if [ -n "$$HTTPS_PORT" ]; then
-            exec static-web-server \
-              --config-file /etc/sws.toml \
-              --port 8080 \
-              --http2=true \
-              --http2-tls-cert "$$HTTPS_CERT" \
-              --http2-tls-key "$$HTTPS_KEY"
-          fi
-          exec static-web-server --config-file /etc/sws.toml
+    command: ["--config-file", "/etc/sws.toml"]
     restart: unless-stopped
