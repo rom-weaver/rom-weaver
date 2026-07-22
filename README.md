@@ -160,8 +160,8 @@ webapp builds, and tests.
 
 ### Self-host the webapp
 
-The source build serves the full webapp — WASM build, cross-origin isolation
-headers, SPA fallback, and precompressed assets included. The
+The Docker source build serves the full webapp — WASM build, cross-origin
+isolation headers, SPA fallback, and precompressed assets included. The
 [self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
 routing, service-worker scope, and the required COOP/COEP headers.
 

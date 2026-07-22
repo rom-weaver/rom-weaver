@@ -90,11 +90,12 @@ security ── advisories (warn only, always green)
 - **`docker`** builds the CLI and webapp images without pushing, so a broken
   Dockerfile fails here rather than at the moment it blocks a release publish.
   It runs only when the files defining the images change (the two Dockerfiles,
-  `.dockerignore`, `docker-compose.yml`, `sws.toml`, `ci.yml`,
-  `docker-publish.yml`), because such a change leaves the sources alone and the
-  registry build cache restores every expensive layer; a source-only pull
-  request would invalidate `COPY . .` and pay a cold cargo+wasm compile for no
-  signal about the Dockerfile. On `main` it also refreshes that cache.
+  `.dockerignore`, `docker-compose.yml`, `sws.toml`, the Docker compression
+  script, `ci.yml`, or `docker-publish.yml`), because such a change leaves the
+  sources alone and the registry build cache restores every expensive layer; a
+  source-only pull request would invalidate `COPY . .` and pay a cold
+  cargo+wasm compile for no signal about the Dockerfile. On `main` it also
+  refreshes that cache.
 - **`wasm`** builds the production WASM module. This is the single most
   expensive step in the pipeline (~6.5 min) and it used to run twice, so it is
   built once here and shared with `webapp` and `deploy` as an artifact, and
@@ -325,11 +326,9 @@ Two consequences worth knowing:
   linked against the glibc of the `ubuntu-24.04` runner `publish-npm` builds on
   (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both
   halves of the switch.
-- `static-webapp` packages the tarball with `--mode selfhost`, which adds the
-  precompressed `.br`/`.gz` siblings that the container's static-web-server
-  expects (`compression-static` in `sws.toml`). The container and the
-  `rom-weaver-webapp.tar.gz` release asset are now the same bytes rather than
-  two independent builds that ought to agree.
+- `static-webapp` packages a raw webapp tarball. The webapp Dockerfile adds the
+  `.br`/`.gz` siblings that its static-web-server expects
+  (`compression-static` in `sws.toml`) after the shared raw artifact is copied.
 
 A prebuilt build deliberately does **not** write the `buildcache` tag: it has
 nothing expensive to cache, and exporting its handful of `COPY` layers would

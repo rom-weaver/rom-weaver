@@ -112,7 +112,7 @@ jobs:
           # Anything that changes how an image is assembled: the Dockerfiles,
           # what lands in their context, the runtime server config, and the two
           # workflows that build them.
-          paths='^(Dockerfile|\.dockerignore|docker-compose\.yml|packages/rom-weaver-webapp/(Dockerfile|sws\.toml)|\.github/workflows/(ci|docker-publish)\.yml)$'
+          paths='^(Dockerfile|\.dockerignore|docker-compose\.yml|packages/rom-weaver-webapp/(Dockerfile|sws\.toml|scripts/compress-static-assets\.mjs)|\.github/workflows/(ci|docker-publish)\.yml)$'
 
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             echo "manual run; building unconditionally"

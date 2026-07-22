@@ -5,7 +5,7 @@ host = "0.0.0.0"
 port = 8080
 root = "/srv"
 
-# Serve the prebuilt *.br / *.gz siblings directly instead of compressing live.
+# Serve the Docker-generated *.br / *.gz siblings directly instead of compressing live.
 compression-static = true
 
 # SPA fallback for client-side routes; no-log /health endpoint for probes.
