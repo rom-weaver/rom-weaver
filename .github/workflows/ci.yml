@@ -248,7 +248,7 @@ jobs:
     name: Rust lint + tests (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -314,7 +314,7 @@ jobs:
     name: Security advisories (non-gating)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -345,7 +345,7 @@ jobs:
     name: Rust check (WASM target)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -381,7 +381,7 @@ jobs:
     name: Rust tests (macOS)
     runs-on: macos-14
     timeout-minutes: 90
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -405,7 +405,7 @@ jobs:
     name: Rust WASM check (macOS)
     runs-on: macos-14
     timeout-minutes: 90
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -435,7 +435,7 @@ jobs:
     name: Rust tests (Windows)
     runs-on: windows-2025
     timeout-minutes: 90
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     env:
       CARGO_TERM_COLOR: always
       # The mise legs get this from .mise.toml's [env]; this leg bypasses mise.
@@ -529,7 +529,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: [rust-host, wasm-check, rust-macos, rust-macos-wasm, rust-windows]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    if: ${{ !cancelled() && github.event_name != 'push' && github.ref_type != 'tag' }}
     steps:
       - name: Verify Rust jobs
         env:
@@ -555,7 +555,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -595,7 +595,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -623,7 +623,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -659,7 +659,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: wasm
-    if: github.ref_type != 'tag'
+    if: github.event_name != 'push' && github.ref_type != 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -690,7 +690,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: [webapp-static, webapp-browser, webapp-wasm-e2e, webapp-webkit-e2e]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    if: ${{ !cancelled() && github.event_name != 'push' && github.ref_type != 'tag' }}
     steps:
       - name: Verify webapp jobs
         env:
