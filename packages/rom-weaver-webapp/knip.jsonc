@@ -6,6 +6,8 @@
     "src/wasm/workers/browser-runner-worker.ts",
     "src/wasm/workers/browser-wasi-thread-worker.ts",
     "scripts/generate-e2e-corpus.mjs",
+    // Invoked by the webapp Dockerfile; Knip does not trace Dockerfile commands.
+    "scripts/compress-static-assets.mjs",
     "scripts/version.mjs",
     "tests/wasm/*.test.mjs",
     "tests/wasm/*.bench.mjs",

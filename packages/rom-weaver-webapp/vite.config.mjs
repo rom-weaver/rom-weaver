@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import zlib from "node:zlib";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
@@ -12,8 +11,6 @@ const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
-const packagedWasmPath = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
-const packagedWasmBrotliPath = `${packagedWasmPath}.br`;
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
@@ -42,7 +39,6 @@ const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
   "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
 };
-const compressibleAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
 const securityHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -152,63 +148,6 @@ const serveRootStaticAssets = (channel, channelLabel) => ({
 const copyFile = (from, to) => {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.copyFileSync(from, to);
-};
-
-// The prebuilt `.br` sibling exists only to skip the slow quality-11 compress of the ~6 MB wasm, and
-// it is a gitignored artifact that can lag the wasm it was built from. Shipping a stale one would
-// serve an OUTDATED wasm to every brotli-capable browser while the raw `.wasm` is current. Decoding
-// costs milliseconds against the tens of seconds it saves, so just verify it round-trips to the exact
-// bytes being emitted; anything stale or corrupt falls through to compressing the real asset.
-const packagedBrotliPathForDistAsset = (filePath) => {
-  if (path.extname(filePath) !== ".wasm") return null;
-  if (!fs.existsSync(packagedWasmBrotliPath)) return null;
-  try {
-    const decoded = zlib.brotliDecompressSync(fs.readFileSync(packagedWasmBrotliPath));
-    return decoded.equals(fs.readFileSync(filePath)) ? packagedWasmBrotliPath : null;
-  } catch {
-    return null;
-  }
-};
-
-// A sibling that did not actually shrink would cost a request its own bytes, so
-// only keep one that beats the original.
-const writeSiblingIfSmaller = (siblingPath, compressed, source) => {
-  if (compressed.byteLength >= source.byteLength) return;
-  fs.writeFileSync(siblingPath, compressed);
-};
-
-// Both siblings are required: `compression-static` in sws.toml serves whichever
-// encoding the client asked for and falls back to the raw file, so shipping only
-// `.br` silently sends uncompressed bytes to any gzip-only client.
-const writeCompressedAssets = (filePath) => {
-  const source = fs.readFileSync(filePath);
-
-  const precompressedPath = packagedBrotliPathForDistAsset(filePath);
-  if (precompressedPath) {
-    copyFile(precompressedPath, `${filePath}.br`);
-  } else {
-    writeSiblingIfSmaller(
-      `${filePath}.br`,
-      zlib.brotliCompressSync(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
-      source,
-    );
-  }
-
-  writeSiblingIfSmaller(`${filePath}.gz`, zlib.gzipSync(source, { level: 9 }), source);
-};
-
-const writeCompressedAssetsInDirectory = (directory) => {
-  if (!fs.existsSync(directory)) return;
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const filePath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      writeCompressedAssetsInDirectory(filePath);
-      continue;
-    }
-    if (entry.name.endsWith(".br") || entry.name.endsWith(".gz")) continue;
-    if (!compressibleAssetExtensions.has(path.extname(entry.name).toLowerCase())) continue;
-    writeCompressedAssets(filePath);
-  }
 };
 
 const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
@@ -324,24 +263,6 @@ const writeChangelogAsset = () => {
   };
 };
 
-const writeStaticCompressedAssets = () => {
-  let outDir = "dist";
-  return {
-    apply: "build",
-    // Must stay `post`: vite-plugin-pwa emits cache-service-worker.js from its
-    // own closeBundle, so without this the walker runs first and the service
-    // worker is the one asset shipped uncompressed.
-    enforce: "post",
-    closeBundle() {
-      writeCompressedAssetsInDirectory(path.resolve(rootDir, outDir));
-    },
-    configResolved(config) {
-      outDir = config.build.outDir;
-    },
-    name: "rom-weaver-static-compressed-assets",
-  };
-};
-
 // Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
 // fetched on demand via unicode-range and is wasteful to preload eagerly.
 const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
@@ -369,7 +290,7 @@ const preloadPrimaryFont = () => ({
   },
 });
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command }) => {
   const buildInfo = getBuildInfo();
   const devServiceWorkerEnabled = process.env.VITE_SW_DEV === "1";
   const serviceWorkerEnabled = command === "build" || devServiceWorkerEnabled;
@@ -476,10 +397,6 @@ export default defineConfig(({ command, mode }) => {
         strategies: "injectManifest",
       }),
       preloadPrimaryFont(),
-      // `selfhost`, not `docker`: the container and the static release tarball
-      // are one bundle now, and both are served by a static server that reads
-      // precompressed siblings rather than a CDN that compresses on the fly.
-      ...(mode === "selfhost" ? [writeStaticCompressedAssets()] : []),
     ],
     preview: {
       headers: securityHeaders,

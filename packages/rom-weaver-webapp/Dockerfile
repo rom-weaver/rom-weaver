@@ -4,9 +4,9 @@
 # `--build-arg DIST=prebuilt` serves `prebuilt/` out of the build context
 # instead, skipping the whole builder stage below - rustup, the WASI SDK,
 # binaryen and a cold wasm compile included. The release fan-out fills it with
-# the same bundle it publishes as `rom-weaver-webapp.tar.gz`, so the container
-# and the static release serve byte-identical bytes built from the wasm module
-# CI tested. A plain `docker build` still builds from source. BuildKit builds
+# the same raw bundle it publishes as `rom-weaver-webapp.tar.gz`, then generates
+# the compressed siblings needed by its static server. A plain `docker build`
+# still builds from source. BuildKit builds
 # only the stages the selected one depends on, so the unused half costs nothing
 # - and `prebuilt/` only has to exist for the build that asks for it.
 ARG DIST=source
@@ -118,7 +118,7 @@ COPY . .
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
     bash scripts/wasm/build-app.sh prod \
-    && npm --prefix packages/rom-weaver-webapp run build -- --mode selfhost
+    && npm --prefix packages/rom-weaver-webapp run build
 
 FROM scratch AS dist-source
 COPY --from=builder /app/packages/rom-weaver-webapp/dist /
@@ -132,11 +132,18 @@ COPY prebuilt/ /
 # hadolint ignore=DL3006
 FROM dist-${DIST} AS dist
 
+# Compression is a Docker image concern: release and npm webapp bundles stay
+# raw, while static-web-server gets the siblings it serves from this stage.
+FROM node:22-bookworm-slim AS compressed
+COPY --from=dist / /dist
+COPY packages/rom-weaver-webapp/scripts/compress-static-assets.mjs /usr/local/bin/
+RUN node /usr/local/bin/compress-static-assets.mjs /dist
+
 # static-web-server serves the generated SPA as a non-root user. HTTPS is
 # terminated by the reverse proxy described in docs/self-hosting.md.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
 COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
-COPY --from=dist / /srv
+COPY --from=compressed /dist /srv
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/health || exit 1
