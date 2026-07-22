@@ -9,7 +9,7 @@ automation.
 
 - [Install](#install)
   - [Prebuilt install](#prebuilt-install)
-    - [Homebrew (macOS, Linux x86-64)](#homebrew-macos-linux-x86-64)
+    - [Homebrew (macOS arm64, macOS Intel, Linux x86-64)](#homebrew-macos-arm64-macos-intel-linux-x86-64)
     - [Scoop (Windows)](#scoop-windows)
     - [Install script (macOS, Linux)](#install-script-macos-linux)
     - [Install script (Windows)](#install-script-windows)
@@ -49,7 +49,7 @@ Every method here installs the same binary built for the release: macOS arm64
 and x86-64, Linux x86-64, and Windows x86-64. Anything else needs the
 [source install](#source-install).
 
-#### Homebrew (macOS, Linux x86-64)
+#### Homebrew (macOS arm64, macOS Intel, Linux x86-64)
 
 ```bash
 brew install brandonocasey/tap/rom-weaver
@@ -84,14 +84,21 @@ irm https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.ps1 
 
 #### npm
 
-`@rom-weaver/cli` is a launcher package; the binary itself arrives through a
-platform-specific optional dependency, so only your platform's binary is
-downloaded. Run it once with `npx`, install it globally, or add it as a project
-dev dependency to pin the version a repo's scripts expect.
+The only channel covering every supported target at once. Needs Node.js 22+.
+The unscoped `rom-weaver` package points at the `@rom-weaver/cli` launcher,
+whose binary arrives through a platform-specific optional dependency, so only
+your platform's binary is downloaded.
+
+```bash
+npm install --global rom-weaver
+```
+
+Use the scoped launcher directly for a one-off run, or as a dev dependency to
+pin the version a repository's scripts expect:
 
 ```bash
 npx @rom-weaver/cli probe --input game.iso
-npm install --global @rom-weaver/cli
+npm install --save-dev @rom-weaver/cli
 ```
 
 #### cargo-binstall

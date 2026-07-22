@@ -77,10 +77,11 @@ libraries elsewhere is not supported.
 
 ### First public release
 
-v0.6.7 is the first public release available to install. The changelog and the
-git history go back further, but v0.6.0 through v0.6.6 failed partway through
-the release pipeline or were only partially published. v0.6.7 is the first
-release with a complete set of artifacts across npm, Homebrew, and the
+v0.6.8 is the first public release available to install. The changelog and the
+git history go back further, but v0.6.0 through v0.6.7 failed partway through
+the release pipeline or were only partially published - v0.6.7 completed, but
+its npm packages shipped a binary that could not start. v0.6.8 is the first
+release with a complete set of working artifacts across npm, Homebrew, and the
 container registry. Earlier version numbers describe development history or
 incomplete releases only.
 
@@ -114,7 +115,7 @@ Every method below installs the same prebuilt binary from the GitHub release.
 macOS arm64 and x86-64, Linux x86-64, and Windows x86-64 are covered; other
 targets need the [source build](#build-from-source).
 
-#### Homebrew (macOS, Linux x86-64)
+#### Homebrew (macOS arm64, macOS Intel, Linux x86-64)
 
 ```bash
 brew install brandonocasey/tap/rom-weaver
@@ -147,18 +148,21 @@ irm https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.ps1 
 
 #### npm
 
-The npm package is a launcher that resolves the right prebuilt binary through
-platform-specific optional dependencies. Use it for a one-off run:
+Cross-platform, and the only channel that covers every supported target at
+once. Needs Node.js 22+. The package is a launcher that pulls the right
+prebuilt binary through platform-specific optional dependencies, so only your
+platform's binary is downloaded.
+
+```bash
+npm install --global rom-weaver
+```
+
+For a one-off run, or to pin the version a repository's scripts expect, use the
+scoped launcher directly:
 
 ```bash
 npx @rom-weaver/cli probe --input game.iso
-```
-
-Or install it globally, or as a project dev dependency so a repo pins the
-version its scripts expect:
-
-```bash
-npm install --global @rom-weaver/cli
+npm install --save-dev @rom-weaver/cli
 ```
 
 #### cargo-binstall
