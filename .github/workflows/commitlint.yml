@@ -34,13 +34,11 @@ jobs:
           node-version: 24.18.0
           cache: npm
 
-      - run: npm ci --ignore-scripts
-
       - name: Check pull request title
         env:
           PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if printf '%s\n' "$PULL_REQUEST_TITLE" | npm exec -- commitlint; then
+          if printf '%s\n' "$PULL_REQUEST_TITLE" | npm exec --yes --package="@commitlint/cli@21.2.1" --package="@commitlint/config-conventional@21.2.0" -- commitlint; then
             exit 0
           fi
 
