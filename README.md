@@ -84,10 +84,10 @@ libraries elsewhere is not supported.
 
 ### First public release
 
-v0.6.8 is the first public release available to install. The changelog and the
+v0.7.0 is the first public version available to install. The changelog and the
 git history go back further, but v0.6.0 through v0.6.7 failed partway through
 the release pipeline or were only partially published - v0.6.7 completed, but
-its npm packages shipped a binary that could not start. v0.6.8 is the first
+its npm packages shipped a binary that could not start. v0.7.0 is the first
 release with a complete set of working artifacts across npm, Homebrew, and the
 container registry. Earlier version numbers describe development history or
 incomplete releases only.
