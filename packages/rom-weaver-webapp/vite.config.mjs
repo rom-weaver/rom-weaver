@@ -152,12 +152,18 @@ const copyFile = (from, to) => {
 
 const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
 
-// An unset channel is a local build or the dev server. Production is only ever
-// reached by CI passing it explicitly, so a typo degrades to "dev" (marked)
-// rather than silently impersonating production (unmarked).
+// An unset channel is a plain production build: the Docker image, the
+// `rom-weaver-webapp.tar.gz` release asset, and anyone self-hosting from a
+// checkout all reach this path, and none of them is a dev build. Only the dev
+// server and preview mark themselves, which they do by setting the variable
+// (see scripts/dev-server.mjs); the deploy job passes its channel explicitly.
+//
+// A *typo* still degrades to "dev" rather than silently impersonating a
+// channel it is not - an explicit-but-unrecognized value means the caller
+// believed it was choosing something, so mark it and warn.
 const resolveAppChannel = (value) => {
   const channel = String(value || "").trim();
-  if (!channel) return "dev";
+  if (!channel) return "prod";
   if (APP_CHANNELS.has(channel)) return channel;
   console.warn(`[rom-weaver] unknown ROM_WEAVER_CHANNEL '${channel}', falling back to 'dev'`);
   return "dev";

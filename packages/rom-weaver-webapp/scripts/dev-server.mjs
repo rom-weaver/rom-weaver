@@ -13,6 +13,14 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { createServer as createViteServer } from "vite";
 
+// An unset channel builds as production (see resolveAppChannel in
+// vite.config.mjs), which is right for the release artifacts and for anyone
+// self-hosting from a checkout - but wrong here. The dev server and preview are
+// the local builds, so they mark themselves. Assigning rather than overwriting
+// keeps `ROM_WEAVER_CHANNEL=beta npm run dev` working for previewing a channel's
+// out-of-box look.
+process.env.ROM_WEAVER_CHANNEL ||= "dev";
+
 const WILDCARD_HOST_REGEX = /^0\.0\.0\.0(?::\d+)?$/;
 const PARENT_DIRECTORY_PREFIX_REGEX = /^(\.\.[/\\])+/;
 
