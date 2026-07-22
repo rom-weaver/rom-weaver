@@ -231,11 +231,10 @@ jobs:
           mkdir checksums
           release_id=""
           for attempt in {1..12}; do
-            if release_ids="$(
-              gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
-                --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" and .draft) | .id"
+            if release_id="$(
+              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+                --jq 'select(.draft) | .id'
             )"; then
-              release_id="${release_ids%%$'\n'*}"
               test -n "$release_id" && break
             fi
             echo "Waiting for draft release (attempt $attempt/12)" >&2
