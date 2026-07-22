@@ -19,7 +19,7 @@
 //
 // Usage: npm-publish-package.mjs [package-dir]   (default: repository root)
 import spawn from "cross-spawn";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const dir = resolve(process.argv[2] ?? ".");
@@ -45,6 +45,19 @@ const isPublished = () => {
 if (isPublished()) {
   console.log(`${spec} is already published`);
   process.exit(0);
+}
+
+// npm packs whatever mode the file has on disk, and a binary that arrives via
+// an Actions artifact has lost its executable bit. The launcher spawns the
+// platform binary by path, so a 0644 publish is an irreversible break for every
+// `npx`/`npm i -g` user. Checked after the already-published exit so a rerun of
+// a finished job stays a no-op; Windows has no executable bit to check.
+if (process.platform !== "win32") {
+  for (const target of Object.values(manifest.bin ?? {})) {
+    if (!(statSync(join(dir, target)).mode & 0o111)) {
+      throw new Error(`${spec}: ${target} is not executable - chmod 0755 it before publishing`);
+    }
+  }
 }
 
 console.log(`publishing ${spec} with dist-tag ${tag}`);
