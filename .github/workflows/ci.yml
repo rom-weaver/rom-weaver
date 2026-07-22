@@ -678,8 +678,11 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      - name: Webapp E2E (WebKit)
-        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
+      # Playwright WebKit exposes OPFS on the page but not from dedicated workers,
+      # while the WASM apply runtime requires worker OPFS. Keep WebKit coverage to
+      # the supported UI/accessibility smoke; Chromium covers the full WASM E2E.
+      - name: Webapp UI smoke (WebKit)
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit -- --a11y
 
   # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
   # for branch protection while the four webapp jobs run in parallel. Must
