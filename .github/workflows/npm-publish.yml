@@ -14,16 +14,6 @@ on:
           have moved past the released commit.
         required: true
         type: string
-      dry_run:
-        description: Run npm publication checks without publishing or uploading release assets
-        required: false
-        default: false
-        type: boolean
-      platform:
-        description: Limit a dry run to one platform package
-        required: false
-        default: ""
-        type: string
     secrets:
       NPM_TOKEN:
         description: npm automation token for the CLI packages
@@ -34,16 +24,6 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
-      dry_run:
-        description: Run npm publication checks without publishing or uploading release assets
-        required: false
-        default: false
-        type: boolean
-      platform:
-        description: Limit a dry run to one platform package
-        required: false
-        default: ""
-        type: string
 concurrency:
   group: npm-publish-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
@@ -53,19 +33,27 @@ permissions:
   id-token: write
 
 jobs:
-  platform:
+  platform-build:
+    name: Build ${{ matrix.package }}
     permissions:
-      contents: write
-      id-token: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.platform == 'win32-x64-msvc' && '[{"package":"win32-x64-msvc","runner":"windows-2025"}]' || '[{"package":"darwin-arm64","runner":"macos-14"},{"package":"darwin-x64","runner":"macos-15-intel"},{"package":"linux-x64-gnu","runner":"ubuntu-24.04"},{"package":"win32-x64-msvc","runner":"windows-2025"}]') }}
+        include:
+          - package: darwin-arm64
+            runner: macos-14
+          - package: darwin-x64
+            runner: macos-15-intel
+          - package: linux-x64-gnu
+            runner: ubuntu-24.04
+          - package: win32-x64-msvc
+            runner: windows-2025
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha || (inputs.dry_run && github.sha) || format('v{0}', inputs.version) }}
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -89,22 +77,25 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm script dependency
-        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
-
       - name: Build native CLI
         run: cargo build --locked --release --package rom-weaver-cli
 
       - name: Prepare platform package
         run: node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
 
-      # The CLI image is linux/amd64 and builds the identical
-      # `cargo build --locked --release -p rom-weaver-cli` from the same commit,
-      # so it consumes this instead of compiling a second time. A run artifact
-      # rather than the release asset below: it is visible to a sibling job in
-      # this run without depending on draft-release readability, and it is
-      # uploaded here, before the npm publish, so a container build never waits
-      # on the irreversible step.
+      # Keep the compiled package outside the publish job. A failed npm or
+      # release-asset step can then rerun without rebuilding Rust.
+      - name: Upload platform package
+        uses: actions/upload-artifact@v5
+        with:
+          name: npm-platform-${{ matrix.package }}
+          path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      # The CLI image is linux/amd64 and consumes this exact binary rather than
+      # compiling the workspace a second time.
       - name: Upload Linux binary for the container build
         if: matrix.package == 'linux-x64-gnu'
         uses: actions/upload-artifact@v5
@@ -121,23 +112,55 @@ jobs:
           overwrite: true
           retention-days: 7
 
+  platform:
+    name: Publish ${{ matrix.package }}
+    needs: platform-build
+    if: ${{ needs.platform-build.result == 'success' }}
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: darwin-arm64
+            runner: macos-14
+          - package: darwin-x64
+            runner: macos-15-intel
+          - package: linux-x64-gnu
+            runner: ubuntu-24.04
+          - package: win32-x64-msvc
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - name: Download platform package
+        uses: actions/download-artifact@v5
+        with:
+          name: npm-platform-${{ matrix.package }}
+          path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm dependencies
+        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+
       - name: Publish platform package
         shell: bash
-        run: |
-          package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
-          if [[ "$DRY_RUN" == "true" ]]; then
-            node scripts/ci/npm-publish-package.mjs --dry-run "$package_path"
-          else
-            node scripts/ci/npm-publish-package.mjs "$package_path"
-          fi
+        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
-        if: ${{ !inputs.dry_run }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -159,7 +182,6 @@ jobs:
 
   launcher:
     needs: platform
-    if: ${{ needs.platform.result == 'success' && !inputs.dry_run }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -172,8 +194,8 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm script dependency
-        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
+      - name: Install npm dependencies
+        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
       - name: Publish launcher package
         run: node scripts/ci/npm-publish-package.mjs
@@ -185,7 +207,6 @@ jobs:
   # otherwise installs resolve a version that is not on the registry yet.
   alias:
     needs: launcher
-    if: ${{ needs.launcher.result == 'success' && !inputs.dry_run }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -198,8 +219,8 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm script dependency
-        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
+      - name: Install npm dependencies
+        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
       - name: Publish alias package
         run: |

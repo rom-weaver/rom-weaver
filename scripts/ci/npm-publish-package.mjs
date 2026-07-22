@@ -17,14 +17,12 @@
 // names contain hyphens (@rom-weaver/cli-darwin-arm64), so matching the spec
 // would tag every platform package as a prerelease.
 //
-// Usage: npm-publish-package.mjs [--dry-run] [package-dir]   (default: repository root)
+// Usage: npm-publish-package.mjs [package-dir]   (default: repository root)
 import spawn from "cross-spawn";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const dryRun = process.argv.includes("--dry-run");
-const packageDir = process.argv.slice(2).find((argument) => argument !== "--dry-run");
-const dir = resolve(packageDir ?? ".");
+const dir = resolve(process.argv[2] ?? ".");
 const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 const spec = `${manifest.name}@${manifest.version}`;
 const tag = manifest.version.includes("-") ? "beta" : "latest";
@@ -44,12 +42,12 @@ const isPublished = () => {
   }
 };
 
-if (!dryRun && isPublished()) {
+if (isPublished()) {
   console.log(`${spec} is already published`);
   process.exit(0);
 }
 
-console.log(`${dryRun ? "dry-running" : "publishing"} ${spec} with dist-tag ${tag}`);
+console.log(`publishing ${spec} with dist-tag ${tag}`);
 try {
   runNpm(
     [
@@ -58,14 +56,14 @@ try {
       "--ignore-scripts",
       "--access",
       "public",
-      ...(dryRun ? ["--dry-run"] : ["--provenance"]),
+      "--provenance",
       "--tag",
       tag,
     ],
     { stdio: "inherit" },
   );
 } catch (error) {
-  if (dryRun || !isPublished()) {
+  if (!isPublished()) {
     throw new Error(`failed to publish ${spec}: ${error.message}`);
   }
   console.log(`${spec} was published by another run`);

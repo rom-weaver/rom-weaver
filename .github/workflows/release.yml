@@ -2,8 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
-  # Gated on CI rather than `push: main` so a red pipeline can never reach
-  # crates.io, npm, or ghcr - those publishes are irreversible.
+  # Ordinary commits use the successful CI run to create/update the release PR.
+  # A merged release PR already passed required checks, so use its close event
+  # instead of waiting for a duplicate full CI run on the merge commit.
+  pull_request:
+    types: [closed]
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -17,7 +20,17 @@ jobs:
   release:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
+      ) ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release ')
+      )
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -26,12 +39,15 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
-      sha: ${{ steps.release.outputs.sha }}
+      # The merged release PR has the same tree as its head, whose CI artifact
+      # is available now. The merge commit's CI is deliberately not required.
+      sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || steps.release.outputs.sha }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          target-branch: main
 
       - name: Mark GitHub prerelease
         if: >-
@@ -80,9 +96,9 @@ jobs:
         run: node scripts/aggregate-release-changelog.mjs
 
   # Package the static site beside the registry publishes rather than making all
-  # of them wait for another production WASM build. Normal workflow_run releases
-  # reuse the exact artifact produced by the successful CI run; manual releases
-  # fall back to a source build when no matching, unexpired artifact exists.
+  # of them wait for another production WASM build. The release PR head's CI
+  # artifact is reused; manual releases fall back to a source build when no
+  # matching, unexpired artifact exists.
   static-webapp:
     name: Package static webapp
     needs: release
