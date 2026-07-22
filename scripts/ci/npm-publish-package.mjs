@@ -18,7 +18,7 @@
 // would tag every platform package as a prerelease.
 //
 // Usage: npm-publish-package.mjs [package-dir]   (default: repository root)
-import spawn from "cross-spawn";
+import { spawnSync } from "node:child_process";
 import { chmodSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -36,7 +36,7 @@ const main = () => {
   restoreExecutableMode(dir, manifest);
 
   const runNpm = (args, options) => {
-    const result = spawn.sync("npm", args, options);
+    const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", args, options);
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
   };
