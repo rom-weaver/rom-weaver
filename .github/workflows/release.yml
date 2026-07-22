@@ -287,8 +287,15 @@ jobs:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
 
+  # After publish-release, not before: the formula points at
+  # releases/download/vX.Y.Z/... and a draft's assets are not publicly
+  # downloadable, so pushing it earlier put a live formula in the tap whose URLs
+  # 404 until the draft is published. This is also the safer half of the
+  # tradeoff it costs - a failed formula push no longer holds the draft, and it
+  # is the one publish in the fan-out that is trivially retryable, being a git
+  # push to a repository we own rather than an irreversible registry write.
   publish-homebrew:
-    needs: [release, publish-npm]
+    needs: [release, publish-release]
     if: >-
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
@@ -355,11 +362,11 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
-  # Windows counterpart to publish-homebrew, and skipped for prereleases for the
-  # same reason: a bucket has one manifest per package, so publishing a beta
+  # Windows counterpart to publish-homebrew, with the same ordering and the same
+  # prerelease skip: a bucket has one manifest per package, so publishing a beta
   # there would hand it to every stable user.
   publish-scoop:
-    needs: [release, publish-npm]
+    needs: [release, publish-release]
     if: >-
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
@@ -440,32 +447,24 @@ jobs:
       sha: ${{ needs.release.outputs.sha }}
 
   # Publishing the draft is what creates the tag and stamps the release
-  # immutable, so it has to come last: assets can only be attached while the
-  # release is still a draft. A failure anywhere above leaves the draft in
-  # place, which is deletable and frees the version to be cut again - a
-  # published immutable release permanently reserves its tag name.
-  # Creating the tag here is also what triggers cargo-publish.yml.
+  # immutable, so every job that attaches an asset has to come first: assets can
+  # only be attached while the release is still a draft. A failure in any of
+  # them leaves the draft in place, which is deletable and frees the version to
+  # be cut again - a published immutable release permanently reserves its tag
+  # name. Creating the tag here is also what triggers cargo-publish.yml.
+  #
+  # publish-homebrew and publish-scoop deliberately run *after* this rather than
+  # gating it; see the comment on publish-homebrew.
   publish-release:
     name: Publish draft release
-    needs:
-      [
-        release,
-        semver-check,
-        static-webapp,
-        publish-npm,
-        publish-homebrew,
-        publish-scoop,
-        publish-containers,
-      ]
+    needs: [release, semver-check, static-webapp, publish-npm, publish-containers]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&
       needs.semver-check.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
-      needs.publish-containers.result == 'success' &&
-      (needs.publish-homebrew.result == 'success' || needs.publish-homebrew.result == 'skipped') &&
-      (needs.publish-scoop.result == 'success' || needs.publish-scoop.result == 'skipped')
+      needs.publish-containers.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

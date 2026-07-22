@@ -20,6 +20,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
   - [Draft-first releases](#draft-first-releases)
+  - [Package managers publish last](#package-managers-publish-last)
   - [Prerelease routing](#prerelease-routing)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
@@ -293,10 +294,14 @@ spec would tag every platform package as a prerelease.
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
 | `publish-npm` | 4 platform packages → launcher → unscoped alias, in that order |
-| `publish-homebrew` | formula commit to `brandonocasey/homebrew-tap` (stable only) |
-| `publish-scoop` | manifest commit to `brandonocasey/scoop-bucket` (stable only) |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
+| `publish-homebrew` | formula commit to `brandonocasey/homebrew-tap` (stable only) |
+| `publish-scoop` | manifest commit to `brandonocasey/scoop-bucket` (stable only) |
+
+The table is in dependency order. Everything above `publish-release` attaches an
+asset to the draft or gates it; the two package-manager pushes come after it, and
+[Package managers publish last](#package-managers-publish-last) explains why.
 
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would
@@ -375,6 +380,21 @@ registry credentials and runs alongside the publishing jobs.
 It runs per-crate rather than `--workspace` so a crate with no published
 baseline (a first release, or a newly added crate) is skipped instead of
 failing the whole job.
+
+### Package managers publish last
+
+`publish-homebrew` and `publish-scoop` run **after** `publish-release`, not as
+gates on it. Both write a manifest whose download URL is
+`releases/download/vX.Y.Z/...`, and a draft release's assets are not publicly
+downloadable - pushing them earlier put a live formula in the tap and a live
+manifest in the bucket whose URLs 404 until the draft was published.
+
+The ordering costs the property that a tap failure holds the draft, and that is
+the better half of the trade. These two are the only publishes in the fan-out
+that are trivially retryable: a git push to a repository we own, with no
+registry state to reconcile. Rerunning the job fixes it. Everything that *is*
+irreversible - npm, the container registry, the release itself - still gates
+`publish-release`, and crates.io still runs after the tag for the same reason.
 
 ### Prerelease routing
 

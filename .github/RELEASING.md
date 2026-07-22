@@ -204,10 +204,12 @@ Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
 allowed types do not trigger a release by themselves.
 
 Release Please opens or updates a release pull request. Merging it creates a
-**draft** GitHub Release and runs every publisher against that draft. The final
-`publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and
-in turn triggers the crates.io publish. Follow progress under GitHub's
-**Actions → Release** page.
+**draft** GitHub Release and runs every asset-producing publisher against that
+draft. The `publish-release` job publishes it, which is what creates the
+`vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop
+pushes run after that, because the manifests they write point at release
+download URLs that do not resolve while the release is a draft. Follow progress
+under GitHub's **Actions → Release** page.
 
 > **Never publish a draft release by hand, and never re-cut a version whose
 > release was published.** Immutable releases are enabled, so publishing is a
@@ -264,8 +266,10 @@ dependents while preserving successful jobs and the artifacts they produced.
 Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
 
 Because the release is still a draft, `publish-release` will not have run, so
-nothing is stamped immutable and the retry can still attach assets. From the
-CLI, the same recovery is:
+nothing is stamped immutable and the retry can still attach assets. A
+`publish-homebrew` or `publish-scoop` failure is the exception: those run after
+the release is published, so the release itself is fine and rerunning the one
+job is the whole fix. From the CLI, the same recovery is:
 
 ```bash
 gh workflow run release-retry.yml -f run_id=29885072562
