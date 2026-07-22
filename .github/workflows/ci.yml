@@ -656,7 +656,10 @@ jobs:
 
   webapp-webkit-e2e:
     name: Webapp E2E (WebKit)
-    runs-on: ubuntu-24.04
+    # The full WASM path requires WebKit OPFS. Playwright's Linux WebKit exposes
+    # the API surface but hangs when the first real OPFS-backed operation starts;
+    # macOS WebKit exercises the supported Safari-family implementation.
+    runs-on: macos-14
     timeout-minutes: 60
     needs: wasm
     if: github.ref_type != 'tag'
