@@ -156,7 +156,15 @@ COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/l
 COPY --from=compressed /dist /srv
 USER sws
 EXPOSE 8080
+# Single `$`, not `$$`. Docker performs no build-time expansion here, so the
+# shell receives the text verbatim - and to a POSIX shell `$$` is its own PID,
+# which is never empty. `[ -n "$${HTTPS_PORT}" ]` is therefore unconditionally
+# true, sending every check down the HTTPS branch and reporting unhealthy on
+# the default HTTP path.
+#
+# Both branches request /health rather than stat-ing the certificate files: a
+# check that only confirms a cert exists stays green after the server dies.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD if [ -n "$${HTTPS_PORT}" ]; then (test -s "$${HTTPS_CERT:-/certs/fullchain.pem}" && test -s "$${HTTPS_KEY:-/certs/privkey.pem}") || (test -s /tmp/rom-weaver-tls/cert.pem && test -s /tmp/rom-weaver-tls/key.pem); else wget -qO- http://127.0.0.1:8080/health; fi
+    CMD if [ -n "${HTTPS_PORT}" ]; then wget --no-check-certificate -qO- https://127.0.0.1:8080/health; else wget -qO- http://127.0.0.1:8080/health; fi
 ENTRYPOINT ["/usr/local/bin/rom-weaver-docker-entrypoint"]
 CMD ["--config-file", "/etc/sws.toml"]
