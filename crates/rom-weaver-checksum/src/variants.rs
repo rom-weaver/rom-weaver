@@ -65,6 +65,10 @@ pub struct DeferredFixHeader {
     pub apply_compatibility: Value,
     pub transforms: Value,
     pub patches: BTreeMap<u64, Vec<u8>>,
+    /// Engine hash budget, carried over so the deferred overlay pass can hash in
+    /// parallel. The in-pass variants are finished by then, so the full budget is
+    /// available rather than a per-variant share.
+    pub hash_thread_budget: usize,
 }
 
 /// Result of finalizing the engine: the in-pass variant rows plus an optional
@@ -461,7 +465,7 @@ impl FixHeader {
         profiles
     }
 
-    fn into_output(mut self) -> Result<FixHeaderOutcome> {
+    fn into_output(mut self, hash_thread_budget: usize) -> Result<FixHeaderOutcome> {
         // Resolve even if the stream ended before the flush boundary (invalid inputs).
         let patches = self.resolve_patches();
         if patches.is_empty() {
@@ -496,6 +500,7 @@ impl FixHeader {
                 apply_compatibility,
                 transforms,
                 patches,
+                hash_thread_budget,
             }));
         }
         if !self.flushed {
@@ -608,6 +613,7 @@ impl StreamingVariantChecksums {
             // Stream shorter than the scan window: plan now from what we have.
             self.plan()?;
         }
+        let hash_thread_budget = self.hash_thread_budget;
         let State::Planned(planned) = self.state else {
             return Ok(VariantOutput {
                 rows: Vec::new(),
@@ -630,7 +636,7 @@ impl StreamingVariantChecksums {
         }
         let mut deferred_fix_header = None;
         if let Some(fix) = fix {
-            match fix.into_output()? {
+            match fix.into_output(hash_thread_budget)? {
                 FixHeaderOutcome::None => {}
                 FixHeaderOutcome::Row(row) => rows.push(row),
                 FixHeaderOutcome::Deferred(deferred) => deferred_fix_header = Some(deferred),
@@ -1104,8 +1110,18 @@ pub fn finish_deferred_fix_header(
     let Some(deferred) = deferred else {
         return Ok(());
     };
+    trace!(
+        path = %path.display(),
+        hash_thread_budget = deferred.hash_thread_budget,
+        "hashing deferred fix-header variant via sparse overlay re-read"
+    );
     let mut file = std::fs::File::open(path)?;
-    let checksums = overlay_checksums(&mut file, algorithms, &deferred.patches)?;
+    let checksums = overlay_checksums(
+        &mut file,
+        algorithms,
+        &deferred.patches,
+        deferred.hash_thread_budget,
+    )?;
     rows.push(VariantRow {
         id: deferred.id,
         label: deferred.label,
@@ -1117,13 +1133,16 @@ pub fn finish_deferred_fix_header(
 }
 
 /// Compute checksums for a stream after applying a sparse byte overlay. Used to
-/// produce a deferred `fix-header` digest in a single extra read.
+/// produce a deferred `fix-header` digest in a single extra read. `max_threads`
+/// caps the parallel hash workers; a budget of 1 (or the non-threaded wasm
+/// build) hashes inline exactly as before.
 pub fn overlay_checksums<R: Read>(
     reader: &mut R,
     algorithms: &[String],
     patches: &BTreeMap<u64, Vec<u8>>,
+    max_threads: usize,
 ) -> Result<BTreeMap<String, String>> {
-    let Some(mut checksum) = StreamingChecksum::new(algorithms)? else {
+    let Some(mut checksum) = StreamingChecksum::new_parallel(algorithms, max_threads)? else {
         return Ok(BTreeMap::new());
     };
     let mut buffer = vec![0u8; 1024 * 1024];
@@ -1246,15 +1265,30 @@ mod tests {
         assert_eq!(deferred.id, "fix-header");
 
         // The deferred overlay digest must equal hashing the repaired bytes.
-        let overlay = overlay_checksums(&mut Cursor::new(&rom), &algorithms, &deferred.patches)
-            .expect("overlay");
+        let overlay = overlay_checksums(
+            &mut Cursor::new(&rom),
+            &algorithms,
+            &deferred.patches,
+            deferred.hash_thread_budget,
+        )
+        .expect("overlay");
         let mut repaired = rom.clone();
         for (offset, bytes) in &deferred.patches {
             let start = *offset as usize;
             repaired[start..start + bytes.len()].copy_from_slice(bytes);
         }
-        let direct = overlay_checksums(&mut Cursor::new(&repaired), &algorithms, &BTreeMap::new())
-            .expect("direct");
+        let direct = overlay_checksums(
+            &mut Cursor::new(&repaired),
+            &algorithms,
+            &BTreeMap::new(),
+            1,
+        )
+        .expect("direct");
         assert_eq!(overlay, direct);
+
+        // Parallel overlay hashing must produce the same digests as the inline pass.
+        let parallel = overlay_checksums(&mut Cursor::new(&rom), &algorithms, &deferred.patches, 4)
+            .expect("parallel overlay");
+        assert_eq!(parallel, direct);
     }
 }
