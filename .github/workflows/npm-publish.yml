@@ -133,15 +133,6 @@ jobs:
           name: npm-platform-${{ matrix.package }}
           path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
 
-      # GitHub Actions artifacts do not round-trip the executable bit, so the
-      # downloaded binary is 0644 and npm packs it that way. The launcher spawns
-      # the platform binary by path, so without this every `npx @rom-weaver/cli`
-      # and `npm i -g @rom-weaver/cli` fails with EACCES. Same fix as the CLI
-      # image (Dockerfile).
-      - name: Restore the executable bit
-        if: runner.os != 'Windows'
-        run: chmod 0755 packages/rom-weaver-cli-platforms/${{ matrix.package }}/bin/rom-weaver
-
       - uses: actions/setup-node@v7
         with:
           node-version: 24

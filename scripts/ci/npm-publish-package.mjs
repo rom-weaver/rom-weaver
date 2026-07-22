@@ -18,66 +18,73 @@
 // would tag every platform package as a prerelease.
 //
 // Usage: npm-publish-package.mjs [package-dir]   (default: repository root)
-import spawn from "cross-spawn";
-import { readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const dir = resolve(process.argv[2] ?? ".");
-const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-const spec = `${manifest.name}@${manifest.version}`;
-const tag = manifest.version.includes("-") ? "beta" : "latest";
-
-const runNpm = (args, options) => {
-  const result = spawn.sync("npm", args, options);
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
-};
-
-const isPublished = () => {
-  try {
-    runNpm(["view", spec, "version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
+// npm packs whatever mode a file has on disk, and a binary that reaches the
+// publish job through an Actions artifact has lost its executable bit - that is
+// what shipped 0.6.7's platform packages 0644 and made every `npx` and
+// `npm i -g` fail with EACCES. Windows has no executable bit to restore.
+const restoreExecutableMode = (dir, manifest) => {
+  const targets =
+    typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
+  for (const target of targets) {
+    if (!target.endsWith(".exe")) chmodSync(join(dir, target), 0o755);
   }
 };
 
-if (isPublished()) {
-  console.log(`${spec} is already published`);
-  process.exit(0);
-}
+const main = () => {
+  const dir = resolve(process.argv[2] ?? ".");
+  const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  const spec = `${manifest.name}@${manifest.version}`;
+  const tag = manifest.version.includes("-") ? "beta" : "latest";
+  restoreExecutableMode(dir, manifest);
 
-// npm packs whatever mode the file has on disk, and a binary that arrives via
-// an Actions artifact has lost its executable bit. The launcher spawns the
-// platform binary by path, so a 0644 publish is an irreversible break for every
-// `npx`/`npm i -g` user. Checked after the already-published exit so a rerun of
-// a finished job stays a no-op; Windows has no executable bit to check.
-if (process.platform !== "win32") {
-  for (const target of Object.values(manifest.bin ?? {})) {
-    if (!(statSync(join(dir, target)).mode & 0o111)) {
-      throw new Error(`${spec}: ${target} is not executable - chmod 0755 it before publishing`);
+  const runNpm = (args, options) => {
+    const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", args, options);
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
+  };
+
+  const isPublished = () => {
+    try {
+      runNpm(["view", spec, "version"], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
     }
-  }
-}
+  };
 
-console.log(`publishing ${spec} with dist-tag ${tag}`);
-try {
-  runNpm(
-    [
-      "publish",
-      dir,
-      "--ignore-scripts",
-      "--access",
-      "public",
-      "--provenance",
-      "--tag",
-      tag,
-    ],
-    { stdio: "inherit" },
-  );
-} catch (error) {
-  if (!isPublished()) {
-    throw new Error(`failed to publish ${spec}: ${error.message}`);
+  if (isPublished()) {
+    console.log(`${spec} is already published`);
+    return;
   }
-  console.log(`${spec} was published by another run`);
-}
+
+  console.log(`publishing ${spec} with dist-tag ${tag}`);
+  try {
+    runNpm(
+      [
+        "publish",
+        dir,
+        "--ignore-scripts",
+        "--access",
+        "public",
+        "--provenance",
+        "--tag",
+        tag,
+      ],
+      { stdio: "inherit" },
+    );
+  } catch (error) {
+    if (!isPublished()) {
+      throw new Error(`failed to publish ${spec}: ${error.message}`);
+    }
+    console.log(`${spec} was published by another run`);
+  }
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+
+export { restoreExecutableMode };
