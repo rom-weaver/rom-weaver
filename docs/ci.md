@@ -39,7 +39,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `codeql.yml` | push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | after a successful `CI` on `main` | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool |
-| `e2e-nightly.yml` | nightly 07:41 UTC, manual | No | Exhaustive Chromium + WebKit E2E matrix |
+| `e2e-nightly.yml` | manual | No | Exhaustive Chromium E2E matrix |
 | `cache-cleanup.yml` | daily 09:00 UTC, manual | No | Reap closed-PR Actions caches |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
