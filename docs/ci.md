@@ -42,7 +42,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `cache-cleanup.yml` | daily 09:00 UTC, manual | No | Reap closed-PR Actions caches |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish + semver check |
-| `npm-publish.yml` | called by `release.yml`, manual | n/a | 4 platform packages, launcher, alias |
+| `npm-publish.yml` | called by `release.yml` | n/a | 4 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
 `commitlint.yml` lints the **pull request title only**. Merge commits are
@@ -351,7 +351,8 @@ docker workflows take it as a required `sha` input. That also closes a race
 they had before: under `workflow_call` they checked out `github.ref`, which is
 `main`, so anything merged between the release pull request landing and the
 fan-out finishing would have been built and published as the release.
-`workflow_dispatch` still falls back to `v${version}`, which by then exists.
+The standalone Cargo and Docker dispatches fall back to `v${version}`, which by
+then exists.
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being
 called by `release.yml`. crates.io Trusted Publishing rejects the `workflow_run`
@@ -417,12 +418,14 @@ compile for the layer that runs the build.
 | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml` deploy | Pages Direct Upload |
 | `RELEASE_PLEASE_TOKEN` | `release.yml` | Opening the release pull request |
-| `NPM_TOKEN` | `npm-publish.yml` | npm automation token |
 | `HOMEBREW_TAP_TOKEN` | `release.yml` | Pushing to the tap repository |
 | `GITHUB_TOKEN` | everywhere | ghcr.io, releases, statuses, cache deletion |
 
 crates.io needs no stored secret - `rust-lang/crates-io-auth-action` mints a
 short-lived token from the workflow's OIDC identity.
+
+npm trusted publishing likewise uses the workflow's OIDC identity and needs no
+stored npm secret.
 
 Permissions are declared per workflow and widened per job rather than granted
 workflow-wide; `cache-cleanup.yml` starts from `permissions: {}` and takes only

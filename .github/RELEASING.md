@@ -50,20 +50,15 @@ as available.
    trigger the required CI checks.
 3. Sign in to crates.io and create an API token for the first-release bootstrap
    described below.
-4. Add `NPM_TOKEN` as an Actions secret. Use a **granular access token with
-   package write access and "Bypass 2FA" enabled** for the first publish. Give
-   it a short expiry and remove it after the trusted-publisher setup below is
-   working. GitHub's OIDC token attaches npm provenance independently of how
-   the publish authenticates.
-5. Require the `Conventional commits` and normal CI checks in the `main` branch
+4. Require the `Conventional commits` and normal CI checks in the `main` branch
    protection rules. Use squash merges so the validated pull request title is
    the commit subject that lands on `main`.
-6. Ensure the existing `v0.5.0` tag is present on GitHub before the first run.
-7. Enable **Immutable releases** in Settings → General. The fan-out is built
+5. Ensure the existing `v0.5.0` tag is present on GitHub before the first run.
+6. Enable **Immutable releases** in Settings → General. The fan-out is built
    for it: releases are created as drafts and published only after every asset
    is attached. Read the warning under [normal release flow](#normal-release-flow)
    before touching a draft by hand.
-8. Create the public `brandonocasey/homebrew-tap` repository with a README,
+7. Create the public `brandonocasey/homebrew-tap` repository with a README,
    then add a fine-grained `HOMEBREW_TAP_TOKEN` Actions secret with Contents
    read/write access to that repository. Stable releases update
    `Formula/rom-weaver.rb`; prereleases leave the tap unchanged.
@@ -102,10 +97,8 @@ OIDC credentials and do not need a stored Cargo token.
 
 ## npm trusted publishing
 
-Trusted publishing (OIDC) removes `NPM_TOKEN` and its manual rotation. It
-cannot be configured up front: npm has no way to register a package that does
-not exist yet, so the **first** publish of each package must use the token
-above. Migrate afterwards.
+Trusted publishing (OIDC) is enabled for all six npm packages, so publishing
+uses short-lived GitHub Actions credentials and no stored npm token.
 
 The publish jobs already meet the mechanical requirements - `id-token: write`
 is set, and the Node 24 toolchain ships npm 11.16.0, above the 11.5.1 minimum.
@@ -120,19 +113,12 @@ one trusted publisher may be configured per package, so register:
 - environment: empty.
 
 That covers the release path and the "re-run failed jobs" retry, both of which
-execute under `release.yml`. It does **not** cover dispatching `npm-publish.yml`
-directly - npm would see the wrong workflow name and reject the token. See
-"Retry a failed publication".
+execute under `release.yml`. Direct dispatch of `npm-publish.yml` is not
+available because npm would see the wrong workflow name. See "Retry a failed
+publication".
 
-Once every package publishes through OIDC, drop `NPM_TOKEN` from the repository
-secrets, from the `secrets:` block in `release.yml`, and from all three
-`NODE_AUTH_TOKEN` environments in `npm-publish.yml`. Only then set each package
-to "Require 2FA and disallow tokens" on npmjs.com: that setting does not affect
-trusted publishing, but applying it before the bootstrap completes locks out the
-token publish that bootstrap depends on.
-
-Keep the explicit `--provenance` flag for the token-authenticated bootstrap.
-Trusted publishing also generates provenance automatically.
+The publish helper keeps its explicit `--provenance` flag; npm also generates
+provenance automatically for trusted publishing.
 
 ## Webapp hosting and the channel domains
 
@@ -280,28 +266,23 @@ CLI, the same recovery is:
 gh workflow run release-retry.yml -f run_id=29885072562
 ```
 
-Manual `workflow_dispatch` is the fallback, taking the version without a `v`
-prefix, such as `0.6.1`:
+Manual `workflow_dispatch` remains available for Cargo and Docker, taking the
+version without a `v` prefix, such as `0.6.1`:
 
 - Publish Cargo crates;
-- Publish npm CLI;
 - Publish Docker images.
 
 These dispatches check out `v<version>`, so they only work **after** the release
 has been published and the tag exists. While the release is still a draft, rerun
-the jobs from the original Release run instead. Registry checks make Cargo and
-npm retries safe when a previous attempt published only some packages.
+the jobs from the original Release run instead. Registry checks make Cargo
+retries safe when a previous attempt published only some packages.
 
 If the fan-out cannot be salvaged, delete the draft release and re-merge the
 release pull request: an unpublished draft holds no reservation on its tag name.
 
-Once npm trusted publishing is in place, the manual `Publish npm CLI` dispatch
-stops working - npm validates against the calling workflow's filename and would
-see `npm-publish.yml` instead of the registered `release.yml`. Re-running the
-failed jobs from the original Release run remains the supported npm retry, since
-it executes under `release.yml`. Dispatching `release.yml` is not a substitute:
-its publish jobs are gated on `release_created`, which is false when no new
-release is cut. Cargo and Docker dispatches are unaffected.
+Re-run failed npm jobs from the original Release run. npm validates the calling
+workflow's filename, so the reusable publisher must run under the registered
+`release.yml` trusted publisher rather than through a direct dispatch.
 
 ## Run the containers locally
 

@@ -14,16 +14,6 @@ on:
           have moved past the released commit.
         required: true
         type: string
-    secrets:
-      NPM_TOKEN:
-        description: npm automation token for the CLI packages
-        required: true
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Release version without the v prefix
-        required: true
-        type: string
 concurrency:
   group: npm-publish-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
@@ -155,8 +145,6 @@ jobs:
       - name: Publish platform package
         shell: bash
         run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
@@ -199,8 +187,6 @@ jobs:
 
       - name: Publish launcher package
         run: node scripts/ci/npm-publish-package.mjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # The unscoped `rom-weaver` name is a dependency-only alias for
   # @rom-weaver/cli, so it must publish after the launcher it points at -
@@ -226,5 +212,3 @@ jobs:
         run: |
           cp LICENSE.md packages/rom-weaver-alias/LICENSE.md
           node scripts/ci/npm-publish-package.mjs packages/rom-weaver-alias
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
