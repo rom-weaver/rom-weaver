@@ -11,6 +11,13 @@ const writeIfSmaller = (filePath, compressed, source) => {
   if (compressed.byteLength < source.byteLength) fs.writeFileSync(filePath, compressed);
 };
 
+// Brotli only. A `.gz` sibling set costs ~2.8 MB in the image and only ever
+// serves clients without brotli, which browsers have all shipped since 2016.
+// static-web-server's on-demand compression (`compression`, on by default)
+// gzips for those; measured at 0.13s for the 6.5 MB wasm, which is affordable
+// precisely because almost nothing takes that path. Baking brotli stays
+// worthwhile for the opposite reason: quality 11 on that same wasm takes 13.7s,
+// far too slow to serve on demand, and sws caches no compressed response.
 const compressFile = (filePath) => {
   const source = fs.readFileSync(filePath);
   writeIfSmaller(
@@ -18,7 +25,6 @@ const compressFile = (filePath) => {
     zlib.brotliCompressSync(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
     source,
   );
-  writeIfSmaller(`${filePath}.gz`, zlib.gzipSync(source, { level: 9 }), source);
 };
 
 const compressDirectory = (directory) => {

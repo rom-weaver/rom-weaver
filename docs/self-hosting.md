@@ -122,8 +122,9 @@ npm --prefix packages/rom-weaver-webapp run build
 Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host.
 Preserve the directory structure. The build emits raw assets; generic hosts
 should enable Brotli or gzip compression when available, especially for the
-WASM file. The Docker image is the only distribution that adds static
-`.br`/`.gz` siblings because its bundled server is configured to consume them.
+WASM file. The Docker image is the only distribution that adds static `.br`
+siblings, because its bundled server is configured to consume them; it gzips
+on demand for clients that cannot take brotli.
 
 The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
 build, so unpacking it is an alternative to building from a checkout.

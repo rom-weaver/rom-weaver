@@ -329,8 +329,10 @@ Two consequences worth knowing:
   halves of the switch. `-cc` rather than `-base` supplies the
   libgcc/libstdc++ the vendored C deps expect. There is no shell in the image.
 - `static-webapp` packages a raw webapp tarball. The webapp Dockerfile adds the
-  `.br`/`.gz` siblings that its static-web-server expects
-  (`compression-static` in `sws.toml`) after the shared raw artifact is copied.
+  `.br` siblings that its static-web-server expects (`compression-static` in
+  `sws.toml`) after the shared raw artifact is copied. No `.gz` siblings: sws
+  gzips on demand for the rare client without brotli, which keeps ~2.8 MB out
+  of the image.
 
 A prebuilt build deliberately does **not** write the `buildcache` tag: it has
 nothing expensive to cache, and exporting its handful of `COPY` layers would
