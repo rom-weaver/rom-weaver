@@ -46,7 +46,7 @@ else
     esac
 
     case "$path" in
-      Dockerfile)
+      Dockerfile | .cargo/* | Cargo.toml | Cargo.lock | crates/*)
         docker_cli=true
         ;;
       packages/rom-weaver-webapp/Dockerfile | packages/rom-weaver-webapp/sws.toml | \

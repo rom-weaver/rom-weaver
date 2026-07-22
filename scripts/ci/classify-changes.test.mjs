@@ -62,13 +62,13 @@ test("Docker changes select only the affected images", () => {
   });
 });
 
-test("Rust and vendored C changes exercise every runtime layer", () => {
+test("Rust and vendored C changes build the CLI image", () => {
   for (const path of ["crates/rom-weaver-core/src/lib.rs", "crates/rom-weaver-containers/vendor/libarchive/archive_read.c"]) {
     assert.deepEqual(classify(path), {
       rust: "true",
       webapp: "true",
       security: "false",
-      docker_cli: "false",
+      docker_cli: "true",
       docker_webapp: "false",
       full: "false",
     });
@@ -76,7 +76,14 @@ test("Rust and vendored C changes exercise every runtime layer", () => {
 });
 
 test("dependency and CI changes select their broader checks", () => {
-  assert.equal(classify("Cargo.lock").security, "true");
+  assert.deepEqual(classify("Cargo.lock"), {
+    rust: "true",
+    webapp: "true",
+    security: "true",
+    docker_cli: "true",
+    docker_webapp: "false",
+    full: "false",
+  });
   for (const path of [
     ".github/workflows/ci.yml",
     "scripts/ci/mise-disable-tools.sh",

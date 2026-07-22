@@ -100,12 +100,11 @@ jobs:
   # that no longer builds surfaced at the moment it blocked a publish. hadolint
   # above reads the Dockerfile; it does not run it.
   #
-  # This job builds the images from source, and is gated on the files that
-  # define them rather than run unconditionally. Such a change leaves the
-  # sources alone, so the registry build cache written by the publish job
-  # restores every expensive layer and this costs minutes; a source-only pull
-  # request would instead invalidate `COPY . .` and pay a cold cargo+wasm
-  # compile to tell us nothing about the Dockerfile.
+  # This job builds the images from source, and each leg is gated on its actual
+  # inputs rather than running for unrelated changes. The CLI leg includes its
+  # Cargo workspace sources, so its required check always exercises the image
+  # when the binary changes. The webapp's source build remains image-plumbing
+  # only because its release path is exercised by the prebuilt smoke below.
   #
   # Reusing CI's cached wasm here is not an option: the CLI image contains no
   # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
