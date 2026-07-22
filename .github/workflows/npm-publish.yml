@@ -14,6 +14,11 @@ on:
           have moved past the released commit.
         required: true
         type: string
+      cache-save:
+        description: Save the Cargo cache after a miss.
+        required: false
+        default: false
+        type: boolean
 concurrency:
   group: npm-publish-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
@@ -56,6 +61,7 @@ jobs:
         with:
           shared-key: npm-publish-${{ matrix.package }}
           cache-on-failure: true
+          save-if: ${{ inputs.cache-save }}
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -76,7 +82,7 @@ jobs:
       # Keep the compiled package outside the publish job. A failed npm or
       # release-asset step can then rerun without rebuilding Rust.
       - name: Upload platform package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: npm-platform-${{ matrix.package }}
           path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
@@ -88,7 +94,7 @@ jobs:
       # compiling the workspace a second time.
       - name: Upload Linux binary for the container build
         if: matrix.package == 'linux-x64-gnu'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: cli-binary-linux-x64-gnu
           path: packages/rom-weaver-cli-platforms/linux-x64-gnu/bin/rom-weaver
@@ -128,7 +134,7 @@ jobs:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - name: Download platform package
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: npm-platform-${{ matrix.package }}
           path: packages/rom-weaver-cli-platforms/${{ matrix.package }}

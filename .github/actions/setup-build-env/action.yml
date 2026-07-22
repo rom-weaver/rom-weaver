@@ -26,6 +26,9 @@ inputs:
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
     default: "true"
+  cache-save:
+    description: Save restored caches. Set to false for workflow_run jobs, which are restore-only.
+    default: "true"
   wasi-sdk:
     description: Download (or restore from cache) the WASI SDK and export WASI_SDK_PATH.
     default: "false"
@@ -120,7 +123,7 @@ runs:
         # depend on. Branch runs give up nothing in practice: rust-cache has
         # never reported better than `full match: false` here, so they were
         # already restoring main's cache and rebuilding the delta.
-        save-if: ${{ github.ref == 'refs/heads/main' }}
+        save-if: ${{ github.ref == 'refs/heads/main' && inputs.cache-save == 'true' }}
 
     # The SDK ships one archive per host platform; resolve which one this
     # runner needs, and its checksum, once for the three steps below.
@@ -144,10 +147,10 @@ runs:
 
     # Keyed on the pinned version + its checksum, so a version bump misses the
     # cache by construction and never serves a stale SDK.
-    - name: Cache WASI SDK
+    - name: Restore WASI SDK cache
       if: inputs.wasi-sdk == 'true'
       id: wasi-sdk-cache
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/wasi-sdk-${{ inputs.wasi-sdk-version }}.0-${{ steps.wasi-sdk-platform.outputs.slug }}
         key: wasi-sdk-${{ runner.os }}-${{ inputs.wasi-sdk-version }}-${{ steps.wasi-sdk-platform.outputs.sha256 }}
@@ -166,6 +169,13 @@ runs:
         # shasum rather than sha256sum: present on both the Ubuntu and macOS images.
         echo "${WASI_SDK_SHA256}  $RUNNER_TEMP/wasi-sdk.tar.gz" | shasum -a 256 --check
         tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
+
+    - name: Save WASI SDK cache
+      if: inputs.wasi-sdk == 'true' && inputs.cache-save == 'true' && steps.wasi-sdk-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/wasi-sdk-${{ inputs.wasi-sdk-version }}.0-${{ steps.wasi-sdk-platform.outputs.slug }}
+        key: wasi-sdk-${{ runner.os }}-${{ inputs.wasi-sdk-version }}-${{ steps.wasi-sdk-platform.outputs.sha256 }}
 
     # Runs on both paths - a cache hit restores the tree but sets no env.
     - name: Export WASI SDK path
@@ -201,10 +211,10 @@ runs:
     # the second-largest consumer of the 10 GiB budget after the Rust caches.
     # The key covers exactly what determines the tree, so a hit means the
     # install can be skipped outright rather than merely sped up.
-    - name: Cache webapp node_modules
+    - name: Restore webapp node_modules cache
       if: inputs.webapp-deps == 'true'
       id: node-modules-cache
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: packages/rom-weaver-webapp/node_modules
         key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/rom-weaver-webapp/package-lock.json') }}
@@ -214,13 +224,20 @@ runs:
       shell: bash
       run: npm ci --prefix packages/rom-weaver-webapp
 
+    - name: Save webapp node_modules cache
+      if: inputs.webapp-deps == 'true' && inputs.cache-save == 'true' && steps.node-modules-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: packages/rom-weaver-webapp/node_modules
+        key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/rom-weaver-webapp/package-lock.json') }}
+
     # Browser binaries were the one download in this action that nothing
     # cached: every webapp, coverage, and nightly run re-fetched them. The
     # browser list is part of the key because the nightly matrix adds WebKit.
-    - name: Cache Playwright browsers
+    - name: Restore Playwright browser cache
       if: inputs.playwright == 'true'
       id: playwright-cache
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.versions.outputs.playwright }}-${{ steps.versions.outputs.browsers }}
@@ -240,3 +257,10 @@ runs:
         else
           npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps "${browsers[@]}"
         fi
+
+    - name: Save Playwright browser cache
+      if: inputs.playwright == 'true' && inputs.cache-save == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.versions.outputs.playwright }}-${{ steps.versions.outputs.browsers }}
