@@ -16,7 +16,7 @@ test("restores executable mode before publishing binary packages", () => {
       JSON.stringify({ bin: { "rom-weaver": "bin/rom-weaver" }, name: "example", version: "1.0.0" }),
     );
     writeFileSync(join(binDirectory, "rom-weaver"), "binary");
-    writeFileSync(fakeNpm, "#!/bin/sh\n[ \"$1\" = view ] && exit 1\nexit 0\n");
+    writeFileSync(fakeNpm, `#!${process.execPath}\nif (process.argv[2] === "view") process.exit(1);\n`);
     chmodSync(fakeNpm, 0o755);
 
     execFileSync(process.execPath, [resolve("scripts/ci/npm-publish-package.mjs"), directory], {
