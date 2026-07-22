@@ -1,0 +1,40 @@
+name: Retry release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Failed Release workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: write
+
+jobs:
+  retry:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          run_json=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID")
+          test "$(jq -r .name <<<"$run_json")" = Release
+          test "$(jq -r .head_branch <<<"$run_json")" = main
+          case "$(jq -r .conclusion <<<"$run_json")" in
+            failure|cancelled) ;;
+            *) echo "Release run $RUN_ID is not failed or cancelled" >&2; exit 1 ;;
+          esac
+
+      - name: Rerun failed jobs and dependents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: gh api --method POST "repos/$REPOSITORY/actions/runs/$RUN_ID/rerun-failed-jobs"

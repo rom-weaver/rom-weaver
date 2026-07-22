@@ -159,10 +159,13 @@ nightly. Without that cascade a quiet stretch on `main` would leave beta and
 nightly serving code older than production - the opposite of what their names
 promise, and useless for reproducing a release-day bug.
 
-Production is CI-gated by construction: release-please only tags after CI is
-green, so an unreviewed push can never reach `rom-weaver.com`. `workflow_dispatch`
-accepts a `deploy_channel` input to force one channel manually; that override
-deploys only the channel named and does not cascade.
+Production is CI-gated by construction: Release Please only tags after the
+release PR's required checks are green, so an unreviewed push can never reach
+`rom-weaver.com`. After that PR merges, the release workflow starts from the
+merged PR event rather than waiting for a duplicate full CI run on the merge
+commit. `workflow_dispatch` accepts a `deploy_channel` input to force one
+channel manually; that override deploys only the channel named and does not
+cascade.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
 Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
@@ -264,9 +267,18 @@ prerelease.
 
 ## Retry a failed publication
 
-Rerun the failed jobs in the Release workflow. Because the release is still a
-draft, `publish-release` will not have run, so nothing is stamped immutable and
-the retry can still attach assets.
+Run **Actions → Retry release**, enter the numeric run ID from the failed
+**Release** workflow URL, and start it. This reruns the failed jobs and their
+dependents while preserving successful jobs and the artifacts they produced.
+Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
+
+Because the release is still a draft, `publish-release` will not have run, so
+nothing is stamped immutable and the retry can still attach assets. From the
+CLI, the same recovery is:
+
+```bash
+gh workflow run release-retry.yml -f run_id=29885072562
+```
 
 Manual `workflow_dispatch` is the fallback, taking the version without a `v`
 prefix, such as `0.6.1`:
