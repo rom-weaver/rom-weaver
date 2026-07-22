@@ -611,7 +611,6 @@ jobs:
           tools: node ripgrep
           cargo-cache: "false"
           webapp-deps: "true"
-          playwright: "true"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -620,6 +619,10 @@ jobs:
           path: packages/rom-weaver-webapp/src/wasm
 
       - name: Browser tests (parallel)
+        env:
+          # ubuntu-24.04 already ships Chrome, so this job does not need to
+          # download Playwright's Chromium or install its system dependencies.
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 
   # Everything else that needs Playwright chromium: the wasm-layer browser

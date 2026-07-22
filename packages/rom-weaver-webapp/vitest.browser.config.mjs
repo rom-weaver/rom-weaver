@@ -130,7 +130,9 @@ export default mergeConfig(baseConfig, {
       enabled: true,
       headless: true,
       instances: createBrowserInstances(),
-      provider: playwright(),
+      provider: playwright(
+        process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { launchOptions: { channel: "chrome" } } : undefined,
+      ),
       screenshotFailures: false,
       viewport: {
         height: 900,

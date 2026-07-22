@@ -178,10 +178,10 @@ security ── advisories (warn only, always green)
   parallel browser suite - the single longest webapp step - is never
   serialized behind the rest: `webapp-static` is the node-only work (build
   script tests, lint, unit tests, vite build; no Playwright install),
-  `webapp-browser` is the parallel browser suite alone, and `webapp-wasm-e2e`
-  is the remaining Playwright work (icon check, wasm browser suite, webapp
-  E2E); the WebKit leg runs the supported Safari-family implementation on
-  macOS.
+  `webapp-browser` is the parallel browser suite alone and uses Chrome from the
+  Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
+  (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the
+  supported Safari-family implementation on macOS.
 - **`webapp`** is the aggregator for those four, mirroring `rust`: one stable
   check name (`Webapp`) while the suites run in parallel.
 - **`deploy-plan`** turns the ref into the list of channels to publish (below).
@@ -280,7 +280,9 @@ Caching decisions that live here:
 - **`node_modules`**: the installed tree is cached, not `~/.npm` - a hit skips
   `npm ci` outright instead of merely speeding up its download half.
 - **Playwright**: browser binaries only. The apt-level libraries they link
-  against are outside the cache, so a hit still runs `install-deps`.
+  against are outside the cache, so a hit still runs `install-deps`. The
+  parallel browser job skips this cache and uses Chrome already installed on
+  the Ubuntu runner image.
 
 ### `.github/actions/wasm-cache`
 
