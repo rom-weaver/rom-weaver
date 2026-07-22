@@ -92,11 +92,11 @@ security ── advisories (warn only, always green)
 ### Jobs
 
 - **`changes`** classifies the pull request or push diff once. Rust and
-  vendored C changes select Rust and webapp integration; webapp-only
-  changes select the webapp while restoring the exact cached WASM module;
-  dependency manifests select the advisory scanners. Documentation changes
-  select none of those expensive stacks. Manual runs and changes to CI,
-  coverage, the toolchain, or the classifier run everything.
+  vendored C changes select Rust, webapp integration, and the CLI image build;
+  webapp-only changes select the webapp while restoring the exact cached WASM
+  module; dependency manifests select the advisory scanners. Documentation
+  changes select none of those expensive stacks. Manual runs and changes to
+  CI, coverage, the toolchain, or the classifier run everything.
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It installs no language toolchain and
@@ -105,16 +105,15 @@ security ── advisories (warn only, always green)
   blocks, which is why both are in its `tools:` list.
 - **`docker`** builds the CLI and webapp images **from source** without
   pushing, so a broken Dockerfile fails here rather than at the moment it
-  blocks a release publish. It runs only when the files defining the images
-  change (the two Dockerfiles, `.dockerignore`, `docker-compose.yml`,
-  `sws.toml`, the Docker compression script, `ci.yml`, or
-  `docker-publish.yml`), because such a change leaves the sources alone and the
-  registry build cache restores every expensive layer; a source-only pull
-  request would invalidate `COPY . .` and pay a cold cargo+wasm compile for no
-  signal about the Dockerfile. Each matrix leg has its own path gate, so a
-  webapp-only Docker change does not also start the CLI build or vice versa.
-  On `main` it also refreshes that cache. When CLI packaging changes, its leg
-  additionally smokes the `BINARY=prebuilt` release path with a stub binary.
+  blocks a release publish. The CLI leg runs for Cargo workspace sources and
+  manifests as well as its image plumbing, so the required check builds the
+  image whenever its binary changes. The webapp source leg runs only when its
+  image plumbing changes (the Dockerfile, `.dockerignore`,
+  `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
+  `docker-publish.yml`); ordinary webapp changes use the release-equivalent
+  prebuilt smoke below. On `main`, source builds also refresh their registry
+  cache. The CLI leg additionally smokes the `BINARY=prebuilt` release path
+  with a stub binary whenever it is selected.
 
   Handing this job CI's cached wasm to lift the gate does not work. The CLI
   image contains no wasm at all - it is `cargo build --release -p
