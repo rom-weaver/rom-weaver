@@ -24,7 +24,6 @@ const PROFILES = {
     suites: [
       ["CLI matrix", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
       ["exhaustive WASM matrix", "npm", ["run", "test:browser:wasm:exhaustive"], PACKAGE_DIR],
-      ["WebKit webapp E2E", "npm", ["run", "test:e2e:webapp:webkit"], PACKAGE_DIR],
       ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
     ],
   },

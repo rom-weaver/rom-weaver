@@ -616,8 +616,8 @@ jobs:
       - name: Browser tests (parallel)
         run: npm --prefix packages/rom-weaver-webapp run test:browser:parallel
 
-  # Everything else that needs a Playwright chromium: the wasm-layer browser
-  # suite, the E2E pass, and the icon check.
+  # Everything else that needs Playwright chromium: the wasm-layer browser
+  # suite, the Chromium E2E pass, and the icon check.
   webapp-wasm-e2e:
     name: Webapp browser tests (wasm) + E2E
     runs-on: ubuntu-24.04
@@ -654,15 +654,42 @@ jobs:
       - name: Webapp E2E
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
+  webapp-webkit-e2e:
+    name: Webapp E2E (WebKit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: wasm
+    if: github.ref_type != 'tag'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+          webapp-deps: "true"
+          playwright: "true"
+          playwright-browsers: webkit
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      - name: Webapp E2E (WebKit)
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
+
   # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
-  # for branch protection while the three webapp jobs run in parallel. Must
+  # for branch protection while the four webapp jobs run in parallel. Must
   # fail rather than skip when a dependency fails (a skipped check counts as
   # passing), and `!cancelled()` keeps a superseded run from reporting red.
   webapp:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [webapp-static, webapp-browser, webapp-wasm-e2e]
+    needs: [webapp-static, webapp-browser, webapp-wasm-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Verify webapp jobs
@@ -670,10 +697,12 @@ jobs:
           STATIC_RESULT: ${{ needs.webapp-static.result }}
           BROWSER_RESULT: ${{ needs.webapp-browser.result }}
           WASM_E2E_RESULT: ${{ needs.webapp-wasm-e2e.result }}
+          WEBKIT_E2E_RESULT: ${{ needs.webapp-webkit-e2e.result }}
         run: |
           test "$STATIC_RESULT" = success
           test "$BROWSER_RESULT" = success
           test "$WASM_E2E_RESULT" = success
+          test "$WEBKIT_E2E_RESULT" = success
 
   # Decide which channels this ref publishes to. Channels are ordered
   # prod -> beta -> nightly, and a deploy refreshes its own channel plus every

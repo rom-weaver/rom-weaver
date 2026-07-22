@@ -238,5 +238,5 @@ runs:
         if [ "$CACHED" = "true" ]; then
           npm --prefix packages/rom-weaver-webapp exec playwright install-deps "${browsers[@]}"
         else
-          npm --prefix packages/rom-weaver-webapp exec playwright install --with-deps "${browsers[@]}"
+          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps "${browsers[@]}"
         fi

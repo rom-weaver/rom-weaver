@@ -44,7 +44,6 @@ jobs:
           wasi-sdk: "true"
           webapp-deps: "true"
           playwright: "true"
-          playwright-browsers: chromium webkit
 
       - name: Verify cached development WASM artifact
         if: steps.wasm-cache.outputs.cache-hit == 'true'
