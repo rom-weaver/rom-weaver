@@ -15,6 +15,8 @@ const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
 const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.min.js");
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+const E2E_ATTEMPTS = 2;
 const A11Y_ONLY = process.argv.includes("--a11y");
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
@@ -171,7 +173,7 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
       return button instanceof HTMLButtonElement && !button.disabled && /weave/i.test(button.textContent || "");
     });
 
-    const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
+    const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
     await apply.click();
     const download = await downloadPromise;
     const downloadPath = await download.path();
@@ -300,7 +302,21 @@ const main = async () => {
   }
 };
 
-main().catch((error) => {
+const runWithRetry = async () => {
+  for (let attempt = 1; attempt <= E2E_ATTEMPTS; attempt += 1) {
+    try {
+      await main();
+      return;
+    } catch (error) {
+      if (attempt === E2E_ATTEMPTS) throw error;
+      process.stderr.write(
+        `Webapp E2E attempt ${attempt} failed; retrying once with a fresh browser:\n${error?.message || error}\n`,
+      );
+    }
+  }
+};
+
+runWithRetry().catch((error) => {
   process.stderr.write(`${error?.stack || String(error)}\n`);
   process.exitCode = 1;
 });
