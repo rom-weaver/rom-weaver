@@ -21,53 +21,63 @@
 import spawn from "cross-spawn";
 import { chmodSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const dir = resolve(process.argv[2] ?? ".");
-const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-const spec = `${manifest.name}@${manifest.version}`;
-const tag = manifest.version.includes("-") ? "beta" : "latest";
-const binary = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.["rom-weaver"];
-
-if (binary && !binary.endsWith(".exe")) chmodSync(join(dir, binary), 0o755);
-
-const runNpm = (args, options) => {
-  const result = spawn.sync("npm", args, options);
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
+const restoreExecutableMode = (dir, manifest) => {
+  const binary = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.["rom-weaver"];
+  if (binary && !binary.endsWith(".exe")) chmodSync(join(dir, binary), 0o755);
 };
 
-const isPublished = () => {
+const main = () => {
+  const dir = resolve(process.argv[2] ?? ".");
+  const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  const spec = `${manifest.name}@${manifest.version}`;
+  const tag = manifest.version.includes("-") ? "beta" : "latest";
+  restoreExecutableMode(dir, manifest);
+
+  const runNpm = (args, options) => {
+    const result = spawn.sync("npm", args, options);
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
+  };
+
+  const isPublished = () => {
+    try {
+      runNpm(["view", spec, "version"], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (isPublished()) {
+    console.log(`${spec} is already published`);
+    return;
+  }
+
+  console.log(`publishing ${spec} with dist-tag ${tag}`);
   try {
-    runNpm(["view", spec, "version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
+    runNpm(
+      [
+        "publish",
+        dir,
+        "--ignore-scripts",
+        "--access",
+        "public",
+        "--provenance",
+        "--tag",
+        tag,
+      ],
+      { stdio: "inherit" },
+    );
+  } catch (error) {
+    if (!isPublished()) {
+      throw new Error(`failed to publish ${spec}: ${error.message}`);
+    }
+    console.log(`${spec} was published by another run`);
   }
 };
 
-if (isPublished()) {
-  console.log(`${spec} is already published`);
-  process.exit(0);
-}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
 
-console.log(`publishing ${spec} with dist-tag ${tag}`);
-try {
-  runNpm(
-    [
-      "publish",
-      dir,
-      "--ignore-scripts",
-      "--access",
-      "public",
-      "--provenance",
-      "--tag",
-      tag,
-    ],
-    { stdio: "inherit" },
-  );
-} catch (error) {
-  if (!isPublished()) {
-    throw new Error(`failed to publish ${spec}: ${error.message}`);
-  }
-  console.log(`${spec} was published by another run`);
-}
+export { restoreExecutableMode };
