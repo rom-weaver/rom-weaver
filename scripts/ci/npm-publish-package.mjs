@@ -17,40 +17,55 @@
 // names contain hyphens (@rom-weaver/cli-darwin-arm64), so matching the spec
 // would tag every platform package as a prerelease.
 //
-// Usage: npm-publish-package.mjs [package-dir]   (default: repository root)
-import { execFileSync } from "node:child_process";
+// Usage: npm-publish-package.mjs [--dry-run] [package-dir]   (default: repository root)
+import spawn from "cross-spawn";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const dir = resolve(process.argv[2] ?? ".");
+const dryRun = process.argv.includes("--dry-run");
+const packageDir = process.argv.slice(2).find((argument) => argument !== "--dry-run");
+const dir = resolve(packageDir ?? ".");
 const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 const spec = `${manifest.name}@${manifest.version}`;
 const tag = manifest.version.includes("-") ? "beta" : "latest";
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
+
+const runNpm = (args, options) => {
+  const result = spawn.sync("npm", args, options);
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
+};
 
 const isPublished = () => {
   try {
-    execFileSync(npmExecutable, ["view", spec, "version"], { stdio: "ignore" });
+    runNpm(["view", spec, "version"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
   }
 };
 
-if (isPublished()) {
+if (!dryRun && isPublished()) {
   console.log(`${spec} is already published`);
   process.exit(0);
 }
 
-console.log(`publishing ${spec} with dist-tag ${tag}`);
+console.log(`${dryRun ? "dry-running" : "publishing"} ${spec} with dist-tag ${tag}`);
 try {
-  execFileSync(
-    npmExecutable,
-    ["publish", dir, "--ignore-scripts", "--access", "public", "--provenance", "--tag", tag],
+  runNpm(
+    [
+      "publish",
+      dir,
+      "--ignore-scripts",
+      "--access",
+      "public",
+      ...(dryRun ? ["--dry-run"] : ["--provenance"]),
+      "--tag",
+      tag,
+    ],
     { stdio: "inherit" },
   );
 } catch (error) {
-  if (!isPublished()) {
+  if (dryRun || !isPublished()) {
     throw new Error(`failed to publish ${spec}: ${error.message}`);
   }
   console.log(`${spec} was published by another run`);

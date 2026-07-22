@@ -14,6 +14,16 @@ on:
           have moved past the released commit.
         required: true
         type: string
+      dry_run:
+        description: Run npm publication checks without publishing or uploading release assets
+        required: false
+        default: false
+        type: boolean
+      platform:
+        description: Limit a dry run to one platform package
+        required: false
+        default: ""
+        type: string
     secrets:
       NPM_TOKEN:
         description: npm automation token for the CLI packages
@@ -23,6 +33,16 @@ on:
       version:
         description: Release version without the v prefix
         required: true
+        type: string
+      dry_run:
+        description: Run npm publication checks without publishing or uploading release assets
+        required: false
+        default: false
+        type: boolean
+      platform:
+        description: Limit a dry run to one platform package
+        required: false
+        default: ""
         type: string
 concurrency:
   group: npm-publish-${{ inputs.version || github.ref_name }}
@@ -40,20 +60,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: darwin-arm64
-            runner: macos-14
-          - package: darwin-x64
-            runner: macos-15-intel
-          - package: linux-x64-gnu
-            runner: ubuntu-24.04
-          - package: win32-x64-msvc
-            runner: windows-2025
+        include: ${{ fromJSON(inputs.platform == 'win32-x64-msvc' && '[{"package":"win32-x64-msvc","runner":"windows-2025"}]' || '[{"package":"darwin-arm64","runner":"macos-14"},{"package":"darwin-x64","runner":"macos-15-intel"},{"package":"linux-x64-gnu","runner":"ubuntu-24.04"},{"package":"win32-x64-msvc","runner":"windows-2025"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+          ref: ${{ inputs.sha || (inputs.dry_run && github.sha) || format('v{0}', inputs.version) }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -76,6 +88,9 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
+
+      - name: Install npm script dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
 
       - name: Build native CLI
         run: cargo build --locked --release --package rom-weaver-cli
@@ -108,13 +123,21 @@ jobs:
 
       - name: Publish platform package
         shell: bash
-        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
+        run: |
+          package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
+          if [[ "$DRY_RUN" == "true" ]]; then
+            node scripts/ci/npm-publish-package.mjs --dry-run "$package_path"
+          else
+            node scripts/ci/npm-publish-package.mjs "$package_path"
+          fi
         env:
+          DRY_RUN: ${{ inputs.dry_run }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
+        if: ${{ !inputs.dry_run }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,6 +159,7 @@ jobs:
 
   launcher:
     needs: platform
+    if: ${{ needs.platform.result == 'success' && !inputs.dry_run }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -147,6 +171,9 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
+
+      - name: Install npm script dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
 
       - name: Publish launcher package
         run: node scripts/ci/npm-publish-package.mjs
@@ -158,6 +185,7 @@ jobs:
   # otherwise installs resolve a version that is not on the registry yet.
   alias:
     needs: launcher
+    if: ${{ needs.launcher.result == 'success' && !inputs.dry_run }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -169,6 +197,9 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
+
+      - name: Install npm script dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund cross-spawn@7.0.6
 
       - name: Publish alias package
         run: |
