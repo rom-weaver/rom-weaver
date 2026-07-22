@@ -8,7 +8,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 ## Table of contents
 
 - [The workflows at a glance](#the-workflows-at-a-glance)
-- [`ci.yml` - the required gate and main promotion](#ciyml---the-required-gate-and-main-promotion)
+- [`ci.yml` - the required gate](#ciyml---the-required-gate)
   - [Jobs](#jobs)
   - [Tag runs](#tag-runs)
   - [Deploy channels](#deploy-channels)
@@ -34,7 +34,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
-| `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Full PR gate; main artifact/deploy promotion |
+| `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
 | `commitlint.yml` | PR (open/edit/sync) | **Yes** | Conventional-commit pull request title |
 | `codeql.yml` | push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | after a successful `CI` on `main` | No | Rust + React coverage reports |
@@ -51,13 +51,6 @@ disabled and squash merges take `PR_TITLE` as the subject, so the title is the
 only text that reaches `main` and the only text Release Please reads. Branch
 commits are squashed away, so they are not linted.
 
-`ci.yml` has two modes. Pull requests and manual runs execute the full Rust and
-webapp matrix, including WebKit. A push to `main` keeps the repository-plumbing
-lint, conditional Docker build, production WASM artifact, and deployment paths,
-but skips the Rust and webapp test jobs because the pull request's required
-checks already validated the merge tree. The successful `main` run still
-provides the artifact and trigger that coverage and release automation consume.
-
 Nothing publishes on a push. `release.yml` runs on `workflow_run` gated on a
 **successful** CI, and even then only opens a release pull request; merging
 that pull request is what sets `release_created` and unlocks the publish jobs.
@@ -67,7 +60,7 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 > module`, `Lint workflows + scripts + Dockerfiles`, `Webapp`, `Docker build
 > (CLI)`, and `Docker build (webapp)`.
 
-## `ci.yml` - the required gate and main promotion
+## `ci.yml` - the required gate
 
 ```
              ┌── rust-host ───────┐
