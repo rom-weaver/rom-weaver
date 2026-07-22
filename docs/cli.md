@@ -300,6 +300,7 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 | `bundle parse` | Validate and resolve a bundle and its referenced entries. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Restore a ROM using undo data embedded in a PPF3 patch. |
+| `inspect` | Alias for `probe`. |
 | `weave` | Run `patch apply` through its shorter alias. |
 | `completions` | Generate a shell completion script. |
 

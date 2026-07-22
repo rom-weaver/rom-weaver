@@ -1,8 +1,8 @@
 use super::shared::*;
 
 #[test]
-fn old_inspect_command_is_removed() {
-    command_stdout(&["inspect", "--help"], 2);
+fn inspect_aliases_probe() {
+    command_stdout(&["inspect", "--help"], 0);
 }
 
 #[test]

@@ -370,6 +370,15 @@ mod tests {
         assert_eq!(color_override(false, true), Some(false));
     }
 
+    #[test]
+    fn inspect_is_accepted_as_probe_alias() {
+        assert!(
+            cli_command()
+                .try_get_matches_from(["rom-weaver", "inspect", "--input", "a.nes"])
+                .is_ok()
+        );
+    }
+
     /// `weave` is accepted as a spelling of `patch apply` on the CLI (both
     /// top-level and under `patch`) and on the JSON wire the wasm layer uses.
     #[test]

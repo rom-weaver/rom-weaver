@@ -83,7 +83,10 @@ use ts_rs::TS;
 pub enum Commands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Identify containers, patches, and known ROM headers")
+        command(
+            visible_alias = "inspect",
+            about = "Identify containers, patches, and known ROM headers"
+        )
     )]
     Probe(ProbeCommand),
     #[cfg_attr(
