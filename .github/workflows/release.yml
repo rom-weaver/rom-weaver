@@ -229,22 +229,40 @@ jobs:
         run: |
           set -euo pipefail
           mkdir checksums
-          release_ids="$(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
-              --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" and .draft) | .id"
-          )"
-          release_id="${release_ids%%$'\n'*}"
+          release_id=""
+          for attempt in {1..12}; do
+            if release_ids="$(
+              gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+                --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" and .draft) | .id"
+            )"; then
+              release_id="${release_ids%%$'\n'*}"
+              test -n "$release_id" && break
+            fi
+            echo "Waiting for draft release (attempt $attempt/12)" >&2
+            sleep 5
+          done
           test -n "$release_id"
 
-          gh api --paginate \
-            "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
-            --jq '.[] | select(.name | test("^rom-weaver-.*\\.sha256$")) | [.name, .url] | @tsv' |
-            while IFS=$'\t' read -r name url; do
-              test -n "$name" && test -n "$url"
-              gh api \
-                -H 'Accept: application/octet-stream' \
-                "$url" > "checksums/$name"
-            done
+          asset_list=""
+          for attempt in {1..12}; do
+            if asset_list="$(
+              gh api --paginate \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+                --jq '.[] | select(.name | test("^rom-weaver-.*\\.sha256$")) | [.name, .url] | @tsv'
+            )"; then
+              test -n "$asset_list" && break
+            fi
+            echo "Waiting for release checksums (attempt $attempt/12)" >&2
+            sleep 5
+          done
+          test -n "$asset_list"
+
+          while IFS=$'\t' read -r name url; do
+            test -n "$name" && test -n "$url"
+            gh api \
+              -H 'Accept: application/octet-stream' \
+              "$url" > "checksums/$name"
+          done <<< "$asset_list"
 
           test -n "$(find checksums -type f -name 'rom-weaver-*.sha256' -print -quit)"
 
