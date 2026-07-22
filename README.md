@@ -110,22 +110,80 @@ To run the webapp on your own infrastructure, see
 
 ### CLI
 
-Prebuilt installers will become available with the first GitHub Release.
+Every method below installs the same prebuilt binary from the GitHub release.
+macOS arm64 and x86-64, Linux x86-64, and Windows x86-64 are covered; other
+targets need the [source build](#build-from-source).
 
-Install with Homebrew on macOS or x86-64 Linux:
+#### Homebrew (macOS, Linux x86-64)
 
 ```bash
 brew install brandonocasey/tap/rom-weaver
 ```
 
-Or download the latest release to `~/.local/bin`:
+#### Scoop (Windows)
+
+```powershell
+scoop bucket add brandonocasey https://github.com/brandonocasey/scoop-bucket
+scoop install rom-weaver
+```
+
+#### Install script (macOS, Linux)
+
+Downloads the latest release to `~/.local/bin` and verifies its checksum.
+Override with `ROM_WEAVER_INSTALL_DIR` or pin with `ROM_WEAVER_VERSION`.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.sh | sh
 ```
 
-Or run it from the published Linux image, without installing anything:
+#### Install script (Windows)
+
+The same thing for PowerShell, installing to `%LOCALAPPDATA%\rom-weaver\bin`.
+
+```powershell
+irm https://raw.githubusercontent.com/brandonocasey/rom-weaver/main/install.ps1 | iex
+```
+
+#### npm
+
+The npm package is a launcher that resolves the right prebuilt binary through
+platform-specific optional dependencies. Use it for a one-off run:
+
+```bash
+npx @rom-weaver/cli probe --input game.iso
+```
+
+Or install it globally, or as a project dev dependency so a repo pins the
+version its scripts expect:
+
+```bash
+npm install --global @rom-weaver/cli
+```
+
+#### cargo-binstall
+
+Downloads the same release binary rather than compiling the workspace, so it is
+minutes faster than `cargo install`:
+
+```bash
+cargo binstall rom-weaver-cli
+```
+
+#### mise
+
+Useful when you want the version pinned per project in `mise.toml`. mise
+verifies the release's GitHub artifact attestations on install. Pass an explicit
+version from the [releases page](https://github.com/brandonocasey/rom-weaver/releases);
+mise cannot resolve `@latest` for this repository:
+
+```bash
+mise use github:brandonocasey/rom-weaver@0.6.7
+```
+
+#### Docker
+
+Runs from the published Linux image without installing anything:
 
 ```bash
 docker run --rm \
@@ -140,7 +198,7 @@ bind-mounted files keep their host ownership, so without it the container cannot
 read files it does not own and leaves anything it writes owned by an unknown uid.
 See [Run in Docker](docs/cli.md#run-in-docker).
 
-To install the current source build instead:
+#### Build from source
 
 ```bash
 git clone https://github.com/brandonocasey/rom-weaver.git
