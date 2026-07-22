@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/cli",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
   "description": "A local-first offline toolkit for ROMs and ROM hack patches. Inspect, extract, checksum, compress, trim, apply patches, create patches, or bundle shareable patch manifests at native speed. In your browser or terminal.",
@@ -48,10 +48,10 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "@rom-weaver/darwin-arm64": "0.6.4",
-    "@rom-weaver/darwin-x64": "0.6.4",
-    "@rom-weaver/linux-x64-gnu": "0.6.4",
-    "@rom-weaver/win32-x64-msvc": "0.6.4"
+    "@rom-weaver/darwin-arm64": "0.6.5",
+    "@rom-weaver/darwin-x64": "0.6.5",
+    "@rom-weaver/linux-x64-gnu": "0.6.5",
+    "@rom-weaver/win32-x64-msvc": "0.6.5"
   },
   "scripts": {
     "docs:toc": "bash scripts/update-markdown-toc.sh",
