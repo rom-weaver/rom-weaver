@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0](https://github.com/brandonocasey/rom-weaver/compare/v0.6.7...v0.7.0) (2026-07-22)
+
+
+### Features
+
+* **cli:** add inspect command alias ([#89](https://github.com/brandonocasey/rom-weaver/issues/89)) ([8294a34](https://github.com/brandonocasey/rom-weaver/commit/8294a34f083ef6c6c53061b933b9c9e3ffc4df4e))
+* **install:** more install methods, and fix the broken npm one ([#83](https://github.com/brandonocasey/rom-weaver/issues/83)) ([0ddd8dd](https://github.com/brandonocasey/rom-weaver/commit/0ddd8ddf42de8f283ebff16d0335869a5a9dee19))
+
+
+### Bug Fixes
+
+* **release:** keep release PRs current ([#92](https://github.com/brandonocasey/rom-weaver/issues/92)) ([9d6bcbc](https://github.com/brandonocasey/rom-weaver/commit/9d6bcbc70ef623ed462a6234fe58a7098c8cebea))
+* **tests:** replace the corrupt raw32.chd fixture ([#86](https://github.com/brandonocasey/rom-weaver/issues/86)) ([87b4ad4](https://github.com/brandonocasey/rom-weaver/commit/87b4ad418d224e69b02e6fea569fe538b31f01ec))
+* **webapp:** default an unset build channel to prod ([#88](https://github.com/brandonocasey/rom-weaver/issues/88)) ([d7bc700](https://github.com/brandonocasey/rom-weaver/commit/d7bc70037ac184b8e8de282ffd4f7195cda64d0a))
+
+
+### Performance Improvements
+
+* **docker:** shrink the published images, with HTTPS self-hosting ([#84](https://github.com/brandonocasey/rom-weaver/issues/84)) ([cc65345](https://github.com/brandonocasey/rom-weaver/commit/cc6534544535d07a6c6edc96dbe260c3a924a781))
+
 ## [0.6.7](https://github.com/brandonocasey/rom-weaver/compare/v0.6.6...v0.6.7) (2026-07-22)
 
 
