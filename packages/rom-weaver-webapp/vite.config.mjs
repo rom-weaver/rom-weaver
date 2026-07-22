@@ -39,11 +39,17 @@ const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
   "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
 };
-const securityHeaders = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+// SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
+// document and COEP on every dedicated-worker script, so these apply to every response. Also the
+// source for the deployed _headers file - see writeCloudflareHeadersAsset.
+const crossOriginIsolationHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-origin",
+};
+const securityHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  ...crossOriginIsolationHeaders,
   Expires: "0",
   Pragma: "no-cache",
 };
@@ -225,6 +231,28 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
   };
 };
 
+// Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
+// isolated from the first network load instead of round-tripping through the service worker's
+// COEP-injection reload. Hosts without header control still use the service-worker fallback.
+// Emitted at the dist root, which keeps it out of the SW precache globs.
+const writeCloudflareHeadersAsset = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      const headerLines = Object.entries(crossOriginIsolationHeaders)
+        .map(([name, value]) => `  ${name}: ${value}`)
+        .join("\n");
+      const outputPath = path.join(path.resolve(rootDir, outDir), "_headers");
+      fs.writeFileSync(outputPath, `/*\n${headerLines}\n`);
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-cloudflare-headers-asset",
+  };
+};
+
 // The "What's new" changelog, emitted at the dist root so it stays OUT of the SW
 // precache globs (assets/** + named files only). The client fetches it with
 // cache: "no-store", so a pending update surfaces the NEW deploy's log rather
@@ -364,6 +392,7 @@ export default defineConfig(({ command }) => {
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       writeWebappStaticAssets(appChannel, appChannelLabel),
       writeChangelogAsset(),
+      writeCloudflareHeadersAsset(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,

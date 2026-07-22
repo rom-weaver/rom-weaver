@@ -137,6 +137,11 @@ const shouldUseNetworkFirst = (request: Request, url: URL) => {
 
 const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}, credentialless = coepCredentialless) => {
   const headers = new Headers(sourceHeaders);
+  // A response that already names a COEP came from a host that serves the isolation trio itself
+  // (the deployed _headers file, or a self-host configured per docs/self-hosting.md). Pass it
+  // through untouched: rewriting a served require-corp to credentialless would un-isolate the page
+  // in browsers that cannot parse credentialless and send them into the reload dance for nothing.
+  if (headers.has(COI_HEADER_COEP)) return headers;
   headers.set(COI_HEADER_COOP, "same-origin");
   headers.set(COI_HEADER_COEP, credentialless ? "credentialless" : "require-corp");
   if (credentialless) headers.delete(COI_HEADER_CORP);
@@ -171,12 +176,14 @@ const toCredentiallessNoCorsRequest = (request: Request, credentialless = coepCr
 const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
   const credentialless = await ensureCoepModeHydrated();
   const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
-  const response = withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
-  if (response.ok) {
+  // Cache the raw network response, not the stamped one: the stored entry then carries the
+  // server's true headers, so a later COEP-mode flip re-stamps it correctly at serve time instead
+  // of replaying a stale injected mode.
+  if (fetchedResponse.ok) {
     const cache = await caches.open(RUNTIME_CACHE_NAME);
-    await cache.put(request, response.clone());
+    await cache.put(request, fetchedResponse.clone());
   }
-  return response;
+  return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
 const matchCachedResponse = async (request: Request, url: URL) => {
