@@ -33,6 +33,7 @@ jobs:
       )
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
       issues: write
       pull-requests: write
@@ -95,6 +96,104 @@ jobs:
           RELEASE_PR: ${{ steps.release-pr.outputs.number }}
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
+
+      # These PNGs belong in the release PR so the merge contains the exact
+      # captures the release will ship. Do this only on PR creation; a later
+      # workflow_run must not keep committing release-asset maintenance onto it.
+      - name: Set up screenshot capture
+        if: steps.release.outputs.prs_created == 'true'
+        uses: ./.github/actions/setup-build-env
+        with:
+          tools: node ripgrep
+          cargo-cache: "false"
+          cache-save: "false"
+          playwright: "true"
+          webapp-deps: "true"
+
+      - name: Resolve tested WASM artifact for screenshots
+        if: steps.release.outputs.prs_created == 'true'
+        id: screenshot-ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          TARGET_SHA="$TRIGGER_SHA"
+          [ -n "$TARGET_SHA" ] || TARGET_SHA=$(git rev-parse HEAD)
+          export TARGET_SHA
+          scripts/ci/resolve-wasm-run.sh
+
+      - name: Download tested WASM artifact for screenshots
+        if: steps.release.outputs.prs_created == 'true' && steps.screenshot-ci.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.screenshot-ci.outputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name wasm-prod \
+            --dir packages/rom-weaver-webapp/src/wasm
+
+      - name: Set up fallback WASM build for screenshots
+        if: steps.release.outputs.prs_created == 'true' && steps.screenshot-ci.outputs.available != 'true'
+        uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust binaryen
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+          cache-save: "false"
+
+      - name: Build fallback WASM for screenshots
+        if: steps.release.outputs.prs_created == 'true' && steps.screenshot-ci.outputs.available != 'true'
+        run: mise run build-wasm-prod
+
+      - name: Verify WASM for screenshots
+        if: steps.release.outputs.prs_created == 'true'
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+
+      - name: Build production webapp for screenshots
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          ROM_WEAVER_CHANNEL: prod
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+      - name: Capture release screenshots
+        if: steps.release.outputs.prs_created == 'true'
+        run: |
+          set -euo pipefail
+          node packages/rom-weaver-webapp/scripts/dev-server.mjs preview --port 4173 > screenshot-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error --insecure --output /dev/null https://localhost:4173/; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat screenshot-server.log
+            exit 1
+          fi
+          npm --prefix packages/rom-weaver-webapp run capture:screenshots
+
+      - name: Commit release screenshots
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/rom-weaver-webapp/design/*-{desktop,mobile}-{light,dark}.png
+          if git diff --cached --quiet; then
+            echo "Release screenshots are already current"
+            exit 0
+          fi
+          git commit -m "docs(screenshots): refresh release captures"
+          git push origin "HEAD:$RELEASE_PR_BRANCH"
 
   # Lives here rather than in cargo-publish.yml, where it used to run, because
   # there it was too late to act on: cargo-publish.yml is triggered by the
