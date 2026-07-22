@@ -345,12 +345,11 @@ export default defineConfig(({ command }) => {
     optimizeDeps: {
       include: [
         "@bjorn3/browser_wasi_shim",
-        "lucide-react/dist/esm/icons/github.js",
-        "lucide-react/dist/esm/icons/heart.js",
-        "lucide-react/dist/esm/icons/refresh-cw.js",
-        "lucide-react/dist/esm/icons/rotate-ccw.js",
-        "lucide-react/dist/esm/icons/save.js",
-        "lucide-react/dist/esm/icons/settings.js",
+        "lucide-react/dist/esm/icons/heart.mjs",
+        "lucide-react/dist/esm/icons/refresh-cw.mjs",
+        "lucide-react/dist/esm/icons/rotate-ccw.mjs",
+        "lucide-react/dist/esm/icons/save.mjs",
+        "lucide-react/dist/esm/icons/settings.mjs",
         "react",
         "react-dom",
         "react-dom/client",

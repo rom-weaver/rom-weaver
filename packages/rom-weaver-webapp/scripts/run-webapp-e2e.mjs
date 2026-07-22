@@ -120,12 +120,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanLiveApp(page, "Settings (dark)");
     const betaTools = page.locator("#settings-beta-tools-enabled");
     if (!(await betaTools.isChecked())) await betaTools.check();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("button", { exact: true, name: "Save" }).click();
     await setTheme("light");
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
     await scanLiveApp(page, "Settings (light)");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("button", { exact: true, name: "Save" }).click();
 
     for (const tab of ["patcher", "creator", "trim"]) {
       await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
@@ -231,6 +231,23 @@ const runArchiveStressSmoke = async (createContext, baseUrl) => {
   }
 };
 
+const createBrowserContextFactory = async (browserType, browserName) => {
+  const persistentContextDirs = [];
+  if (browserName === "webkit") {
+    return {
+      browser: null,
+      createContext: async (options) => {
+        const userDataDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "rom-weaver-webkit-e2e-"));
+        persistentContextDirs.push(userDataDir);
+        return browserType.launchPersistentContext(userDataDir, { ...options, headless: true });
+      },
+      persistentContextDirs,
+    };
+  }
+  const browser = await browserType.launch({ headless: true });
+  return { browser, createContext: (options) => browser.newContext(options), persistentContextDirs };
+};
+
 const main = async () => {
   const port = await reservePort();
   const baseUrl = `https://${browserName === "webkit" ? "localhost" : "127.0.0.1"}:${port}/`;
@@ -255,16 +272,10 @@ const main = async () => {
       const unlistedStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
       if (unlistedStatus !== 404) throw new Error(`unlisted corpus file returned ${unlistedStatus}, expected 404`);
     }
-    const persistentContextDirs = [];
-    const browser = browserName === "webkit" ? null : await browserType.launch({ headless: true });
-    const createContext =
-      browserName === "webkit"
-        ? async (options) => {
-            const userDataDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "rom-weaver-webkit-e2e-"));
-            persistentContextDirs.push(userDataDir);
-            return browserType.launchPersistentContext(userDataDir, { ...options, headless: true });
-          }
-        : (options) => browser.newContext(options);
+    const { browser, createContext, persistentContextDirs } = await createBrowserContextFactory(
+      browserType,
+      browserName,
+    );
     try {
       await runAccessibilityAudit(createContext, baseUrl);
       if (A11Y_ONLY) return;
