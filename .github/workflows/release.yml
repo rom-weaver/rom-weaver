@@ -216,54 +216,42 @@ jobs:
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.sha }}
 
-      - name: Download release checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v${{ needs.release.outputs.version }}
+      - name: Download darwin arm64 package
+        uses: actions/download-artifact@v5
+        with:
+          name: npm-platform-darwin-arm64
+          path: platform-artifacts/darwin-arm64
+
+      - name: Download darwin x64 package
+        uses: actions/download-artifact@v5
+        with:
+          name: npm-platform-darwin-x64
+          path: platform-artifacts/darwin-x64
+
+      - name: Download linux x64 package
+        uses: actions/download-artifact@v5
+        with:
+          name: npm-platform-linux-x64-gnu
+          path: platform-artifacts/linux-x64-gnu
+
+      - name: Calculate release checksums
         run: |
           set -euo pipefail
           mkdir checksums
-          release_id=""
-          for attempt in {1..12}; do
-            if release_id="$(
-              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
-                --jq 'select(.draft) | .id'
-            )"; then
-              test -n "$release_id" && break
-            fi
-            echo "Waiting for draft release (attempt $attempt/12)" >&2
-            sleep 5
+          for platform in darwin-arm64 darwin-x64 linux-x64-gnu; do
+            binary="platform-artifacts/$platform/bin/rom-weaver"
+            test -f "$binary"
+            checksum="$(sha256sum "$binary" | cut -d ' ' -f 1)"
+            printf '%s  rom-weaver-%s\n' "$checksum" "$platform" > \
+              "checksums/rom-weaver-$platform.sha256"
           done
-          test -n "$release_id"
-
-          asset_list=""
-          for attempt in {1..12}; do
-            if asset_list="$(
-              gh api --paginate \
-                "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
-                --jq '.[] | select(.name | test("^rom-weaver-.*\\.sha256$")) | [.name, .url] | @tsv'
-            )"; then
-              test -n "$asset_list" && break
-            fi
-            echo "Waiting for release checksums (attempt $attempt/12)" >&2
-            sleep 5
-          done
-          test -n "$asset_list"
-
-          while IFS=$'\t' read -r name url; do
-            test -n "$name" && test -n "$url"
-            gh api \
-              -H 'Accept: application/octet-stream' \
-              "$url" > "checksums/$name"
-          done <<< "$asset_list"
-
-          test -n "$(find checksums -type f -name 'rom-weaver-*.sha256' -print -quit)"
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v7
