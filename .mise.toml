@@ -327,7 +327,7 @@ description = "Run CLI, WASM, browser, and real webapp E2E checks in parallel"
 run = "npm --prefix packages/rom-weaver-webapp run test:e2e:fast"
 
 [tasks.test-e2e-nightly]
-description = "Run exhaustive CLI/WASM interaction matrices plus Chromium webapp E2E"
+description = "Run exhaustive CLI/WASM interaction matrices plus WebKit and webapp E2E"
 run = "npm --prefix packages/rom-weaver-webapp run test:e2e:nightly"
 
 [tasks.test-e2e-ios]
