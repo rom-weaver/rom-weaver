@@ -19,7 +19,7 @@ crc32c.workspace = true
 crc32fast.workspace = true
 md-5.workspace = true
 rayon = { workspace = true }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.6" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.6.7" }
 serde_json.workspace = true
 sha1.workspace = true
 sha2.workspace = true
