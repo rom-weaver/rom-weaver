@@ -148,9 +148,12 @@ USER root
 # hadolint ignore=DL3018
 RUN apk add --no-cache openssl
 COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
-COPY packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/local/bin/rom-weaver-docker-entrypoint
+# `--chmod` rather than a following `RUN chmod`, which would copy the script
+# into a second layer. See the sticky-bit caveat in docs/ci.md before reusing
+# this on a directory: it takes the low nine bits only, which is exactly right
+# for 0755 and lossy for anything setuid or sticky.
+COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/local/bin/rom-weaver-docker-entrypoint
 COPY --from=compressed /dist /srv
-RUN chmod 0755 /usr/local/bin/rom-weaver-docker-entrypoint
 USER sws
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
