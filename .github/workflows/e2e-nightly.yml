@@ -67,3 +67,52 @@ jobs:
             packages/rom-weaver-webapp/tests/wasm/__screenshots__/**
             test-results/**
           if-no-files-found: ignore
+
+  # The published install paths, exercised against the real latest release the
+  # way a user would. Every one of these is a channel nothing else covers: CI
+  # tests the scripts hermetically with stubbed downloads, and the release
+  # workflow tests the publish step, but neither proves the artifact a user
+  # actually receives runs. v0.6.7 shipped an npm package that could not start
+  # at all; this is the check that would have said so the next morning.
+  install-methods:
+    name: Install via ${{ matrix.method }} (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - method: install.sh
+            runner: ubuntu-24.04
+          - method: install.sh
+            runner: macos-14
+          - method: install.ps1
+            runner: windows-2025
+          - method: npm
+            runner: ubuntu-24.04
+          - method: npm
+            runner: windows-2025
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install and run
+        shell: bash
+        env:
+          ROM_WEAVER_INSTALL_DIR: ${{ github.workspace }}/install
+        run: |
+          set -euo pipefail
+          case "${{ matrix.method }}" in
+            install.sh)
+              sh install.sh
+              "$ROM_WEAVER_INSTALL_DIR/rom-weaver" --version
+              ;;
+            install.ps1)
+              pwsh -NoProfile -File install.ps1
+              "$ROM_WEAVER_INSTALL_DIR/rom-weaver.exe" --version
+              ;;
+            npm)
+              npm install --global rom-weaver
+              rom-weaver --version
+              ;;
+          esac
