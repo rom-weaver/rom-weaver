@@ -4,7 +4,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const [platform, binaryPath = resolve(repoRoot, "target/release/rom-weaver")] =
+const binaryName = process.platform === "win32" ? "rom-weaver.exe" : "rom-weaver";
+const [platform, binaryPath = resolve(repoRoot, "target/release", binaryName)] =
   process.argv.slice(2);
 
 if (!platform)

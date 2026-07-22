@@ -42,6 +42,7 @@ REPO_ROOT = SCRIPT_PATH.parent.parent
 BENCH_DEFAULTS_PATH = REPO_ROOT / "scripts" / "bench-defaults.json"
 BROWSER_WASM_RUNNER = REPO_ROOT / "scripts" / "wasm" / "run-browser-cli.mjs"
 CACHE_SCHEMA_VERSION = 1
+DEFAULT_NATIVE_BIN = Path("target/release/rom-weaver.exe" if os.name == "nt" else "target/release/rom-weaver")
 
 
 def load_benchmark_defaults() -> dict[str, Any]:
@@ -437,8 +438,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bin",
         type=Path,
-        default=Path("target/release/rom-weaver"),
-        help="Path to rom-weaver binary (default: target/release/rom-weaver)",
+        default=DEFAULT_NATIVE_BIN,
+        help=f"Path to rom-weaver binary (default: {DEFAULT_NATIVE_BIN})",
     )
     parser.add_argument(
         "--work-dir",
