@@ -108,10 +108,56 @@ jobs:
           overwrite: true
           retention-days: 7
 
-  platform:
-    name: Publish ${{ matrix.package }}
+  platform-dry-run:
+    name: Dry-run publish ${{ matrix.package }}
     needs: platform-build
     if: ${{ needs.platform-build.result == 'success' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: darwin-arm64
+            runner: macos-14
+          - package: darwin-x64
+            runner: macos-15-intel
+          - package: linux-x64-gnu
+            runner: ubuntu-24.04
+          - package: win32-x64-msvc
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - name: Download platform package
+        uses: actions/download-artifact@v8
+        with:
+          name: npm-platform-${{ matrix.package }}
+          path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm dependencies
+        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+
+      - name: Dry-run platform package publish
+        shell: bash
+        run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-cli-platforms/${{ matrix.package }}
+
+  # A matrix dependency is a barrier over every matrix entry. No registry
+  # publish starts unless all four downloaded platform artifacts passed the
+  # same publish helper in dry-run mode on their target operating systems.
+  platform:
+    name: Publish ${{ matrix.package }}
+    needs: platform-dry-run
+    if: ${{ needs.platform-dry-run.result == 'success' }}
     permissions:
       contents: write
       id-token: write
