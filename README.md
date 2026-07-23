@@ -84,13 +84,14 @@ libraries elsewhere is not supported.
 
 ### First public release
 
-v0.7.1 is the first public version available to install. The changelog and the
-git history go back further, but v0.6.0 through v0.6.7 failed partway through
-the release pipeline or were only partially published - v0.6.7 completed, but
-its npm packages shipped a binary that could not start. v0.7.1 is the first
-release with a complete set of working artifacts across npm, Homebrew, and the
-container registry. Earlier version numbers describe development history or
-incomplete releases only.
+v0.7.2 is the first public version to install. The changelog and the git
+history go back further, but v0.6.0 through v0.7.1 failed partway through the
+release pipeline or were only partially published. v0.7.1 completed most of
+the pipeline, but it still missed the crates.io CLI package, shipped a broken
+unscoped npm launcher, and built the static webapp archive with mismatched
+release metadata. v0.7.2 is the first release intended to have all public
+install methods working together. Earlier version numbers describe development
+history or incomplete releases only.
 
 ### LLM-assisted development
 
@@ -202,8 +203,8 @@ platform's binary is downloaded.
 npm install --global rom-weaver
 ```
 
-For a one-off run, or to pin the version a repository's scripts expect, use the
-scoped launcher directly:
+For a one-off run, or to add the scoped launcher for a repository's scripts,
+use the scoped package directly:
 
 ```bash
 npx @rom-weaver/cli probe --input game.iso
@@ -227,13 +228,13 @@ cargo binstall rom-weaver-cli
 <details>
 <summary>mise</summary>
 
-Useful when you want the version pinned per project in `mise.toml`. mise
-verifies the release's GitHub artifact attestations on install. Pass an explicit
-version from the [releases page](https://github.com/brandonocasey/rom-weaver/releases);
-mise cannot resolve `@latest` for this repository:
+Useful when you want the CLI managed per project in `mise.toml`. mise verifies
+the release's GitHub artifact attestations on install. The
+`minimum_release_age=0s` option lets new releases resolve immediately on release
+day; omit it if you prefer mise's default release-age delay.
 
 ```bash
-mise use github:brandonocasey/rom-weaver@0.6.7
+mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]'
 ```
 
 </details>

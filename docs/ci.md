@@ -343,6 +343,7 @@ spec would tag every platform package as a prerelease.
 | Job | Produces |
 | --- | --- |
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
+| `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
@@ -578,10 +579,11 @@ inputs change.
   linked.
 - **`cargo publish --dry-run` exits 0 when a package sets `publish = false`**,
   so that CI gate becomes a silent no-op rather than an error.
-- **The root `package-lock.json` needs hand-preserved `@rom-weaver/*` optional
-  entries.** The scope is not fully published, so a plain `npm install` strips
-  them and `npm ci` then breaks every job. A lefthook `root-lock-sync` hook
-  guards this.
+- **The root `package-lock.json` needs generated `@rom-weaver/*` optional
+  entries.** The scope is not fully published when Release Please opens a new
+  release PR, so `scripts/sync-version.mjs` writes local platform-package lock
+  entries without registry `resolved`/`integrity` fields. A lefthook
+  `root-lock-sync` hook guards this.
 - **`COPY --chmod` silently drops the sticky bit.** It takes the low nine bits
   only, so `--chmod=1777` yields `drwxrwxrwx`, not `drwxrwxrwt`. Naming a
   directory as the COPY *source* does not preserve its mode either - only its

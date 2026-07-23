@@ -93,8 +93,8 @@ your platform's binary is downloaded.
 npm install --global rom-weaver
 ```
 
-Use the scoped launcher directly for a one-off run, or as a dev dependency to
-pin the version a repository's scripts expect:
+Use the scoped launcher directly for a one-off run, or as a dev dependency for
+a repository's scripts:
 
 ```bash
 npx @rom-weaver/cli probe --input game.iso
@@ -112,12 +112,13 @@ cargo binstall rom-weaver-cli
 
 #### mise
 
-Pins the CLI per project in `mise.toml` and verifies the release's GitHub
-artifact attestations on install. Pass an explicit version - mise cannot resolve
-`@latest` for this repository.
+Manages the CLI per project in `mise.toml` and verifies the release's GitHub
+artifact attestations on install. The `minimum_release_age=0s` option lets
+new releases resolve immediately on release day; omit it if you prefer mise's
+default release-age delay.
 
 ```bash
-mise use github:brandonocasey/rom-weaver@0.6.7
+mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]'
 ```
 
 ### Source install
