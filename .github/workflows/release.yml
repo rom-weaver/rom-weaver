@@ -413,7 +413,6 @@ jobs:
       - name: Package static webapp release asset
         env:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}
-          ROM_WEAVER_COMMIT_HASH: ${{ needs.release.outputs.sha }}
         run: |
           npm --prefix packages/rom-weaver-webapp run build
           if rg --files --no-ignore packages/rom-weaver-webapp/dist | rg -q '\.(br|gz)$'; then
