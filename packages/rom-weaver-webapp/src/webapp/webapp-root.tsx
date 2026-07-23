@@ -449,4 +449,4 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   );
 }
 
-export { resolveThreads, selectViewWithTransition, WebappRoot };
+export { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot };

@@ -6,6 +6,9 @@
     "src/wasm/workers/browser-runner-worker.ts",
     "src/wasm/workers/browser-wasi-thread-worker.ts",
     "scripts/generate-e2e-corpus.mjs",
+    // Loaded by scripts/prerender.mjs through Vite's ssrLoadModule (a string,
+    // not a JS import), so knip cannot trace it.
+    "src/webapp/prerender-entry.tsx",
     // Invoked by the webapp Dockerfile; Knip does not trace Dockerfile commands.
     "scripts/compress-static-assets.mjs",
     "scripts/version.mjs",

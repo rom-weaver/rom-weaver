@@ -356,6 +356,28 @@ const writeChangelogAsset = () => {
   };
 };
 
+// Ship the landing shell's real markup inside #webapp-root so the browser can
+// paint it as soon as the stylesheet arrives, instead of a blank page until the
+// bundle executes and React mounts. Rendered from the actual components via
+// react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
+// to drift. The client keeps createRoot and replaces the shell on first mount.
+const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
+
+const prerenderWebappShell = () => ({
+  apply: "build",
+  name: "rom-weaver-prerender-shell",
+  transformIndexHtml: {
+    async handler(html) {
+      if (!html.includes(PRERENDER_MOUNT_POINT))
+        throw new Error("rom-weaver-prerender-shell: #webapp-root mount point not found in index.html");
+      const { renderLandingShell } = await import("./scripts/prerender.mjs");
+      const shell = await renderLandingShell();
+      return html.replace(PRERENDER_MOUNT_POINT, `<div id="webapp-root" aria-busy="true">${shell}</div>`);
+    },
+    order: "post",
+  },
+});
+
 // Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
 // fetched on demand via unicode-range and is wasteful to preload eagerly.
 const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
@@ -449,6 +471,7 @@ export default defineConfig(({ command }) => {
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
+      prerenderWebappShell(),
       writeWebappStaticAssets(appChannel, appChannelLabel),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),

@@ -1,6 +1,12 @@
 /* ── base ── */
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* The prerendered boot shell (aria-busy until React mounts) must paint in its
+   settled state: entry animations would hold the hero at opacity 0 while the
+   main thread is busy executing the bundle, hiding the LCP text the shell
+   exists to paint early. The remount's replay is fast-forwarded separately
+   (markWebappMounted finishes entry animations pre-paint). */
+#webapp-root[aria-busy="true"] * { animation: none !important; }
 /* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
 :root:has(.rw-app) { font-size: clamp(15px, 13px + .42vw, 17px); }
