@@ -1,0 +1,13 @@
+rom-weaver
+Copyright (C) 2026 Brandon Casey and rom-weaver contributors
+
+First-party rom-weaver code is available under either:
+
+1. GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+2. Separate commercial terms available from Brandon Casey
+
+You may use first-party rom-weaver code under the terms of either license. See
+LICENSE and COMMERCIAL_LICENSE.md.
+
+Bundled third-party components remain subject to their own licenses. Release
+artifacts include the applicable third-party attribution and license inventory.

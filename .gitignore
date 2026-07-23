@@ -18,9 +18,8 @@
 # Generated wasm artifacts
 /dist/wasm/
 /packages/rom-weaver-cli-platforms/*/bin/
-/packages/rom-weaver-cli-platforms/*/LICENSE.md
+/packages/rom-weaver-cli-platforms/*/LICENSE
 /packages/rom-weaver-cli-platforms/*/NOTICE
-/packages/rom-weaver-cli-platforms/*/THIRD_PARTY_LICENSES.md
 /packages/rom-weaver-cli-platforms/*/third_party/
 
 # Coverage reports

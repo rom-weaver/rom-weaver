@@ -28,9 +28,8 @@
   },
   "files": [
     "bin/rom-weaver.exe",
-    "LICENSE.md",
+    "LICENSE",
     "NOTICE",
-    "THIRD_PARTY_LICENSES.md",
     "third_party/licenses/**"
   ],
   "publishConfig": {

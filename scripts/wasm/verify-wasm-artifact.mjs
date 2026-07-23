@@ -12,7 +12,7 @@ import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const EXPECTED_MAX_PAGES = 65536; // 4 GiB / 64 KiB
-const BASE_REQUIRED_FILES = ["rom-weaver-app.wasm", "NOTICE", "THIRD_PARTY_LICENSES.md"];
+const BASE_REQUIRED_FILES = ["rom-weaver-app.wasm", "NOTICE"];
 const REQUIRED_DIRS = ["third_party/licenses"];
 
 const EXTERNAL_KIND = { func: 0, table: 1, memory: 2, global: 3 };

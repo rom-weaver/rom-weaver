@@ -6,7 +6,7 @@ import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options
 import { ACCENTS } from "./accent.ts";
 import { RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
-import { LICENSE_URL, NOTICE_URL, THIRD_PARTY_LICENSES_URL } from "./project-links.ts";
+import { LICENSE_URL, NOTICE_URL } from "./project-links.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
   getDefaultThreads,
@@ -401,14 +401,9 @@ const AboutSection = () => (
       .
     </div>
     <div className="about-line">
-      Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the
-      generated{" "}
+      Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the{" "}
       <a href={NOTICE_URL} rel="noreferrer" target="_blank">
-        attribution notice
-      </a>{" "}
-      and{" "}
-      <a href={THIRD_PARTY_LICENSES_URL} rel="noreferrer" target="_blank">
-        license inventory
+        attribution and license inventory
       </a>
       .
     </div>

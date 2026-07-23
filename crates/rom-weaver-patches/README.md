@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://crates.io/crates/rom-weaver-patches"><img alt="crates.io" src="https://img.shields.io/crates/v/rom-weaver-patches?color=d9690f"></a>
   <a href="https://docs.rs/rom-weaver-patches"><img alt="docs.rs" src="https://img.shields.io/docsrs/rom-weaver-patches?color=4a6d63"></a>
-  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
+  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
 > **Beta software, published so the CLI can be.** This crate exists to build
@@ -72,5 +72,5 @@ yourself.
 ## License
 
 Copyright (C) Brandon Casey. Licensed under
-[AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE.md).
+[AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
 Bundled third-party components retain their own licenses.

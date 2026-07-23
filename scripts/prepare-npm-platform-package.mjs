@@ -20,7 +20,7 @@ if (!binary) throw new Error(`${manifest.name} does not declare a binary`);
 const binaryTarget = resolve(packageRoot, binary);
 mkdirSync(dirname(binaryTarget), { recursive: true });
 copyFileSync(binaryPath, binaryTarget);
-copyFileSync(resolve(repoRoot, "LICENSE.md"), resolve(packageRoot, "LICENSE.md"));
+copyFileSync(resolve(repoRoot, "LICENSE"), resolve(packageRoot, "LICENSE"));
 execFileSync(
   process.execPath,
   [resolve(repoRoot, "scripts/gen-third-party-licenses.mjs"), packageRoot],

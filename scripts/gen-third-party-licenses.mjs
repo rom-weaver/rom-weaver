@@ -31,7 +31,6 @@ if (!outputDirInput) {
 
 const OUTPUT_DIR = path.resolve(process.cwd(), outputDirInput);
 const NOTICE_FILE = path.join(OUTPUT_DIR, "NOTICE");
-const INVENTORY_FILE = path.join(OUTPUT_DIR, "THIRD_PARTY_LICENSES.md");
 const LICENSES_DIR = path.join(OUTPUT_DIR, "third_party", "licenses");
 
 /**
@@ -172,51 +171,27 @@ function removeDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-/** Build the Markdown inventory document. */
-function renderInventory(rows) {
-  const lines = [];
-  lines.push("# Third-Party Licenses");
+/** Build one notice containing the project terms and third-party inventory. */
+function renderNotice(rows) {
+  const lines = [fs.readFileSync(path.join(REPO_ROOT, "NOTICE"), "utf8").trimEnd()];
   lines.push("");
-  lines.push("This file is generated during the build from the resolved Cargo");
-  lines.push("dependency graph. It is not maintained as a source file.");
-  lines.push("Only dependencies whose declared SPDX expression includes a license that");
-  lines.push("requires retaining attribution or license notices are listed.");
+  lines.push("Third-party components");
+  lines.push("");
+  lines.push("This build includes the following third-party Rust crates whose declared");
+  lines.push("licenses require retaining attribution or license notices.");
   lines.push("Public-domain and no-attribution-only expressions are omitted.");
   lines.push("");
-  lines.push("License texts live under `third_party/licenses/<name>-<version>/`.");
+  lines.push("License texts or SPDX metadata are stored under");
+  lines.push("third_party/licenses/<name>-<version>/.");
   lines.push("");
-  lines.push("## Inventory");
-  lines.push("");
-  lines.push("| Crate | Version | License Expression | Source |");
-  lines.push("|---|---|---|---|");
+  lines.push("Crate | Version | License expression | Source");
+  lines.push("----- | ------- | ------------------ | ------");
   for (const row of rows) {
     const license = row.license ?? "UNKNOWN";
-    lines.push(`| \`${row.name}\` | \`${row.version}\` | \`${license}\` | \`${row.source}\` |`);
+    lines.push(`${row.name} | ${row.version} | ${license} | ${row.source}`);
   }
   lines.push("");
-  lines.push("## Notes");
-  lines.push("");
-  lines.push("- First-party workspace crates are excluded. Vendored third-party");
-  lines.push("  forks published under `rom-weaver-*` names are included.");
-  lines.push("- The License Expression column is the SPDX expression declared in each");
-  lines.push("  crate's `Cargo.toml`.");
-  lines.push("- Some crates do not ship a flat license text file with their published");
-  lines.push("  source; those rows include a generated SPDX metadata notice instead.");
-  lines.push("");
   return lines.join("\n");
-}
-
-function renderNotice() {
-  return [
-    "rom-weaver Third-Party Attribution",
-    "",
-    "This build includes third-party Rust crates whose declared licenses",
-    "require retaining attribution or license notices.",
-    "",
-    "See THIRD_PARTY_LICENSES.md for the inventory and",
-    "third_party/licenses/ for the corresponding license texts or SPDX metadata.",
-    "",
-  ].join("\n");
 }
 
 function main() {
@@ -314,8 +289,8 @@ function main() {
   }
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  fs.writeFileSync(NOTICE_FILE, renderNotice());
-  fs.writeFileSync(INVENTORY_FILE, renderInventory(rows));
+  fs.writeFileSync(NOTICE_FILE, renderNotice(rows));
+  fs.rmSync(path.join(OUTPUT_DIR, "THIRD_PARTY_LICENSES.md"), { force: true });
 
   pruned.sort();
   missingLicense.sort();

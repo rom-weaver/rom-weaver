@@ -15,7 +15,7 @@
   <a href="https://github.com/rom-weaver/rom-weaver/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/rom-weaver/rom-weaver/ci.yml?branch=main&amp;logo=githubactions&amp;logoColor=white&amp;label=CI&amp;color=4a6d63"></a>
   <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-4a6d63?logo=nodedotjs&logoColor=white"></a>
   <a href=".mise.toml"><img alt="Rust 1.95" src="https://img.shields.io/badge/Rust-1.95-2c323b?logo=rust&logoColor=white"></a>
-  <a href="LICENSE.md"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
+  <a href="LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
 <p align="center">
@@ -341,7 +341,7 @@ integration, development, architecture, and format-reference guides.
 ## Contributing and support
 
 Bug reports and contributions are welcome. Read the
-[contribution guide](.github/CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
+[contribution guide](CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
 before submitting a change, and report
 suspected vulnerabilities through GitHub's private reporting form in the
 [security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
@@ -349,10 +349,12 @@ support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
 
 ## License
 
-Copyright (C) Brandon Casey
+Copyright (C) Brandon Casey and rom-weaver contributors
 
-See [LICENSE.md](LICENSE.md) for the license terms. Bundled third-party
-components retain their own licenses. Release builds include a generated
-[attribution notice](https://rom-weaver.com/NOTICE),
-[third-party license inventory](https://rom-weaver.com/THIRD_PARTY_LICENSES.md),
-and corresponding license texts.
+The public distribution is licensed under
+[AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL_LICENSE.md) is
+also available for first-party rom-weaver code. Bundled third-party components
+retain their own licenses. Release builds include a generated
+[attribution and license inventory](https://rom-weaver.com/NOTICE) and
+corresponding license texts. Those third-party terms continue to apply under
+every rom-weaver licensing option.

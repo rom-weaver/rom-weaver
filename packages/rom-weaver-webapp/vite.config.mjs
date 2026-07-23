@@ -39,7 +39,6 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
 });
 const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
-  "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
 };
 // SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
 // document and COEP on every dedicated-worker script, so these apply to every response. Also the
@@ -108,7 +107,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
-  else if (requestPath.endsWith(".md") || requestPath.endsWith("/NOTICE")) {
+  else if (requestPath.endsWith("/NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }
 };

@@ -368,5 +368,5 @@ jobs:
 
       - name: Publish alias package
         run: |
-          cp LICENSE.md packages/rom-weaver-alias/LICENSE.md
+          cp LICENSE packages/rom-weaver-alias/LICENSE
           node scripts/ci/npm-publish-package.mjs packages/rom-weaver-alias
