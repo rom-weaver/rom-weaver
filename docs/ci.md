@@ -41,7 +41,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
 | `e2e-nightly.yml` | manual | No | Exhaustive Chromium E2E matrix |
-| `cache-cleanup.yml` | daily 09:00 UTC, manual | No | Reap closed-PR Actions caches |
+| `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
@@ -483,9 +483,14 @@ evicting the `main` caches every cold run depends on).
 
 1. `save-if: github.ref == 'refs/heads/main'` on the cargo cache, so branch
    runs restore but never write.
-2. `cache-cleanup.yml` deletes caches belonging to closed and merged pull
-   requests daily, and warns in the job summary if usage is still above 9 GiB
-   afterwards.
+2. `cache-cleanup.yml` runs every six hours and deletes two kinds of dead
+   weight: caches belonging to closed and merged pull requests, and superseded
+   generations - entries whose key family (the key minus its trailing content
+   hashes) has a newer save in the same ref scope, which restores prefix-match
+   past but that still occupy hundreds of megabytes each. `wasm-prod` is
+   exempt from generation pruning: it restores by exact fingerprint key, so an
+   older ~4 MB entry is still what a branch based on older `main` asks for.
+   The job warns in its summary if usage is still above 9 GiB afterwards.
 3. `parity.yml` caches only its release CLI binary, keyed without restore
    prefixes over the Rust/C source and toolchain inputs, and saves only on
    `main`. The nightly check still installs and runs the current external tools.
