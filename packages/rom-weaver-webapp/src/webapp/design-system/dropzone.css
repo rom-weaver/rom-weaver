@@ -56,9 +56,12 @@
 .rw-app .drop.hero.dragging .main.bead { --bead-scale: 1.07; --bead-halo: .9; --bead-rim: 70%; }
 @media (prefers-reduced-motion: reduce) {
   /* Keep the arming color cues, drop the movement. */
-  .rw-app .drop.hero .main.bead, .rw-app .drop.hero:hover .main.bead,
+  .rw-app .drop.hero .main.bead,
   .rw-app .drop.hero:focus-within .main.bead, .rw-app .drop.hero:active .main.bead,
   .rw-app .drop.hero.dragging .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
+  @media (hover: hover) {
+    .rw-app .drop.hero:hover .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
+  }
 }
 .rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
 .rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }

@@ -84,7 +84,9 @@ const collect = (src, file, out, gated = false, lineOffset = 0) => {
       if (depth === 0) {
         const prelude = src.slice(preludeStart, blockStart);
         const body = src.slice(blockStart + 1, index);
-        const line = lineOffset + src.slice(0, blockStart).split("\n").length;
+        // Report the first selector line, not the `{`, so multi-line lists point at themselves.
+        const leading = prelude.match(/^(?:\s|\/\*[\s\S]*?\*\/)*/)[0];
+        const line = lineOffset + src.slice(0, preludeStart + leading.length).split("\n").length;
         const trimmed = normalize(prelude);
         if (trimmed.startsWith("@")) {
           const isHoverQuery = /^@media\s*\(\s*hover\s*:\s*hover\s*\)/.test(trimmed);
