@@ -283,6 +283,22 @@ scripts must carry on a cross-origin-isolated page. Plain builds skip all of
 this - the release tarball asserts `dist` contains no compression sidecars
 (the Docker image generates its own for `static-web-server`).
 
+Cost model: only the 8 sidecar-backed URLs invoke the function - one cold
+load costs 8 invocations against the Workers free tier's 100,000/day
+(~12,500 cold loads/day); repeat visits are covered by the immutable
+browser/service-worker cache. Nothing sits in front of Pages Functions on
+`pages.dev`, and a `caches.default` lookup inside the function would not
+help - the invocation is counted whether or not it hits cache. If traffic
+ever approaches the ceiling, the escape hatch is a zone-level Cache Rule on
+the custom domains (eligible for cache on `/assets/*`): the zone proxies to
+Pages, so the edge then caches function responses and the function runs
+roughly once per URL per PoP. Safe because every routed URL is
+content-hashed and immutable, but it is dashboard state outside this repo
+and does not cover `pages.dev` previews, so it is deliberately not
+provisioned today. Past the free tier, the next step is the flat $5/month
+Workers Paid plan; on free, excess requests degrade gracefully to static
+serving (Cloudflare's own recompression) for the rest of the day.
+
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel
 below it**. Otherwise a quiet stretch on `main` would leave beta and nightly
