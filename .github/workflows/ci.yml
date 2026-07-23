@@ -749,6 +749,9 @@ jobs:
       - name: Build script tests
         run: npm test
 
+      - name: Lint @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run lint
+
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
 
