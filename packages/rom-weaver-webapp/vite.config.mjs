@@ -159,6 +159,13 @@ const copyFile = (from, to) => {
 };
 
 const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
+const CHANNEL_DEFAULT_ACCENTS = {
+  beta: "woad",
+  dev: "madder",
+  nightly: "verdigris",
+  preview: "plum",
+  prod: "madder",
+};
 
 // An unset channel is a plain production build: the Docker image, the
 // `rom-weaver-webapp.tar.gz` release asset, and anyone self-hosting from a
@@ -229,8 +236,10 @@ const stampChannelIdentity = (channel, channelLabel) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html) {
-      if (channel === "prod") return html;
-      return html
+      const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
+      const stampedHtml = accent === "madder" ? html : html.replace("<html ", `<html data-accent="${accent}" `);
+      if (channel === "prod") return stampedHtml;
+      return stampedHtml
         .replace("<title>RomWeaver", `<title>RomWeaver ${channelLabel}`)
         .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
         .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${channelLabel}$3`);
@@ -239,7 +248,9 @@ const stampChannelIdentity = (channel, channelLabel) => ({
   },
 });
 
-const writeWebappStaticAssets = (channel, channelLabel) => {
+const PRERENDER_ROOT = (shell) => `<div id="webapp-root" aria-busy="true">${shell}</div>`;
+
+const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells) => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -259,7 +270,11 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
         copyFile(sourcePath, path.join(distDir, assetPath));
       }
       const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
-      const createHtml = createWorkflowRouteHtml(indexHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel);
+      const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
+      if (!indexHtml.includes(patcherRoot))
+        throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
+      const creatorHtml = indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator")));
+      const createHtml = createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel);
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       for (const [slug, html] of [
         ["apply", indexHtml],
@@ -367,6 +382,31 @@ const writeChangelogAsset = () => {
   };
 };
 
+// Ship the landing shell's real markup inside #webapp-root so the browser can
+// paint it as soon as the stylesheet arrives, instead of a blank page until the
+// bundle executes and React mounts. Rendered from the actual components via
+// react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
+// to drift. The client keeps createRoot and replaces the shell on first mount.
+const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
+
+const prerenderWebappShell = (prerenderedShells) => ({
+  apply: "build",
+  name: "rom-weaver-prerender-shell",
+  transformIndexHtml: {
+    async handler(html) {
+      if (!html.includes(PRERENDER_MOUNT_POINT))
+        throw new Error("rom-weaver-prerender-shell: #webapp-root mount point not found in index.html");
+      const { renderLandingShell } = await import("./scripts/prerender.mjs");
+      const patcherShell = await renderLandingShell("patcher");
+      const creatorShell = await renderLandingShell("creator");
+      prerenderedShells.set("patcher", patcherShell);
+      prerenderedShells.set("creator", creatorShell);
+      return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
+    },
+    order: "post",
+  },
+});
+
 // Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
 // fetched on demand via unicode-range and is wasteful to preload eagerly.
 const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
@@ -412,6 +452,7 @@ export default defineConfig(({ command }) => {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
   };
+  const prerenderedShells = new Map();
 
   return {
     assetsInclude: ["**/*.wasm"],
@@ -460,7 +501,8 @@ export default defineConfig(({ command }) => {
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
-      writeWebappStaticAssets(appChannel, appChannelLabel),
+      prerenderWebappShell(prerenderedShells),
+      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
       VitePWA({

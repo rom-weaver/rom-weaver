@@ -6,7 +6,7 @@
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
   --shuttle: #f6ead0;
-  --font: "Archivo", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
+  --font: "Archivo", "Archivo Fallback", "Segoe UI", system-ui, sans-serif;
   --ctl: 40px;
   /* Fluid rhythm reaches its mobile floor near 560px and desktop cap near 860px. */
   --ctrl-h: clamp(24px, 12px + 2.15vw, 30px); /* WCAG 2.5.8 control floor */

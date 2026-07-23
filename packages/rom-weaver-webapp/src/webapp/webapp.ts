@@ -21,7 +21,7 @@ import {
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "./webapp-controller.ts";
-import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
+import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
@@ -170,10 +170,61 @@ logger.info("Browser environment", collectBrowserInfo());
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
+// Whether index.html shipped the prerendered boot shell (rom-weaver-prerender-shell)
+// inside #webapp-root; recorded before createRoot wipes it on the first render.
+let hadPrerenderedShell = false;
+// Clocks of the shell's infinite ambient animations (format-pill ticker, weave
+// drift), captured just before the first render replaces their nodes so the
+// remounted copies can continue in phase instead of visibly snapping to zero.
+let shellAnimationPhases: Map<string, number[]> | null = null;
+
+const isInfiniteCssAnimation = (animation: Animation): animation is CSSAnimation =>
+  animation instanceof CSSAnimation && animation.effect?.getTiming().iterations === Infinity;
+
+const captureShellAnimationPhases = (appRootElement: HTMLElement) => {
+  const phases = new Map<string, number[]>();
+  for (const animation of appRootElement.getAnimations({ subtree: true })) {
+    if (!isInfiniteCssAnimation(animation) || typeof animation.currentTime !== "number") continue;
+    const clocks = phases.get(animation.animationName) || [];
+    clocks.push(animation.currentTime);
+    phases.set(animation.animationName, clocks);
+  }
+  shellAnimationPhases = phases.size > 0 ? phases : null;
+};
 
 const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
-  if (appRootElement) appRootElement.removeAttribute("aria-busy");
+  if (!appRootElement) return;
+  const firstMount = appRootElement.hasAttribute("aria-busy");
+  appRootElement.removeAttribute("aria-busy");
+  if (!(firstMount && hadPrerenderedShell)) return;
+  // The first mount replaced the prerendered shell with identical markup, which
+  // restarts every CSS animation on it. Settle them before this frame paints:
+  // force the style recalc that creates the animations (the flushSync render
+  // finished, but styles have not been computed yet), then jump each entry
+  // animation to its finished (natural) state - the shell already played the
+  // entrance - and hand each infinite ambient animation its captured clock.
+  const phases = shellAnimationPhases;
+  shellAnimationPhases = null;
+  void appRootElement.offsetWidth;
+  for (const animation of appRootElement.getAnimations({ subtree: true })) {
+    if (!(animation instanceof CSSAnimation)) continue;
+    try {
+      if (ENTRY_ANIMATIONS.has(animation.animationName)) {
+        animation.finish();
+        continue;
+      }
+      if (isInfiniteCssAnimation(animation)) {
+        const clock = phases?.get(animation.animationName)?.shift();
+        if (typeof clock === "number") animation.currentTime = clock;
+      }
+    } catch (error) {
+      logger.trace("Unable to settle animation across the first mount", {
+        animationName: animation.animationName,
+        message: error instanceof Error ? error.message : String(error || ""),
+      });
+    }
+  }
 };
 
 const patcherSessionHasFormChanges = (session: ReturnType<typeof webappController.getState>["patcherSession"]) =>
@@ -253,13 +304,37 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
+// The prerendered shell baked into index.html (rom-weaver-prerender-shell) can
+// only paint if the browser gets a rendering opportunity before the first
+// flushSync mount replaces it - the bundle otherwise runs straight from parse
+// into React render with no paint in between. One rAF + macrotask yield
+// guarantees that paint; renders requested while waiting coalesce into the
+// deferred first mount, and everything after it stays synchronous.
+let firstMountYield: "pending" | "scheduled" | "done" = "pending";
+
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
   if (serviceWorkerBootGate.isGated()) return undefined;
+  if (firstMountYield !== "done") {
+    if (firstMountYield === "pending") {
+      firstMountYield = "scheduled";
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          firstMountYield = "done";
+          renderWebappRoot();
+        }, 0);
+      });
+    }
+    return undefined;
+  }
   if (!appRoot) {
     const appRootElement = document.getElementById("webapp-root");
-    if (appRootElement) appRoot = createRoot(appRootElement);
+    if (appRootElement) {
+      hadPrerenderedShell = appRootElement.childElementCount > 0;
+      if (hadPrerenderedShell) captureShellAnimationPhases(appRootElement);
+      appRoot = createRoot(appRootElement);
+    }
   }
   const root = appRoot;
   if (!root) return undefined;

@@ -24,7 +24,7 @@ body{
 	/* follow the active loom theme (which defaults to the OS preference) */
 	background-color:var(--chassis, var(--rom-weaver-color-background));
 	color:var(--ink, var(--rom-weaver-color-text));
-	font:500 14.5px/1.5 "Archivo", "Inter Tight Fallback", "Segoe UI", system-ui, sans-serif;
+	font:500 14.5px/1.5 "Archivo", "Archivo Fallback", "Segoe UI", system-ui, sans-serif;
 	letter-spacing:0;
 	font-stretch:94%;
 	cursor:default;
