@@ -9,7 +9,6 @@ Participation in this project is governed by the
 
 - [Report a problem](#report-a-problem)
 - [Propose a change](#propose-a-change)
-- [Developer Certificate of Origin](#developer-certificate-of-origin)
 - [Contributor License Agreement](#contributor-license-agreement)
 
 <!-- END doctoc -->
@@ -50,19 +49,6 @@ possible, the complete local gate:
 ```bash
 mise run ci
 ```
-
-## Developer Certificate of Origin
-
-Every commit must be signed off under the
-[Developer Certificate of Origin 1.1](https://developercertificate.org/). Add
-the required `Signed-off-by` trailer with:
-
-```bash
-git commit --signoff
-```
-
-By signing off a commit, you certify that you have the right to submit it under
-the project's licenses and agree to the DCO for that contribution.
 
 ## Contributor License Agreement
 
