@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
+import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
@@ -338,13 +339,19 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Deploy-only (ROM_WEAVER_PAGES_WASM_BROTLI=1): stage the prebuilt quality-11
-// brotli sidecar next to the hashed wasm asset and write a _routes.json that
-// scopes Pages Function invocation (functions/assets/[name].js) to that one
-// URL. Off in plain builds on purpose: the release tarball asserts dist holds
-// no compression sidecars (the Docker image generates its own), and without
-// the _routes.json scope every request would invoke the function.
-const writePagesWasmBrotliSidecar = () => {
+// Deploy-only (ROM_WEAVER_PAGES_WASM_BROTLI=1): stage quality-11 brotli
+// sidecars where q11 measurably beats Cloudflare's on-the-fly recompression
+// (~640 KB on the wasm, ~50 KB on the main JS bundle, single-digit KB on CSS
+// and worker scripts), and write a _routes.json scoping Pages Function
+// invocation (functions/assets/[name].js) to exactly the sidecar-backed URLs.
+// The wasm sidecar is the prebuilt artifact, byte-verified against the emitted
+// asset; JS/CSS are compressed here. Off in plain builds on purpose: the
+// release tarball asserts dist holds no compression sidecars (the Docker image
+// generates its own), and unmatched routes must stay on Pages' unmetered
+// static path.
+const PAGES_BROTLI_TEXT_ASSETS = /\.(js|mjs|css)$/;
+
+const writePagesBrotliSidecars = () => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -368,15 +375,22 @@ const writePagesWasmBrotliSidecar = () => {
         throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
       }
       fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
+      const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      for (const name of fs.readdirSync(assetsDir)) {
+        if (!PAGES_BROTLI_TEXT_ASSETS.test(name)) continue;
+        const assetPath = path.join(assetsDir, name);
+        brotliCompressFile({ inputPath: assetPath, outputPath: `${assetPath}.br`, quality: 11 });
+        sidecarUrls.push(`/assets/${name}`);
+      }
       fs.writeFileSync(
         path.join(distDir, "_routes.json"),
-        `${JSON.stringify({ version: 1, include: [`/assets/${wasmNames[0]}`], exclude: [] }, null, 2)}\n`,
+        `${JSON.stringify({ version: 1, include: sidecarUrls.sort(), exclude: [] }, null, 2)}\n`,
       );
     },
     configResolved(config) {
       outDir = config.build.outDir;
     },
-    name: "rom-weaver-pages-wasm-brotli-sidecar",
+    name: "rom-weaver-pages-brotli-sidecars",
   };
 };
 
@@ -547,7 +561,7 @@ export default defineConfig(({ command }) => {
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
-      writePagesWasmBrotliSidecar(),
+      writePagesBrotliSidecars(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,
