@@ -101,6 +101,11 @@ debugging, and review. I make the engineering decisions and review and test
 the resulting work myself; the goal is high-quality, dependable software, but
 AI-assisted code may still need extra scrutiny.
 
+### Translations
+
+Localized translations are early and may be entirely wrong in places. Manual
+edits and corrections are welcome.
+
 ## Install
 
 ### Webapp
