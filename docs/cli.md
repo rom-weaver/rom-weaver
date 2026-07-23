@@ -117,7 +117,7 @@ artifact attestations on install. Pass an explicit version - mise cannot resolve
 `@latest` for this repository.
 
 ```bash
-mise use github:brandonocasey/rom-weaver@0.6.7
+mise use github:brandonocasey/rom-weaver@0.7.2
 ```
 
 ### Source install

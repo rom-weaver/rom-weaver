@@ -84,13 +84,14 @@ libraries elsewhere is not supported.
 
 ### First public release
 
-v0.7.1 is the first public version available to install. The changelog and the
-git history go back further, but v0.6.0 through v0.6.7 failed partway through
-the release pipeline or were only partially published - v0.6.7 completed, but
-its npm packages shipped a binary that could not start. v0.7.1 is the first
-release with a complete set of working artifacts across npm, Homebrew, and the
-container registry. Earlier version numbers describe development history or
-incomplete releases only.
+v0.7.2 is the first public version to install. The changelog and the git
+history go back further, but v0.6.0 through v0.7.1 failed partway through the
+release pipeline or were only partially published. v0.7.1 completed most of
+the pipeline, but it still missed the crates.io CLI package, shipped a broken
+unscoped npm launcher, and built the static webapp archive with mismatched
+release metadata. v0.7.2 is the first release intended to have all public
+install methods working together. Earlier version numbers describe development
+history or incomplete releases only.
 
 ### LLM-assisted development
 
@@ -233,7 +234,7 @@ version from the [releases page](https://github.com/brandonocasey/rom-weaver/rel
 mise cannot resolve `@latest` for this repository:
 
 ```bash
-mise use github:brandonocasey/rom-weaver@0.6.7
+mise use github:brandonocasey/rom-weaver@0.7.2
 ```
 
 </details>
