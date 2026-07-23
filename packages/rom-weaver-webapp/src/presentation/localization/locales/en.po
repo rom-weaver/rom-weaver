@@ -76,7 +76,7 @@ msgstr "Apply"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Apply patches to any ROM or a sharable patch bundle,"
+msgstr "Apply patches to any ROM or create a sharable patch apply bundle,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

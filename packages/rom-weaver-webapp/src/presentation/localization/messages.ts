@@ -99,7 +99,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.local",
     message: "All local, in your browser — files never leave your machine.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply patches to any ROM or a sharable patch bundle," }),
+  "ui.hero.thesis": msg({
+    id: "ui.hero.thesis",
+    message: "Apply patches to any ROM or create a sharable patch apply bundle,",
+  }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and compress the result —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
