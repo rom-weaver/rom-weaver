@@ -292,6 +292,13 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
+      # Full debuginfo is the bulk of a dev-profile target/, which is what this
+      # job's rust-cache entry stores against the shared 10 GiB budget. Line
+      # tables keep file:line in test backtraces while dropping the rest; the
+      # Windows leg has run this way from the start (see its env for the
+      # original reasoning). Applies to the test profile via dev-profile
+      # inheritance; local builds are untouched.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -559,6 +566,9 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
+      # Same trade as rust-host above: test backtraces keep file:line while
+      # the cache entry and compile shed the bulk of the debuginfo.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7

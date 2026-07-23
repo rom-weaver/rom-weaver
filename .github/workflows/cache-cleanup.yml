@@ -1,13 +1,24 @@
 name: Cache cleanup
 
 # GitHub gives a repository 10 GiB of Actions cache and evicts least-recently-
-# used entries once that fills. A closed pull request's caches can never be
-# read again - cache scopes are branch-local, so nothing outside that ref may
-# restore them - yet they keep occupying the budget until eviction reaches
-# them. Left alone they push out the main-branch caches that every cold run
-# actually depends on: six closed dependabot PRs had 5.1 GB parked this way,
-# putting the repository 7% over the cap with the 4 MB wasm-prod entry (worth
-# ~6.5 min a run) competing against 450 MB Rust caches for what was left.
+# used entries once that fills. Two kinds of dead weight fill it:
+#
+# A closed pull request's caches can never be read again - cache scopes are
+# branch-local, so nothing outside that ref may restore them - yet they keep
+# occupying the budget until eviction reaches them. Left alone they push out
+# the main-branch caches that every cold run actually depends on: six closed
+# dependabot PRs had 5.1 GB parked this way, putting the repository 7% over
+# the cap with the 4 MB wasm-prod entry (worth ~6.5 min a run) competing
+# against 450 MB Rust caches for what was left.
+#
+# Superseded generations of the keyed caches. rust-cache and the other keyed
+# caches append content hashes (Cargo.lock, env, commit) to their keys, so
+# every hash bump strands the previous generation: restores prefix-match to
+# the newest entry, which makes an older sibling unreachable in practice while
+# it still occupies the budget. After the CLI platform matrix landed, one full
+# main generation is ~6.5 GB - two generations exceed the cap by themselves,
+# and the resulting LRU eviction shows up only as unexplained 15-minute cold
+# Windows builds.
 #
 # Deliberately scheduled rather than triggered by `pull_request: closed`.
 # Workflows triggered by Dependabot or by a fork receive a read-only
@@ -17,9 +28,10 @@ name: Cache cleanup
 # would have covered.
 on:
   schedule:
-    # Daily, off-peak. Nothing here is urgent; it only has to outpace the rate
-    # pull requests are closed at.
-    - cron: "0 9 * * *"
+    # Every six hours: a single Cargo.lock bump on main writes a whole new
+    # cache generation (~6.5 GB), so a daily sweep left the repository at the
+    # cap - and silently evicting live caches - for most of a working day.
+    - cron: "0 3,9,15,21 * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -30,7 +42,7 @@ concurrency:
 
 jobs:
   cleanup:
-    name: Reap closed-PR caches
+    name: Reap stale caches
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -98,6 +110,61 @@ jobs:
             echo "| limit | 10240 |"
             echo ""
             echo "Deleted **${deleted}** cache entries belonging to closed pull requests."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The second kind of garbage from the header comment: entries whose key
+      # family has a newer generation in the same ref scope. The family is the
+      # key with its trailing hex hash segments stripped, so
+      # v0-rust-rust-host-Linux-x64-9a8bd51e-3ba8bfda and ...-9a8bd51e-b78a21c6
+      # are two generations of one family; a key with no hash suffix
+      # (playwright-Linux-1.61.1-chromium) is a family of one and never deleted
+      # here. Grouping includes the ref, so an open pull request's own caches
+      # are only ever measured against that same pull request's newer saves.
+      #
+      # wasm-prod is exempt: it restores by exact fingerprint key, so an older
+      # generation is still precisely what a branch based on an older main
+      # commit will ask for, it is worth ~6.5 min per hit, and at ~4 MB it
+      # costs the budget nothing. Every other family either prefix-restores
+      # (rust-cache, codeql-trap) or rebuilds in about a minute (node-modules),
+      # while the stranded generations run to hundreds of megabytes each.
+      - name: Delete superseded cache generations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          deleted=0
+          freed=0
+
+          while IFS=$'\t' read -r id key size; do
+            if gh cache delete "$id" >/dev/null 2>&1; then
+              deleted=$((deleted + 1))
+              freed=$((freed + size))
+              echo "deleted superseded cache $key ($((size / 1048576)) MB)"
+            else
+              echo "::warning::failed to delete cache $id ($key)"
+            fi
+          done < <(gh cache list --limit 100 --json id,key,ref,sizeInBytes,createdAt \
+            --jq 'map(. + {family: (.key | sub("(-[0-9a-f]{8,64})+$"; ""))})
+              | map(select(.key | startswith("wasm-prod-") | not))
+              | group_by([.ref, .family])[]
+              | sort_by(.createdAt) | .[:-1][]
+              | [.id, .key, .sizeInBytes] | @tsv')
+
+          after=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
+            --jq .active_caches_size_in_bytes)
+
+          {
+            echo "### Superseded cache generations"
+            echo ""
+            echo "| | MB |"
+            echo "|---|---|"
+            echo "| reclaimed | $((freed / 1048576)) |"
+            echo "| after | $((after / 1048576)) |"
+            echo "| limit | 10240 |"
+            echo ""
+            echo "Deleted **${deleted}** cache entries superseded by a newer generation."
           } >> "$GITHUB_STEP_SUMMARY"
 
           # A repository sitting at the cap is evicting caches it still needs,
