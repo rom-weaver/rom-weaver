@@ -266,6 +266,18 @@ cross-origin isolation headers required by threaded WASM. Content-hashed
 `cache-service-worker.js` uses `no-cache` so a deployment is discovered
 promptly. Non-production channels add their `X-Robots-Tag` in the same file.
 
+Pages has no precompressed-sibling convention and recompresses `.wasm` on the
+fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
+per cold load). Deploy builds therefore set `ROM_WEAVER_PAGES_WASM_BROTLI=1`,
+which stages the prebuilt `.wasm.br` sidecar next to the hashed wasm asset and
+writes a `_routes.json` routing exactly that URL through the Pages Function in
+`packages/rom-weaver-webapp/functions/assets/[name].js`. The function serves
+the sidecar bytes with `Content-Encoding: br` (`encodeBody: "manual"`) to
+br-capable clients and falls through to static serving otherwise; every other
+request stays on the unmetered static path. Plain builds skip all of this -
+the release tarball asserts `dist` contains no compression sidecars (the
+Docker image generates its own for `static-web-server`).
+
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel
 below it**. Otherwise a quiet stretch on `main` would leave beta and nightly

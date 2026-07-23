@@ -1042,6 +1042,10 @@ jobs:
         env:
           ROM_WEAVER_CHANNEL: ${{ matrix.target.channel }}
           ROM_WEAVER_CHANNEL_LABEL: ${{ matrix.target.label }}
+          # Stage the q11 wasm brotli sidecar + _routes.json so the Pages
+          # Function (functions/assets/[name].js) serves our bytes instead of
+          # Cloudflare's on-the-fly recompression (~640 KB worse).
+          ROM_WEAVER_PAGES_WASM_BROTLI: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Idempotent, so the first run on a channel bootstraps its own project and
@@ -1082,7 +1086,11 @@ jobs:
           BRANCH: ${{ matrix.target.branch }}
         run: |
           set -o pipefail
-          npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
+          # Run from the webapp directory: wrangler resolves the Pages
+          # `functions/` directory relative to the cwd, and the wasm-brotli
+          # function must ship with every channel.
+          cd packages/rom-weaver-webapp
+          npx --yes wrangler@4 pages deploy dist \
             --project-name="$PROJECT" \
             --branch="$BRANCH" \
             --commit-hash="${GITHUB_SHA}" 2>&1 | tee /tmp/deploy.log

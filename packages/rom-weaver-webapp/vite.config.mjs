@@ -338,6 +338,48 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
+// Deploy-only (ROM_WEAVER_PAGES_WASM_BROTLI=1): stage the prebuilt quality-11
+// brotli sidecar next to the hashed wasm asset and write a _routes.json that
+// scopes Pages Function invocation (functions/assets/[name].js) to that one
+// URL. Off in plain builds on purpose: the release tarball asserts dist holds
+// no compression sidecars (the Docker image generates its own), and without
+// the _routes.json scope every request would invoke the function.
+const writePagesWasmBrotliSidecar = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      if (process.env.ROM_WEAVER_PAGES_WASM_BROTLI !== "1") return;
+      const distDir = path.resolve(rootDir, outDir);
+      const assetsDir = path.join(distDir, "assets");
+      const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      if (wasmNames.length !== 1) {
+        throw new Error(`expected exactly one .wasm asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`);
+      }
+      const sourceWasm = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
+      const sourceSidecar = `${sourceWasm}.br`;
+      if (!fs.existsSync(sourceSidecar)) {
+        throw new Error(
+          `ROM_WEAVER_PAGES_WASM_BROTLI=1 but ${sourceSidecar} is missing; build the prod wasm artifact first`,
+        );
+      }
+      const emittedWasm = path.join(assetsDir, wasmNames[0]);
+      if (!fs.readFileSync(emittedWasm).equals(fs.readFileSync(sourceWasm))) {
+        throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
+      }
+      fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
+      fs.writeFileSync(
+        path.join(distDir, "_routes.json"),
+        `${JSON.stringify({ version: 1, include: [`/assets/${wasmNames[0]}`], exclude: [] }, null, 2)}\n`,
+      );
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-pages-wasm-brotli-sidecar",
+  };
+};
+
 // The "What's new" changelog, emitted at the dist root so it stays OUT of the SW
 // precache globs (assets/** + named files only). The client fetches it with
 // cache: "no-store", so a pending update surfaces the NEW deploy's log rather
@@ -505,6 +547,7 @@ export default defineConfig(({ command }) => {
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
+      writePagesWasmBrotliSidecar(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,
