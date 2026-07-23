@@ -33,7 +33,6 @@
     "bin/rom-weaver",
     "LICENSE",
     "NOTICE",
-    "THIRD_PARTY_LICENSES.md",
     "third_party/licenses/**"
   ],
   "publishConfig": {

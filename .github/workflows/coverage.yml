@@ -36,7 +36,6 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
             packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
             packages/rom-weaver-webapp/src/wasm/third_party
 
       - uses: ./.github/actions/setup-build-env

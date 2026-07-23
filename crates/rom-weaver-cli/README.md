@@ -129,5 +129,4 @@ supported API.
 Copyright (C) Brandon Casey. Licensed under
 [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
 Bundled third-party components retain their own licenses; release builds ship a
-generated [attribution notice](https://rom-weaver.com/NOTICE) and
-[third-party license inventory](https://rom-weaver.com/THIRD_PARTY_LICENSES.md).
+generated [attribution and license inventory](https://rom-weaver.com/NOTICE).

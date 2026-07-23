@@ -240,7 +240,6 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
             packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
             packages/rom-weaver-webapp/src/wasm/third_party
 
       # Skipped entirely on a hit - the toolchain exists only to compile.
@@ -279,7 +278,6 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
             packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
             packages/rom-weaver-webapp/src/wasm/third_party
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so

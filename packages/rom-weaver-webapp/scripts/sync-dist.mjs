@@ -20,7 +20,7 @@ const REQUIRED_DIST_COPIES = [
   { src: "rom-weaver-app.wasm", dst: "rom-weaver-app.wasm" },
   { src: "rom-weaver-app.wasm.br", dst: "rom-weaver-app.wasm.br" },
 ];
-const REQUIRED_LICENSE_FILES = ["NOTICE", "THIRD_PARTY_LICENSES.md"];
+const REQUIRED_LICENSE_FILES = ["NOTICE"];
 
 function main() {
   mkdirSync(PACKAGE_DIR, { recursive: true });

@@ -158,7 +158,8 @@ output_dir="$(mktemp -d)"
 trap 'rm -rf "$output_dir"' EXIT
 node "{{ config_root }}/scripts/gen-third-party-licenses.mjs" "$output_dir"
 test -s "$output_dir/NOTICE"
-test -s "$output_dir/THIRD_PARTY_LICENSES.md"
+grep -q '^Third-party components$' "$output_dir/NOTICE"
+test ! -e "$output_dir/THIRD_PARTY_LICENSES.md"
 test -d "$output_dir/third_party/licenses"
 '''
 

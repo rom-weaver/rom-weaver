@@ -5,5 +5,4 @@ src/wasm/*.wasm
 src/wasm/*.wasm.br
 src/wasm/*.wasm.prod.sha256
 src/wasm/NOTICE
-src/wasm/THIRD_PARTY_LICENSES.md
 src/wasm/third_party/
