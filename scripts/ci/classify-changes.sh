@@ -22,8 +22,7 @@ else
     case "$path" in
       .github/workflows/ci.yml | .github/workflows/coverage.yml | \
         .github/actions/setup-build-env/* | .github/actions/wasm-cache/* | \
-        .cargo/* | .mise.toml | scripts/ci/classify-changes.sh | \
-        scripts/ci/mise-disable-tools.sh | scripts/ci/resolve-wasm-run.sh)
+        .cargo/* | .mise.toml | scripts/ci/*)
         full=true
         ;;
     esac

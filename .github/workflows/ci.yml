@@ -1042,6 +1042,12 @@ jobs:
         env:
           ROM_WEAVER_CHANNEL: ${{ matrix.target.channel }}
           ROM_WEAVER_CHANNEL_LABEL: ${{ matrix.target.label }}
+          # Stage q11 brotli sidecars for every asset where q11 beats
+          # Cloudflare's on-the-fly recompression (~640 KB on the wasm, ~50 KB
+          # on the main bundle) + a _routes.json so the Pages Function
+          # (functions/assets/[name].js) serves our bytes for exactly those
+          # URLs.
+          ROM_WEAVER_PAGES_BROTLI: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Idempotent, so the first run on a channel bootstraps its own project and
@@ -1056,22 +1062,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PROJECT: ${{ matrix.target.project }}
-        run: |
-          set -o pipefail
-          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
-          body=$(curl -sS -X POST "$api" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data "{\"name\":\"${PROJECT}\",\"production_branch\":\"main\"}")
-          if [ "$(printf '%s' "$body" | jq -r '.success')" = "true" ]; then
-            echo "created Pages project '$PROJECT'"
-          elif printf '%s' "$body" | jq -e '.errors[]? | select(.code == 8000002 or (.message | test("already exists"; "i")))' >/dev/null; then
-            echo "Pages project '$PROJECT' already exists"
-          else
-            echo "unexpected response creating '$PROJECT':" >&2
-            printf '%s\n' "$body" | jq . >&2 || printf '%s\n' "$body" >&2
-            exit 1
-          fi
+        run: scripts/ci/ensure-cloudflare-pages-project.sh
 
       - name: Deploy to Cloudflare Pages
         id: deploy
@@ -1080,15 +1071,26 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PROJECT: ${{ matrix.target.project }}
           BRANCH: ${{ matrix.target.branch }}
-        run: |
-          set -o pipefail
-          npx --yes wrangler@4 pages deploy packages/rom-weaver-webapp/dist \
-            --project-name="$PROJECT" \
-            --branch="$BRANCH" \
-            --commit-hash="${GITHUB_SHA}" 2>&1 | tee /tmp/deploy.log
-          url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' /tmp/deploy.log | tail -1)
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "deployed to $url"
+        run: scripts/ci/deploy-pages.sh
+
+      # Every sidecar-backed /assets/* request invokes the Pages Function, so
+      # a zone Cache Rule makes the edge cache those responses and the
+      # function run roughly once per URL per PoP instead of per request.
+      # Safe because everything under /assets/ is content-hashed and
+      # immutable; respect_origin keeps the function's own Cache-Control
+      # authoritative. Zone rules only exist on the custom domains - pages.dev
+      # previews stay per-request, which is fine (preview traffic is internal).
+      #
+      # The rule covers all custom domains, but this runs only on the nightly
+      # matrix leg so release-channel deploys cannot race the ruleset
+      # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
+      # set and the API token carries Zone -> Cache Rules -> Edit.
+      - name: Ensure zone cache rule for /assets
+        if: matrix.target.channel == 'nightly'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: scripts/ci/ensure-cloudflare-assets-cache-rule.sh
 
       # The GitHub environment above already surfaces the deployment on the PR;
       # this status just carries the stable branch alias (pr-<n>...pages.dev)
