@@ -172,15 +172,17 @@ docker run --rm \
   weave --input /work/in/game.sfc --patch /work/in/hack.bps --output /work/out/patched.sfc
 ```
 
-Tags follow the release: `latest`, the exact version (`0.5.0`), and the minor
-series (`0.5`). Prereleases publish under `beta` instead of `latest`. The image
-is built for `linux/amd64` only, so it runs under emulation on arm64 hosts
+Tags follow the release: `latest`, the exact version (`X.Y.Z`), and the minor
+series (`X.Y`). Stable releases also receive a major-series tag once the
+project reaches 1.0. Prereleases publish under `beta` instead of `latest`. The
+image is built for `linux/amd64` only, so it runs under emulation on arm64 hosts
 (Apple Silicon included) — install a native build there for large jobs.
 
 ### Development checkout
 
 For a development checkout, follow the [development guide](development.md)
-and use `cargo run -p rom-weaver-cli --` in place of `rom-weaver`.
+and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
+`rom-weaver`.
 
 ## First weave
 

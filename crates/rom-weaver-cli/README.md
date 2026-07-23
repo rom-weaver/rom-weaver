@@ -68,9 +68,9 @@ Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
 bind-mounted files keep their host ownership, so without it the container
 cannot read files it does not own.
 
-Prebuilt binaries and a Homebrew tap will land with the first GitHub Release;
-see the [project README](https://github.com/rom-weaver/rom-weaver#install)
-for the current state.
+Prebuilt binaries and a Homebrew tap are available. See the
+[project README](https://github.com/rom-weaver/rom-weaver#install) for the
+current install methods and platform coverage.
 
 ## Usage
 

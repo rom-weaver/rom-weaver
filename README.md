@@ -78,9 +78,9 @@ rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0. Trim and Tools are
 currently untested but theoretically working, so they are disabled in the
 current webapp. The `rom-weaver-core`, `-checksum`, `-containers`, and
-`-patches` crates are published to crates.io only so `rom-weaver-cli` can be;
-the CLI and the webapp are the supported interfaces, and using those crates as
-libraries elsewhere is not supported.
+`-patches` crates are published to crates.io only so `rom-weaver-cli` can use
+them. The CLI and the webapp are the supported interfaces; using those crates as
+libraries in another project is not supported.
 
 ### First public release
 
@@ -105,12 +105,13 @@ AI-assisted code may still need extra scrutiny.
 
 ### Webapp
 
-Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. There
-is nothing to install and no account: choose **Weave**, add a ROM and one or
-more patches, review the detected formats and checksums, then run the workflow
-and save the result. Use **Create** to generate a distributable patch from
-an original and a modified file. Your files are processed locally and never
-leave the device. Install it as a PWA from the browser menu to use it offline.
+Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. You
+do not need to install anything or create an account. Choose **Weave**, add a
+ROM and one or more patches, review the detected formats and checksums, then run
+the workflow and save the result. Use **Create** to generate a distributable
+patch from an original and a modified file. Your files are processed locally
+and never leave the device. Install it as a PWA from the browser menu to use it
+offline.
 New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
 with tiny synthetic files.
 
@@ -119,8 +120,9 @@ with tiny synthetic files.
 <details>
 <summary>Self-host the webapp</summary>
 
-The Docker source build serves the full webapp — WASM build, cross-origin
-isolation headers, SPA fallback, and precompressed assets included. The
+The Docker source build serves the full webapp: it builds the WASM module, adds
+cross-origin isolation headers, supports client-side routes, and precompresses
+assets. The
 [self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
 routing, HTTPS certificates, service-worker scope, and the required COOP/COEP
 headers.
