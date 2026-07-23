@@ -173,6 +173,24 @@ let appRoot: Root | null = null;
 // Whether index.html shipped the prerendered boot shell (rom-weaver-prerender-shell)
 // inside #webapp-root; recorded before createRoot wipes it on the first render.
 let hadPrerenderedShell = false;
+// Clocks of the shell's infinite ambient animations (format-pill ticker, weave
+// drift), captured just before the first render replaces their nodes so the
+// remounted copies can continue in phase instead of visibly snapping to zero.
+let shellAnimationPhases: Map<string, number[]> | null = null;
+
+const isInfiniteCssAnimation = (animation: Animation): animation is CSSAnimation =>
+  animation instanceof CSSAnimation && animation.effect?.getTiming().iterations === Infinity;
+
+const captureShellAnimationPhases = (appRootElement: HTMLElement) => {
+  const phases = new Map<string, number[]>();
+  for (const animation of appRootElement.getAnimations({ subtree: true })) {
+    if (!isInfiniteCssAnimation(animation) || typeof animation.currentTime !== "number") continue;
+    const clocks = phases.get(animation.animationName) || [];
+    clocks.push(animation.currentTime);
+    phases.set(animation.animationName, clocks);
+  }
+  shellAnimationPhases = phases.size > 0 ? phases : null;
+};
 
 const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
@@ -181,19 +199,27 @@ const markWebappMounted = () => {
   appRootElement.removeAttribute("aria-busy");
   if (!(firstMount && hadPrerenderedShell)) return;
   // The first mount replaced the prerendered shell with identical markup, which
-  // restarts the CSS entry animations and would visibly fade the already-shown
-  // shell back in from opacity 0. Fast-forward them before this frame paints:
+  // restarts every CSS animation on it. Settle them before this frame paints:
   // force the style recalc that creates the animations (the flushSync render
   // finished, but styles have not been computed yet), then jump each entry
-  // animation to its finished (natural) state.
+  // animation to its finished (natural) state - the shell already played the
+  // entrance - and hand each infinite ambient animation its captured clock.
+  const phases = shellAnimationPhases;
+  shellAnimationPhases = null;
   void appRootElement.offsetWidth;
-  for (const animation of document.getAnimations()) {
-    if (!("animationName" in animation && typeof animation.animationName === "string")) continue;
-    if (!ENTRY_ANIMATIONS.has(animation.animationName)) continue;
+  for (const animation of appRootElement.getAnimations({ subtree: true })) {
+    if (!(animation instanceof CSSAnimation)) continue;
     try {
-      animation.finish();
+      if (ENTRY_ANIMATIONS.has(animation.animationName)) {
+        animation.finish();
+        continue;
+      }
+      if (isInfiniteCssAnimation(animation)) {
+        const clock = phases?.get(animation.animationName)?.shift();
+        if (typeof clock === "number") animation.currentTime = clock;
+      }
     } catch (error) {
-      logger.trace("Unable to fast-forward entry animation", {
+      logger.trace("Unable to settle animation across the first mount", {
         animationName: animation.animationName,
         message: error instanceof Error ? error.message : String(error || ""),
       });
@@ -306,6 +332,7 @@ const renderWebappRoot = (): undefined => {
     const appRootElement = document.getElementById("webapp-root");
     if (appRootElement) {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
+      if (hadPrerenderedShell) captureShellAnimationPhases(appRootElement);
       appRoot = createRoot(appRootElement);
     }
   }
