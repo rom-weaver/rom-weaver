@@ -7,6 +7,9 @@ export default {
   ignores: [(message) => /^Merge (branch|pull request|remote-tracking branch|tag) /.test(message)],
   extends: ["@commitlint/config-conventional"],
   rules: {
+    // config-conventional caps the header at 100 chars, which rejects grouped
+    // dependabot titles ("bump the X group in /packages/... with N updates").
+    "header-max-length": [2, "always", 150],
     "type-enum": [
       2,
       "always",
