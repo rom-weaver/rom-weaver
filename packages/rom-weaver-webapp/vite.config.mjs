@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
+import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
@@ -338,6 +339,80 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
+// Deploy-only (ROM_WEAVER_PAGES_BROTLI=1): stage quality-11 brotli sidecars
+// for every hashed asset where q11 measurably beats Cloudflare's on-the-fly
+// recompression (~640 KB on the wasm, ~50 KB on the main JS bundle), and
+// write a _routes.json scoping Pages Function invocation
+// (functions/assets/[name].js) to exactly the sidecar-backed URLs. The wasm
+// sidecar is the prebuilt artifact, byte-verified against the emitted asset;
+// everything else is compressed here and kept only when it saves >=2% -
+// already-compressed formats (woff2, png, zip) fail that bar and stay on the
+// static path. Only /assets/* is eligible: those URLs are content-hashed and
+// immutable, while the mutable root files (index.html, the service worker,
+// changelog.json) must keep their no-cache semantics and never route through
+// the function's immutable-cache response. Off in plain builds on purpose:
+// the release tarball asserts dist holds no compression sidecars (the Docker
+// image generates its own), and unmatched routes must stay on Pages'
+// unmetered static path.
+const PAGES_BROTLI_MIN_SAVINGS = 0.02;
+// _routes.json rejects more than 100 combined include/exclude entries; leave
+// headroom so an asset-count creep fails the build before Cloudflare does.
+const PAGES_ROUTES_MAX_INCLUDES = 90;
+
+const writePagesBrotliSidecars = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      if (process.env.ROM_WEAVER_PAGES_BROTLI !== "1") return;
+      const distDir = path.resolve(rootDir, outDir);
+      const assetsDir = path.join(distDir, "assets");
+      const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      if (wasmNames.length !== 1) {
+        throw new Error(`expected exactly one .wasm asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`);
+      }
+      const sourceWasm = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
+      const sourceSidecar = `${sourceWasm}.br`;
+      if (!fs.existsSync(sourceSidecar)) {
+        throw new Error(
+          `ROM_WEAVER_PAGES_BROTLI=1 but ${sourceSidecar} is missing; build the prod wasm artifact first`,
+        );
+      }
+      const emittedWasm = path.join(assetsDir, wasmNames[0]);
+      if (!fs.readFileSync(emittedWasm).equals(fs.readFileSync(sourceWasm))) {
+        throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
+      }
+      fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
+      const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      for (const name of fs.readdirSync(assetsDir)) {
+        if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
+        const assetPath = path.join(assetsDir, name);
+        const { compressedSize, sourceSize } = brotliCompressFile({
+          inputPath: assetPath,
+          outputPath: `${assetPath}.br`,
+          quality: 11,
+        });
+        if (compressedSize > sourceSize * (1 - PAGES_BROTLI_MIN_SAVINGS)) {
+          fs.rmSync(`${assetPath}.br`);
+          continue;
+        }
+        sidecarUrls.push(`/assets/${name}`);
+      }
+      if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
+        throw new Error(`${sidecarUrls.length} sidecar routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
+      }
+      fs.writeFileSync(
+        path.join(distDir, "_routes.json"),
+        `${JSON.stringify({ version: 1, include: sidecarUrls.sort(), exclude: [] }, null, 2)}\n`,
+      );
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-pages-brotli-sidecars",
+  };
+};
+
 // The "What's new" changelog, emitted at the dist root so it stays OUT of the SW
 // precache globs (assets/** + named files only). The client fetches it with
 // cache: "no-store", so a pending update surfaces the NEW deploy's log rather
@@ -505,6 +580,7 @@ export default defineConfig(({ command }) => {
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
+      writePagesBrotliSidecars(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,

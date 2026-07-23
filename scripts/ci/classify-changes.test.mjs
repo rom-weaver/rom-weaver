@@ -105,6 +105,7 @@ test("dependency and CI changes select their broader checks", () => {
   });
   for (const path of [
     ".github/workflows/ci.yml",
+    "scripts/ci/ensure-cloudflare-assets-cache-rule.sh",
     "scripts/ci/mise-disable-tools.sh",
     "scripts/ci/resolve-wasm-run.sh",
   ]) {
