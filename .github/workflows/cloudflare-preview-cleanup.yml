@@ -1,0 +1,102 @@
+name: Cloudflare preview cleanup
+
+# A scheduled sweep handles deleted PRs and previews created from refs that
+# cannot run a close-triggered job with the repository's Cloudflare secrets.
+on:
+  schedule:
+    - cron: "0 3,9,15,21 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cloudflare-preview-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Reap stale Pages previews
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pull-requests: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PROJECT: rom-weaver-preview
+      RETENTION_DAYS: "7"
+    steps:
+      - name: Delete stale preview deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+          : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
+
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/deployments"
+          now=$(date -u +%s)
+          deployments=$(mktemp)
+          trap 'rm -f "$deployments"' EXIT
+
+          page=1
+          while :; do
+            response=$(curl -fsS --get "$api" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --data-urlencode "page=${page}" \
+              --data-urlencode "per_page=100")
+            jq -c '.result[]?' <<<"$response" >>"$deployments"
+            pages=$(jq -r '.result_info.total_pages // 1' <<<"$response")
+            [ "$page" -ge "$pages" ] && break
+            page=$((page + 1))
+          done
+
+          declare -A pr_states
+          declare -A latest_seen
+          deleted=0
+
+          while IFS=$'\t' read -r id created branch; do
+            [[ "$branch" =~ ^pr-([0-9]+)$ ]] || continue
+            pr="${BASH_REMATCH[1]}"
+
+            if [ -z "${pr_states[$pr]+set}" ]; then
+              pr_states[$pr]=$(gh pr view "$pr" --repo "$GH_REPO" --json state --jq .state 2>/dev/null || echo UNKNOWN)
+            fi
+
+            state="${pr_states[$pr],,}"
+            case "$state" in
+              open|closed|merged) ;;
+              *) echo "skipping PR #${pr}: state is ${pr_states[$pr]}"; continue ;;
+            esac
+
+            # Keep the newest deployment for an open PR. The list is sorted
+            # newest-first per branch below; closed PRs have no live alias to
+            # preserve, so their newest deployment can be removed too.
+            latest=false
+            if [ "$state" = open ] && [ -z "${latest_seen[$branch]+set}" ]; then
+              latest_seen[$branch]=1
+              latest=true
+            fi
+
+            created_epoch=$(date -u -d "$created" +%s)
+            age=$((now - created_epoch))
+            [ "$latest" = true ] || [ "$age" -le "$((RETENTION_DAYS * 86400))" ] && continue
+
+            if curl -fsS -X DELETE "${api}/${id}?force=true" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" >/dev/null; then
+              deleted=$((deleted + 1))
+              echo "deleted deployment ${id} (${branch}, PR #${pr}, ${created})"
+            fi
+          done < <(
+            jq -sr '
+              map(select(.environment == "preview" and ((.deployment_trigger.metadata.branch // "") | test("^pr-[0-9]+$"))))
+              | sort_by([.deployment_trigger.metadata.branch, .created_on])
+              | reverse[]
+              | [.id, .created_on, .deployment_trigger.metadata.branch]
+              | @tsv
+            ' "$deployments"
+          )
+
+          echo "deleted ${deleted} stale Cloudflare Pages preview deployment(s)"

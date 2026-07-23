@@ -42,6 +42,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
 | `e2e-nightly.yml` | manual | No | Exhaustive Chromium E2E matrix |
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
+| `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
@@ -267,6 +268,12 @@ Preview deployments are skipped for forks and Dependabot, which are not given
 the Cloudflare secrets and could only ever fail. The preview URL is published
 as a commit status (`preview/webapp`) and in one marker-backed PR comment.
 Repeated deployments update that comment instead of accreting comments.
+
+The preview project is swept every six hours. The cleanup keeps the newest
+deployment for each open PR and gives superseded deployments a seven-day grace
+period; deployments belonging to closed or merged PRs are deleted after that
+grace period. The scheduled sweep also handles orphaned deployments when no
+close-triggered workflow can run.
 
 Projects are created on demand through the Cloudflare REST API rather than
 `wrangler pages project create`: wrangler enumerates accounts internally, which
