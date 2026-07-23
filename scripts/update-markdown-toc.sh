@@ -11,7 +11,7 @@ if ((${#files[@]} == 0)); then
     .github/RELEASING.md
     .github/SECURITY.md
     packages/rom-weaver-webapp/design/icon-masters/README.md
-    packages/rom-weaver-webapp/src/wasm/README.md
+    packages/rom-weaver-wasm/src/README.md
     scripts/wasm/README.md
   )
 fi

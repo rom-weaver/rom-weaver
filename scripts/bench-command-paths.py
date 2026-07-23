@@ -605,7 +605,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--wasm-module",
         type=Path,
-        default=Path("packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm"),
+        default=Path("packages/rom-weaver-wasm/src/rom-weaver-app.wasm"),
         help="Path to rom-weaver app wasm module used for rom-weaver-wasm archive tool",
     )
     parser.add_argument(

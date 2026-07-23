@@ -25,8 +25,8 @@ case "$mode" in
 esac
 
 target="wasm32-wasip1-threads"
-out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-webapp/src/wasm}"
-pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-webapp/src/wasm"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-wasm/src}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-wasm/src"
 artifact="$out_dir/rom-weaver-app.wasm"
 built_artifact="$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm"
 prod_fingerprint_file="$artifact.prod.sha256"

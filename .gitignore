@@ -25,10 +25,16 @@
 
 # Coverage reports
 /dist/coverage/
-/packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-/packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-/packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm
-/packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm.br
+# Generated @rom-weaver/wasm package artifacts (wasm binary + bundled dist + attribution)
+/packages/rom-weaver-wasm/dist/
+/packages/rom-weaver-wasm/src/rom-weaver-app.wasm
+/packages/rom-weaver-wasm/src/rom-weaver-app.wasm.br
+/packages/rom-weaver-wasm/src/rom-weaver-app-threaded.wasm
+/packages/rom-weaver-wasm/src/rom-weaver-app-threaded.wasm.br
+/packages/rom-weaver-wasm/src/rom-weaver-app.wasm.prod.sha256
+/packages/rom-weaver-wasm/src/NOTICE
+/packages/rom-weaver-wasm/src/THIRD_PARTY_LICENSES.md
+/packages/rom-weaver-wasm/src/third_party/
 /packages/rom-weaver-webapp/tests/wasm/__screenshots__/
 
 # Prebuilt artifacts staged for a `--build-arg BINARY=prebuilt` / `DIST=prebuilt`

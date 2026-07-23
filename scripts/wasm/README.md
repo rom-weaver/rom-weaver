@@ -15,7 +15,7 @@ command-line work.
 
 The [development guide](../../docs/development.md#build-and-run-the-webapp)
 explains the toolchain and build flow. The
-[browser WASM runtime guide](../../packages/rom-weaver-webapp/src/wasm/README.md)
+[browser WASM runtime guide](../../packages/rom-weaver-wasm/src/README.md)
 documents the TypeScript worker and OPFS APIs. Keeping those API examples in
 one place prevents the build-script notes from drifting away from the runtime.
 
@@ -32,7 +32,7 @@ This example runs a checksum command through the real browser WASM runtime:
 
 ```bash
 node scripts/wasm/run-browser-cli.mjs \
-  --wasm-module packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm \
+  --wasm-module packages/rom-weaver-wasm/src/rom-weaver-app.wasm \
   -- checksum /path/to/input.bin --algo crc32 --no-extract
 ```
 
