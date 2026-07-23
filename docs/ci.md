@@ -67,6 +67,11 @@ that pull request is what sets `release_created` and unlocks the publish jobs.
 > module`, `Lint workflows + scripts + Dockerfiles`, `Webapp`, `Docker build
 > (CLI)`, and `Docker build (webapp)`.
 
+The two Docker contexts are temporary compatibility checks while the protected
+ruleset moves to the single `Docker builds` context. The source CLI and webapp
+images are built once by that job; the compatibility checks only forward its
+result and are removed after the ruleset is updated.
+
 ## `ci.yml` - the required gate
 
 ```
@@ -107,10 +112,10 @@ security ── advisories (warn only, always green)
   blocks, which is why both are in its `tools:` list.
 - **`docker`** builds the CLI and webapp images **from source** without
   pushing, so a broken Dockerfile fails here rather than at the moment it
-  blocks a release publish. The CLI leg runs for Cargo workspace sources and
-  manifests as well as its image plumbing, so the required check builds the
-  image whenever its binary changes. The webapp source leg runs only when its
-  image plumbing changes (the Dockerfile, `.dockerignore`,
+  blocks a release publish. Its conditional CLI build runs for Cargo workspace
+  sources and manifests as well as its image plumbing, so the required check
+  builds the image whenever its binary changes. The webapp source build runs
+  only when its image plumbing changes (the Dockerfile, `.dockerignore`,
   `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
   `docker-publish.yml`); ordinary webapp changes use the release-equivalent
   prebuilt smoke below. On `main`, source builds also refresh their registry

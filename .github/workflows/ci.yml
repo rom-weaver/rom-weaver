@@ -100,11 +100,11 @@ jobs:
   # that no longer builds surfaced at the moment it blocked a publish. hadolint
   # above reads the Dockerfile; it does not run it.
   #
-  # This job builds the images from source, and each leg is gated on its actual
-  # inputs rather than running for unrelated changes. The CLI leg includes its
-  # Cargo workspace sources, so its required check always exercises the image
-  # when the binary changes. The webapp's source build remains image-plumbing
-  # only because its release path is exercised by the prebuilt smoke below.
+  # This job builds the images from source, and each build is gated on its actual
+  # inputs rather than running for unrelated changes. The CLI build includes its
+  # Cargo workspace sources, so it always exercises the image when the binary
+  # changes. The webapp's source build remains image-plumbing only because its
+  # release path is exercised by the prebuilt smoke below.
   #
   # Reusing CI's cached wasm here is not an option: the CLI image contains no
   # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
@@ -113,7 +113,7 @@ jobs:
   # test. That path is covered instead, unconditionally and for free, by
   # the webapp prebuilt smoke below.
   docker:
-    name: Docker build (${{ matrix.name }})
+    name: Docker builds
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
@@ -124,41 +124,15 @@ jobs:
       # pull request from a fork receives a read-only token regardless, which is
       # why the export below is restricted to pushes on main anyway.
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: CLI
-            image: rom-weaver-cli
-            file: Dockerfile
-          - name: webapp
-            image: rom-weaver-webapp
-            file: packages/rom-weaver-webapp/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Check whether the image plumbing changed
-        id: gate
-        env:
-          CLI_SELECTED: ${{ needs.changes.outputs.docker_cli }}
-          WEBAPP_SELECTED: ${{ needs.changes.outputs.docker_webapp }}
-          IMAGE: ${{ matrix.name }}
-        run: |
-          set -euo pipefail
-          if [[ "$IMAGE" == CLI ]]; then
-            build=$CLI_SELECTED
-          else
-            build=$WEBAPP_SELECTED
-          fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "$IMAGE build selected: $build"
-
       - uses: docker/setup-buildx-action@v4
-        if: steps.gate.outputs.build == 'true'
+        if: needs.changes.outputs.docker_cli == 'true' || needs.changes.outputs.docker_webapp == 'true'
 
       - name: Log in to GitHub Container Registry
-        if: steps.gate.outputs.build == 'true'
+        if: needs.changes.outputs.docker_cli == 'true' || needs.changes.outputs.docker_webapp == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -168,30 +142,67 @@ jobs:
       # Never pushes an image. On main it refreshes the build cache so the next
       # release starts warm; on a pull request it only reads, because a fork's
       # token cannot write to the registry.
-      - name: Build image
-        if: steps.gate.outputs.build == 'true'
+      - name: Build CLI image
+        if: needs.changes.outputs.docker_cli == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ matrix.file }}
+          file: Dockerfile
           platforms: linux/amd64
           push: false
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
-          cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/rom-weaver-cli:buildcache
+          cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/rom-weaver-cli:buildcache,mode=max', github.repository_owner) || '' }}
 
       - name: Build CLI prebuilt path
-        if: steps.gate.outputs.build == 'true' && matrix.name == 'CLI'
+        if: needs.changes.outputs.docker_cli == 'true'
         run: |
           set -euo pipefail
           mkdir -p prebuilt
           printf 'stub\n' > prebuilt/rom-weaver
           docker build --file Dockerfile --build-arg BINARY=prebuilt --tag prebuilt-smoke .
 
+      - name: Build webapp image
+        if: needs.changes.outputs.docker_webapp == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/rom-weaver-webapp/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:buildcache
+          cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/rom-weaver-webapp:buildcache,mode=max', github.repository_owner) || '' }}
+
+  # Temporary compatibility contexts for the current main protection ruleset.
+  # Remove these after the ruleset requires `Docker builds` instead.
+  docker-cli-compat:
+    name: Docker build (CLI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: docker
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    steps:
+      - name: Verify Docker builds
+        env:
+          DOCKER_RESULT: ${{ needs.docker.result }}
+        run: test "$DOCKER_RESULT" = success
+
+  docker-webapp-compat:
+    name: Docker build (webapp)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: docker
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    steps:
+      - name: Verify Docker builds
+        env:
+          DOCKER_RESULT: ${{ needs.docker.result }}
+        run: test "$DOCKER_RESULT" = success
+
   # Exercise the webapp release COPY path against the real bundle built above.
   # The CLI equivalent rides in its already-gated source job, so it does not
   # start a separate runner after every Rust or webapp change.
   docker-prebuilt:
-    name: Docker build (webapp, prebuilt)
+    name: Docker prebuilt
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: webapp-static
@@ -285,7 +296,7 @@ jobs:
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
   rust-host:
-    name: "Rust (Linux: lint + tests)"
+    name: Rust Linux
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
@@ -357,7 +368,7 @@ jobs:
   # release day. Linux musl targets use cross; Windows targets select the
   # matching MSVC environment explicitly.
   cli-platforms:
-    name: CLI target (${{ matrix.target }})
+    name: CLI ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     needs: changes
@@ -489,7 +500,7 @@ jobs:
             "packages/rom-weaver-cli-platforms/${{ matrix.package }}"
 
   cli-linux-arm64:
-    name: CLI target runtime (aarch64-unknown-linux-musl)
+    name: CLI runtime (aarch64-unknown-linux-musl)
     runs-on: ubuntu-24.04-arm
     needs: [changes, cli-platforms]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
@@ -517,7 +528,7 @@ jobs:
   # request red blocks unrelated work until someone lands an upgrade. Findings
   # surface as annotations and a job summary instead, so this job stays green.
   security:
-    name: Security advisories
+    name: Security
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: changes
@@ -559,7 +570,7 @@ jobs:
   # toolchain manager the repo's macOS development already runs on. This leg
   # needs neither the WASI SDK nor the wasm target.
   rust-macos:
-    name: Rust (macOS)
+    name: Rust macOS
     runs-on: macos-14
     timeout-minutes: 90
     needs: changes
@@ -591,7 +602,7 @@ jobs:
   # module on Windows is unsupported until those shims have a native
   # counterpart.
   rust-windows:
-    name: Rust (Windows)
+    name: Rust Windows
     runs-on: windows-2025
     timeout-minutes: 90
     needs: changes
@@ -715,7 +726,7 @@ jobs:
   # skips the Playwright install entirely; the `webapp` aggregate below gives
   # branch protection one stable name for all of it.
   webapp-static:
-    name: Webapp (static)
+    name: Webapp static
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -769,7 +780,7 @@ jobs:
   # The single longest webapp suite (~4 min) rides alone so it defines this
   # group's wall clock instead of adding to it.
   webapp-browser:
-    name: Webapp (browser)
+    name: Webapp browser
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -800,7 +811,7 @@ jobs:
   # Everything else that needs Playwright chromium: the wasm-layer browser
   # suite, the Chromium E2E pass, and the icon check.
   webapp-wasm-e2e:
-    name: Webapp (WASM + E2E)
+    name: Webapp E2E
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -836,7 +847,7 @@ jobs:
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
   webapp-webkit-e2e:
-    name: Webapp (WebKit E2E)
+    name: Webapp WebKit
     # The full WASM path requires WebKit OPFS. Playwright's Linux WebKit exposes
     # the API surface but hangs when the first real OPFS-backed operation starts;
     # macOS WebKit exercises the supported Safari-family implementation.
@@ -905,7 +916,7 @@ jobs:
   # Split out of `deploy` because the channel list drives that job's matrix, and
   # a matrix can only be fed by an upstream job's output.
   deploy-plan:
-    name: Webapp deploy (plan)
+    name: Deploy plan
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: changes
@@ -987,7 +998,7 @@ jobs:
   # minutes or a second toolchain. Depend only on `wasm` so preview URLs arrive
   # while the rest of the suite is still running.
   deploy:
-    name: Webapp deploy (${{ matrix.target.channel }})
+    name: Deploy ${{ matrix.target.channel }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: [wasm, deploy-plan]
