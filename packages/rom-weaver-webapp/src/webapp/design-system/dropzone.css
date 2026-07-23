@@ -18,7 +18,9 @@
 .rw-app .drop.hero .main { flex: none; flex-direction: row; padding: 0; border: 0; background: none; box-shadow: none; }
 /* the shuttle bead: the single focal control on the empty page. a raised disc
    riding the fell line, lit from above, that warms and lifts as it arms */
+/* Arming only moves these four values, so each state rule stays a one-liner. */
 .rw-app .drop.hero .main.bead {
+  --bead-lift: 0px; --bead-scale: 1; --bead-rim: 38%; --bead-halo: 0; --bead-glyph: 0px;
   position: relative;
   justify-content: center;
   width: clamp(56px, 7vw, 68px); aspect-ratio: 1; padding: 0; border-radius: 50%;
@@ -26,34 +28,30 @@
     radial-gradient(115% 115% at 50% 8%, color-mix(in oklab, var(--thread) 30%, var(--plate-2)), var(--plate-2) 76%);
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, #fff 14%, transparent),
-    0 0 0 1px color-mix(in oklab, var(--thread) 38%, var(--seam)),
+    0 0 0 1px color-mix(in oklab, var(--thread) var(--bead-rim), var(--seam)),
     0 10px 24px -12px color-mix(in oklab, var(--thread) 70%, transparent);
-  transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+  transform: translateY(var(--bead-lift)) scale(var(--bead-scale));
+  transition: transform .2s ease, box-shadow .2s ease;
 }
 /* halo blooms on arm without shifting the fell line */
 .rw-app .drop.hero .main.bead::before {
   content: ""; position: absolute; inset: -12px; border-radius: 50%; pointer-events: none;
   background: radial-gradient(closest-side, color-mix(in oklab, var(--thread) 32%, transparent), transparent);
-  opacity: 0; transition: opacity .2s ease;
+  opacity: var(--bead-halo); transition: opacity .2s ease;
 }
-.rw-app .drop.hero:hover .main.bead,
-.rw-app .drop.hero:focus-within .main.bead {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, #fff 20%, transparent),
-    0 0 0 1px color-mix(in oklab, var(--thread) 70%, var(--seam)),
-    0 16px 30px -12px color-mix(in oklab, var(--thread) 80%, transparent);
+.rw-app .drop.hero .main.bead svg { transform: translateY(var(--bead-glyph)); transition: transform .2s ease; }
+@media (hover: hover) {
+  .rw-app .drop.hero:hover .main.bead { --bead-lift: -2px; --bead-rim: 70%; --bead-halo: .55; --bead-glyph: -1px; }
 }
-.rw-app .drop.hero:hover .main.bead::before,
-.rw-app .drop.hero:focus-within .main.bead::before { opacity: .55; }
-.rw-app .drop.hero.dragging .main.bead { transform: scale(1.07); }
-.rw-app .drop.hero.dragging .main.bead::before { opacity: .9; }
-.rw-app .drop.hero .main.bead svg { transition: transform .2s ease; }
-.rw-app .drop.hero:hover .main.bead svg { transform: translateY(-1px); }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .drop.hero:focus-within .main.bead,
+.rw-app .drop.hero:active .main.bead { --bead-lift: -2px; --bead-rim: 70%; --bead-halo: .55; --bead-glyph: -1px; }
+.rw-app .drop.hero.dragging .main.bead { --bead-scale: 1.07; --bead-halo: .9; --bead-rim: 70%; }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .drop.hero .main.bead, .rw-app .drop.hero .main.bead svg { transition: none; transform: none; }
-  .rw-app .drop.hero:hover .main.bead, .rw-app .drop.hero:focus-within .main.bead,
-  .rw-app .drop.hero.dragging .main.bead, .rw-app .drop.hero:hover .main.bead svg { transform: none; }
+  /* Keep the arming color cues, drop the movement. */
+  .rw-app .drop.hero .main.bead, .rw-app .drop.hero:hover .main.bead,
+  .rw-app .drop.hero:focus-within .main.bead, .rw-app .drop.hero:active .main.bead,
+  .rw-app .drop.hero.dragging .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
 }
 .rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
 .rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
