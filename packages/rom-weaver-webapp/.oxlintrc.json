@@ -22,5 +22,5 @@
     "unicorn/no-useless-fallback-in-spread": "error",
     "unicorn/no-useless-spread": "error"
   },
-  "ignorePatterns": ["dist/**", "src/wasm/generated/**", "src/presentation/localization/locales/*.ts"]
+  "ignorePatterns": ["dist/**", "src/presentation/localization/locales/*.ts"]
 }

@@ -12,7 +12,7 @@ pub type Result<T> = std::result::Result<T, RomWeaverError>;
 
 /// Stable [`RomWeaverError`] classification generated into TypeScript for the
 /// worker-error layer. Snake-case variant names are part of the JS contract; see
-/// `packages/rom-weaver-webapp/src/wasm/workers/worker-error-utils.ts`.
+/// `packages/rom-weaver-wasm/src/workers/worker-error-utils.ts`.
 ///
 /// Kinds are coarse (both validation variants map to `Validation`). Contract
 /// tests lock the message-prefix and kind mappings.
