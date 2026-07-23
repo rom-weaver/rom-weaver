@@ -3,8 +3,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-// Destination for synced wasm artifacts inside the merged webapp package.
-const PACKAGE_DIR = resolve(SCRIPT_DIR, "..", "src", "wasm");
+// Destination for synced wasm artifacts: the @rom-weaver/wasm package's src/,
+// where the package build and the webapp's attribution checks consume them.
+const PACKAGE_DIR = resolve(SCRIPT_DIR, "..", "..", "rom-weaver-wasm", "src");
 const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..", "..");
 const ARTIFACTS_DIR_INPUT = process.argv[2] ?? process.env.ROM_WEAVER_WASM_ARTIFACT_DIR;
 

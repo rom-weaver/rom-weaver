@@ -8,7 +8,7 @@
 
 import path from "node:path";
 import process from "node:process";
-import { mtimeMs, newestMtime, PACKAGE_DIR, run, WASM_ARTIFACT } from "./build-utils.mjs";
+import { mtimeMs, newestMtime, PACKAGE_DIR, run, WASM_ARTIFACT, WASM_PACKAGE_DIR } from "./build-utils.mjs";
 
 // This runs the vite build in its own process ahead of dev-server.mjs, so it
 // needs the same default or preview would serve a production-stamped bundle.
@@ -17,7 +17,7 @@ process.env.ROM_WEAVER_CHANNEL ||= "dev";
 const DIST_INDEX = path.join(PACKAGE_DIR, "dist", "index.html");
 
 // Inputs that gate the vite rebuild (in addition to the WASM artifact itself).
-const WEB_ROOTS = [path.join(PACKAGE_DIR, "src")];
+const WEB_ROOTS = [path.join(PACKAGE_DIR, "src"), path.join(WASM_PACKAGE_DIR, "src")];
 const WEB_FILES = [
   path.join(PACKAGE_DIR, "index.html"),
   path.join(PACKAGE_DIR, "vite.config.mjs"),
