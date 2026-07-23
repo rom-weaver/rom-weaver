@@ -14,13 +14,17 @@
 // The wasm binary and its Brotli sibling are copied beside the output; the
 // runtime resolves them via `new URL('./rom-weaver-app.wasm', import.meta.url)`.
 
-import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
+import {
+  build,
+  copyDeclarationSources,
+  emitDeclarations,
+  rewriteDeclarationExtensions,
+  rewriteNewUrlAssetRefs,
+} from "./build-shared.mjs";
 
 const packageRoot = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const srcDir = path.join(packageRoot, "src");
@@ -57,40 +61,6 @@ const ASSET_TARGETS = [
   { re: /(?:^|\/)browser-runner-worker\.(?:ts|js)$/, rel: "workers/browser-runner-worker.js" },
   { re: /(?:^|\/)rom-weaver-app\.wasm$/, rel: "rom-weaver-app.wasm" },
 ];
-const NEW_URL_RE = /new URL\(\s*(["'])((?:\.\.?\/)[^"']+)\1\s*,\s*import\.meta\.url\s*\)/g;
-
-const rewriteAssetUrls = (distDir) => {
-  const toPosix = (p) => p.split(path.sep).join("/");
-  const relFromFile = (fileDir, targetAbs) => {
-    const out = toPosix(path.relative(fileDir, targetAbs));
-    return out.startsWith(".") ? out : `./${out}`;
-  };
-  let rewritten = 0;
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.name.endsWith(".js")) continue;
-      const original = readFileSync(full, "utf8");
-      const fileDir = path.dirname(full);
-      const next = original.replace(NEW_URL_RE, (match, quote, spec) => {
-        const target = ASSET_TARGETS.find((candidate) => candidate.re.test(spec));
-        if (!target) return match;
-        const correct = relFromFile(fileDir, path.join(distDir, target.rel));
-        return `new URL(${quote}${correct}${quote}, import.meta.url)`;
-      });
-      if (next !== original) {
-        writeFileSync(full, next);
-        rewritten += 1;
-      }
-    }
-  };
-  walk(distDir);
-  return rewritten;
-};
 
 const walkTsFiles = (dir) => {
   const out = [];
@@ -104,77 +74,6 @@ const walkTsFiles = (dir) => {
     if (entry.name.endsWith(".ts")) out.push(full);
   }
   return out;
-};
-
-// Emit `.d.ts` declarations beside the bundled `.js` so consumers resolve real
-// types from `dist` rather than the `.ts` source (which needs
-// `allowImportingTsExtensions`). Runs the emit-only tsconfig through the
-// workspace's TypeScript.
-const emitDeclarations = () => {
-  const require = createRequire(import.meta.url);
-  const tscBin = path.join(path.dirname(require.resolve("typescript/package.json")), "bin", "tsc");
-  const result = spawnSync(process.execPath, [tscBin, "-p", "tsconfig.build.json"], {
-    cwd: packageRoot,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    throw new Error(`tsc declaration emit failed with exit code ${result.status ?? "signal"}`);
-  }
-};
-
-// Hand-authored/generated `.d.ts` source files (rom-weaver-types.d.ts and the
-// typegen output under generated/) are declaration-only, so tsc's
-// emitDeclarationOnly pass never copies them to the output. Copy them verbatim,
-// preserving their relative path, so the emitted declarations that reference
-// them resolve.
-const copyDeclarationSources = () => {
-  let copied = 0;
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.name.endsWith(".d.ts")) continue;
-      const rel = path.relative(srcDir, full);
-      const dest = path.join(distDir, rel);
-      mkdirSync(path.dirname(dest), { recursive: true });
-      cpSync(full, dest);
-      copied += 1;
-    }
-  };
-  walk(srcDir);
-  return copied;
-};
-
-// tsc (tsgo) emits declarations that keep the source's explicit `.ts`/`.d.ts`
-// import specifiers, which only resolve for a consumer that enables
-// `allowImportingTsExtensions`. Normalize every relative specifier to `.js`
-// (its sibling `.d.ts` resolves by the standard rule), so the published types
-// work under a stock consumer config too.
-const REL_SPECIFIER_RE = /(["'])(\.\.?\/[^"']*?)(?:\.d)?\.ts\1/g;
-
-const rewriteDeclarationExtensions = (dir) => {
-  let rewritten = 0;
-  const walk = (current) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.name.endsWith(".d.ts")) continue;
-      const original = readFileSync(full, "utf8");
-      const next = original.replace(REL_SPECIFIER_RE, (_match, quote, spec) => `${quote}${spec}.js${quote}`);
-      if (next !== original) {
-        writeFileSync(full, next);
-        rewritten += 1;
-      }
-    }
-  };
-  walk(dir);
-  return rewritten;
 };
 
 const sharedOptions = {
@@ -221,12 +120,12 @@ const run = async () => {
     external: EXTERNAL_DEPS,
   });
 
-  const rewritten = rewriteAssetUrls(distDir);
+  const rewritten = rewriteNewUrlAssetRefs(distDir, ASSET_TARGETS);
   log(`rewrote import.meta.url asset refs in ${rewritten} files`);
 
   log("emitting type declarations");
-  emitDeclarations();
-  const copiedDecls = copyDeclarationSources();
+  emitDeclarations(packageRoot, "tsconfig.build.json");
+  const copiedDecls = copyDeclarationSources(srcDir, distDir);
   const rewrittenDecls = rewriteDeclarationExtensions(distDir);
   log(`copied ${copiedDecls} declaration sources; normalized specifiers in ${rewrittenDecls} declarations`);
 
@@ -234,8 +133,11 @@ const run = async () => {
   // (CI stages them into src/). A dev bundle without them is fine, but a
   // published tarball must never ship without the binary or the third-party
   // attribution that redistributing it requires (AGPL) - and a burned npm
-  // version can never be re-cut, so hard-fail under prepack.
-  const isPrepack = process.env.npm_lifecycle_event === "prepack";
+  // version can never be re-cut, so hard-fail under prepack. The webapp's
+  // prepack chains this script with npm_lifecycle_event inherited, so also
+  // require that the package being packed is this one.
+  const isPrepack =
+    process.env.npm_lifecycle_event === "prepack" && process.env.npm_package_name === "@rom-weaver/wasm";
   const missingAsset = (message) => {
     if (isPrepack) {
       throw new Error(`${message}; refusing to pack an incomplete package`);
