@@ -40,7 +40,7 @@ Choose the guide that matches what you are trying to do.
 
 ## Develop and contribute
 
-- [Contribution guide](../.github/CONTRIBUTING.md): reporting bugs, proposing changes,
+- [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes,
   validation, and contribution licensing.
 - [Code of conduct](../.github/CODE_OF_CONDUCT.md): expectations for respectful project
   participation and reporting conduct concerns.

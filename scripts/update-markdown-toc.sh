@@ -5,9 +5,9 @@ files=("$@")
 if ((${#files[@]} == 0)); then
   files=(
     README.md
+    CONTRIBUTING.md
     docs
     .github/CODE_OF_CONDUCT.md
-    .github/CONTRIBUTING.md
     .github/RELEASING.md
     .github/SECURITY.md
     packages/rom-weaver-webapp/design/icon-masters/README.md

@@ -48,6 +48,10 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
+The hosted CLA Assistant GitHub App checks outside contributors against
+[CLA version 1.0](../CLA.md). It is configured in GitHub rather than as a
+repository workflow.
+
 Coverage is deliberately sampled weekly rather than repeated after every green
 `main` build. It restores the source-exact production WASM cache and builds on
 a miss, so the report still covers the current commit; manual runs use the same

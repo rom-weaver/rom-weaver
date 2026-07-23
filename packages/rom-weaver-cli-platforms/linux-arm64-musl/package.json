@@ -31,7 +31,7 @@
   },
   "files": [
     "bin/rom-weaver",
-    "LICENSE.md",
+    "LICENSE",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md",
     "third_party/licenses/**"

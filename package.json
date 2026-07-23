@@ -50,7 +50,7 @@
   "files": [
     "bin/rom-weaver.mjs",
     "docs/man/*.1",
-    "LICENSE.md"
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public",
