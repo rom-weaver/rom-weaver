@@ -45,8 +45,13 @@
           document.documentElement.setAttribute("data-theme", preferred || system);
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
-          const accent = common && typeof common.accent === "string" ? common.accent : "";
-          if (accent && accent !== "madder") document.documentElement.setAttribute("data-accent", accent);
+          const storedAccent = common && typeof common.accent === "string" ? common.accent : "";
+          const accents = ["madder", "woad", "verdigris", "plum", "ochre"];
+          const accent = accents.includes(storedAccent)
+            ? storedAccent
+            : document.documentElement.getAttribute("data-accent") || "madder";
+          if (accent === "madder") document.documentElement.removeAttribute("data-accent");
+          else document.documentElement.setAttribute("data-accent", accent);
         } catch (error) {
           document.documentElement.setAttribute("data-theme", "dark");
         }

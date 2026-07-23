@@ -9,7 +9,7 @@ import { WebappRoot } from "./webapp-root.tsx";
 
 /**
  * Build-time prerender of the landing shell: the exact markup the client's
- * first committed render produces (startup ready, patcher tab, no session),
+ * first committed render produces (startup ready, requested public tab, no session),
  * rendered through react-dom/server so index.html can ship it inside
  * #webapp-root and the browser can paint the real shell before the bundle
  * executes. The client keeps createRoot (replace, not hydrate); see
@@ -45,7 +45,9 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onTrimSourceChange: noop,
 });
 
-const renderLandingShellHtml = (): string => {
+const renderLandingShellHtml = (
+  currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator"> = "patcher",
+): string => {
   const controller = createWebappRootController({
     onApplySettings: noop,
     onCreatorViewRequested: () => true,
@@ -55,6 +57,7 @@ const renderLandingShellHtml = (): string => {
   });
   const state = {
     ...controller.getState(),
+    currentView,
     // Match the state of the client's first painted frame: initializeWebapp
     // runs loading -> ready synchronously before the browser can paint.
     startup: { message: "", status: "ready" as const },

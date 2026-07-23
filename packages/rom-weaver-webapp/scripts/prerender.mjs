@@ -5,7 +5,7 @@ import { createServer } from "vite";
 // Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
 // SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
 // Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
-const renderLandingShell = async () => {
+const renderLandingShell = async (view = "patcher") => {
   // Node exposes navigator.hardwareConcurrency, which would bake the build
   // machine's core count into the masthead. Force the "unknown environment"
   // rendering (no thread count) so the prerendered HTML is deterministic.
@@ -22,7 +22,7 @@ const renderLandingShell = async () => {
   });
   try {
     const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
-    return entry.renderLandingShellHtml();
+    return entry.renderLandingShellHtml(view);
   } finally {
     await server.close();
   }
