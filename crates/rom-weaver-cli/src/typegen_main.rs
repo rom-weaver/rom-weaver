@@ -28,8 +28,7 @@ use rom_weaver_patches::PatchRegistry;
 use serde_json::{Map, Value, json};
 use ts_rs::TS;
 
-const TYPES_OUTPUT_PATH: &str =
-    "packages/rom-weaver-wasm/src/generated/rom-weaver-rust-types.d.ts";
+const TYPES_OUTPUT_PATH: &str = "packages/rom-weaver-wasm/src/generated/rom-weaver-rust-types.d.ts";
 const METADATA_OUTPUT_PATH: &str =
     "packages/rom-weaver-wasm/src/generated/rom-weaver-format-metadata.ts";
 const COMMAND_TYPES_OUTPUT_PATH: &str =

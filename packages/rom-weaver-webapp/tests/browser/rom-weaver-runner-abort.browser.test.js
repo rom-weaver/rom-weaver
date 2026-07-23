@@ -20,7 +20,8 @@ const resetWorkerClientState = () => {
   workerClientState.terminateCalls = 0;
 };
 
-vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
+vi.mock("@rom-weaver/wasm", async (importOriginal) => ({
+  ...(await importOriginal()),
   createBrowserWorkerClient: () => {
     const pendingRuns = new Set();
     return {
