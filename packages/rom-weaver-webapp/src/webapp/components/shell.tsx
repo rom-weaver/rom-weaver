@@ -190,6 +190,7 @@ const Masthead = ({
   const localizer = useUiLocalizer();
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
+  const threadsLabel = localizer.message("ui.env.threads");
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
     event.preventDefault();
@@ -214,11 +215,9 @@ const Masthead = ({
               <span className="build-version-label" title={versionTitle}>
                 {version}
               </span>
-              {threads ? (
-                <span className="masthead-threads">
-                  · {threads} {localizer.message("ui.env.threads")}
-                </span>
-              ) : null}
+              <span className="masthead-threads" data-thread-label={threadsLabel}>
+                {threads ? `· ${threads} ${threadsLabel}` : null}
+              </span>
             </span>
           ) : null}
         </span>

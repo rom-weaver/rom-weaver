@@ -240,6 +240,8 @@ const copyConsoleLogs = async (): Promise<string> => {
 };
 
 const installGlobalErrorHooks = () => {
+  // Absent during the build-time prerender (scripts/prerender.mjs runs in Node).
+  if (typeof window === "undefined") return;
   window.addEventListener("error", (event) => {
     captureRecord("error", "window.error", [
       event.message,
@@ -259,15 +261,17 @@ const installGlobalErrorHooks = () => {
 installConsoleHooks();
 installGlobalErrorHooks();
 
-window.ROM_WEAVER_CONSOLE_LOGS = {
-  clear: () => {
-    records.length = 0;
-  },
-  copy: copyConsoleLogs,
-  formatJsonLines: formatConsoleLogsJsonLines,
-  getReport,
-  size: () => records.length,
-};
+if (typeof window !== "undefined") {
+  window.ROM_WEAVER_CONSOLE_LOGS = {
+    clear: () => {
+      records.length = 0;
+    },
+    copy: copyConsoleLogs,
+    formatJsonLines: formatConsoleLogsJsonLines,
+    getReport,
+    size: () => records.length,
+  };
+}
 
 export type { ConsoleLogRecord };
 export { subscribeConsoleLogRecords };

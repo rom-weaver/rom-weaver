@@ -110,7 +110,7 @@ const isInsideLocalDropZone = (target: EventTarget | null) =>
 
 type WorkflowView = WebappRootProps["state"]["currentView"];
 
-const resolveThreads = (threads: unknown): number => {
+const resolveThreads = (threads?: unknown): number => {
   const numeric = typeof threads === "number" ? threads : Number.parseInt(String(threads || ""), 10);
   if (Number.isFinite(numeric) && numeric >= 1) return numeric;
   return typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 0;
@@ -340,7 +340,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
                 ? WORKFLOW_TABS
                 : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
             }
-            threads={resolveThreads(threads)}
+            threads={resolveThreads()}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
           />
@@ -449,4 +449,4 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   );
 }
 
-export { resolveThreads, selectViewWithTransition, WebappRoot };
+export { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot };

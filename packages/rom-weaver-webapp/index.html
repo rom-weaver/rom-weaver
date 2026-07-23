@@ -30,6 +30,33 @@
         }
       }
     </style>
+    <script>
+      // Resolve data-theme/data-accent before first paint so the prerendered shell
+      // inside #webapp-root paints with the :root[data-theme] design tokens instead
+      // of waiting for theme.ts in the bundle. Mirrors theme.ts (stored preference,
+      // else prefers-color-scheme, dark default) and accent.ts (settings store's
+      // accent field; madder = no attribute). theme.ts/accent.ts re-apply the same
+      // values on boot, so this only moves the attribute earlier - keep in sync.
+      (function () {
+        try {
+          const stored = localStorage.getItem("rom-weaver-theme");
+          const preferred = stored === "light" || stored === "dark" ? stored : "";
+          const system = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", preferred || system);
+          const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
+          const common = settings && settings.common ? settings.common : null;
+          const storedAccent = common && typeof common.accent === "string" ? common.accent : "";
+          const accents = ["madder", "woad", "verdigris", "plum", "ochre"];
+          const accent = accents.includes(storedAccent)
+            ? storedAccent
+            : document.documentElement.getAttribute("data-accent") || "madder";
+          if (accent === "madder") document.documentElement.removeAttribute("data-accent");
+          else document.documentElement.setAttribute("data-accent", accent);
+        } catch (error) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="RomWeaver" />
@@ -66,5 +93,14 @@
   </head>
   <body>
     <div id="webapp-root" aria-busy="true"></div>
+    <script>
+      // Fill the prerendered environment slot before first paint. React reads
+      // the same browser value, so replacing the shell cannot move the masthead.
+      (function () {
+        const slot = document.querySelector(".masthead-threads");
+        const threads = navigator.hardwareConcurrency;
+        if (slot && threads) slot.textContent = `· ${threads} ${slot.dataset.threadLabel}`;
+      })();
+    </script>
   </body>
 </html>

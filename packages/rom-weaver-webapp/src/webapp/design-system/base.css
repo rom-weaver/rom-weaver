@@ -1,16 +1,55 @@
 /* ── base ── */
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* The prerendered boot shell (aria-busy until React mounts) must paint with its
+   panel settled while its ambient loops keep moving. The remount carries those
+   loops forward and fast-forwards entry animations before it paints. */
+#webapp-root[aria-busy="true"] .workflow-body { animation: none !important; }
+#webapp-root[aria-busy="true"] .tool { background: transparent; border-color: transparent; transition: none; }
 /* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
 :root:has(.rw-app) { font-size: clamp(15px, 13px + .42vw, 17px); }
-/* metric-adjusted fallback ≈ Inter Tight: no reflow when the webfont swaps in */
+/* Metric-adjusted fallback ≈ Archivo: minimal reflow when the webfont swaps in.
+   (The old single face was tuned for Inter Tight at 93% and left the 800-weight
+   hero 19% narrow - visible now that the prerendered shell paints before the
+   webfont on cold loads.) Archivo's advance widths genuinely widen with weight
+   while the local face's synthetic bold barely does, so parity needs one
+   size-adjust per weight band; values measured empirically against the real
+   Archivo at weights 500/600/700/800 (all within ±0.3%). */
 @font-face {
-  font-family: "Inter Tight Fallback";
+  font-family: "Archivo Fallback";
   src: local("Helvetica Neue"), local("Arial");
-  size-adjust: 93%;
-  ascent-override: 100%;
-  descent-override: 26%;
+  font-weight: 100 500;
+  size-adjust: 99%;
+  ascent-override: 85.4%;
+  descent-override: 20.4%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Helvetica Neue"), local("Arial");
+  font-weight: 501 600;
+  size-adjust: 101.5%;
+  ascent-override: 85.4%;
+  descent-override: 20.4%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Helvetica Neue"), local("Arial");
+  font-weight: 601 700;
+  size-adjust: 105.2%;
+  ascent-override: 85.4%;
+  descent-override: 20.4%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Helvetica Neue"), local("Arial");
+  font-weight: 701 900;
+  size-adjust: 108.7%;
+  ascent-override: 85.4%;
+  descent-override: 20.4%;
   line-gap-override: 0%;
 }
 .rw-app {
