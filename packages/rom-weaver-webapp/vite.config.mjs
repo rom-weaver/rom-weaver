@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
@@ -34,6 +35,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+  "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
 });
 const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
@@ -186,15 +188,51 @@ const createRootManifestSource = (channel, channelLabel) => {
   return `${JSON.stringify(manifest, null, 2)}\n`;
 };
 
+const createRobotsSource = (channel) =>
+  channel === "prod"
+    ? "User-agent: *\nAllow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n"
+    : "User-agent: *\nDisallow: /\n";
+
+const replaceMetaContent = (html, attribute, name, content) =>
+  html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${content}$2`);
+
+const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
+  const title = channel === "prod" ? route.title : route.title.replace("RomWeaver", `RomWeaver ${channelLabel}`);
+  const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
+  let routeHtml = html
+    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+    .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1${canonicalUrl}$2`);
+  for (const [attribute, name, content] of [
+    ["name", "description", route.description],
+    ["property", "og:title", title],
+    ["property", "og:description", route.description],
+    ["property", "og:url", canonicalUrl],
+    ["name", "twitter:title", title],
+    ["name", "twitter:description", route.description],
+  ]) {
+    routeHtml = replaceMetaContent(routeHtml, attribute, name, content);
+  }
+  return routeHtml;
+};
+
+const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://rom-weaver.com/weave</loc></url>
+  <url><loc>https://rom-weaver.com/create</loc></url>
+</urlset>
+`;
+
 // The tab title and the iOS home-screen label are the two places the channel has
-// to show up before the bundle has even booted.
+// to show up before the bundle has even booted. Non-production deployments also
+// opt out of indexing here; the deployed response repeats the policy as a header.
 const stampChannelIdentity = (channel, channelLabel) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html) {
       if (channel === "prod") return html;
       return html
-        .replace("<title>rom-weaver</title>", `<title>rom-weaver ${channelLabel}</title>`)
+        .replace("<title>RomWeaver", `<title>RomWeaver ${channelLabel}`)
+        .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
         .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${channelLabel}$3`);
     },
     order: "pre",
@@ -220,6 +258,21 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
       for (const [assetPath, sourcePath] of Object.entries(generatedLicenseAssetSources)) {
         copyFile(sourcePath, path.join(distDir, assetPath));
       }
+      const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
+      const createHtml = createWorkflowRouteHtml(indexHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel);
+      fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      for (const [slug, html] of [
+        ["weave", indexHtml],
+        ["create", createHtml],
+        ["trim", indexHtml],
+        ["tools", indexHtml],
+      ]) {
+        const routeDir = path.join(distDir, slug);
+        fs.mkdirSync(routeDir, { recursive: true });
+        fs.writeFileSync(path.join(routeDir, "index.html"), html.replace("<head>", '<head>\n    <base href="../" />'));
+      }
+      fs.writeFileSync(path.join(distDir, "robots.txt"), createRobotsSource(channel));
+      if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), path.join(distDir, "third_party"), {
         recursive: true,
       });
@@ -235,16 +288,23 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
 // Emitted at the dist root, which keeps it out of the SW precache globs.
-const writeCloudflareHeadersAsset = () => {
+const writeCloudflareHeadersAsset = (channel) => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
-      const headerLines = Object.entries(crossOriginIsolationHeaders)
+      const headers =
+        channel === "prod"
+          ? crossOriginIsolationHeaders
+          : { ...crossOriginIsolationHeaders, "X-Robots-Tag": "noindex, nofollow" };
+      const headerLines = Object.entries(headers)
         .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
       const outputPath = path.join(path.resolve(rootDir, outDir), "_headers");
-      fs.writeFileSync(outputPath, `/*\n${headerLines}\n`);
+      fs.writeFileSync(
+        outputPath,
+        `/*\n${headerLines}\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n`,
+      );
     },
     configResolved(config) {
       outDir = config.build.outDir;
@@ -392,7 +452,7 @@ export default defineConfig(({ command }) => {
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       writeWebappStaticAssets(appChannel, appChannelLabel),
       writeChangelogAsset(),
-      writeCloudflareHeadersAsset(),
+      writeCloudflareHeadersAsset(appChannel),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,

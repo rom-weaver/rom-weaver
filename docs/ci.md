@@ -214,12 +214,28 @@ leg per channel, deploying with Cloudflare Direct Upload and reusing the
 CI-tested WASM artifact rather than spending Cloudflare build minutes on a
 second toolchain.
 
-| Channel | Cloudflare project | URL |
-| --- | --- | --- |
-| `prod` | `rom-weaver` | rom-weaver.com |
-| `beta` | `rom-weaver-beta` | beta.rom-weaver.com |
-| `nightly` | `rom-weaver-nightly` | nightly.rom-weaver.com |
-| `preview` | `rom-weaver-preview` | `pr-<n>.rom-weaver-preview.pages.dev` |
+| Channel | Cloudflare project | URL | Intended use |
+| --- | --- | --- | --- |
+| `prod` | `rom-weaver` | [rom-weaver.com](https://rom-weaver.com/) | Stable public webapp |
+| `beta` | `rom-weaver-beta` | [beta.rom-weaver.com](https://beta.rom-weaver.com/) | Release candidates and prereleases |
+| `nightly` | `rom-weaver-nightly` | [nightly.rom-weaver.com](https://nightly.rom-weaver.com/) | Latest webapp changes from `main` |
+| `preview` | `rom-weaver-preview` | `pr-<n>.rom-weaver-preview.pages.dev` | Review an internal pull request |
+
+Only production is intended for search indexing. Beta, nightly, and pull-request
+preview builds include `noindex, nofollow` in both the HTML robots metadata and
+the Cloudflare `X-Robots-Tag` response header, and their generated `robots.txt`
+blocks crawling with `Disallow: /`. Production instead publishes `Allow: /`.
+Its sitemap lists the two stable, crawlable workflow pages:
+[`/weave`](https://rom-weaver.com/weave) and
+[`/create`](https://rom-weaver.com/create). History API navigation keeps those
+URLs distinct; the generated HTML gives each its own title, description, and
+canonical URL plus Open Graph and Twitter card metadata.
+
+Each build also generates Cloudflare Pages `_headers`. All channels receive the
+cross-origin isolation headers required by threaded WASM. Content-hashed
+`/assets/*` responses use a one-year immutable browser cache, while
+`cache-service-worker.js` uses `no-cache` so a deployment is discovered
+promptly. Non-production channels add their `X-Robots-Tag` in the same file.
 
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel

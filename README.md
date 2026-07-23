@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/">Open the webapp</a>
+  <a href="https://rom-weaver.com/weave">Open the webapp</a>
   · <a href="docs/README.md">Docs index</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
@@ -105,13 +105,13 @@ AI-assisted code may still need extra scrutiny.
 
 ### Webapp
 
-Open the hosted webapp at **[rom-weaver.com](https://rom-weaver.com/)**. There
+Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. There
 is nothing to install and no account: choose **Weave**, add a ROM and one or
 more patches, review the detected formats and checksums, then run the workflow
 and save the result. Use **Create** to generate a distributable patch from
 an original and a modified file. Your files are processed locally and never
 leave the device. Install it as a PWA from the browser menu to use it offline.
-New here? [Try the sample weave](https://rom-weaver.com/?bundle=first-weave.zip#/weave)
+New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
 with tiny synthetic files.
 
 <a name="self-host-the-webapp"></a>

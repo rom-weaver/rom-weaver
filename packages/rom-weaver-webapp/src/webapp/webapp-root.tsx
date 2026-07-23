@@ -28,16 +28,41 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
+import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
-  { icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
-  { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
-  { icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
+  { href: "weave", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
+  { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
+  { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
+  { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
 const logger = createLogger("webapp-root");
+
+const syncWorkflowSeoMetadata = (view: WorkflowView) => {
+  const route =
+    view === "creator" ? WORKFLOW_SEO_ROUTES.creator : view === "patcher" ? WORKFLOW_SEO_ROUTES.patcher : null;
+  if (!route) {
+    const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
+    document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
+    return;
+  }
+  const title = CHANNEL_BADGE ? route.title.replace("RomWeaver", `RomWeaver ${CHANNEL_BADGE}`) : route.title;
+  const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
+  document.title = title;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", route.description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute("content", title);
+  document
+    .querySelector<HTMLMetaElement>('meta[property="og:description"]')
+    ?.setAttribute("content", route.description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute("content", title);
+  document
+    .querySelector<HTMLMetaElement>('meta[name="twitter:description"]')
+    ?.setAttribute("content", route.description);
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
+};
 
 // Dismissing the update banner is remembered per running build: the same
 // pending update never re-prompts on reload, while an actual update changes
@@ -151,10 +176,8 @@ const ActivityFinishMarker = () => {
 
 function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession }: WebappRootProps) {
   useEntryAnimationLock();
-  // The page title follows the active workflow tab.
   useEffect(() => {
-    const tab = WORKFLOW_TABS.find((entry) => entry.id === state.currentView);
-    document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
+    syncWorkflowSeoMetadata(state.currentView);
   }, [state.currentView]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.

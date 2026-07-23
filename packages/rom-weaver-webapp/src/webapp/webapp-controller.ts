@@ -62,47 +62,49 @@ const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, 
   }
 };
 
-// Lightweight hash router: each tab is a `#/<slug>` route so reload, back/forward,
-// and shared links land on the same tab. Hash routing needs no service-worker or
-// server navigation fallback (the fragment never reaches the network).
-const VIEW_TO_HASH_SLUG: Record<WorkflowView, string> = {
+const VIEW_TO_ROUTE_SLUG: Record<WorkflowView, string> = {
   creator: "create",
   patcher: "weave",
   tools: "tools",
   trim: "trim",
 };
-const HASH_SLUG_TO_VIEW: Record<string, WorkflowView> = {
-  apply: "patcher",
+const ROUTE_SLUG_TO_VIEW: Record<string, WorkflowView> = {
   create: "creator",
+  "create.html": "creator",
   tools: "tools",
   trim: "trim",
   weave: "patcher",
 };
 
-const readHashSegments = (): string[] => {
+const readRouteSegments = (): string[] => {
   if (typeof window === "undefined") return [];
-  return window.location.hash.replace(/^#\/?/, "").trim().toLowerCase().split("/").filter(Boolean);
+  const segments = window.location.pathname.trim().toLowerCase().split("/").filter(Boolean);
+  if (segments.at(-1) === "index.html") segments.pop();
+  return segments;
 };
 
-/** Parse the active view from the URL hash (accepts the friendly slug or the raw view id). */
-const readWorkflowViewFromHash = (): WorkflowView | null => {
-  const segments = readHashSegments();
-  if (segments.length !== 1) return null;
-  const slug = segments[0] || "";
-  return HASH_SLUG_TO_VIEW[slug] || normalizeWorkflowView(slug);
+const readWorkflowViewFromPath = (): WorkflowView | null => {
+  const segments = readRouteSegments();
+  const slug = segments.at(-1) || "";
+  return ROUTE_SLUG_TO_VIEW[slug] || null;
 };
 
-const writeWorkflowViewToHash = (view: WorkflowView): void => {
+type RouteHistoryMode = "none" | "push" | "replace";
+
+const writeWorkflowViewToPath = (view: WorkflowView, historyMode: RouteHistoryMode): void => {
   if (typeof window === "undefined") return;
-  const slug = VIEW_TO_HASH_SLUG[view];
-  const nextHash = `#/${slug}`;
-  if (window.location.hash !== nextHash) {
-    if (typeof window.history?.replaceState === "function") {
-      window.history.replaceState(window.history.state, "", nextHash);
-    } else {
-      window.location.hash = nextHash;
-    }
-  }
+  if (historyMode === "none") return;
+  const baseUrl = new URL(window.location.href);
+  const pathSegments = baseUrl.pathname.split("/");
+  while (pathSegments.at(-1) === "") pathSegments.pop();
+  if (pathSegments.at(-1) === "index.html") pathSegments.pop();
+  const currentSlug = pathSegments.at(-1) || "";
+  if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
+  baseUrl.pathname = `${pathSegments.join("/")}/`;
+  const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], baseUrl);
+  nextUrl.search = window.location.search;
+  if (nextUrl.href === window.location.href) return;
+  window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };
 
 type WebappState = {
@@ -186,12 +188,12 @@ const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
   // Before the React tree renders, so the accent tokens resolve on first paint.
   applyAccent(settings.accent);
-  // The URL hash wins (deep links / reload), then the last persisted tab, then the default.
+  // The URL path wins (deep links / reload), then the last persisted tab, then the default.
   const initialView = normalizeWorkflowViewForSettings(
-    readWorkflowViewFromHash() || loadPersistedWorkflowView(options.storage),
+    readWorkflowViewFromPath() || loadPersistedWorkflowView(options.storage),
     settings,
   );
-  writeWorkflowViewToHash(initialView);
+  writeWorkflowViewToPath(initialView, "replace");
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
     currentView: initialView,
@@ -251,17 +253,17 @@ const createWebappRootController = (options: ControllerOptions) => {
     setState(nextState);
     if (nextCurrentView !== currentView) {
       persistWorkflowView(options.storage, nextCurrentView);
-      writeWorkflowViewToHash(nextCurrentView);
+      writeWorkflowViewToPath(nextCurrentView, "replace");
     }
     emitCommittedSettings();
     applyAccent(nextSettings.accent);
     options.onLocalizationChange(nextSettings.language);
   };
 
-  const commitMode = (mode: WorkflowView) => {
+  const commitMode = (mode: WorkflowView, historyMode: RouteHistoryMode = "push") => {
     setState({ currentView: mode });
     persistWorkflowView(options.storage, mode);
-    writeWorkflowViewToHash(mode);
+    writeWorkflowViewToPath(mode, historyMode);
   };
 
   const updatePatcherSession = (nextPatcherSession: Partial<PatcherSessionState>) => {
@@ -292,7 +294,10 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 
   return {
-    activateInitialView(mode: string, optionsForSelection?: { fallbackOnError?: boolean }) {
+    activateInitialView(
+      mode: string,
+      optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode },
+    ) {
       return this.selectView(mode, optionsForSelection);
     },
     buildSettingsForRuntime(overrides?: { allowDropFiles?: boolean; ondropfiles?: () => void }) {
@@ -368,7 +373,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       setState({ settingsDialogOpen: false });
       return true;
     },
-    selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean }) {
+    selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode }) {
       const state = store.getState();
       let nextView = normalizeWorkflowView(mode) || DEFAULT_WORKFLOW_VIEW;
       nextView = normalizeWorkflowViewForSettings(nextView, state.settings);
@@ -385,7 +390,7 @@ const createWebappRootController = (options: ControllerOptions) => {
         const opened = options.onCreatorViewRequested(optionsForSelection);
         if (!opened) nextView = DEFAULT_WORKFLOW_VIEW;
       }
-      commitMode(nextView);
+      commitMode(nextView, optionsForSelection?.historyMode);
       return nextView;
     },
     setBundlePackage(value: string) {
@@ -493,4 +498,4 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 };
 
-export { areSettingsEqual, createWebappRootController, readWorkflowViewFromHash };
+export { areSettingsEqual, createWebappRootController, readWorkflowViewFromPath };

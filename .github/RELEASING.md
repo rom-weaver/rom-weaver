@@ -184,11 +184,12 @@ edit as a change of the schema's identity rather than a URL update: `$schema`
 values are carried through bundles verbatim and never matched against this
 constant.
 
-The service worker in
-`packages/rom-weaver-webapp/src/webapp/cache-service-worker.ts` injects the
-COOP/COEP headers needed for cross-origin isolation and chooses the compatible
-COEP mode at runtime. Do not replace this with a static `_headers` file without
-testing Safari and iOS.
+Cloudflare Pages reads the generated `dist/_headers` file. It applies the
+COOP/COEP headers on the first response, blocks indexing outside production,
+caches content-hashed assets, and keeps the service worker revalidating. The
+service worker in `packages/rom-weaver-webapp/src/webapp/cache-service-worker.ts`
+remains the fallback for hosts that cannot set response headers and chooses the
+compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
 
 ## Normal release flow
 

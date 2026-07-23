@@ -21,7 +21,7 @@ const Github = createLucideIcon("github", [
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
-type WorkflowTab = { id: string; label: string; icon: ReactNode };
+type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
@@ -49,7 +49,7 @@ const ModeRail = ({
     const thumb = thumbRef.current;
     if (!(rail && thumb)) return undefined;
     const position = (animate: boolean) => {
-      const selected = rail.querySelector<HTMLButtonElement>('.mode[aria-selected="true"]');
+      const selected = rail.querySelector<HTMLAnchorElement>('.mode[aria-selected="true"]');
       if (!selected) return;
       if (!animate) thumb.style.transition = "none";
       thumb.style.left = `${selected.offsetLeft}px`;
@@ -76,7 +76,7 @@ const ModeRail = ({
     if (nextId === undefined) return;
     event.preventDefault();
     onSelect(nextId);
-    railRef.current?.querySelector<HTMLButtonElement>(`.mode[data-mode="${nextId}"]`)?.focus();
+    railRef.current?.querySelector<HTMLAnchorElement>(`.mode[data-mode="${nextId}"]`)?.focus();
   };
 
   return (
@@ -91,21 +91,25 @@ const ModeRail = ({
       >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
         {tabs.map((tab) => (
-          <button
+          <a
             aria-controls={`panel-${tab.id}`}
             aria-selected={tab.id === current}
             className="mode"
             data-mode={tab.id}
+            href={tab.href}
             id={`tab-${tab.id}`}
             key={tab.id}
-            onClick={() => onSelect(tab.id)}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              onSelect(tab.id);
+            }}
             role="tab"
             tabIndex={tab.id === current ? 0 : -1}
-            type="button"
           >
             {tab.icon}
             <span>{tab.label}</span>
-          </button>
+          </a>
         ))}
       </div>
     </nav>

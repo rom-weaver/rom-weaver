@@ -20,7 +20,7 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
-import { createWebappRootController, readWorkflowViewFromHash } from "./webapp-controller.ts";
+import { createWebappRootController, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
@@ -362,11 +362,14 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  // Hash router: respond to deep links, manual hash edits, and history navigation.
-  window.addEventListener("hashchange", () => {
-    const view = readWorkflowViewFromHash();
-    if (view && view !== webappController.getState().currentView)
-      selectViewWithTransition(() => webappController.selectView(view));
+  window.addEventListener("popstate", () => {
+    const view = readWorkflowViewFromPath();
+    if (view && view !== webappController.getState().currentView) {
+      selectViewWithTransition(() => {
+        const selectedView = webappController.selectView(view, { historyMode: "none" });
+        if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
+      });
+    }
   });
 }
 
@@ -388,8 +391,8 @@ const initializeWebapp = () => {
   webappController.setStartupState("loading");
   renderWebappRoot();
 
-  // A URL session always lands on the apply tab, whatever the hash says.
-  const initialMode = urlSessionParse.request ? "patcher" : readWorkflowViewFromHash() || "patcher";
+  // A URL session always lands on the apply tab, whatever the route says.
+  const initialMode = urlSessionParse.request ? "patcher" : readWorkflowViewFromPath() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, { fallbackOnError: true });
 };

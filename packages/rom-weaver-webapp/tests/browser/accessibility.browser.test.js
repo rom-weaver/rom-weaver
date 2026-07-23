@@ -381,9 +381,9 @@ const stagedPatchItem = (fileName) => ({
 });
 
 const PAGE_TABS = [
-  { icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Weave" },
-  { icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
-  { icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+  { href: "weave", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Weave" },
+  { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
+  { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
 ];
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
@@ -1053,7 +1053,7 @@ describe("webapp responsive navigation", () => {
             onSelectTab: noop,
             tabs: [
               ...PAGE_TABS,
-              { icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+              { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
             ],
           }),
         ),

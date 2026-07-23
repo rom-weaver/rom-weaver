@@ -16,9 +16,9 @@ const withSettings = (children: ReactNode) => (
 );
 
 const TABS = [
-  { icon: <svg aria-hidden="true" />, id: "patcher", label: "Weave" },
-  { icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
+  { href: "weave", icon: <svg aria-hidden="true" />, id: "patcher", label: "Weave" },
+  { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
+  { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 
 const mastheadProps = {
@@ -48,7 +48,8 @@ describe("Masthead", () => {
     const tabs = Array.from(rail.querySelectorAll('[role="tab"]'));
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Weave", "Create", "Trim"]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
-    fireEvent.click(tabs[1] as HTMLButtonElement);
+    expect(tabs[1]?.getAttribute("href")).toBe("create");
+    fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
     // the external links (GitHub then Tip) lead the row; a separator fences
     // them off from the app tools (Reset, Theme, Log, Settings) that trail

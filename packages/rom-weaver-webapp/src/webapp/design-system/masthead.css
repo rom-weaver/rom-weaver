@@ -46,7 +46,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   display: inline-flex; align-items: center; gap: var(--sp-s);
   padding: var(--sp-s) var(--sp-l); border-radius: var(--r-s);
   font-size: .8rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
-  color: var(--ink-2); transition: color .25s var(--ease);
+  color: var(--ink-2); text-decoration: none; transition: color .25s var(--ease);
 }
 .rw-app .mode svg { width: 1rem; height: 1rem; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }

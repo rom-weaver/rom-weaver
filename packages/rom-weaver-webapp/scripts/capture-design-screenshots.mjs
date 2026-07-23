@@ -12,10 +12,10 @@ const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhos
 const CASES = [
   {
     name: "weave",
-    route: "/?bundle=first-weave.zip#/weave",
+    route: "/weave?bundle=first-weave.zip",
     waitFor: "The woven result will be verified against the expected output.",
   },
-  { name: "create", route: "/#/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
+  { name: "create", route: "/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
 ];
 const VIEWPORTS = [
   { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 1, isMobile: false },

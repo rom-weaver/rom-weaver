@@ -4,3 +4,7 @@
 # OPFS store and service worker - a user landing on www would see different
 # saved state than on the apex. Redirect instead of serving.
 https://www.rom-weaver.com/* https://rom-weaver.com/:splat 301
+/create /create.html 200
+/tools /index.html 200
+/trim /index.html 200
+/weave /index.html 200

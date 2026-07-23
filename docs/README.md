@@ -26,6 +26,8 @@ Choose the guide that matches what you are trying to do.
 
 - [Self-hosting](self-hosting.md): Docker, static deployment, reverse proxies,
   subpaths, HTTPS, and COOP/COEP.
+- [Hosted deployment channels](ci.md#deploy-channels): production, beta, nightly,
+  and pull-request previews, including their stability and search-indexing policy.
 - [Runtime configuration](env-vars.md): native, WASM, webapp, test, and build
   configuration knobs.
 

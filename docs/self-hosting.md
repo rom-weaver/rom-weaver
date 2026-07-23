@@ -129,9 +129,26 @@ on demand for clients that cannot take brotli.
 The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
 build, so unpacking it is an alternative to building from a checkout.
 
-The server should fall back to `index.html` for navigation requests within the
-rom-weaver path. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so
-relative assets and the service-worker scope resolve consistently.
+The build includes directory-index pages for `/weave`, `/create`, `/trim`, and
+`/tools`, so ordinary static servers can resolve direct visits and refreshes
+without rewrite configuration. A server that disables directory indexes must
+instead fall back to `index.html` for those navigation requests. Redirect
+`/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History
+API routes, and the service-worker scope resolve consistently. Explicit
+directory-document URLs such as `/weave/index.html` are normalized in the
+browser to the clean `/weave` route without another request.
+
+Cloudflare-compatible hosts read the generated `_headers` file. On other hosts,
+the equivalent cache policy is:
+
+```text
+/assets/*                 Cache-Control: public, max-age=31536000, immutable
+/cache-service-worker.js  Cache-Control: no-cache
+```
+
+Only `/assets/*` uses immutable caching because those filenames contain content
+hashes. Do not apply that policy to HTML, the manifest, `robots.txt`,
+`sitemap.xml`, or other stable filenames.
 
 ## Cross-origin isolation
 

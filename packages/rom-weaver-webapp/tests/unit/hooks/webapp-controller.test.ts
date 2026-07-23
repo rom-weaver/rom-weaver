@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createWebappRootController, readWorkflowViewFromHash } from "../../../src/webapp/webapp-controller.ts";
+import { createWebappRootController, readWorkflowViewFromPath } from "../../../src/webapp/webapp-controller.ts";
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -27,7 +27,7 @@ const createController = () =>
 // Exercises the controller through the hand-rolled store that replaced zustand: the public
 // getState/subscribe/mutation surface must round-trip exactly as before.
 beforeEach(() => {
-  window.location.hash = "";
+  window.history.replaceState({}, "", "/");
 });
 
 describe("createWebappRootController over the vanilla store", () => {
@@ -36,7 +36,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.currentView).toBe("patcher");
     expect(state.settingsDialogOpen).toBe(false);
     expect(state.patcherSession.romFilePresent).toBe(false);
-    expect(window.location.hash).toBe("#/weave");
+    expect(window.location.pathname).toBe("/weave");
   });
 
   it("hides beta workflow views until enabled", () => {
@@ -54,26 +54,52 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().currentView).toBe("patcher");
   });
 
-  it("falls back from a beta route in the initial hash", () => {
-    window.location.hash = "#/tools";
+  it("falls back from a disabled beta route in the initial path", () => {
+    window.history.replaceState({}, "", "/tools");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.hash).toBe("#/weave");
+    expect(window.location.pathname).toBe("/weave");
   });
 
-  it("normalizes the legacy apply route to the weave route", () => {
-    window.location.hash = "#/apply";
+  it("loads the create workflow from its path", () => {
+    window.history.replaceState({}, "", "/create");
     const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.hash).toBe("#/weave");
+    expect(controller.getState().currentView).toBe("creator");
+    expect(readWorkflowViewFromPath()).toBe("creator");
+    expect(window.location.pathname).toBe("/create");
   });
 
-  it("rejects multi-segment workflow routes", () => {
-    window.location.hash = "#/weave/extra";
-    expect(readWorkflowViewFromHash()).toBeNull();
+  it("preserves a self-hosted subpath while switching workflows", () => {
+    window.history.replaceState({}, "", "/rom-weaver/create/");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("creator");
+    controller.selectView("patcher");
+    expect(window.location.pathname).toBe("/rom-weaver/weave");
+  });
+
+  it("normalizes a static-host index page to its clean route", () => {
+    window.history.replaceState({}, "", "/rom-weaver/weave/index.html");
+    expect(readWorkflowViewFromPath()).toBe("patcher");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.hash).toBe("#/weave");
+    expect(window.location.pathname).toBe("/rom-weaver/weave");
+  });
+
+  it("preserves URL session parameters without emitting hash routes", () => {
+    window.history.replaceState({}, "", "/weave?bundle=first-weave.zip");
+    const controller = createController();
+    controller.selectView("creator");
+    expect(window.location.pathname).toBe("/create");
+    expect(window.location.search).toBe("?bundle=first-weave.zip");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("does not preserve legacy hash routes", () => {
+    window.history.replaceState({}, "", "/#/create");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.hash).toBe("");
   });
 
   it("routes and tracks the tools workflow", () => {
@@ -81,7 +107,7 @@ describe("createWebappRootController over the vanilla store", () => {
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("tools")).toBe("tools");
-    expect(window.location.hash).toBe("#/tools");
+    expect(window.location.pathname).toBe("/tools");
     controller.setToolsSessionState(true);
     expect(controller.getState().toolsSession.active).toBe(true);
   });

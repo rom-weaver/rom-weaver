@@ -18,8 +18,8 @@ Use `?bundle=<url>` to load a bundle, or combine `?rom=<url>` with one or more
 `?patch=<url>` values:
 
 ```text
-https://rom-weaver.com/?bundle=https://example.com/release.zip#/weave
-https://rom-weaver.com/?rom=https://example.com/game.bin&patch=https://example.com/change.ips#/weave
+https://rom-weaver.com/weave?bundle=https://example.com/release.zip
+https://rom-weaver.com/weave?rom=https://example.com/game.bin&patch=https://example.com/change.ips
 ```
 
 The webapp reads these parameters once at startup and fetches each source in
