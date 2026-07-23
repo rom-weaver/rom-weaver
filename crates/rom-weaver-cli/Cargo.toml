@@ -2,7 +2,7 @@
 name = "rom-weaver-cli"
 authors.workspace = true
 description = "Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI."
-keywords = ["rom", "rom-hack", "patch", "disc-image", "bundle", "cli"]
+keywords = ["rvz", "chd", "z3ds", "rom", "patch"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

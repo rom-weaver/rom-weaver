@@ -40,9 +40,12 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
+      # release-please reports the commit the release targets. For merged
+      # release PRs this is the merge commit, not necessarily the PR head.
+      sha: ${{ steps.release.outputs.sha }}
       # The merged release PR has the same tree as its head, whose CI artifact
       # is available now. The merge commit's CI is deliberately not required.
-      sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || steps.release.outputs.sha }}
+      artifact_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || steps.release.outputs.sha }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v5
@@ -88,6 +91,22 @@ jobs:
         with:
           ref: ${{ steps.release-pr.outputs.branch }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Sync generated release metadata
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+        run: |
+          set -euo pipefail
+          node scripts/sync-version.mjs
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if git diff --cached --quiet; then
+            echo "Generated release metadata is already current"
+            exit 0
+          fi
+          git commit -m "chore(release): sync generated metadata"
+          git push origin "HEAD:$RELEASE_PR_BRANCH"
 
       - name: Aggregate prerelease changelog
         if: steps.release.outputs.prs_created == 'true'
@@ -301,9 +320,11 @@ jobs:
         id: ci
         env:
           GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.release.outputs.artifact_sha }}
           PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
-        # The checkout above is at the release tag, not at github.sha (main).
-        run: TARGET_SHA=$(git rev-parse HEAD) scripts/ci/resolve-wasm-run.sh
+        # The checkout above is at the release commit; the reusable CI artifact
+        # may be from the release PR head, which has the same tree.
+        run: scripts/ci/resolve-wasm-run.sh
 
       - name: Set up static webapp build
         uses: ./.github/actions/setup-build-env
@@ -350,6 +371,7 @@ jobs:
       - name: Package static webapp release asset
         env:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}
+          ROM_WEAVER_COMMIT_HASH: ${{ needs.release.outputs.sha }}
         run: |
           npm --prefix packages/rom-weaver-webapp run build
           if rg --files --no-ignore packages/rom-weaver-webapp/dist | rg -q '\.(br|gz)$'; then

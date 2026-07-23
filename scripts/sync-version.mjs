@@ -24,6 +24,9 @@ const syncedPackageJsonPaths = [
 // shipping a launcher that resolves last release's binaries.
 const pinnedDependencyPackageJsonPaths = ["package.json", "packages/rom-weaver-alias/package.json"];
 const syncedPackageDirs = [".", "packages/rom-weaver-webapp"];
+const rootLockOptionalPackageJsonPaths = syncedPackageJsonPaths.filter((packageJsonPath) =>
+  packageJsonPath.startsWith("packages/rom-weaver-cli-platforms/"),
+);
 
 async function fileExists(filePath) {
   try {
@@ -183,6 +186,57 @@ function updatePackageLock(packageDir) {
   }
 }
 
+async function syncRootOptionalPackageLockEntries() {
+  const lockfilePath = join(rootDir, "package-lock.json");
+  if (!(await fileExists(lockfilePath))) return false;
+
+  const rootPackage = JSON.parse(await readFile(packageJsonPath, "utf8"));
+  const lock = JSON.parse(await readFile(lockfilePath, "utf8"));
+  lock.packages ??= {};
+  lock.packages[""] ??= {};
+  lock.packages[""].optionalDependencies ??= {};
+
+  const localPackages = new Map();
+  for (const packageJsonRelativePath of rootLockOptionalPackageJsonPaths) {
+    const pkg = JSON.parse(await readFile(join(rootDir, packageJsonRelativePath), "utf8"));
+    localPackages.set(pkg.name, pkg);
+  }
+
+  let changed = false;
+  for (const [name, version] of Object.entries(rootPackage.optionalDependencies ?? {})) {
+    if (!name.startsWith("@rom-weaver/")) continue;
+    const pkg = localPackages.get(name);
+    if (!pkg) continue;
+
+    if (lock.packages[""].optionalDependencies[name] !== version) {
+      lock.packages[""].optionalDependencies[name] = version;
+      changed = true;
+    }
+
+    const entry = {
+      version,
+      cpu: pkg.cpu,
+      ...(pkg.libc ? { libc: pkg.libc } : {}),
+      license: pkg.license,
+      optional: true,
+      os: pkg.os,
+      bin: pkg.bin,
+      funding: typeof pkg.funding === "string" ? { url: pkg.funding } : pkg.funding,
+    };
+    const key = `node_modules/${name}`;
+    if (JSON.stringify(lock.packages[key]) !== JSON.stringify(entry)) {
+      lock.packages[key] = entry;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeFile(lockfilePath, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+    console.log("Synced root @rom-weaver optional package-lock entries");
+  }
+  return changed;
+}
+
 function stageAllChanges() {
   // Stage everything the bump touched so nothing is left out of the version
   // commit. npm requires a clean tree to start `npm version`, so the only
@@ -231,6 +285,8 @@ async function main() {
       updatePackageLock(packageDir);
     }
   }
+
+  changed = (await syncRootOptionalPackageLockEntries()) || changed;
 
   if (changed || bumpType) {
     stageAllChanges();
