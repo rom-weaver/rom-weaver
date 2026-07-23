@@ -46,6 +46,8 @@
 @media (hover: hover) {
   .rw-app .cancel:hover { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .cancel:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
 .rw-app .cancel svg { width: 14px; height: 14px; }
 .rw-app .prog-panel {
   position: relative; display: flex; align-items: stretch;

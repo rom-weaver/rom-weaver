@@ -53,6 +53,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .mode:not([aria-selected="true"]):active { color: var(--ink); }
 .rw-app .tools-subnav { padding: 10px var(--pad); border-block-end: 1px solid var(--seam-soft); background: var(--plate-2); }
 .rw-app .tools-subnav-rail { display: flex; gap: var(--sp-s); }
 .rw-app .tools-subnav-tab {
@@ -60,6 +62,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border: 1px solid var(--thread); border-radius: var(--r-s); background: color-mix(in oklab, var(--thread) 14%, var(--well));
   color: var(--thread-text); cursor: pointer; font-size: .78rem; font-weight: 650;
 }
+/* No hover pair to mirror: the tab is lit at rest, so press deepens the tint. */
+.rw-app .tools-subnav-tab:active { background: color-mix(in oklab, var(--thread) 22%, var(--well)); }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }

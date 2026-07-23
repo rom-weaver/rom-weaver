@@ -19,6 +19,8 @@
 @media (hover: hover) {
   .rw-app .notice .x:hover { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .notice .x:active { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
 .rw-app .notice .x svg { width: 14px; height: 14px; margin: 0; }
 
 /* `.fault` itself is kept: it is referenced by the entry-animation lock selector in

@@ -98,6 +98,8 @@
 @media (hover: hover) {
   .rw-app a:hover { color: var(--thread-text); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app a:active { color: var(--thread-text); }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rw-app :focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; border-radius: 4px; }
 /* a dialog body is only focused programmatically (to park initial focus off the

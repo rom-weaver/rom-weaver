@@ -42,6 +42,8 @@
 @media (hover: hover) {
   .rw-app .updates-ver:hover { color: var(--thread-text); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .updates-ver:active { color: var(--thread-text); }
 .rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
 .rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
 .rw-app .changelog-subject { font-size: .9rem; }
@@ -54,6 +56,7 @@
 @media (hover: hover) {
   .rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 }
+.rw-app .banner-x:active { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 .rw-app .banner-x svg { width: 14px; height: 14px; }
 
 .rw-app .wakelock {

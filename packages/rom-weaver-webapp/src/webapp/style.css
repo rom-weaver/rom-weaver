@@ -56,6 +56,11 @@ a:focus-visible{
 	}
 }
 
+/* Touch devices need active feedback because they lack hover. */
+a:active{
+	color:var(--rom-weaver-color-primary-hover);
+}
+
 select{
 	appearance:none;
 	background-image:

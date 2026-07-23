@@ -58,6 +58,8 @@
 @media (hover: hover) {
   .rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
 }
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .log-dlg .logview .seg-btn:active { color: var(--ink); }
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
   background: var(--thread); color: var(--thread-ink);
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
@@ -65,6 +67,7 @@
 @media (hover: hover) {
   .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 }
+.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
 .rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .rw-app .log-filter-bar { display: flex; align-items: center; gap: var(--sp-s); }
 .rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }

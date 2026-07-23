@@ -300,6 +300,7 @@
 @media (hover: hover) {
   .rw-app .info-btn:hover { color: var(--ink-2); }
 }
+.rw-app .info-btn:active { color: var(--ink-2); }
 .rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
 .rw-app .info-pop {
   position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
