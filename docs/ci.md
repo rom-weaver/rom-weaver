@@ -62,7 +62,9 @@ no bypass actor to merge past it. Rebasing a branch onto `main` is the usual way
 to hit this.
 
 **Close and reopen the pull request to recover.** The `reopened` event makes the
-app post `license/cla` against the current head, and it lands within seconds.
+app post `license/cla` against the current head, and it lands within seconds. It
+also re-runs the whole of `ci.yml` against an unchanged head, so budget a full
+CI cycle before the pull request goes green again.
 
 The widely cited fix - commenting `recheck` - **does not work on this repo's own
 pull requests.** That trigger belongs to the bot's signature-request comment,
