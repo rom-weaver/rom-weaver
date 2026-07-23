@@ -163,7 +163,7 @@ const DropZone = ({
   // label - that drops below); in the compact add-row it is the plain button
   // with its label inline.
   const mainNode = (
-    <span className={join("main", !big && "btnish")}>
+    <span className={join("main", big ? "bead" : "btnish")}>
       {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
       {big ? null : renderLabelBody()}
     </span>
