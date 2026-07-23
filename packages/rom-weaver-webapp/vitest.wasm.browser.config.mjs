@@ -48,6 +48,12 @@ export default defineConfig({
     __ROM_WEAVER_WASM_STRESS_1GB__: JSON.stringify(STRESS_1GB),
   },
   envPrefix: ["VITE_", "ROM_WEAVER_WASM_"],
+  // @rom-weaver/wasm resolves its worker and wasm assets via `new URL(..., import.meta.url)`.
+  // Pre-bundling would rewrite those URLs into `.vite/deps`, where the worker/wasm siblings do
+  // not exist; serve the package's real dist files so the relative resolution stays intact.
+  optimizeDeps: {
+    exclude: ["@rom-weaver/wasm"],
+  },
   server: {
     fs: {
       allow: [...new Set([REPO_ROOT, GIT_COMMON_ROOT])],
@@ -79,7 +85,7 @@ export default defineConfig({
     },
     coverage: {
       ...coverageBase,
-      include: ["src/wasm/**/*.{ts,tsx}"],
+      include: ["../rom-weaver-wasm/src/**/*.{ts,tsx}"],
       reportsDirectory: fileURLToPath(new URL("../../dist/coverage/react-wasm", import.meta.url)),
     },
     include: ["tests/wasm/*.test.mjs"],

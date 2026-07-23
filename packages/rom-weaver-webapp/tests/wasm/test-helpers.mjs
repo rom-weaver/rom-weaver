@@ -1,7 +1,8 @@
 import { expect } from "vitest";
-import { runBrowserFullFormatMatrixCore } from "../../src/wasm/browser-format-matrix.ts";
-import { createRomWeaverCommand } from "../../src/wasm/rom-weaver-command.ts";
-import { createBrowserWorkerClient } from "../../src/wasm/workers/browser-worker-client.ts";
+import { getRomWeaverWasmAssetUrls } from "@rom-weaver/wasm/asset-urls";
+import { runBrowserFullFormatMatrixCore } from "@rom-weaver/wasm/browser-format-matrix";
+import { createRomWeaverCommand } from "@rom-weaver/wasm/rom-weaver-command";
+import { createBrowserWorkerClient } from "@rom-weaver/wasm/workers/browser-worker-client";
 
 const OPFS_GUEST_ROOT = "/work";
 const TEXT_ENCODER = new TextEncoder();
@@ -58,7 +59,7 @@ export async function withTempFixture(run, options = {}) {
     const init = await worker.init({
       opfsHandle: fixtureHandle,
       runtimeMounts: [OPFS_GUEST_ROOT],
-      wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+      wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
       workGuestPath: OPFS_GUEST_ROOT,
       ...initOptions,
     });

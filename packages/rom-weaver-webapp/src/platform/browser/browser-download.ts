@@ -1,5 +1,5 @@
 import { createLogger } from "../../lib/logging.ts";
-import { isAppleMobileWebKit } from "../shared/webkit-runtime.ts";
+import { isAppleMobileWebKit } from "@rom-weaver/wasm";
 
 const logger = createLogger("browser-download");
 

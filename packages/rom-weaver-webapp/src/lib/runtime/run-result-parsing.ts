@@ -1,7 +1,7 @@
 import type { ChecksumMap, ChecksumVariant, ExtractTiming, RomTypeTag } from "../../types/checksum.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
-import type { ExtractedFileEntry } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
-import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
+import type { ExtractedFileEntry } from "@rom-weaver/wasm/generated/rom-weaver-rust-types";
+import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "@rom-weaver/wasm";
 import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventEffectiveThreads,

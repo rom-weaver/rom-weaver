@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBrowserWasiThreadWorkerPool } from "../../src/wasm/browser-wasi-thread-pool.ts";
-import { createRomWeaverBrowserOpfs } from "../../src/wasm/rom-weaver-browser-opfs-api.ts";
+import { getRomWeaverWasmAssetUrls } from "@rom-weaver/wasm/asset-urls";
+import { createBrowserWasiThreadWorkerPool } from "@rom-weaver/wasm/browser-wasi-thread-pool";
+import { createRomWeaverBrowserOpfs } from "@rom-weaver/wasm/rom-weaver-browser-opfs-api";
 import {
   BrowserRomWeaverWorkerClient,
   createBrowserWorkerClient,
-} from "../../src/wasm/workers/browser-worker-client.ts";
+} from "@rom-weaver/wasm/workers/browser-worker-client";
 import {
   assertRunJsonSucceeded,
   getGuestFileSize,
@@ -616,7 +617,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       },
       {
         initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+          wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
         },
       },
     );
@@ -631,7 +632,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       },
       {
         initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+          wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
         },
       },
     );
@@ -660,7 +661,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       },
       {
         initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+          wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
         },
       },
     );
@@ -727,7 +728,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
       },
       {
         initOptions: {
-          wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+          wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
         },
       },
     );
@@ -833,7 +834,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         },
         {
           initOptions: {
-            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
           },
         },
       );
@@ -890,7 +891,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         {
           initOptions: {
             sharedMemoryMaximumPages: 16384,
-            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
           },
         },
       );
@@ -985,7 +986,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         },
         {
           initOptions: {
-            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
           },
         },
       );
@@ -1056,7 +1057,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
           initOptions: {
             defaultThreads: 2,
             threadWorkerUrl: probeWorkerUrl,
-            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
           },
         },
       );
@@ -1132,7 +1133,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
           initOptions: {
             defaultThreads: 2,
             threadWorkerUrl: probeWorkerUrl,
-            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
           },
         },
       );
@@ -1150,7 +1151,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
         },
         {
           initOptions: {
-            wasmUrl: new URL("../../src/wasm/missing-rom-weaver-app.wasm", import.meta.url).href,
+            wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl.replace("rom-weaver-app.wasm", "missing-rom-weaver-app.wasm"),
           },
         },
       ),

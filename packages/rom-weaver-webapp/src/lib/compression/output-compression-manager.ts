@@ -20,7 +20,7 @@ import type { SourceMetadata } from "../../types/workflow-source.ts";
 import {
   type ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-} from "../../wasm/generated/rom-weaver-format-metadata.ts";
+} from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {

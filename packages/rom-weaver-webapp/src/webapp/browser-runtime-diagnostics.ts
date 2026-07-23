@@ -1,4 +1,4 @@
-import { hasMobileToken, isAppleTouchDesktop, isSafariBrowser } from "../platform/shared/webkit-runtime.ts";
+import { hasMobileToken, isAppleTouchDesktop, isSafariBrowser } from "@rom-weaver/wasm";
 
 type BrowserRuntimeFeatureProbe = {
   available: boolean;

@@ -1,7 +1,7 @@
 import type {
   ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-} from "../wasm/generated/rom-weaver-format-metadata.ts";
+} from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import type { LogLevel, LogSink } from "./logging.ts";
 
 type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup" | "ups" | "vcdiff" | "xdelta";

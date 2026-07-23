@@ -10,7 +10,7 @@ import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-controller.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
-import type { PatchValidationPlan } from "../../wasm/index.ts";
+import type { PatchValidationPlan } from "@rom-weaver/wasm";
 import type { ApplyWorkflowOptions, PatchInput, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { getPatchProbeRequirements } from "../apply/patch-apply-service.ts";

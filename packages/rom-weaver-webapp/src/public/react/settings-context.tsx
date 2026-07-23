@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo } from "react";
 import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createBrowserLocalizer, type Localizer } from "../../presentation/localization/index.ts";
-import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import type {
   ApplyPatchFormSettings,
   ApplyWorkflowSettings,

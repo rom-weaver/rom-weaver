@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   createExhaustiveContainerCases,
   getBrowserFormatMatrixMetadataCoverage,
-} from "../../src/wasm/browser-format-matrix.ts";
+} from "@rom-weaver/wasm/browser-format-matrix";
 import {
   ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,
   ROM_WEAVER_FILE_FILTERS,
   ROM_WEAVER_PATCH_FORMATS,
-} from "../../src/wasm/generated/rom-weaver-format-metadata.ts";
+} from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 
 const unique = (values) => [...new Set(values)];
 const sorted = (values) => [...values].sort((left, right) => left.localeCompare(right));

@@ -1,4 +1,4 @@
-import { ROM_WEAVER_Z3DS_SUBTYPES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_Z3DS_SUBTYPES } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 
 // The Z3DS subtype table maps a 3DS payload variant between its raw extension, the
 // compressed `.z*` extension assigned on create, and the payload's container magic.

@@ -5,15 +5,15 @@
  * / WebKit. Not imported by the app.
  */
 
-import { getInterruptedArchiveStressCase, runBrowserArchiveStress } from "../wasm/browser-archive-stress.ts";
+import { getInterruptedArchiveStressCase, runBrowserArchiveStress } from "@rom-weaver/wasm/browser-archive-stress";
 import {
   type BrowserFormatMatrixProfile,
   type BrowserFormatMatrixStep,
   type BrowserFormatMatrixSummary,
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
-} from "../wasm/browser-format-matrix.ts";
-import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
+} from "@rom-weaver/wasm/browser-format-matrix";
+import type { RomWeaverRunJsonEvent } from "@rom-weaver/wasm/rom-weaver-types";
 import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
 
 type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";

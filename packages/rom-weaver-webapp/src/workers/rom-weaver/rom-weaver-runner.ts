@@ -19,21 +19,18 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-} from "../../wasm/index.ts";
+} from "@rom-weaver/wasm";
 import {
   collectRomWeaverRunInputPaths,
+  createBrowserWorkerClient,
   createRomWeaverCommand,
+  getRomWeaverWasmAssetUrls,
   readRomWeaverRequestedThreadCount,
   readRomWeaverRunInputCommand,
   romWeaverCommandSupportsThreads,
   withRomWeaverForcedThreads,
-} from "../../wasm/index.ts";
-import browserWasmUrl from "../../wasm/rom-weaver-app.wasm?url";
-import browserOpfsProxyWorkerUrl from "../../wasm/workers/browser-opfs-proxy-worker.ts?worker&url";
-import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?worker&url";
-import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
-import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
-import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
+} from "@rom-weaver/wasm";
+import { formatCommandForTrace } from "@rom-weaver/wasm/workers/worker-trace-format";
 import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
@@ -253,13 +250,19 @@ const selectActiveVirtualFilesForRun = (
   return activeVirtualFiles.filter((file) => referencedPaths.has(file.path));
 };
 
-const resolveBrowserWasmUrl = async () => browserWasmUrl;
+// The wasm module and its three worker entrypoints are resolved by the package
+// via `new URL(..., import.meta.url)`, which the webapp's bundler rewrites to
+// copied asset URLs. The runner passes these strings through the client's init
+// options, so worker construction is never statically analyzed by the bundler.
+const browserWasmAssetUrls = getRomWeaverWasmAssetUrls();
 
-const resolveBrowserThreadWorkerUrl = async () => browserThreadWorkerUrl;
+const resolveBrowserWasmUrl = async () => browserWasmAssetUrls.wasmUrl;
 
-const resolveBrowserOpfsProxyWorkerUrl = async () => browserOpfsProxyWorkerUrl;
+const resolveBrowserThreadWorkerUrl = async () => browserWasmAssetUrls.threadWorkerUrl;
 
-const resolveBrowserRunnerWorkerUrl = async () => browserRunnerWorkerUrl;
+const resolveBrowserOpfsProxyWorkerUrl = async () => browserWasmAssetUrls.opfsProxyWorkerUrl;
+
+const resolveBrowserRunnerWorkerUrl = async () => browserWasmAssetUrls.runnerWorkerUrl;
 
 const canUseThreadedBrowserWasm = (root: typeof globalThis = globalThis) => {
   return typeof root.SharedArrayBuffer === "function" && root.crossOriginIsolated === true;

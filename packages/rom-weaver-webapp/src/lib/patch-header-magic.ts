@@ -1,4 +1,4 @@
-import { ROM_WEAVER_PATCH_FORMATS } from "../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_PATCH_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 
 // Expected leading magic (as a Latin-1 string for `header.startsWith`) per patch
 // extension, sourced from the generated patch-format metadata - Rust owns the

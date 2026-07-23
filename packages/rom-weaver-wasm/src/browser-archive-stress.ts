@@ -1,7 +1,4 @@
-import {
-  resolveAppleMobileSharedMemoryMaximumPages,
-  resolveMemoryCeilingBytes,
-} from "../lib/runtime/op-memory-estimate.ts";
+import { resolveAppleMobileSharedMemoryMaximumPages, resolveMemoryCeilingBytes } from "./device-memory.ts";
 import type { BrowserFormatMatrixStep, BrowserFormatMatrixSummary } from "./browser-format-matrix.ts";
 import { createRomWeaverCommand } from "./rom-weaver-command.ts";
 import type { RomWeaverRunJsonEvent } from "./rom-weaver-types.d.ts";

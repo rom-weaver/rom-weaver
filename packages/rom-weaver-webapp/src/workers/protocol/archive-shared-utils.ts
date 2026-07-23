@@ -1,6 +1,6 @@
 import { getFileNameExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
 import { hasReadableBytes, toUint8Array } from "../../storage/shared/binary/binary-source-utils.ts";
-import { ROM_WEAVER_ARCHIVE_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_ARCHIVE_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import type { BlobLike } from "./archive-source-types.ts";
 
 // Archive detection data (magic signatures + the libarchive extension universe)

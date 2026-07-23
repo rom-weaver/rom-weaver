@@ -4,8 +4,8 @@ import {
   OPFS_PROXY_GLOBAL_DOORBELL_INDEX,
   type OpfsProxyChannel,
   opfsProxyVersionIndex,
-} from "../../src/wasm/browser-opfs-proxy-channel.ts";
-import { CREATE_FLAG, WRITABLE_FLAG } from "../../src/wasm/browser-opfs-proxy-client.ts";
+} from "@rom-weaver/wasm/browser-opfs-proxy-channel";
+import { CREATE_FLAG, WRITABLE_FLAG } from "@rom-weaver/wasm/browser-opfs-proxy-client";
 import {
   OPFS_PROXY_CONTROL_AUX_LOW_INDEX,
   OPFS_PROXY_CONTROL_HANDLE_INDEX,
@@ -29,8 +29,8 @@ import {
   OPFS_PROXY_STATE_REQUESTED,
   OPFS_PROXY_STATUS_EIO,
   OPFS_PROXY_STATUS_OK,
-} from "../../src/wasm/browser-opfs-proxy-protocol.ts";
-import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm/browser-opfs-proxy-server.ts";
+} from "@rom-weaver/wasm/browser-opfs-proxy-protocol";
+import { type OpfsProxyServerHandle, startOpfsProxyServer } from "@rom-weaver/wasm/browser-opfs-proxy-server";
 
 // In-memory mock of the OPFS surface the proxy server needs. Files are growable byte buffers; the
 // mock SyncAccessHandle mirrors FileSystemSyncAccessHandle's synchronous read/write/truncate API.

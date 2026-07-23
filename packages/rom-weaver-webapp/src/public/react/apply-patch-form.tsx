@@ -10,7 +10,7 @@ import type {
 } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
-import type { PatchValidationPlan } from "../../wasm/index.ts";
+import type { PatchValidationPlan } from "@rom-weaver/wasm";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import {

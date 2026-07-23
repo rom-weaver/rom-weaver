@@ -7,7 +7,7 @@
  * `src/webapp/mobile-safari-matrix.ts`) to verify formats on real iOS Safari /
  * WebKit. The app itself never imports this module.
  */
-import { resolveAppleMobileSharedMemoryMaximumPages } from "../lib/runtime/op-memory-estimate.ts";
+import { resolveAppleMobileSharedMemoryMaximumPages } from "./device-memory.ts";
 import {
   ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CONTAINER_FORMATS,

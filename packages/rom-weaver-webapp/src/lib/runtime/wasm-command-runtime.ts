@@ -20,8 +20,8 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
-import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
-import { createRomWeaverCommand } from "../../wasm/index.ts";
+import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "@rom-weaver/wasm";
+import { createRomWeaverCommand } from "@rom-weaver/wasm";
 import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventFormat,

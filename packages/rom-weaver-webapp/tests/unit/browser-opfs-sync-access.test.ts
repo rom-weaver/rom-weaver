@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { openSyncAccessHandle } from "../../src/wasm/browser-opfs-sync-access.ts";
+import { openSyncAccessHandle } from "@rom-weaver/wasm/browser-opfs-sync-access";
 
 const stubHandle = () => ({}) as never;
 

@@ -7,7 +7,7 @@ import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../ty
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
-import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_CONTAINER_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { getArchiveMagicType, getArchiveType, MAGIC_SIGNATURES } from "../../workers/protocol/archive-shared-utils.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";

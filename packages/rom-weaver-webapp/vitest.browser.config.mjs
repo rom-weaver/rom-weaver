@@ -76,6 +76,10 @@ const readDownloadStream = (stream, maxBytes) =>
 
 export default mergeConfig(baseConfig, {
   optimizeDeps: {
+    // Keep @rom-weaver/wasm unbundled so its `new URL(..., import.meta.url)`
+    // worker/wasm asset references resolve against the real dist (pre-bundling
+    // rewrites them into .vite/deps where the siblings do not exist).
+    exclude: ["@rom-weaver/wasm"],
     include: ["@bjorn3/browser_wasi_shim"],
   },
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),

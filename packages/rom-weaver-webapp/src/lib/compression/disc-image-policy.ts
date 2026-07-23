@@ -1,4 +1,4 @@
-import { ROM_WEAVER_DISC_IMAGE_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_DISC_IMAGE_POLICY } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 
 // Shared consumer of Rust-owned disc-image policy. Ambiguous extensions such as `.bin` count as
 // disc images only when their known size aligns to a supported sector size.

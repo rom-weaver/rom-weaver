@@ -6,7 +6,7 @@ import type { CreateSettings, PatchFormat } from "../../types/settings.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreatePatchInput, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime-types.ts";
-import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { CREATE_ARCHIVE_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { getCreatePatchFormatsForSizes, normalizeCreatePatchFormat } from "../create/patch-format-limits.ts";
 import { createWorkflowDeps, runCreateWorkflow } from "../create/workflow.ts";

@@ -9,7 +9,7 @@ import {
   isSafariBrowser,
   isWebKitDesktopSafari,
   type WebKitRuntimeEnvironment,
-} from "../../src/platform/shared/webkit-runtime.ts";
+} from "@rom-weaver/wasm";
 import { getFileInputAcceptAttributes } from "../../src/public/react/file-input-accept.ts";
 
 /**

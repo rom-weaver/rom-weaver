@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, bench, describe } from "vitest";
-import { createBrowserWorkerClient } from "../../src/wasm/workers/browser-worker-client.ts";
+import { createBrowserWorkerClient } from "@rom-weaver/wasm/workers/browser-worker-client";
 import {
   COMMAND_PATHS_DEFAULTS,
   createBenchOptions,

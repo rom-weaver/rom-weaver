@@ -1,4 +1,4 @@
-import { ROM_WEAVER_PATCH_FORMATS } from "../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_PATCH_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { getFileNameParts } from "./path-utils.ts";
 
 // Patch families whose browser apply path gets special thread routing. The

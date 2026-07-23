@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROM_WEAVER_ARCHIVE_FORMATS } from "../../src/wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_ARCHIVE_FORMATS } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { getArchiveMagicType, getArchiveType, isArchiveFile } from "../../src/workers/protocol/archive-shared-utils.ts";
 
 // The archive tables are canonical in Rust (`rom-weaver-containers`) and reach

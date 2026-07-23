@@ -1,4 +1,4 @@
-import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 
 type CreatePatchFormatPreferenceInput = {
   automaticFormatSelection?: boolean;

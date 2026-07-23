@@ -1,0 +1,67 @@
+{
+  "name": "@rom-weaver/wasm",
+  "version": "0.7.0",
+  "description": "Browser WebAssembly runtime for rom-weaver: a WASI + OPFS threaded worker engine to inspect, extract, compress, and patch ROMs and disc images.",
+  "keywords": [
+    "rom",
+    "wasm",
+    "webassembly",
+    "wasi",
+    "opfs",
+    "chd",
+    "rvz",
+    "z3ds",
+    "disc-image",
+    "patch"
+  ],
+  "author": "Brandon Casey",
+  "homepage": "https://rom-weaver.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brandonocasey/rom-weaver.git",
+    "directory": "packages/rom-weaver-wasm"
+  },
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./rom-weaver-types": {
+      "types": "./src/rom-weaver-types.d.ts"
+    },
+    "./generated/rom-weaver-rust-types": {
+      "types": "./src/generated/rom-weaver-rust-types.d.ts"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/**/*.ts",
+    "src/**/*.d.ts"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

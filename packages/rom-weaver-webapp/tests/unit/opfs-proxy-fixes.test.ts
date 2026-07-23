@@ -3,8 +3,8 @@ import {
   createOpfsProxyChannel,
   OPFS_PROXY_GLOBAL_DOORBELL_INDEX,
   type OpfsProxyChannel,
-} from "../../src/wasm/browser-opfs-proxy-channel.ts";
-import { CREATE_FLAG, WRITABLE_FLAG } from "../../src/wasm/browser-opfs-proxy-client.ts";
+} from "@rom-weaver/wasm/browser-opfs-proxy-channel";
+import { CREATE_FLAG, WRITABLE_FLAG } from "@rom-weaver/wasm/browser-opfs-proxy-client";
 import {
   OPFS_PROXY_CONTROL_AUX_HIGH_INDEX,
   OPFS_PROXY_CONTROL_AUX_LOW_INDEX,
@@ -26,13 +26,13 @@ import {
   OPFS_PROXY_STATE_IDLE,
   OPFS_PROXY_STATE_REQUESTED,
   OPFS_PROXY_STATUS_OK,
-} from "../../src/wasm/browser-opfs-proxy-protocol.ts";
-import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm/browser-opfs-proxy-server.ts";
+} from "@rom-weaver/wasm/browser-opfs-proxy-protocol";
+import { type OpfsProxyServerHandle, startOpfsProxyServer } from "@rom-weaver/wasm/browser-opfs-proxy-server";
 import {
   THREAD_SLOT_LENGTH,
   THREAD_SLOT_STATE_INDEX,
   waitForAtomicsStateChange,
-} from "../../src/wasm/browser-wasi-thread-protocol.ts";
+} from "@rom-weaver/wasm/browser-wasi-thread-protocol";
 
 const ERRNO_ACCES = 2;
 

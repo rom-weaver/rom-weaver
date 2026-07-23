@@ -1,9 +1,4 @@
-import {
-  hasChromeToken,
-  hasMobileToken,
-  hasSafariToken,
-  isAppleTouchDesktop,
-} from "../../platform/shared/webkit-runtime.ts";
+import { hasChromeToken, hasMobileToken, hasSafariToken, isAppleTouchDesktop } from "@rom-weaver/wasm";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 
 /**

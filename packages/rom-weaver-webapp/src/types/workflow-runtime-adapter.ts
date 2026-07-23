@@ -6,7 +6,7 @@ import type {
   PatchValidateCommand,
   PatchValidationPlan,
   ThreadBudget,
-} from "../wasm/index.ts";
+} from "@rom-weaver/wasm";
 import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";

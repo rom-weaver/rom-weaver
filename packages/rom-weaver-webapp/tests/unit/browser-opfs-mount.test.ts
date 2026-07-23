@@ -1,10 +1,10 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { describe, expect, it } from "vitest";
-import { BrowserOpfsMount } from "../../src/wasm/browser-opfs-mount.ts";
-import type { OpfsProxyClient } from "../../src/wasm/browser-opfs-proxy-client.ts";
-import type { FileSystemDirectoryHandleLike } from "../../src/wasm/browser-opfs-runtime-types.ts";
-import type { RandomAccessFileLike } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
-import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
+import { BrowserOpfsMount } from "@rom-weaver/wasm/browser-opfs-mount";
+import type { OpfsProxyClient } from "@rom-weaver/wasm/browser-opfs-proxy-client";
+import type { FileSystemDirectoryHandleLike } from "@rom-weaver/wasm/browser-opfs-runtime-types";
+import type { RandomAccessFileLike } from "@rom-weaver/wasm/browser-opfs-wasi-file-inode";
+import { WasiRandomAccessFileInode } from "@rom-weaver/wasm/browser-opfs-wasi-file-inode";
 
 // Minimal RandomAccessFileLike that only tracks whether it was closed; the mount-pruning path under
 // test never touches the read/write surface.

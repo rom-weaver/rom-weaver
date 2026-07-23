@@ -1,5 +1,5 @@
 import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
-import type { ThreadBudget } from "../../wasm/index.ts";
+import type { ThreadBudget } from "@rom-weaver/wasm";
 
 const toThreadBudget = (value: unknown, fallback: ThreadBudget | null = null): ThreadBudget | null => {
   if (typeof value === "number" && Number.isFinite(value)) {

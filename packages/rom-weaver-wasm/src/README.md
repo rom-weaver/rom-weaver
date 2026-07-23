@@ -1,7 +1,7 @@
 # Browser WASM runtime
 
 JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution,
-consumed within `@rom-weaver/webapp` through relative imports.
+published as the `@rom-weaver/wasm` npm package and consumed by `@rom-weaver/webapp`.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -29,11 +29,11 @@ Use the native `rom-weaver` CLI directly for Node workflows.
 
 Import the TypeScript sources directly with relative paths, for example:
 
-- `src/wasm/index.ts` (main entry: format metadata, command helpers, OPFS API, types)
-- `src/wasm/generated/rom-weaver-format-metadata.ts`
-- `src/wasm/rom-weaver-browser-opfs-api.ts`
-- `src/wasm/workers/browser-worker-client.ts`
-- `src/wasm/workers/worker-protocol.ts`
+- `src/index.ts` (main entry: format metadata, command helpers, OPFS API, types)
+- `src/generated/rom-weaver-format-metadata.ts`
+- `src/rom-weaver-browser-opfs-api.ts`
+- `src/workers/browser-worker-client.ts`
+- `src/workers/worker-protocol.ts`
 
 ## Browser OPFS runner example
 
@@ -134,7 +134,7 @@ worker.terminate();
 
 ## Build and package
 
-The [development guide](../../../../docs/development.md#build-and-run-the-webapp)
+The [development guide](../../../docs/development.md#build-and-run-the-webapp)
 owns the WASM build and dev-server procedure. Build artifacts are written to
 this directory by default.
 

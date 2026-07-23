@@ -7,7 +7,7 @@ import { coverageConfigDefaults, defineConfig } from "vitest/config";
 // separate (cross-config merging is out of scope).
 export const coverageBase = {
   enabled: process.env.ROM_WEAVER_COVERAGE === "1",
-  exclude: [...coverageConfigDefaults.exclude, "src/wasm/generated/**", "src/**/*.d.ts", "tests/**"],
+  exclude: [...coverageConfigDefaults.exclude, "src/**/*.d.ts", "tests/**"],
   include: ["src/**/*.{ts,tsx}"],
   provider: "v8",
   reporter: ["text", "html", "lcov"],

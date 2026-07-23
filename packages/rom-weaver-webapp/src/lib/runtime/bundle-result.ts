@@ -23,7 +23,7 @@ import type {
   BundlePatchSource,
   BundleRom,
   RomWeaverBundle,
-} from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+} from "@rom-weaver/wasm/generated/rom-weaver-rust-types";
 import { parsePatchDescriptor } from "./ingest-result.ts";
 import type { WireRecord } from "./run-result-parsing.ts";
 

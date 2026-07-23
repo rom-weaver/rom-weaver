@@ -4,7 +4,7 @@ import type { SourceMetadata } from "../../types/workflow-source.ts";
 import {
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-} from "../../wasm/generated/rom-weaver-format-metadata.ts";
+} from "@rom-weaver/wasm/generated/rom-weaver-format-metadata";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import {
   getFileNameExtension,

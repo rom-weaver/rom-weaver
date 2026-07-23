@@ -42,6 +42,7 @@
   "scripts": {
     "audit:deps": "npm audit --audit-level=high",
     "audit:strings": "if rg --hidden --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
+    "prebuild": "node ../rom-weaver-wasm/scripts/build.mjs",
     "build": "vite build",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
     "dev": "node scripts/ensure-wasm-build.mjs && node scripts/dev-server.mjs",
@@ -88,8 +89,8 @@
     "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs"
   },
   "dependencies": {
-    "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.5.0",
+    "@rom-weaver/wasm": "0.7.0",
     "lucide-react": "1.25.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -97,6 +98,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4",
+    "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/babel-plugin-lingui-macro": "6.5.0",
     "@lingui/cli": "6.5.0",
     "@lingui/conf": "6.5.0",

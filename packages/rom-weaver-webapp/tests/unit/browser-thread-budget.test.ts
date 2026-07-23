@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { RomWeaverRunInput } from "../../src/wasm/browser-opfs-runtime-types.ts";
-import { browserThreadRequestOptions } from "../../src/wasm/browser-wasi-thread-sizing.ts";
-import { readRomWeaverRequestedThreadCount } from "../../src/wasm/rom-weaver-command.ts";
-import { resolveBrowserDefaultThreads } from "../../src/wasm/workers/browser-thread-budget.ts";
+import type { RomWeaverRunInput } from "@rom-weaver/wasm/browser-opfs-runtime-types";
+import { browserThreadRequestOptions } from "@rom-weaver/wasm/browser-wasi-thread-sizing";
+import { readRomWeaverRequestedThreadCount } from "@rom-weaver/wasm/rom-weaver-command";
+import { resolveBrowserDefaultThreads } from "@rom-weaver/wasm/workers/browser-thread-budget";
 
 const rootWithCores = (hardwareConcurrency: number | undefined): typeof globalThis =>
   ({ navigator: { hardwareConcurrency } }) as unknown as typeof globalThis;

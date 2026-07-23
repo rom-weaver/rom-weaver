@@ -6,7 +6,7 @@
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
 import type { ChecksumMap } from "../../types/checksum.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
-import type { IngestResult, IngestRomAsset, PatchDescriptor } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+import type { IngestResult, IngestRomAsset, PatchDescriptor } from "@rom-weaver/wasm/generated/rom-weaver-rust-types";
 import { parseChecksumVariants, type WireRecord } from "./run-result-parsing.ts";
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>

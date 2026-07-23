@@ -1,5 +1,5 @@
 import { emitTraceLog } from "../../lib/logging.ts";
-import { isAppleMobileWebKit, isWebKitDesktopSafari } from "../../platform/shared/webkit-runtime.ts";
+import { isAppleMobileWebKit, isWebKitDesktopSafari } from "@rom-weaver/wasm";
 import { getBrowserSourceBlob, getBrowserSourceHandle } from "../../storage/browser/browser-source-primitives.ts";
 import {
   getNamedSource,

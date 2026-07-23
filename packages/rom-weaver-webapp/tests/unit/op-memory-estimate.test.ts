@@ -5,7 +5,7 @@ import {
   resolveAppleMobileSharedMemoryMaximumPages,
   resolveMemoryCeilingBytes,
 } from "../../src/lib/runtime/op-memory-estimate.ts";
-import type { RomWeaverCommand } from "../../src/wasm/index.ts";
+import type { RomWeaverCommand } from "@rom-weaver/wasm";
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * 1024 * 1024;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RomWeaverRunJsonEvent } from "../../src/wasm/index.ts";
+import type { RomWeaverRunJsonEvent } from "@rom-weaver/wasm";
 import { getRomWeaverRunEventErrorKind } from "../../src/workers/rom-weaver/rom-weaver-run-events.ts";
 
 // The typed `error_kind` is the Rust-side contract (the generated

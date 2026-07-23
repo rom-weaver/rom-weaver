@@ -3,7 +3,7 @@ import type {
   RuntimePatchCreateFormatCandidates,
   RuntimePatchValidateWorkerInput,
 } from "../../types/workflow-runtime-adapter.ts";
-import type { ThreadBudget } from "../../wasm/index.ts";
+import type { ThreadBudget } from "@rom-weaver/wasm";
 import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventFormat,

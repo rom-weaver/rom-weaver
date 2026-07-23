@@ -18,7 +18,7 @@ import {
   WASI_ERRNO_ENOSYS,
   waitForAtomicsStateChange,
   waitForThreadStartAck,
-} from "../../src/wasm/browser-wasi-thread-protocol.ts";
+} from "@rom-weaver/wasm/browser-wasi-thread-protocol";
 
 // Unit coverage for the WASI thread-start protocol helpers (see docs/browser-concurrency.md). These
 // run on the browser main thread, so they only exercise paths that do NOT call Atomics.wait (which

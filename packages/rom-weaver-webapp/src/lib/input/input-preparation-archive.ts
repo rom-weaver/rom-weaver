@@ -2,7 +2,7 @@ import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
-import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
+import type { ExtractedFileEntry, ExtractStepDetails } from "@rom-weaver/wasm";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { RomWeaverError } from "../errors.ts";
 import { emitTraceLog } from "../logging.ts";

@@ -9,7 +9,7 @@ import {
   normalizeRomWeaverRunRequest,
   readRomWeaverRequestedThreadCount,
   withRomWeaverDefaultThreads,
-} from "../../src/wasm/rom-weaver-command.ts";
+} from "@rom-weaver/wasm/rom-weaver-command";
 
 describe("rom-weaver command boundary helpers", () => {
   it("exports Rust-generated known command discriminants", () => {

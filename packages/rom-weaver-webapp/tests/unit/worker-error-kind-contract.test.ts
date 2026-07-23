@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RomWeaverErrorKind } from "../../src/wasm/rom-weaver-types.d.ts";
-import { resolveWorkerErrorKind } from "../../src/wasm/workers/worker-error-utils.ts";
+import type { RomWeaverErrorKind } from "@rom-weaver/wasm/rom-weaver-types";
+import { resolveWorkerErrorKind } from "@rom-weaver/wasm/workers/worker-error-utils";
 
 // The canonical `Display` output prefix each RomWeaverError variant renders,
 // mirrored from the Rust contract test in

@@ -35,9 +35,13 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
 });
+// The wasm runtime and its third-party attribution (NOTICE, THIRD_PARTY_LICENSES.md,
+// third_party/) now live in the @rom-weaver/wasm workspace package; the wasm build
+// generates them beside the binary in the package's src.
+const wasmPackageSrcDir = path.resolve(rootDir, "..", "rom-weaver-wasm", "src");
 const generatedLicenseAssetSources = {
-  "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
-  "/THIRD_PARTY_LICENSES.md": path.join(rootDir, "src", "wasm", "THIRD_PARTY_LICENSES.md"),
+  "/NOTICE": path.join(wasmPackageSrcDir, "NOTICE"),
+  "/THIRD_PARTY_LICENSES.md": path.join(wasmPackageSrcDir, "THIRD_PARTY_LICENSES.md"),
 };
 // SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
 // document and COEP on every dedicated-worker script, so these apply to every response. Also the
@@ -57,8 +61,8 @@ const runtimeScratchIgnorePatterns = [
   "**/dist/**",
   "**/.rpjs-vfs",
   "**/.rpjs-vfs/**",
-  "**/src/wasm/*.wasm",
-  "**/src/wasm/*.wasm.br",
+  "**/rom-weaver-wasm/**/*.wasm",
+  "**/rom-weaver-wasm/**/*.wasm.br",
   path.join(os.tmpdir(), "rpjs-vfs*").replace(/\\/g, "/"),
 ];
 const getHotUpdateLabel = (filePath) => path.relative(rootDir, filePath) || path.basename(filePath);
@@ -218,11 +222,16 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
         copyFile(rootStaticAssetSources[assetPath], outputPath);
       }
       for (const [assetPath, sourcePath] of Object.entries(generatedLicenseAssetSources)) {
+        if (!fs.existsSync(sourcePath)) {
+          console.warn(`[static-assets] missing wasm attribution ${sourcePath}; run the wasm build to regenerate it`);
+          continue;
+        }
         copyFile(sourcePath, path.join(distDir, assetPath));
       }
-      fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), path.join(distDir, "third_party"), {
-        recursive: true,
-      });
+      const wasmThirdPartyDir = path.join(wasmPackageSrcDir, "third_party");
+      if (fs.existsSync(wasmThirdPartyDir)) {
+        fs.cpSync(wasmThirdPartyDir, path.join(distDir, "third_party"), { recursive: true });
+      }
     },
     configResolved(config) {
       outDir = config.build.outDir;
@@ -371,6 +380,10 @@ export default defineConfig(({ command }) => {
       ...serviceWorkerDefines,
     },
     optimizeDeps: {
+      // @rom-weaver/wasm resolves its worker + wasm assets via `new URL(...,
+      // import.meta.url)`; pre-bundling would rewrite those into `.vite/deps`
+      // where the sibling files do not exist. Serve its real dist untouched.
+      exclude: ["@rom-weaver/wasm"],
       include: [
         "@bjorn3/browser_wasi_shim",
         "lucide-react/dist/esm/icons/heart.mjs",

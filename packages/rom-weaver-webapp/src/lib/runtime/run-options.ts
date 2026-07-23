@@ -5,7 +5,7 @@ import type {
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverBrowserSyncAccessMode,
   RomWeaverRunJsonEvent,
-} from "../../wasm/index.ts";
+} from "@rom-weaver/wasm";
 import { emitTraceLog } from "../logging.ts";
 
 type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
