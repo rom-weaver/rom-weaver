@@ -997,11 +997,13 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
-      pull-requests: write
       statuses: write
     # An empty or missing list would be a hard "matrix contains no values"
     # error, so guard rather than trusting the planner to always emit one.
     if: needs.deploy-plan.outputs.targets != '' && needs.deploy-plan.outputs.targets != '[]'
+    environment:
+      name: webapp-${{ matrix.target.channel }}
+      url: ${{ steps.deploy.outputs.url }}
     strategy:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. The
@@ -1085,15 +1087,17 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "deployed to $url"
 
-      # Keep the status for the checks list, and keep one discoverable comment
-      # on the PR for people who do not open the checks list.
-      - name: Publish preview URL
+      # The GitHub environment above already surfaces the deployment on the PR;
+      # this status just carries the stable branch alias (pr-<n>...pages.dev)
+      # into the checks list, which the environment's raw per-deploy URL does
+      # not. The old marker-backed PR comment is retired - it duplicated the
+      # environment's native "View deployment" link.
+      - name: Publish preview status
         if: matrix.target.channel == 'preview' && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALIAS: https://${{ matrix.target.branch }}.rom-weaver-preview.pages.dev
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
@@ -1105,28 +1109,4 @@ jobs:
             --field description='Preview deployment - click Details' \
             --silent
 
-          body=$(cat <<EOF
-          <!-- rom-weaver-preview -->
-          Preview: [Open the deployed webapp](${ALIAS})
-
-          Updated for commit ${HEAD_SHA:0:7}.
-          EOF
-          )
-          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --paginate \
-            --jq '.[] | select(.body | contains("<!-- rom-weaver-preview -->")) | .id' \
-            | sed -n '1p')
-          if [ -n "$comment_id" ]; then
-            gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
-              --method PATCH \
-              --field body="$body" \
-              --silent
-            echo "updated preview comment #${comment_id}"
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-              --method POST \
-              --field body="$body" \
-              --silent
-            echo "created preview comment"
-          fi
           echo "preview status -> ${ALIAS}"
