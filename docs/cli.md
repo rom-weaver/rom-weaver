@@ -93,12 +93,12 @@ your platform's binary is downloaded.
 npm install --global rom-weaver
 ```
 
-Use the scoped launcher directly for a one-off run, or as a dev dependency to
-pin the version a repository's scripts expect:
+Use the scoped launcher directly for a one-off run, or as a dev dependency for
+a repository's scripts:
 
 ```bash
-npx @rom-weaver/cli probe --input game.iso
-npm install --save-dev @rom-weaver/cli
+npx @rom-weaver/cli@latest probe --input game.iso
+npm install --save-dev @rom-weaver/cli@latest
 ```
 
 #### cargo-binstall

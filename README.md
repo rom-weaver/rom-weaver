@@ -203,12 +203,12 @@ platform's binary is downloaded.
 npm install --global rom-weaver
 ```
 
-For a one-off run, or to pin the version a repository's scripts expect, use the
-scoped launcher directly:
+For a one-off run, or to add the scoped launcher for a repository's scripts,
+use latest explicitly:
 
 ```bash
-npx @rom-weaver/cli probe --input game.iso
-npm install --save-dev @rom-weaver/cli
+npx @rom-weaver/cli@latest probe --input game.iso
+npm install --save-dev @rom-weaver/cli@latest
 ```
 
 </details>
