@@ -101,14 +101,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # Nothing on main builds --release, and CI is Linux-only, so there is no
-      # upstream cache to seed from: this pays off from the second release
-      # onward, when a tag run restores what the previous tag run saved.
+      # Main CI builds this same release target matrix, so releases restore its
+      # caches without spending cache storage on a duplicate release-only set.
       # Keyed per matrix entry - the nine platforms share no artifacts.
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: npm-publish-${{ matrix.package }}
+          shared-key: cli-platform-${{ matrix.package }}
           cache-on-failure: true
           save-if: ${{ inputs.cache-save }}
 
