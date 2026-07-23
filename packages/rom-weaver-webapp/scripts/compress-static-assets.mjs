@@ -5,7 +5,31 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
-const COMPRESSIBLE_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
+// Denylist, not an allowlist: the attribution bundle ships ~435 files named
+// `LICENSE-APACHE`, `COPYING`, `NOTICE` and friends, none of which carry an
+// extension an allowlist could match, so they used to ship as 2.1 MB of raw
+// text with no `.br` sibling at all. Listing what is already compressed is both
+// shorter and self-maintaining - anything new is compressed by default, and
+// `writeIfSmaller` discards the result when brotli cannot beat the source.
+const PRECOMPRESSED_EXTENSIONS = new Set([
+  ".avif",
+  ".br",
+  ".gif",
+  ".gz",
+  // scripts/optimize-ico.mjs stores every favicon frame as PNG, so brotli
+  // recovers ~100 bytes for the cost of a second 15 KB file in the image.
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".mp4",
+  ".png",
+  ".webm",
+  ".webp",
+  ".woff",
+  ".woff2",
+  ".zip",
+  ".zst",
+]);
 
 const writeIfSmaller = (filePath, compressed, source) => {
   if (compressed.byteLength < source.byteLength) fs.writeFileSync(filePath, compressed);
@@ -34,8 +58,8 @@ const compressDirectory = (directory) => {
       compressDirectory(filePath);
       continue;
     }
-    if (entry.name.endsWith(".br") || entry.name.endsWith(".gz")) continue;
-    if (COMPRESSIBLE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) compressFile(filePath);
+    if (PRECOMPRESSED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+    compressFile(filePath);
   }
 };
 

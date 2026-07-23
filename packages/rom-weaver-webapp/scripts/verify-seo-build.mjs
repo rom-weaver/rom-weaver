@@ -26,6 +26,11 @@ assertIncludes(
   "fingerprinted asset cache headers",
 );
 assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
+assertIncludes(
+  headers,
+  "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8",
+  "attribution text content type",
+);
 assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "weave canonical");
 assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.patcher.description, "weave description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
