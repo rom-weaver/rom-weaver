@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.2](https://github.com/brandonocasey/rom-weaver/compare/v0.7.1...v0.7.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* **release:** keep install metadata in sync ([#107](https://github.com/brandonocasey/rom-weaver/issues/107)) ([cd6f3e7](https://github.com/brandonocasey/rom-weaver/commit/cd6f3e727d76633f1a9b97e06103a97e5892a9fc))
+* **release:** keep webapp hash abbreviated ([6466d38](https://github.com/brandonocasey/rom-weaver/commit/6466d38473b3c525fdf5cc73bf2122231bfa1b0e))
+* **webapp:** fit masthead build line on mobile ([#103](https://github.com/brandonocasey/rom-weaver/issues/103)) ([bef6ee0](https://github.com/brandonocasey/rom-weaver/commit/bef6ee0b56a2dbdbf7b7558a4ef22e0f0a22477f))
+
 ## [0.7.1](https://github.com/brandonocasey/rom-weaver/compare/v0.7.0...v0.7.1) (2026-07-23)
 
 
