@@ -343,6 +343,7 @@ spec would tag every platform package as a prerelease.
 | Job | Produces |
 | --- | --- |
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
+| `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
