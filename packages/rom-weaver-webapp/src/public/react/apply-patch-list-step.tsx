@@ -135,7 +135,7 @@ const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overr
     <p className="pfault-detail">{toFaultDetail(message)}</p>
     <p className="pfault-hint">
       {overrideAvailable
-        ? "Pick the ROM this patch was made for, or use “Weave anyway despite patch & ROM check mismatch” in 0x04."
+        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x04."
         : "Pick the ROM this patch was made for."}
     </p>
   </div>
@@ -538,7 +538,7 @@ const chainChipText = (
           : localizer.message("ui.chain.matchesRomVariant", { variant: verdict.matched.variant }),
     };
   }
-  if (item.validationState === "deferred") return { text: localizer.message("ui.chain.verifiedDuringWeave") };
+  if (item.validationState === "deferred") return { text: localizer.message("ui.chain.verifiedDuringApply") };
   return null;
 };
 
@@ -770,7 +770,7 @@ const PatchChecksDrawer = ({
       {outputCheckHint ? (
         <p className="patch-off-note" id={`rom-weaver-patch-output-check-hint-${index}`}>
           <TriangleAlert aria-hidden="true" />
-          <span>The expected output is verified only when every patch in the bundle is woven.</span>
+          <span>The expected output is verified only when every patch in the bundle is applied.</span>
         </p>
       ) : null}
     </ChecksumList>
@@ -906,7 +906,7 @@ const PatchTarget = ({
     <span className="target-grp">
       <Crosshair aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
-        Weave patch into
+        Apply patch to
       </label>
       <select
         className="meta-target-select mono ptgt-sel"
@@ -1355,7 +1355,7 @@ const ApplyPatchListStep = ({
   bundleMeta?: readonly (BundlePatchMeta | undefined)[];
   onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
-  /** The 0x04 "Weave anyway…" override toggle is on offer - fault hints name it. */
+  /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
   patchInput: PatcherUiState["patchInput"];
   /** ROM id → its computed checks, for verifying user-entered input checks against
@@ -1400,7 +1400,7 @@ const ApplyPatchListStep = ({
               IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and
               more.
             </li>
-            <li>NINJA1 headers are recognized, but NINJA1 weaving is not supported.</li>
+            <li>NINJA1 headers are recognized, but NINJA1 applying is not supported.</li>
             <li>PDS patches are unsupported; HDIFF19 directory patches are unsupported.</li>
             <li>Patches can be chosen from supported (and nested) archives.</li>
           </ul>

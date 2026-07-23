@@ -23,7 +23,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "No selectable file was found.",
   }),
   "error.OUTPUT_WRITE_FAILED": msg({ id: "error.OUTPUT_WRITE_FAILED", message: "Output could not be written." }),
-  "error.PATCH_APPLY_FAILED": msg({ id: "error.PATCH_APPLY_FAILED", message: "Weaving the patch failed." }),
+  "error.PATCH_APPLY_FAILED": msg({ id: "error.PATCH_APPLY_FAILED", message: "Applying the patch failed." }),
   "error.PATCH_CREATE_FAILED": msg({ id: "error.PATCH_CREATE_FAILED", message: "Patch creation failed." }),
   "error.PATCH_PARSE_FAILED": msg({ id: "error.PATCH_PARSE_FAILED", message: "Patch parsing failed." }),
   "error.PATCH_TARGET_MISMATCH": msg({
@@ -78,8 +78,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.chain.fixOrder": msg({ id: "ui.chain.fixOrder", message: "Fix order" }),
   "ui.chain.matchesRom": msg({ id: "ui.chain.matchesRom", message: "matches your ROM" }),
   "ui.chain.matchesRomVariant": msg({ id: "ui.chain.matchesRomVariant", message: "matches your ROM ({variant})" }),
-  "ui.chain.orderNote": msg({ id: "ui.chain.orderNote", message: "“{patch}” expects “{predecessor}” woven first." }),
-  "ui.chain.verifiedDuringWeave": msg({ id: "ui.chain.verifiedDuringWeave", message: "verified during the weave" }),
+  "ui.chain.orderNote": msg({ id: "ui.chain.orderNote", message: "“{patch}” expects “{predecessor}” applied first." }),
+  "ui.chain.verifiedDuringApply": msg({ id: "ui.chain.verifiedDuringApply", message: "verified during apply" }),
   "ui.common.close": msg({ id: "ui.common.close", message: "Close" }),
   "ui.common.copy": msg({ id: "ui.common.copy", message: "Copy" }),
   "ui.common.dismiss": msg({ id: "ui.common.dismiss", message: "Dismiss" }),
@@ -99,7 +99,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.local",
     message: "All local, in your browser — files never leave your machine.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Weave patches into any ROM or a sharable patch bundle," }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply patches to any ROM or a sharable patch bundle," }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and compress the result —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
@@ -139,7 +139,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.output.verified": msg({
     id: "ui.output.verified",
-    message: "The woven result will be verified against the expected output.",
+    message: "The applied result will be verified against the expected output.",
   }),
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",
@@ -160,7 +160,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.title": msg({ id: "ui.settings.title", message: "Settings" }),
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
-  "ui.step.apply": msg({ id: "ui.step.apply", message: "Weave" }),
+  "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),
   "ui.step.original": msg({ id: "ui.step.original", message: "Original" }),
   "ui.step.output": msg({ id: "ui.step.output", message: "Output" }),

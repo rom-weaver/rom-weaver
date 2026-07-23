@@ -49,7 +49,7 @@ function ObstructedHarness() {
     createElement(
       "button",
       { className: "run", style: { height: "52px", marginTop: "16px", width: "320px" }, type: "button" },
-      "Weave",
+      "Apply",
     ),
   );
 }

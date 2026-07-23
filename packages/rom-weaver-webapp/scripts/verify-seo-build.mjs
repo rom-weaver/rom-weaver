@@ -12,12 +12,12 @@ const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
 
-const weaveHtml = read("index.html");
+const applyHtml = read("index.html");
 const createHtml = read("create.html");
 const headers = read("_headers");
 const robots = read("robots.txt");
 
-for (const route of ["weave", "create", "trim", "tools"]) {
+for (const route of ["apply", "create", "trim", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(
@@ -31,15 +31,15 @@ assertIncludes(
   "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8",
   "attribution text content type",
 );
-assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "weave canonical");
-assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.patcher.description, "weave description");
+assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
+assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(
-  weaveHtml,
+  applyHtml,
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
-  "weave robots metadata",
+  "apply robots metadata",
 );
 
 if (production) {

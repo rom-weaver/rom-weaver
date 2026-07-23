@@ -46,9 +46,9 @@ describe("ui catalog", () => {
     expect(es.message("ui.common.copy")).toBe("Copiar");
     expect(de.message("ui.common.copy")).toBe("Kopieren");
     expect(en.message("ui.common.copy")).toBe("Copy");
-    expect(es.message("ui.step.apply")).toBe("Tejer");
-    expect(de.message("ui.step.apply")).toBe("Weben");
-    expect(en.message("ui.step.apply")).toBe("Weave");
+    expect(es.message("ui.step.apply")).toBe("Aplicar");
+    expect(de.message("ui.step.apply")).toBe("Anwenden");
+    expect(en.message("ui.step.apply")).toBe("Apply");
   });
 
   it("falls back to English per-id for unknown ids in a partial locale", () => {

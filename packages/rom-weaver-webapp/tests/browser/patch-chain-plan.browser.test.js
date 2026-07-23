@@ -81,12 +81,12 @@ test("checksumless patches with no evidence each verify against the ROM regardle
 
   // Both IPS patches apply cleanly to the ROM. With no checksum to tie either to the other's
   // output, neither has any more claim to being "chained" than the head does - so both verify
-  // green against the base. Before the fix the second patch read "verified during the weave"
-  // purely for being listed second (an empty promise: IPS has nothing to verify during a weave).
+  // green against the base. Before the fix the second patch read "verified during apply"
+  // purely for being listed second (an empty promise: IPS has nothing to verify during apply).
   const passedChecks = () =>
     document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  expect(chipText(1)).not.toBe("verified during the weave");
+  expect(chipText(1)).not.toBe("verified during apply");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
@@ -102,10 +102,10 @@ test("the basis select names the inferred basis and a pin re-plans the chain", a
   expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
 
   // Pinning "previous output" overrides the inference: the re-plan stops
-  // verifying this patch against the ROM and defers it to the weave (where the
+  // verifying this patch against the ROM and defers it to apply (where the
   // real intermediate decides).
   setFormControlValue(basisSelect, "previous");
-  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during the weave");
+  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
 
   // Back to auto: inference decides again and the chip recovers.
   setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "");
@@ -120,7 +120,7 @@ test("an out-of-order chain names its predecessor and Fix order repairs it", asy
   await expect.poll(() => chipText(1), { timeout: 60000 }).toContain("expects patch 3 first");
   await expect
     .poll(() => document.getElementById("rom-weaver-patch-order-note")?.textContent ?? "", { timeout: 60000 })
-    .toContain("woven first");
+    .toContain("applied first");
   // The broken chain also stands down output verification, naming the order problem.
   await expect
     .poll(() => document.getElementById("rom-weaver-bundle-output-unverified")?.textContent ?? "", { timeout: 60000 })

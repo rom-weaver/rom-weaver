@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/weave">Open the webapp</a>
+  <a href="https://rom-weaver.com/apply">Open the webapp</a>
   · <a href="docs/README.md">Docs index</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
@@ -105,14 +105,14 @@ AI-assisted code may still need extra scrutiny.
 
 ### Webapp
 
-Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. You
-do not need to install anything or create an account. Choose **Weave**, add a
+Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You
+do not need to install anything or create an account. Choose **Apply**, add a
 ROM and one or more patches, review the detected formats and checksums, then run
 the workflow and save the result. Use **Create** to generate a distributable
 patch from an original and a modified file. Your files are processed locally
 and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
-New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
+New here? [Try a sample apply](https://rom-weaver.com/apply?bundle=first-apply.zip)
 with tiny synthetic files.
 
 <a name="self-host-the-webapp"></a>
@@ -297,11 +297,11 @@ webapp builds, and tests.
   </thead>
   <tbody>
     <tr>
-      <td>Desktop — Apply patches (Weave)</td>
+      <td>Desktop — Apply patches</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-desktop-dark.png">
+          <img src="packages/rom-weaver-webapp/design/apply-desktop-light.png" alt="Filled Apply patch workflow on desktop">
         </picture>
       </td>
     </tr>
@@ -315,11 +315,11 @@ webapp builds, and tests.
       </td>
     </tr>
     <tr>
-      <td>Mobile — Apply patches (Weave)</td>
+      <td>Mobile — Apply patches</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-mobile-dark.png">
+          <img src="packages/rom-weaver-webapp/design/apply-mobile-light.png" alt="Filled Apply patch workflow on mobile" width="390">
         </picture>
       </td>
     </tr>

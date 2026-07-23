@@ -831,7 +831,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       accept: createFileInputAccept.unifiedRom,
       addLabel: "Add or replace a ROM",
       afterDropZone: createSourcesActuallyEmpty ? (
-        <div className="first-weave-demo">
+        <div className="first-apply-demo">
           <span>New here?</span>
           <button
             aria-busy={sampleLoading}

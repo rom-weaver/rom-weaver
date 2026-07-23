@@ -31,8 +31,8 @@ import { SettingsPanel } from "./webapp-settings";
 import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
-  // "Weave": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "weave", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
+  // "Apply": the tab both applies patch chains and edits/exports them as bundles.
+  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
@@ -154,7 +154,7 @@ const DropVeil = () => {
 /**
  * Activity-store subscribers live OUTSIDE the root component: the stage line
  * updates on every progress tick, and re-rendering the whole workbench per
- * tick makes the weave animations stutter during extraction.
+ * tick makes the apply animations stutter during extraction.
  */
 const ActivityWakeLockNotice = () => {
   const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);

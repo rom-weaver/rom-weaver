@@ -252,7 +252,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       { label: "Bundle + patches (.7z)", value: "7z:patches" },
       { label: "Bundle + ROM + patches (.7z)", value: "7z:rom" },
     ],
-    suggestion: "Choose a package to show bundle download by default when weaving a ROM hack.",
+    suggestion: "Choose a package to show bundle download by default when applying a ROM hack.",
     validationLabel: "Bundle",
     validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
   },

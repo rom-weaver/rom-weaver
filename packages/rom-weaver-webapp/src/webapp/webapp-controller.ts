@@ -64,15 +64,17 @@ const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, 
 
 const VIEW_TO_ROUTE_SLUG: Record<WorkflowView, string> = {
   creator: "create",
-  patcher: "weave",
+  patcher: "apply",
   tools: "tools",
   trim: "trim",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WorkflowView> = {
   create: "creator",
   "create.html": "creator",
+  apply: "patcher",
   tools: "tools",
   trim: "trim",
+  // Keep old shared links working while normalizing them to the canonical route.
   weave: "patcher",
 };
 

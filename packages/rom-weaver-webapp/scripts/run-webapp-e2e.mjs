@@ -167,10 +167,10 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
     const apply = page.locator("#rom-weaver-button-apply");
     await apply.waitFor({ state: "visible" });
     // The label distinguishes the ready state from the in-flight one, so match
-    // the real ready-state copy ("Weave & download") rather than just enabledness.
+    // the real ready-state copy ("Apply & download") rather than just enabledness.
     await page.waitForFunction(() => {
       const button = document.getElementById("rom-weaver-button-apply");
-      return button instanceof HTMLButtonElement && !button.disabled && /weave/i.test(button.textContent || "");
+      return button instanceof HTMLButtonElement && !button.disabled && /apply/i.test(button.textContent || "");
     });
 
     const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });

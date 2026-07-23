@@ -19,7 +19,7 @@ automation.
   - [Source install](#source-install)
   - [Run in Docker](#run-in-docker)
   - [Development checkout](#development-checkout)
-- [First weave](#first-weave)
+- [First apply](#first-apply)
 - [Common workflows](#common-workflows)
 - [Commands](#commands)
 - [Input selection](#input-selection)
@@ -184,15 +184,15 @@ For a development checkout, follow the [development guide](development.md)
 and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
 `rom-weaver`.
 
-## First weave
+## First apply
 
 Run a complete patch with the tiny synthetic sample used by the webapp. The
 bundle contains its ROM, patch, and expected output checksum.
 
 ```bash
-curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver patch apply --input first-weave.zip --output woven.bin --no-compress
-rom-weaver checksum --input woven.bin --algo sha256
+curl --fail --location --output first-apply.zip https://rom-weaver.com/first-apply.zip
+rom-weaver patch apply --input first-apply.zip --output applied.bin --no-compress
+rom-weaver checksum --input applied.bin --algo sha256
 ```
 
 The final SHA-256 should be

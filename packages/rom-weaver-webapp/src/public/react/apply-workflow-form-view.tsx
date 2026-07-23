@@ -163,7 +163,7 @@ const ApplyDropAfter = ({
   }
   if (!workflowEmpty) return null;
   return (
-    <div className="first-weave-demo">
+    <div className="first-apply-demo">
       <span>New here?</span>
       <button
         aria-busy={sampleLoading}
@@ -172,7 +172,7 @@ const ApplyDropAfter = ({
         onClick={onLoadSample}
         type="button"
       >
-        {sampleLoading ? "Loading sample…" : "Try a sample weave"}
+        {sampleLoading ? "Loading sample…" : "Try a sample apply"}
       </button>
       {sampleError ? <span role="status">{sampleError}</span> : null}
     </div>
@@ -277,7 +277,7 @@ type BundleToolsState = {
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
   hasOptionalEntries: boolean;
-  /** Whether the woven final result will be verified against an expected output
+  /** Whether the applied final result will be verified against an expected output
    * (`ok`), or why it won't (`warn`); null when nothing declares an output. */
   outputVerification: { level: "ok" | "warn"; message: string } | null;
 };
@@ -784,7 +784,7 @@ type PatchEnablement = {
 // The apply view is a singleton in the webapp; a stable per-workflow key keeps
 // its activity slot separate from the create/trim forms in the shared store.
 const APPLY_ACTIVITY_KEY = "react-apply-view";
-const FIRST_WEAVE_URL = "/first-weave.zip";
+const FIRST_APPLY_URL = "/first-apply.zip";
 
 const getBundleVerificationError = (bundleMeta: Array<BundlePatchMeta | undefined>, patches: PatchStackItemState[]) => {
   const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
@@ -1051,10 +1051,10 @@ const BundleOutputFields = ({
 }) => {
   const exportTypeInfo = {
     items: [
-      "A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM; it is not a pre-patched ROM.",
+      "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
       "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
       "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
-      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player weaves it.",
+      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
     summary:
       "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
@@ -1094,7 +1094,7 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
       <>
         {applyTiming ? (
           <span className="rb mono done-chip">
-            <span className="k">Weave</span>
+            <span className="k">Apply</span>
             <span className="t">{applyTiming}</span>
           </span>
         ) : null}
@@ -1110,7 +1110,7 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
   if (!applyTiming) return undefined;
   return (
     <span className="rb mono">
-      <span className="k">Weave</span>
+      <span className="k">Apply</span>
       <span className="t">{applyTiming}</span>
     </span>
   );
@@ -1279,14 +1279,14 @@ function ApplyWorkflowFormView({
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const loadFirstWeave = async () => {
+  const loadFirstApply = async () => {
     setSampleLoading(true);
     setSampleError("");
     try {
-      const response = await fetch(FIRST_WEAVE_URL);
+      const response = await fetch(FIRST_APPLY_URL);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
+      handleUnifiedDrop([new File([blob], "first-apply.zip", { type: "application/zip" })]);
     } catch {
       setSampleError("Could not load the sample. Try again.");
     } finally {
@@ -1362,7 +1362,7 @@ function ApplyWorkflowFormView({
         addLabel="Replace the ROM or add patches"
         afterDropZone={
           <ApplyDropAfter
-            onLoadSample={() => void loadFirstWeave()}
+            onLoadSample={() => void loadFirstApply()}
             pendingDrops={pendingDrops}
             sampleError={sampleError}
             sampleLoading={sampleLoading}
@@ -1411,7 +1411,7 @@ function ApplyWorkflowFormView({
                   <li>chd, rvz/wia/gcz, and z3ds files are decompressed before patching.</li>
                   <li>Nested archives (7z in rar, chd in 7z, …) are handled recursively.</li>
                   <li>
-                    A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM. Its{" "}
+                    A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
                     <code>rom-weaver-bundle.json</code> file is the required index. The JSON contains the schema
                     version, optional ROM description/checks, ordered patch entries, and optional output
                     defaults/checks.
@@ -1545,7 +1545,7 @@ function ApplyWorkflowFormView({
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
-            title="Weave"
+            title="Apply"
             woven={applyDone || running}
           />
         </>

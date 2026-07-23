@@ -3,7 +3,7 @@
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    /* Includes the first-weave action below the hero so the empty bench still
+    /* Includes the first-apply action below the hero so the empty bench still
        occupies one phone viewport. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px);
   }

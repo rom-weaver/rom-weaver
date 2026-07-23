@@ -244,13 +244,13 @@ test("url-session files fetched from same-origin urls flow through the drop pipe
 test("sample action stays in-page and flows through the drop pipeline to a green apply", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".first-weave-demo button")).toBeInstanceOf(HTMLButtonElement);
-  const sampleButton = document.querySelector(".first-weave-demo button");
+  await expect.poll(() => document.querySelector(".first-apply-demo button")).toBeInstanceOf(HTMLButtonElement);
+  const sampleButton = document.querySelector(".first-apply-demo button");
   sampleButton.click();
   expect(location.href).toBe(href);
 
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
-  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["first-weave.ips"]);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["first-apply.ips"]);
   await expect
     .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
       timeout: 30000,

@@ -28,7 +28,7 @@ const storeOf = <State,>(state: State) => ({
 
 const outputState = (overrides: Partial<PatcherOutputState> = {}): PatcherOutputState =>
   ({
-    applyButton: { disabled: true, label: "WEAVE & DOWNLOAD", loading: false, progress: null, title: "" },
+    applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
     applyTiming: "",
     compress: null,
     compressTiming: "",
@@ -114,8 +114,8 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("section.step.is-input.is-empty")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
-    const sample = container.querySelector(".first-weave-demo button") as HTMLButtonElement;
-    expect(sample.textContent).toContain("Try a sample weave");
+    const sample = container.querySelector(".first-apply-demo button") as HTMLButtonElement;
+    expect(sample.textContent).toContain("Try a sample apply");
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01"]);
@@ -131,12 +131,12 @@ describe("apply workflow view - empty bench", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    fireEvent.click(container.querySelector(".first-weave-demo button") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".first-apply-demo button") as HTMLButtonElement);
 
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
-    expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip");
-    expect(files[0]?.name).toBe("first-weave.zip");
+    expect(fetchMock).toHaveBeenCalledWith("/first-apply.zip");
+    expect(files[0]?.name).toBe("first-apply.zip");
     vi.unstubAllGlobals();
   });
 

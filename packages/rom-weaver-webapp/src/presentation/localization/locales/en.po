@@ -21,7 +21,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
-msgstr "“{patch}” expects “{predecessor}” woven first."
+msgstr "“{patch}” expects “{predecessor}” applied first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -67,6 +67,21 @@ msgstr "and shrink them for storage —"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "applies after patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.apply"
+msgstr "Apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Apply patches to any ROM or a sharable patch bundle,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_APPLY_FAILED"
+msgstr "Applying the patch failed."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -145,18 +160,8 @@ msgstr "Create {format} ROM Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Now"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Dismiss"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Tip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,6 +230,11 @@ msgstr "Language"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Last"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.later"
 msgstr "Later"
 
@@ -290,6 +300,11 @@ msgstr "No selectable file was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Now"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -330,6 +345,11 @@ msgstr "Output won't be verified - the patches are out of order."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Page Logs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Patch creation failed."
 
@@ -342,11 +362,6 @@ msgstr "Patch parsing failed."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Last"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -445,11 +460,6 @@ msgstr "Shared session download failed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Page Logs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
 
@@ -472,6 +482,11 @@ msgstr "Switch to light theme"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tap to choose files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.verified"
+msgstr "The applied result will be verified against the expected output."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,11 +530,6 @@ msgstr "The selected source type is not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.verified"
-msgstr "The woven result will be verified against the expected output."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Theme"
 
@@ -540,6 +550,11 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Tip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update ready"
 
@@ -550,23 +565,8 @@ msgstr "using the patch's own undo data —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "verified during the weave"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.step.apply"
-msgstr "Weave"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Weave patches into any ROM or a sharable patch bundle,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "error.PATCH_APPLY_FAILED"
-msgstr "Weaving the patch failed."
+msgid "ui.chain.verifiedDuringApply"
+msgstr "verified during apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

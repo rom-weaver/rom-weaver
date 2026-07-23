@@ -129,14 +129,15 @@ on demand for clients that cannot take brotli.
 The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
 build, so unpacking it is an alternative to building from a checkout.
 
-The build includes directory-index pages for `/weave`, `/create`, `/trim`, and
+The build includes directory-index pages for `/apply`, `/create`, `/trim`, and
 `/tools`, so ordinary static servers can resolve direct visits and refreshes
 without rewrite configuration. A server that disables directory indexes must
 instead fall back to `index.html` for those navigation requests. Redirect
 `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History
 API routes, and the service-worker scope resolve consistently. Explicit
-directory-document URLs such as `/weave/index.html` are normalized in the
-browser to the clean `/weave` route without another request.
+directory-document URLs such as `/apply/index.html` are normalized in the
+browser to the clean `/apply` route without another request. The former
+`/weave` route remains a compatibility alias and normalizes to `/apply`.
 
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts,
 the equivalent cache policy is:

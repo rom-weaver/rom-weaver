@@ -12,9 +12,9 @@ const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
 const CASES = [
   {
-    name: "weave",
-    route: "/weave?bundle=first-weave.zip",
-    waitFor: "The woven result will be verified against the expected output.",
+    name: "apply",
+    route: "/apply?bundle=first-apply.zip",
+    waitFor: "The applied result will be verified against the expected output.",
   },
   { name: "create", route: "/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
 ];

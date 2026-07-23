@@ -31,6 +31,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/create-modified.bin": path.join(rootAssetDir, "create-modified.bin"),
   "/create-original.bin": path.join(rootAssetDir, "create-original.bin"),
   "/favicon.ico": channelAssetPath(channel, "favicon.ico"),
+  "/first-apply.zip": path.join(rootAssetDir, "first-apply.zip"),
   "/first-weave.zip": path.join(rootAssetDir, "first-weave.zip"),
   "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
@@ -217,7 +218,7 @@ const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
 
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rom-weaver.com/weave</loc></url>
+  <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
 </urlset>
 `;
@@ -262,6 +263,7 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
       const createHtml = createWorkflowRouteHtml(indexHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel);
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       for (const [slug, html] of [
+        ["apply", indexHtml],
         ["weave", indexHtml],
         ["create", createHtml],
         ["trim", indexHtml],
@@ -476,6 +478,7 @@ export default defineConfig(({ command }) => {
             "index.html",
             "manifest.json",
             "logo.svg",
+            "first-apply.zip",
             "first-weave.zip",
             "favicon.ico",
             "apple-touch-icon.png",

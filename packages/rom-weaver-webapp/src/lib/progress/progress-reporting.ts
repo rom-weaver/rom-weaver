@@ -67,7 +67,7 @@ const normalizeApplyProgressInput = (
   if (isRecord(progress)) {
     return {
       details: progress as JsonValue,
-      label: getRawProgressLabel(progress, "Weaving patch..."),
+      label: getRawProgressLabel(progress, "Applying patch..."),
       percent: getProgressEventPercent(progress),
     };
   }
@@ -79,7 +79,7 @@ const normalizeApplyProgressInput = (
   const totalValue = normalizeProgressPercent(total);
   return {
     details: undefined,
-    label: "Weaving patch...",
+    label: "Applying patch...",
     percent:
       loadedValue !== null && totalValue !== null && totalValue > 0
         ? Math.max(0, Math.min(100, (loadedValue / totalValue) * 100))

@@ -255,7 +255,7 @@ preview builds include `noindex, nofollow` in both the HTML robots metadata and
 the Cloudflare `X-Robots-Tag` response header, and their generated `robots.txt`
 blocks crawling with `Disallow: /`. Production instead publishes `Allow: /`.
 Its sitemap lists the two stable, crawlable workflow pages:
-[`/weave`](https://rom-weaver.com/weave) and
+[`/apply`](https://rom-weaver.com/apply) and
 [`/create`](https://rom-weaver.com/create). History API navigation keeps those
 URLs distinct; the generated HTML gives each its own title, description, and
 canonical URL plus Open Graph and Twitter card metadata.

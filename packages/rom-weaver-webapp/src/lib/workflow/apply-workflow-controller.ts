@@ -810,7 +810,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       },
       hasProgress: progress.hasProgress,
       id: `${this.id}:${role}:${stage}`,
-      label: progress.label || (stage === "compress" ? "Compressing output..." : "Weaving patch..."),
+      label: progress.label || (stage === "compress" ? "Compressing output..." : "Applying patch..."),
       percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
       role,
       stage,

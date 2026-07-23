@@ -250,7 +250,7 @@ describe("buildOutputViewState", () => {
 
   it("labels the apply button for the run phase when nothing is pending", () => {
     const state = baseOutput();
-    expect(state.applyButton).toMatchObject({ disabled: false, label: "Weave & download", title: "" });
+    expect(state.applyButton).toMatchObject({ disabled: false, label: "Apply & download", title: "" });
     expect(state.downloadSummary).toBeNull();
   });
 

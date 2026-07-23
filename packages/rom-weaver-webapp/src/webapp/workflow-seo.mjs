@@ -8,7 +8,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   patcher: Object.freeze({
     description:
       "Apply ROM patches privately in your browser with automatic format detection, checksum validation, and ordered patch chains. No uploads or account required.",
-    slug: "weave",
+    slug: "apply",
     title: "RomWeaver — Apply ROM patches online",
   }),
 });

@@ -51,7 +51,7 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
   it("exposes an actionable apply button before any run", () => {
     const { result } = renderSession();
     const output = result.current.localOutputController.getState();
-    expect(output.applyButton.label).toBe("Weave & download");
+    expect(output.applyButton.label).toBe("Apply & download");
     expect(output.applyButton.disabled).toBe(false);
     expect(output.pendingDownloadFileName).toBeNull();
   });

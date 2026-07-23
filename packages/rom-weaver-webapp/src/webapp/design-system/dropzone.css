@@ -260,7 +260,7 @@
   padding-block: 0;
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
-.rw-app .first-weave-demo {
+.rw-app .first-apply-demo {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-s);
   padding-block: var(--sp-s); color: var(--ink-3); font-size: .78rem;
 }

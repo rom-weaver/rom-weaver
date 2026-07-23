@@ -460,7 +460,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     };
   }, [activeBundleSession, bundleChainStatus, bundleOutputChecksum]);
 
-  // The output-verification line: whether the woven FINAL result will be checked against an
+  // The output-verification line: whether the applied FINAL result will be checked against an
   // expected output, and why not when it won't. Plan-driven when the chain plans carry a
   // final-step output expectation (declared per-patch checks or the last patch's embedded
   // target); the bundle-level expected output (seeded onto the last patch only while the full

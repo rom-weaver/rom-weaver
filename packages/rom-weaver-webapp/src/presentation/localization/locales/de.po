@@ -21,7 +21,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
-msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst gewebt wird."
+msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -67,6 +67,21 @@ msgstr "und die Dateien fürs Archiv verkleinern —"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "wird nach Patch {n} angewendet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.apply"
+msgstr "Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Patches auf deine ROM anwenden und das Ergebnis herunterladen,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_APPLY_FAILED"
+msgstr "Das Anwenden des Patches ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -145,18 +160,8 @@ msgstr "{format}-ROM-Bundle erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Aktuell"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Verwerfen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Trinkgeld"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,6 +230,11 @@ msgstr "Sprache"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Vorheriges"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.later"
 msgstr "Später"
 
@@ -290,6 +300,11 @@ msgstr "Keine wählbare Datei gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -330,6 +345,11 @@ msgstr "Die Ausgabe wird nicht überprüft - die Patches sind in falscher Reihen
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Das Erstellen des Patches ist fehlgeschlagen."
 
@@ -342,11 +362,6 @@ msgstr "Das Parsen des Patches ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Vorheriges"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -445,11 +460,6 @@ msgstr "Download der geteilten Sitzung fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Angezeigtes Protokoll"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Speicher ist nicht verfügbar."
 
@@ -472,6 +482,11 @@ msgstr "Zum hellen Design wechseln"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tippen, um Dateien zu wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.verified"
+msgstr "Das angewendete Ergebnis wird gegen die erwartete Ausgabe überprüft."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,11 +530,6 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.verified"
-msgstr "Das gewebte Ergebnis wird gegen die erwartete Ausgabe überprüft."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Design"
 
@@ -540,6 +550,11 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Trinkgeld"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update bereit"
 
@@ -550,23 +565,8 @@ msgstr "mit den Undo-Daten des Patches —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "wird beim Weben überprüft"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.step.apply"
-msgstr "Weben"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Patches in deine ROM weben und das Ergebnis herunterladen,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "error.PATCH_APPLY_FAILED"
-msgstr "Das Einweben des Patches ist fehlgeschlagen."
+msgid "ui.chain.verifiedDuringApply"
+msgstr "wird beim Anwenden überprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

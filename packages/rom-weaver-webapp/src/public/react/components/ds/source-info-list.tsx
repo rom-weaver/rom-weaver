@@ -111,7 +111,7 @@ const ExpectedMismatchInfo = () => (
   >
     <strong>Not the expected ROM</strong>
     <p>This ROM's checks do not match what the bundle was authored against - see the Expected rows below.</p>
-    <p>You can still weave, but the result may differ from what the bundle's author intended.</p>
+    <p>You can still apply the patch, but the result may differ from what the bundle's author intended.</p>
   </InfoToggle>
 );
 
