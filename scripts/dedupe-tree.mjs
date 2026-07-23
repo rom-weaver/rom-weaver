@@ -10,6 +10,12 @@
  * back to full copies, which is exactly today's behaviour.
  *
  * Call it again after any copy that re-expands the tree; it is idempotent.
+ *
+ * Never run this over a directory that `npm pack` will see. node-tar packs
+ * entries on four parallel jobs and deadlocks emitting hardlink records, so
+ * `npm pack` exits mid-stream with "Exit handler never called!" - which is why
+ * the attribution generator leaves its output expanded and only the webapp
+ * build, whose dist tree npm never packs, collapses it.
  */
 
 import crypto from "node:crypto";
