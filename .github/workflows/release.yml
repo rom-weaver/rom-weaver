@@ -211,6 +211,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      # Cache reservation needs a writable scope; contents:read alone is denied
+      # by the cache service ("token has no writable scopes").
+      actions: write
     steps:
       - uses: actions/checkout@v7
         with:
