@@ -1,6 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
+    // Published library surface: package.json exports point at the built
+    // dist/lib, so knip no longer discovers the source entry from them.
+    "src/index.tsx",
     "src/webapp/cache-service-worker.ts",
     "src/webapp/mobile-safari-matrix.ts",
     "scripts/generate-e2e-corpus.mjs",

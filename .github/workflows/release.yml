@@ -483,6 +483,74 @@ jobs:
       - name: Publish @rom-weaver/wasm
         run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-wasm
 
+  publish-webapp:
+    name: Publish @rom-weaver/webapp
+    # After publish-wasm: the webapp pins @rom-weaver/wasm at this release's
+    # version, so it must never reach the registry while its dependency's
+    # publish has failed.
+    needs: [release, publish-wasm]
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # ponytail: First-publish bridge - npm trusted publishing cannot create a
+      # never-published package, so this publish authenticates with the
+      # bootstrap token. Flip to false after configuring a trusted publisher
+      # for @rom-weaver/webapp.
+      bootstrap: true
+    steps:
+      # The release is still a draft here, so its tag does not exist yet - check
+      # out the commit release-please released instead.
+      - name: Checkout release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
+      - name: Set up workspace build
+        uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+          cache-save: "false"
+          webapp-deps: "true"
+
+      # The library build needs @rom-weaver/wasm's dist type declarations to
+      # emit its own; the wasm binary is not part of this package, so the
+      # dev-mode bundle (which only warns about a missing binary) is enough.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
+
+      - name: Build @rom-weaver/webapp library
+        run: npm --prefix packages/rom-weaver-webapp run build:lib
+
+      # Registry auth + OIDC identity. Node 24 matches the other npm publishes.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      # The publish helper needs cross-spawn from the repo-root dependencies.
+      # --package-lock=false leaves the committed lock (and its hand-preserved
+      # optional platform entries) untouched.
+      - name: Install publish helper dependencies
+        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+
+      - name: Dry-run publish
+        run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-webapp
+
+      - name: Publish @rom-weaver/webapp
+        env:
+          NODE_AUTH_TOKEN: ${{ env.bootstrap == 'true' && secrets.NPM_BOOTSTRAP_TOKEN || '' }}
+        run: |
+          if [[ "$bootstrap" == true && -z "$NODE_AUTH_TOKEN" ]]; then
+            echo "::error::NPM_BOOTSTRAP_TOKEN is required for first publication"
+            exit 1
+          fi
+          node scripts/ci/npm-publish-package.mjs packages/rom-weaver-webapp
+
   publish-npm:
     needs: release
     if: needs.release.outputs.release_created == 'true'
@@ -687,7 +755,7 @@ jobs:
   # gating it; see the comment on publish-homebrew.
   publish-release:
     name: Publish draft release
-    needs: [release, semver-check, static-webapp, publish-npm, publish-wasm, publish-containers]
+    needs: [release, semver-check, static-webapp, publish-npm, publish-wasm, publish-webapp, publish-containers]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&
@@ -695,6 +763,7 @@ jobs:
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
       needs.publish-wasm.result == 'success' &&
+      needs.publish-webapp.result == 'success' &&
       needs.publish-containers.result == 'success'
     runs-on: ubuntu-24.04
     permissions:

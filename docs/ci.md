@@ -352,6 +352,7 @@ spec would tag every platform package as a prerelease.
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
 | `publish-wasm` | `@rom-weaver/wasm` on npm, bundled from the tested wasm module and published with provenance |
+| `publish-webapp` | `@rom-weaver/webapp` on npm - the React library build (`dist/lib`), after `publish-wasm` so its dependency pin always resolves |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
@@ -370,6 +371,15 @@ package's `prepack`/`prepare` never fires and the bundle must be built in the jo
 first. Like `publish-npm` it is an irreversible registry write, so it gates
 `publish-release` - a failed publish leaves a deletable draft rather than burning
 the version.
+
+`publish-webapp` builds the library (`npm run build:lib` - the public React
+forms + `ingest` bundled with all npm dependencies external, plus the app
+stylesheet and `.d.ts` declarations) and publishes `dist/lib` only; the static
+site tarball stays with `static-webapp`. It runs after `publish-wasm` because
+the webapp pins `@rom-weaver/wasm` at the release version, and it currently
+authenticates with `NPM_BOOTSTRAP_TOKEN` (`bootstrap: true` in the job) until a
+trusted publisher exists for the package. It gates `publish-release` like every
+other registry write.
 
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would

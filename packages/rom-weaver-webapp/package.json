@@ -22,18 +22,21 @@
     "url": "https://github.com/brandonocasey/rom-weaver.git"
   },
   "type": "module",
-  "private": true,
   "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=22"
   },
   "exports": {
     ".": {
-      "types": "./src/index.tsx",
-      "import": "./src/index.tsx"
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/index.js"
     },
-    "./webapp": "./src/webapp/main.tsx"
+    "./style.css": "./dist/lib/style.css"
   },
+  "files": [
+    "dist/lib",
+    "LICENSE.md"
+  ],
   "//vite": "Keep this vite pin identical to packages/package.json (the workspace root). The `$vite` override below resolves to this package's own pin, and the root override resolves to the root's; both must match so the workspace installs a single vite.",
   "overrides": {
     "vite-plugin-pwa": {
@@ -45,6 +48,7 @@
     "audit:strings": "if rg --hidden --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
     "prebuild": "node ../rom-weaver-wasm/scripts/build.mjs",
     "build": "vite build",
+    "build:lib": "node scripts/build-lib.mjs",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
     "dev": "node scripts/ensure-wasm-build.mjs && node scripts/dev-server.mjs",
     "format": "oxfmt .",
@@ -63,6 +67,7 @@
     "lint:jscpd": "jscpd",
     "lint:knip": "knip --no-progress",
     "lint:types": "tsc -p tsconfig.json --noEmit",
+    "prepack": "node ../rom-weaver-wasm/scripts/build.mjs && node scripts/build-lib.mjs",
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
     "test": "npm run test:browser:parallel",

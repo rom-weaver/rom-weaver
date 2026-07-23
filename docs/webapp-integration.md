@@ -39,7 +39,9 @@ A host on the same origin can place inputs under the OPFS
 pipeline. Include a bundle in the list when using one; it does not need a
 separate option.
 
-Code running inside this workspace can import the private webapp package and
+Hosts bundling their own page can install the published library
+(`npm install @rom-weaver/webapp`, which also exports the React form
+components and, via `@rom-weaver/webapp/style.css`, the stock stylesheet) and
 call `ingest`:
 
 ```js
