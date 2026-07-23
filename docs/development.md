@@ -118,7 +118,7 @@ for the browser OPFS and worker API.
 
 ```bash
 cargo build -p rom-weaver-cli
-cargo run -p rom-weaver-cli -- --help
+cargo run -p rom-weaver-cli --bin rom-weaver -- --help
 ```
 
 The `rom-weaver-cli` package contains the reusable `rom_weaver_app` command

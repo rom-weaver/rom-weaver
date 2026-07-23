@@ -40,7 +40,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
-| `e2e-nightly.yml` | manual | No | Exhaustive Chromium E2E matrix |
+| `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | after a successful `CI` on `main`, manual | n/a | Release Please, then the publish fan-out |
