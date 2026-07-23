@@ -1,0 +1,48 @@
+name: Dependabot auto-merge
+
+# Turn Dependabot's weekly, grouped dependency PRs into no-touch merges: enable
+# GitHub's native auto-merge so each one lands on its own the moment every
+# required check passes (Rust, WASM, webapp, commitlint, and the license/cla
+# gate). Nothing merges before CI is green - auto-merge only arms the merge.
+#
+# Only patch and minor bumps auto-merge. Majors (e.g. bincode 1.x -> 2.x) can
+# carry breaking API or byte-parity changes, so they stay open for a human to
+# review and migrate deliberately - the same philosophy as the exact-pinning in
+# dependabot.yml.
+#
+# This runs on `synchronize` too, so a `@dependabot rebase` on an already-open
+# PR re-arms auto-merge - which is how the currently-open backlog gets picked up
+# once this lands.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+# One PR only needs auto-merge armed once; drop superseded runs on rapid pushes.
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge
+    # Dependabot PRs run with a read-only token by default; the `permissions`
+    # block above elevates it. Guard on the actor so no other PR is touched.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+
+      - name: Enable auto-merge for patch and minor updates
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"
