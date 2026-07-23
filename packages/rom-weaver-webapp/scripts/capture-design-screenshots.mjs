@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(PACKAGE_DIR, "design"));
@@ -58,7 +59,13 @@ const capture = async () => {
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
           await waitForStableContent(page);
           const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.png`);
-          await page.screenshot({ animations: "disabled", fullPage: true, path: outputPath, type: "png" });
+          const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
+          // These are committed docs assets; Chrome's encoder leaves ~25% on
+          // the table, so squeeze before writing rather than re-bloating the
+          // repo on every recapture.
+          const optimized = optimizePng(shot);
+          assertSamePixels(shot, optimized, path.basename(outputPath));
+          fs.writeFileSync(outputPath, optimized);
           await context.close();
           console.log(`Captured ${path.relative(PACKAGE_DIR, outputPath)}`);
         }

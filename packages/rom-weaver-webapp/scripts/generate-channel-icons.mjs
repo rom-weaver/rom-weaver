@@ -29,6 +29,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(rootDir, "..", "..");
@@ -78,7 +79,13 @@ const rasterize = async (page, svg, size) => {
     `<!doctype html><style>html,body{margin:0;background:transparent}img{display:block;width:${size}px;height:${size}px}</style><img src="${dataUri}">`,
   );
   await page.locator("img").waitFor({ state: "visible" });
-  return page.screenshot({ omitBackground: true, type: "png" });
+  const shot = await page.screenshot({ omitBackground: true, type: "png" });
+  // Chrome writes a conservatively-filtered, middling-deflate PNG. Squeeze it
+  // here rather than as a later pass so the bytes `--check` compares against
+  // are the bytes that get committed.
+  const optimized = optimizePng(shot);
+  assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
+  return optimized;
 };
 
 const main = async () => {
