@@ -19,6 +19,10 @@ on:
         required: false
         default: false
         type: boolean
+    secrets:
+      NPM_BOOTSTRAP_TOKEN:
+        description: One-time token for packages that cannot use trusted publishing yet.
+        required: false
 concurrency:
   group: npm-publish-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
@@ -241,22 +245,31 @@ jobs:
         include:
           - package: darwin-arm64
             runner: macos-14
+            bootstrap: false
           - package: darwin-x64
             runner: macos-15-intel
+            bootstrap: false
           - package: linux-arm64-musl
             runner: ubuntu-24.04-arm
+            bootstrap: false
           - package: linux-ia32-musl
             runner: ubuntu-24.04
+            bootstrap: false
           - package: linux-x64-gnu
             runner: ubuntu-24.04
+            bootstrap: false
           - package: linux-x64-musl
             runner: ubuntu-24.04
+            bootstrap: false
           - package: win32-arm64-msvc
             runner: windows-11-arm
+            bootstrap: false
           - package: win32-ia32-msvc
             runner: windows-2025
+            bootstrap: false
           - package: win32-x64-msvc
             runner: windows-2025
+            bootstrap: false
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -279,7 +292,17 @@ jobs:
         run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
       - name: Publish platform package
-        run: node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ matrix.bootstrap && secrets.NPM_BOOTSTRAP_TOKEN || '' }}
+        run: |
+          # ponytail: Set bootstrap: true only for an unpublished package, then
+          # remove it after configuring that package's trusted publisher.
+          if [[ "${{ matrix.bootstrap }}" == true && -z "$NODE_AUTH_TOKEN" ]]; then
+            echo "::error::NPM_BOOTSTRAP_TOKEN is required for first publication"
+            exit 1
+          fi
+          node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
 
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.

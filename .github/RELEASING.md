@@ -96,6 +96,11 @@ credentials and do not need a stored Cargo token.
 Trusted publishing (OIDC) is enabled for all 11 npm packages, so publishing
 uses short-lived GitHub Actions credentials and no stored npm token.
 
+The optional `NPM_BOOTSTRAP_TOKEN` secret remains available for a new package's
+first publication. Set `bootstrap: true` on only that package's publish matrix
+entry, publish it once, configure its trusted publisher, then remove the flag.
+Existing packages must continue through OIDC.
+
 The publish jobs already meet the mechanical requirements - `id-token: write`
 is set, and the Node 24 toolchain ships npm 11.16.0, above the 11.5.1 minimum.
 

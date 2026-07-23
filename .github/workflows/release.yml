@@ -465,6 +465,8 @@ jobs:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
       cache-save: false
+    secrets:
+      NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
 
   # After publish-release, not before: the formula points at
   # releases/download/vX.Y.Z/... and a draft's assets are not publicly
