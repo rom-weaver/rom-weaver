@@ -10,28 +10,22 @@
 
 const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;
 
-// Sidecars exist only for these types; anything else falls through.
-const CONTENT_TYPES = new Map([
-  [".css", "text/css; charset=utf-8"],
-  [".js", "text/javascript; charset=utf-8"],
-  [".mjs", "text/javascript; charset=utf-8"],
-  [".wasm", "application/wasm"],
-]);
-
-const contentTypeFor = (pathname) => {
-  const extension = pathname.slice(pathname.lastIndexOf("."));
-  return CONTENT_TYPES.get(extension);
-};
+// A request Pages cannot resolve surfaces as the SPA fallback (200 text/html),
+// not a 404, so content-type is the reliable missing-asset signal.
+const isSpaFallback = (response) => !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
 export const onRequestGet = async ({ request, env, next }) => {
-  const url = new URL(request.url);
-  const contentType = contentTypeFor(url.pathname);
-  if (!contentType) return next();
   if (!ACCEPTS_BR.test(request.headers.get("Accept-Encoding") ?? "")) return next();
+  const url = new URL(request.url);
+  // The content type comes from the static asset itself (headers only, no
+  // body) rather than a hand-kept extension map, so any sidecar-backed file
+  // type the build stages is served with exactly the type Pages would use.
+  const asset = await env.ASSETS.fetch(new URL(url.pathname, url), { method: "HEAD" });
+  if (isSpaFallback(asset)) return next();
+  const contentType = asset.headers.get("Content-Type");
+  if (!contentType) return next();
   const sidecar = await env.ASSETS.fetch(new URL(`${url.pathname}.br`, url));
-  // A missing sidecar surfaces as the SPA fallback (200 text/html), not a 404.
-  const sidecarType = sidecar.headers.get("Content-Type") ?? "";
-  if (!sidecar.ok || sidecarType.includes("text/html")) return next();
+  if (isSpaFallback(sidecar)) return next();
   const headers = new Headers(sidecar.headers);
   headers.set("Content-Type", contentType);
   headers.set("Content-Encoding", "br");

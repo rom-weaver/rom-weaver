@@ -269,35 +269,47 @@ promptly. Non-production channels add their `X-Robots-Tag` in the same file.
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
 on the wasm and ~50 KB on the main JS bundle, per cold load). Deploy builds
-therefore set `ROM_WEAVER_PAGES_WASM_BROTLI=1`, which stages the prebuilt
-`.wasm.br` sidecar next to the hashed wasm asset, compresses the emitted
-JS/CSS assets to q11 siblings, and writes a `_routes.json` routing exactly
-those URLs through the Pages Function in
-`packages/rom-weaver-webapp/functions/assets/[name].js`. The function serves
-the sidecar bytes with `Content-Encoding: br` (`encodeBody: "manual"`) to
-br-capable clients and falls through to static serving otherwise; every other
-request stays on the unmetered static path. Because function responses bypass
-`_headers`, the function restates the immutable cache rule and the
-cross-origin-isolation headers - COEP in particular, which dedicated-worker
-scripts must carry on a cross-origin-isolated page. Plain builds skip all of
-this - the release tarball asserts `dist` contains no compression sidecars
-(the Docker image generates its own for `static-web-server`).
+therefore set `ROM_WEAVER_PAGES_BROTLI=1`, which stages the prebuilt
+`.wasm.br` sidecar next to the hashed wasm asset, compresses every other
+`/assets/*` file to a q11 sibling kept only when it saves at least 2%
+(already-compressed formats such as woff2/png fail that bar and stay
+static), and writes a `_routes.json` routing exactly the sidecar-backed URLs
+through the Pages Function in
+`packages/rom-weaver-webapp/functions/assets/[name].js`. The function takes
+the content type from a headers-only probe of the static asset (no hand-kept
+extension map) and serves the sidecar bytes with `Content-Encoding: br`
+(`encodeBody: "manual"`) to br-capable clients, falling through to static
+serving otherwise; unrouted requests never invoke it. Because function
+responses bypass `_headers`, the function restates the immutable cache rule
+and the cross-origin-isolation headers - COEP in particular, which
+dedicated-worker scripts must carry on a cross-origin-isolated page. Only
+`/assets/*` is eligible: the mutable root files (`index.html`,
+`cache-service-worker.js`, `changelog.json`) keep their no-cache semantics
+and never route through the function. Plain builds skip all of this - the
+release tarball asserts `dist` contains no compression sidecars (the Docker
+image generates its own for `static-web-server`).
 
-Cost model: only the 8 sidecar-backed URLs invoke the function - one cold
-load costs 8 invocations against the Workers free tier's 100,000/day
-(~12,500 cold loads/day); repeat visits are covered by the immutable
-browser/service-worker cache. Nothing sits in front of Pages Functions on
-`pages.dev`, and a `caches.default` lookup inside the function would not
-help - the invocation is counted whether or not it hits cache. If traffic
-ever approaches the ceiling, the escape hatch is a zone-level Cache Rule on
-the custom domains (eligible for cache on `/assets/*`): the zone proxies to
-Pages, so the edge then caches function responses and the function runs
-roughly once per URL per PoP. Safe because every routed URL is
-content-hashed and immutable, but it is dashboard state outside this repo
-and does not cover `pages.dev` previews, so it is deliberately not
-provisioned today. Past the free tier, the next step is the flat $5/month
-Workers Paid plan; on free, excess requests degrade gracefully to static
-serving (Cloudflare's own recompression) for the rest of the day.
+Cost model: sidecar-backed URLs invoke the function, everything else stays
+on the unmetered static path, and repeat visits are covered by the immutable
+browser/service-worker cache. To keep invocations from scaling with traffic,
+the nightly deploy leg idempotently installs a zone Cache Rule ("Ensure zone
+cache rule for /assets" in `ci.yml`) making `/assets/*` on the custom
+domains eligible for edge caching with `respect_origin` TTLs - the function
+then runs roughly once per URL per PoP instead of per request. Safe because
+every routed URL is content-hashed and immutable. The step skips with a
+notice until two pieces of one-time setup exist: a `CLOUDFLARE_ZONE_ID`
+repository secret (the `rom-weaver.com` zone) and `Zone -> Cache Rules ->
+Edit` added to the `CLOUDFLARE_API_TOKEN`. `pages.dev` previews sit outside
+the zone, so preview traffic stays per-request - fine, it is internal. A
+`caches.default` lookup inside the function would not reduce the bill (the
+invocation is counted whether or not it hits cache). Free tier:
+100,000 invocations/day; past it, the flat $5/month Workers Paid plan; on
+free, excess requests degrade gracefully to static serving (Cloudflare's own
+recompression) for the rest of the day. After first enabling the rule,
+verify encoding negotiation once: a client without `Accept-Encoding: br`
+must still receive usable bytes from an edge-cached URL (Cloudflare
+transcodes stored representations per client, but confirm rather than
+trust).
 
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel

@@ -1042,11 +1042,12 @@ jobs:
         env:
           ROM_WEAVER_CHANNEL: ${{ matrix.target.channel }}
           ROM_WEAVER_CHANNEL_LABEL: ${{ matrix.target.label }}
-          # Stage q11 brotli sidecars (wasm + JS/CSS) + _routes.json so the
-          # Pages Function (functions/assets/[name].js) serves our bytes
-          # instead of Cloudflare's on-the-fly recompression (~640 KB worse on
-          # the wasm, ~50 KB on the main bundle).
-          ROM_WEAVER_PAGES_WASM_BROTLI: "1"
+          # Stage q11 brotli sidecars for every asset where q11 beats
+          # Cloudflare's on-the-fly recompression (~640 KB on the wasm, ~50 KB
+          # on the main bundle) + a _routes.json so the Pages Function
+          # (functions/assets/[name].js) serves our bytes for exactly those
+          # URLs.
+          ROM_WEAVER_PAGES_BROTLI: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Idempotent, so the first run on a channel bootstraps its own project and
@@ -1098,6 +1099,63 @@ jobs:
           url=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' /tmp/deploy.log | tail -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "deployed to $url"
+
+      # Every sidecar-backed /assets/* request invokes the Pages Function, so
+      # a zone Cache Rule makes the edge cache those responses and the
+      # function run roughly once per URL per PoP instead of per request.
+      # Safe because everything under /assets/ is content-hashed and
+      # immutable; respect_origin keeps the function's own Cache-Control
+      # authoritative. Zone rules only exist on the custom domains - pages.dev
+      # previews stay per-request, which is fine (preview traffic is internal).
+      #
+      # Gated to the nightly leg: it runs on both main pushes and tags, and
+      # exactly once per run, so concurrent matrix legs never race the
+      # read-merge-write below. Skips with a notice until CLOUDFLARE_ZONE_ID
+      # is set and the API token carries Zone -> Cache Rules -> Edit.
+      - name: Ensure zone cache rule for /assets
+        if: matrix.target.channel == 'nightly'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          set -o pipefail
+          if [ -z "$CLOUDFLARE_ZONE_ID" ]; then
+            echo "::notice::CLOUDFLARE_ZONE_ID not set; skipping zone cache rule"
+            exit 0
+          fi
+          api="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/rulesets"
+          desc="rom-weaver: cache immutable /assets (managed by ci.yml)"
+          expr='(http.host in {"rom-weaver.com" "beta.rom-weaver.com" "nightly.rom-weaver.com"}) and starts_with(http.request.uri.path, "/assets/")'
+          rule=$(jq -cn --arg desc "$desc" --arg expr "$expr" '{
+            description: $desc,
+            expression: $expr,
+            action: "set_cache_settings",
+            action_parameters: { cache: true, edge_ttl: { mode: "respect_origin" } },
+            enabled: true
+          }')
+          entry=$(curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "$api/phases/http_request_cache_settings/entrypoint")
+          # A zone with no cache rules yet has no entrypoint ruleset; treat
+          # that as an empty rule list rather than a failure.
+          rules=$(printf '%s' "$entry" | jq -c '.result.rules // []')
+          if printf '%s' "$rules" | jq -e --arg desc "$desc" --arg expr "$expr" \
+            'any(.[]; .description == $desc and .expression == $expr)' >/dev/null; then
+            echo "zone cache rule already present"
+            exit 0
+          fi
+          merged=$(printf '%s' "$rules" | jq -c --argjson rule "$rule" --arg desc "$desc" \
+            '[.[] | select(.description != $desc)] + [$rule]')
+          body=$(curl -sS -X PUT "$api/phases/http_request_cache_settings/entrypoint" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"rules\":${merged}}")
+          if [ "$(printf '%s' "$body" | jq -r '.success')" = "true" ]; then
+            echo "zone cache rule installed"
+          else
+            echo "unexpected response installing zone cache rule:" >&2
+            printf '%s\n' "$body" | jq . >&2 || printf '%s\n' "$body" >&2
+            exit 1
+          fi
 
       # The GitHub environment above already surfaces the deployment on the PR;
       # this status just carries the stable branch alias (pr-<n>...pages.dev)

@@ -339,24 +339,32 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Deploy-only (ROM_WEAVER_PAGES_WASM_BROTLI=1): stage quality-11 brotli
-// sidecars where q11 measurably beats Cloudflare's on-the-fly recompression
-// (~640 KB on the wasm, ~50 KB on the main JS bundle, single-digit KB on CSS
-// and worker scripts), and write a _routes.json scoping Pages Function
-// invocation (functions/assets/[name].js) to exactly the sidecar-backed URLs.
-// The wasm sidecar is the prebuilt artifact, byte-verified against the emitted
-// asset; JS/CSS are compressed here. Off in plain builds on purpose: the
-// release tarball asserts dist holds no compression sidecars (the Docker image
-// generates its own), and unmatched routes must stay on Pages' unmetered
-// static path.
-const PAGES_BROTLI_TEXT_ASSETS = /\.(js|mjs|css)$/;
+// Deploy-only (ROM_WEAVER_PAGES_BROTLI=1): stage quality-11 brotli sidecars
+// for every hashed asset where q11 measurably beats Cloudflare's on-the-fly
+// recompression (~640 KB on the wasm, ~50 KB on the main JS bundle), and
+// write a _routes.json scoping Pages Function invocation
+// (functions/assets/[name].js) to exactly the sidecar-backed URLs. The wasm
+// sidecar is the prebuilt artifact, byte-verified against the emitted asset;
+// everything else is compressed here and kept only when it saves >=2% -
+// already-compressed formats (woff2, png, zip) fail that bar and stay on the
+// static path. Only /assets/* is eligible: those URLs are content-hashed and
+// immutable, while the mutable root files (index.html, the service worker,
+// changelog.json) must keep their no-cache semantics and never route through
+// the function's immutable-cache response. Off in plain builds on purpose:
+// the release tarball asserts dist holds no compression sidecars (the Docker
+// image generates its own), and unmatched routes must stay on Pages'
+// unmetered static path.
+const PAGES_BROTLI_MIN_SAVINGS = 0.02;
+// _routes.json rejects more than 100 combined include/exclude entries; leave
+// headroom so an asset-count creep fails the build before Cloudflare does.
+const PAGES_ROUTES_MAX_INCLUDES = 90;
 
 const writePagesBrotliSidecars = () => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
-      if (process.env.ROM_WEAVER_PAGES_WASM_BROTLI !== "1") return;
+      if (process.env.ROM_WEAVER_PAGES_BROTLI !== "1") return;
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
       const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
@@ -367,7 +375,7 @@ const writePagesBrotliSidecars = () => {
       const sourceSidecar = `${sourceWasm}.br`;
       if (!fs.existsSync(sourceSidecar)) {
         throw new Error(
-          `ROM_WEAVER_PAGES_WASM_BROTLI=1 but ${sourceSidecar} is missing; build the prod wasm artifact first`,
+          `ROM_WEAVER_PAGES_BROTLI=1 but ${sourceSidecar} is missing; build the prod wasm artifact first`,
         );
       }
       const emittedWasm = path.join(assetsDir, wasmNames[0]);
@@ -377,10 +385,21 @@ const writePagesBrotliSidecars = () => {
       fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       for (const name of fs.readdirSync(assetsDir)) {
-        if (!PAGES_BROTLI_TEXT_ASSETS.test(name)) continue;
+        if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
         const assetPath = path.join(assetsDir, name);
-        brotliCompressFile({ inputPath: assetPath, outputPath: `${assetPath}.br`, quality: 11 });
+        const { compressedSize, sourceSize } = brotliCompressFile({
+          inputPath: assetPath,
+          outputPath: `${assetPath}.br`,
+          quality: 11,
+        });
+        if (compressedSize > sourceSize * (1 - PAGES_BROTLI_MIN_SAVINGS)) {
+          fs.rmSync(`${assetPath}.br`);
+          continue;
+        }
         sidecarUrls.push(`/assets/${name}`);
+      }
+      if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
+        throw new Error(`${sidecarUrls.length} sidecar routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
       }
       fs.writeFileSync(
         path.join(distDir, "_routes.json"),
