@@ -108,6 +108,7 @@ async function confirmReloadUpdate() {
 
 const FORCE_HTTPS_HOSTS = ["www.marcrobledo.com"];
 const serviceWorkerClient = createPwaServiceWorkerClient({
+  appVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,
@@ -383,8 +384,8 @@ const initializeWebapp = () => {
     commit: COMMIT_HASH,
     dirty: !!DIRTY_HASH,
     dirtyHash: DIRTY_HASH || undefined,
-    version: APP_VERSION,
     threads: resolveThreads(webappController.getState().settings.threads),
+    version: APP_VERSION,
   });
 
   serviceWorkerClient.refreshCacheVersion();

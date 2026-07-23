@@ -36,6 +36,7 @@ const createController = () => {
 };
 
 const createHarness = ({
+  appVersion = "app-under-test",
   controller = null,
   crossOriginIsolated = false,
   sessionStorageSeed = {},
@@ -77,6 +78,7 @@ const createHarness = ({
     return updateServiceWorker;
   };
   const client = createPwaServiceWorkerClient({
+    appVersion,
     cachePrefix: "precache-rom-weaver-",
     cacheVersionTimeoutMs: 50,
     document: {
@@ -132,7 +134,7 @@ test("reloads once to gain control when registration is active but uncontrolled"
   expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe("notcontrolling");
 });
 
-test("auto-applies an update when no work is in progress", async () => {
+test("auto-applies an update silently without reloading when no work is in progress", async () => {
   const controller = createController();
   const harness = createHarness({
     controller,
@@ -144,6 +146,28 @@ test("auto-applies an update when no work is in progress", async () => {
   await flushAsync();
   harness.triggerNeedRefresh();
 
+  // Running version (app-under-test) is ahead of the outgoing controller (reports "test"), so the page
+  // already runs the incoming version: activate via skipWaiting (false), no reload.
+  expect(harness.updateServiceWorker).toHaveBeenCalledWith(false);
+  expect(harness.location.reload).not.toHaveBeenCalled();
+  expect(harness.client.getState().updateReady).toBe(false);
+});
+
+test("auto-applies with a reload when the page is still running the outgoing controller's code", async () => {
+  const controller = createController();
+  const harness = createHarness({
+    appVersion: "test",
+    controller,
+    crossOriginIsolated: true,
+    shouldAutoApplyUpdate: () => true,
+  });
+
+  harness.client.initialize();
+  await flushAsync();
+  harness.triggerNeedRefresh();
+
+  // Running version matches the outgoing controller (both "test"), so the loaded code is stale and a
+  // reload is needed to pick up the incoming worker's assets.
   expect(harness.updateServiceWorker).toHaveBeenCalledWith(true);
   expect(harness.client.getState().updateReady).toBe(false);
 });
