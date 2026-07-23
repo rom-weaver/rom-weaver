@@ -90,7 +90,7 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.5.0",
-    "lucide-react": "1.25.0",
+    "lucide-react": "1.26.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "valibot": "1.4.2"
@@ -111,8 +111,8 @@
     "@vitest/browser-playwright": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "axe-core": "4.12.1",
-    "browserslist": "4.28.6",
-    "happy-dom": "20.11.0",
+    "browserslist": "4.28.7",
+    "happy-dom": "20.11.1",
     "jscpd": "5.0.12",
     "knip": "6.27.0",
     "npm-run-all2": "9.0.2",
