@@ -91,7 +91,7 @@
   },
   "dependencies": {
     "@lingui/core": "6.5.0",
-    "@rom-weaver/wasm": "0.7.0",
+    "@rom-weaver/wasm": "0.7.1",
     "lucide-react": "1.25.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",

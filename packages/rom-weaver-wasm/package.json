@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/wasm",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Browser WebAssembly runtime for rom-weaver: a WASI + OPFS threaded worker engine to inspect, extract, compress, and patch ROMs and disc images.",
   "keywords": [
     "rom",
