@@ -26,7 +26,9 @@
   border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: transparent; color: var(--ink-3);
   transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease), box-shadow .18s;
 }
-.dlg-x:hover { color: var(--ink); border-color: var(--ink-4); background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px); }
+@media (hover: hover) {
+  .dlg-x:hover { color: var(--ink); border-color: var(--ink-4); background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px); }
+}
 .dlg-x:active { transform: translateY(0) scale(.99); }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
@@ -53,12 +55,16 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background .18s, color .18s;
 }
-.rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
+@media (hover: hover) {
+  .rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
+}
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
   background: var(--thread); color: var(--thread-ink);
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
 }
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
+@media (hover: hover) {
+  .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
+}
 .rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
 .rw-app .log-filter-bar { display: flex; align-items: center; gap: var(--sp-s); }
 .rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
@@ -81,7 +87,11 @@
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
   transition: border-color .15s, background .15s;
 }
-.rw-app .pick-row:hover { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
+@media (hover: hover) {
+  .rw-app .pick-row:hover { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .pick-row:active { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
 .rw-app .pick-row:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
 .rw-app .pick-row.skip { opacity: .55; cursor: not-allowed; }
 .rw-app .pick-row { align-items: flex-start; position: relative; }

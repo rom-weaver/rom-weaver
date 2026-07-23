@@ -16,7 +16,9 @@
 :root[data-theme="light"] .notice.warn b { color: #7a5300; }
 /* notice dismiss matches the row-control size (--ctrl-h) like the card buttons */
 .rw-app .notice .x { appearance: none; border: 0; border-radius: var(--r-s); background: transparent; color: currentColor; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center; flex: none; opacity: .6; }
-.rw-app .notice .x:hover { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
+@media (hover: hover) {
+  .rw-app .notice .x:hover { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
+}
 .rw-app .notice .x svg { width: 14px; height: 14px; margin: 0; }
 
 /* `.fault` itself is kept: it is referenced by the entry-animation lock selector in

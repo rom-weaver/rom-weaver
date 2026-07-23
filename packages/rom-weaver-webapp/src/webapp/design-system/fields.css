@@ -33,7 +33,9 @@
   background: var(--ink-4); box-shadow: 0 1px 2px rgb(0 0 0 / .3);
   transition: translate .18s var(--ease), background .18s;
 }
-.rw-app input[type="checkbox"]:hover { border-color: var(--ink-4); }
+@media (hover: hover) {
+  .rw-app input[type="checkbox"]:hover { border-color: var(--ink-4); }
+}
 .rw-app input[type="checkbox"]:checked { background: var(--thread); border-color: var(--thread); }
 .rw-app input[type="checkbox"]:checked::after { translate: var(--sw-travel) -50%; background: var(--thread-ink); }
 .rw-app input[type="checkbox"]:focus-visible { outline: 2px solid color-mix(in oklab, var(--thread) 55%, transparent); outline-offset: 2px; }
@@ -94,7 +96,9 @@
   color: var(--ink-3); font-family: var(--font); font-size: .66rem; font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
 }
-.rw-app .ck-more:hover { color: var(--ink); }
+@media (hover: hover) {
+  .rw-app .ck-more:hover { color: var(--ink); }
+}
 .rw-app .ck-more .chev-i { width: 12px; height: 12px; flex: none; transition: rotate .16s var(--ease); }
 .rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
 @media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
@@ -108,7 +112,10 @@
 .rw-app .patch-meta-cols .patch-meta-field { flex: 1 1 0; min-width: 0; }
 /* Patch actions menu */
 .rw-app .patch-menu { position: relative; display: inline-block; }
-.rw-app .patch-menu-btn:hover, .rw-app .patch-menu-btn:active { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+.rw-app .patch-menu-btn:active { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+@media (hover: hover) {
+  .rw-app .patch-menu-btn:hover { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+}
 .rw-app .patch-menu-btn.is-open, .rw-app .patch-menu-btn.is-editing { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 45%, transparent); }
 .rw-app .patch-menu-list {
   position: absolute; top: calc(100% + 5px); inset-inline-end: 0; z-index: 70;
@@ -124,10 +131,18 @@
   color: var(--ink-2); font: inherit; font-size: .82rem; font-weight: 500;
   text-align: start; cursor: pointer; transition: color .15s, background .15s;
 }
-.rw-app .patch-menu-item:hover { color: var(--ink); background: color-mix(in oklab, var(--well) 80%, transparent); }
+@media (hover: hover) {
+  .rw-app .patch-menu-item:hover { color: var(--ink); background: color-mix(in oklab, var(--well) 80%, transparent); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .patch-menu-item:active { color: var(--ink); background: color-mix(in oklab, var(--well) 80%, transparent); }
 .rw-app .patch-menu-item svg { width: 13px; height: 13px; flex: none; color: var(--ink-4); }
-.rw-app .patch-menu-item:hover svg { color: inherit; }
-.rw-app .patch-menu-item.is-danger:hover { color: var(--fault); }
+@media (hover: hover) {
+  .rw-app .patch-menu-item:hover svg { color: inherit; }
+  .rw-app .patch-menu-item.is-danger:hover { color: var(--fault); }
+}
+.rw-app .patch-menu-item:active svg { color: inherit; }
+.rw-app .patch-menu-item.is-danger:active { color: var(--fault); }
 /* Match editable check rows to computed rows. */
 .rw-app .patch-checks-body .verification-row {
   grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto;
@@ -152,8 +167,10 @@
   transition: border-color .08s, background-color .08s;
 }
 .rw-app .patch-checks-body .verification-row .popt-input::placeholder { text-transform: none; }
-.rw-app .patch-checks-body .verification-row .popt-input:hover {
-  border-color: var(--seam); background: color-mix(in oklab, var(--thread) 5%, var(--well));
+@media (hover: hover) {
+  .rw-app .patch-checks-body .verification-row .popt-input:hover {
+    border-color: var(--seam); background: color-mix(in oklab, var(--thread) 5%, var(--well));
+  }
 }
 .rw-app .patch-checks-body .verification-row .popt-input:focus,
 .rw-app .patch-checks-body .verification-row .popt-input:focus-visible {
@@ -167,7 +184,9 @@
   width: 24px; height: 24px; padding: 0; border: 0; background: none;
   color: var(--ink-4); cursor: pointer; transition: color .15s; opacity: .6;
 }
-.rw-app .ck-remove:hover { opacity: 1; color: var(--fault); }
+@media (hover: hover) {
+  .rw-app .ck-remove:hover { opacity: 1; color: var(--fault); }
+}
 .rw-app .ck-remove svg { width: 12px; height: 12px; }
 .rw-app .patch-checks-body .verification-row .ck-err {
   grid-column: 2 / -1; margin: 0 0 2px; padding-inline-start: 4px;
@@ -196,10 +215,15 @@
   font-family: var(--font); font-size: .66rem; font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
 }
-.rw-app .ck-add:hover,
 .rw-app .ck-add:focus-within {
   color: var(--ink); border-color: var(--thread);
   background: color-mix(in oklab, var(--thread) 9%, var(--well));
+}
+@media (hover: hover) {
+  .rw-app .ck-add:hover {
+    color: var(--ink); border-color: var(--thread);
+    background: color-mix(in oklab, var(--thread) 9%, var(--well));
+  }
 }
 .rw-app .ck-basis-select {
   margin-inline-start: var(--sp-s);
@@ -243,7 +267,9 @@
   transition: border-color .15s, background .15s;
 }
 .rw-app .optschecks .popt > span { flex: 1 1 auto; min-width: 0; }
-.rw-app .optschecks .popt:hover { border-color: var(--seam); background: var(--plate-2); }
+@media (hover: hover) {
+  .rw-app .optschecks .popt:hover { border-color: var(--seam); background: var(--plate-2); }
+}
 .rw-app .optschecks .popt:has(:focus-visible) { border-color: var(--thread); }
 .rw-app .optschecks .popt:has(:checked) { color: var(--ink); }
 .rw-app .optschecks .popt:has(:disabled) { cursor: default; opacity: .55; }
