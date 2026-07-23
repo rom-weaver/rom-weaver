@@ -1,15 +1,41 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const requiredReleaseKeywords = ["rvz", "chd", "z3ds", "rom", "patch"];
 
-test("npm alias package exposes a runnable bin", () => {
+test("npm alias package exposes a runnable bin", (t) => {
   const pkg = readJson("packages/rom-weaver-alias/package.json");
   assert.equal(pkg.bin?.["rom-weaver"], "bin/rom-weaver.mjs");
   assert.ok(pkg.files.includes("bin/rom-weaver.mjs"));
   assert.ok(existsSync("packages/rom-weaver-alias/bin/rom-weaver.mjs"));
+
+  const installRoot = mkdtempSync(join(tmpdir(), "rom-weaver-alias-"));
+  t.after(() => rmSync(installRoot, { recursive: true, force: true }));
+  const aliasBin = join(installRoot, "node_modules/rom-weaver/bin/rom-weaver.mjs");
+  const cliDir = join(installRoot, "node_modules/@rom-weaver/cli");
+  const cliBin = join(cliDir, "bin/rom-weaver.mjs");
+  mkdirSync(join(installRoot, "node_modules/rom-weaver/bin"), { recursive: true });
+  mkdirSync(join(cliDir, "bin"), { recursive: true });
+  copyFileSync("packages/rom-weaver-alias/bin/rom-weaver.mjs", aliasBin);
+  writeFileSync(join(cliDir, "package.json"), '{"name":"@rom-weaver/cli","type":"module"}\n');
+  writeFileSync(cliBin, 'console.log("hoisted CLI loaded");\n');
+
+  const result = spawnSync(process.execPath, [aliasBin], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "hoisted CLI loaded\n");
 });
 
 test("root lockfile mirrors local optional platform package manifests", () => {
