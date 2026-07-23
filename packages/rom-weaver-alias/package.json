@@ -12,18 +12,24 @@
     "directory": "packages/rom-weaver-alias"
   },
   "keywords": [
+    "rvz",
+    "chd",
+    "z3ds",
     "rom",
     "rom-hack",
     "patch",
     "ips",
     "bps",
-    "chd",
     "cli"
   ],
+  "bin": {
+    "rom-weaver": "bin/rom-weaver.mjs"
+  },
   "dependencies": {
     "@rom-weaver/cli": "0.7.1"
   },
   "files": [
+    "bin/rom-weaver.mjs",
     "LICENSE.md"
   ],
   "publishConfig": {
