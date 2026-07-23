@@ -141,6 +141,7 @@
   animation: formats-ticker 120s linear infinite;
   backface-visibility: hidden; will-change: transform;
 }
+#webapp-root[aria-busy="true"] .formats-track { animation-play-state: paused; }
 .rw-app .drop.hero .formats-lane:nth-child(2) .formats-track { animation-direction: reverse; }
 .rw-app .drop.hero .formats-set { display: flex; gap: var(--sp-xs); }
 .rw-app .drop.hero .fmt { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 12px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }
