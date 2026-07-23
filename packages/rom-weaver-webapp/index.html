@@ -88,5 +88,14 @@
   </head>
   <body>
     <div id="webapp-root" aria-busy="true"></div>
+    <script>
+      // Fill the prerendered environment slot before first paint. React reads
+      // the same browser value, so replacing the shell cannot move the masthead.
+      (function () {
+        const slot = document.querySelector(".masthead-threads");
+        const threads = navigator.hardwareConcurrency;
+        if (slot && threads) slot.textContent = `· ${threads} ${slot.dataset.threadLabel}`;
+      })();
+    </script>
   </body>
 </html>

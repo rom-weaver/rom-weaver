@@ -62,7 +62,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
 .rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
-.rw-app .masthead-threads { flex: none; animation: value-in .4s var(--ease); }
+.rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
 .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
 /* ghost tools at every width: the buttons drop their box chrome at rest -
