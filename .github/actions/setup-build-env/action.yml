@@ -211,25 +211,38 @@ runs:
     # the second-largest consumer of the 10 GiB budget after the Rust caches.
     # The key covers exactly what determines the tree, so a hit means the
     # install can be skipped outright rather than merely sped up.
-    - name: Restore webapp node_modules cache
+    #
+    # The webapp lives in an npm workspace (packages/), so npm hoists shared deps
+    # to packages/node_modules and keeps platform/unhoistable ones in each
+    # package's own node_modules - all three trees are cached and keyed on the
+    # single workspace lock. On a hit the wasm package's `dist/` is still absent
+    # (it is outside node_modules and built per-job once the wasm binary lands),
+    # so jobs bundle @rom-weaver/wasm after downloading the module.
+    - name: Restore workspace node_modules cache
       if: inputs.webapp-deps == 'true'
       id: node-modules-cache
       uses: actions/cache/restore@v6
       with:
-        path: packages/rom-weaver-webapp/node_modules
-        key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/rom-weaver-webapp/package-lock.json') }}
+        path: |
+          packages/node_modules
+          packages/rom-weaver-wasm/node_modules
+          packages/rom-weaver-webapp/node_modules
+        key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/package-lock.json') }}
 
     - name: Install package dependencies
       if: inputs.webapp-deps == 'true' && steps.node-modules-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: npm ci --prefix packages/rom-weaver-webapp
+      run: npm ci --prefix packages
 
-    - name: Save webapp node_modules cache
+    - name: Save workspace node_modules cache
       if: inputs.webapp-deps == 'true' && inputs.cache-save == 'true' && steps.node-modules-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
-        path: packages/rom-weaver-webapp/node_modules
-        key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/rom-weaver-webapp/package-lock.json') }}
+        path: |
+          packages/node_modules
+          packages/rom-weaver-wasm/node_modules
+          packages/rom-weaver-webapp/node_modules
+        key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/package-lock.json') }}
 
     # Browser binaries were the one download in this action that nothing
     # cached: every webapp, coverage, and nightly run re-fetched them. The

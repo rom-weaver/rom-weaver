@@ -41,7 +41,9 @@ else
     esac
 
     case "$path" in
-      packages/rom-weaver-webapp/* | package.json | package-lock.json | \
+      packages/rom-weaver-webapp/* | packages/rom-weaver-wasm/* | \
+        packages/package.json | packages/package-lock.json | \
+        package.json | package-lock.json | \
         scripts/*.mjs | scripts/wasm/* | .dockerignore | \
         docker-compose.yml | .github/workflows/docker-publish.yml)
         webapp=true
@@ -64,7 +66,8 @@ else
 
     case "$path" in
       Cargo.toml | Cargo.lock | crates/*/Cargo.toml | package.json | package-lock.json | \
-        packages/rom-weaver-webapp/package.json | packages/rom-weaver-webapp/package-lock.json)
+        packages/package.json | packages/package-lock.json | \
+        packages/rom-weaver-webapp/package.json | packages/rom-weaver-wasm/package.json)
         security=true
         ;;
     esac

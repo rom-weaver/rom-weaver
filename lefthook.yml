@@ -46,9 +46,27 @@ pre-commit:
     react-format:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run format:check
+    # Widened to the whole workspace: the webapp resolves @rom-weaver/wasm's
+    # types, so a change in the wasm package (or the workspace manifests) can
+    # break the webapp's type-check and must re-run it here, not only in CI.
     react-types:
-      glob: "packages/rom-weaver-webapp/**"
+      glob: "packages/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:types
+    # The @rom-weaver/wasm package's own static analysis - the webapp-prefixed
+    # react-* hooks lint only the webapp, so the wasm package needs equivalents
+    # gated on its own tree. Same static-analysis reasoning as the react-* hooks.
+    wasm-lint:
+      glob: "packages/rom-weaver-wasm/**"
+      run: npm --prefix packages/rom-weaver-wasm run lint:code
+    wasm-format:
+      glob: "packages/rom-weaver-wasm/**"
+      run: npm --prefix packages/rom-weaver-wasm run format:check
+    wasm-types:
+      glob: "packages/rom-weaver-wasm/**"
+      run: npm --prefix packages/rom-weaver-wasm run lint:types
+    wasm-knip:
+      glob: "packages/rom-weaver-wasm/**"
+      run: npm --prefix packages/rom-weaver-wasm run lint:knip
     # knip, browser-compat, the i18n catalog compile and the legacy-string audit
     # are all part of CI's `npm run lint`; running them here too keeps a dead
     # export, a browser-compat regression, a stale/incomplete message catalog, or
@@ -79,6 +97,16 @@ pre-commit:
     root-lock-sync:
       glob: "package{,-lock}.json"
       run: npm ci --ignore-scripts --dry-run
+    # The packages workspace lock has no hand-preserved optional entries, but a
+    # manifest edit that is not reflected in packages/package-lock.json still
+    # breaks `npm ci --prefix packages` for every webapp CI job. Catch it here.
+    packages-lock-sync:
+      glob:
+        - "packages/package.json"
+        - "packages/package-lock.json"
+        - "packages/rom-weaver-wasm/package.json"
+        - "packages/rom-weaver-webapp/package.json"
+      run: npm ci --prefix packages --ignore-scripts --dry-run
     # Workflow mistakes are invisible until a push burns a runner minute, so
     # they are worth catching at commit time. Covers the composite actions too.
     actionlint:

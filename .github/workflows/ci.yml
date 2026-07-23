@@ -236,12 +236,12 @@ jobs:
         with:
           variant: prod
           path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
-            packages/rom-weaver-webapp/src/wasm/third_party
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.br
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-wasm/src/NOTICE
+            packages/rom-weaver-wasm/src/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-wasm/src/third_party
 
       # Skipped entirely on a hit - the toolchain exists only to compile.
       - uses: ./.github/actions/setup-build-env
@@ -263,7 +263,7 @@ jobs:
       # Use runner Node because toolchain setup is skipped on hits.
       - name: Verify wasm artifact
         if: needs.changes.outputs.webapp == 'true'
-        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-wasm/src
 
       # The wasm module and its brotli sibling are already compressed, so
       # re-compressing them into the artifact only burns time.
@@ -275,12 +275,12 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
-            packages/rom-weaver-webapp/src/wasm/third_party
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.br
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-wasm/src/NOTICE
+            packages/rom-weaver-wasm/src/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-wasm/src/third_party
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
@@ -543,8 +543,8 @@ jobs:
       - name: npm advisories
         run: |
           scripts/warn-only.sh "npm advisories (root)" npm run audit:deps
-          scripts/warn-only.sh "npm advisories (webapp)" \
-            npm --prefix packages/rom-weaver-webapp run audit:deps
+          scripts/warn-only.sh "npm advisories (packages workspace)" \
+            npm --prefix packages run audit:deps
 
   # No separate `wasm-check` job. It compiled a strict subset of the production
   # module above, while the source-exact cache already covers every input that
@@ -734,7 +734,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
+          path: packages/rom-weaver-wasm/src
+
+      # The webapp resolves @rom-weaver/wasm through its built dist/, so bundle
+      # the package once the wasm module is in place. Required on a node_modules
+      # cache hit, where `npm ci` and its `prepare` bundle never ran.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
 
       # Lives here rather than in the `rust` job because
       # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
@@ -788,7 +794,11 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
+          path: packages/rom-weaver-wasm/src
+
+      # See webapp-static: bundle the package so the webapp resolves its dist/.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
 
       - name: Browser tests (parallel)
         env:
@@ -820,7 +830,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
+          path: packages/rom-weaver-wasm/src
+
+      # See webapp-static: bundle the package so the wasm suite and webapp E2E
+      # (which serves the built package via the dev server) resolve its dist/.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
 
       # The per-channel app icons are committed, not built, so nothing else would
       # notice them going stale against logo.svg / the icon masters / an accent's
@@ -860,7 +875,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
+          path: packages/rom-weaver-wasm/src
+
+      # See webapp-static: the WebKit E2E serves the built package via the dev
+      # server, so bundle it first.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
 
       - name: Webapp E2E (WebKit)
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
@@ -1028,7 +1048,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
-          path: packages/rom-weaver-webapp/src/wasm
+          path: packages/rom-weaver-wasm/src
 
       # The channel stamps the bundle's visible identity - masthead badge, tab
       # title, PWA name and accent tokens - so a nightly or preview tab is never

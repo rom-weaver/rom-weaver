@@ -114,7 +114,7 @@ cd rom-weaver
 mise trust
 mise install
 npm ci
-npm ci --prefix packages/rom-weaver-webapp
+npm ci --prefix packages
 mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
 ```

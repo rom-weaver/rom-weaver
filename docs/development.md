@@ -57,7 +57,7 @@ sets, and install the repository hooks:
 mise trust
 mise install
 npm ci
-npm ci --prefix packages/rom-weaver-webapp
+npm ci --prefix packages
 npm --prefix packages/rom-weaver-webapp exec playwright -- install chromium
 npm run hooks:install
 ```

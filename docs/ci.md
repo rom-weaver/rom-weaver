@@ -266,7 +266,7 @@ consumer, which is the point.
 
 Every toolchain concern, each opt-in so a job installs only what it runs: apt
 packages, mise-pinned tools, Rust components and targets, the cargo cache, the
-WASI SDK, webapp `node_modules`, and Playwright browsers.
+WASI SDK, the workspace `node_modules`, and Playwright browsers.
 
 The `tools:` input is a **positive** list of short tool names
 (`tools: node rust ripgrep`). mise offers no allowlist - `MISE_DISABLE_TOOLS`
@@ -286,7 +286,14 @@ Caching decisions that live here:
 - **WASI SDK**: keyed on version *and* checksum, so a version bump misses by
   construction and can never serve a stale SDK.
 - **`node_modules`**: the installed tree is cached, not `~/.npm` - a hit skips
-  `npm ci` outright instead of merely speeding up its download half.
+  `npm ci` outright instead of merely speeding up its download half. The webapp
+  is an npm workspace (`packages/`), so the install is `npm ci --prefix packages`
+  and all three trees (`packages/node_modules` plus the per-package
+  `rom-weaver-wasm`/`rom-weaver-webapp` `node_modules` npm keeps unhoisted) are
+  cached, keyed on `packages/package-lock.json`. A hit skips `npm ci` and with it
+  `@rom-weaver/wasm`'s `prepare` bundle, and the package's `dist/` lives outside
+  `node_modules`, so every webapp/coverage job bundles `@rom-weaver/wasm` after
+  downloading the wasm module rather than relying on the install to have built it.
 - **Playwright**: browser binaries only. The apt-level libraries they link
   against are outside the cache, so a hit still runs `install-deps`. The
   parallel browser job skips this cache and uses Chrome already installed on
@@ -344,6 +351,7 @@ spec would tag every platform package as a prerelease.
 | --- | --- |
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
+| `publish-wasm` | `@rom-weaver/wasm` on npm, bundled from the tested wasm module and published with provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/.../rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
@@ -353,6 +361,15 @@ spec would tag every platform package as a prerelease.
 The table is in dependency order. Everything above `publish-release` attaches an
 asset to the draft or gates it; the two package-manager pushes come after it, and
 [Package managers publish last](#package-managers-publish-last) explains why.
+
+`publish-wasm` mirrors `static-webapp`: it reuses the release PR head's tested
+`wasm-prod` artifact (falling back to a source build for a manual release),
+bundles `@rom-weaver/wasm`'s `dist/` from that exact module, and publishes with
+provenance. The publish helper runs `npm publish --ignore-scripts`, so the
+package's `prepack`/`prepare` never fires and the bundle must be built in the job
+first. Like `publish-npm` it is an irreversible registry write, so it gates
+`publish-release` - a failed publish leaves a deletable draft rather than burning
+the version.
 
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would

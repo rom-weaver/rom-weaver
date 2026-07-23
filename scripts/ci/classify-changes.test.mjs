@@ -35,6 +35,34 @@ test("webapp changes reuse wasm and skip Rust", () => {
   });
 });
 
+test("wasm-package source changes reuse wasm and skip Rust", () => {
+  assert.deepEqual(classify("packages/rom-weaver-wasm/src/index.ts"), {
+    rust: "false",
+    webapp: "true",
+    security: "false",
+    docker_cli: "false",
+    docker_webapp: "false",
+    full: "false",
+  });
+});
+
+test("workspace and package manifests select webapp and the advisory scanners", () => {
+  for (const path of [
+    "packages/package.json",
+    "packages/package-lock.json",
+    "packages/rom-weaver-wasm/package.json",
+  ]) {
+    assert.deepEqual(classify(path), {
+      rust: "false",
+      webapp: "true",
+      security: "true",
+      docker_cli: "false",
+      docker_webapp: "false",
+      full: "false",
+    });
+  }
+});
+
 test("Docker changes select only the affected images", () => {
   assert.deepEqual(classify("Dockerfile"), {
     rust: "false",

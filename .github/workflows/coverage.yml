@@ -32,12 +32,12 @@ jobs:
         with:
           variant: prod
           path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
-            packages/rom-weaver-webapp/src/wasm/third_party
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.br
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-wasm/src/NOTICE
+            packages/rom-weaver-wasm/src/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-wasm/src/third_party
 
       - uses: ./.github/actions/setup-build-env
         with:
@@ -58,7 +58,12 @@ jobs:
         run: mise run build-wasm-prod
 
       - name: Verify WASM artifact
-        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-wasm/src
+
+      # The React coverage suites resolve @rom-weaver/wasm through its dist/,
+      # which is built per-job once the wasm module is in place.
+      - name: Bundle @rom-weaver/wasm
+        run: npm --prefix packages/rom-weaver-wasm run build
 
       - name: Rust coverage
         run: mise run coverage-rust

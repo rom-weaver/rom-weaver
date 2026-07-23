@@ -29,10 +29,10 @@ jobs:
         with:
           variant: dev
           path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/THIRD_PARTY_LICENSES.md
-            packages/rom-weaver-webapp/src/wasm/third_party
+            packages/rom-weaver-wasm/src/rom-weaver-app.wasm
+            packages/rom-weaver-wasm/src/NOTICE
+            packages/rom-weaver-wasm/src/THIRD_PARTY_LICENSES.md
+            packages/rom-weaver-wasm/src/third_party
 
       - uses: ./.github/actions/setup-build-env
         with:
@@ -45,7 +45,7 @@ jobs:
 
       - name: Verify cached development WASM artifact
         if: steps.wasm-cache.outputs.cache-hit == 'true'
-        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm --dev
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-wasm/src --dev
 
       - name: Run exhaustive E2E matrix
         env:
