@@ -22,17 +22,27 @@
   background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
   opacity: .72;
 }
-.rw-app .drawer-action .info-btn:hover,
 .rw-app .drawer-action .info-btn[aria-expanded="true"] {
   color: color-mix(in oklab, var(--verified) 82%, var(--ink));
 }
-.rw-app .drawer-action .info-btn:hover::before,
+@media (hover: hover) {
+  .rw-app .drawer-action .info-btn:hover {
+    color: color-mix(in oklab, var(--verified) 82%, var(--ink));
+  }
+}
 .rw-app .drawer-action .info-btn[aria-expanded="true"]::before { opacity: 1; }
+@media (hover: hover) {
+  .rw-app .drawer-action .info-btn:hover::before { opacity: 1; }
+}
 .rw-app .drawer-action .info-btn:active { transform: scale(.92); }
 .rw-app .drawer-action .expected-mismatch-info .info-btn { color: var(--fault); }
-.rw-app .drawer-action .expected-mismatch-info .info-btn:hover,
 .rw-app .drawer-action .expected-mismatch-info .info-btn[aria-expanded="true"] {
   color: color-mix(in oklab, var(--fault) 82%, var(--ink));
+}
+@media (hover: hover) {
+  .rw-app .drawer-action .expected-mismatch-info .info-btn:hover {
+    color: color-mix(in oklab, var(--fault) 82%, var(--ink));
+  }
 }
 .rw-app .drawer-action .info-btn svg { width: 14px; height: 14px; }
 .rw-app .dry-apply-pop p { margin: 6px 0 0; }
@@ -51,13 +61,20 @@
   /* Prevent selection and iOS callouts from stealing header taps. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
-.rw-app .cks:not(.is-open) > .cks-head:hover { background: color-mix(in oklab, var(--thread) 6%, transparent); }
+@media (hover: hover) {
+  .rw-app .cks:not(.is-open) > .cks-head:hover { background: color-mix(in oklab, var(--thread) 6%, transparent); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .cks:not(.is-open) > .cks-head:active { background: color-mix(in oklab, var(--thread) 6%, transparent); }
 .rw-app .cks.is-open > .cks-head {
   background: color-mix(in oklab, var(--ink) 3%, transparent);
   border-end-start-radius: 0; border-end-end-radius: 0;
   border-block-end: 1px solid var(--seam-soft);
 }
-.rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); }
+@media (hover: hover) {
+  .rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); }
+}
+.rw-app .cks.is-open > .cks-head:active { background: color-mix(in oklab, var(--ink) 6%, transparent); }
 /* Hidden content must leave the tab order and accessibility tree. */
 .rw-app .cks > .cks-body {
   /* Keep wide content inside the drawer on narrow screens. */
@@ -74,7 +91,9 @@
 .rw-app .cks .cks-inner { padding-inline: 10px; border-end-start-radius: calc(var(--r-s) - 1px); border-end-end-radius: calc(var(--r-s) - 1px); }
 .rw-app .cks .cks-inner > :last-child { margin-block-end: 9px; }
 .rw-app .cks .chev { width: .82rem; height: .82rem; flex: none; color: var(--ink-4); opacity: .6; transition: transform .22s var(--ease), color .18s, opacity .18s; }
-.rw-app .cks > .cks-head:hover .chev { opacity: 1; }
+@media (hover: hover) {
+  .rw-app .cks > .cks-head:hover .chev { opacity: 1; }
+}
 .rw-app .cks.is-open > .cks-head .chev { transform: rotate(90deg); color: var(--thread-text); opacity: 1; }
 .rw-app .cks .lab { margin-inline-end: auto; font-size: .8rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
 .rw-app .cks.is-open > .cks-head .lab { color: var(--ink); }
@@ -137,7 +156,10 @@
 @media (pointer: coarse) {
   .rw-app .ck { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 }
-.rw-app .ck:hover { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
+@media (hover: hover) {
+  .rw-app .ck:hover { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
+}
+.rw-app .ck:active { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
 .rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
 /* Scale all values together so a 40-character SHA-1 stays on one line. */
@@ -209,12 +231,8 @@
 /* Preserve label contrast over tinted light-theme rows. */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
 .rw-app .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
-.rw-app .ck:hover .copy { opacity: 1; color: var(--thread-text); }
-/* Avoid sticky hover tints on touch devices. */
-@media (hover: none) {
-  .rw-app .cks:not(.is-open) > .cks-head:hover { background: transparent; }
-  .rw-app .cks.is-open > .cks-head:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
-  .rw-app .ck:hover { background: transparent; }
+@media (hover: hover) {
+  .rw-app .ck:hover .copy { opacity: 1; color: var(--thread-text); }
 }
 .rw-app .ck .copy:active { transform: scale(.82); }
 .rw-app .ck .copy.copied { color: var(--verified); opacity: 1; animation: pop .32s var(--ease); }
@@ -279,7 +297,10 @@
 .rw-app .info-btn svg { width: 1em; height: 1em; }
 /* Enlarge the small glyph's hit target. */
 .rw-app .info-btn::after { content: ""; position: absolute; inset: -7px; }
-.rw-app .info-btn:hover { color: var(--ink-2); }
+@media (hover: hover) {
+  .rw-app .info-btn:hover { color: var(--ink-2); }
+}
+.rw-app .info-btn:active { color: var(--ink-2); }
 .rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
 .rw-app .info-pop {
   position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
@@ -313,7 +334,9 @@
 .rw-app .cue-sub-single { position: relative; }
 .rw-app .cue-sub-single > .cue-copy { position: absolute; z-index: 1; inset-block-start: 4px; inset-inline-end: 20px; }
 .rw-app .cue-copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-3); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; transition: transform .12s, color .15s; }
-.rw-app .cue-copy:hover { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .cue-copy:hover { color: var(--thread-text); }
+}
 .rw-app .cue-copy:active { transform: scale(.85); }
 .rw-app .cue-copy.copied { color: var(--verified); animation: pop .32s var(--ease); }
 .rw-app .cue-copy svg { width: 13px; height: 13px; }

@@ -5,10 +5,17 @@
   border: 0; border-radius: var(--r-m);
   background: none; color: var(--ink-2); font-size: .88rem; cursor: pointer;
 }
-.rw-app .drop:hover { color: var(--ink); }
+@media (hover: hover) {
+  .rw-app .drop:hover { color: var(--ink); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .drop:active { color: var(--ink); }
 .rw-app .drop .main { display: inline-flex; align-items: center; gap: var(--sp-m); font-weight: 650; color: var(--ink); }
 .rw-app .drop .main svg { width: 16px; height: 16px; color: var(--ink-3); }
-.rw-app .drop:hover .main svg { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .drop:hover .main svg { color: var(--thread-text); }
+}
+.rw-app .drop:active .main svg { color: var(--thread-text); }
 .rw-app .drop .hint { font-size: .74rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
 .rw-app .drop .hint b { color: var(--ink-2); font-weight: 600; }
 .rw-app .drop .pointer-copy.coarse { display: none; }
@@ -49,9 +56,12 @@
 .rw-app .drop.hero.dragging .main.bead { --bead-scale: 1.07; --bead-halo: .9; --bead-rim: 70%; }
 @media (prefers-reduced-motion: reduce) {
   /* Keep the arming color cues, drop the movement. */
-  .rw-app .drop.hero .main.bead, .rw-app .drop.hero:hover .main.bead,
+  .rw-app .drop.hero .main.bead,
   .rw-app .drop.hero:focus-within .main.bead, .rw-app .drop.hero:active .main.bead,
   .rw-app .drop.hero.dragging .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
+  @media (hover: hover) {
+    .rw-app .drop.hero:hover .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
+  }
 }
 .rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
 .rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
@@ -165,10 +175,22 @@
   padding: 4px 13px; min-height: 28px; font-size: .76rem; font-weight: 600; gap: var(--sp-s);
   color: var(--ink-2);
 }
-.rw-app .drop:hover .main.btnish, .rw-app .drop:focus-within .main.btnish {
+.rw-app .drop:focus-within .main.btnish {
   border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); color: var(--thread-text);
 }
-.rw-app .drop:hover .main.btnish svg, .rw-app .drop:focus-within .main.btnish svg { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .drop:hover .main.btnish {
+    border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); color: var(--thread-text);
+  }
+}
+.rw-app .drop:active .main.btnish {
+  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); color: var(--thread-text);
+}
+.rw-app .drop:focus-within .main.btnish svg { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .drop:hover .main.btnish svg { color: var(--thread-text); }
+}
+.rw-app .drop:active .main.btnish svg { color: var(--thread-text); }
 .rw-app .drop:not(.hero) { min-height: 0; padding: 4px 16px 7px; gap: var(--sp-xs); }
 .rw-app .drop:not(.hero) .main svg { width: 13px; height: 13px; }
 /* Keep add-more instructions visible without hover. */
@@ -192,7 +214,17 @@
   background: var(--warp-lines) var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
-.rw-app .step.is-input .drop.hero:hover, .rw-app .step.is-input .drop.hero:focus-visible {
+.rw-app .step.is-input .drop.hero:focus-visible {
+  border-color: var(--empty-border-hover);
+  background: var(--warp-lines) var(--empty-fill-hover);
+}
+@media (hover: hover) {
+  .rw-app .step.is-input .drop.hero:hover {
+    border-color: var(--empty-border-hover);
+    background: var(--warp-lines) var(--empty-fill-hover);
+  }
+}
+.rw-app .step.is-input .drop.hero:active {
   border-color: var(--empty-border-hover);
   background: var(--warp-lines) var(--empty-fill-hover);
 }
@@ -201,13 +233,24 @@
   border: 1px solid var(--seam); background: var(--warp-lines) var(--empty-fill);
   transition: border-color .2s, background .2s;
 }
-.rw-app .step.is-input .drop:not(.hero):hover, .rw-app .step.is-input .drop:not(.hero):focus-within {
+.rw-app .step.is-input .drop:not(.hero):focus-within {
+  border-color: var(--empty-border-hover); background: var(--warp-lines) var(--empty-fill-hover);
+}
+@media (hover: hover) {
+  .rw-app .step.is-input .drop:not(.hero):hover {
+    border-color: var(--empty-border-hover); background: var(--warp-lines) var(--empty-fill-hover);
+  }
+}
+.rw-app .step.is-input .drop:not(.hero):active {
   border-color: var(--empty-border-hover); background: var(--warp-lines) var(--empty-fill-hover);
 }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish {
   border: 0; background: transparent; padding: 0; min-height: 0; font-size: .84rem; color: var(--ink-2);
 }
-.rw-app .step.is-input .drop:not(.hero):hover .main.btnish { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .step.is-input .drop:not(.hero):hover .main.btnish { color: var(--thread-text); }
+}
+.rw-app .step.is-input .drop:not(.hero):active .main.btnish { color: var(--thread-text); }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish svg { color: var(--thread-text); }
 /* with nothing staged the hero is THE page: a big, obvious drop target that
    claims a healthy share of the viewport, capped so the thesis + ghost steps
@@ -234,7 +277,17 @@
   color: var(--ink-3); font-size: .9rem; font-weight: 600; text-align: center; white-space: nowrap;
   transition: color .15s, background .15s, border-color .15s;
 }
-.rw-app .needs-input:hover, .rw-app .needs-input:focus-visible {
+.rw-app .needs-input:focus-visible {
+  color: var(--ink-2); background: var(--warp-lines) var(--empty-fill-hover);
+  border-color: var(--empty-border-hover);
+}
+@media (hover: hover) {
+  .rw-app .needs-input:hover {
+    color: var(--ink-2); background: var(--warp-lines) var(--empty-fill-hover);
+    border-color: var(--empty-border-hover);
+  }
+}
+.rw-app .needs-input:active {
   color: var(--ink-2); background: var(--warp-lines) var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }

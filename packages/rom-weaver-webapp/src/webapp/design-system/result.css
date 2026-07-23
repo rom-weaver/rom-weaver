@@ -39,7 +39,9 @@
 .rw-app .swap-row { display: flex; justify-content: center; height: 30px; margin-block: var(--sp-s) -15px; position: relative; z-index: 1; }
 .rw-app .swap-btn { height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
 .rw-app .swap-btn svg { transition: transform .4s var(--ease); }
-.rw-app .swap-btn:hover svg { transform: rotate(180deg); }
+@media (hover: hover) {
+  .rw-app .swap-btn:hover svg { transform: rotate(180deg); }
+}
 
 /* Trace log */
 .rw-app .tracelog {
@@ -55,7 +57,11 @@
   animation: trace-in .25s var(--ease);
 }
 .rw-app .tracelog .ln:last-child { border-block-end: 0; }
-.rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
+@media (hover: hover) {
+  .rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .tracelog .ln:active { background: color-mix(in oklab, var(--thread) 8%, transparent); }
 .rw-app .tracelog .ln.copied { background: color-mix(in oklab, var(--verified) 16%, transparent); }
 .rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
 .rw-app .tracelog .ts { color: #6aa8c0; flex: none; }

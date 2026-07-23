@@ -46,8 +46,18 @@ a{
 	color:var(--rom-weaver-color-primary);
 }
 
-a:hover,
 a:focus-visible{
+	color:var(--rom-weaver-color-primary-hover);
+}
+
+@media (hover: hover){
+	a:hover{
+		color:var(--rom-weaver-color-primary-hover);
+	}
+}
+
+/* Touch devices need active feedback because they lack hover. */
+a:active{
 	color:var(--rom-weaver-color-primary-hover);
 }
 
@@ -103,13 +113,15 @@ input[type=checkbox].styled:focus:not(:disabled){
 	box-shadow:var(--rom-weaver-color-primary-focus) 0 0 0 2px;
 }
 
-input[type=checkbox].styled:hover:not(:disabled){
-	border-color:var(--rom-weaver-color-primary-hover);
-	cursor:pointer;
-}
+@media (hover: hover){
+	input[type=checkbox].styled:hover:not(:disabled){
+		border-color:var(--rom-weaver-color-primary-hover);
+		cursor:pointer;
+	}
 
-input[type=checkbox].styled:hover:checked:not(:disabled){
-	background-color:var(--rom-weaver-color-primary-hover);
+	input[type=checkbox].styled:hover:checked:not(:disabled){
+		background-color:var(--rom-weaver-color-primary-hover);
+	}
 }
 
 input[type=checkbox].styled:checked{

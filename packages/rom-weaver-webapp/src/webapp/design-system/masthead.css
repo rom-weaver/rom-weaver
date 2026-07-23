@@ -50,7 +50,11 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .mode svg { width: 1rem; height: 1rem; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
-.rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
+@media (hover: hover) {
+  .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .mode:not([aria-selected="true"]):active { color: var(--ink); }
 .rw-app .tools-subnav { padding: 10px var(--pad); border-block-end: 1px solid var(--seam-soft); background: var(--plate-2); }
 .rw-app .tools-subnav-rail { display: flex; gap: var(--sp-s); }
 .rw-app .tools-subnav-tab {
@@ -58,13 +62,17 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border: 1px solid var(--thread); border-radius: var(--r-s); background: color-mix(in oklab, var(--thread) 14%, var(--well));
   color: var(--thread-text); cursor: pointer; font-size: .78rem; font-weight: 650;
 }
+/* No hover pair to mirror: the tab is lit at rest, so press deepens the tint. */
+.rw-app .tools-subnav-tab:active { background: color-mix(in oklab, var(--thread) 22%, var(--well)); }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
 .rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
-.rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
+@media (hover: hover) {
+  .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
+}
 /* ghost tools at every width: the buttons drop their box chrome at rest -
    border/fill only appear on hover - so six controls stop reading as a
    second nav beside the mode rail */
@@ -73,7 +81,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   border: 1px solid transparent; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
   transition: color .18s, border-color .18s, background .18s;
 }
-.rw-app .tool:hover { color: var(--ink); background: var(--well); border-color: var(--seam); }
+@media (hover: hover) {
+  .rw-app .tool:hover { color: var(--ink); background: var(--well); border-color: var(--seam); }
+}
 .rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

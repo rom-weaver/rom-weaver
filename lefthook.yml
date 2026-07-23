@@ -67,6 +67,11 @@ pre-commit:
     react-browser-compat:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:browser-compat
+    # An ungated `:hover` leaves tapped controls stuck in the hover look on
+    # touch, which no other check here would catch. CSS-only, so scope the glob.
+    react-touch-styles:
+      glob: "packages/rom-weaver-webapp/**/*.css"
+      run: npm --prefix packages/rom-weaver-webapp run lint:touch-styles
     react-i18n:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:i18n

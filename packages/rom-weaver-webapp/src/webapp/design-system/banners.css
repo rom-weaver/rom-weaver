@@ -39,7 +39,11 @@
   color: var(--ink-2); font-size: .8rem; margin-inline-start: 6px;
   text-decoration: underline dotted; text-underline-offset: 3px;
 }
-.rw-app .updates-ver:hover { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .updates-ver:hover { color: var(--thread-text); }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .updates-ver:active { color: var(--thread-text); }
 .rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
 .rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
 .rw-app .changelog-subject { font-size: .9rem; }
@@ -49,7 +53,10 @@
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
-.rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
+@media (hover: hover) {
+  .rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
+}
+.rw-app .banner-x:active { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
 .rw-app .banner-x svg { width: 14px; height: 14px; }
 
 .rw-app .wakelock {

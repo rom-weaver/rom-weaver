@@ -48,6 +48,13 @@ maps every workflow, the shared actions, caching, and the release fan-out.
   `docs/ARCHITECTURE.md`.
 - **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines -
   trace output is the primary debugging tool for wasm/browser issues.
+- **Every `:hover` rule lives inside `@media (hover: hover)`**, paired with an
+  `:active` twin that supplies the press feedback touch users lose. Touch
+  browsers latch `:hover` onto the last-tapped element, so an ungated rule
+  leaves tapped controls stuck in the hover look. Never group `:hover` with
+  `:focus-visible`/`:focus-within`/`:active` in one selector list - those halves
+  must stay outside the media query. Enforced by `npm run lint:touch-styles`;
+  genuine exceptions go in that script's `EXEMPT` map with a reason.
 - Relative imports only in TypeScript (no path aliases).
 
 ## Releases

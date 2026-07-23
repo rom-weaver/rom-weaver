@@ -42,7 +42,10 @@
   appearance: none; -webkit-appearance: none; margin: 0;
 }
 .rw-app .handle svg { width: calc(var(--ctrl-h) * .6); height: calc(var(--ctrl-h) * .6); }
-.rw-app .handle:hover:not(:disabled), .rw-app .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
+.rw-app .handle:focus-visible { color: var(--thread-text); border-color: var(--thread); }
+@media (hover: hover) {
+  .rw-app .handle:hover:not(:disabled) { color: var(--thread-text); border-color: var(--thread); }
+}
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
@@ -80,8 +83,14 @@
   color: var(--ink-3); cursor: pointer;
   transition: color .15s, border-color .15s, background .15s;
 }
-.rw-app .rm:hover, .rw-app .rm:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
-.rw-app .rm.replace:hover, .rw-app .rm.replace:active { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+.rw-app .rm:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
+@media (hover: hover) {
+  .rw-app .rm:hover { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, transparent); background: color-mix(in oklab, var(--fault) 8%, transparent); }
+}
+.rw-app .rm.replace:active { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+@media (hover: hover) {
+  .rw-app .rm.replace:hover { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
+}
 /* Remove user-agent padding so icon glyphs center. */
 .rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
 .rw-app .rm svg { width: calc(var(--ctrl-h) * .47); height: calc(var(--ctrl-h) * .47); }
