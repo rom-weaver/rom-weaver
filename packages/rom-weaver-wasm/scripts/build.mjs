@@ -14,17 +14,11 @@
 // The wasm binary and its Brotli sibling are copied beside the output; the
 // runtime resolves them via `new URL('./rom-weaver-app.wasm', import.meta.url)`.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import {
-  build,
-  copyDeclarationSources,
-  emitDeclarations,
-  rewriteDeclarationExtensions,
-  rewriteNewUrlAssetRefs,
-} from "./build-shared.mjs";
+import { build, copyDeclarationSources, emitDeclarations, rewriteDeclarationExtensions } from "./build-shared.mjs";
 
 const packageRoot = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const srcDir = path.join(packageRoot, "src");
@@ -44,23 +38,44 @@ const WORKER_ENTRYPOINTS = [
 // bare specifiers at runtime.
 const EXTERNAL_DEPS = ["@bjorn3/browser_wasi_shim"];
 
-// After bundling, `new URL("./...", import.meta.url)` asset references can point
-// at the wrong depth or a `.ts` extension (the code carries dead dev fallbacks
-// superseded by the URLs threaded through init options). A consumer's bundler
-// still statically resolves every such literal, so a stale one aborts the module
-// transform and the worker fails to load. Rewrite each asset reference to the
-// correct relative path to its real built sibling, per the file's own location.
-//
-// Each pattern is anchored to the end of the specifier so a future
-// `./rom-weaver-app.wasm.br` reference can never be rewritten to the `.wasm`
-// path (`\.wasm$` does not match `...wasm.br`), and a worker basename is matched
-// exactly rather than as a substring.
-const ASSET_TARGETS = [
-  { re: /(?:^|\/)browser-opfs-proxy-worker\.(?:ts|js)$/, rel: "workers/browser-opfs-proxy-worker.js" },
-  { re: /(?:^|\/)browser-wasi-thread-worker\.(?:ts|js)$/, rel: "workers/browser-wasi-thread-worker.js" },
-  { re: /(?:^|\/)browser-runner-worker\.(?:ts|js)$/, rel: "workers/browser-runner-worker.js" },
-  { re: /(?:^|\/)rom-weaver-app\.wasm$/, rel: "rom-weaver-app.wasm" },
-];
+// Every `new URL(..., import.meta.url)` asset reference must resolve against
+// its emitted location as-is: src/asset-urls.ts is the only module that mints
+// them (worker-side fallbacks anchor on self.location instead, which no bundler
+// touches), and its refs are written in built-dist layout at root depth. A
+// consumer's bundler statically resolves each such literal, so a ref that
+// esbuild inlined at the wrong depth would abort the consumer's build - verify
+// instead of rewriting, and fail loudly here.
+const ASSET_LOCATIONS = new Map([
+  ["browser-opfs-proxy-worker.js", "workers/browser-opfs-proxy-worker.js"],
+  ["browser-wasi-thread-worker.js", "workers/browser-wasi-thread-worker.js"],
+  ["browser-runner-worker.js", "workers/browser-runner-worker.js"],
+  ["rom-weaver-app.wasm", "rom-weaver-app.wasm"],
+]);
+const NEW_URL_RE = /new URL\(\s*(["'])((?:\.\.?\/)[^"']+)\1\s*,\s*import\.meta\.url\s*\)/g;
+
+const verifyNewUrlAssetRefs = (dir) => {
+  let verified = 0;
+  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!(entry.isFile() && entry.name.endsWith(".js"))) continue;
+    const full = path.join(entry.parentPath, entry.name);
+    for (const [, , spec] of readFileSync(full, "utf8").matchAll(NEW_URL_RE)) {
+      const basename = path.posix.basename(spec);
+      if (basename.endsWith(".ts")) {
+        throw new Error(`${path.relative(distDir, full)} references source file ${spec} by URL`);
+      }
+      const expectedRel = ASSET_LOCATIONS.get(basename);
+      if (!expectedRel) continue;
+      const resolved = path.resolve(path.dirname(full), spec);
+      if (resolved !== path.join(distDir, expectedRel)) {
+        throw new Error(
+          `${path.relative(distDir, full)} references ${spec}, which resolves outside dist/${expectedRel}`,
+        );
+      }
+      verified += 1;
+    }
+  }
+  return verified;
+};
 
 const walkTsFiles = (dir) => {
   const out = [];
@@ -120,8 +135,8 @@ const run = async () => {
     external: EXTERNAL_DEPS,
   });
 
-  const rewritten = rewriteNewUrlAssetRefs(distDir, ASSET_TARGETS);
-  log(`rewrote import.meta.url asset refs in ${rewritten} files`);
+  const verified = verifyNewUrlAssetRefs(distDir);
+  log(`verified ${verified} import.meta.url asset refs`);
 
   log("emitting type declarations");
   emitDeclarations(packageRoot, "tsconfig.build.json");

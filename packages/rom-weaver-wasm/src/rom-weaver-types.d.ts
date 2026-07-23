@@ -192,8 +192,8 @@ export interface RomWeaverBrowserOpfsOptions {
   /** URL for the wasm artifact. Defaults to the package artifact URL. */
   wasmUrl?: string;
   threadWorkerUrl?: string | URL;
-  /** URL for the bundled OPFS proxy worker. Defaults to the package artifact URL. Required in a
-   * production build, where the `new URL(...)` dev fallback would resolve to an unbundled source file. */
+  /** URL for the bundled OPFS proxy worker. Defaults to the spawning worker's built sibling
+   * (`self.location`-relative), so main-thread callers must pass an explicit URL. */
   opfsProxyWorkerUrl?: string | URL;
   sharedMemoryInitialPages?: number;
   /** Exact shared-memory maximum. Omit to allow the browser runtime's default fallback ladder. */

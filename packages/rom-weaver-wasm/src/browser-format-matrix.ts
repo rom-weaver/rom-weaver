@@ -7,6 +7,7 @@
  * `src/webapp/mobile-safari-matrix.ts`) to verify formats on real iOS Safari /
  * WebKit. The app itself never imports this module.
  */
+import { getRomWeaverWasmAssetUrls } from "./asset-urls.ts";
 import { resolveAppleMobileSharedMemoryMaximumPages } from "./device-memory.ts";
 import {
   ROM_WEAVER_COMPRESSION_METADATA,
@@ -187,7 +188,7 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
   await root.getDirectoryHandle(fixtureName, { create: true });
   const fixtureGuestRoot = joinGuestPath(OPFS_GUEST_ROOT, fixtureName);
   const sharedMemoryMaximumPages = resolveAppleMobileSharedMemoryMaximumPages();
-  const wasmUrl = options.wasmUrl || new URL("./rom-weaver-app.wasm", import.meta.url).href;
+  const wasmUrl = options.wasmUrl || getRomWeaverWasmAssetUrls().wasmUrl;
   let sharedWorker: ReturnType<typeof createBrowserWorkerClient> | null = null;
 
   try {

@@ -1,3 +1,4 @@
+import { getRomWeaverWasmAssetUrls } from "./asset-urls.ts";
 import { resolveAppleMobileSharedMemoryMaximumPages, resolveMemoryCeilingBytes } from "./device-memory.ts";
 import type { BrowserFormatMatrixStep, BrowserFormatMatrixSummary } from "./browser-format-matrix.ts";
 import { createRomWeaverCommand } from "./rom-weaver-command.ts";
@@ -137,7 +138,7 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
       await worker.init({
         runtimeMounts: [OPFS_GUEST_ROOT],
         ...(sharedMemoryMaximumPages ? { sharedMemoryMaximumPages } : {}),
-        wasmUrl: new URL("./rom-weaver-app.wasm", import.meta.url).href,
+        wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
         workGuestPath: OPFS_GUEST_ROOT,
       });
       const events: RomWeaverRunJsonEvent[] = [];

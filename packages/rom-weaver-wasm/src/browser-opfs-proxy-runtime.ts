@@ -39,11 +39,12 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   // runner-creation latency (it precedes every op, so it is not counted in a run's setupMs).
   const spawnStartedAtMs = typeof performance === "undefined" ? 0 : performance.now();
   const channel = createOpfsProxyChannel(options.slotCount);
-  // The `new URL(..., import.meta.url)` MUST stay inline inside the Worker constructor: that is the
-  // pattern Vite statically detects to bundle the worker for production. Hoisting it into a variable
-  // first makes Vite ship the raw .ts asset instead, so the worker 404s/parse-fails in a prod build
-  // (dev hides this by transforming .ts on the fly). Mirrors workers/browser-worker-client.ts.
-  const worker = new Worker(options.workerUrl ?? new URL("./workers/browser-opfs-proxy-worker.ts", import.meta.url), {
+  // The proxy is only spawned from inside the runner worker (OPFS code runs in
+  // dedicated workers only), so the fallback anchors on the running worker's
+  // own URL - its built sibling in dist/workers/ - which stays correct no
+  // matter where this module's code is inlined and needs no bundler support.
+  // Main-thread callers pass an explicit URL (getRomWeaverWasmAssetUrls()).
+  const worker = new Worker(options.workerUrl ?? new URL("./browser-opfs-proxy-worker.js", self.location.href), {
     type: "module",
   });
   // Mutable so the runner can point proxy-worker traces at the *active run's* trace channel (the one

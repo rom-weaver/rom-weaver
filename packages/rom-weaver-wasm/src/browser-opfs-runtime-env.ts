@@ -4,7 +4,13 @@ import { normalizeGuestPath } from "./rom-weaver-runtime-utils.ts";
 
 declare const FileSystemSyncAccessHandle: unknown;
 
-const DEFAULT_BROWSER_WASM_URLS = [new URL("./rom-weaver-app.wasm", import.meta.url).href];
+// Module resolution only happens inside the runner worker (OPFS code runs in
+// dedicated workers only), so the fallback anchors on the running worker's own
+// URL in dist/workers/ - correct no matter where this module's code is inlined,
+// and lazy so importing this module outside a worker (node unit tests) never
+// evaluates self.location. Main-thread callers pass an explicit wasmUrl
+// (getRomWeaverWasmAssetUrls()).
+const defaultBrowserWasmUrls = () => [new URL("../rom-weaver-app.wasm", self.location.href).href];
 
 type ResolvedBrowserModule = {
   module: WebAssembly.Module;
@@ -97,7 +103,7 @@ export async function resolveBrowserModule({
     };
   }
 
-  const resolvedWasmUrls = normalizeConfiguredWasmUrls(wasmUrl, DEFAULT_BROWSER_WASM_URLS);
+  const resolvedWasmUrls = normalizeConfiguredWasmUrls(wasmUrl, defaultBrowserWasmUrls());
   return compileBrowserModuleFromUrls(resolvedWasmUrls);
 }
 

@@ -133,7 +133,12 @@ export function createStandaloneBrowserWasiThread({
   return slot;
 }
 
-const DEFAULT_THREAD_WORKER_URL = () => new URL("./workers/browser-wasi-thread-worker.ts", import.meta.url).href;
+// Thread spawning only happens inside the runner/thread workers (OPFS code runs
+// in dedicated workers only), so the fallback anchors on the running worker's
+// own URL - its built sibling in dist/workers/ - which stays correct no matter
+// where this module's code is inlined. Callers on the main thread must pass an
+// explicit URL (getRomWeaverWasmAssetUrls().threadWorkerUrl).
+const DEFAULT_THREAD_WORKER_URL = () => new URL("./browser-wasi-thread-worker.js", self.location.href).href;
 
 // The thread worker runs with full access to the shared wasm memory, so its URL must stay
 // on our own origin. Callers pass a build-resolved URL; anything that resolves elsewhere

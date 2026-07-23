@@ -1,3 +1,4 @@
+import { getRomWeaverWasmAssetUrls } from "../asset-urls.ts";
 import type { RomWeaverBrowserOpfsOptions, RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
@@ -19,7 +20,7 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
   options = options ?? {};
   const createWorker = () =>
     options.worker ??
-    new Worker(options.workerUrl ?? new URL("./browser-runner-worker.ts", import.meta.url), {
+    new Worker(options.workerUrl ?? getRomWeaverWasmAssetUrls().runnerWorkerUrl, {
       type: "module",
       ...options.workerOptions,
     });

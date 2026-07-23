@@ -120,10 +120,6 @@ const shiftSourceMapColumns = (mapPath, edits) => {
   writeFileSync(mapPath, JSON.stringify(map));
 };
 
-const NEW_URL_RE = /new URL\(\s*(["'])((?:\.\.?\/)[^"']+)\1\s*,\s*import\.meta\.url\s*\)/g;
-
-const toPosix = (p) => p.split(path.sep).join("/");
-
 const lineAndColumnAt = (content, offset) => {
   let line = 0;
   let lineStart = 0;
@@ -132,49 +128,4 @@ const lineAndColumnAt = (content, offset) => {
     lineStart = index + 1;
   }
   return { line, column: offset - lineStart };
-};
-
-// Rewrite `new URL("./...", import.meta.url)` asset references in every built
-// `.js` file so each points at its real built sibling, then shift the sibling
-// sourcemap so its mappings survive the edit. Only the specifier string is
-// replaced (whitespace inside the match is preserved), so every edit stays on
-// one line and the column shift above is exact.
-export const rewriteNewUrlAssetRefs = (distDir, targets) => {
-  const relFromFile = (fileDir, targetAbs) => {
-    const out = toPosix(path.relative(fileDir, targetAbs));
-    return out.startsWith(".") ? out : `./${out}`;
-  };
-  let rewritten = 0;
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.name.endsWith(".js")) continue;
-      const original = readFileSync(full, "utf8");
-      const fileDir = path.dirname(full);
-      const edits = [];
-      const next = original.replace(NEW_URL_RE, (match, quote, spec, offset) => {
-        const target = targets.find((candidate) => candidate.re.test(spec));
-        if (!target) return match;
-        const correct = relFromFile(fileDir, path.join(distDir, target.rel));
-        const specOffset = offset + match.indexOf(`${quote}${spec}${quote}`) + 1;
-        edits.push({
-          ...lineAndColumnAt(original, specOffset),
-          oldLength: spec.length,
-          delta: correct.length - spec.length,
-        });
-        return match.replace(`${quote}${spec}${quote}`, `${quote}${correct}${quote}`);
-      });
-      if (next !== original) {
-        writeFileSync(full, next);
-        shiftSourceMapColumns(`${full}.map`, edits);
-        rewritten += 1;
-      }
-    }
-  };
-  walk(distDir);
-  return rewritten;
 };
