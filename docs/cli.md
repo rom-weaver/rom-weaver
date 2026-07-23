@@ -97,8 +97,8 @@ Use the scoped launcher directly for a one-off run, or as a dev dependency for
 a repository's scripts:
 
 ```bash
-npx @rom-weaver/cli@latest probe --input game.iso
-npm install --save-dev @rom-weaver/cli@latest
+npx @rom-weaver/cli probe --input game.iso
+npm install --save-dev @rom-weaver/cli
 ```
 
 #### cargo-binstall
@@ -114,11 +114,11 @@ cargo binstall rom-weaver-cli
 
 Manages the CLI per project in `mise.toml` and verifies the release's GitHub
 artifact attestations on install. The `minimum_release_age=0s` option lets
-`@latest` resolve immediately on release day; omit it if you prefer mise's
+new releases resolve immediately on release day; omit it if you prefer mise's
 default release-age delay.
 
 ```bash
-mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]@latest'
+mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]'
 ```
 
 ### Source install

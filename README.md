@@ -204,11 +204,11 @@ npm install --global rom-weaver
 ```
 
 For a one-off run, or to add the scoped launcher for a repository's scripts,
-use latest explicitly:
+use the scoped package directly:
 
 ```bash
-npx @rom-weaver/cli@latest probe --input game.iso
-npm install --save-dev @rom-weaver/cli@latest
+npx @rom-weaver/cli probe --input game.iso
+npm install --save-dev @rom-weaver/cli
 ```
 
 </details>
@@ -230,11 +230,11 @@ cargo binstall rom-weaver-cli
 
 Useful when you want the CLI managed per project in `mise.toml`. mise verifies
 the release's GitHub artifact attestations on install. The
-`minimum_release_age=0s` option lets `@latest` resolve immediately on release
+`minimum_release_age=0s` option lets new releases resolve immediately on release
 day; omit it if you prefer mise's default release-age delay.
 
 ```bash
-mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]@latest'
+mise use 'github:brandonocasey/rom-weaver[minimum_release_age=0s]'
 ```
 
 </details>
