@@ -74,4 +74,4 @@ files. OPFS is origin-private, so another origin cannot populate or ingest
 these paths.
 
 For lower-level browser worker and OPFS runner APIs, see the
-[browser WASM runtime](../packages/rom-weaver-wasm/src/README.md).
+[browser WASM runtime](../packages/rom-weaver-wasm/README.md).

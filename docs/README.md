@@ -33,7 +33,7 @@ Choose the guide that matches what you are trying to do.
 
 - [Webapp integration](webapp-integration.md): preload `?bundle=…` and
   `?rom=…&patch=…` URLs or feed same-origin OPFS files into the webapp pipeline.
-- [Browser WASM runtime](../packages/rom-weaver-wasm/src/README.md):
+- [Browser WASM runtime](../packages/rom-weaver-wasm/README.md):
   the OPFS runner and worker-client API surface.
 
 ## Develop and contribute

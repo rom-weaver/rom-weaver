@@ -1,7 +1,8 @@
-# Browser WASM runtime
+# @rom-weaver/wasm
 
-JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution,
-published as the `@rom-weaver/wasm` npm package and consumed by `@rom-weaver/webapp`.
+Browser WebAssembly runtime for `rom-weaver`: a WASI + OPFS threaded worker
+engine to inspect, extract, compress, and patch ROMs and disc images. Published
+as the `@rom-weaver/wasm` npm package and consumed by `@rom-weaver/webapp`.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -12,6 +13,7 @@ published as the `@rom-weaver/wasm` npm package and consumed by `@rom-weaver/web
 - [Dedicated browser worker client example](#dedicated-browser-worker-client-example)
 - [Build and package](#build-and-package)
 - [Browser benchmarks](#browser-benchmarks)
+- [License](#license)
 
 <!-- END doctoc -->
 
@@ -27,13 +29,17 @@ Use the native `rom-weaver` CLI directly for Node workflows.
 
 ## Import paths
 
-Import the TypeScript sources directly with relative paths, for example:
+Import from the package root or a granular subpath, for example:
 
-- `src/index.ts` (main entry: format metadata, command helpers, OPFS API, types)
-- `src/generated/rom-weaver-format-metadata.ts`
-- `src/rom-weaver-browser-opfs-api.ts`
-- `src/workers/browser-worker-client.ts`
-- `src/workers/worker-protocol.ts`
+- `@rom-weaver/wasm` (main entry: asset URLs, format metadata, command helpers, OPFS API, worker client, types)
+- `@rom-weaver/wasm/generated/rom-weaver-format-metadata`
+- `@rom-weaver/wasm/rom-weaver-browser-opfs-api`
+- `@rom-weaver/wasm/workers/browser-worker-client`
+- `@rom-weaver/wasm/workers/worker-protocol`
+
+The wasm module and the three worker entrypoints resolve through
+`getRomWeaverWasmAssetUrls()`, whose `new URL(..., import.meta.url)` literals
+Vite, webpack 5, and Rollup all rewrite to copied asset URLs.
 
 ## Browser OPFS runner example
 
@@ -41,10 +47,10 @@ Import the TypeScript sources directly with relative paths, for example:
 It is not a main-thread API and will throw when called from `window`.
 
 ```js
-import { createRomWeaverBrowserOpfs } from './rom-weaver-browser-opfs-api.ts';
+import { createRomWeaverBrowserOpfs, getRomWeaverWasmAssetUrls } from '@rom-weaver/wasm';
 
 const runner = await createRomWeaverBrowserOpfs({
-  wasmUrl: '/wasm/rom-weaver-app.wasm',
+  wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
@@ -107,11 +113,11 @@ await runner.runJson({
 ## Dedicated browser worker client example
 
 ```js
-import { createBrowserWorkerClient } from './workers/browser-worker-client.ts';
+import { createBrowserWorkerClient, getRomWeaverWasmAssetUrls } from '@rom-weaver/wasm';
 
 const worker = createBrowserWorkerClient();
 await worker.init({
-  wasmUrl: '/wasm/rom-weaver-app.wasm',
+  wasmUrl: getRomWeaverWasmAssetUrls().wasmUrl,
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
@@ -134,9 +140,10 @@ worker.terminate();
 
 ## Build and package
 
-The [development guide](../../../docs/development.md#build-and-run-the-webapp)
-owns the WASM build and dev-server procedure. Build artifacts are written to
-this directory by default.
+The [development guide](../../docs/development.md#build-and-run-the-webapp)
+owns the WASM build and dev-server procedure. The wasm binary is written to
+`src/` by default; `scripts/build.mjs` bundles `src/` and the binary into
+`dist/`, which is what consumers load.
 
 If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm`
 syncs them in automatically. To sync a pre-built directory manually (run from
@@ -187,3 +194,16 @@ Optional environment knobs:
   - `ROM_WEAVER_WASM_BENCH_THREADING_SEQUENTIAL_THREADS` (default `1`)
   - `ROM_WEAVER_WASM_BENCH_THREADING_PARALLEL_THREADS` (default `4`)
   - `ROM_WEAVER_WASM_BENCH_THREADING_STRIDE_MIB` (default `2`)
+
+## License
+
+Copyright (C) Brandon Casey
+
+`@rom-weaver/wasm` is licensed under the GNU Affero General Public License,
+version 3 or later ([AGPL-3.0-or-later](LICENSE.md)). Bundled third-party
+components retain their own licenses; release artifacts ship a generated
+attribution notice and third-party license inventory.
+
+If the AGPL's obligations do not fit your product, separate commercial license
+terms are available from the copyright holder — contact
+Brandon Casey (<brandonocasey@gmail.com>).

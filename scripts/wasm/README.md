@@ -15,7 +15,7 @@ command-line work.
 
 The [development guide](../../docs/development.md#build-and-run-the-webapp)
 explains the toolchain and build flow. The
-[browser WASM runtime guide](../../packages/rom-weaver-wasm/src/README.md)
+[browser WASM runtime guide](../../packages/rom-weaver-wasm/README.md)
 documents the TypeScript worker and OPFS APIs. Keeping those API examples in
 one place prevents the build-script notes from drifting away from the runtime.
 

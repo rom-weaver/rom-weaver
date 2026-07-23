@@ -111,7 +111,7 @@ for ad hoc target commands:
 mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1-threads
 ```
 
-See the [WASM runtime notes](../packages/rom-weaver-wasm/src/README.md)
+See the [WASM runtime notes](../packages/rom-weaver-wasm/README.md)
 for the browser OPFS and worker API.
 
 ## Build and run the native CLI

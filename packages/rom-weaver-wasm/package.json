@@ -48,7 +48,8 @@
   "files": [
     "dist",
     "src/**/*.ts",
-    "src/**/*.d.ts"
+    "src/**/*.d.ts",
+    "LICENSE.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
