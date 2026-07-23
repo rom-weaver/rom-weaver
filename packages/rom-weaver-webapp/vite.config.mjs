@@ -32,7 +32,6 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/create-original.bin": path.join(rootAssetDir, "create-original.bin"),
   "/favicon.ico": channelAssetPath(channel, "favicon.ico"),
   "/first-apply.zip": path.join(rootAssetDir, "first-apply.zip"),
-  "/first-weave.zip": path.join(rootAssetDir, "first-weave.zip"),
   "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
@@ -264,7 +263,6 @@ const writeWebappStaticAssets = (channel, channelLabel) => {
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       for (const [slug, html] of [
         ["apply", indexHtml],
-        ["weave", indexHtml],
         ["create", createHtml],
         ["trim", indexHtml],
         ["tools", indexHtml],
@@ -479,7 +477,6 @@ export default defineConfig(({ command }) => {
             "manifest.json",
             "logo.svg",
             "first-apply.zip",
-            "first-weave.zip",
             "favicon.ico",
             "apple-touch-icon.png",
             "create-modified.bin",

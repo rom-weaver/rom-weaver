@@ -85,14 +85,6 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
 
-  it("normalizes the legacy weave route to apply", () => {
-    window.history.replaceState({}, "", "/rom-weaver/weave/index.html");
-    expect(readWorkflowViewFromPath()).toBe("patcher");
-    const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply");
-  });
-
   it("preserves URL session parameters without emitting hash routes", () => {
     window.history.replaceState({}, "", "/apply?bundle=first-apply.zip");
     const controller = createController();

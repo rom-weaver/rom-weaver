@@ -136,8 +136,7 @@ instead fall back to `index.html` for those navigation requests. Redirect
 `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History
 API routes, and the service-worker scope resolve consistently. Explicit
 directory-document URLs such as `/apply/index.html` are normalized in the
-browser to the clean `/apply` route without another request. The former
-`/weave` route remains a compatibility alias and normalizes to `/apply`.
+browser to the clean `/apply` route without another request.
 
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts,
 the equivalent cache policy is:

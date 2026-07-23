@@ -74,8 +74,6 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WorkflowView> = {
   apply: "patcher",
   tools: "tools",
   trim: "trim",
-  // Keep old shared links working while normalizing them to the canonical route.
-  weave: "patcher",
 };
 
 const readRouteSegments = (): string[] => {
