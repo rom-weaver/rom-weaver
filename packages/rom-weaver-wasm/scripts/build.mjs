@@ -52,10 +52,10 @@ const EXTERNAL_DEPS = ["@bjorn3/browser_wasi_shim"];
 // path (`\.wasm$` does not match `...wasm.br`), and a worker basename is matched
 // exactly rather than as a substring.
 const ASSET_TARGETS = [
-  { re: /browser-opfs-proxy-worker\.(?:ts|js)$/, rel: "workers/browser-opfs-proxy-worker.js" },
-  { re: /browser-wasi-thread-worker\.(?:ts|js)$/, rel: "workers/browser-wasi-thread-worker.js" },
-  { re: /browser-runner-worker\.(?:ts|js)$/, rel: "workers/browser-runner-worker.js" },
-  { re: /rom-weaver-app\.wasm$/, rel: "rom-weaver-app.wasm" },
+  { re: /(?:^|\/)browser-opfs-proxy-worker\.(?:ts|js)$/, rel: "workers/browser-opfs-proxy-worker.js" },
+  { re: /(?:^|\/)browser-wasi-thread-worker\.(?:ts|js)$/, rel: "workers/browser-wasi-thread-worker.js" },
+  { re: /(?:^|\/)browser-runner-worker\.(?:ts|js)$/, rel: "workers/browser-runner-worker.js" },
+  { re: /(?:^|\/)rom-weaver-app\.wasm$/, rel: "rom-weaver-app.wasm" },
 ];
 const NEW_URL_RE = /new URL\(\s*(["'])((?:\.\.?\/)[^"']+)\1\s*,\s*import\.meta\.url\s*\)/g;
 
@@ -230,14 +230,37 @@ const run = async () => {
   const rewrittenDecls = rewriteDeclarationExtensions(distDir);
   log(`copied ${copiedDecls} declaration sources; normalized specifiers in ${rewrittenDecls} declarations`);
 
+  // The wasm binary and its attribution set come from `mise run build-wasm`
+  // (CI stages them into src/). A dev bundle without them is fine, but a
+  // published tarball must never ship without the binary or the third-party
+  // attribution that redistributing it requires (AGPL) - and a burned npm
+  // version can never be re-cut, so hard-fail under prepack.
+  const isPrepack = process.env.npm_lifecycle_event === "prepack";
+  const missingAsset = (message) => {
+    if (isPrepack) {
+      throw new Error(`${message}; refusing to pack an incomplete package`);
+    }
+    log(`WARNING: ${message}`);
+  };
+
   for (const asset of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br"]) {
     const from = path.join(srcDir, asset);
     if (!existsSync(from)) {
-      log(`WARNING: missing wasm asset ${asset} (build the wasm binary with \`mise run build-wasm\`)`);
+      missingAsset(`missing wasm asset ${asset} (build the wasm binary with \`mise run build-wasm\`)`);
       continue;
     }
     cpSync(from, path.join(distDir, asset));
     log(`copied ${asset} (${(statSync(from).size / (1024 * 1024)).toFixed(1)} MiB)`);
+  }
+
+  for (const attribution of ["NOTICE", "THIRD_PARTY_LICENSES.md", "third_party"]) {
+    const from = path.join(srcDir, attribution);
+    if (!existsSync(from)) {
+      missingAsset(`missing attribution ${attribution} (produced by \`mise run build-wasm\`)`);
+      continue;
+    }
+    cpSync(from, path.join(distDir, attribution), { recursive: true });
+    log(`copied ${attribution}`);
   }
 
   log(`done -> ${path.relative(packageRoot, distDir)}`);

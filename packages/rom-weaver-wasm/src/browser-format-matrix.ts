@@ -105,17 +105,17 @@ type BrowserFormatMatrixState = {
 };
 const TEXT_ENCODER = new TextEncoder();
 const DEFAULT_VCDIFF_FIXTURE_URLS = {
-  patch: new URL("../../../../tests/fixtures/vcdiff/secondary-djw.xdelta", import.meta.url),
-  source: new URL("../../../../tests/fixtures/vcdiff/secondary-source.bin", import.meta.url),
-  target: new URL("../../../../tests/fixtures/vcdiff/secondary-target.bin", import.meta.url),
+  patch: new URL("../../../tests/fixtures/vcdiff/secondary-djw.xdelta", import.meta.url),
+  source: new URL("../../../tests/fixtures/vcdiff/secondary-source.bin", import.meta.url),
+  target: new URL("../../../tests/fixtures/vcdiff/secondary-target.bin", import.meta.url),
 };
 const DEFAULT_HDIFF_FIXTURE_URLS = {
   patch: new URL(
-    "../../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/upstream-hdiff13-zstd.hdiff",
+    "../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/upstream-hdiff13-zstd.hdiff",
     import.meta.url,
   ),
-  source: new URL("../../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/source.bin", import.meta.url),
-  target: new URL("../../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin", import.meta.url),
+  source: new URL("../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/source.bin", import.meta.url),
+  target: new URL("../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin", import.meta.url),
 };
 const PATCH_CREATE_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
 const CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS = new Map<string, RegExp>([["rvz", /failed to open input/i]]);
