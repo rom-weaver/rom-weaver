@@ -21,15 +21,26 @@
           "jsonpath": "$.packages[''].optionalDependencies.*"
         },
         "packages/rom-weaver-webapp/package.json",
+        "packages/rom-weaver-wasm/package.json",
         {
           "type": "json",
-          "path": "packages/rom-weaver-webapp/package-lock.json",
-          "jsonpath": "$.version"
+          "path": "packages/rom-weaver-webapp/package.json",
+          "jsonpath": "$.dependencies['@rom-weaver/wasm']"
         },
         {
           "type": "json",
-          "path": "packages/rom-weaver-webapp/package-lock.json",
-          "jsonpath": "$.packages[''].version"
+          "path": "packages/package-lock.json",
+          "jsonpath": "$.packages['rom-weaver-wasm'].version"
+        },
+        {
+          "type": "json",
+          "path": "packages/package-lock.json",
+          "jsonpath": "$.packages['rom-weaver-webapp'].version"
+        },
+        {
+          "type": "json",
+          "path": "packages/package-lock.json",
+          "jsonpath": "$.packages['rom-weaver-webapp'].dependencies['@rom-weaver/wasm']"
         },
         "packages/rom-weaver-alias/package.json",
         {
