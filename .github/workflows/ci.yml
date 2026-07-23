@@ -1081,10 +1081,10 @@ jobs:
       # authoritative. Zone rules only exist on the custom domains - pages.dev
       # previews stay per-request, which is fine (preview traffic is internal).
       #
-      # Gated to the nightly leg: it runs on both main pushes and tags, and
-      # exactly once per run, so concurrent matrix legs never race the
-      # read-merge-write below. Skips with a notice until CLOUDFLARE_ZONE_ID
-      # is set and the API token carries Zone -> Cache Rules -> Edit.
+      # The rule covers all custom domains, but this runs only on the nightly
+      # matrix leg so release-channel deploys cannot race the ruleset
+      # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
+      # set and the API token carries Zone -> Cache Rules -> Edit.
       - name: Ensure zone cache rule for /assets
         if: matrix.target.channel == 'nightly'
         env:

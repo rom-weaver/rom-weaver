@@ -293,11 +293,12 @@ Cost model: sidecar-backed URLs invoke the function, everything else stays
 on the unmetered static path, and repeat visits are covered by the immutable
 browser/service-worker cache. To keep invocations from scaling with traffic,
 the nightly deploy leg idempotently installs a zone Cache Rule ("Ensure zone
-cache rule for /assets" in `ci.yml`) making `/assets/*` on the custom
-domains eligible for edge caching with `respect_origin` TTLs - the function
-then runs roughly once per URL per PoP instead of per request. Safe because
-every routed URL is content-hashed and immutable. The step skips with a
-notice until two pieces of one-time setup exist: a `CLOUDFLARE_ZONE_ID`
+cache rule for /assets" in `ci.yml`) making `/assets/*` on the prod, beta,
+and nightly custom domains eligible for edge caching with `respect_origin`
+TTLs - the function then runs roughly once per URL per PoP instead of per
+request. Safe because every routed URL is content-hashed and immutable. The
+step skips with a notice until two pieces of one-time setup exist: a
+`CLOUDFLARE_ZONE_ID`
 repository secret (the `rom-weaver.com` zone) and `Zone -> Cache Rules ->
 Edit` added to the `CLOUDFLARE_API_TOKEN`. `pages.dev` previews sit outside
 the zone, so preview traffic stays per-request - fine, it is internal. A
