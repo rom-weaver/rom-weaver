@@ -13,6 +13,7 @@ import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdat
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
+import { captureShellHeroHover, restoreShellHeroHover } from "./shell-hover-carryover.ts";
 import {
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
@@ -198,6 +199,9 @@ const markWebappMounted = () => {
   const firstMount = appRootElement.hasAttribute("aria-busy");
   appRootElement.removeAttribute("aria-busy");
   if (!(firstMount && hadPrerenderedShell)) return;
+  // The replacement also dropped the pointer's :hover off the hero drop zone;
+  // hand it back before this frame paints.
+  restoreShellHeroHover(appRootElement);
   // The first mount replaced the prerendered shell with identical markup, which
   // restarts every CSS animation on it. Settle them before this frame paints:
   // force the style recalc that creates the animations (the flushSync render
@@ -332,7 +336,10 @@ const renderWebappRoot = (): undefined => {
     const appRootElement = document.getElementById("webapp-root");
     if (appRootElement) {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
-      if (hadPrerenderedShell) captureShellAnimationPhases(appRootElement);
+      if (hadPrerenderedShell) {
+        captureShellAnimationPhases(appRootElement);
+        captureShellHeroHover(appRootElement);
+      }
       appRoot = createRoot(appRootElement);
     }
   }
