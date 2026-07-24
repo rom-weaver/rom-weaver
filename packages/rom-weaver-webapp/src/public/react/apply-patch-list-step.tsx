@@ -1172,9 +1172,6 @@ const PatchCard = ({
   // the card already shows its full body (Extract + Checks). A top-edge bar carries
   // that async work - a later phase following the "Reading…" staging bar.
   const verifying = !(staging || isDisabled) && item.validationState === "verifying";
-  const checksRows = getPatchVerificationRows(item);
-  const hasKnownChecks =
-    !!(checksRows.inputRows.length || checksRows.outputRows.length) || !!meta?.inputChecks || !!meta?.outputChecks;
   return (
     <FileCard
       {...rowProps}
@@ -1298,26 +1295,26 @@ const PatchCard = ({
               timing={TIMING_LABEL(item.decompressionTimeMs)}
             />
           )}
-          {/* A patch still staging usually has no parsed requirements or header
-              choice yet - the (empty) Checks drawer joins the card once the
-              parse lands. Requirements already known (eager parse, bundle
-              metadata) keep their drawer through staging. */}
-          {staging && !hasKnownChecks ? null : (
-            <PatchChecksDrawer
-              basisSelectVisible={basisSelectVisible}
-              chainChip={chainChip}
-              disabled={isDisabled}
-              index={index}
-              isChainInput={isChainInput}
-              isChainOutput={isChainOutput}
-              item={item}
-              meta={meta}
-              onMetaChange={onMetaChange}
-              outputCheckHint={outputCheckHint}
-              patchStack={patchStack}
-              romActuals={romActuals}
-            />
-          )}
+          {/* Reserve the Checks drawer through staging even before the parse
+              lands - a patch still loading has no requirements yet, so it
+              renders collapsed and empty (identical to a resolved no-checks
+              patch). Mirrors the ROM card: keeping the drawer mounted holds the
+              card's resolved height so the patch stack below doesn't jump when
+              requirements arrive. */}
+          <PatchChecksDrawer
+            basisSelectVisible={basisSelectVisible}
+            chainChip={chainChip}
+            disabled={isDisabled}
+            index={index}
+            isChainInput={isChainInput}
+            isChainOutput={isChainOutput}
+            item={item}
+            meta={meta}
+            onMetaChange={onMetaChange}
+            outputCheckHint={outputCheckHint}
+            patchStack={patchStack}
+            romActuals={romActuals}
+          />
         </div>
       </div>
     </FileCard>
