@@ -26,6 +26,7 @@ type StagedInputInfo = {
   targetLabel?: string;
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
+  checksumVariantPlan?: RomInputRowState["info"]["checksumVariantPlan"];
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   romType?: RomInputRowState["info"]["romType"];

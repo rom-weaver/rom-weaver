@@ -39,7 +39,7 @@ use crate::{
     extract_support::{
         ContainerProgressContext, ExtractChecksumTiming, ExtractHasher, ExtractTiming,
         ExtractedFileChecksum, attach_extract_checksum_details, emit_container_step_progress,
-        emit_extract_identity, ensure_extract_output_available,
+        emit_extract_identity, emit_variant_plan, ensure_extract_output_available,
     },
 };
 
@@ -1536,6 +1536,9 @@ where
                             if let Some(identity) = hasher.take_ready_identity(&task.output_path) {
                                 emit_extract_identity(context, format_name, &identity);
                             }
+                            if let Some(plan) = hasher.take_ready_variant_plan() {
+                                emit_variant_plan(context, format_name, &task.output_path, &plan);
+                            }
                             hash_feed += hash_at.elapsed().unwrap_or_default();
                             let read_u64 = read as u64;
                             copied = copied.saturating_add(read_u64);
@@ -2013,6 +2016,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                 output.hasher.take_ready_identity(&output.output_path)
                             {
                                 emit_extract_identity(context, format_name, &identity);
+                            }
+                            if let Some(plan) = output.hasher.take_ready_variant_plan() {
+                                emit_variant_plan(context, format_name, &output.output_path, &plan);
                             }
                             written_bytes = written_bytes.saturating_add(delta);
                             if let Some(total_bytes) = total_file_bytes {

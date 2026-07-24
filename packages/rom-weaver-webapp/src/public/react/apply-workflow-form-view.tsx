@@ -560,33 +560,31 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         ]
       : undefined;
   const romByteCount = typeof romBytes === "number" && Number.isFinite(romBytes) ? Math.floor(romBytes) : undefined;
-  const baseRows = [
+  const baseChecksumRows = [
     { label: "CRC32", length: 8 },
     { label: "BYTES", length: romByteCount === undefined ? 8 : String(romByteCount).length },
     { label: "MD5", length: 32 },
     { label: "SHA-1", length: 40 },
   ];
-  // Phase A reserves the base group as bare rows (matching the no-variant
-  // layout). A 512-byte copier header (SNES et al., size % 1024 === 512) makes
-  // the resolved card add a labeled "Unchanged" + "Remove header" pair, so when
-  // one is present reserve both groups here - otherwise that second group lands
-  // on hash completion and shoves the Weave button below it down the page.
-  const pendingGroups =
-    romByteCount !== undefined && romByteCount % 1024 === 512
-      ? [
-          { id: "raw", label: "Unchanged", rows: baseRows },
-          {
-            id: "remove-header",
-            label: "Remove header",
-            rows: [
-              { label: "CRC32", length: 8 },
-              { label: "BYTES", length: String(romByteCount - 512).length },
-              { label: "MD5", length: 32 },
-              { label: "SHA-1", length: 40 },
-            ],
-          },
-        ]
-      : [{ id: "raw", rows: baseRows }];
+  // Reserve one skeleton group per planned variant, from Rust's early `probe-variant-plan` event
+  // (settled once the header is scanned, before the checksums finish), so the Checks panel starts at
+  // its resolved height instead of growing group-by-group as values stream in. Without a plan yet,
+  // reserve just the always-present base group. Whether the base group takes a head, and where an
+  // "Expected" group slots in, is SourceInfoList's call - it owns the resolved layout these mirror.
+  //
+  // This replaces the `size % 1024 === 512` copier-header guess: the plan comes from the engine's
+  // real header detection, so it covers every strippable header (iNES, PCE, SNES…) and never
+  // reserves a "Remove header" group for a ROM that merely happens to be 512 over. Every group
+  // reuses the source's byte length - a stripped header cannot change the digit count, since ROM
+  // sizes are powers of two and none sit within a header's length below a power of ten.
+  const variantPlan = romInput.info.checksumVariantPlan;
+  const pendingGroups = variantPlan?.length
+    ? variantPlan.map((variant) => ({
+        id: variant.id,
+        rows: baseChecksumRows,
+        ...(variant.id === "raw" ? {} : { label: variant.label }),
+      }))
+    : [{ id: "raw", rows: baseChecksumRows }];
   return {
     card: {
       extract: {
@@ -619,7 +617,9 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
             ? undefined
             : { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
-          ...(deps.expectedChecks && !staging ? { expected: deps.expectedChecks } : {}),
+          // Also while staging: the bundle already declares these, so they reserve their own group
+          // (and read) before the hashes land instead of appearing with them.
+          ...(deps.expectedChecks ? { expected: deps.expectedChecks } : {}),
           lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,

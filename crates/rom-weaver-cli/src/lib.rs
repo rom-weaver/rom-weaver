@@ -46,7 +46,7 @@ use rom_weaver_core::{
     ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
     SelectionMatcher, SelectionPrompter, SolidPatchMetadata, ThreadBudget, ThreadCapability,
     ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet,
-    enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
+    emit_variant_plan, enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
     is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
     should_ignore_common_container_file, sibling_gdi_path,
 };

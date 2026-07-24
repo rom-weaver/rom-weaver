@@ -550,6 +550,9 @@ pub struct StreamingVariantChecksums {
     /// crc32/md5/sha1 run in parallel and overlap the producer. 1 (or non-threaded wasm)
     /// → every variant hashes synchronously.
     hash_thread_budget: usize,
+    /// Set once [`take_planned_variants`](Self::take_planned_variants) has yielded the plan, so the
+    /// early reservation is surfaced exactly once.
+    plan_taken: bool,
 }
 
 impl StreamingVariantChecksums {
@@ -576,7 +579,36 @@ impl StreamingVariantChecksums {
             header_buf: Vec::new(),
             state: State::Buffering,
             hash_thread_budget: hash_thread_budget.max(1),
+            plan_taken: false,
         })
+    }
+
+    /// The certain variants' `(id, label)` as soon as the plan is known (after the header scan
+    /// window is buffered), yielded exactly once. Callers use it to reserve UI rows before the
+    /// checksums finish so the layout does not grow variant-by-variant as values stream in.
+    ///
+    /// `fix-header` is deliberately EXCLUDED even when a repair profile matched: whether it
+    /// produces a row depends on the streamed checksum, and a correct stored checksum - every
+    /// healthy dump - drops it at finalize. Listing it would make the reservation one group too
+    /// tall for the common case, trading a grow for a shrink. So the plan is a SUBSET of the
+    /// finalized rows, and `fix-header` is the only id finalize can add to it - which happens only
+    /// for a ROM that actually needs the repair.
+    pub fn take_planned_variants(&mut self) -> Option<Vec<(String, String)>> {
+        if self.plan_taken {
+            return None;
+        }
+        let State::Planned(planned) = &self.state else {
+            return None;
+        };
+        self.plan_taken = true;
+        let mut plan = vec![(planned.raw.id.clone(), planned.raw.label.clone())];
+        if let Some(remove_header) = planned.remove_header.as_ref() {
+            plan.push((remove_header.id.clone(), remove_header.label.clone()));
+        }
+        for variant in &planned.n64_orders {
+            plan.push((variant.id.clone(), variant.label.clone()));
+        }
+        Some(plan)
     }
 
     /// Feed the next ordered slice of source bytes.
@@ -1178,6 +1210,7 @@ pub fn overlay_checksums<R: Read>(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::io::Cursor;
 
     use super::*;
@@ -1236,6 +1269,84 @@ mod tests {
         let rom = build_n64_rom();
         assert!(detect_n64_cic(&rom, N64Order::BigEndian).is_none());
         assert!(plan_n64_repair(&rom, rom.len() as u64).is_some());
+    }
+
+    /// Drain the plan while streaming `rom` in chunks, returning the planned ids and the finalized
+    /// ids (including any deferred `fix-header`). Chunked so the plan settles mid-stream the way it
+    /// does during extraction.
+    fn stream_plan_and_finalized_ids(
+        rom: &[u8],
+        name_hint: &str,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        let algorithms = algorithms();
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, rom.len() as u64, Some(name_hint), 1)
+                .expect("engine");
+        let mut plan: Option<Vec<(String, String)>> = None;
+        for chunk in rom.chunks(4096) {
+            engine.update(chunk).expect("update");
+            if let Some(rows) = engine.take_planned_variants() {
+                assert!(plan.is_none(), "plan must be yielded exactly once");
+                plan = Some(rows);
+            }
+        }
+        let plan_ids = plan
+            .expect("plan available once the header is scanned")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let output = engine.finalize().expect("finalize");
+        let mut final_ids: BTreeSet<String> =
+            output.rows.iter().map(|row| row.id.clone()).collect();
+        if let Some(deferred) = output.deferred_fix_header.as_ref() {
+            final_ids.insert(deferred.id.clone());
+        }
+        (plan_ids, final_ids)
+    }
+
+    #[test]
+    fn planned_variants_are_a_subset_of_the_finalized_rows() {
+        // This N64 fixture carries a wrong crc1/crc2, so the repair DOES produce a row - the one
+        // case where finalize adds an id the plan omitted, and only ever that id.
+        let (plan_ids, final_ids) = stream_plan_and_finalized_ids(&build_n64_rom(), "game.n64");
+        // N64: raw + the three byte-order variants are certain, so all are reserved up front.
+        assert!(plan_ids.contains("raw"));
+        assert!(plan_ids.contains("n64-byte-order:big-endian"));
+        assert!(
+            !plan_ids.contains("fix-header"),
+            "fix-header is conditional on the streamed checksum and must not be reserved"
+        );
+        assert!(
+            plan_ids.is_subset(&final_ids),
+            "planned rows {plan_ids:?} must all appear in the finalized rows {final_ids:?}"
+        );
+        let added: Vec<&String> = final_ids.difference(&plan_ids).collect();
+        assert_eq!(
+            added,
+            vec!["fix-header"],
+            "fix-header is the only id finalize may add to the plan"
+        );
+    }
+
+    #[test]
+    fn a_healthy_rom_reserves_exactly_the_rows_it_finalizes() {
+        // Correct stored Genesis checksum: the repair profile matches but produces no patch, so
+        // fix-header never materializes. Reserving it would leave the panel a group too tall.
+        let mut rom = vec![0u8; 0x400];
+        rom[0x100..0x104].copy_from_slice(b"SEGA");
+        rom[0x200..0x210].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        rom[0x18E] = 0x40;
+        rom[0x18F] = 0x48;
+        assert!(
+            plan_sega_repair(&rom, rom.len() as u64).is_some(),
+            "the repair profile must match, so the plan is exercised against a real candidate"
+        );
+
+        let (plan_ids, final_ids) = stream_plan_and_finalized_ids(&rom, "game.md");
+        assert_eq!(
+            plan_ids, final_ids,
+            "a healthy ROM's reservation must match its finalized rows exactly"
+        );
     }
 
     #[test]

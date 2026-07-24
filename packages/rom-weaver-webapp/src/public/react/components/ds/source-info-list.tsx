@@ -279,6 +279,32 @@ const ExpectedChecksGroup = ({
   );
 };
 
+/* The staging skeleton has to reserve what the resolved drawer below will render, so the two layout
+   rules live together:
+
+   - the base rows are bare only while they stand ALONE; a variant group or an "Expected" group
+     promotes them to a labeled `ck-group`, which costs a head line;
+   - "Expected" is not a hash result - it is what the bundle declares - so it is known before the
+     checksums land and renders for real, not as shimmer. It is given no computed values here: the
+     per-row match marks are exactly the part that has to wait.
+
+   Ordering matches the resolved branch: base group, Expected, then the transform variants. */
+const buildStagingGroups = (
+  pending: ChecksumPendingGroup[],
+  expected: SourceInfoExpectedChecks | undefined,
+  hasExpected: boolean,
+): ChecksumPendingGroup[] => {
+  const variantCount = pending.filter((group) => group.id !== "raw").length;
+  const baseLabel = variantCount ? "Unchanged" : "Computed";
+  const groups = pending.map((group) =>
+    group.id === "raw" && (variantCount || hasExpected) ? { ...group, label: baseLabel } : group,
+  );
+  if (!hasExpected) return groups;
+  const baseIndex = groups.findIndex((group) => group.id === "raw");
+  const expectedGroup = { content: <ExpectedChecksGroup expected={expected} />, id: "expected" };
+  return groups.toSpliced(baseIndex < 0 ? groups.length : baseIndex + 1, 0, expectedGroup);
+};
+
 type SourceInfoProgress = Parameters<typeof FileProgress>[0];
 
 const CHECKSUM_VARIANT_ALGORITHMS = [
@@ -395,13 +421,21 @@ const SourceInfoList = ({
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
 }) => {
+  const hasExpected = !!(Object.keys(expected?.checksums || {}).length || typeof expected?.size === "number");
   if (pending?.length) {
-    return <PendingChecks defaultOpen={defaultOpen} groups={pending} label={label} onToggle={onToggle} open={open} />;
+    return (
+      <PendingChecks
+        defaultOpen={defaultOpen}
+        groups={buildStagingGroups(pending, expected, hasExpected)}
+        label={label}
+        onToggle={onToggle}
+        open={open}
+      />
+    );
   }
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
   if (!(hasBytes || checksums || lead || progress || trim?.detected)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
-  const hasExpected = !!(Object.keys(expected?.checksums || {}).length || typeof expected?.size === "number");
   // When transform variants (headerless, auto-trimmed…) are present - or the
   // bundle contributes an "Expected" group - the base checksums become one of
   // several groups, so they get their own labeled head ("Unchanged"/"Computed")

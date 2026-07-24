@@ -397,3 +397,74 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-create-bundle")).toBeNull();
   });
 });
+
+/**
+ * The staging Checks skeleton exists to reserve the height the resolved drawer will occupy, so the
+ * two layouts have to agree on their GROUPS - a head the reservation forgets (or invents) is a
+ * layout shift at the exact moment the card is supposed to settle. These pin that agreement.
+ */
+describe("apply workflow view - staging checks reservation", () => {
+  const checksHeads = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("#rom-weaver-list-input-stack .ckrows .ck-group-head")).map(
+      (el) => el.textContent,
+    );
+
+  const n64Variants = [
+    { id: "raw", label: "Raw" },
+    { id: "n64-byte-order:big-endian", label: "N64 byte order: big-endian" },
+  ];
+
+  const stagingN64Row = () => {
+    const rom = romRow("game.n64");
+    rom.info = { ...rom.info, checksumVariantPlan: n64Variants, crc32: "", validationPhase: "checksum" };
+    rom.progress = { label: "Calculating checksums...", percent: 50 } as RomInputRowState["progress"];
+    return rom;
+  };
+
+  it("reserves the same group heads the resolved drawer renders", () => {
+    const staging = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [stagingN64Row()] } });
+
+    const resolved = romRow("game.n64");
+    resolved.info = {
+      ...resolved.info,
+      checksumVariants: n64Variants.map((variant) => ({
+        ...variant,
+        checksums: { crc32: "C6FB1252", md5: "0".repeat(32), sha1: "0".repeat(40) },
+      })),
+      md5: "0".repeat(32),
+      sha1: "0".repeat(40),
+    } as RomInputRowState["info"];
+    const settled = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [resolved] } });
+
+    // The base rows are bare only when they stand alone; a variant promotes them to "Unchanged".
+    expect(checksHeads(staging.container)).toEqual(["Unchanged", "N64 byte order: big-endian"]);
+    expect(checksHeads(settled.container)).toEqual(checksHeads(staging.container));
+  });
+
+  it("leaves the base rows bare on both sides when the ROM has no variants", () => {
+    const rom = romRow("game.bin");
+    rom.info = { ...rom.info, crc32: "", validationPhase: "checksum" };
+    rom.progress = { label: "Calculating checksums...", percent: 50 } as RomInputRowState["progress"];
+    const staging = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [rom] } });
+    const settled = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] } });
+
+    expect(checksHeads(staging.container)).toEqual([]);
+    expect(checksHeads(settled.container)).toEqual([]);
+  });
+
+  it("renders the bundle's Expected group while the ROM is still hashing", () => {
+    const patch = patchItem("change.bps");
+    patch.validationValues = ["in crc32=C6FB1252"];
+    const { container } = renderView({
+      patches: [patch],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [stagingN64Row()] },
+    });
+
+    // Expected slots between the base group and the variants, exactly where it resolves.
+    expect(checksHeads(container)).toEqual(["Unchanged", "Expected", "N64 byte order: big-endian"]);
+    // The bundle supplies the value; only the match mark waits for the hash.
+    const expectedGroup = container.querySelector("#rom-weaver-rom-expected-checks");
+    expect(expectedGroup?.querySelector(".ck-v")?.textContent).toBe("C6FB1252");
+    expect(expectedGroup?.querySelector(".ck-mark")).toBeNull();
+  });
+});

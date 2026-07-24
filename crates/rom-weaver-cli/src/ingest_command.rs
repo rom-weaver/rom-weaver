@@ -920,6 +920,7 @@ impl CliApp {
         let report = self.run_checksum_variants_with_progress(
             &request,
             context,
+            "ingest",
             "checksum",
             &mut |progress| {
                 self.emit_running(

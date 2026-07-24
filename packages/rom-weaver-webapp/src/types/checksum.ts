@@ -1,5 +1,15 @@
 type ChecksumMap = Record<string, string>;
 
+/** One planned checksum variant, surfaced by Rust's `probe-variant-plan` event as soon as the ROM
+ * header is scanned - before the checksums finish. Used to reserve the staging skeleton so the ROM
+ * card doesn't grow variant-by-variant as values stream in. Only the certain variants are listed:
+ * the eventual `ChecksumVariant` rows match these exactly for a healthy ROM, and add `fix-header`
+ * for one that actually needs the repair. */
+type ChecksumVariantPlanEntry = {
+  id: string;
+  label: string;
+};
+
 type ChecksumVariant = {
   id: string;
   label: string;
@@ -47,4 +57,4 @@ type ExtractTiming = {
   workers?: number;
 };
 
-export type { ChecksumMap, ChecksumRomProbe, ChecksumVariant, ExtractTiming, RomTypeTag };
+export type { ChecksumMap, ChecksumRomProbe, ChecksumVariant, ChecksumVariantPlanEntry, ExtractTiming, RomTypeTag };

@@ -5,11 +5,14 @@ const CHECKSUM_VARIANT_CHUNK_SIZE: usize = 1024 * 1024;
 impl CliApp {
     /// Compute every applicable checksum variant (raw, remove-header, fix-header,
     /// n64 byte order) in a single streaming pass via the shared engine in
-    /// `rom-weaver-checksum`, emitting per-byte progress.
+    /// `rom-weaver-checksum`, emitting per-byte progress. `command` names the invoking
+    /// command (`checksum`/`ingest`) so every event this pass emits carries the same
+    /// command/format pair as the caller's own progress ticks.
     pub(super) fn run_checksum_variants_with_progress<F>(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
+        command: &'static str,
         stage: &'static str,
         on_progress: &mut F,
     ) -> Result<OperationReport>
@@ -55,6 +58,18 @@ impl CliApp {
                 break;
             }
             engine.update(&buffer[..read])?;
+            // Surface the variant plan the moment the header scan settles it, so the host reserves
+            // the checks rows before the full-file hash finishes (bare ROMs never hit the extract
+            // path that emits this for archives).
+            if let Some(plan) = engine.take_planned_variants() {
+                emit_variant_plan(
+                    context,
+                    command,
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name()),
+                    &plan,
+                );
+            }
             identity.push(&buffer[..read]);
             processed = processed.saturating_add(read as u64);
             Self::emit_checksum_variant_progress(
