@@ -1,0 +1,89 @@
+[
+  {
+    "package": "darwin-arm64",
+    "runner": "macos-14",
+    "native_runner": "macos-14",
+    "target": "aarch64-apple-darwin",
+    "build": "build",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "darwin-x64",
+    "runner": "macos-15-intel",
+    "native_runner": "macos-15-intel",
+    "target": "x86_64-apple-darwin",
+    "build": "build",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "linux-arm64-musl",
+    "runner": "ubuntu-24.04",
+    "native_runner": "ubuntu-24.04-arm",
+    "target": "aarch64-unknown-linux-musl",
+    "build": "cross",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "linux-ia32-musl",
+    "runner": "ubuntu-24.04",
+    "native_runner": "ubuntu-24.04",
+    "target": "i686-unknown-linux-musl",
+    "build": "cross",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "linux-x64-gnu",
+    "runner": "ubuntu-24.04",
+    "native_runner": "ubuntu-24.04",
+    "target": "x86_64-unknown-linux-gnu",
+    "build": "build",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "linux-x64-musl",
+    "runner": "ubuntu-24.04",
+    "native_runner": "ubuntu-24.04",
+    "target": "x86_64-unknown-linux-musl",
+    "build": "cross",
+    "binary": "rom-weaver",
+    "bootstrap": false
+  },
+  {
+    "package": "win32-arm64-msvc",
+    "runner": "windows-11-arm",
+    "native_runner": "windows-11-arm",
+    "target": "aarch64-pc-windows-msvc",
+    "build": "build",
+    "binary": "rom-weaver.exe",
+    "msvc_arch": "arm64",
+    "msvc_host": "arm64",
+    "bootstrap": false
+  },
+  {
+    "package": "win32-ia32-msvc",
+    "runner": "windows-2025",
+    "native_runner": "windows-2025",
+    "target": "i686-pc-windows-msvc",
+    "build": "build",
+    "binary": "rom-weaver.exe",
+    "msvc_arch": "x86",
+    "msvc_host": "amd64",
+    "bootstrap": false
+  },
+  {
+    "package": "win32-x64-msvc",
+    "runner": "windows-2025",
+    "native_runner": "windows-2025",
+    "target": "x86_64-pc-windows-msvc",
+    "build": "build",
+    "binary": "rom-weaver.exe",
+    "msvc_arch": "amd64",
+    "msvc_host": "amd64",
+    "bootstrap": false
+  }
+]

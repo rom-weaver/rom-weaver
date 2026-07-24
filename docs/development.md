@@ -156,7 +156,7 @@ mise run hadolint      # Dockerfiles
 
 npm --prefix packages/rom-weaver-webapp run lint    # complete frontend lint fan-out
 npm --prefix packages/rom-weaver-webapp run test:unit
-npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+npm --prefix packages/rom-weaver-webapp run test:browser
 ```
 
 Use the repository's browser-test runner instead of invoking browser Vitest

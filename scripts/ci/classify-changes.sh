@@ -59,8 +59,10 @@ else
     case "$path" in
       Cargo.toml | Cargo.lock | deny.toml | package.json | package-lock.json | \
         .github/workflows/npm-publish.yml | .github/workflows/release.yml | \
+        .github/actions/build-cli-platform/* | .github/cli-platforms.json | \
         packages/rom-weaver-cli-platforms/* | bin/rom-weaver.mjs | install.sh | install.ps1 | \
-        scripts/check-thread-guards.sh | scripts/gen-third-party-licenses.mjs | \
+        scripts/check-thread-guards.sh | scripts/check-whitespace.sh | \
+        scripts/gen-third-party-licenses.mjs | \
         scripts/prepare-npm-platform-package.mjs | scripts/sync-version.mjs | \
         scripts/vendored-pathspecs.sh | scripts/verify-cli-platform.mjs | scripts/wasm/*)
         rust=true
@@ -98,11 +100,12 @@ else
     esac
 
     # `repo-lint` lints every tracked file of these kinds rather than the diff,
-    # so this selects the whole job, not individual files: any `.github` entry
-    # (actionlint reads the workflows and the composite actions), any shell
-    # script, any Dockerfile.
+    # so this selects the whole job, not individual files: whatever actionlint
+    # reads (the workflows, the composite actions, its own config), any shell
+    # script, any Dockerfile, and hadolint's config.
     case "$path" in
-      .github/* | *.sh | *Dockerfile | *Dockerfile.*)
+      .github/workflows/* | .github/actions/* | .github/*.yml | .github/*.yaml | \
+        .hadolint.yaml | *.sh | *Dockerfile | *Dockerfile.*)
         repo_lint=true
         ;;
     esac

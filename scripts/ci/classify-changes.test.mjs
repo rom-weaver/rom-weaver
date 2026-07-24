@@ -112,6 +112,7 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     ".github/actions/wasm-cache/action.yml",
     "scripts/setup-worktree.sh",
     "packages/rom-weaver-webapp/Dockerfile",
+    ".hadolint.yaml",
   ]) {
     assert.equal(classify(path).repo_lint, "true", path);
   }
@@ -120,15 +121,21 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     "crates/rom-weaver-core/src/lib.rs",
     "packages/rom-weaver-webapp/src/index.tsx",
     "install.ps1",
+    ".github/cli-platforms.json",
+    ".github/ISSUE_TEMPLATE/bug.md",
   ]) {
     assert.equal(classify(path).repo_lint, "false", path);
   }
 });
 
 test("native package changes build every CLI platform", () => {
-  for (const path of [
-    "packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json",
-    "scripts/verify-cli-platform.mjs",
+  // The shared build action is a composite action, so it also selects the
+  // plumbing lint; the target list beside it is data nothing lints.
+  for (const [path, repoLint] of [
+    ["packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json", "false"],
+    ["scripts/verify-cli-platform.mjs", "false"],
+    [".github/cli-platforms.json", "false"],
+    [".github/actions/build-cli-platform/action.yml", "true"],
   ]) {
     assert.deepEqual(classify(path), {
       rust: "true",
@@ -136,7 +143,7 @@ test("native package changes build every CLI platform", () => {
       security: "false",
       docker_cli: "false",
       docker_webapp: "false",
-      repo_lint: "false",
+      repo_lint: repoLint,
       full: "false",
     });
   }

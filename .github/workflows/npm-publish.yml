@@ -32,120 +32,58 @@ permissions:
   id-token: write
 
 jobs:
+  # The three matrices below all fan out over the same target list, and CI
+  # builds it too. It lives in .github/cli-platforms.json; a matrix can only be
+  # fed by an upstream job's output, so it is resolved once here.
+  plan:
+    name: Resolve platform matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      platforms: ${{ steps.platforms.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - id: platforms
+        # Two statements, not `echo "matrix=$(...)"`: a failure inside command
+        # substitution leaves `echo` succeeding, and an empty matrix would only
+        # surface later as an unexplained fromJSON error.
+        run: |
+          matrix=$(scripts/ci/cli-platform-matrix.sh)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   platform-build:
     name: Build ${{ matrix.package }}
+    needs: plan
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: darwin-arm64
-            runner: macos-14
-            target: aarch64-apple-darwin
-            build: build
-            binary: rom-weaver
-          - package: darwin-x64
-            runner: macos-15-intel
-            target: x86_64-apple-darwin
-            build: build
-            binary: rom-weaver
-          - package: linux-arm64-musl
-            runner: ubuntu-24.04
-            target: aarch64-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: linux-ia32-musl
-            runner: ubuntu-24.04
-            target: i686-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: linux-x64-gnu
-            runner: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-            build: build
-            binary: rom-weaver
-          - package: linux-x64-musl
-            runner: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: win32-arm64-msvc
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: arm64
-            msvc_host: arm64
-          - package: win32-ia32-msvc
-            runner: windows-2025
-            target: i686-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: x86
-            msvc_host: amd64
-          - package: win32-x64-msvc
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: amd64
-            msvc_host: amd64
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Same action CI builds with, against the same per-platform cargo cache,
+      # so a release restores what CI already built rather than compiling a
+      # second, differently-configured copy.
+      - uses: ./.github/actions/build-cli-platform
         with:
-          targets: ${{ matrix.target }}
-
-      # Main CI builds this same release target matrix, so releases restore its
-      # caches without spending cache storage on a duplicate release-only set.
-      # Keyed per matrix entry - the nine platforms share no artifacts.
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: cli-platform-${{ matrix.package }}
-          cache-on-failure: true
-          save-if: ${{ inputs.cache-save }}
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build pkg-config
-
-      - uses: taiki-e/install-action@v2
-        if: matrix.build == 'cross'
-        with:
-          tool: cross@0.2.5
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
+          package: ${{ matrix.package }}
+          target: ${{ matrix.target }}
+          build: ${{ matrix.build }}
+          binary: ${{ matrix.binary }}
+          msvc-arch: ${{ matrix.msvc_arch }}
+          msvc-host: ${{ matrix.msvc_host }}
+          cache-save: ${{ inputs.cache-save }}
           registry-url: https://registry.npmjs.org
-
-      - name: Build native CLI
-        if: runner.os != 'Windows' && matrix.build != 'cross'
-        run: cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
-
-      - name: Build native CLI
-        if: matrix.build == 'cross'
-        run: cross build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
-
-      - name: Build native CLI
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }} -host_arch=${{ matrix.msvc_host }}
-          cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
-
-      - name: Prepare platform package
-        run: >-
-          node scripts/prepare-npm-platform-package.mjs ${{ matrix.package }}
-          target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       # Keep the compiled package outside the publish job. A failed npm or
       # release-asset step can then rerun without rebuilding Rust.
@@ -178,33 +116,17 @@ jobs:
 
   platform-dry-run:
     name: Dry-run publish ${{ matrix.package }}
-    needs: platform-build
+    needs: [plan, platform-build]
     if: ${{ needs.platform-build.result == 'success' }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: darwin-arm64
-            runner: macos-14
-          - package: darwin-x64
-            runner: macos-15-intel
-          - package: linux-arm64-musl
-            runner: ubuntu-24.04-arm
-          - package: linux-ia32-musl
-            runner: ubuntu-24.04
-          - package: linux-x64-gnu
-            runner: ubuntu-24.04
-          - package: linux-x64-musl
-            runner: ubuntu-24.04
-          - package: win32-arm64-msvc
-            runner: windows-11-arm
-          - package: win32-ia32-msvc
-            runner: windows-2025
-          - package: win32-x64-msvc
-            runner: windows-2025
-    runs-on: ${{ matrix.runner }}
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    # `native_runner`, not `runner`: this leg executes the built binary, and
+    # linux-arm64-musl cross-builds on x64 but can only run on arm64.
+    runs-on: ${{ matrix.native_runner }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -234,7 +156,7 @@ jobs:
   # same publish helper in dry-run mode on their target operating systems.
   platform:
     name: Publish ${{ matrix.package }}
-    needs: platform-dry-run
+    needs: [plan, platform-dry-run]
     if: ${{ needs.platform-dry-run.result == 'success' }}
     permissions:
       contents: write
@@ -242,35 +164,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: darwin-arm64
-            runner: macos-14
-            bootstrap: false
-          - package: darwin-x64
-            runner: macos-15-intel
-            bootstrap: false
-          - package: linux-arm64-musl
-            runner: ubuntu-24.04-arm
-            bootstrap: false
-          - package: linux-ia32-musl
-            runner: ubuntu-24.04
-            bootstrap: false
-          - package: linux-x64-gnu
-            runner: ubuntu-24.04
-            bootstrap: false
-          - package: linux-x64-musl
-            runner: ubuntu-24.04
-            bootstrap: false
-          - package: win32-arm64-msvc
-            runner: windows-11-arm
-            bootstrap: false
-          - package: win32-ia32-msvc
-            runner: windows-2025
-            bootstrap: false
-          - package: win32-x64-msvc
-            runner: windows-2025
-            bootstrap: false
-    runs-on: ${{ matrix.runner }}
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    # Publishes the binary it just proved runs here, so the same native host as
+    # the dry-run above.
+    runs-on: ${{ matrix.native_runner }}
     steps:
       - uses: actions/checkout@v7
         with:

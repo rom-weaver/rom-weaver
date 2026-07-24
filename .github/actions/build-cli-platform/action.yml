@@ -1,0 +1,99 @@
+name: Build a release CLI platform package
+description: >-
+  Compile the native CLI for one entry of .github/cli-platforms.json and stage
+  it into its npm platform package. CI runs this on every change and the release
+  fan-out runs it to produce what actually ships, so the two must agree byte for
+  byte - which is why the toolchain, cache key, cross wiring, and the MSVC
+  environment dance live here once instead of in both workflows.
+
+inputs:
+  package:
+    description: npm platform package name (matrix `package`).
+    required: true
+  target:
+    description: rustc target triple (matrix `target`).
+    required: true
+  build:
+    description: '"build" for cargo, "cross" for the cross-rs wrapper (matrix `build`).'
+    required: true
+  binary:
+    description: Built binary file name (matrix `binary`).
+    required: true
+  msvc-arch:
+    description: VsDevCmd.bat -arch value. Windows targets only.
+    default: ""
+  msvc-host:
+    description: VsDevCmd.bat -host_arch value. Windows targets only.
+    default: ""
+  cache-save:
+    description: >-
+      Save the cargo cache after a miss. CI saves only on main; the release
+      fan-out is restore-only unless its caller says otherwise.
+    default: "false"
+  registry-url:
+    description: >-
+      npm registry to configure Node against. The release fan-out needs it for
+      the publish that follows; CI does not.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+
+    # CI and the release fan-out deliberately share one key per platform, so a
+    # release restores what CI already built instead of spending a second set of
+    # cache entries on the same artifacts. Keyed per entry - the nine platforms
+    # share nothing.
+    - name: Cache cargo artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: cli-platform-${{ inputs.package }}
+        cache-on-failure: true
+        save-if: ${{ inputs.cache-save == 'true' }}
+
+    - name: Install Linux build dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build pkg-config
+
+    - uses: taiki-e/install-action@v2
+      if: inputs.build == 'cross'
+      with:
+        tool: cross@0.2.5
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        package-manager-cache: false
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Build release CLI
+      if: runner.os != 'Windows' && inputs.build != 'cross'
+      shell: bash
+      run: cargo build --locked --release --package rom-weaver-cli --target ${{ inputs.target }}
+
+    - name: Build release CLI
+      if: inputs.build == 'cross'
+      shell: bash
+      run: cross build --locked --release --package rom-weaver-cli --target ${{ inputs.target }}
+
+    # vswhere locates the installed Visual Studio, and VsDevCmd.bat puts the
+    # matching MSVC toolchain on PATH - the cross-arch legs (arm64, x86) do not
+    # get one otherwise. It only exports into its own cmd session, hence the
+    # cargo invocation living inside the same block.
+    - name: Build release CLI
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+        call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ inputs.msvc-arch }} -host_arch=${{ inputs.msvc-host }}
+        cargo build --locked --release --package rom-weaver-cli --target ${{ inputs.target }}
+
+    - name: Stage the platform package
+      shell: bash
+      run: >-
+        node scripts/prepare-npm-platform-package.mjs ${{ inputs.package }}
+        target/${{ inputs.target }}/release/${{ inputs.binary }}

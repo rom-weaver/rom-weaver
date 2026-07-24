@@ -31,12 +31,6 @@ jobs:
         uses: ./.github/actions/wasm-cache
         with:
           variant: prod
-          path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/third_party
 
       - uses: ./.github/actions/setup-build-env
         with:

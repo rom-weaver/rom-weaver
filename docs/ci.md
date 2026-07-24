@@ -15,6 +15,9 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 - [Shared building blocks](#shared-building-blocks)
   - [`.github/actions/setup-build-env`](#githubactionssetup-build-env)
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
+  - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
+  - [`.github/cli-platforms.json`](#githubcli-platformsjson)
+  - [`scripts/ci/assert-jobs.sh`](#scriptsciassert-jobssh)
   - [`scripts/ci/classify-changes.sh`](#scriptsciclassify-changessh)
   - [`scripts/ci/resolve-wasm-run.sh`](#scriptsciresolve-wasm-runsh)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
@@ -137,8 +140,8 @@ security ── advisories (warn only, always green)
   except Rust test, bench, and example sources, which select the Rust jobs
   alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
-  module; dependency manifests select the advisory scanners; workflows, shell
-  scripts, and Dockerfiles select the plumbing lint. Documentation
+  module; dependency manifests select the advisory scanners; workflows, composite
+  actions, shell scripts, and Dockerfiles select the plumbing lint. Documentation
   changes select none of those expensive stacks. Manual runs and changes to
   CI, coverage, the toolchain, or the classifier run everything. It also plans
   the `docker` matrix, because a matrix can only be fed by an upstream job's
@@ -146,8 +149,9 @@ security ── advisories (warn only, always green)
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
-  rather than the diff, so it is selected by whether any `.github` entry, shell
-  script, or Dockerfile changed at all - not per file. It installs no language toolchain and
+  rather than the diff, so it is selected by whether anything of those kinds
+  changed at all - workflows, composite actions, `.github` YAML, any `*.sh`,
+  any Dockerfile, `.hadolint.yaml` - not per file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -194,7 +198,11 @@ security ── advisories (warn only, always green)
   round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures;
   and creates/applies fourteen patch formats on its target architecture. Native
   arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs
-  only when Rust or native-package inputs change.
+  only when Rust or native-package inputs change. Both the target list
+  ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build
+  itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform))
+  are shared with the release fan-out, so this job cannot cover a different set
+  of targets - or build them differently - than the one that ships.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p
   rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm`
   already compiles as a strict subset (the app build pulls `containers` in with
@@ -221,8 +229,9 @@ security ── advisories (warn only, always green)
   same pinned version). nextest does not execute doctests, so each leg runs a
   separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`plumbing`** is an aggregator over `repo-lint`, `docker`,
-  `docker-prebuilt`, and `wasm`, with the same contract as `rust` below. Those
-  four are each skippable, and a matrix leg that is not planned reports no
+  `docker-prebuilt`, and `wasm`, on the same `scripts/ci/assert-jobs.sh` as
+  `rust` below - three calls, because those jobs do not share one selection
+  flag. All four are skippable, and a matrix leg that is not planned reports no
   status at all, so `Plumbing` is the only name branch protection can safely
   require for them.
 - **`rust`** is an aggregator: it fails unless selected jobs succeeded and
@@ -461,6 +470,48 @@ vendored libarchive sources under it.
 Deliberately no `restore-keys`: a partial-prefix hit could serve a module built
 from different source. A miss costs one build; a false hit ships stale WASM.
 `cache-epoch` invalidates everything by hand.
+
+The file set is a property of the variant, not of the caller - a `dev` build
+runs neither `wasm-opt` nor brotli and writes no checksum, so it has three of
+the five files. Callers pass only `variant`, and the `path` output reports what
+was cached so the CI job that uploads the module as an artifact cannot list a
+different set than the one it restored.
+
+### `.github/actions/build-cli-platform`
+
+Compiles the native CLI for one entry of the platform list and stages it into
+its npm platform package: toolchain, the per-platform cargo cache, the Linux
+build dependencies, `cross` for the musl targets, and - for Windows - the
+`vswhere` + `VsDevCmd.bat` dance that puts the right MSVC toolchain on `PATH`
+for the cross-arch legs.
+
+CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a
+release restores what CI already built rather than compiling a second,
+differently-configured copy. `cache-save` and `registry-url` are the only
+things the two callers set differently.
+
+### `.github/cli-platforms.json`
+
+The nine released CLI targets, and the single source for all four matrices that
+fan out over them - CI's build plus the fan-out's build, dry-run, and publish.
+They used to be four pasted copies, which let CI quietly stop covering a target
+the release still shipped.
+
+`scripts/ci/cli-platform-matrix.sh` emits it as a one-line matrix (a matrix can
+only be fed by an upstream job's output) and documents every field, since JSON
+carries no comments. Note `runner` versus `native_runner`: the first is the host
+that *compiles* a target, the second the host that can *execute* the result -
+the same everywhere except `linux-arm64-musl`, which cross-builds on x64.
+
+### `scripts/ci/assert-jobs.sh`
+
+Backs the `rust`, `webapp`, and `plumbing` aggregate checks, which present one
+stable name to branch protection over a fan-out of parallel jobs. It takes one
+selection flag per call, so `plumbing` - whose jobs do not share a flag - calls
+it once per group. On GitHub a skipped check
+counts as passing, so the aggregate has to fail explicitly - which means telling
+"skipped because the path filter said this change cannot affect it" apart from
+"skipped because something upstream failed".
 
 ### `scripts/ci/classify-changes.sh`
 
@@ -722,7 +773,7 @@ npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-o
 npm --prefix packages/rom-weaver-webapp run icons:channels:check
 npm --prefix packages/rom-weaver-webapp run test:unit
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-npm --prefix packages/rom-weaver-webapp run test:browser:parallel
+npm --prefix packages/rom-weaver-webapp run test:browser
 npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 npm --prefix packages/rom-weaver-webapp run build
 ```

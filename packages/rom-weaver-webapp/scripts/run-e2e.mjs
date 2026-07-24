@@ -14,7 +14,7 @@ const PROFILES = {
     suites: [
       ["CLI", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
       ["WASM", "npm", ["run", "test:browser:wasm"], PACKAGE_DIR],
-      ["browser", "npm", ["run", "test:browser:parallel"], PACKAGE_DIR],
+      ["browser", "npm", ["run", "test:browser"], PACKAGE_DIR],
       ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
     ],
     wallTimeLabel: "Fast E2E wall time",
