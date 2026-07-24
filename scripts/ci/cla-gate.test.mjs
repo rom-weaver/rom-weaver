@@ -29,7 +29,8 @@ printf '%s %s\\n' "$method" "$endpoint" >>"$GH_LOG"
 fixture() { printf '%s/%s' "$GH_FIXTURES" "$(printf '%s' "$1" | tr '/?=' '___')"; }
 # A signature write must be visible to the re-read that follows it.
 if [[ $method == PUT && $endpoint == *contents/signatures.json ]]; then
-  jq -n --arg c "$content" '{sha: "newsha", content: $c}' \\
+  # Re-wrapped on the way back out, exactly as the real API serves it.
+  jq -n --arg c "$(fold -w 60 <<<"$content")" '{sha: "newsha", content: $c}' \\
     >"$(fixture "\${endpoint}?ref=cla-signatures")"
   exit 0
 fi
@@ -42,7 +43,13 @@ if [[ -n $jq_expr ]]; then jq -r "$jq_expr" <"$file"; else cat "$file"; fi
 const REPO = "rom-weaver/rom-weaver";
 const HEAD_SHA = "deadbeef";
 
-const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64");
+// The contents API line-wraps its base64 at 60 characters and ends with a
+// newline. Reproducing that exactly is the point: jq's @base64d rejects
+// embedded whitespace, and unwrapped fixtures hid that from this suite.
+const encode = (value) =>
+  `${Buffer.from(JSON.stringify(value))
+    .toString("base64")
+    .replace(/.{1,60}/g, "$&\n")}`;
 
 function run({ prAuthor, commitAuthors = [], signatures = [], comment } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "cla-gate-"));
