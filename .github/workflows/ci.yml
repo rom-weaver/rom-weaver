@@ -306,7 +306,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node rust ripgrep cargo-deny cargo-machete nextest
+          tools: node rust cargo-deny cargo-machete nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
 
@@ -724,7 +724,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
 
@@ -778,7 +778,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
 
@@ -809,7 +809,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
           playwright: "true"
@@ -1025,7 +1025,7 @@ jobs:
       # module - so the Rust toolchain is dead weight here.
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
 

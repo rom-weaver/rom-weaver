@@ -381,7 +381,7 @@ packages, mise-pinned tools, Rust components and targets, the cargo cache, the
 WASI SDK, webapp `node_modules`, and Playwright browsers.
 
 The `tools:` input is a **positive** list of short tool names
-(`tools: node rust ripgrep`). mise offers no allowlist - `MISE_DISABLE_TOOLS`
+(`tools: node rust nextest`). mise offers no allowlist - `MISE_DISABLE_TOOLS`
 is the only lever - so `scripts/ci/mise-disable-tools.sh` reads the `[tools]`
 table of `.mise.toml` and computes the complement. Two consequences worth
 knowing:

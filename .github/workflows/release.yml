@@ -141,7 +141,7 @@ jobs:
         if: steps.release.outputs.prs_created == 'true'
         uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           cache-save: "false"
           playwright: "true"
@@ -371,7 +371,7 @@ jobs:
       - name: Set up static webapp build
         uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
@@ -415,7 +415,7 @@ jobs:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}
         run: |
           npm --prefix packages/rom-weaver-webapp run build
-          if rg --files --no-ignore packages/rom-weaver-webapp/dist | rg -q '\.(br|gz)$'; then
+          if find packages/rom-weaver-webapp/dist -type f \( -name '*.br' -o -name '*.gz' \) | grep -q .; then
             echo 'webapp release build unexpectedly contains .br/.gz sidecars' >&2
             exit 1
           fi
