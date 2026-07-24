@@ -5,15 +5,20 @@
   border: 0; border-radius: var(--r-m);
   background: none; color: var(--ink-2); font-size: .88rem; cursor: pointer;
 }
+/* `[data-shell-hover="hero"]` is the hover the prerendered shell held when React
+   replaced it - the browser only re-resolves :hover on the next pointer move,
+   so these twins carry the look across the mount (see shell-hover-carryover.ts). */
 @media (hover: hover) {
-  .rw-app .drop:hover { color: var(--ink); }
+  .rw-app .drop:hover,
+  #webapp-root[data-shell-hover="hero"] .drop.hero { color: var(--ink); }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .drop:active { color: var(--ink); }
 .rw-app .drop .main { display: inline-flex; align-items: center; gap: var(--sp-m); font-weight: 650; color: var(--ink); }
 .rw-app .drop .main svg { width: 16px; height: 16px; color: var(--ink-3); }
 @media (hover: hover) {
-  .rw-app .drop:hover .main svg { color: var(--thread-text); }
+  .rw-app .drop:hover .main svg,
+  #webapp-root[data-shell-hover="hero"] .drop.hero .main svg { color: var(--thread-text); }
 }
 .rw-app .drop:active .main svg { color: var(--thread-text); }
 .rw-app .drop .hint { font-size: .74rem; color: var(--ink-3); text-align: center; text-wrap: balance; }
@@ -48,7 +53,8 @@
 }
 .rw-app .drop.hero .main.bead svg { transform: translateY(var(--bead-glyph)); transition: transform .2s ease; }
 @media (hover: hover) {
-  .rw-app .drop.hero:hover .main.bead { --bead-lift: -2px; --bead-rim: 70%; --bead-halo: .55; --bead-glyph: -1px; }
+  .rw-app .drop.hero:hover .main.bead,
+  #webapp-root[data-shell-hover="hero"] .drop.hero .main.bead { --bead-lift: -2px; --bead-rim: 70%; --bead-halo: .55; --bead-glyph: -1px; }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .drop.hero:focus-within .main.bead,
@@ -60,7 +66,8 @@
   .rw-app .drop.hero:focus-within .main.bead, .rw-app .drop.hero:active .main.bead,
   .rw-app .drop.hero.dragging .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
   @media (hover: hover) {
-    .rw-app .drop.hero:hover .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
+    .rw-app .drop.hero:hover .main.bead,
+    #webapp-root[data-shell-hover="hero"] .drop.hero .main.bead { --bead-lift: 0px; --bead-scale: 1; --bead-glyph: 0px; }
   }
 }
 .rw-app .drop.hero .fell { align-self: stretch; display: flex; align-items: center; gap: var(--sp-l); padding-inline: var(--pad); }
@@ -224,7 +231,8 @@
   background: var(--warp-lines) var(--empty-fill-hover);
 }
 @media (hover: hover) {
-  .rw-app .step.is-input .drop.hero:hover {
+  .rw-app .step.is-input .drop.hero:hover,
+  #webapp-root[data-shell-hover="hero"] .step.is-input .drop.hero {
     border-color: var(--empty-border-hover);
     background: var(--warp-lines) var(--empty-fill-hover);
   }
