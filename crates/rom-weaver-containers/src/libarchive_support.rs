@@ -1537,7 +1537,7 @@ where
                                 emit_extract_identity(context, format_name, &identity);
                             }
                             if let Some(plan) = hasher.take_ready_variant_plan() {
-                                emit_variant_plan(context, format_name, &plan);
+                                emit_variant_plan(context, format_name, &task.output_path, &plan);
                             }
                             hash_feed += hash_at.elapsed().unwrap_or_default();
                             let read_u64 = read as u64;
@@ -2018,7 +2018,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                 emit_extract_identity(context, format_name, &identity);
                             }
                             if let Some(plan) = output.hasher.take_ready_variant_plan() {
-                                emit_variant_plan(context, format_name, &plan);
+                                emit_variant_plan(context, format_name, &output.output_path, &plan);
                             }
                             written_bytes = written_bytes.saturating_add(delta);
                             if let Some(total_bytes) = total_file_bytes {

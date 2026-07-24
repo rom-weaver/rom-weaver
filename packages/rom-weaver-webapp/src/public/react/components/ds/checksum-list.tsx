@@ -157,7 +157,10 @@ const ChecksumList = ({
 type ChecksumPendingGroup = {
   id: string;
   label?: ReactNode;
-  rows: Array<{ id?: string; label: ReactNode; length: number }>;
+  /** A group whose values are already known while the file stages (a bundle's "Expected" checks
+   * come from the bundle, not the hash), rendered as-is in place of shimmer rows. */
+  content?: ReactNode;
+  rows?: Array<{ id?: string; label: ReactNode; length: number }>;
 };
 
 /**
@@ -184,7 +187,8 @@ const PendingChecks = ({
 }) => (
   <ChecksumList defaultOpen={defaultOpen} label={label} onToggle={onToggle} open={open}>
     {groups.map((group) => {
-      const rows = group.rows.map((row) => (
+      if (group.content) return <Fragment key={group.id}>{group.content}</Fragment>;
+      const rows = (group.rows || []).map((row) => (
         <PendingChecksumRow
           key={`${group.id}:${row.id ?? `${typeof row.label === "string" ? row.label : "row"}:${row.length}`}`}
           label={row.label}

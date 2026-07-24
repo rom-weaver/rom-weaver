@@ -19,6 +19,7 @@ use rom_weaver_core::{
     ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
+use tracing::trace;
 
 use crate::constants::copy_progress_buffer_size;
 
@@ -87,11 +88,24 @@ pub(crate) fn emit_extract_identity(
 /// Emit the container extract's planned checksum variants (`probe-variant-plan`) via the shared
 /// core helper, so archive extracts reserve their checks rows the same way the bare-ROM `checksum`
 /// path does. See [`rom_weaver_core::emit_variant_plan`].
+///
+/// The event names no entry, so the host attributes it to the staged source as a whole - sound only
+/// because a ROM ingest extracts ONE selected payload (an ambiguous archive errors with
+/// `AMBIGUOUS_SELECTION` and re-runs against a pick). A multi-payload extract would emit one plan
+/// per hashed output and the host would keep whichever landed last; `output_path` is traced so that
+/// shows up here rather than as an unexplained skeleton. Applies equally to `emit_extract_identity`.
 pub(crate) fn emit_variant_plan(
     context: &OperationContext,
     format: &str,
+    output_path: &Path,
     plan: &[(String, String)],
 ) {
+    trace!(
+        format,
+        output = %output_path.display(),
+        variants = ?plan.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+        "emitting extract checksum variant plan"
+    );
     rom_weaver_core::emit_variant_plan(
         context,
         "extract",
