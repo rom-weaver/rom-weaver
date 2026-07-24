@@ -550,6 +550,9 @@ pub struct StreamingVariantChecksums {
     /// crc32/md5/sha1 run in parallel and overlap the producer. 1 (or non-threaded wasm)
     /// → every variant hashes synchronously.
     hash_thread_budget: usize,
+    /// Set once [`take_planned_variants`](Self::take_planned_variants) has yielded the plan, so the
+    /// early reservation is surfaced exactly once.
+    plan_taken: bool,
 }
 
 impl StreamingVariantChecksums {
@@ -576,7 +579,38 @@ impl StreamingVariantChecksums {
             header_buf: Vec::new(),
             state: State::Buffering,
             hash_thread_budget: hash_thread_budget.max(1),
+            plan_taken: false,
         })
+    }
+
+    /// The active variants' `(id, label)` as soon as the plan is known (after the header scan
+    /// window is buffered), yielded exactly once. Callers use it to reserve UI rows before the
+    /// checksums finish so the layout does not grow variant-by-variant as values stream in.
+    ///
+    /// This is a SUPERSET of the finalized rows, never a subset: `fix-header` is listed
+    /// optimistically here but collapses to `raw` and drops at finalize when no header repair is
+    /// actually needed (its correction depends on the streamed sum). So treat the plan as a
+    /// reservation that may shrink by at most the `fix-header` row - the finalized rows never
+    /// introduce an id the plan did not list.
+    pub fn take_planned_variants(&mut self) -> Option<Vec<(String, String)>> {
+        if self.plan_taken {
+            return None;
+        }
+        let State::Planned(planned) = &self.state else {
+            return None;
+        };
+        self.plan_taken = true;
+        let mut plan = vec![(planned.raw.id.clone(), planned.raw.label.clone())];
+        if let Some(remove_header) = planned.remove_header.as_ref() {
+            plan.push((remove_header.id.clone(), remove_header.label.clone()));
+        }
+        if planned.fix.is_some() {
+            plan.push(("fix-header".to_string(), "Fix header".to_string()));
+        }
+        for variant in &planned.n64_orders {
+            plan.push((variant.id.clone(), variant.label.clone()));
+        }
+        Some(plan)
     }
 
     /// Feed the next ordered slice of source bytes.
@@ -1236,6 +1270,46 @@ mod tests {
         let rom = build_n64_rom();
         assert!(detect_n64_cic(&rom, N64Order::BigEndian).is_none());
         assert!(plan_n64_repair(&rom, rom.len() as u64).is_some());
+    }
+
+    #[test]
+    fn planned_variants_are_a_superset_of_the_finalized_rows() {
+        use std::collections::BTreeSet;
+
+        let rom = build_n64_rom();
+        let algorithms = algorithms();
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, rom.len() as u64, Some("game.n64"), 1)
+                .expect("engine");
+        // Feed in chunks so the plan settles mid-stream, as it does during extraction, and prove it
+        // is yielded exactly once.
+        let mut plan: Option<Vec<(String, String)>> = None;
+        let mut extra_yields = 0;
+        for chunk in rom.chunks(4096) {
+            engine.update(chunk).expect("update");
+            match engine.take_planned_variants() {
+                Some(rows) if plan.is_none() => plan = Some(rows),
+                Some(_) => extra_yields += 1,
+                None => {}
+            }
+        }
+        assert_eq!(extra_yields, 0, "plan must be yielded exactly once");
+        let plan = plan.expect("plan available once the header is scanned");
+        let plan_ids: BTreeSet<String> = plan.into_iter().map(|(id, _)| id).collect();
+        // N64: raw + the three byte-order variants + the fix-header repair are all planned.
+        assert!(plan_ids.contains("raw"));
+        assert!(plan_ids.contains("fix-header"));
+
+        let output = engine.finalize().expect("finalize");
+        let mut final_ids: BTreeSet<String> =
+            output.rows.iter().map(|row| row.id.clone()).collect();
+        if let Some(deferred) = output.deferred_fix_header.as_ref() {
+            final_ids.insert(deferred.id.clone());
+        }
+        assert!(
+            final_ids.is_subset(&plan_ids),
+            "finalized rows {final_ids:?} must never introduce an id the plan {plan_ids:?} omitted"
+        );
     }
 
     #[test]

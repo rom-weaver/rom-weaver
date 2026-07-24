@@ -55,6 +55,18 @@ impl CliApp {
                 break;
             }
             engine.update(&buffer[..read])?;
+            // Surface the variant plan the moment the header scan settles it, so the host reserves
+            // the checks rows before the full-file hash finishes (bare ROMs never hit the extract
+            // path that emits this for archives).
+            if let Some(plan) = engine.take_planned_variants() {
+                emit_variant_plan(
+                    context,
+                    self.checksum.name(),
+                    OperationFamily::Checksum,
+                    None,
+                    &plan,
+                );
+            }
             identity.push(&buffer[..read]);
             processed = processed.saturating_add(read as u64);
             Self::emit_checksum_variant_progress(

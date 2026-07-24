@@ -84,6 +84,23 @@ pub(crate) fn emit_extract_identity(
     });
 }
 
+/// Emit the container extract's planned checksum variants (`probe-variant-plan`) via the shared
+/// core helper, so archive extracts reserve their checks rows the same way the bare-ROM `checksum`
+/// path does. See [`rom_weaver_core::emit_variant_plan`].
+pub(crate) fn emit_variant_plan(
+    context: &OperationContext,
+    format: &str,
+    plan: &[(String, String)],
+) {
+    rom_weaver_core::emit_variant_plan(
+        context,
+        "extract",
+        OperationFamily::Container,
+        Some(format),
+        plan,
+    );
+}
+
 /// Fold the next ordered slice into `identity` and emit the `probe-identity` event exactly once
 /// (tracked by `emitted`) when the prefix fills. Used by handlers that decode their own stream
 /// (rvz, cso, z3ds). Detection uses the KNOWN final output length so size-dependent media
@@ -346,6 +363,16 @@ impl ExtractHasher {
                 let detected = detect_emitted_identity(identity, output_path);
                 (!detected.is_empty()).then_some(detected)
             }
+        }
+    }
+
+    /// Return the planned checksum variants `(id, label)` exactly once, as soon as the variant
+    /// engine has scanned the header and settled its plan, so the caller can reserve the UI rows
+    /// before the checksums finish. `None` until planned, after taken, or when not hashing variants.
+    pub(crate) fn take_ready_variant_plan(&mut self) -> Option<Vec<(String, String)>> {
+        match self {
+            Self::Variants { engine, .. } => engine.take_planned_variants(),
+            _ => None,
         }
     }
 

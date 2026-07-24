@@ -151,6 +151,42 @@ pub fn emit_container_running_progress(
     });
 }
 
+/// Emit the planned checksum variants mid-ingest as a `probe-variant-plan` event so the host can
+/// reserve one checks group per eventual variant before the checksums finish - keeping the ROM card
+/// from growing variant-by-variant as values stream in. Shared by the inline-extract write path
+/// (`command`/`family` = the container extract) and the bare-ROM `checksum` path. The payload is
+/// `details.checksum_variant_plan` = `[{id,label}]`, a superset of the final `checksum_variants`
+/// rows (see `rom_weaver_checksum::StreamingVariantChecksums::take_planned_variants`).
+pub fn emit_variant_plan(
+    context: &OperationContext,
+    command: &str,
+    family: OperationFamily,
+    format: Option<&str>,
+    plan: &[(String, String)],
+) {
+    if plan.is_empty() {
+        return;
+    }
+    let rows = plan
+        .iter()
+        .map(|(id, label)| serde_json::json!({ "id": id, "label": label }))
+        .collect::<Vec<_>>();
+    let mut details = serde_json::Map::new();
+    details.insert("checksum_variant_plan".to_string(), Value::Array(rows));
+    context.emit(ProgressEvent {
+        command: command.to_string(),
+        family,
+        format: format.map(str::to_string),
+        stage: "probe-variant-plan".to_string(),
+        label: "planned checksum variants".to_string(),
+        details: Some(Value::Object(details)),
+        percent: None,
+        elapsed_ms: None,
+        status: OperationStatus::Running,
+        ..ProgressEvent::from_thread_execution(None)
+    });
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct ContainerByteProgress<'a> {
     pub command: &'a str,

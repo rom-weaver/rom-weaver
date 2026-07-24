@@ -52,7 +52,7 @@ pub use io::{
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
 pub use progress::{
     ContainerByteProgress, NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent,
-    ProgressSink, RecordingProgressSink, emit_container_running_progress,
+    ProgressSink, RecordingProgressSink, emit_container_running_progress, emit_variant_plan,
     maybe_emit_container_byte_progress,
 };
 pub use prompt::{
