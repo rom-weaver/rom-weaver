@@ -29,9 +29,6 @@ inputs:
   cloudflare-account-id:
     description: CLOUDFLARE_ACCOUNT_ID.
     required: true
-  github-token:
-    description: Token for the preview commit status. Unused on other channels.
-    default: ""
 
 outputs:
   url:
@@ -89,28 +86,3 @@ runs:
         PROJECT: ${{ inputs.project }}
         BRANCH: ${{ inputs.branch }}
       run: scripts/ci/deploy-pages.sh
-
-    # The caller's GitHub environment already surfaces the deployment on the PR;
-    # this status just carries the stable branch alias (pr-<n>...pages.dev) into
-    # the checks list, which the environment's raw per-deploy URL does not. The
-    # old marker-backed PR comment is retired - it duplicated the environment's
-    # native "View deployment" link.
-    - name: Publish preview status
-      if: inputs.channel == 'preview' && steps.deploy.outputs.url != ''
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        ALIAS: https://${{ inputs.branch }}.rom-weaver-preview.pages.dev
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      run: |
-        set -euo pipefail
-
-        gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
-          --method POST \
-          --field state=success \
-          --field context='preview/webapp' \
-          --field target_url="${ALIAS}" \
-          --field description='Preview deployment - click Details' \
-          --silent
-
-        echo "preview status -> ${ALIAS}"

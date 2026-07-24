@@ -92,9 +92,16 @@ it.
 
 ## 7. Practicalities
 
-- Sign through the CLA Assistant link on your first pull request. Your signature
-  covers all of your past and future Contributions to rom-weaver under version
-  1.0 of this Agreement.
+- Sign on your first pull request. The `license/cla` check comments there asking
+  for a signature; reply in a new comment on that pull request containing
+  exactly:
+
+  > I have read the CLA Document and I hereby sign the CLA
+
+  That comment, posted from your authenticated GitHub account, is the signing
+  process referred to in section 6. Your signature covers all of your past and
+  future Contributions to rom-weaver under version 1.0 of this Agreement, and
+  you will not be asked again.
 - If an employer or another entity owns rights in your Contribution, the
   Maintainer may require separate confirmation or an agreement from that rights
   holder before accepting it.

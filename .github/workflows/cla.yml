@@ -1,0 +1,61 @@
+name: CLA
+
+# Posts the required `license/cla` commit status. This replaced the hosted CLA
+# Assistant app, which had no re-run button and no `synchronize` trigger: a
+# force-push left the new head with no status at all, and the pull request sat
+# on "Expected - waiting for status to be reported" forever with no bypass actor
+# able to merge past it. As a workflow the gate reruns from the Actions tab,
+# fires on every push to the head, and always targets the current head SHA.
+#
+# `pull_request_target` runs from the base branch with a write token, which is
+# what lets a fork's pull request receive a status and a comment. Nothing from
+# the pull request head is ever checked out or executed here.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+# Two pushes in a row only need the newer verdict; a signing comment must not be
+# cancelled by one, so the group is per pull request and comments run to
+# completion.
+concurrency:
+  group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cla:
+    name: CLA
+    # issue_comment fires on plain issues too, and on every unrelated comment.
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request != null &&
+       (contains(github.event.comment.body, 'I have read the CLA Document and I hereby sign the CLA') ||
+        contains(github.event.comment.body, 'recheck')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # contents: write is for the signature file on the `cla-signatures`
+      # branch only - the default branch's ruleset refuses direct pushes.
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      # Explicitly the base commit, never the pull request head: this checkout
+      # supplies the script and the allowlist, both of which must be the
+      # reviewed versions.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check contributor signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        run: scripts/ci/cla-gate.sh

@@ -37,6 +37,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
 | `commitlint.yml` | PR (open/edit/sync) | **Yes** | Conventional-commit pull request title |
+| `cla.yml` | PR (open/reopen/sync), PR comment | **Yes** | The required `license/cla` status |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -48,32 +49,38 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
-The hosted CLA Assistant GitHub App checks outside contributors against
-[CLA version 1.0](../CLA.md). It is configured in GitHub rather than as a
-repository workflow, so there is no workflow file to read and no re-run button
-in the Actions tab - it posts the `license/cla` commit status straight onto the
-head commit.
+`cla.yml` posts the required `license/cla` commit status, checking every
+contributor to a pull request against [CLA version 1.0](../CLA.md). The logic is
+`scripts/ci/cla-gate.sh`, covered by `scripts/ci/cla-gate.test.mjs` against a
+stubbed `gh`.
 
-That status is required, and the app only posts it in response to a
-`pull_request` event. A **force-push can leave the check permanently missing**:
-the new head commit never receives a status, so the pull request sits on
-"Expected - waiting for status to be reported" with every other check green and
-no bypass actor to merge past it. Rebasing a branch onto `main` is the usual way
-to hit this.
+| Where | What |
+| --- | --- |
+| `.github/cla-allowlist.txt` (default branch) | Logins exempt from signing, one glob per line. `*[bot]` covers every bot; brackets are literal, and an unescaped `*[bot]` would be a character class matching anything ending in b, o or t. |
+| `cla-signatures` branch, `signatures.json` | The signature records. It lives off the default branch because the `main protection` ruleset forbids direct pushes and names no bypass actor, so a workflow cannot commit there. |
 
-**Close and reopen the pull request to recover.** The `reopened` event makes the
-app post `license/cla` against the current head, and it lands within seconds. It
-also re-runs the whole of `ci.yml` against an unchanged head, so budget a full
-CI cycle before the pull request goes green again.
+An unsigned contributor gets a failing status and one comment - edited in place
+on later runs, never duplicated - asking them to reply with the signing phrase.
+That reply is what appends their record. Anyone can comment `recheck` to re-run
+the gate. Commits whose author email matches no GitHub account are reported as
+`unlinked:<name>` rather than skipped.
 
-The widely cited fix - commenting `recheck` - **does not work on this repo's own
-pull requests.** That trigger belongs to the bot's signature-request comment,
-and no such comment exists when the author has already signed or is the repo
-owner: the check passes silently, so there is no thread for `recheck` to act on
-and the comment is ignored. Verified on
-[#129](https://github.com/rom-weaver/rom-weaver/pull/129), where `recheck` did
-nothing and close/reopen fixed it immediately. Expect `recheck` to be useful
-only on an outside contributor's pull request that the bot has commented on.
+The job runs on `pull_request_target`, so a fork's pull request still receives a
+status and a comment; nothing from the pull request head is checked out or
+executed, and both the script and the allowlist come from the base commit.
+
+**This replaced the hosted CLA Assistant app** ([#129] is the case that forced
+it). That app posted only in response to a `pull_request` event and offered no
+re-run button anywhere, so a force-push left the new head with no status at all
+and the pull request sat on "Expected - waiting for status to be reported" with
+every other check green and nothing able to merge past it. Commenting `recheck`
+did not help: that trigger belonged to the bot's own signature-request comment,
+which never exists for an author who has already signed. Only closing and
+reopening recovered it, at the cost of a full re-run of `ci.yml`. A workflow has
+none of those failure modes - it fires on `synchronize` (which force-pushes
+emit), reruns from the Actions tab, and always targets the current head SHA.
+
+[#129]: https://github.com/rom-weaver/rom-weaver/pull/129
 
 Coverage is deliberately sampled weekly rather than repeated after every green
 `main` build. It restores the source-exact production WASM cache and builds on
@@ -98,7 +105,9 @@ unlocks the publish jobs.
 > commits`, and `license/cla`. The ruleset has no bypass
 > actors, so a status that is never reported blocks the merge outright - which
 > is why every required name belongs to an aggregate job that always runs, and
-> never to a job that path classification can skip or drop from a matrix.
+> never to a job that path classification can skip or drop from a matrix, and
+> why `license/cla` is a workflow that can be rerun rather than an app that
+> cannot.
 
 ## `ci.yml` - the required gate
 
@@ -383,9 +392,9 @@ routes the npm dist-tag and the docker `beta` tag - see
 channel named, with no cascade - it is a break-glass override, not a release.
 
 Preview deployments are skipped for forks and Dependabot, which are not given
-the Cloudflare secrets and could only ever fail. The preview URL is published as
-a commit status (`preview/webapp`) carrying the stable branch alias
-(`pr-<n>.rom-weaver-preview.pages.dev`).
+the Cloudflare secrets and could only ever fail. The preview URL reaches the
+pull request through the GitHub `environment` below; the old `preview/webapp`
+commit status that duplicated it is retired.
 
 Each leg also declares a GitHub `environment` named for the hostname it serves
 (`rom-weaver.com`, `beta.rom-weaver.com`, `nightly.rom-weaver.com`, and
@@ -743,10 +752,10 @@ inputs change.
   linked.
 - **`cargo publish --dry-run` exits 0 when a package sets `publish = false`**,
   so that CI gate becomes a silent no-op rather than an error.
-- **A force-push can drop the required `license/cla` status.** CLA Assistant is
-  an external app with no re-run button, and commenting `recheck` does nothing
-  on a pull request the bot never commented on. Close and reopen the pull
-  request instead. See the workflow table above.
+- **A glob of `*[bot]` does not match a bot login.** In a bash `[[ ]]` pattern
+  `[bot]` is a character class, so it matches a trailing b, o or t - never the
+  literal `[bot]` every GitHub App account ends with. `cla-gate.sh` escapes the
+  brackets before matching; any new glob-matching code needs the same.
 - **The root `package-lock.json` needs generated `@rom-weaver/*` optional
   entries.** The scope is not fully published when Release Please opens a new
   release PR, so `scripts/sync-version.mjs` writes local platform-package lock

@@ -1070,7 +1070,6 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
-      statuses: write
     if: needs.deploy-plan.outputs.preview_branch != ''
     # A cache miss still opens a deployment record with no URL. The fallback in
     # `deploy` runs later and supersedes it, so the PR ends up pointing at the
@@ -1114,7 +1113,6 @@ jobs:
           branch: ${{ needs.deploy-plan.outputs.preview_branch }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # Build and publish one channel per matrix leg, to isolated Cloudflare origins
   # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
@@ -1138,7 +1136,6 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
-      statuses: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
     # main, and a skipped dependency would otherwise skip this job with it. That
     # weakens the implicit "only after a good wasm build" gate, so state it.
@@ -1193,7 +1190,6 @@ jobs:
           branch: ${{ matrix.target.branch }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Every sidecar-backed /assets/* request invokes the Pages Function, so
       # a zone Cache Rule makes the edge cache those responses and the

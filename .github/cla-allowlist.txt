@@ -1,0 +1,13 @@
+# Logins exempt from the Contributor License Agreement gate, one glob per line.
+# Read by scripts/ci/cla-gate.sh. Living on the default branch means every
+# addition goes through a reviewed pull request. `*` and `?` are wildcards;
+# brackets are literal.
+
+# Bots author no copyrightable work of their own and cannot comment a
+# signature, so every bot account is exempt. GitHub App accounts always carry
+# the `[bot]` suffix, which makes this exact rather than a name guess.
+*[bot]
+
+# The Maintainer named in CLA.md - the party the agreement grants rights *to*,
+# so there is nobody for him to sign with.
+brandonocasey
