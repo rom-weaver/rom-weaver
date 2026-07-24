@@ -11,7 +11,7 @@
 // Kept outside mise tools so its clang does not shadow the host clang and break
 // libarchive-sys bindgen on macOS. Mise consumes the printed root; absence still
 // exits successfully, so only WASM build tasks fail on a missing SDK. Printing a
-// directory that is not an SDK is worse than printing nothing: .mise.toml
+// directory that is not an SDK is worse than printing nothing: .config/mise.toml
 // derives WASI_SYSROOT and WASI_CLANG from this, so a wrong root turns "no SDK
 // installed" into a confusing missing-file error deep inside a build.
 

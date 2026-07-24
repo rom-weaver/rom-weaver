@@ -94,7 +94,7 @@ runs:
               scripts/gen-third-party-licenses.mjs \
               .github/actions/setup-build-env
             printf 'mise-wasm-config\n'
-            git show HEAD:.mise.toml | awk '
+            git show HEAD:.config/mise.toml | awk '
               /^\[tools\]/ { section = "tools"; next }
               /^\[env\]/ { section = "env"; next }
               /^\[tasks\./ { section = $0 }

@@ -35,7 +35,7 @@ export function classifyChanges(paths, all = false) {
       /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
       /^\.cargo\//.test(path) ||
-      path === ".mise.toml" ||
+      path === ".config/mise.toml" ||
       /^scripts\/ci\//.test(path)
     ) result.full = true;
 

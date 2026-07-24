@@ -3,10 +3,10 @@ import test from "node:test";
 
 import { disabledTools } from "./mise-disable-tools.mjs";
 
-const config = `${import.meta.dirname}/../../.mise.toml`;
+const config = `${import.meta.dirname}/../../.config/mise.toml`;
 
 // The exclusion lists each CI job used to carry by hand. Regenerating them
-// from .mise.toml is only safe if it reproduces them exactly, so the previous
+// from .config/mise.toml is only safe if it reproduces them exactly, so the previous
 // values are pinned here rather than described.
 const JOBS = {
   "wasm / release fallback": [
