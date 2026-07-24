@@ -17,7 +17,10 @@
     "cli"
   ],
   "homepage": "https://rom-weaver.com",
-  "funding": "https://ko-fi.com/brandonocasey",
+  "funding": [
+    "https://github.com/sponsors/brandonocasey",
+    "https://ko-fi.com/brandonocasey"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/rom-weaver/rom-weaver.git"
