@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { ApplyBandaidIcon } from "./apply-bandaid-icon.tsx";
@@ -27,6 +27,35 @@ function PatcherPrimaryAction({
   totalTime?: string;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
+  const progress = state.applyButton.progress;
+  const running = state.applyButton.loading || !!progress;
+  const downloadReady = !!state.pendingDownloadFileName && !running;
+  // The run button, the live-progress panel, and the finished download button
+  // share one slot at the bottom of a long form. On mobile that slot sits below
+  // the fold, and while weaving the per-row progress that expands above it keeps
+  // pushing it further down. Keep it visible: reveal it (centered) when a run
+  // starts and when the download is ready, and re-pin the progress panel as the
+  // page grows during the run - but only when it has actually drifted below the
+  // fold, so a user who scrolls up isn't yanked back while it's already in view.
+  // While running the panel is `rom-weaver-progress-apply`; idle/ready it's the
+  // `rom-weaver-button-apply` element. Refs seed to the mount value so an
+  // already-active/ready state (e.g. restored session) never scrolls unprompted.
+  const wasRunningRef = useRef(running);
+  const wasDownloadReadyRef = useRef(downloadReady);
+  useEffect(() => {
+    const target =
+      document.getElementById("rom-weaver-progress-apply") || document.getElementById("rom-weaver-button-apply");
+    if (!target) return;
+    const startedRunning = running && !wasRunningRef.current;
+    const becameReady = downloadReady && !wasDownloadReadyRef.current;
+    if (startedRunning || becameReady) {
+      target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    } else if (progress && target.getBoundingClientRect().bottom > window.innerHeight) {
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    }
+    wasRunningRef.current = running;
+    wasDownloadReadyRef.current = downloadReady;
+  }, [running, downloadReady, progress]);
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
     // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on
