@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/cli",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
   "description": "Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI.",
@@ -63,15 +63,15 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "@rom-weaver/darwin-arm64": "0.7.2",
-    "@rom-weaver/darwin-x64": "0.7.2",
-    "@rom-weaver/linux-arm64-musl": "0.7.2",
-    "@rom-weaver/linux-ia32-musl": "0.7.2",
-    "@rom-weaver/linux-x64-gnu": "0.7.2",
-    "@rom-weaver/linux-x64-musl": "0.7.2",
-    "@rom-weaver/win32-arm64-msvc": "0.7.2",
-    "@rom-weaver/win32-ia32-msvc": "0.7.2",
-    "@rom-weaver/win32-x64-msvc": "0.7.2"
+    "@rom-weaver/darwin-arm64": "0.8.0",
+    "@rom-weaver/darwin-x64": "0.8.0",
+    "@rom-weaver/linux-arm64-musl": "0.8.0",
+    "@rom-weaver/linux-ia32-musl": "0.8.0",
+    "@rom-weaver/linux-x64-gnu": "0.8.0",
+    "@rom-weaver/linux-x64-musl": "0.8.0",
+    "@rom-weaver/win32-arm64-msvc": "0.8.0",
+    "@rom-weaver/win32-ia32-msvc": "0.8.0",
+    "@rom-weaver/win32-x64-msvc": "0.8.0"
   },
   "scripts": {
     "docs:toc": "bash scripts/update-markdown-toc.sh",

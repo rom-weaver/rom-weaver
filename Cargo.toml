@@ -19,7 +19,7 @@ license = "AGPL-3.0-or-later"
 publish = ["crates-io"]
 repository = "https://github.com/rom-weaver/rom-weaver"
 rust-version = "1.95"
-version = "0.7.2"
+version = "0.8.0"
 
 # Lint policy in the manifest rather than only in the `mise run clippy` flags,
 # so a bare `cargo clippy` and rust-analyzer's in-editor diagnostics enforce the
