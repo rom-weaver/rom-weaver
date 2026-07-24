@@ -47,10 +47,10 @@ the WASM build over a JSON event protocol.
 
 | Path | Role |
 | --- | --- |
-| `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`), and the standalone codec backends (zstd, deflate, lzma, … in `src/codecs`). Depends on nothing else in the workspace. |
+| `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`), and the standalone codec backends (zstd, deflate, lzma, ... in `src/codecs`). Depends on nothing else in the workspace. |
 | `crates/rom-weaver-checksum` | Checksum engines (crc32/md5/sha*/blake3/crc32c/crc16/adler32) plus the streaming variant engine shared by `checksum` and extract flows. |
-| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, …), native CHD implementation (`src/chd`), and the libarchive wrapper/bindings/build integration (`src/libarchive`, `libarchive/`). |
-| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,…}.rs`), one file per format, including VCDIFF/xdelta encode+decode (`src/xdelta`, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
+| `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, ...), native CHD implementation (`src/chd`), and the libarchive wrapper/bindings/build integration (`src/libarchive`, `libarchive/`). |
+| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,...}.rs`), one file per format, including VCDIFF/xdelta encode+decode (`src/xdelta`, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
 | `crates/rom-weaver-cli/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
 | `crates/rom-weaver-cli/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-patches`'s `xdelta` module. |
 | `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
@@ -72,7 +72,7 @@ keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI
 
 - `ContainerHandler` (+ `ContainerHandlerOperations`): `probe`, `probe_details`,
   `list_entries`, `extract`, `create`, plus `capabilities()` describing what the
-  format supports (create, dry-run sizing, …).
+  format supports (create, dry-run sizing, ...).
 - `PatchHandler`: `probe`, `parse`, `apply`, `create`, with a default
   `validate` that dry-run applies to a temp path.
 
@@ -415,7 +415,7 @@ readouts, sage verification).
 - **Stylesheet.** One hand-written semantic sheet,
   `packages/rom-weaver-webapp/src/webapp/design-system.css`: design tokens on
   `:root[data-theme="dark"|"light"]` (`--thread`, `--plate`, `--seam`,
-  `--ink-*`, …), component rules scoped under `.rw-app`, webapp-only
+  `--ink-*`, ...), component rules scoped under `.rw-app`, webapp-only
   adaptations (React modal framework, codec combobox, platform ergonomics) at
   the end of the file. No utility classes, no CSS-in-JS, no Tailwind.
 - **Shell.** `packages/rom-weaver-webapp/src/webapp/components/shell.tsx`

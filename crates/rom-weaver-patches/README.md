@@ -29,8 +29,8 @@ trait, plus the registry that probes an unknown patch file down to a format.
   EBP, and more than twenty in total. NINJA1 is recognized on probe but cannot
   be applied.
 - **Apply and create.** Most formats round-trip: generate a distributable patch
-  from an original and a modified file, then apply it back. A few — BSP and
-  HDiffPatch among them — are apply-only.
+  from an original and a modified file, then apply it back. BSP and HDiffPatch
+  can only be applied, not created.
 - **Validation before writing.** `validate` dry-run applies to a temp path, so
   a patch chain can be checked end to end before anything is written.
 - **Checksum discipline.** Formats that carry expected input/output checksums
@@ -66,8 +66,8 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats) — the full patch format and capability tables.
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md) — registry traits and copier-header handling on apply.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full patch format and capability tables.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): registry traits and copier-header handling on apply.
 
 ## License
 

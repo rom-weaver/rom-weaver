@@ -62,7 +62,7 @@ contribution, so all contributions require agreeing to the
 On your first pull request, CLA Assistant links to the signing flow. Signing
 covers all of your past and future contributions under that immutable CLA
 version. You keep the copyright in your work, and it is always also released
-under the project's open-source license — see the CLA's open-source assurance
+under the project's open-source license; see the CLA's open-source assurance
 section.
 
 Third-party code you did not write is not covered by the CLA: identify it in

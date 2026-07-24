@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  The <code>rom-weaver</code> command-line tool: Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI.
+  The <code>rom-weaver</code> command-line tool: inspect, extract, compress, and patch ROMs and disc images, all on your own machine.
 </p>
 
 <p align="center">
@@ -21,15 +21,15 @@
 ## What this crate is
 
 The installable end of rom-weaver. It ships the `rom-weaver` binary and the
-`rom_weaver_app` command library that both frontends share — the native CLI and
+`rom_weaver_app` command library that both frontends share. The native CLI and
 the `wasm32-wasip1-threads` build that powers the
 [rom-weaver.com](https://rom-weaver.com/) webapp run the exact same
 orchestration code.
 
-- **Apply and create patches.** IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
-  BDF/BSDIFF40, APS, DCP (Dreamcast), and more than twenty formats, with
-  ordered multi-patch chains, strict checksum validation, and cheat-code
-  baking. A few — DCP, BSP, and HDiffPatch among them — are apply-only.
+- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
+  xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
+  multi-patch chains, strict checksum validation, and cheat-code baking. Three
+  of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
 - **Inspect and extract containers.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO,
   PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS, validated
@@ -78,18 +78,21 @@ current install methods and platform coverage.
 # What is this file?
 rom-weaver probe --input game.iso
 
-# Apply a patch chain, verifying checksums at every step
-rom-weaver patch apply --input game.sfc --patch hack.bps \
+# Apply a patch, verifying checksums at every step (weave is short for patch apply)
+rom-weaver weave --input game.sfc --patch hack.bps \
   --output game-hacked.sfc --no-compress
 
-# ...or let the output extension pick a compression container
-rom-weaver patch apply --input game.sfc --patch hack.bps --output game-hacked.zip
+# ...or let the output extension choose a compression format
+rom-weaver weave --input game.sfc --patch hack.bps --output game-hacked.zip
 
-# Create a distributable patch
+# Build a patch you can share
 rom-weaver patch create --original original.sfc --modified hacked.sfc --output hack.bps
 
-# Checksum with header-aware variants
+# Checksum, including the header-aware variants
 rom-weaver checksum --input game.sfc --algo crc32,sha1
+
+# Shrink a disc image; the .cue brings its tracks along
+rom-weaver compress --input game.cue --output game.chd
 
 # Machine-readable output for scripts
 rom-weaver probe --input game.chd --json

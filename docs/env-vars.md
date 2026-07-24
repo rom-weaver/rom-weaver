@@ -38,7 +38,7 @@ or `env` options. WASI argv0 is always `rom-weaver`. A command may still supply
 | `ROM_WEAVER_LOG` | filter string | unset | `crates/rom-weaver-cli/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_app=trace`); also honored via `RUST_LOG` when no explicit CLI log level is selected. |
 | `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-patches/src/lib.rs` | Cap below which patch apply/create buffers in memory; above it the streaming path is used. Set to `0` to force streaming for benchmarks. |
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). Set to `0` to force the on-disk path for regression/parity runs. |
-| `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1–2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
+| `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
 | `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
 
 ## Test / build-only knobs
@@ -58,8 +58,8 @@ Not for production use.
 
 | Global | Direction | Set/read at | Purpose |
 | --- | --- | --- | --- |
-| `window.ROM_WEAVER_CONSOLE_LOGS` | exposed by app | `webapp/console-log-capture.ts` | Console-log capture API (`getReport`/`copy`/`clear`/…) for debugging. |
-| `window.ROM_WEAVER_SERVICE_WORKER` | exposed by app | `webapp/webapp.ts` | Service-worker cache controls (`forceCacheAndReload`/`getState`/…). |
+| `window.ROM_WEAVER_CONSOLE_LOGS` | exposed by app | `webapp/console-log-capture.ts` | Console-log capture API (`getReport`/`copy`/`clear`/...) for debugging. |
+| `window.ROM_WEAVER_SERVICE_WORKER` | exposed by app | `webapp/webapp.ts` | Service-worker cache controls (`forceCacheAndReload`/`getState`/...). |
 | `window.ROM_WEAVER_BROWSER_DIAGNOSTICS` | exposed by app | `webapp/browser-runtime-diagnostics.ts` | Browser runtime diagnostics handle. |
 | `window.ROM_WEAVER_MOBILE_SAFARI_DIAGNOSTICS` | exposed by app | `webapp/browser-runtime-diagnostics.ts` | Mobile-Safari runtime diagnostics handle (alias of the same diagnostics API). |
 | `window.ROM_WEAVER_IOS_SAFARI_MATRIX` | exposed by app | `webapp/mobile-safari-matrix.ts` | iOS-Safari format-matrix diagnostic harness API (diagnostic page only). |

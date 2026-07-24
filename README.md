@@ -67,10 +67,10 @@ Windows, and in the browser if you would rather not install anything.
 
 ## Features
 
-- **Apply and create patches.** IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP,
-  BDF/BSDIFF40, APS, DCP (Dreamcast), and more than twenty formats in total,
-  with ordered multi-patch chains, strict checksum validation, and cheat-code
-  baking. A few - DCP, BSP, and HDiffPatch among them - are apply-only.
+- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
+  xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
+  multi-patch chains, strict checksum validation, and cheat-code baking. Three
+  of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
 - **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
   Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
@@ -331,7 +331,7 @@ webapp builds, and tests.
   </thead>
   <tbody>
     <tr>
-      <td>Desktop — Apply patches (Weave)</td>
+      <td>Desktop: Apply patches (Weave)</td>
       <td>
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
@@ -340,7 +340,7 @@ webapp builds, and tests.
       </td>
     </tr>
     <tr>
-      <td>Desktop — Create a patch</td>
+      <td>Desktop: Create a patch</td>
       <td>
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.png">
@@ -349,7 +349,7 @@ webapp builds, and tests.
       </td>
     </tr>
     <tr>
-      <td>Mobile — Apply patches (Weave)</td>
+      <td>Mobile: Apply patches (Weave)</td>
       <td align="center">
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
@@ -358,7 +358,7 @@ webapp builds, and tests.
       </td>
     </tr>
     <tr>
-      <td>Mobile — Create a patch</td>
+      <td>Mobile: Create a patch</td>
       <td align="center">
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.png">
