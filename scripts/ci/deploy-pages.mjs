@@ -10,7 +10,10 @@ export const extractPagesUrl = (output) => [...output.matchAll(/https:\/\/[a-z0-
 
 export function deployPages({ project, branch, commitHash, root = process.cwd(), outputFile = process.env.GITHUB_OUTPUT } = {}) {
   const webapp = resolve(root, "packages/rom-weaver-webapp");
-  const result = spawnSync("npx", ["--yes", "wrangler@4", "pages", "deploy", "dist", `--project-name=${project}`, `--branch=${branch}`, `--commit-hash=${commitHash}`], { cwd: webapp, encoding: "utf8" });
+  // maxBuffer is lifted because spawnSync KILLS the child once the default
+  // 1 MiB is exceeded - on a deploy that means a half-uploaded site, not just a
+  // truncated log.
+  const result = spawnSync("npx", ["--yes", "wrangler@4", "pages", "deploy", "dist", `--project-name=${project}`, `--branch=${branch}`, `--commit-hash=${commitHash}`], { cwd: webapp, encoding: "utf8", maxBuffer: Infinity });
   const output = `${result.stdout || ""}${result.stderr || ""}`;
   process.stdout.write(output);
   if (result.status !== 0) throw new Error(`wrangler exited with status ${result.status}`);

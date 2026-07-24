@@ -20,22 +20,36 @@ function matches(root, prefix, pattern, excluded = () => false) {
   return result;
 }
 
+// src/chd (the folded rom-weaver-chd crate, never in this guard's scope) uses
+// the cfg pair for its decode heap-pregrow, which enables threaded wasm rather
+// than suppressing it. browser-format-matrix.ts legitimately declares per-format
+// `threads: 1` expectations.
+const GUARDS = [
+  {
+    prefix: "crates/rom-weaver-containers/src",
+    pattern: /wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver_wasi_threads/,
+    excluded: (file) => file.includes("/chd/"),
+    message: "container handlers should not suppress threaded WASM execution",
+  },
+  {
+    prefix: "packages/rom-weaver-webapp/src",
+    pattern: /threads:\s*1(?:[^0-9]|$)|toThreadArg\([^)]*,\s*["']1["']\)/,
+    excluded: (file) => file.endsWith("browser-format-matrix.ts"),
+    message: "browser runtime should not force single-threaded execution",
+  },
+];
+
 export function checkThreadGuards(root = process.cwd()) {
-  const violations = [
-    ...matches(root, "crates/rom-weaver-containers/src", /wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver_wasi_threads/, (file) => file.includes("/chd/")),
-    ...matches(root, "packages/rom-weaver-webapp/src", /threads:\s*1(?:[^0-9]|$)|toThreadArg\([^)]*,\s*["']1["']\)/, (file) => file.endsWith("browser-format-matrix.ts")),
-  ];
-  return violations;
+  return GUARDS.map((guard) => ({ ...guard, hits: matches(root, guard.prefix, guard.pattern, guard.excluded) })).filter((guard) => guard.hits.length);
 }
 
 export function main(root = process.cwd()) {
-  const violations = checkThreadGuards(root);
-  if (violations.length) {
-    process.stdout.write(`${violations.join("\n")}\n`);
-    process.stderr.write("threaded WASM execution was suppressed\n");
-    return 1;
+  const failed = checkThreadGuards(root);
+  for (const guard of failed) {
+    process.stdout.write(`${guard.hits.join("\n")}\n`);
+    process.stderr.write(`${guard.message}\n`);
   }
-  return 0;
+  return failed.length ? 1 : 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();

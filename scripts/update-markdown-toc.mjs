@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
@@ -16,9 +17,17 @@ export const DEFAULT_FILES = [
   "scripts/wasm/README.md",
 ];
 
-export function tocFiles(files) {
+const isDirectory = (file) => {
+  try { return statSync(file).isDirectory(); } catch { return false; }
+};
+
+// doctoc only filters by extension when it walks a directory; an explicit file
+// argument is rewritten whatever it is. lefthook hands us the staged paths under
+// docs/, so without this guard a staged docs/*.json gets TOC markers appended
+// and stops being valid JSON.
+export function tocFiles(files, directory = isDirectory) {
   const readme = files.includes("README.md");
-  const other = files.filter((file) => file !== "README.md" && (file.endsWith(".md") || file === "docs"));
+  const other = files.filter((file) => file !== "README.md" && (file.endsWith(".md") || directory(file)));
   return { other, readme };
 }
 
