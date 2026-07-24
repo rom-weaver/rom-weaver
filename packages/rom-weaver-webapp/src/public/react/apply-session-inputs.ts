@@ -84,6 +84,24 @@ const getRomTypeFromProgressDetails = (details: Record<string, unknown>): Staged
   return platform || discFormat ? { discFormat, platform } : undefined;
 };
 
+// The early `probe-variant-plan` event (Rust) carries the labels of every checksum variant the ROM
+// will produce, known once the header is scanned - before the checksums finish. Reserving one checks
+// group per entry keeps the staging card from growing variant-by-variant as values stream in.
+const getVariantPlanFromProgressDetails = (
+  details: Record<string, unknown>,
+): StagedInputInfo["checksumVariantPlan"] => {
+  const plan = details.checksum_variant_plan;
+  if (!Array.isArray(plan)) return undefined;
+  const entries = plan
+    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === "object")
+    .map((entry) => ({ id: entry.id, label: entry.label }))
+    .filter(
+      (entry): entry is { id: string; label: string } =>
+        typeof entry.id === "string" && typeof entry.label === "string",
+    );
+  return entries.length ? entries : undefined;
+};
+
 // Rust's `is_rom` verdict from the same probe-manifest event (`is_rom = has_rom || !has_patch`): an
 // archive that carries only patches reports false, which the unified drop uses to move it from the ROM
 // bucket to the patch bucket. Only container/archive sources emit this manifest, so a bare ROM yields
@@ -103,6 +121,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
     details.wasDecompressed === true || progressStage === "checksum" || progressStage === "decompress";
   return {
     archiveName: getArchiveNameFromProgressDetails(details),
+    checksumVariantPlan: getVariantPlanFromProgressDetails(details),
     chdMode: typeof details.chdMode === "string" ? details.chdMode : undefined,
     decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
     fileName: getInputDisplayFileName(fileName, isPreparedFileName),

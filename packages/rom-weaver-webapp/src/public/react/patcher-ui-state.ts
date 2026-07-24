@@ -1,5 +1,5 @@
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
-import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant, ChecksumVariantPlanEntry, RomTypeTag } from "../../types/checksum.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -58,6 +58,9 @@ type RomInputInfoState = {
   md5: string;
   sha1: string;
   checksumVariants?: ChecksumVariant[];
+  /** Early variant reservation from Rust's `probe-variant-plan`, present during staging before the
+   * checksums land, so the checks skeleton can reserve one group per eventual variant. */
+  checksumVariantPlan?: ChecksumVariantPlanEntry[];
   romInfo: string;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
@@ -295,10 +298,17 @@ const normalizeRomInputInfo = (
         (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
       )
     : undefined;
+  const checksumVariantPlan = Array.isArray(source.checksumVariantPlan)
+    ? source.checksumVariantPlan.filter(
+        (entry): entry is ChecksumVariantPlanEntry =>
+          isRecord(entry) && typeof entry.id === "string" && typeof entry.label === "string",
+      )
+    : undefined;
   return {
     archiveName: typeof source.archiveName === "string" ? source.archiveName : "",
     checksumsExpanded: source.checksumsExpanded !== false,
     checksumTiming: typeof source.checksumTiming === "string" ? source.checksumTiming : fallbackChecksumTiming,
+    checksumVariantPlan: checksumVariantPlan?.length ? checksumVariantPlan : undefined,
     checksumVariants,
     crc32: typeof source.crc32 === "string" ? source.crc32 : "",
     fileName: typeof source.fileName === "string" ? source.fileName : "",

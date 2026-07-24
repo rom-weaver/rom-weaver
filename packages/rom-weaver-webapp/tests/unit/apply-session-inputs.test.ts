@@ -34,6 +34,36 @@ describe("getProgressStagedInputInfo romType from probe-manifest", () => {
   });
 });
 
+describe("getProgressStagedInputInfo checksumVariantPlan from probe-variant-plan", () => {
+  it("surfaces the planned variant ids/labels from the early plan event", () => {
+    const info = getProgressStagedInputInfo(
+      event({
+        checksum_variant_plan: [
+          { id: "raw", label: "Raw" },
+          { id: "remove-header", label: "Remove header" },
+        ],
+        sourceId: "input-1",
+      }),
+    );
+    expect(info.checksumVariantPlan).toEqual([
+      { id: "raw", label: "Raw" },
+      { id: "remove-header", label: "Remove header" },
+    ]);
+  });
+
+  it("drops malformed plan entries and undefined-s an empty plan", () => {
+    const info = getProgressStagedInputInfo(
+      event({ checksum_variant_plan: [{ id: "raw" }, { label: "no id" }, 5], sourceId: "input-1" }),
+    );
+    expect(info.checksumVariantPlan).toBeUndefined();
+  });
+
+  it("leaves checksumVariantPlan undefined for events without a plan", () => {
+    const info = getProgressStagedInputInfo(event({ sourceId: "input-1", stage: "checksum" }));
+    expect(info.checksumVariantPlan).toBeUndefined();
+  });
+});
+
 describe("getProgressStagedInputInfo isRom from probe-manifest", () => {
   it("surfaces is_rom=true for a ROM-bearing archive (stays in the ROM bucket)", () => {
     const info = getProgressStagedInputInfo(event({ probe_manifest: { is_rom: true }, sourceId: "input-1" }));
