@@ -6,6 +6,7 @@ import { createWebappRootController } from "./webapp-controller.ts";
 import { createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { WebappRoot } from "./webapp-root.tsx";
+import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 
 /**
  * Build-time prerender of the landing shell: the exact markup the client's
@@ -14,6 +15,10 @@ import { WebappRoot } from "./webapp-root.tsx";
  * #webapp-root and the browser can paint the real shell before the bundle
  * executes. The client keeps createRoot (replace, not hydrate); see
  * renderWebappRoot in webapp.ts.
+ *
+ * Workflow forms are lazy route chunks, so the requested tab's module is
+ * resolved first - renderToString cannot suspend, and a preloaded route renders
+ * synchronously.
  */
 
 const noop = () => undefined;
@@ -45,9 +50,10 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onTrimSourceChange: noop,
 });
 
-const renderLandingShellHtml = (
+const renderLandingShellHtml = async (
   currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator"> = "patcher",
-): string => {
+): Promise<string> => {
+  await preloadWorkflowRoute(currentView);
   const controller = createWebappRootController({
     onApplySettings: noop,
     onCreatorViewRequested: () => true,

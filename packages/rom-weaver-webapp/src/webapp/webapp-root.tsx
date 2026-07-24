@@ -1,5 +1,5 @@
 import { GitCompare, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -10,16 +10,17 @@ import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
-import type { PageFileDrop } from "../public/react/index.tsx";
-import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
+import type { PageFileDrop } from "../public/react/public-types.ts";
+// Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
+// every workflow form, so a static import of it pulls all four route chunks
+// back into the entry and defeats the split below.
+import { RomWeaverSettingsProvider } from "../public/react/settings-context.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
-import { LogDialog } from "./components/log-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
-import { ToolsForm } from "./components/tools-form.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -28,6 +29,13 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
+import {
+  ApplyPatchRoute,
+  CreatePatchRoute,
+  preloadIdleWorkflowRoutes,
+  ToolsRouteForm,
+  TrimPatchRoute,
+} from "./workflow-routes.tsx";
 import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
@@ -37,6 +45,10 @@ const WORKFLOW_TABS = [
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
+
+// The trace inspector is the single largest dialog in the bundle and opens from
+// a masthead button, so it only downloads once someone asks for it.
+const LogDialog = lazy(() => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog })));
 
 const logger = createLogger("webapp-root");
 
@@ -199,6 +211,9 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   useEffect(() => {
     void preloadBrowserRuntime({ threads });
   }, [threads]);
+  // Warm the tabs the visitor did not land on once the main thread is idle, so
+  // a tab switch never waits on a chunk request.
+  useEffect(() => preloadIdleWorkflowRoutes(state.currentView), [state.currentView]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -314,7 +329,10 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
         id={`panel-${view}`}
         role="tabpanel"
       >
-        <div className="workflow-body">{form}</div>
+        <div className="workflow-body">
+          {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
+          <Suspense fallback={null}>{form}</Suspense>
+        </div>
       </section>
     ) : null;
 
@@ -364,7 +382,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
           <main className="workbench">
             {workflowPanel(
               "patcher",
-              <ApplyPatchForm
+              <ApplyPatchRoute
                 bundleSession={bundleSession}
                 onBundlePackageChange={actions.onPatcherBundlePackageChange}
                 onInputsChange={actions.onPatcherInputsChange}
@@ -376,7 +394,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             )}
             {workflowPanel(
               "creator",
-              <CreatePatchForm
+              <CreatePatchRoute
                 onModifiedChange={actions.onCreatorModifiedChange}
                 onOriginalChange={actions.onCreatorOriginalChange}
                 onPatchTypeChange={actions.onCreatorPatchTypeChange}
@@ -386,7 +404,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             )}
             {workflowPanel(
               "trim",
-              <TrimPatchForm
+              <TrimPatchRoute
                 onOutputFormatChange={actions.onTrimOutputFormatChange}
                 onSettingsChange={actions.onTrimSettingsChange}
                 onSourceChange={actions.onTrimSourceChange}
@@ -395,18 +413,22 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             )}
             {workflowPanel(
               "tools",
-              <ToolsForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
+              <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
             )}
             <DropVeil />
           </main>
         </div>
         <ActivityFinishMarker />
-        <LogDialog
-          level={state.settings.logLevel}
-          onClose={() => setLogOpen(false)}
-          onLevelChange={actions.onLogLevelChange}
-          open={logOpen}
-        />
+        {logOpen ? (
+          <Suspense fallback={null}>
+            <LogDialog
+              level={state.settings.logLevel}
+              onClose={() => setLogOpen(false)}
+              onLevelChange={actions.onLogLevelChange}
+              open={logOpen}
+            />
+          </Suspense>
+        ) : null}
         <Modal
           headerActions={
             <>

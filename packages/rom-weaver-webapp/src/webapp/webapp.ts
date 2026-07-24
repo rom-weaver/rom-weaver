@@ -24,6 +24,7 @@ import {
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
+import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
@@ -169,6 +170,13 @@ const webappController = createWebappRootController({
 });
 applySettingsToRuntime(webappController.getState().settings);
 logger.info("Browser environment", collectBrowserInfo());
+
+// The landing tab's workflow form is its own chunk. Start it here, at module
+// evaluation, so it downloads while the boot yield below lets the prerendered
+// shell paint; the first mount then renders the real form synchronously instead
+// of committing a Suspense fallback over the shell the browser just painted.
+// A failed load resolves anyway - the route's Suspense boundary owns the error.
+const initialWorkflowRoute = preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
@@ -332,8 +340,10 @@ const renderWebappRoot = (): undefined => {
       firstMountYield = "scheduled";
       requestAnimationFrame(() => {
         setTimeout(() => {
-          firstMountYield = "done";
-          renderWebappRoot();
+          void initialWorkflowRoute.then(() => {
+            firstMountYield = "done";
+            renderWebappRoot();
+          });
         }, 0);
       });
     }

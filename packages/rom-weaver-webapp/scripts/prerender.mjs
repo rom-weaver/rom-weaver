@@ -18,7 +18,9 @@ const forceDeterministicNavigator = () => {
 const renderLandingShellWithServer = async (server, view = "patcher") => {
   forceDeterministicNavigator();
   const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
-  return entry.renderLandingShellHtml(view);
+  // renderLandingShellHtml resolves the requested tab's lazy route chunk before
+  // rendering, so it is async - renderToString cannot suspend.
+  return await entry.renderLandingShellHtml(view);
 };
 
 // Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's

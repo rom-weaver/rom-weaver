@@ -259,7 +259,7 @@ const stampChannelIdentity = (channel, channelLabel) => ({
 
 const PRERENDER_ROOT = (shell) => `<div id="webapp-root" aria-busy="true">${shell}</div>`;
 
-const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells) => {
+const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -286,7 +286,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells) => {
       // SoftwareApplication markup the /weave route gets.
       const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher);
       fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
-      const creatorHtml = indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator")));
+      const creatorHtml = withRoutePreloadLinks(
+        indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator"))),
+        routePreloadLinks.get("creator"),
+      );
       const createHtml = injectLdJson(
         createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.creator,
@@ -295,8 +298,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells) => {
       for (const [slug, html] of [
         ["weave", weaveHtml],
         ["create", createHtml],
-        ["trim", makeBetaRouteNoindex(indexHtml, "trim")],
-        ["tools", makeBetaRouteNoindex(indexHtml, "tools")],
+        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
+        ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
@@ -542,6 +545,84 @@ const prerenderWebappShell = (prerenderedShells) => ({
   },
 });
 
+// Workflow forms are lazy route chunks (src/webapp/workflow-routes.tsx), so
+// without help the landing tab's chunk is only requested once the entry bundle
+// has downloaded, parsed and evaluated - one serialized round trip added to the
+// exact path the prerendered shell exists to speed up. Each emitted route page
+// therefore carries modulepreload links for its own route chunks, so they
+// download alongside the entry instead of after it.
+//
+// The links live between markers so writeWebappStaticAssets can swap the
+// patcher set baked into index.html for the set belonging to the route page it
+// is deriving.
+const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
+const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
+
+const WORKFLOW_ROUTE_MODULES = {
+  creator: "src/public/react/create-patch-form.tsx",
+  patcher: "src/public/react/apply-patch-form.tsx",
+  tools: "src/webapp/components/tools-form.tsx",
+  trim: "src/public/react/trim-form.tsx",
+};
+
+const findChunkForModule = (bundle, moduleSuffix) =>
+  Object.keys(bundle).find((fileName) => {
+    const chunk = bundle[fileName];
+    if (chunk.type !== "chunk") return false;
+    return (chunk.moduleIds || []).some((id) => id.split("?")[0].replace(/\\/g, "/").endsWith(moduleSuffix));
+  });
+
+const collectStaticImportClosure = (bundle, entryFileNames) => {
+  const seen = new Set();
+  const pending = [...entryFileNames];
+  while (pending.length > 0) {
+    const fileName = pending.pop();
+    if (!fileName || seen.has(fileName)) continue;
+    const chunk = bundle[fileName];
+    if (!chunk || chunk.type !== "chunk") continue;
+    seen.add(fileName);
+    for (const imported of chunk.imports || []) pending.push(imported);
+  }
+  return seen;
+};
+
+const renderRoutePreloadLinks = (fileNames) =>
+  fileNames.map((fileName) => `  <link rel="modulepreload" crossorigin href="./${fileName}" />`).join("\n");
+
+const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
+  apply: "build",
+  name: "rom-weaver-preload-workflow-route-chunks",
+  transformIndexHtml: {
+    handler(html, ctx) {
+      const bundle = ctx.bundle;
+      if (!bundle) return html;
+      const entryFileName = html.match(/<script[^>]*\ssrc="\.\/([^"]+\.js)"/)?.[1];
+      if (!entryFileName) throw new Error("rom-weaver-preload-workflow-route-chunks: entry script not found");
+      const alreadyLoaded = collectStaticImportClosure(bundle, [entryFileName]);
+      for (const [view, moduleSuffix] of Object.entries(WORKFLOW_ROUTE_MODULES)) {
+        const routeChunk = findChunkForModule(bundle, moduleSuffix);
+        if (!routeChunk)
+          throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for ${moduleSuffix}`);
+        const routeFiles = [...collectStaticImportClosure(bundle, [routeChunk])]
+          .filter((fileName) => !alreadyLoaded.has(fileName))
+          .sort();
+        routePreloadLinks.set(view, renderRoutePreloadLinks(routeFiles));
+      }
+      return html.replace(
+        "</head>",
+        `${ROUTE_PRELOAD_MARKER_START}\n${routePreloadLinks.get("patcher")}\n  ${ROUTE_PRELOAD_MARKER_END}\n  </head>`,
+      );
+    },
+    order: "post",
+  },
+});
+
+const withRoutePreloadLinks = (html, links) =>
+  html.replace(
+    new RegExp(`${ROUTE_PRELOAD_MARKER_START}[\\s\\S]*?${ROUTE_PRELOAD_MARKER_END}`),
+    `${ROUTE_PRELOAD_MARKER_START}\n${links}\n  ${ROUTE_PRELOAD_MARKER_END}`,
+  );
+
 // Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
 // fetched on demand via unicode-range and is wasteful to preload eagerly.
 const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
@@ -588,6 +669,7 @@ export default defineConfig(({ command }) => {
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
   };
   const prerenderedShells = new Map();
+  const routePreloadLinks = new Map();
 
   return {
     assetsInclude: ["**/*.wasm"],
@@ -637,7 +719,8 @@ export default defineConfig(({ command }) => {
       stampChannelIdentity(appChannel, appChannelLabel),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
-      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells),
+      preloadWorkflowRouteChunks(routePreloadLinks),
+      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
       writePagesBrotliSidecars(),

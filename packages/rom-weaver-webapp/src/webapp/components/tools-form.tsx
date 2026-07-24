@@ -8,7 +8,7 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-transition.ts";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
-import type { PageFileDrop } from "../../public/react/index.tsx";
+import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
 const TOOLS_ACTIVITY_KEY = "tools";
@@ -58,13 +58,12 @@ const StagedInputStep = ({
   </StepSection>
 );
 
-const ToolsForm = ({
-  onSessionChange,
-  pageDrop,
-}: {
+type ToolsFormProps = {
   onSessionChange: (active: boolean) => void;
   pageDrop?: PageFileDrop | null;
-}) => {
+};
+
+const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
   const [rom, setRom] = useState<File | null>(null);
   const [patch, setPatch] = useState<File | null>(null);
   const [outputName, setOutputName] = useState("restored-rom.bin");
@@ -281,3 +280,4 @@ const ToolsForm = ({
 };
 
 export { ToolsForm };
+export type { ToolsFormProps };
