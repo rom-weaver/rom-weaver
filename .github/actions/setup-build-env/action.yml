@@ -8,7 +8,7 @@ description: >-
 inputs:
   tools:
     description: >-
-      Space-separated short names of the .mise.toml tools this job needs
+      Space-separated short names of the .config/mise.toml tools this job needs
       (node, rust, binaryen, cargo-deny, cargo-machete,
       cargo-semver-checks, actionlint, shellcheck, hadolint). Everything else
       is disabled. An unknown name fails the job. Empty installs every pinned
@@ -76,7 +76,7 @@ runs:
         WANTED: ${{ inputs.tools }}
       run: |
         # shellcheck disable=SC2086 # deliberate word-splitting of the input list
-        disable=$(scripts/ci/mise-disable-tools.sh .mise.toml $WANTED)
+        disable=$(scripts/ci/mise-disable-tools.sh .config/mise.toml $WANTED)
         echo "MISE_DISABLE_TOOLS=$disable" >> "$GITHUB_ENV"
         echo "installing: $WANTED"
         echo "disabled:   ${disable:-(none)}"
@@ -86,7 +86,7 @@ runs:
       with:
         install: true
 
-    # mise pins the toolchain (.mise.toml [tools] rust) and exports
+    # mise pins the toolchain (.config/mise.toml [tools] rust) and exports
     # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
     # than to whatever rustup defaults to - `mise exec` supplies the pin.
     - name: Install Rust components
@@ -99,7 +99,7 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
-    # sccache is deliberately absent: .mise.toml resolves RUSTC_WRAPPER to
+    # sccache is deliberately absent: .config/mise.toml resolves RUSTC_WRAPPER to
     # whatever is on PATH and leaves it empty otherwise, and nothing here
     # persists ~/.cache/sccache between runs. Installing it would reintroduce
     # the wrapper overhead for a cache that starts empty every time;
@@ -187,7 +187,7 @@ runs:
       run: echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-${WASI_SDK_SLUG}" >> "$GITHUB_ENV"
 
     # Two exact pins, resolved once and used as cache keys below. node comes
-    # from mise (.mise.toml [tools] node) and decides what `npm ci` produces;
+    # from mise (.config/mise.toml [tools] node) and decides what `npm ci` produces;
     # playwright is pinned without a range in the webapp manifest and decides
     # which browser builds `playwright install` would fetch.
     - name: Resolve pinned tool versions

@@ -56,7 +56,7 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser WASM layer in the webapp package: OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.mise.toml` (`mise run build-wasm`). |
+| `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.config/mise.toml` (`mise run build-wasm`). |
 
 Crate dependency flow is one-directional: `core` ← format crates
 (`checksum`/`containers`/`patches`) ← `cli`. Libarchive is an internal
@@ -414,7 +414,7 @@ npm --prefix packages/rom-weaver-webapp run dev|build
 ```
 
 The WASM build needs a WASI SDK (v33+, auto-detected; see
-`scripts/wasm/detect-wasi-sdk.sh` and the `build-wasm` task in `.mise.toml`). Generated wasm artifacts in
+`scripts/wasm/detect-wasi-sdk.sh` and the `build-wasm` task in `.config/mise.toml`). Generated wasm artifacts in
 `packages/rom-weaver-webapp/src/wasm` are gitignored; the generated *TypeScript*
 files are
 committed and drift-checked.

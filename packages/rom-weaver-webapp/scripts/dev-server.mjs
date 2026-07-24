@@ -53,7 +53,7 @@ const MIME_TYPES = {
 };
 const WASM_WATCH_PATHS = [
   path.join(REPO_ROOT, ".cargo"),
-  path.join(REPO_ROOT, ".mise.toml"),
+  path.join(REPO_ROOT, ".config/mise.toml"),
   path.join(REPO_ROOT, "Cargo.lock"),
   path.join(REPO_ROOT, "Cargo.toml"),
   path.join(REPO_ROOT, "crates"),
