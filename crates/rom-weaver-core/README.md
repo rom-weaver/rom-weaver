@@ -73,7 +73,7 @@ yourself.
 
 ## Documentation
 
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md) — crate graph, registry traits, threading model.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): crate graph, registry traits, threading model.
 - [Documentation index](https://github.com/rom-weaver/rom-weaver/blob/main/docs/README.md)
 
 ## License

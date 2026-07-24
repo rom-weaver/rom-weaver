@@ -77,13 +77,13 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats) — the full container, codec, and capability tables.
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md) — registry traits and the threading model.
-- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/vendor-code.md) — what is vendored here and why.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full container, codec, and capability tables.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): registry traits and the threading model.
+- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/vendor-code.md): what is vendored here and why.
 
 ## License
 
 Copyright (C) Brandon Casey. Licensed under
 [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
-Bundled third-party components — libarchive, the inlined `nod` and `xdvdfs`
-sources, and the C compression libraries — retain their own licenses.
+Bundled third-party components retain their own licenses: libarchive, the
+inlined `nod` and `xdvdfs` sources, and the C compression libraries.

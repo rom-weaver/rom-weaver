@@ -53,7 +53,7 @@ See [`src/xdvdfs`](#xdvdfs-inlined-into-rom-weaver-containers) below.
 
 Everything else that was once vendored has gone back upstream: `qbsdiff` and
 `chd` now come from crates.io, and the `akv` wrapper was removed outright. That
-is the preferred outcome whenever upstream can serve the need — inlining is the
+is the preferred outcome whenever upstream can serve the need. Inlining is the
 fallback for when it cannot, and a published fork is the last resort.
 
 No vendored dependency has its own `rom-weaver-*` package.
@@ -148,7 +148,7 @@ upstream's `LICENSE` beside it, and is re-exported as
 
 The published 0.8.3 release defines `write = ["std", "arrayvec", "wax"]`, so
 using it pulls in `wax` and with it `nom` 7, `regex`, `pori`, `const_format`,
-and `itertools` — six crates for a glob-remap module this project never calls.
+and `itertools`: six crates for a glob-remap module this project never calls.
 
 Upstream `main` **already fixes this**, moving `wax` behind its own `remap`
 feature:
@@ -188,7 +188,7 @@ Once it does not, the swap is four steps:
    Then `xdvdfs.workspace = true` in `crates/rom-weaver-containers/Cargo.toml`.
 3. In `crates/rom-weaver-containers/src/lib.rs`, replace `pub mod xdvdfs;` with
    `pub use ::xdvdfs;`, and drop the `extern crate alloc;` line above the
-   `use std::{…}` block.
+   `use std::{...}` block.
 4. Remove the dependencies that existed only for the inlined module from
    `crates/rom-weaver-containers/Cargo.toml` and the root
    `[workspace.dependencies]`: `arrayvec`, `async-trait`, `bincode`,
@@ -196,7 +196,7 @@ Once it does not, the swap is four steps:
    `rand` dev-dependency. Drop the `[package.metadata.cargo-machete]`
    `async-trait` entry with them.
 
-Call sites do not change. `rom_weaver_containers::xdvdfs::…` keeps working in
+Call sites do not change. `rom_weaver_containers::xdvdfs::...` keeps working in
 `rom-weaver-cli` and `cli_smoke`, and the internal paths (`blockdev`, `layout`,
 `read`, `write::fs`, `write::img`) match upstream's layout.
 
@@ -207,7 +207,7 @@ crate it falls outside that scope and the ignore can likely go.
 
 ### Local changes against 0.8.3
 
-The module is **not** a verbatim copy — `#![no_std]` and `#[cfg(feature = "…")]`
+The module is **not** a verbatim copy. `#![no_std]` and `#[cfg(feature = "...")]`
 are crate-level concepts that cannot survive being moved into a module. The
 deltas are listed at the top of `src/xdvdfs/mod.rs`; in short:
 
@@ -227,7 +227,7 @@ One coupling to know about: `handlers/xiso.rs` matches `ProgressInfo`
 exhaustively with no `_` arm. rustc suppresses the unreachable-pattern lint for
 foreign enums so upstream can add variants, but not for local ones. A future
 upstream version that adds a variant will therefore be a compile error rather
-than a silent no-op — which is the safer failure, but it is new.
+than a silent no-op, which is the safer failure, but it is new.
 
 ## Validate after any vendor change
 

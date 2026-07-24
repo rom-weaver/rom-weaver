@@ -285,12 +285,13 @@ impl CliApp {
 
         if args.bundle_rom.is_some() && args.rom.is_none() {
             return Err(RomWeaverError::Validation(
-                "--bundle-rom requires --rom so checks describe the logical ROM bytes".to_string(),
+                "--bundle-rom requires --input so the recorded checksums describe the real ROM"
+                    .to_string(),
             ));
         }
 
         if args.no_bundle_rom && args.rom.is_none() {
-            warnings.push("--no-bundle-rom ignored: no local --rom given".to_string());
+            warnings.push("--no-bundle-rom ignored: no local ROM given with --input".to_string());
         }
         // Trusted rom checksums/size from a prior staging pass, so export skips
         // re-hashing the prepared leaf. `algo=hex` tokens seed the rom checks; a
@@ -315,7 +316,9 @@ impl CliApp {
         let rom = match (&args.rom, &args.rom_url) {
             (None, None) => {
                 if args.rom_name.is_some() {
-                    warnings.push("--rom-name ignored: no rom source given".to_string());
+                    warnings.push(
+                        "--rom-name ignored: no ROM given with --input or --rom-url".to_string(),
+                    );
                 }
                 None
             }

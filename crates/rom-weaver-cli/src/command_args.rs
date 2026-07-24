@@ -28,6 +28,108 @@ filter_accessors!(PatchApplyCommand);
 filter_accessors!(PatchValidateCommand);
 filter_accessors!(BundleParseCommand);
 
+/// `patch apply` and its top-level `weave` spelling are the same command, so
+/// they share one set of help strings. Without this the alias would show a
+/// shorter help than the command it aliases.
+pub const PATCH_APPLY_ABOUT: &str = "Apply one or more patches to a ROM, in order";
+
+pub const PATCH_APPLY_LONG_ABOUT: &str = "\
+Apply one or more patches to a ROM, in order.
+
+`rom-weaver weave` runs this same command under a shorter name, and is what
+most of the examples use.
+
+Repeat --patch once per patch. They run left to right, each one on the result
+of the last. --input takes a plain ROM, an archive or disc image (the ROM
+inside is found for you), or a rom-weaver-bundle.json that already names the
+ROM, the patches, and the output.
+
+The result is compressed by default, into whatever container the --output
+extension names. Pass --no-compress for a plain ROM file.
+
+Patch formats: IPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF,
+HDiffPatch/HPatchZ, APS (N64), APSGBA, RUP, PPF, PAT/FFP, EBP, BDF/BSDIFF40,
+BSP, MOD/PMSR, DLDI, DPS, and DCP (Dreamcast).
+
+Not supported: PDS; NINJA1 (recognized, but cannot be applied); HDiffPatch
+directory patches, HDIFF19 (single-file .hdiff and .hpatchz are fine).
+
+DCP needs a Dreamcast .cue or .gdi input. It rebuilds the whole disc, so it
+cannot be combined with other patches or with the header and checksum options.";
+
+pub const PATCH_APPLY_AFTER_HELP: &str = "\
+Examples:
+  # One patch, plain ROM out
+  rom-weaver weave --input game.sfc --patch hack.bps \\
+    --output hacked.sfc --no-compress
+
+  # Two patches in order, straight out of and back into a zip
+  rom-weaver weave --input game.zip \\
+    --patch translation.bps --patch fixes.ips --output hacked.zip
+
+  # Replay someone else's published recipe
+  rom-weaver weave --bundle rom-weaver-bundle.json --input game.sfc
+
+  # Check the result against a checksum the patch author published
+  rom-weaver weave --input game.sfc --patch hack.bps \\
+    --output hacked.sfc --no-compress \\
+    --expect-out sha1=0123456789abcdef0123456789abcdef01234567";
+
+/// Shared wording for the archive-lookup flags. Every command that can reach
+/// inside a container takes the same four, so they read the same everywhere.
+pub const SELECT_HELP: &str =
+    "Pick which file inside the archive to use, by exact name, prefix, or glob (repeatable)";
+
+pub const FILTER_HELP: &str = "Consider only files that look like a rom or a patch, judged by extension (repeatable, comma-separable)";
+
+pub const NO_IGNORE_HELP: &str = "Also consider files normally skipped inside archives: readmes, images, checksum sidecars, and OS clutter such as .DS_Store";
+
+pub const THREADS_HELP: &str =
+    "How many threads to use at most. auto uses every core; a format may still use fewer";
+
+/// `compress` and `patch apply` both choose an output container, so the format
+/// and codec flags say the same thing in both places.
+pub const FORMAT_HELP: &str =
+    "Output format, such as zip, 7z, chd, rvz, or z3ds [default: from the --output extension]";
+
+pub const FORMAT_LONG_HELP: &str = "\
+Output format, such as zip, 7z, chd, rvz, or z3ds.
+
+Normally you do not need this: the format comes from the --output extension.
+Pass it when the output name has no usable extension. If it disagrees with the
+extension, this flag wins and a warning is printed.
+
+Common alternate spellings are accepted, so `7zip` works as well as `7z` and
+`3ds` as well as `z3ds`. The CLI guide lists every alias.";
+
+pub const CODEC_HELP: &str =
+    "Compression method to use, as codec or codec:level (repeatable, comma-separable)";
+
+pub const CODEC_LONG_HELP: &str = "\
+Compression method to use, written as codec or codec:level.
+
+Each format has its own codecs, and each picks a sensible one on its own, so
+this is only for overriding that choice. CHD takes a list, tried in order:
+
+  --codec cdzs:19,cdzl,cdfl
+
+Without :level, a codec follows the --level profile.
+
+Only the codec names a format actually supports are accepted; there are no
+cross-format synonyms. The CLI guide lists them per format.";
+
+/// `--assume-in` means the same thing on apply, validate, and create: trust
+/// this checksum rather than reading the file to compute it.
+pub const ASSUME_IN_HELP: &str = "Take this checksum on trust instead of reading the ROM to compute it, as in crc32=1234abcd (repeatable, comma-separable)";
+
+pub const ASSUME_IN_LONG_HELP: &str = "\
+Take this checksum on trust instead of reading the ROM to compute it, as in
+crc32=1234abcd. Repeatable and comma-separable.
+
+This is a speed option for scripts that already know the checksum: it skips a
+full read of a large ROM. It does not verify anything. To check a ROM against a
+checksum, use --expect-in.";
+
 const fn default_true() -> bool {
     true
 }
@@ -60,7 +162,7 @@ pub struct ProbeCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "File or container to inspect, or - to read from stdin"
+            help = "File to identify. Use - to read from stdin"
         )
     )]
     pub input: PathBuf,
@@ -69,7 +171,7 @@ pub struct ProbeCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Select an extracted probe payload by exact name, prefix, or glob (repeatable)"
+            help = SELECT_HELP
         )
     )]
     #[serde(default)]
@@ -81,7 +183,7 @@ pub struct ProbeCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Keep only payload candidates of the given class during automatic extraction: rom, patch, or both (repeatable, comma-separable)"
+            help = FILTER_HELP
         )
     )]
     #[serde(default)]
@@ -89,21 +191,12 @@ pub struct ProbeCommand {
     pub filter: Vec<FilterKind>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable container auto-extract and probe the source bytes directly"
-        )
+        arg(long, help = "Do not look inside archives; identify the file itself")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default ignore filtering during probe container payload resolution"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
@@ -119,7 +212,7 @@ pub struct ExtractCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Container or disc image to extract"
+            help = "Archive or disc image to unpack"
         )
     )]
     pub input: PathBuf,
@@ -128,7 +221,7 @@ pub struct ExtractCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Select extracted entries by exact name, prefix, or glob (repeatable). Examples: --select game.disc02.cue --select 'game.disc0?.bin'"
+            help = "Extract only these files, by exact name, prefix, or glob (repeatable). For example: --select 'game.disc0?.bin'"
         )
     )]
     #[serde(default)]
@@ -140,7 +233,7 @@ pub struct ExtractCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Extract only entries (and nested containers) of the given class: rom, patch, or both (repeatable, comma-separable)"
+            help = "Extract only files that look like a rom or a patch, judged by extension (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -152,7 +245,7 @@ pub struct ExtractCommand {
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Directory for extracted files"
+            help = "Directory to write the extracted files into"
         )
     )]
     pub output: PathBuf,
@@ -160,19 +253,13 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
+            help = "Write a CD-format CHD as a CUE plus one BIN per track (*.trackNN.bin), rather than one merged BIN"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub split_bin: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default common-file ignore filtering during container extraction"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
@@ -180,7 +267,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "no-nested-extract",
-            help = "Do not recursively extract nested containers emitted by this extraction"
+            help = "Stop after one layer; leave any archive found inside the input packed"
         )
     )]
     #[serde(default)]
@@ -190,7 +277,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "force",
-            help = "Overwrite destination output files that already exist (default: fail if any exist)"
+            help = "Overwrite files already in the output directory (without this, extraction stops instead)"
         )
     )]
     #[serde(default)]
@@ -202,7 +289,7 @@ pub struct ExtractCommand {
             long = "checksum",
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "Compute an output checksum while extracting; repeat or comma-separate for multiple algorithms"
+            help = "Also hash every extracted file (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -214,7 +301,7 @@ pub struct ExtractCommand {
             long = "checksum-rom",
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "Like --checksum but only ROM-like outputs are hashed (sidecar/non-ROM entries are skipped); safe to always pass. Ignored if --checksum is also set"
+            help = "Like --checksum, but hash only the ROMs and skip sidecar files. Ignored when --checksum is also given"
         )
     )]
     #[serde(default)]
@@ -224,7 +311,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Fold container/platform probe metadata into the result and fail when a single-payload source resolves to no known platform"
+            help = "Also report the format and platform of what was extracted, and fail if a lone payload matches no known platform"
         )
     )]
     #[serde(default)]
@@ -237,7 +324,7 @@ pub struct ExtractCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -255,7 +342,7 @@ pub struct ChecksumCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "File or container payload to checksum, or - to read from stdin"
+            help = "File to hash. Use - to read from stdin"
         )
     )]
     pub input: PathBuf,
@@ -267,7 +354,7 @@ pub struct ChecksumCommand {
             required = true,
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "Checksum algorithm; repeat or comma-separate for multiple algorithms"
+            help = "Which checksum to compute: crc32, md5, sha1, sha256, blake3, crc32c, crc16, or adler32 (repeatable, comma-separable)"
         )
     )]
     pub algo: Vec<String>,
@@ -276,7 +363,7 @@ pub struct ChecksumCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Select a container payload by exact name, prefix, or glob (repeatable)"
+            help = SELECT_HELP
         )
     )]
     #[serde(default)]
@@ -288,7 +375,7 @@ pub struct ChecksumCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Keep only payload candidates of the given class during checksum auto-extract: rom, patch, or both (repeatable, comma-separable)"
+            help = FILTER_HELP
         )
     )]
     #[serde(default)]
@@ -296,21 +383,12 @@ pub struct ChecksumCommand {
     pub filter: Vec<FilterKind>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable container auto-extract and checksum the source bytes directly"
-        )
+        arg(long, help = "Do not look inside archives; hash the file itself")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default ignore filtering during checksum container payload resolution"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
@@ -318,7 +396,7 @@ pub struct ChecksumCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Disable automatic trim-boundary checksum fixes for trim-eligible ROMs"
+            help = "Skip the extra checksums computed for how a trimmable ROM would hash trimmed or untrimmed"
         )
     )]
     #[serde(default)]
@@ -329,7 +407,7 @@ pub struct ChecksumCommand {
         arg(
             long,
             value_name = "BYTE",
-            help = "Zero-based byte offset at which hashing begins"
+            help = "Start hashing at this byte offset, counting from 0"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -339,7 +417,7 @@ pub struct ChecksumCommand {
         arg(
             long,
             value_name = "BYTES",
-            help = "Number of bytes to hash from --start (defaults to the remaining input)"
+            help = "How many bytes to hash from --start. Defaults to the rest of the file"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -348,7 +426,7 @@ pub struct ChecksumCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Fold platform probe metadata into the result and fail when the checksummed bytes resolve to no known platform"
+            help = "Also report the platform of the hashed bytes, and fail if it matches no known platform"
         )
     )]
     #[serde(default)]
@@ -361,7 +439,7 @@ pub struct ChecksumCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -379,7 +457,7 @@ pub struct IngestCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Dropped file or container to classify"
+            help = "File to sort into ROMs and patches"
         )
     )]
     pub input: PathBuf,
@@ -389,7 +467,7 @@ pub struct IngestCommand {
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Directory for extracted ingest outputs"
+            help = "Directory to write anything unpacked along the way into"
         )
     )]
     pub output: PathBuf,
@@ -398,7 +476,7 @@ pub struct IngestCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Select a payload by exact name, prefix, or glob when an archive carries more than one ROM (repeatable)"
+            help = "Pick which ROM to use when the archive holds more than one, by exact name, prefix, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -421,7 +499,7 @@ pub struct IngestCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Disable default common-file ignore filtering during classification and extraction"
+            help = NO_IGNORE_HELP
         )
     )]
     #[serde(default)]
@@ -431,7 +509,7 @@ pub struct IngestCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "no-nested-extract",
-            help = "Do not recursively extract nested containers emitted while ingesting"
+            help = "Stop after one layer; leave any archive found inside the input packed"
         )
     )]
     #[serde(default)]
@@ -443,7 +521,7 @@ pub struct IngestCommand {
             long = "split-bin",
             num_args = 0..=1,
             default_missing_value = "true",
-            help = "For a multi-track CHD CD, force split per-track BIN (`--split-bin`/`--split-bin true`) or a single merged BIN (`--split-bin false`). Omit to ask the host interactively when the disc offers the choice"
+            help = "For a multi-track CD-format CHD, write one BIN per track (--split-bin) or one merged BIN (--split-bin false). Omit to be asked"
         )
     )]
     #[serde(default)]
@@ -455,7 +533,7 @@ pub struct IngestCommand {
             long = "checksum",
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "ROM checksum algorithm to compute (repeatable, comma-separable); defaults to crc32, md5, sha1 when omitted"
+            help = "Which checksums to compute for each ROM found (repeatable, comma-separable) [default: crc32,md5,sha1]"
         )
     )]
     #[serde(default)]
@@ -468,7 +546,7 @@ pub struct IngestCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -487,7 +565,7 @@ pub struct CompressCommand {
             long = "input",
             required = true,
             value_name = "INPUT",
-            help = "Input file(s) to place in the output container (repeatable)"
+            help = "File to put in the archive; repeat for each one. For a disc image, pass the .cue or .gdi alone and its tracks come along"
         )
     )]
     pub input: Vec<PathBuf>,
@@ -496,14 +574,20 @@ pub struct CompressCommand {
         arg(
             short = 'f',
             long,
-            help = "Output container format (derived from the output extension when omitted; required when the output has no recognizable extension; overrides the extension with a warning when they disagree)"
+            help = FORMAT_HELP,
+            long_help = FORMAT_LONG_HELP
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub format: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(short = 'o', long, value_name = "PATH", help = "Output container path")
+        arg(
+            short = 'o',
+            long,
+            value_name = "PATH",
+            help = "Where to write the archive"
+        )
     )]
     pub output: PathBuf,
     #[cfg_attr(
@@ -512,7 +596,8 @@ pub struct CompressCommand {
             long,
             action = ArgAction::Append,
             value_delimiter = ',',
-            help = "Compression codec override; supports codec[:level]. Repeat or comma-separate --codec for multiple codecs (for example CHD: --codec cdzs[:19],cdzl,cdfl). If :level is omitted, falls back to --level profile."
+            help = CODEC_HELP,
+            long_help = CODEC_LONG_HELP
         )
     )]
     #[serde(default)]
@@ -522,7 +607,7 @@ pub struct CompressCommand {
         long,
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
-        help = "Global compression level profile (min|very-low|low|medium|high|very-high|max)"
+        help = "How hard to compress: min, very-low, low, medium, high, very-high, or max"
     ))]
     #[serde(default = "default_max_compression_level")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -534,7 +619,7 @@ pub struct CompressCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -553,7 +638,7 @@ pub struct TrimCommand {
             long = "input",
             required = true,
             value_name = "INPUT",
-            help = "File, container, or directory to trim (repeatable)"
+            help = "File or folder to trim. Repeat for each one"
         )
     )]
     pub input: Vec<PathBuf>,
@@ -563,7 +648,7 @@ pub struct TrimCommand {
             short = 'o',
             long,
             conflicts_with = "in_place",
-            help = "Destination file for trimmed output (single trim-eligible source only)"
+            help = "Where to write the trimmed file. Only valid with a single trimmable input"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -573,7 +658,7 @@ pub struct TrimCommand {
         arg(
             short = 'e',
             long,
-            help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `trim.{ext}`)"
+            help = "Save next to each original under this extension. {ext} stands for the original one, as in trim.{ext}"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -582,7 +667,7 @@ pub struct TrimCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "in-place",
-            help = "Trim the source file in place instead of writing a new file"
+            help = "Overwrite the original instead of writing a new file"
         )
     )]
     #[serde(default)]
@@ -593,7 +678,7 @@ pub struct TrimCommand {
         arg(
             short = 'n',
             long = "dry-run",
-            help = "Simulate trim operations without writing output files"
+            help = "Report what would be trimmed without writing anything"
         )
     )]
     #[serde(default)]
@@ -603,9 +688,19 @@ pub struct TrimCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            alias = "untrim",
-            alias = "restore",
-            help = "Restore trimmed files using an embedded revert marker when present; otherwise use the format's header-derived size (NDS/3DS) or next power of two (GBA). Not supported for xiso or rvz-scrub"
+            visible_alias = "untrim",
+            visible_alias = "restore",
+            help = "Pad a trimmed file back to full size (NDS, GBA, and 3DS only)",
+            long_help = "\
+Pad a trimmed file back to full size. `--untrim` and `--restore` do the same
+thing.
+
+If the file carries a revert footer from an earlier --revert-marker run, the
+original is restored byte for byte. Otherwise the size is worked out from the
+ROM header (NDS and 3DS) or rounded up to the next power of two (GBA), which
+usually matches but is not guaranteed to.
+
+XISO and RVZ scrub cannot be reverted."
         )
     )]
     #[serde(default)]
@@ -615,7 +710,7 @@ pub struct TrimCommand {
         long = "no-recursive",
         action = ArgAction::SetFalse,
         default_value_t = true,
-        help = "Do not recursively scan subdirectories when input sources include folders"
+        help = "When an input is a folder, look only at its top level"
     ))]
     #[serde(default = "default_true")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -624,7 +719,7 @@ pub struct TrimCommand {
         long = "no-filter",
         action = ArgAction::SetFalse,
         default_value_t = true,
-        help = "Disable the default ROM-only filter applied to archive payloads before trimming"
+        help = "Consider every file inside an archive, not just the ones that look like ROMs"
     ))]
     #[serde(default = "default_true")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -633,7 +728,7 @@ pub struct TrimCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Disable archive auto-extract; only trim direct file inputs"
+            help = "Do not look inside archives; trim only the files named directly"
         )
     )]
     #[serde(default)]
@@ -643,8 +738,8 @@ pub struct TrimCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "revert-marker",
-            alias = "reversible",
-            help = "Embed a small footer in the trimmed output so it can later be reverted to a byte-identical original"
+            visible_alias = "reversible",
+            help = "Add a small footer recording what was cut, so --revert can restore the original exactly"
         )
     )]
     #[serde(default)]
@@ -657,7 +752,7 @@ pub struct TrimCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -675,7 +770,7 @@ pub struct PatchApplyCommand {
             short = 'i',
             long,
             value_name = "PATH",
-            help = "ROM, disc sheet, bundle, or container to patch"
+            help = "ROM to patch. May be an archive, a disc sheet (.cue/.gdi), or a bundle"
         )
     )]
     pub input: PathBuf,
@@ -684,7 +779,7 @@ pub struct PatchApplyCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Container payload selection pattern(s) used while auto-extracting patch apply input and patch files"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -694,7 +789,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "target",
-            help = "For a disc-sheet (.cue/.gdi) input, glob selecting which referenced track (.bin) receives the patch; must match exactly one track. Uses the same matching as --select."
+            help = "For a .cue or .gdi input, which track gets the patch. Matched like --select and must hit exactly one track"
         )
     )]
     #[serde(default)]
@@ -706,7 +801,7 @@ pub struct PatchApplyCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Keep only payload candidates of the given class while resolving patch input/patch archives: rom, patch, or both (repeatable, comma-separable)"
+            help = FILTER_HELP
         )
     )]
     #[serde(default)]
@@ -716,19 +811,13 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Disable container auto-extract and patch the raw input and patch bytes directly"
+            help = "Do not look inside archives; treat the input and every patch as raw files"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default ignore filtering during patch apply container payload resolution"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
@@ -736,7 +825,13 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch file(s) to apply in order; repeat --patch for each step. If omitted, patch apply discovers RetroArch-style sidecar patches inside the input archive."
+            help = "Patch to apply. Repeat once per patch; they run in the order given",
+            long_help = "\
+Patch to apply. Repeat once per patch; they run in the order given, each on the
+result of the last.
+
+Leave it out and rom-weaver looks for RetroArch-style patches sitting next to
+the ROM inside the input archive."
         )
     )]
     #[serde(default)]
@@ -747,7 +842,7 @@ pub struct PatchApplyCommand {
         arg(
             short = 'o',
             long,
-            help = "Output path for the patched result. Optional when a rom-weaver-bundle.json bundle supplies output.name"
+            help = "Where to write the patched ROM. Optional when a bundle already names the output"
         )
     )]
     #[serde(default)]
@@ -757,7 +852,14 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "bundle",
-            help = "Apply using a rom-weaver-bundle.json bundle (a path, or an http(s) URL on native builds). Also auto-detected when the input is rom-weaver-bundle.json[.gz|.bz2|.xz|.zst], or an archive carrying a root rom-weaver-bundle.json without explicit --patch flags"
+            help = "Follow a rom-weaver-bundle.json recipe: a file path, or an http(s) URL",
+            long_help = "\
+Follow a rom-weaver-bundle.json recipe, which lists the patches, their order,
+and the expected checksums. Takes a file path or an http(s) URL.
+
+You can usually skip this flag. A bundle is picked up automatically when
+--input is a rom-weaver-bundle.json (optionally .gz, .bz2, .xz, or .zst), or an
+archive with one at its root, and you passed no --patch of your own."
         )
     )]
     #[serde(default)]
@@ -768,7 +870,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "with",
             value_name = "GLOB",
-            help = "Include bundle patches matching GLOB (by name or file name) even when default is false; repeatable"
+            help = "Turn on a bundle patch the bundle leaves off by default, matched by name or file name (repeatable)"
         )
     )]
     #[serde(default)]
@@ -779,7 +881,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "without",
             value_name = "GLOB",
-            help = "Exclude bundle patches matching GLOB (by name or file name), overriding their default; repeatable"
+            help = "Turn off a bundle patch, matched by name or file name (repeatable)"
         )
     )]
     #[serde(default)]
@@ -787,10 +889,7 @@ pub struct PatchApplyCommand {
     pub without_patches: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Write raw patched bytes without the default patch-output compression step"
-        )
+        arg(long, help = "Write a plain ROM instead of compressing the result")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -799,7 +898,14 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "compress-format",
-            help = "Patch-output compression container format (derived from the output extension when omitted; required when the output has no recognizable extension; overrides the extension with a warning when they disagree). Use --no-compress to write raw patched bytes."
+            help = "Format to compress the patched ROM into [default: from the --output extension]",
+            long_help = "\
+Format to compress the patched ROM into, such as zip, 7z, chd, rvz, or z3ds.
+
+Normally you do not need this: the format comes from the --output extension.
+Pass it when the output name has no usable extension. If it disagrees with the
+extension, this flag wins and a warning is printed. Use --no-compress to write
+a plain ROM instead."
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -810,7 +916,16 @@ pub struct PatchApplyCommand {
             long = "compress-codec",
             action = ArgAction::Append,
             value_delimiter = ',',
-            help = "Patch-output compression codec override; supports codec[:level]. Repeat or comma-separate --compress-codec for multiple codecs (for example CHD: --compress-codec cdzs[:19],cdzl,cdfl). If :level is omitted, falls back to --compress-level profile."
+            help = CODEC_HELP,
+            long_help = "\
+Compression method for the patched ROM, written as codec or codec:level.
+
+Each format has its own codecs, and each picks a sensible one on its own, so
+this is only for overriding that choice. CHD takes a list, tried in order:
+
+  --compress-codec cdzs:19,cdzl,cdfl
+
+Without :level, a codec follows the --compress-level profile."
         )
     )]
     #[serde(default)]
@@ -821,7 +936,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "compress-level",
             value_enum,
-            help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max). Defaults to max"
+            help = "How hard to compress: min, very-low, low, medium, high, very-high, or max [default: max]"
         )
     )]
     #[serde(default)]
@@ -834,7 +949,8 @@ pub struct PatchApplyCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Provide trusted effective patch input checksum values so validation skips recomputing them; repeat or comma-separate for multiple algorithms (for example: --assume-in crc32=1234abcd)"
+            help = ASSUME_IN_HELP,
+            long_help = ASSUME_IN_LONG_HELP
         )
     )]
     #[serde(default)]
@@ -847,7 +963,14 @@ pub struct PatchApplyCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Validate the effective patch input checksum before apply; ALGO=HEX tokens (repeatable, comma-separable, for example: --expect-in crc32=1234abcd). Size gates (size=N/min-size=N) are only supported on `patch validate`"
+            help = "Stop unless the ROM about to be patched has this checksum, as in crc32=1234abcd (repeatable, comma-separable)",
+            long_help = "\
+Stop unless the ROM about to be patched has this checksum, as in
+crc32=1234abcd. Repeatable and comma-separable.
+
+Use it when a patch's readme publishes a source checksum, to be sure you are
+starting from the ROM the author used. The size gates size=N and min-size=N
+work on `patch validate` only."
         )
     )]
     #[serde(default)]
@@ -859,7 +982,30 @@ pub struct PatchApplyCommand {
             long = "patch-header",
             value_enum,
             action = ArgAction::Append,
-            help = "Which bytes patches apply against: auto (default; strip the detected ROM copier header only when that patch's required input checksum matches the headerless bytes - decided per patch in a chain), keep (patch the current bytes as-is), or strip (strip the detected header). Repeatable: each occurrence applies to the most recent preceding --patch and carries forward until the next occurrence; an occurrence before any --patch applies to every patch. Detected headers: A78/LNX/NES/FDS/SMC signatures plus SNES/PCE copier-size rules."
+            help = "Whether a patch applies to the ROM with or without its copier header: auto, keep, or strip [default: auto]",
+            long_help = "\
+Whether a patch applies to the ROM with or without its copier header.
+
+Some ROMs carry a small header added by old copier hardware, and a patch may
+have been made either with it or without it. Getting this wrong makes the patch
+fail or produce a broken ROM.
+
+  auto    Work it out per patch (the default). The header is stripped or put
+          back only when the patch's own source checksum proves which form it
+          expects. With no such proof, the bytes are left alone.
+  keep    Apply to the bytes as they are.
+  strip   Remove the header first.
+
+Repeatable, and each occurrence binds to the --patch before it and carries
+forward until the next one:
+
+  --patch a.bps --patch-header strip --patch b.ups   strips for both
+  --patch a.bps --patch b.ups --patch-header strip   strips for b.ups only
+
+An occurrence before any --patch applies to every patch.
+
+Headers detected: A78, LNX, NES, FDS, and SMC signatures, plus the SNES and PCE
+copier size rules."
         )
     )]
     #[serde(default)]
@@ -871,7 +1017,19 @@ pub struct PatchApplyCommand {
             long = "patch-basis",
             value_enum,
             action = ArgAction::Append,
-            help = "What the preceding --patch's input checks were authored against: auto (default; infer from checksums), base (the original ROM - verified up front, embedded checks skipped mid-chain), or previous (the prior patch's output). Binds to the most recent --patch; index-aligned on the wasm path."
+            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]",
+            long_help = "\
+Which ROM the preceding --patch was built against, and so which one its
+checksums describe.
+
+  auto      Work it out from the checksums (the default).
+  base      The original ROM. It is verified once up front, and the patch's own
+            checks are skipped when it runs later in the chain.
+  previous  The output of the patch before it.
+
+Reach for this when several patches in a chain were each written against the
+unmodified ROM rather than against each other. Binds to the most recent
+--patch."
         )
     )]
     #[serde(default)]
@@ -883,7 +1041,21 @@ pub struct PatchApplyCommand {
             long = "output-header",
             value_enum,
             overrides_with = "output_header",
-            help = "Whether the final patched output carries the ROM header: keep (re-add a header stripped for apply), strip (headerless output, removing a still-present header if needed), or auto (default; keep emulator-required headers like iNES/FDS/LNX/A78, drop junk copier headers like SNES/PCE/Game Doctor). The chain produces one output, so this is a single setting; if repeated, the last value wins. When the final header state changes the ROM's conventional extension (for example SNES .smc vs headerless .sfc), the output extension is adjusted to match."
+            help = "Whether the finished ROM keeps its copier header: auto, keep, or strip [default: auto]",
+            long_help = "\
+Whether the finished ROM keeps its copier header.
+
+  auto   Keep headers emulators need (iNES, FDS, LNX, A78) and drop the ones
+         they do not (SNES, PCE, Game Doctor). The default.
+  keep   Put back a header that was stripped in order to patch.
+  strip  Write a headerless ROM, removing the header if it is still there.
+
+The chain produces one file, so this is a single setting; if repeated, the last
+value wins.
+
+When the header decision changes which extension is conventional, the output
+extension follows (SNES .smc becomes headerless .sfc, for instance) and the
+report says so. Extensions unrelated to headers are never touched."
         )
     )]
     #[serde(default)]
@@ -893,7 +1065,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
+            help = "Recompute the ROM's internal header checksum afterwards, so the console does not reject it (SNES, NES, GB, GBA, Mega Drive, SMS, N64, NDS)"
         )
     )]
     #[serde(default)]
@@ -905,7 +1077,22 @@ pub struct PatchApplyCommand {
             long = "n64-byte-order",
             value_enum,
             action = ArgAction::Append,
-            help = "N64 byte order for each patch: auto (default; match the patch source CRC32), keep, big-endian, little-endian, or byte-swapped. Repeatable per patch; a shorter list carries the last mode forward. The original input order is restored on output."
+            help = "Byte order to put an N64 ROM in for each patch: auto, keep, big-endian, little-endian, or byte-swapped [default: auto]",
+            long_help = "\
+Byte order to put an N64 ROM in before each patch runs.
+
+N64 dumps circulate in three interleavings (.z64 big-endian, .v64 byte-swapped,
+.n64 little-endian) and a patch only matches one of them.
+
+  auto           Match whichever order the patch's source CRC32 names. The
+                 default, and almost always right.
+  keep           Leave the ROM as it is.
+  big-endian     Rewrite to .z64 order.
+  little-endian  Rewrite to .n64 order.
+  byte-swapped   Rewrite to .v64 order.
+
+Repeatable, one per patch; a short list carries its last value forward. The
+output is written back in the order the input arrived in."
         )
     )]
     #[serde(default)]
@@ -915,7 +1102,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip patch-provided checksum validation during patch apply and permit recoverable patch-format validation issues"
+            help = "Apply the patch even when its own checksums do not match. Can produce a broken ROM"
         )
     )]
     #[serde(default)]
@@ -928,7 +1115,7 @@ pub struct PatchApplyCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Validate the patched output checksum after apply; ALGO=HEX tokens (repeatable, comma-separable, for example: --expect-out sha1=...)"
+            help = "Fail unless the patched ROM has this checksum, as in sha1=abc... (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -939,7 +1126,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "code",
             action = ArgAction::Append,
-            help = "Cheat code (Game Genie or Pro Action Replay/GameShark) to bake into the input ROM; repeat --code for each. Codes are decoded against the input ROM and applied as a synthetic patch."
+            help = "Game Genie or GameShark/Pro Action Replay code to bake into the ROM. Repeat for each code"
         )
     )]
     #[serde(default)]
@@ -949,7 +1136,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
-            help = "Override the cheat-code system (nes, snes, genesis, gameboy) when it cannot be auto-detected from the ROM header"
+            help = "Console the --code values are for (nes, snes, genesis, gameboy), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -960,7 +1147,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "code-kind",
             default_value = "auto",
-            help = "Cheat code scheme: auto (infer), game-genie, or gameshark/par"
+            help = "Which cheat scheme the --code values use: auto, game-genie, or gameshark/par"
         )
     )]
     #[serde(default = "default_code_kind")]
@@ -973,7 +1160,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "emit-bundle",
             value_name = "PATH",
-            help = "Also write a rom-weaver-bundle.json describing this apply (input rom + ordered patches + computed checks)"
+            help = "Also write a rom-weaver-bundle.json recording this run, so someone else can repeat it"
         )
     )]
     #[serde(skip)]
@@ -983,7 +1170,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "tui",
-            help = "Interactively fill in bundle metadata (needs a terminal), then apply and write rom-weaver-bundle.json"
+            help = "Ask for each patch's name, version, and author, then apply and write a bundle. Needs a terminal"
         )
     )]
     #[serde(skip)]
@@ -996,7 +1183,7 @@ pub struct PatchApplyCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -1099,7 +1286,7 @@ pub struct PatchValidateCommand {
             short = 'i',
             long,
             value_name = "PATH",
-            help = "ROM or container input against which patches are validated"
+            help = "ROM to check the patches against. May be an archive"
         )
     )]
     pub input: PathBuf,
@@ -1108,7 +1295,7 @@ pub struct PatchValidateCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Container payload selection pattern(s) used while auto-extracting patch validate input and patch files"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -1120,7 +1307,7 @@ pub struct PatchValidateCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Keep only payload candidates of the given class while resolving patch validation input/patch archives: rom, patch, or both (repeatable, comma-separable)"
+            help = FILTER_HELP
         )
     )]
     #[serde(default)]
@@ -1130,19 +1317,13 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Disable container auto-extract and validate the raw input and patch bytes directly"
+            help = "Do not look inside archives; treat the input and every patch as raw files"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            long,
-            help = "Disable default ignore filtering during patch validate container payload resolution"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
@@ -1151,7 +1332,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch",
             required = true,
-            help = "Patch file(s) to validate in order; repeat --patch for each step"
+            help = "Patch to check. Repeat once per patch; they are checked in the order given"
         )
     )]
     pub patches: Vec<PathBuf>,
@@ -1162,7 +1343,8 @@ pub struct PatchValidateCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Provide trusted effective patch input checksum values so validation skips recomputing them; repeat or comma-separate for multiple algorithms (for example: --assume-in crc32=1234abcd)"
+            help = ASSUME_IN_HELP,
+            long_help = ASSUME_IN_LONG_HELP
         )
     )]
     #[serde(default)]
@@ -1175,7 +1357,7 @@ pub struct PatchValidateCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Validate the effective patch input before preflight; ALGO=HEX checksum and/or size=N / min-size=N tokens (repeatable, comma-separable, for example: --expect-in crc32=1234abcd,size=1048576)"
+            help = "Fail unless the ROM matches: a checksum (crc32=1234abcd), an exact size (size=N), or a floor (min-size=N). Repeatable, comma-separable"
         )
     )]
     #[serde(default)]
@@ -1185,7 +1367,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Remove a detected ROM header before patch validation (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+            help = "Remove the ROM's copier header before checking (A78, LNX, NES, FDS, SMC signatures, plus the SNES and PCE size rules)"
         )
     )]
     #[serde(default)]
@@ -1196,7 +1378,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "n64-byte-order",
             value_enum,
-            help = "N64 byte order before patch validation: auto (default; match the patch source CRC32), keep, big-endian, little-endian, or byte-swapped"
+            help = "Byte order to put an N64 ROM in before checking: auto, keep, big-endian, little-endian, or byte-swapped [default: auto]"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -1205,7 +1387,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip patch-provided checksum validation during patch validation and permit recoverable patch-format validation issues"
+            help = "Report a patch as usable even when its own checksums do not match"
         )
     )]
     #[serde(default)]
@@ -1215,7 +1397,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Validate each --patch independently against the original input (no sequential chaining); report a per-patch verdict and never abort the batch on a single failing patch"
+            help = "Check every patch against the original ROM rather than as a chain, and report a verdict for each instead of stopping at the first failure"
         )
     )]
     #[serde(default)]
@@ -1225,7 +1407,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Resolve every patch's input basis and chain order statically and report a typed verification plan; runs preflight only for patches that consume the original input"
+            help = "Report the order the patches would run in and what each would be checked against, without reading the ROM more than needed"
         )
     )]
     #[serde(default)]
@@ -1236,7 +1418,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch-basis",
             value_enum,
-            help = "What the preceding --patch's input checks were authored against: auto (infer from checksums), base (the original ROM), or previous (the prior patch's output); binds to the most recent --patch"
+            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]"
         )
     )]
     #[serde(default)]
@@ -1247,7 +1429,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch-input-check",
             value_name = "ALGO=HEX",
-            help = "Declared input checks for the preceding --patch (comma-separable ALGO=HEX tokens; empty skips); binds to the most recent --patch"
+            help = "Checksum the preceding --patch expects to see going in, when the patch does not carry one (comma-separable; empty means none)"
         )
     )]
     #[serde(default)]
@@ -1258,7 +1440,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch-output-check",
             value_name = "ALGO=HEX",
-            help = "Declared output checks for the preceding --patch (comma-separable ALGO=HEX tokens; empty skips); binds to the most recent --patch"
+            help = "Checksum the preceding --patch should produce, when the patch does not carry one (comma-separable; empty means none)"
         )
     )]
     #[serde(default)]
@@ -1271,7 +1453,7 @@ pub struct PatchValidateCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -1372,18 +1554,14 @@ impl PatchValidateCommand {
 pub struct PatchCreateCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long,
-            value_name = "PATH",
-            help = "Original ROM from which to create the patch"
-        )
+        arg(long, value_name = "PATH", help = "The unmodified ROM")
     )]
     pub original: PathBuf,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Modified ROM to diff against the original. Optional when --code is used; the modified ROM is then derived by baking the cheat codes into the original."
+            help = "The changed ROM. Leave out when using --code, which produces the changed ROM for you"
         )
     )]
     #[serde(default)]
@@ -1394,7 +1572,16 @@ pub struct PatchCreateCommand {
         arg(
             short = 'f',
             long,
-            help = "Patch format (derived from the output extension when omitted; required when the output has no recognizable patch extension)"
+            help = "Patch format, such as bps, ips, or xdelta [default: from the --output extension]",
+            long_help = "\
+Patch format, such as bps, ips, or xdelta.
+
+Normally you do not need this: the format comes from the --output extension, so
+`--output hack.bps` writes a BPS patch. Pass it when the output name has no
+recognizable patch extension.
+
+Common alternate spellings are accepted, so `xdelta3` works as well as `xdelta`
+and `bsdiff` as well as `bdf`. The CLI guide lists every alias."
         )
     )]
     #[serde(default)]
@@ -1406,7 +1593,7 @@ pub struct PatchCreateCommand {
             short = 'o',
             long,
             value_name = "PATH",
-            help = "Output patch path; optional only with --plan"
+            help = "Where to write the patch. Required unless --plan is used"
         )
     )]
     #[serde(default)]
@@ -1414,7 +1601,10 @@ pub struct PatchCreateCommand {
     pub output: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long, help = "Only return recommended formats; do not create a patch")
+        arg(
+            long,
+            help = "Only report which formats suit these two ROMs; write nothing"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -1423,7 +1613,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip strict patch validation during patch create when supported, including checksum emission and compatibility checks"
+            help = "Write the patch even when the format's own consistency checks fail, and leave its checksums out"
         )
     )]
     #[serde(default)]
@@ -1433,7 +1623,13 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "checksum-name",
-            help = "Embed the original ROM crc32 into the output patch file name (as `[crc32:HEX]`) so patch apply can validate the input ROM; most useful for formats that carry no embedded checksum"
+            help = "Put the original ROM's crc32 in the patch file name, as [crc32:HEX]",
+            long_help = "\
+Put the original ROM's crc32 in the patch file name, as [crc32:HEX].
+
+Formats like IPS carry no checksum of their own, so there is nothing to catch
+the patch being applied to the wrong ROM. rom-weaver reads this token back on
+apply and verifies the input, as long as the file name survives."
         )
     )]
     #[serde(default)]
@@ -1446,7 +1642,7 @@ pub struct PatchCreateCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Trusted checksum(s) of the original ROM; with --checksum-name the crc32 value is embedded without re-reading the original (for example: --assume-in crc32=1234abcd)"
+            help = "Take the original ROM's checksum on trust rather than reading the file, as in crc32=1234abcd (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1457,7 +1653,7 @@ pub struct PatchCreateCommand {
         arg(
             long = "code",
             action = ArgAction::Append,
-            help = "Cheat code (Game Genie or Pro Action Replay/GameShark) to bake into the original ROM to derive the modified ROM; repeat --code for each. Mutually exclusive with --modified."
+            help = "Build the patch from a Game Genie or GameShark/Pro Action Replay code instead of a second ROM. Repeat for each code; cannot be used with --modified"
         )
     )]
     #[serde(default)]
@@ -1467,7 +1663,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
-            help = "Override the cheat-code system (nes, snes, genesis, gameboy) when it cannot be auto-detected from the ROM header"
+            help = "Console the --code values are for (nes, snes, genesis, gameboy), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -1478,7 +1674,7 @@ pub struct PatchCreateCommand {
         arg(
             long = "code-kind",
             default_value = "auto",
-            help = "Cheat code scheme: auto (infer), game-genie, or gameshark/par"
+            help = "Which cheat scheme the --code values use: auto, game-genie, or gameshark/par"
         )
     )]
     #[serde(default = "default_code_kind")]
@@ -1491,7 +1687,7 @@ pub struct PatchCreateCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -1501,7 +1697,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-system",
-            help = "Override the SOLID patch system description"
+            help = "SOLID patches only: console the ROM is for"
         )
     )]
     #[serde(default)]
@@ -1509,20 +1705,14 @@ pub struct PatchCreateCommand {
     pub solid_system: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long = "solid-game",
-            help = "Override the SOLID patch game description"
-        )
+        arg(long = "solid-game", help = "SOLID patches only: name of the game")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub solid_game: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long = "solid-hack",
-            help = "Override the SOLID patch hack description"
-        )
+        arg(long = "solid-hack", help = "SOLID patches only: name of the hack")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -1531,7 +1721,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-version",
-            help = "Set the extended SOLID patch version description"
+            help = "SOLID patches only: version of the hack. Switches the patch to its extended header"
         )
     )]
     #[serde(default)]
@@ -1541,7 +1731,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-author",
-            help = "Set the extended SOLID patch author description"
+            help = "SOLID patches only: who made the hack. Switches the patch to its extended header"
         )
     )]
     #[serde(default)]
@@ -1551,7 +1741,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-contact",
-            help = "Set the extended SOLID patch contact description"
+            help = "SOLID patches only: how to reach the author. Switches the patch to its extended header"
         )
     )]
     #[serde(default)]
@@ -1561,7 +1751,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-comment",
-            help = "Set the extended SOLID patch comment description"
+            help = "SOLID patches only: free-form note. Switches the patch to its extended header"
         )
     )]
     #[serde(default)]
@@ -1571,7 +1761,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "solid-extended",
-            help = "Emit the seven-string SOLID metadata header even when extended fields are empty"
+            help = "SOLID patches only: use the extended header even with none of the extended fields filled in"
         )
     )]
     #[serde(default)]
@@ -1583,7 +1773,18 @@ pub struct PatchCreateCommand {
             long = "xdelta-secondary",
             default_value = "none",
             value_parser = ["auto", "lzma", "djw", "fgk", "none"],
-            help = "xdelta secondary compression mode during patch create (default none = no in-patch compression, matching xdelta3 without -S; lzma adds LZMA like xdelta -S lzma; djw/fgk are xdelta3's huffman coders; auto compares djw/lzma/fgk and keeps the smallest)"
+            help = "xdelta patches only: compress the patch's own contents",
+            long_help = "\
+xdelta patches only: compress the patch's own contents.
+
+  none  Leave it uncompressed. The default, and what xdelta3 does without -S.
+  lzma  Add LZMA, like xdelta3 -S lzma.
+  djw   xdelta3's Huffman coder.
+  fgk   xdelta3's adaptive Huffman coder.
+  auto  Try djw, lzma, and fgk, and keep whichever comes out smallest.
+
+Leaving it at none is usually right: patch payloads are often already-compressed
+game assets, and the patch tends to get compressed again downstream anyway."
         )
     )]
     #[serde(default = "default_xdelta_secondary")]
@@ -1618,7 +1819,7 @@ pub struct PlanExtractBatchCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -1666,7 +1867,7 @@ pub struct BundleParseCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Bundle file or archive containing a root bundle"
+            help = "Bundle file, or an archive with a bundle at its root"
         )
     )]
     pub input: PathBuf,
@@ -1675,7 +1876,7 @@ pub struct BundleParseCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Resolve/extract only bundle entries whose file name matches this exact name, prefix, or glob (repeatable)"
+            help = "Handle only the bundle entries whose file name matches this exact name, prefix, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -1687,7 +1888,7 @@ pub struct BundleParseCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Resolve/extract only bundle entries of the given class: rom, patch, or both (repeatable, comma-separable)"
+            help = "Handle only the bundle's rom entry or only its patch entries (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1697,7 +1898,7 @@ pub struct BundleParseCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Report the bundle structure without extracting archive members (path entries stay unresolved)"
+            help = "Report what the bundle contains without unpacking any of it"
         )
     )]
     #[serde(default)]
@@ -1709,7 +1910,7 @@ pub struct BundleParseCommand {
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Extract bundle-referenced archive members into this directory (path entries stay unresolved without it when the source is an archive)"
+            help = "Directory to unpack the bundle's files into. Without it, files packed in an archive are listed but not written out"
         )
     )]
     #[serde(default)]
@@ -1722,7 +1923,7 @@ pub struct BundleParseCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -1769,7 +1970,7 @@ pub struct BundleCreateCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Local ROM file the patch chain applies to; its checksums/size become the bundle's rom checks"
+            help = "ROM the patches apply to. Its checksums and size are read from the file and recorded in the bundle"
         )
     )]
     #[serde(default)]
@@ -1785,7 +1986,7 @@ pub struct BundleCreateCommand {
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
-            help = "Trusted rom checksum(s) and/or size for the bundle's rom checks, skipping recompute (for example: --assume-in crc32=1234abcd,size=1048576)"
+            help = "Take the ROM's checksum and size on trust rather than reading it, as in crc32=1234abcd,size=1048576 (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1795,7 +1996,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-url",
-            help = "Emitted rom download url (combined with --rom the local file still supplies checks; alone it emits a url-only rom entry)"
+            help = "Where the ROM can be downloaded from. With --input, the local file still supplies the checksums; on its own, the bundle records only this url"
         )
     )]
     #[serde(default)]
@@ -1805,7 +2006,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-name",
-            help = "Display/output-naming file name for the rom entry"
+            help = "File name to show for the ROM, and to base the output name on"
         )
     )]
     #[serde(default)]
@@ -1815,7 +2016,16 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch file to include, in apply order; repeat --patch for each entry. --patch-id, --patch-version, --patch-author, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header bind to the preceding --patch"
+            help = "Patch to list in the bundle. Repeat once per patch, in the order they should be applied",
+            long_help = "\
+Patch to list in the bundle. Repeat once per patch, in the order they should be
+applied.
+
+Every --patch-* flag describes the --patch before it, so metadata for several
+patches reads left to right:
+
+  --patch tl.bps  --patch-name 'Translation' --patch-author 'Team A' \\
+  --patch fix.ips --patch-name 'Bugfixes'    --patch-optional true"
         )
     )]
     #[serde(default)]
@@ -1823,7 +2033,10 @@ pub struct BundleCreateCommand {
     pub patch: Vec<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-id", help = "Stable identity for the preceding --patch")
+        arg(
+            long = "patch-id",
+            help = "Identifier for the preceding --patch that stays the same across releases, so a replacement keeps its settings"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -1832,7 +2045,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch-version",
-            help = "Author-controlled version for the preceding --patch"
+            help = "Version of the preceding --patch, in whatever form its author uses"
         )
     )]
     #[serde(default)]
@@ -1840,27 +2053,21 @@ pub struct BundleCreateCommand {
     pub patch_version: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-name", help = "Display name for the preceding --patch")
+        arg(long = "patch-name", help = "Name to show for the preceding --patch")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_name: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long = "patch-description",
-            help = "Description for the preceding --patch"
-        )
+        arg(long = "patch-description", help = "What the preceding --patch does")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_description: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            long = "patch-author",
-            help = "Author credit for the preceding --patch"
-        )
+        arg(long = "patch-author", help = "Who made the preceding --patch")
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -1869,7 +2076,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch-label",
-            help = "Free-form maturity or status label for the preceding --patch"
+            help = "Short status note for the preceding --patch, such as beta or recommended"
         )
     )]
     #[serde(default)]
@@ -1879,7 +2086,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch-optional",
-            help = "Set whether the preceding --patch is optional; optional patches are deselected by default"
+            help = "Mark the preceding --patch optional, so it starts switched off and needs --with to run"
         )
     )]
     #[serde(default)]
@@ -1889,7 +2096,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch-source-url",
-            help = "Emitted url source for the preceding --patch (the local file is still read for the bundle)"
+            help = "Where the preceding --patch can be downloaded from. The local file is still read to build the bundle"
         )
     )]
     #[serde(default)]
@@ -1900,7 +2107,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "patch-header",
             value_enum,
-            help = "Header handling mode for the preceding --patch"
+            help = "Whether the preceding --patch applies to the ROM with or without its copier header: auto, keep, or strip"
         )
     )]
     #[serde(default)]
@@ -1911,7 +2118,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "patch-basis",
             value_enum,
-            help = "What the preceding --patch's input checks were authored against: base (the bundle's rom) or previous (the prior patch's output, the default); auto omits the field for inference"
+            help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it"
         )
     )]
     #[serde(default)]
@@ -1922,7 +2129,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "patch-expect-in",
             value_name = "ALGO=HEX",
-            help = "Expected pre-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as inputChecks only when it differs from the rom checks. On the wasm path this is index-aligned with --patch (one comma-separated value per entry, empty for none)"
+            help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1933,7 +2140,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "patch-expect-out",
             value_name = "ALGO=HEX",
-            help = "Expected post-apply ROM checksum for the preceding --patch (algo=hex; repeatable and comma-separable); emitted as outputChecks only when it differs from the final output checks"
+            help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1944,7 +2151,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "expect-out",
             value_name = "ALGO=HEX",
-            help = "Expected checksum of the final output once the full patch chain is applied (algo=hex; repeatable and comma-separable); emitted as output.checks"
+            help = "Checksum the ROM should have once every patch has run, so users can confirm they got the right result (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -1954,7 +2161,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "output-name",
-            help = "Default output file name the bundle suggests"
+            help = "File name the bundle suggests for the patched ROM"
         )
     )]
     #[serde(default)]
@@ -1965,7 +2172,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "output-header",
             value_enum,
-            help = "Default header handling mode for the final bundle output"
+            help = "Whether the patched ROM should keep its copier header: auto, keep, or strip"
         )
     )]
     #[serde(default)]
@@ -1976,7 +2183,7 @@ pub struct BundleCreateCommand {
         arg(
             short = 'o',
             long,
-            help = "Where to write the bundle: rom-weaver-bundle.json, or rom-weaver-bundle.json.gz / rom-weaver-bundle.json.zst for a compressed one"
+            help = "Where to write the bundle. Name it rom-weaver-bundle.json, or add .gz or .zst to compress it"
         )
     )]
     pub output: PathBuf,
@@ -1984,7 +2191,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Also bundle the bundle plus the local rom/patch files into this archive (creatable formats only, for example .zip); bundle path entries then reference the archived names"
+            help = "Also pack the bundle and its ROM and patches into one shareable archive, such as release.zip"
         )
     )]
     #[serde(default)]
@@ -1995,7 +2202,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "bundle-rom",
-            help = "ROM payload to package in --bundle while --rom supplies its checks and metadata"
+            help = "Pack this file into --bundle as the ROM, while --input supplies the checksums and metadata"
         )
     )]
     #[serde(default)]
@@ -2005,7 +2212,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "no-bundle-rom",
-            help = "Don't distribute the local --rom: leave it out of --bundle and emit its bundle entry with checks only (the applying user supplies the ROM)"
+            help = "Keep the ROM out of --bundle and record only its checksums, so whoever applies the bundle brings their own copy"
         )
     )]
     #[serde(default)]
@@ -2015,7 +2222,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
-            help = "Checksum algorithm(s) for rom checks (repeatable; default crc32, md5, sha1)"
+            help = "Which checksums to record for the ROM (repeatable) [default: crc32,md5,sha1]"
         )
     )]
     #[serde(default)]
@@ -2031,7 +2238,16 @@ pub struct BundleCreateCommand {
         arg(
             long = "from",
             value_name = "FILE",
-            help = "Author the bundle from a rom-weaver-bundle.json spec (local paths, checksums filled in for you); - reads the spec from stdin. Explicit flags override spec values"
+            help = "Build the bundle from a hand-written rom-weaver-bundle.json instead of flags. Use - to read it from stdin",
+            long_help = "\
+Build the bundle from a hand-written rom-weaver-bundle.json instead of flags.
+Use - to read it from stdin.
+
+Write the file with local paths and leave the checksums out; they are filled in
+from the real files. Get the schema with `rom-weaver bundle schema` so your
+editor can check the file as you write it.
+
+Any flag you also pass overrides what the file says."
         )
     )]
     #[serde(skip)]
@@ -2044,7 +2260,7 @@ pub struct BundleCreateCommand {
         arg(
             long = "schema-ref",
             value_name = "URL",
-            help = "Write this $schema URL into the emitted bundle for editor validation"
+            help = "Record this $schema URL in the bundle so editors can validate it. Left out unless asked for"
         )
     )]
     #[serde(skip)]
@@ -2057,7 +2273,7 @@ pub struct BundleCreateCommand {
             long,
             default_value = "auto",
             value_name = "auto|N",
-            help = "Thread budget: auto or a positive integer"
+            help = THREADS_HELP
         )
     )]
     #[serde(default)]
@@ -2228,7 +2444,7 @@ pub struct PpfUndoCommand {
             short = 'i',
             long = "input",
             value_name = "ROM",
-            help = "ROM produced by applying the PPF patch"
+            help = "The already-patched ROM to undo"
         )
     )]
     pub rom: PathBuf,
@@ -2237,7 +2453,7 @@ pub struct PpfUndoCommand {
         arg(
             long = "patch",
             value_name = "PPF",
-            help = "PPF3 patch containing undo data"
+            help = "The PPF3 patch that was applied. It must carry undo data"
         )
     )]
     pub patch: PathBuf,
@@ -2247,7 +2463,7 @@ pub struct PpfUndoCommand {
             short,
             long,
             value_name = "PATH",
-            help = "Output path for the restored ROM"
+            help = "Where to write the restored ROM"
         )
     )]
     pub output: PathBuf,

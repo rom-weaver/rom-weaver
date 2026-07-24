@@ -19,8 +19,8 @@ future contributions to rom-weaver.
   Contribution.
 - **"Maintainer"** means Brandon Casey and any successor or assign to whom he
   transfers this Agreement or the rights it grants.
-- **"Contribution"** means any original work of authorship — including source
-  code, documentation, and configuration — that you intentionally submit to the
+- **"Contribution"** means any original work of authorship, including source
+  code, documentation, and configuration, that you intentionally submit to the
   rom-weaver project in any form (pull request, patch, issue attachment, or
   otherwise) for inclusion in the project. Communication that you conspicuously
   mark in writing as "Not a Contribution" is excluded.
@@ -70,7 +70,7 @@ You represent that:
 - any part of a Contribution that is **not** your original work (third-party
   code, ported algorithms, generated assets) is clearly identified as such in
   the submission, together with its license, source, and any other applicable
-  restriction — such material is not covered by this Agreement and is accepted
+  restriction. Such material is not covered by this Agreement and is accepted
   only under its own terms.
 
 You are not expected to provide support or warranty for your Contribution.

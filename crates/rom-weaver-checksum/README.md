@@ -34,8 +34,8 @@ patch's expected input, fingerprinting an extracted ROM, or answering a plain
 - **Header-aware variants.** ROM copier headers (SNES/SMC, NES, and friends)
   are detected so a file can report both the raw checksum and the
   headerless checksum databases actually index by.
-- **N64 byte orders.** The three interleavings — `.z64` big-endian, `.v64`
-  byte-swapped, `.n64` little-endian — are detected from the boot magic, and
+- **N64 byte orders.** The three interleavings (`.z64` big-endian, `.v64`
+  byte-swapped, `.n64` little-endian) are detected from the boot magic, and
   the same pass reports what the file would hash to in each of the other two.
 - **Checksum repair.** Internal header checksums that a patch invalidates can
   be recomputed in the same streaming pass: the N64 boot-code CRC pair, the
@@ -69,7 +69,7 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats) — the full algorithm and variant tables.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full algorithm and variant tables.
 - [Documentation index](https://github.com/rom-weaver/rom-weaver/blob/main/docs/README.md)
 
 ## License

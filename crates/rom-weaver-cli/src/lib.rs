@@ -85,53 +85,123 @@ pub enum Commands {
         not(target_arch = "wasm32"),
         command(
             visible_alias = "inspect",
-            about = "Identify containers, patches, and known ROM headers"
+            about = "Identify a file: its format, its platform, and any header it carries",
+            long_about = "\
+Identify a file. Reports what format it is, which console it is for, whether it
+carries a copier header, and what is inside it if it is an archive.
+
+`rom-weaver inspect` runs this same command under another name.
+
+Archives are opened automatically, so pointing this at a .zip describes the ROM
+inside rather than the zip itself. Pass --no-extract to describe the file as it
+sits on disk.
+
+Nothing is written; this only reads."
         )
     )]
     Probe(ProbeCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Extract files and disc payloads from supported containers")
+        command(
+            about = "Unpack an archive or disc image",
+            long_about = "\
+Unpack an archive or disc image into a directory.
+
+Archives found inside the input are unpacked too, up to eight levels deep. Pass
+--no-nested-extract to stop after the first layer.
+
+Existing files are never overwritten: if any output file is already there, the
+whole extraction stops before writing. Pass --force to overwrite instead."
+        )
     )]
     Extract(ExtractCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Compute checksums for files or selected container payloads")
+        command(
+            about = "Compute checksums for a file, or for a ROM inside an archive",
+            long_about = "\
+Compute checksums for a file, so you can tell one dump from another.
+
+Archives are opened automatically, so this hashes the ROM inside a .zip rather
+than the zip itself. Pass --no-extract to hash the file as it sits on disk.
+
+Alongside the plain checksum, rom-weaver reports how the same ROM would hash in
+its other common forms: with and without a copier header, in each N64 byte
+order, and trimmed or padded. That is what lets a checksum from a database
+match a file that is stored slightly differently."
+        )
     )]
     Checksum(ChecksumCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Classify a source as ROM or patch, extracting nested containers and checksumming ROMs"
+            about = "Sort a file into ROMs and patches, unpacking and hashing along the way",
+            long_about = "\
+Sort a file into ROMs and patches, unpacking archives and hashing the ROMs as
+it goes.
+
+This is what the webapp runs when you drop a file on it, and it is the command
+to reach for when you do not know what you have. For a description without the
+unpacking, use `probe`."
         )
     )]
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Create a supported archive or disc-image container")
+        command(
+            about = "Pack files into an archive or a compressed disc image",
+            long_about = "\
+Pack files into an archive or a compressed disc image.
+
+The format comes from the --output extension, so `--output game.chd` writes a
+CHD. Formats that can be written: zip, 7z, chd, rvz, and z3ds.
+
+Repeat --input to put several files in one archive. Disc images take a single
+input instead: point --input at the .cue or .gdi and its tracks come along.
+
+  rom-weaver compress --input game.cue --output game.chd
+
+Each format picks a suitable codec on its own; --codec and --level are there
+for when you want to override that."
+        )
     )]
     Compress(CompressCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Trim or restore supported ROM and disc-image formats")
+        command(
+            about = "Cut the padding off a ROM, or put it back",
+            long_about = "\
+Cut the unused padding off the end of a ROM, making the file smaller without
+changing what a console or emulator reads from it.
+
+Works on NDS-family ROMs (.nds, .dsi, .srl), GBA (.gba), 3DS (.3ds), XISO
+images, and RVZ scrub candidates.
+
+By default a new file is written. --in-place overwrites the original, and
+-n/--dry-run reports what would change without touching anything.
+
+--revert pads a trimmed file back out (NDS, GBA, and 3DS only). To make that
+exact rather than approximate, trim with --revert-marker, which stores a small
+footer recording what was cut."
+        )
     )]
     Trim(TrimCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(subcommand, about = "Apply, create, or validate ROM patches")
+        command(subcommand, about = "Apply, create, or check ROM patches")
     )]
     Patch(PatchCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
             subcommand,
-            about = "Create and parse rom-weaver-bundle.json workflows"
+            about = "Build and read rom-weaver-bundle.json patch recipes"
         )
     )]
     Bundle(BundleCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(subcommand, about = "Run specialized recovery and conversion tools")
+        command(subcommand, about = "One-off recovery tools")
     )]
     Tools(ToolsCommands),
     #[cfg_attr(
@@ -158,8 +228,9 @@ pub enum PatchCommands {
         not(target_arch = "wasm32"),
         command(
             visible_alias = "weave",
-            about = "Apply one or more ROM patch files to an input in sequence",
-            long_about = "Apply one or more ROM patch files to an input in sequence.\n\nSupported patch apply formats:\nIPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF, HDiffPatch/HPatchZ, APS (N64), APSGBA, RUP, PPF, PAT/FFP, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS, DCP (Dreamcast).\n\nROM copier headers:\n- --patch-header (auto|keep|strip, default auto) controls which bytes each patch applies against. Auto decides PER PATCH: a patch's required input checksum (embedded UPS/BPS source CRC32, or a [crc32:..] filename token for the first patch) is compared against the current bytes and their headerless/re-headered counterpart; the header is stripped or restored between chain steps only on checksum proof. No evidence keeps the current bytes untouched.\n- --patch-header is positional and repeatable: each occurrence applies to the most recent preceding --patch and carries forward (`--patch a.bps --patch-header strip --patch b.ups` strips for both; `--patch a.bps --patch b.ups --patch-header strip` strips only for b.ups). An occurrence before any --patch applies to every patch.\n- --output-header (keep|strip|auto, default auto) controls whether the final output carries the header. Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor). The chain has one output, so the flag is a single setting (last value wins).\n- When the final header state changes the ROM's conventional extension, the output extension is adjusted to match (for example SNES .smc -> headerless .sfc) and the report notes the adjustment. Unrelated extensions are never touched.\n\nCaveats:\n- NINJA1 headers are recognized but apply is unsupported.\n- PDS is explicitly unsupported.\n- HDiffPatch directory patches (HDIFF19) are unsupported; only single-file .hdiff/.hpatchz is supported.\n- DCP (Universal Dreamcast Patcher) requires a disc-sheet input (.cue/.gdi); it rebuilds the GD-ROM data track's filesystem and reassembles the full disc (compressed to CHD by default). It cannot be chained with other patches or combined with header/checksum transforms."
+            about = PATCH_APPLY_ABOUT,
+            long_about = PATCH_APPLY_LONG_ABOUT,
+            after_help = PATCH_APPLY_AFTER_HELP,
         )
     )]
     // Accepts the `weave` spelling on the wire too; always serializes as `apply`,
@@ -169,14 +240,35 @@ pub enum PatchCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Validate one or more ROM patch files against an input without writing output",
-            long_about = "Validate one or more ROM patch files against an input without writing output.\n\nValidation performs the same patch-format checksum checks as patch apply when the handler supports them, including VCDIFF/xdelta target-window checksums. It also accepts optional input checksum and size values for source preflight."
+            about = "Check that patches would apply cleanly, without writing anything",
+            long_about = "\
+Check that patches would apply cleanly to a ROM, without writing anything.
+
+This runs the same checks apply does: it parses each patch and verifies every
+checksum the format carries. Use --expect-in to also confirm the ROM itself is
+the one you think it is, by checksum or by size.
+
+Patches are checked as a chain by default, each against the output of the one
+before it. Pass --independent to check each one against the original ROM
+instead and get a verdict per patch."
         )
     )]
     Validate(Box<PatchValidateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Create a patch from original and modified ROM data")
+        command(
+            about = "Build a patch from an original ROM and a changed one",
+            long_about = "\
+Build a patch from an original ROM and a changed one, so you can share the
+change without sharing the ROM.
+
+The format comes from the --output extension, so `--output hack.bps` writes a
+BPS patch. Use --plan to see which formats suit these two files before
+committing to one.
+
+Instead of a second ROM, --code builds the patch from Game Genie or
+GameShark/Pro Action Replay codes."
+        )
     )]
     Create(Box<PatchCreateCommand>),
 }
@@ -193,16 +285,39 @@ pub enum BundleCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files",
-            long_about = "Build, validate, and write a rom-weaver-bundle.json bundle from local ROM/patch files.\n\nROM checks are computed from the actual file (crc32/md5/sha1 by default). Per-patch metadata flags (--patch-id, --patch-version, --patch-author, --patch-name, --patch-description, --patch-label, --patch-optional, --patch-source-url, and --patch-header) bind to the most recent preceding --patch. --output accepts rom-weaver-bundle.json, rom-weaver-bundle.json.gz, or rom-weaver-bundle.json.zst; --bundle additionally packs the bundle plus the local sources into one archive whose path entries reference the archived names."
+            about = "Write a rom-weaver-bundle.json recipe from local ROM and patch files",
+            long_about = "\
+Write a rom-weaver-bundle.json recipe from local ROM and patch files.
+
+A bundle records which ROM the patches are for, what order they run in, and
+what the result should hash to. Hand it to someone else and
+`rom-weaver weave --bundle` reproduces your exact result.
+
+Checksums come from the real files, so nothing here is taken on faith. Every
+--patch-* flag describes the --patch before it.
+
+--output names the recipe itself; add .gz or .zst to compress it. --bundle
+additionally packs the recipe and its files into one shareable archive."
         )
     )]
     Create(Box<BundleCreateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Parse and validate a rom-weaver-bundle.json bundle (plain, stream-codec compressed, or inside an archive) and resolve its ROM/patch entries",
-            long_about = "Parse and validate a rom-weaver-bundle.json bundle and resolve its ROM/patch entries.\n\nAccepted sources: a plain rom-weaver-bundle.json, a stream-codec-compressed rom-weaver-bundle.json.gz/.bz2/.xz/.zst, or an archive carrying rom-weaver-bundle.json at its root (an \"everything archive\" that also bundles the ROM and patches).\n\nBundle `path` entries refer to archive members (or files next to the bundle). With --output, members referenced by the bundle are extracted there and returned as resolved paths, and extracted patch entries include a full patch descriptor. URL entries are returned verbatim; relative URLs resolve against the bundle's own location on the caller's side."
+            about = "Read a rom-weaver-bundle.json recipe and report what it points at",
+            long_about = "\
+Read a rom-weaver-bundle.json recipe, check that it is valid, and report the
+ROM and patches it points at.
+
+The input can be a plain rom-weaver-bundle.json, a compressed one (.gz, .bz2,
+.xz, or .zst), or an archive with the recipe at its root alongside the files it
+names.
+
+Entries that name a file are looked for in the archive, or next to the recipe.
+Pass --output to write those files out and get real paths back. Entries that
+name a url are reported as they are; nothing is downloaded.
+
+To actually run a bundle, use `rom-weaver weave --bundle` instead."
         )
     )]
     Parse(BundleParseCommand),
@@ -213,8 +328,17 @@ pub enum BundleCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Print the rom-weaver-bundle.json JSON Schema (for editor validation / direct authoring)",
-            long_about = "Print the rom-weaver-bundle.json JSON Schema to stdout.\n\nRedirect it to a file your editor can point at, or add its published URL as a `$schema` key in a hand-authored bundle so the editor validates and autocompletes it. `bundle create --from <file>` then bakes the authored file into a canonical, checksummed bundle."
+            about = "Print the rom-weaver-bundle.json JSON Schema, for editors and hand-authoring",
+            long_about = "\
+Print the rom-weaver-bundle.json JSON Schema to stdout.
+
+Save it and point your editor at it, and the editor will check and autocomplete
+a bundle as you write it:
+
+  rom-weaver bundle schema > rom-weaver-bundle-v1.schema.json
+
+Then `bundle create --from <your file>` turns what you wrote into a finished
+bundle with the checksums filled in."
         )
     )]
     Schema,
@@ -231,7 +355,14 @@ pub enum BundleCommands {
 pub enum ToolsCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Restore a ROM using undo data embedded in a PPF3 patch")
+        command(
+            about = "Undo a PPF3 patch, using the undo data stored inside it",
+            long_about = "\
+Undo a PPF3 patch, turning a patched ROM back into the original.
+
+Only works when the patch was written with undo data, which is optional in the
+PPF3 format. Without it there is nothing to reverse from."
+        )
     )]
     PpfUndo(PpfUndoCommand),
 }
@@ -1232,8 +1363,9 @@ pub use bundle_create::BundleCreateResult;
 mod command_args;
 pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
-    CompressCommand, ExtractCommand, IngestCommand, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
+    CompressCommand, ExtractCommand, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
 };
 
 mod expect_tokens;

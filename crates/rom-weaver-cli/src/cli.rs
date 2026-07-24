@@ -9,14 +9,53 @@ use std::sync::Arc;
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_app::{
-    BundleCommands, Commands, JsonProgressSink, LogLevel, PatchApplyCommand, PatchCommands,
-    RomWeaverRunOutputOptions, RunCommandOptions, run_command, run_command_outcome,
+    BundleCommands, Commands, JsonProgressSink, LogLevel, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCommands, RomWeaverRunOutputOptions,
+    RunCommandOptions, run_command, run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{NoninteractivePrompter, ProgressSink, SelectionPrompter};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
+
+/// Heading the global flags are listed under. Every subcommand inherits the
+/// globals, so without a heading they interleave with that command's own
+/// options and make the list hard to scan.
+#[cfg(not(target_arch = "wasm32"))]
+const GLOBAL_HELP_HEADING: &str = "Global options";
+
+#[cfg(not(target_arch = "wasm32"))]
+const CLI_LONG_ABOUT: &str = "\
+Inspect, extract, checksum, compress, trim, and patch ROMs and disc images.
+
+rom-weaver reads compressed input directly, so you rarely have to unpack a file
+first. Point --input at an archive or disc image and the ROM inside it is found
+for you; pass --no-extract to work on the raw bytes instead.
+
+Everything runs on your machine. Nothing is uploaded.";
+
+#[cfg(not(target_arch = "wasm32"))]
+const CLI_AFTER_HELP: &str = "\
+Examples:
+  # What is this file?
+  rom-weaver probe --input game.iso
+
+  # Apply a patch, writing a plain ROM
+  rom-weaver weave --input game.sfc --patch hack.bps \\
+    --output hacked.sfc --no-compress
+
+  # Two patches in order; the .zip extension compresses the result
+  rom-weaver weave --input game.sfc \\
+    --patch base.ips --patch fixes.ups --output hacked.zip
+
+  # Hash a ROM, including one inside an archive
+  rom-weaver checksum --input game.zip --algo crc32,sha1
+
+  # Shrink a disc image; the .cue brings its tracks along
+  rom-weaver compress --input game.cue --output game.chd
+
+Full guide: https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md";
 
 #[derive(Debug)]
 #[cfg(not(target_arch = "wasm32"))]
@@ -26,7 +65,9 @@ use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
     command(
         name = "rom-weaver",
         version,
-        about = "Inspect, extract, checksum, compress, trim, and patch ROMs and disc images"
+        about = "Inspect, extract, checksum, compress, trim, and patch ROMs and disc images",
+        long_about = CLI_LONG_ABOUT,
+        after_help = CLI_AFTER_HELP,
     )
 )]
 struct Cli {
@@ -35,7 +76,8 @@ struct Cli {
         arg(
             long,
             global = true,
-            help = "Emit progress and terminal status as JSON lines"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Print one JSON object per line instead of human-readable output"
         )
     )]
     json: bool,
@@ -45,7 +87,8 @@ struct Cli {
             long,
             global = true,
             conflicts_with = "no_progress",
-            help = "Force running progress events on"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Show progress even when output is piped to a file or another program"
         )
     )]
     progress: bool,
@@ -55,7 +98,8 @@ struct Cli {
             long = "no-progress",
             global = true,
             conflicts_with = "progress",
-            help = "Disable running progress events"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Hide progress"
         )
     )]
     no_progress: bool,
@@ -66,7 +110,8 @@ struct Cli {
             global = true,
             value_enum,
             conflicts_with_all = ["verbose", "quiet"],
-            help = "Set application log level (off, error, warn, info, debug, trace)"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "How much rom-weaver logs to stderr. Separate from the normal output [default: off]"
         )
     )]
     log_level: Option<LogLevel>,
@@ -78,7 +123,8 @@ struct Cli {
             global = true,
             action = ArgAction::Count,
             conflicts_with_all = ["log_level", "quiet"],
-            help = "Increase application log verbosity; repeat for debug and trace"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Log more: -v for info, -vv for debug, -vvv for trace"
         )
     )]
     verbose: u8,
@@ -89,7 +135,8 @@ struct Cli {
             long,
             global = true,
             conflicts_with_all = ["log_level", "verbose"],
-            help = "Show only application errors"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Log errors only"
         )
     )]
     quiet: bool,
@@ -98,7 +145,8 @@ struct Cli {
         arg(
             long,
             global = true,
-            help = "Enable trace logs from dependencies (for example nod)"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Also log trace output from bundled libraries (for bug reports)"
         )
     )]
     dep_trace: bool,
@@ -108,7 +156,8 @@ struct Cli {
             long,
             global = true,
             conflicts_with = "no_color",
-            help = "Force colored output on, even when piped"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Keep colors even when output is piped"
         )
     )]
     color: bool,
@@ -118,7 +167,8 @@ struct Cli {
             long = "no-color",
             global = true,
             conflicts_with = "color",
-            help = "Disable colored output"
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Turn colors off"
         )
     )]
     no_color: bool,
@@ -139,12 +189,24 @@ enum CliCommand {
     /// Top-level spelling of `patch apply`. Normalized away in [`main_entry`]
     /// before dispatch, so it never reaches the shared `Commands` enum.
     #[command(
-        about = "Apply one or more ROM patch files to an input in sequence (alias of `patch apply`)"
+        about = "Apply one or more patches to a ROM, in order (same as `patch apply`)",
+        long_about = PATCH_APPLY_LONG_ABOUT,
+        after_help = PATCH_APPLY_AFTER_HELP,
     )]
     Weave(Box<PatchApplyCommand>),
-    #[command(about = "Generate a shell completion script (bash, zsh, fish, powershell, elvish)")]
+    #[command(
+        about = "Print a tab-completion script for your shell",
+        long_about = "\
+Print a tab-completion script for your shell to stdout.
+
+Save it where your shell looks for completions, then start a new shell:
+
+  rom-weaver completions bash > /etc/bash_completion.d/rom-weaver
+  rom-weaver completions zsh  > ~/.zfunc/_rom-weaver
+  rom-weaver completions fish > ~/.config/fish/completions/rom-weaver.fish"
+    )]
     Completions {
-        #[arg(value_name = "SHELL", help = "Shell to generate completions for")]
+        #[arg(value_name = "SHELL", help = "Shell to print completions for")]
         shell: clap_complete::Shell,
     },
 }
