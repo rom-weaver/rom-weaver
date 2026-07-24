@@ -9,6 +9,10 @@ import { createOpfsProxyChannel, type OpfsProxyChannelTransfer } from "./browser
 import { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import type { OpfsProxyMountBootstrap } from "./browser-opfs-proxy-server.ts";
 import type { RomWeaverBrowserSyncAccessMode, TraceLine } from "./browser-opfs-runtime-types.ts";
+// `?worker&url` (not `new URL(..., import.meta.url)`) is what makes Vite emit the *built* worker and
+// hand back its URL. A bare `new URL()` inside a `??` chain is invisible to Vite's worker detection,
+// so it degrades to a plain asset copy and ships the raw TypeScript source.
+import DEFAULT_OPFS_PROXY_WORKER_URL from "./workers/browser-opfs-proxy-worker.ts?worker&url";
 
 const PROXY_READY_TIMEOUT_MS = 30_000;
 
@@ -39,11 +43,7 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   // runner-creation latency (it precedes every op, so it is not counted in a run's setupMs).
   const spawnStartedAtMs = typeof performance === "undefined" ? 0 : performance.now();
   const channel = createOpfsProxyChannel(options.slotCount);
-  // The `new URL(..., import.meta.url)` MUST stay inline inside the Worker constructor: that is the
-  // pattern Vite statically detects to bundle the worker for production. Hoisting it into a variable
-  // first makes Vite ship the raw .ts asset instead, so the worker 404s/parse-fails in a prod build
-  // (dev hides this by transforming .ts on the fly). Mirrors workers/browser-worker-client.ts.
-  const worker = new Worker(options.workerUrl ?? new URL("./workers/browser-opfs-proxy-worker.ts", import.meta.url), {
+  const worker = new Worker(options.workerUrl ?? DEFAULT_OPFS_PROXY_WORKER_URL, {
     type: "module",
   });
   // Mutable so the runner can point proxy-worker traces at the *active run's* trace channel (the one

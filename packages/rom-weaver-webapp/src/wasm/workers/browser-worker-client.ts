@@ -1,6 +1,10 @@
 import type { RomWeaverBrowserOpfsOptions, RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
+// `?worker&url` (not `new URL(..., import.meta.url)`) is what makes Vite emit the *built* worker and
+// hand back its URL. A bare `new URL()` inside a `??` chain is invisible to Vite's worker detection,
+// so it degrades to a plain asset copy and ships the raw TypeScript source.
+import DEFAULT_RUNNER_WORKER_URL from "./browser-runner-worker.ts?worker&url";
 
 type BrowserWorkerClientOptions = {
   defaultThreads?: RomWeaverDefaultThreads;
@@ -19,7 +23,7 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
   options = options ?? {};
   const createWorker = () =>
     options.worker ??
-    new Worker(options.workerUrl ?? new URL("./browser-runner-worker.ts", import.meta.url), {
+    new Worker(options.workerUrl ?? DEFAULT_RUNNER_WORKER_URL, {
       type: "module",
       ...options.workerOptions,
     });

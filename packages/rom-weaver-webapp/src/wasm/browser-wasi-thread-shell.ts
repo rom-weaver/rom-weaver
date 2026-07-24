@@ -21,6 +21,10 @@ import {
   THREAD_SLOT_TID_INDEX,
   type ThreadStartControl,
 } from "./browser-wasi-thread-protocol.ts";
+// `?worker&url` (not `new URL(..., import.meta.url)`) is what makes Vite emit the *built* worker and
+// hand back its URL. A bare `new URL()` is invisible to Vite's worker detection here (the constructor
+// call is elsewhere), so it degrades to a plain asset copy and ships the raw TypeScript source.
+import BUILT_THREAD_WORKER_URL from "./workers/browser-wasi-thread-worker.ts?worker&url";
 
 export const THREAD_WORKER_READY_TIMEOUT_MS = 5000;
 export const THREAD_WORKER_BUSY_RETRY_INTERVAL_MS = 25;
@@ -133,7 +137,7 @@ export function createStandaloneBrowserWasiThread({
   return slot;
 }
 
-const DEFAULT_THREAD_WORKER_URL = () => new URL("./workers/browser-wasi-thread-worker.ts", import.meta.url).href;
+const DEFAULT_THREAD_WORKER_URL = () => BUILT_THREAD_WORKER_URL;
 
 // The thread worker runs with full access to the shared wasm memory, so its URL must stay
 // on our own origin. Callers pass a build-resolved URL; anything that resolves elsewhere
