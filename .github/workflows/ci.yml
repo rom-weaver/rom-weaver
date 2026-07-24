@@ -1018,8 +1018,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The deployed changelog is generated from the latest 50 commits.
-          fetch-depth: 0
+          # The deployed changelog is generated from the latest 50 commits
+          # (scripts/version.mjs getChangelog), so a full clone is ~97 MB of
+          # pack this job never reads. Tags must still come along: the version
+          # string drops its `+hash` suffix only when `git tag --points-at
+          # HEAD` sees the release tag, and a depth-limited fetch skips tags
+          # unless asked.
+          fetch-depth: 60
+          fetch-tags: true
 
       # This job compiles nothing - it runs vite and wrangler over a prebuilt
       # module - so the Rust toolchain is dead weight here.
