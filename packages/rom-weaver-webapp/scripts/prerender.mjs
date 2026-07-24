@@ -2,17 +2,29 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
-// Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
-// SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
-// Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
-const renderLandingShell = async (view = "patcher") => {
-  // Node exposes navigator.hardwareConcurrency, which would bake the build
-  // machine's core count into the masthead. Force the "unknown environment"
-  // rendering (no thread count) so the prerendered HTML is deterministic.
+// Node exposes navigator.hardwareConcurrency, which would bake the build
+// machine's core count into the masthead. Force the "unknown environment"
+// rendering (no thread count) so the prerendered HTML is deterministic.
+const forceDeterministicNavigator = () => {
   Object.defineProperty(globalThis.navigator, "hardwareConcurrency", {
     configurable: true,
     value: 0,
   });
+};
+
+// Render the shell through an already-running Vite server's SSR loader. The dev
+// server reuses this so the prerendered shell matches production without
+// standing up a second Vite server per index.html request.
+const renderLandingShellWithServer = async (server, view = "patcher") => {
+  forceDeterministicNavigator();
+  const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
+  return entry.renderLandingShellHtml(view);
+};
+
+// Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
+// SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
+// Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
+const renderLandingShell = async (view = "patcher") => {
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),
@@ -21,8 +33,7 @@ const renderLandingShell = async (view = "patcher") => {
     server: { hmr: false, middlewareMode: true, watch: null },
   });
   try {
-    const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
-    return entry.renderLandingShellHtml(view);
+    return await renderLandingShellWithServer(server, view);
   } finally {
     await server.close();
   }
@@ -41,4 +52,4 @@ if (isDirectRun) {
   );
 }
 
-export { renderLandingShell };
+export { renderLandingShell, renderLandingShellWithServer };

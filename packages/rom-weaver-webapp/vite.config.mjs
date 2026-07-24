@@ -500,15 +500,34 @@ const writeChangelogAsset = () => {
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
 const prerenderWebappShell = (prerenderedShells) => ({
-  apply: "build",
   name: "rom-weaver-prerender-shell",
   transformIndexHtml: {
-    async handler(html) {
+    async handler(html, ctx) {
       if (!html.includes(PRERENDER_MOUNT_POINT))
         throw new Error("rom-weaver-prerender-shell: #webapp-root mount point not found in index.html");
-      const { renderLandingShell } = await import("./scripts/prerender.mjs");
-      const patcherShell = await renderLandingShell("patcher");
-      const creatorShell = await renderLandingShell("creator");
+      const prerender = await import("./scripts/prerender.mjs");
+      // Dev reuses the running dev server's SSR loader (no second Vite server
+      // per request) so the shell - and its prerender->mount handoff - matches
+      // production locally. Build renders the creator variant too, which
+      // writeWebappStaticAssets emits as a second static entry point.
+      if (ctx.server) {
+        const patcherShell = await prerender.renderLandingShellWithServer(ctx.server, "patcher");
+        // Production ships the bundled CSS as a render-blocking <link>, so its
+        // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
+        // that only apply after the bundle runs, which would flash the shell
+        // unstyled. Inject the same stylesheets render-blocking (Vite serves
+        // ?direct as real text/css) - order mirrors vite-entry.ts's imports.
+        return {
+          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell)),
+          tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
+            attrs: { href: `${href}?direct`, rel: "stylesheet" },
+            injectTo: "head",
+            tag: "link",
+          })),
+        };
+      }
+      const patcherShell = await prerender.renderLandingShell("patcher");
+      const creatorShell = await prerender.renderLandingShell("creator");
       prerenderedShells.set("patcher", patcherShell);
       prerenderedShells.set("creator", creatorShell);
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
