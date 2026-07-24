@@ -139,9 +139,13 @@
 .rw-app .drop.hero .formats-track {
   display: flex; gap: var(--sp-xs); width: max-content;
   animation: formats-ticker 120s linear infinite;
+  /* Start the marquee at the phase a loop running since the epoch would be at:
+     --wall-clock is stamped with the current epoch-seconds at mount (see
+     layout.tsx / index.html), so a reload or remount resumes mid-stride
+     instead of restarting at 0. Unset (SSR / no JS) falls back to 0s. */
+  animation-delay: calc(-1 * mod(var(--wall-clock, 0s), 120s));
   backface-visibility: hidden; will-change: transform;
 }
-#webapp-root[aria-busy="true"] .formats-track { animation-play-state: paused; }
 .rw-app .drop.hero .formats-lane:nth-child(2) .formats-track { animation-direction: reverse; }
 .rw-app .drop.hero .formats-set { display: flex; gap: var(--sp-xs); }
 .rw-app .drop.hero .fmt { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .04em; padding: 3px 12px; border: 1px solid var(--seam); border-radius: 99px; color: var(--ink-3); background: var(--plate); }

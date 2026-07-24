@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useState } from "react";
+import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -10,6 +10,12 @@ import { join } from "./cx.ts";
 const stampDroppedFiles = (files: readonly File[], atMs: number): void => {
   for (const file of files) recordDrop(file.name, atMs);
 };
+
+// False until the extension ticker has mounted once this session. The first
+// mount inherits the prerendered shell's :root --wall-clock for a seamless
+// swap; every later mount stamps the current epoch. Module-scoped so it spans
+// the ticker unmounting (hero -> compact) and remounting (reset back to hero).
+let tickerHasMounted = false;
 
 /**
  * Loom layout primitives: the numbered step section (0x01 …), the inline info
@@ -131,6 +137,28 @@ const DropZone = ({
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  const formatsRef = useRef<HTMLSpanElement>(null);
+  const showFormats = Boolean(big && formats?.length);
+  // Phase-lock the extension ticker (`formats-ticker`) to wall-clock time via a
+  // negative animation-delay derived from --wall-clock (see dropzone.css), so a
+  // page reload resumes the marquee where a continuously-running one would sit
+  // instead of restarting at 0. The head script in index.html seeds :root with
+  // the load-time epoch, which the prerendered shell's ticker inherits.
+  //
+  // The FIRST ticker mount replaces that prerendered node; leaving it on the
+  // inherited :root value keeps its animation-delay identical to the shell's,
+  // so webapp.ts's captured-phase transfer lands the swap with no jump. A later
+  // remount (tab switch back to an empty hero) has no prerendered counterpart,
+  // so stamp the current epoch to resume in real-time phase rather than snap
+  // back to the load-time position. useLayoutEffect is client-only (the shell
+  // stays deterministic) and runs before paint; keyed on the ticker's presence
+  // so plain re-renders never re-stamp.
+  useLayoutEffect(() => {
+    if (!showFormats) return;
+    const lane = formatsRef.current;
+    if (lane && tickerHasMounted) lane.style.setProperty("--wall-clock", `${Date.now() / 1000}s`);
+    tickerHasMounted = true;
+  }, [showFormats]);
   const formatSplit = Math.ceil((formats?.length || 0) / 2);
   const formatRows = formats?.length
     ? formats.length < 4
@@ -170,7 +198,7 @@ const DropZone = ({
   );
   const formatsNode =
     big && formats?.length ? (
-      <span aria-hidden="true" className="formats">
+      <span aria-hidden="true" className="formats" ref={formatsRef}>
         {formatRows.map((row) => (
           <span className="formats-lane" key={row.join("|")}>
             <span className="formats-track">
