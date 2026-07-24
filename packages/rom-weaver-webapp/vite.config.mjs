@@ -223,6 +223,34 @@ const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
   return routeHtml;
 };
 
+// SoftwareApplication structured data lets search engines render a rich result
+// for a free browser tool. Injected per indexable route with that route's
+// canonical URL and description; the price/offer marks it explicitly free.
+const createSoftwareApplicationLdJson = (route) => {
+  const data = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    applicationCategory: "UtilitiesApplication",
+    description: route.description,
+    name: "RomWeaver",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    operatingSystem: "Web browser",
+    url: `https://rom-weaver.com/${route.slug}`,
+  };
+  return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
+};
+
+const injectLdJson = (html, route) => html.replace("</head>", `  ${createSoftwareApplicationLdJson(route)}\n  </head>`);
+
+// The Trim and Tools tabs are still beta - they navigate in production but must
+// not be indexed, and they inherit the Weave page's markup, so strip the shared
+// index directive to noindex and point their canonical at themselves (rather
+// than leaking a /weave canonical that would fold them into the patcher page).
+const makeBetaRouteNoindex = (html, slug) =>
+  html
+    .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
+    .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
+
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/weave</loc></url>
@@ -274,14 +302,21 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells) => {
       const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
+      // dist/index.html is served at the apex (the patcher); give it the same
+      // SoftwareApplication markup the /weave route gets.
+      const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher);
+      fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
       const creatorHtml = indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator")));
-      const createHtml = createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel);
+      const createHtml = injectLdJson(
+        createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel),
+        WORKFLOW_SEO_ROUTES.creator,
+      );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       for (const [slug, html] of [
-        ["weave", indexHtml],
+        ["weave", weaveHtml],
         ["create", createHtml],
-        ["trim", indexHtml],
-        ["tools", indexHtml],
+        ["trim", makeBetaRouteNoindex(indexHtml, "trim")],
+        ["tools", makeBetaRouteNoindex(indexHtml, "tools")],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });

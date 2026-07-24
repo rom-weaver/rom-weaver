@@ -49,6 +49,19 @@ assertIncludes(
   "weave robots metadata",
 );
 
+assertIncludes(weaveHtml, '"@type":"SoftwareApplication"', "weave SoftwareApplication JSON-LD");
+assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
+assertIncludes(createHtml, '"url":"https://rom-weaver.com/create"', "create JSON-LD canonical url");
+
+for (const beta of ["trim", "tools"]) {
+  assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
+  assertIncludes(
+    read(`${beta}/index.html`),
+    `rel="canonical" href="https://rom-weaver.com/${beta}"`,
+    `${beta} self canonical`,
+  );
+}
+
 if (production) {
   if (weaveHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
   assertIncludes(robots, "Allow: /", "production robots.txt");
