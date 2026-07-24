@@ -51,12 +51,12 @@ msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "comprimido para guardar o en un bundle para compartir —"
+msgstr "o crea y abre bundles de parches compartibles, con o sin ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "y genera un parche para compartir —"
+msgstr "en un parche comprimido y compartible que otros puedan aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -121,7 +121,7 @@ msgstr "Cerrar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Compara una ROM original con una modificada,"
+msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin comprimir,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "Tejer"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Teje parches en tu ROM y descarga el resultado,"
+msgstr "Descomprime ROMs, aplica parches y vuelve a comprimir el resultado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

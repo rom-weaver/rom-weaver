@@ -1387,6 +1387,7 @@ function ApplyWorkflowFormView({
         inputId="rom-weaver-input-file-unified"
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDrop}
+        showLeadAccent={false}
         supported={APPLY_SUPPORTED_FILES}
       />
       {workflowEmpty ? (

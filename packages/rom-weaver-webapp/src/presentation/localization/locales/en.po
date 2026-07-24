@@ -51,12 +51,12 @@ msgstr "All local, in your browser — files never leave your machine."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "and compress the result —"
+msgstr "or create and open shareable patch bundles, with or without a ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "and produce a sharable patch —"
+msgstr "into a compressed, shareable patch others can apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -121,7 +121,7 @@ msgstr "Close"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Compare an original ROM against a modified one,"
+msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "Weave"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Weave patches into any ROM or a sharable patch bundle,"
+msgstr "Decompress ROMs, apply patches, and recompress the result,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

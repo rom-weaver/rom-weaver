@@ -51,12 +51,12 @@ msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rec
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "komprimiert zum Speichern oder als Bundle zum Teilen —"
+msgstr "oder teilbare Patch-Bundles mit oder ohne ROM erstellen und öffnen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "und einen teilbaren Patch erzeugen —"
+msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -121,7 +121,7 @@ msgstr "Schließen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Eine Original-ROM mit einer modifizierten vergleichen,"
+msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimiert oder unkomprimiert,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -561,7 +561,7 @@ msgstr "Weben"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Patches in deine ROM weben und das Ergebnis herunterladen,"
+msgstr "ROMs dekomprimieren, Patches anwenden und das Ergebnis erneut komprimieren,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -92,15 +92,24 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.accent": msg({ id: "ui.hero.accent", message: "at native speed" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
-    message: "Compare an original ROM against a modified one,",
+    message: "Turn an original ROM and its modified version, whether compressed or raw,",
   }),
-  "ui.hero.createThesis2": msg({ id: "ui.hero.createThesis2", message: "and produce a sharable patch —" }),
+  "ui.hero.createThesis2": msg({
+    id: "ui.hero.createThesis2",
+    message: "into a compressed, shareable patch others can apply",
+  }),
   "ui.hero.local": msg({
     id: "ui.hero.local",
     message: "All local, in your browser — files never leave your machine.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Weave patches into any ROM or a sharable patch bundle," }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and compress the result —" }),
+  "ui.hero.thesis": msg({
+    id: "ui.hero.thesis",
+    message: "Decompress ROMs, apply patches, and recompress the result,",
+  }),
+  "ui.hero.thesis2": msg({
+    id: "ui.hero.thesis2",
+    message: "or create and open shareable patch bundles, with or without a ROM",
+  }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",

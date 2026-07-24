@@ -37,6 +37,7 @@ type UnifiedDropZoneProps = {
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
   lead?: { line1: MessageId; line2: MessageId };
+  showLeadAccent?: boolean;
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
@@ -61,6 +62,7 @@ const UnifiedDropZone = ({
   num = "0x01",
   onDropStart,
   onFiles,
+  showLeadAccent = true,
   supported,
   title = "Inputs",
   ...dropZoneProps
@@ -99,7 +101,14 @@ const UnifiedDropZone = ({
       <span className="lead-title">
         <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
         <span className="lead-line">
-          {localizer.message(lead.line2)} <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>.
+          {localizer.message(lead.line2)}
+          {showLeadAccent ? (
+            <>
+              {" "}
+              <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>
+            </>
+          ) : null}
+          .
         </span>
       </span>
       <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>

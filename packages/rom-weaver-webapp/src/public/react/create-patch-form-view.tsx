@@ -42,7 +42,11 @@ const CreatePatchFormView = ({
   const localizer = useUiLocalizer();
   return (
     <section className="panel" id="patch-builder-container">
-      <UnifiedDropZone {...dropZone} lead={{ line1: "ui.hero.createThesis", line2: "ui.hero.createThesis2" }} />
+      <UnifiedDropZone
+        {...dropZone}
+        lead={{ line1: "ui.hero.createThesis", line2: "ui.hero.createThesis2" }}
+        showLeadAccent={false}
+      />
       {sourcesEmpty ? (
         <GhostSteps
           steps={[

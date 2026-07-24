@@ -45,6 +45,19 @@ describe("UnifiedDropZone", () => {
     expect(step?.querySelector(".drop .main.btnish")).toBeTruthy();
   });
 
+  it("can omit the hero accent", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        big
+        inputId="rom-weaver-input-file-unified"
+        label="Drop files"
+        onFiles={() => undefined}
+        showLeadAccent={false}
+      />,
+    );
+    expect(container.querySelector(".lead-accent")).toBeNull();
+  });
+
   it("opens the existing file input from the Inputs heading action", () => {
     const { container } = render(
       <UnifiedDropZone inputId="rom-weaver-input-file-unified" label="Add more" onFiles={() => undefined} />,
