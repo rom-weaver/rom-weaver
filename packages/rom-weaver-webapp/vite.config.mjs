@@ -499,26 +499,52 @@ const writeChangelogAsset = () => {
 // to drift. The client keeps createRoot and replaces the shell on first mount.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
+// Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
+// in webapp-controller.ts: the last path segment picks the workflow. Only the
+// creator has a shell of its own (the build emits create.html and
+// create/index.html from it); trim and tools inherit the patcher markup, exactly
+// as writeWebappStaticAssets emits them.
+const devPrerenderView = (url) => {
+  const segments = String(url || "")
+    .split(/[?#]/)[0]
+    .toLowerCase()
+    .split("/")
+    .filter(Boolean);
+  if (segments.at(-1) === "index.html") segments.pop();
+  const slug = segments.at(-1) || "";
+  return slug === "create" || slug === "create.html" ? "creator" : "patcher";
+};
+
 const prerenderWebappShell = (prerenderedShells) => ({
   name: "rom-weaver-prerender-shell",
   transformIndexHtml: {
     async handler(html, ctx) {
-      if (!html.includes(PRERENDER_MOUNT_POINT))
+      // Dev serves every HTML file in the package, not just the app entry
+      // (mobile-safari-matrix.html is the on-device diagnostic harness), so a
+      // missing mount point there is expected. It is still a hard build error:
+      // index.html is the only HTML rollup input.
+      if (!html.includes(PRERENDER_MOUNT_POINT)) {
+        if (ctx.server) return html;
         throw new Error("rom-weaver-prerender-shell: #webapp-root mount point not found in index.html");
+      }
       const prerender = await import("./scripts/prerender.mjs");
       // Dev reuses the running dev server's SSR loader (no second Vite server
       // per request) so the shell - and its prerender->mount handoff - matches
       // production locally. Build renders the creator variant too, which
       // writeWebappStaticAssets emits as a second static entry point.
       if (ctx.server) {
-        const patcherShell = await prerender.renderLandingShellWithServer(ctx.server, "patcher");
+        const view = devPrerenderView(ctx.originalUrl ?? ctx.path);
+        const shell = await prerender.renderLandingShellWithServer(ctx.server, view);
         // Production ships the bundled CSS as a render-blocking <link>, so its
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell
         // unstyled. Inject the same stylesheets render-blocking (Vite serves
         // ?direct as real text/css) - order mirrors vite-entry.ts's imports.
+        // These links are outside the module graph, so a CSS edit only reaches
+        // them on a full reload; until then the HMR'd <style> (appended after
+        // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
-          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell)),
+          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
           tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
             attrs: { href: `${href}?direct`, rel: "stylesheet" },
             injectTo: "head",
