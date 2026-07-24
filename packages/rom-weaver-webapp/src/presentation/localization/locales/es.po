@@ -60,6 +60,11 @@ msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "y descarga el resultado o un paquete compartible —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
 msgstr "y redúcelos para almacenarlos —"
 
@@ -67,6 +72,11 @@ msgstr "y redúcelos para almacenarlos —"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Aplica parches a cualquier ROM, comprimida o sin comprimir,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -140,11 +150,6 @@ msgstr "Crear bundle {format} con ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Descomprime ROMs, aplica parches y vuelve a comprimir el resultado,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Descartar"
 
@@ -211,7 +216,7 @@ msgstr "Corregir cabecera ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "en un parche comprimido y compartible que otros puedan aplicar"
+msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -292,11 +297,6 @@ msgstr "No se encontró ningún archivo seleccionable."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "o crea y abre bundles de parches compartibles, con o sin ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

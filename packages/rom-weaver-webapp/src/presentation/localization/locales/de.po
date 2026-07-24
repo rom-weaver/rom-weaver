@@ -60,6 +60,11 @@ msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rec
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "und das Ergebnis oder ein teilbares Bundle herunterladen —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
 msgstr "und die Dateien fürs Archiv verkleinern —"
 
@@ -67,6 +72,11 @@ msgstr "und die Dateien fürs Archiv verkleinern —"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "wird nach Patch {n} angewendet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Patches auf jede ROM anwenden, komprimiert oder unkomprimiert,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -140,11 +150,6 @@ msgstr "{format}-ROM-Bundle erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "ROMs dekomprimieren, Patches anwenden und das Ergebnis erneut komprimieren,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Verwerfen"
 
@@ -211,7 +216,7 @@ msgstr "ROM-Header korrigieren"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können"
+msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -292,11 +297,6 @@ msgstr "Keine wählbare Datei gefunden."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Aktuell"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "oder teilbare Patch-Bundles mit oder ohne ROM erstellen und öffnen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

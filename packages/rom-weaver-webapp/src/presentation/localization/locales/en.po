@@ -60,6 +60,11 @@ msgstr "All local, in your browser — files never leave your machine."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "and download the result or a shareable bundle —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
 msgstr "and shrink them for storage —"
 
@@ -67,6 +72,11 @@ msgstr "and shrink them for storage —"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "applies after patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Apply patches to any ROM, compressed or raw,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -140,11 +150,6 @@ msgstr "Create {format} ROM Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Decompress ROMs, apply patches, and recompress the result,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Dismiss"
 
@@ -211,7 +216,7 @@ msgstr "Fix ROM header"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "into a compressed, shareable patch others can apply"
+msgstr "into a compressed, shareable patch others can apply —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -292,11 +297,6 @@ msgstr "No selectable file was found."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Now"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "or create and open shareable patch bundles, with or without a ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
