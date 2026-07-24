@@ -26,6 +26,7 @@
 
 <!-- START doctoc -->
 
+- [Why](#why)
 - [Features](#features)
 - [Notices](#notices)
 - [Install](#install)
@@ -35,6 +36,34 @@
 - [License](#license)
 
 <!-- END doctoc -->
+
+## Why
+
+Every console generation brought its own compressed format, and each one came
+with its own tool. CHD for discs, RVZ for GameCube and Wii, Z3DS for 3DS, CSO
+and PBP for PSP, plus the usual ZIP and 7z on top. Those tools are scattered
+across projects, most are command-line only, and plenty of them only ship
+builds for one or two platforms. If you are on a Mac, or on Windows without a
+compiler handy, half of them are out of reach. Anyone who has tried to shrink a
+disc collection knows the routine: track down five programs, learn five sets of
+flags, and hope each one still builds.
+
+Patching has the same problem from a different angle. Most patchers take one
+patch at a time, so a translation plus a bugfix plus an undub means running the
+tool three times and keeping the intermediate files straight yourself. And
+because almost no patcher reads compressed input, the real sequence is
+decompress, patch, recompress - every time you want to try a different patch or
+redo one you already applied. That is a lot of disk churn and waiting for what
+should be a single step.
+
+The last piece is curation. Keeping a collection in order means storing ROMs
+compressed, keeping the patches next to them, and being able to prove months
+later that a patched file came from the ROM you think it did. rom-weaver
+handles all of it in one place: read and write every format above, chain as
+many patches as you want in a single pass without unpacking to disk first, and
+record the whole recipe - patch order, checksums, output names - in a bundle
+file you can hand to someone else. It runs the same on Linux, macOS, and
+Windows, and in the browser if you would rather not install anything.
 
 ## Features
 
