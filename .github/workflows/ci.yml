@@ -37,8 +37,8 @@ jobs:
       rust: ${{ steps.classify.outputs.rust }}
       webapp: ${{ steps.classify.outputs.webapp }}
       security: ${{ steps.classify.outputs.security }}
-      docker_cli: ${{ steps.classify.outputs.docker_cli }}
-      docker_webapp: ${{ steps.classify.outputs.docker_webapp }}
+      docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
     steps:
       - name: Checkout
@@ -67,6 +67,33 @@ jobs:
           printf 'changed paths:\n%s\n' "${paths:-(none)}"
           printf '%s\n' "$paths" | scripts/ci/classify-changes.sh | tee -a "$GITHUB_OUTPUT"
 
+      # The image table lives here rather than in the `docker` job below because
+      # a matrix can only be fed by an upstream job's output, and an unselected
+      # leg has to be absent from the matrix rather than started and skipped -
+      # that is the whole saving. `[]` means neither image is selected; the job
+      # guards on it, since an empty matrix is a hard error.
+      - name: Plan the Docker image matrix
+        id: docker-matrix
+        env:
+          CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
+          WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
+        run: |
+          set -euo pipefail
+          legs=""
+          if [[ "$CLI_SELECTED" == true ]]; then
+            legs="$legs$(jq -cn '{name: "CLI", image: "rom-weaver-cli", file: "Dockerfile"}')"$'\n'
+          fi
+          if [[ "$WEBAPP_SELECTED" == true ]]; then
+            legs="$legs$(jq -cn '{
+              name: "webapp",
+              image: "rom-weaver-webapp",
+              file: "packages/rom-weaver-webapp/Dockerfile"
+            }')"$'\n'
+          fi
+          matrix=$(printf '%s' "$legs" | jq -cs .)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Docker legs: $matrix"
+
   # Static analysis of the repository's own plumbing - workflows, shell
   # scripts, Dockerfiles. Compiles nothing and installs no language toolchain,
   # so it finishes in well under a minute and reports independently of the
@@ -75,7 +102,12 @@ jobs:
     name: Lint workflows + scripts + Dockerfiles
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    if: github.ref_type != 'tag'
+    needs: changes
+    # It lints every tracked workflow, shell script, and Dockerfile rather than
+    # the diff, so the gate is "did any file of those kinds change at all", not
+    # a per-file filter. The `Plumbing` aggregate below is the required check,
+    # so skipping this reports nothing to branch protection.
+    if: github.ref_type != 'tag' && needs.changes.outputs.repo_lint == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -102,9 +134,10 @@ jobs:
   #
   # This job builds the images from source, and each leg is gated on its actual
   # inputs rather than running for unrelated changes. The CLI leg includes its
-  # Cargo workspace sources, so its required check always exercises the image
-  # when the binary changes. The webapp's source build remains image-plumbing
-  # only because its release path is exercised by the prebuilt smoke below.
+  # Cargo workspace sources, so the `Plumbing` aggregate always exercises the
+  # image when the binary changes. The webapp's source build remains
+  # image-plumbing only because its release path is exercised by the prebuilt
+  # smoke below.
   #
   # Reusing CI's cached wasm here is not an option: the CLI image contains no
   # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
@@ -117,7 +150,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
-    if: github.ref_type != 'tag'
+    if: github.ref_type != 'tag' && needs.changes.outputs.docker_matrix != '[]'
     permissions:
       contents: read
       # Read to restore the cache; write so a merge to main can refresh it. A
@@ -126,39 +159,17 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
+      # Planned in `changes` above: an unselected image is absent from the
+      # matrix entirely rather than starting a runner to skip its own steps.
       matrix:
-        include:
-          - name: CLI
-            image: rom-weaver-cli
-            file: Dockerfile
-          - name: webapp
-            image: rom-weaver-webapp
-            file: packages/rom-weaver-webapp/Dockerfile
+        include: ${{ fromJSON(needs.changes.outputs.docker_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Check whether the image plumbing changed
-        id: gate
-        env:
-          CLI_SELECTED: ${{ needs.changes.outputs.docker_cli }}
-          WEBAPP_SELECTED: ${{ needs.changes.outputs.docker_webapp }}
-          IMAGE: ${{ matrix.name }}
-        run: |
-          set -euo pipefail
-          if [[ "$IMAGE" == CLI ]]; then
-            build=$CLI_SELECTED
-          else
-            build=$WEBAPP_SELECTED
-          fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "$IMAGE build selected: $build"
-
       - uses: docker/setup-buildx-action@v4
-        if: steps.gate.outputs.build == 'true'
 
       - name: Log in to GitHub Container Registry
-        if: steps.gate.outputs.build == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -169,7 +180,6 @@ jobs:
       # release starts warm; on a pull request it only reads, because a fork's
       # token cannot write to the registry.
       - name: Build image
-        if: steps.gate.outputs.build == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -180,7 +190,7 @@ jobs:
           cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
 
       - name: Build CLI prebuilt path
-        if: steps.gate.outputs.build == 'true' && matrix.name == 'CLI'
+        if: matrix.name == 'CLI'
         run: |
           set -euo pipefail
           mkdir -p prebuilt
@@ -222,15 +232,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
+    # Skipped whole rather than started with every step gated off. Everything
+    # downstream of it - the four webapp jobs, `docker-prebuilt`, `deploy` -
+    # carries the same selection, so none of them is left waiting on an
+    # artifact that was never going to be built. The `Plumbing` aggregate below
+    # is the required check.
+    if: needs.changes.outputs.webapp == 'true'
     env:
       CARGO_TERM_COLOR: always
     steps:
       - name: Checkout
-        if: needs.changes.outputs.webapp == 'true'
         uses: actions/checkout@v7
 
       - name: Restore built wasm module
-        if: needs.changes.outputs.webapp == 'true'
         id: wasm-cache
         uses: ./.github/actions/wasm-cache
         with:
@@ -244,7 +258,7 @@ jobs:
 
       # Skipped entirely on a hit - the toolchain exists only to compile.
       - uses: ./.github/actions/setup-build-env
-        if: needs.changes.outputs.webapp == 'true' && steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         with:
           tools: node rust binaryen
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
@@ -255,19 +269,17 @@ jobs:
       # of extending them, silently dropping shared-memory, LTO, and exports.
       # The separate non-linking Rust check denies warnings.
       - name: Build production WASM
-        if: needs.changes.outputs.webapp == 'true' && steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
 
       # Validate completeness and the 4 GiB memory ceiling on both cache paths.
       # Use runner Node because toolchain setup is skipped on hits.
       - name: Verify wasm artifact
-        if: needs.changes.outputs.webapp == 'true'
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
       # The wasm module and its brotli sibling are already compressed, so
       # re-compressing them into the artifact only burns time.
       - name: Upload WASM artifact
-        if: needs.changes.outputs.webapp == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: wasm-prod
@@ -279,6 +291,38 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
             packages/rom-weaver-webapp/src/wasm/NOTICE
             packages/rom-weaver-webapp/src/wasm/third_party
+
+  # One stable name for the repository plumbing - lint, the WASM module, the
+  # images - so each of those jobs can be skipped outright when nothing it
+  # consumes changed. Branch protection requires this, not the individual jobs:
+  # a job removed from a matrix reports no status at all, and the ruleset has no
+  # bypass actors, so an unreported required name blocks the merge forever.
+  # Same shape as `rust` and `webapp` below: it runs even when its dependencies
+  # skipped, and accepts a skip only where `changes` did not select the stack.
+  plumbing:
+    name: Plumbing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [changes, repo-lint, docker, docker-prebuilt, wasm]
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    steps:
+      - name: Verify plumbing jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          REPO_LINT_SELECTED: ${{ needs.changes.outputs.repo_lint }}
+          REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
+          DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
+          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
+          WASM_RESULT: ${{ needs.wasm.result }}
+        run: |
+          [[ "$CHANGES_RESULT" == success ]]
+          check() { [[ "$1" == success || ( "$1" == skipped && "$2" != true ) ]]; }
+          check "$REPO_LINT_RESULT" "$REPO_LINT_SELECTED"
+          check "$DOCKER_RESULT" "$DOCKER_SELECTED"
+          check "$DOCKER_PREBUILT_RESULT" "$WEBAPP_SELECTED"
+          check "$WASM_RESULT" "$WEBAPP_SELECTED"
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.

@@ -20,6 +20,7 @@ test("documentation changes skip compiled stacks", () => {
     security: "false",
     docker_cli: "false",
     docker_webapp: "false",
+    repo_lint: "false",
     full: "false",
   });
 });
@@ -31,6 +32,7 @@ test("webapp changes reuse wasm and skip Rust", () => {
     security: "false",
     docker_cli: "false",
     docker_webapp: "false",
+    repo_lint: "false",
     full: "false",
   });
 });
@@ -42,6 +44,7 @@ test("Docker changes select only the affected images", () => {
     security: "false",
     docker_cli: "true",
     docker_webapp: "false",
+    repo_lint: "true",
     full: "false",
   });
   assert.deepEqual(classify("packages/rom-weaver-webapp/Dockerfile"), {
@@ -50,6 +53,7 @@ test("Docker changes select only the affected images", () => {
     security: "false",
     docker_cli: "false",
     docker_webapp: "true",
+    repo_lint: "true",
     full: "false",
   });
   assert.deepEqual(classify(".dockerignore"), {
@@ -58,6 +62,7 @@ test("Docker changes select only the affected images", () => {
     security: "false",
     docker_cli: "true",
     docker_webapp: "true",
+    repo_lint: "false",
     full: "false",
   });
 });
@@ -73,8 +78,50 @@ test("Rust and vendored C changes build the CLI image", () => {
       security: "false",
       docker_cli: "true",
       docker_webapp: "false",
+      repo_lint: "false",
       full: "false",
     });
+  }
+});
+
+// The wasm cache key excludes these same trees, so selecting the webapp stack
+// for them can only ever buy a cache hit plus four browser jobs that cannot
+// observe the edit. `.github/actions/wasm-cache` owns the authoritative list.
+test("Rust test-only changes select Rust alone", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/tests/cli_smoke/apply.rs",
+    "crates/rom-weaver-core/src/test_support.rs",
+    "crates/rom-weaver-patches/benches/xdelta.rs",
+    "crates/rom-weaver-containers/examples/probe.rs",
+  ]) {
+    assert.deepEqual(classify(path), {
+      rust: "true",
+      webapp: "false",
+      security: "false",
+      docker_cli: "false",
+      docker_webapp: "false",
+      repo_lint: "false",
+      full: "false",
+    });
+  }
+});
+
+test("plumbing lint runs only for the file kinds it lints", () => {
+  for (const path of [
+    ".github/workflows/codeql.yml",
+    ".github/actions/wasm-cache/action.yml",
+    "scripts/setup-worktree.sh",
+    "packages/rom-weaver-webapp/Dockerfile",
+  ]) {
+    assert.equal(classify(path).repo_lint, "true", path);
+  }
+  for (const path of [
+    "README.md",
+    "crates/rom-weaver-core/src/lib.rs",
+    "packages/rom-weaver-webapp/src/index.tsx",
+    "install.ps1",
+  ]) {
+    assert.equal(classify(path).repo_lint, "false", path);
   }
 });
 
@@ -89,6 +136,7 @@ test("native package changes build every CLI platform", () => {
       security: "false",
       docker_cli: "false",
       docker_webapp: "false",
+      repo_lint: "false",
       full: "false",
     });
   }
@@ -101,6 +149,7 @@ test("dependency and CI changes select their broader checks", () => {
     security: "true",
     docker_cli: "true",
     docker_webapp: "false",
+    repo_lint: "false",
     full: "false",
   });
   for (const path of [
@@ -115,6 +164,7 @@ test("dependency and CI changes select their broader checks", () => {
       security: "true",
       docker_cli: "true",
       docker_webapp: "true",
+      repo_lint: "true",
       full: "true",
     });
   }

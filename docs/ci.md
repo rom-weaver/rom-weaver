@@ -94,15 +94,16 @@ screenshots. Merging the release pull request is what sets `release_created` and
 unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
-> must use squash merge and pass `Rust`, `Conventional commits`, `Build WASM
-> module`, `Lint workflows + scripts + Dockerfiles`, `Webapp`, `Docker build
-> (CLI)`, `Docker build (webapp)`, and `license/cla`. The ruleset has no bypass
-> actors, so a status that is never reported blocks the merge outright.
+> must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `Conventional
+> commits`, and `license/cla`. The ruleset has no bypass
+> actors, so a status that is never reported blocks the merge outright - which
+> is why every required name belongs to an aggregate job that always runs, and
+> never to a job that path classification can skip or drop from a matrix.
 
 ## `ci.yml` - the required gate
 
 ```
-changes ── changed paths -> rust / webapp / security
+changes ── changed paths -> rust / webapp / security / repo_lint / docker legs
 
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
@@ -121,7 +122,10 @@ wasm ────┤
                  └── deploy-preview-fast ── preview, wasm cache hit only
                                             (skips deploy's preview leg)
 
-webapp-static ── docker-prebuilt (webapp) - the release COPY path
+             ┌── repo-lint ───────────┐
+changes ─────┼── docker (0-2 legs) ───┼── plumbing (aggregate check name)
+             ├── wasm ────────────────┤
+             └── docker-prebuilt ─────┘ (via webapp-static: the release COPY path)
 
 security ── advisories (warn only, always green)
 ```
@@ -129,14 +133,21 @@ security ── advisories (warn only, always green)
 ### Jobs
 
 - **`changes`** classifies the pull request or push diff once. Rust and
-  vendored C changes select Rust, webapp integration, and the CLI image build;
+  vendored C changes select Rust, webapp integration, and the CLI image build -
+  except Rust test, bench, and example sources, which select the Rust jobs
+  alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
-  module; dependency manifests select the advisory scanners. Documentation
+  module; dependency manifests select the advisory scanners; workflows, shell
+  scripts, and Dockerfiles select the plumbing lint. Documentation
   changes select none of those expensive stacks. Manual runs and changes to
-  CI, coverage, the toolchain, or the classifier run everything.
+  CI, coverage, the toolchain, or the classifier run everything. It also plans
+  the `docker` matrix, because a matrix can only be fed by an upstream job's
+  output.
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
-  `hadolint` over the Dockerfiles. It installs no language toolchain and
+  `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
+  rather than the diff, so it is selected by whether any `.github` entry, shell
+  script, or Dockerfile changed at all - not per file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -144,7 +155,10 @@ security ── advisories (warn only, always green)
   pushing, so a broken Dockerfile fails here rather than at the moment it
   blocks a release publish. The CLI leg runs for Cargo workspace sources and
   manifests as well as its image plumbing, so the required check builds the
-  image whenever its binary changes. The webapp source leg runs only when its
+  image whenever its binary changes. An unselected leg is absent from the
+  matrix entirely rather than starting a runner to skip its own steps, which is
+  why the required check name is the `plumbing` aggregate and not the legs.
+  The webapp source leg runs only when its
   image plumbing changes (the Dockerfile, `.dockerignore`,
   `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
   `docker-publish.yml`); ordinary webapp changes use the release-equivalent
@@ -168,7 +182,8 @@ security ── advisories (warn only, always green)
   built once here and shared with `webapp` and `deploy` as an artifact, and
   with `release` by artifact download. A webapp-only change
   restores it by its source-exact key; a change outside the webapp/runtime
-  stack leaves the required job present but does no artifact work.
+  stack skips the job outright, along with everything downstream that would
+  have consumed the artifact.
 - **`rust-host`** is everything needing a host-profile Rust build: fmt, clippy,
   typegen drift, whitespace, thread guards, the Rust test suite, license
   attribution, `cargo deny` licenses/sources, unused dependencies, and a
@@ -205,6 +220,11 @@ security ── advisories (warn only, always green)
   through the `test-rust` task, Windows via `taiki-e/install-action` at the
   same pinned version). nextest does not execute doctests, so each leg runs a
   separate `cargo test --doc` pass rather than silently shrinking the suite.
+- **`plumbing`** is an aggregator over `repo-lint`, `docker`,
+  `docker-prebuilt`, and `wasm`, with the same contract as `rust` below. Those
+  four are each skippable, and a matrix leg that is not planned reports no
+  status at all, so `Plumbing` is the only name branch protection can safely
+  require for them.
 - **`rust`** is an aggregator: it fails unless selected jobs succeeded and
   unselected jobs were intentionally skipped. It also fails if classification
   itself failed.
@@ -444,10 +464,16 @@ from different source. A miss costs one build; a false hit ships stale WASM.
 
 ### `scripts/ci/classify-changes.sh`
 
-Maps changed paths to the Rust, webapp, dependency-scanning, and per-image
-Docker stacks.
+Maps changed paths to the Rust, webapp, dependency-scanning, plumbing-lint, and
+per-image Docker stacks.
 Rust and vendored C imply webapp integration, while webapp-only
-changes do not imply Rust. Changes to CI, coverage, toolchain setup, or the
+changes do not imply Rust. Rust test, bench, and example trees are the one
+exception: they select the Rust jobs but not the webapp or CLI-image stacks,
+because they enter neither the production WASM module nor the release binary -
+`.github/actions/wasm-cache` excludes the identical list from its cache key, so
+selecting the webapp there could only ever buy a guaranteed cache hit followed
+by four browser jobs that cannot observe the edit. Keep the two lists in step.
+Changes to CI, coverage, toolchain setup, or the
 classifier fail open by selecting every stack.
 `scripts/ci/classify-changes.test.mjs` pins these boundaries.
 
