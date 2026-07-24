@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
-import process from "node:process";
-import { appendFileSync } from "node:fs";
+// The image table lives here rather than in the `docker` job because a matrix
+// can only be fed by an upstream job's output.
 
-const legs = [];
-if (process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile" });
-if (process.env.WEBAPP_SELECTED === "true") legs.push({ name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile" });
-const output = `matrix=${JSON.stringify(legs)}\n`;
-process.stdout.write(`${output}Docker legs: ${JSON.stringify(legs)}\n`);
-if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
+import { appendFileSync } from "node:fs";
+import process from "node:process";
+
+import { runMain } from "../run-main.mjs";
+
+runMain(() => {
+  const legs = [];
+  if (process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile" });
+  if (process.env.WEBAPP_SELECTED === "true") legs.push({ name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile" });
+  const matrix = JSON.stringify(legs);
+  process.stdout.write(`Docker legs: ${matrix}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${matrix}\n`);
+});
