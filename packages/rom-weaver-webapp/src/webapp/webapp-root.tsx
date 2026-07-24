@@ -24,11 +24,10 @@ import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
-import { getSettingsUiState } from "./settings/settings-state.ts";
+import type { SettingsDraftState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import { SettingsPanel } from "./webapp-settings";
 import {
   ApplyPatchRoute,
   CreatePatchRoute,
@@ -49,6 +48,29 @@ const WORKFLOW_TABS = [
 // The trace inspector is the single largest dialog in the bundle and opens from
 // a masthead button, so it only downloads once someone asks for it.
 const LogDialog = lazy(() => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog })));
+
+// The settings panel drags in the whole settings-metadata graph (field metadata,
+// codec combobox, compression profile copy) that nothing on the workflow surface
+// needs, so it loads on demand and is warmed at idle to keep first open instant.
+const loadSettingsPanel = () => import("./webapp-settings.tsx");
+const SettingsPanel = lazy(() => loadSettingsPanel().then((module) => ({ default: module.SettingsPanel })));
+
+const warmSettingsPanel = (): (() => void) => {
+  const warm = () => {
+    void loadSettingsPanel().catch((error: unknown) => {
+      // The lazy wrapper still owns the user-visible failure on a real open.
+      logger.warn("Settings panel preload failed", {
+        message: error instanceof Error ? error.message : String(error || ""),
+      });
+    });
+  };
+  if (typeof requestIdleCallback !== "function") {
+    const timer = setTimeout(warm, 1000);
+    return () => clearTimeout(timer);
+  }
+  const handle = requestIdleCallback(warm, { timeout: 5000 });
+  return () => cancelIdleCallback(handle);
+};
 
 const logger = createLogger("webapp-root");
 
@@ -214,6 +236,9 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   // Warm the tabs the visitor did not land on once the main thread is idle, so
   // a tab switch never waits on a chunk request.
   useEffect(() => preloadIdleWorkflowRoutes(state.currentView), [state.currentView]);
+  // Same idea for the settings panel: off the critical path, but resolved well
+  // before the masthead button can realistically be pressed.
+  useEffect(() => warmSettingsPanel(), []);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -447,15 +472,16 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
           title="Settings"
           variant="settings-modal"
         >
-          <SettingsPanel
-            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-            onClose={actions.onCloseSettings}
-            onDraftChange={actions.onDraftChange}
-            onRestoreDefaults={actions.onRestoreDefaults}
-            onSaveClose={actions.onSaveClose}
-            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-            validation={state.validation}
-          />
+          <Suspense fallback={null}>
+            <SettingsPanel
+              draftSettings={state.draftSettings as SettingsDraftState}
+              onClose={actions.onCloseSettings}
+              onDraftChange={actions.onDraftChange}
+              onRestoreDefaults={actions.onRestoreDefaults}
+              onSaveClose={actions.onSaveClose}
+              validation={state.validation}
+            />
+          </Suspense>
         </Modal>
         <ConfirmDialog
           body={confirmationDialog.message}
