@@ -28,10 +28,6 @@ jobs:
         uses: ./.github/actions/wasm-cache
         with:
           variant: dev
-          path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/third_party
 
       - uses: ./.github/actions/setup-build-env
         with:

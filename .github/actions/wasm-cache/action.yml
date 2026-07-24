@@ -12,8 +12,11 @@ inputs:
     description: prod or dev. Part of the key, so the two builds can never collide.
     required: true
   path:
-    description: Newline-separated artifact paths to cache.
-    required: true
+    description: >-
+      Newline-separated artifact paths to cache. Defaults to the variant's
+      canonical file set, which is what every caller wants; override only to
+      cache something else under the same keying rules.
+    default: ""
   cache-epoch:
     description: Bump to invalidate every cached module by hand.
     default: "1"
@@ -33,10 +36,45 @@ outputs:
   key:
     description: The resolved cache key.
     value: ${{ steps.key.outputs.key }}
+  path:
+    description: >-
+      The newline-separated paths that were cached. Callers that upload the same
+      files as a workflow artifact read this instead of restating the list.
+    value: ${{ steps.paths.outputs.path }}
 
 runs:
   using: composite
   steps:
+    # The file set is a property of the variant, not of the caller: a dev build
+    # emits no wasm-opt/brotli sidecars and no prod checksum. Resolving it here
+    # keeps a caller from caching a subset of what it later uploads.
+    - name: Resolve artifact paths
+      id: paths
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.variant }}
+        OVERRIDE: ${{ inputs.path }}
+      run: |
+        wasm_dir=packages/rom-weaver-webapp/src/wasm
+        if [ -n "$OVERRIDE" ]; then
+          paths="$OVERRIDE"
+        else
+          # A dev build runs neither wasm-opt nor brotli and writes no prod
+          # checksum, so it has three of the five files.
+          case "$VARIANT" in
+            prod) names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE third_party) ;;
+            dev) names=(rom-weaver-app.wasm NOTICE third_party) ;;
+            *) echo "::error::unknown wasm variant '$VARIANT'"; exit 1 ;;
+          esac
+          paths=$(printf '%s\n' "${names[@]/#/$wasm_dir/}")
+        fi
+        {
+          echo "path<<PATHS_EOF"
+          printf '%s\n' "$paths"
+          echo "PATHS_EOF"
+        } >> "$GITHUB_OUTPUT"
+        printf 'caching (%s):\n%s\n' "$VARIANT" "$paths"
+
     # Hash every source, dependency, toolchain, and build-script input to the
     # emitted module. git ls-tree resolves the PR merge tree, unlike hashFiles.
     # Test targets never enter this production build, so exclude them instead
@@ -90,7 +128,7 @@ runs:
       uses: actions/cache@v6
       with:
         key: ${{ steps.key.outputs.key }}
-        path: ${{ inputs.path }}
+        path: ${{ steps.paths.outputs.path }}
 
     - name: Restore built wasm module (read-only)
       id: restore
