@@ -104,7 +104,7 @@ ROM_WEAVER_WASM_OUT_DIR=/path/to/artifacts mise run build-wasm
 
 The build synchronizes the artifacts back into the webapp package when the
 custom directory differs from the default. The threaded target flags and WASI
-compiler wiring live in `.cargo/config.toml` and `.mise.toml`; use `mise exec`
+compiler wiring live in `.cargo/config.toml` and `.config/mise.toml`; use `mise exec`
 for ad hoc target commands:
 
 ```bash

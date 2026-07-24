@@ -6,7 +6,7 @@ import test from "node:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, "mise-disable-tools.sh");
-const config = join(here, "..", "..", ".mise.toml");
+const config = join(here, "..", "..", ".config/mise.toml");
 
 const run = (...wanted) =>
   execFileSync(script, [config, ...wanted], { encoding: "utf8" }).trim();
@@ -21,7 +21,7 @@ const runFails = (...wanted) => {
 };
 
 // The exclusion lists each CI job used to carry by hand. Regenerating them
-// from .mise.toml is only safe if it reproduces them exactly, so the previous
+// from .config/mise.toml is only safe if it reproduces them exactly, so the previous
 // values are pinned here rather than described.
 const JOBS = {
   "wasm / release fallback": [

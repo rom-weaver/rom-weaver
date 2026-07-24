@@ -1,6 +1,6 @@
 # Dependency update automation.
 #
-# Everything in this repo is pinned to an exact version (see .mise.toml [tools]
+# Everything in this repo is pinned to an exact version (see .config/mise.toml [tools]
 # and the package.json dependency blocks), which is deliberate - reproducible
 # wasm builds depend on it - but means nothing drives those pins forward. These
 # schedules do.

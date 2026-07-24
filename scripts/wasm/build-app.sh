@@ -6,7 +6,7 @@
 #   build-app.sh        # dev: build + cp + strip + sync
 #   build-app.sh prod   # prod: build + cp + wasm-opt + strip + brotli + sync
 #
-# Reads MISE_PROJECT_ROOT and WASI_* from .mise.toml. Honors
+# Reads MISE_PROJECT_ROOT and WASI_* from .config/mise.toml. Honors
 # ROM_WEAVER_WASM_OUT_DIR and, in production, BROTLI_QUALITY and
 # ROM_WEAVER_WASM_NO_BROTLI.
 #

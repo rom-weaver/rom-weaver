@@ -560,7 +560,7 @@ jobs:
   # are bash scripts a native cargo cannot exec, and mise's [env] templates
   # assume a POSIX shell. The npm platform publish already proves the
   # dtolnay + rustup route on this exact image, so the tests ride that instead.
-  # The toolchain pin is read from .mise.toml so this leg can never drift from
+  # The toolchain pin is read from .config/mise.toml so this leg can never drift from
   # the version the other jobs test with. No wasm leg here - building the wasm
   # module on Windows is unsupported until those shims have a native
   # counterpart.
@@ -572,7 +572,7 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
-      # The mise legs get this from .mise.toml's [env]; this leg bypasses mise.
+      # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
       # Incremental artifacts only bloat the rust-cache save.
       CARGO_INCREMENTAL: "0"
       # MSVC debug info (PDBs, link.exe /DEBUG) is the priciest part of a
@@ -614,9 +614,9 @@ jobs:
         id: pin
         shell: bash
         run: |
-          version=$(sed -n 's/^rust = "\(.*\)"$/\1/p' .mise.toml)
+          version=$(sed -n 's/^rust = "\(.*\)"$/\1/p' .config/mise.toml)
           if [ -z "$version" ]; then
-            echo "::error::no rust pin found in .mise.toml"
+            echo "::error::no rust pin found in .config/mise.toml"
             exit 1
           fi
           echo "rust=$version" >> "$GITHUB_OUTPUT"
@@ -633,7 +633,7 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # Same version as the .mise.toml pin; this leg cannot use mise.
+      # Same version as the .config/mise.toml pin; this leg cannot use mise.
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest@0.9.140

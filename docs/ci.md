@@ -238,7 +238,7 @@ security ── advisories (warn only, always green)
   jobs. fmt, clippy, typegen, and the policy checks are platform-independent
   and already gate in `rust-host`.
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
-  the toolchain with `dtolnay/rust-toolchain` (pin read from `.mise.toml`)
+  the toolchain with `dtolnay/rust-toolchain` (pin read from `.config/mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
   release jobs already prove this route on the same image. Because it bypasses
   mise it re-declares `CARGO_INCREMENTAL=0` itself, and it trims MSVC debug
@@ -459,10 +459,10 @@ WASI SDK, webapp `node_modules`, and Playwright browsers.
 The `tools:` input is a **positive** list of short tool names
 (`tools: node rust nextest`). mise offers no allowlist - `MISE_DISABLE_TOOLS`
 is the only lever - so `scripts/ci/mise-disable-tools.sh` reads the `[tools]`
-table of `.mise.toml` and computes the complement. Two consequences worth
+table of `.config/mise.toml` and computes the complement. Two consequences worth
 knowing:
 
-- Adding a pin to `.mise.toml` costs nothing until a job opts in. Under the
+- Adding a pin to `.config/mise.toml` costs nothing until a job opts in. Under the
   old hand-maintained exclusion lists it silently slowed down every job.
 - A name that is not pinned fails the job instead of being ignored.
 

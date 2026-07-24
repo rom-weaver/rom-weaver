@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           basis=$(git ls-tree HEAD -- \
-            crates Cargo.lock Cargo.toml .cargo .mise.toml \
+            crates Cargo.lock Cargo.toml .cargo .config/mise.toml \
             .github/actions/setup-build-env .github/workflows/parity.yml)
           [[ -n "$basis" ]]
           hash=$(printf '%s\n' "$basis" | sha256sum | cut -d' ' -f1)
@@ -64,7 +64,7 @@ jobs:
 
       # The reference tools are cross-platform npm packages (chdman from
       # emmercm/chdman-js, dolphin-tool). Each exposes a binary of the same name
-      # on PATH after a global install. node comes from mise (.mise.toml).
+      # on PATH after a global install. node comes from mise (.config/mise.toml).
       - name: Install reference tools (chdman, dolphin-tool)
         run: |
           npm install --global chdman dolphin-tool

@@ -3,11 +3,11 @@
 #
 # mise has no allowlist: MISE_DISABLE_TOOLS is the only lever, so a job that
 # wants two of the eight pinned tools has to name the other six. Maintaining
-# that by hand across every job means adding a tool to .mise.toml silently
+# that by hand across every job means adding a tool to .config/mise.toml silently
 # slows down every job that forgot to exclude it, and a typo in an exclusion is
 # invisible - it just installs something extra.
 #
-# The full set is read from .mise.toml rather than duplicated here, so a new
+# The full set is read from .config/mise.toml rather than duplicated here, so a new
 # pin is excluded from every job by default and only the jobs that opt in pay
 # for it. Each tool's short name is the final path segment of its mise id
 # ("aqua:EmbarkStudios/cargo-deny" -> "cargo-deny"), and an unrecognized name
