@@ -59,8 +59,10 @@ else
     case "$path" in
       Cargo.toml | Cargo.lock | deny.toml | package.json | package-lock.json | \
         .github/workflows/npm-publish.yml | .github/workflows/release.yml | \
+        .github/actions/build-cli-platform/* | .github/cli-platforms.json | \
         packages/rom-weaver-cli-platforms/* | bin/rom-weaver.mjs | install.sh | install.ps1 | \
-        scripts/check-thread-guards.sh | scripts/gen-third-party-licenses.mjs | \
+        scripts/check-thread-guards.sh | scripts/check-whitespace.sh | \
+        scripts/gen-third-party-licenses.mjs | \
         scripts/prepare-npm-platform-package.mjs | scripts/sync-version.mjs | \
         scripts/vendored-pathspecs.sh | scripts/verify-cli-platform.mjs | scripts/wasm/*)
         rust=true

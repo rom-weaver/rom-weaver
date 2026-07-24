@@ -129,6 +129,8 @@ test("native package changes build every CLI platform", () => {
   for (const path of [
     "packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json",
     "scripts/verify-cli-platform.mjs",
+    ".github/cli-platforms.json",
+    ".github/actions/build-cli-platform/action.yml",
   ]) {
     assert.deepEqual(classify(path), {
       rust: "true",
