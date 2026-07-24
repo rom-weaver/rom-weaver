@@ -21,6 +21,7 @@
 <p align="center">
   <a href="https://rom-weaver.com/weave">Open the webapp</a>
   · <a href="docs/README.md">Docs index</a>
+  · <a href="https://github.com/sponsors/brandonocasey">Sponsor on GitHub</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
@@ -381,7 +382,9 @@ Bug reports and contributions are welcome. Read the
 before submitting a change, and report
 suspected vulnerabilities through GitHub's private reporting form in the
 [security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
-support continued development on [Ko-fi](https://ko-fi.com/brandonocasey).
+support continued development through
+[GitHub Sponsors](https://github.com/sponsors/brandonocasey) or
+[Ko-fi](https://ko-fi.com/brandonocasey).
 
 ## License
 

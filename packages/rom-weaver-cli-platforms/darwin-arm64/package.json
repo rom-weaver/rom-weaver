@@ -9,7 +9,10 @@
     "directory": "packages/rom-weaver-cli-platforms/darwin-arm64"
   },
   "license": "AGPL-3.0-or-later",
-  "funding": "https://ko-fi.com/brandonocasey",
+  "funding": [
+    "https://github.com/sponsors/brandonocasey",
+    "https://ko-fi.com/brandonocasey"
+  ],
   "keywords": [
     "rvz",
     "chd",
