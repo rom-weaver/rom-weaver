@@ -94,7 +94,7 @@ const getApplyOutputVerification = ({
   chainPlans: ReadonlyMap<string, PatchValidationPlan>;
   enabledPatchCount: number;
   localizer: ReturnType<typeof useUiLocalizer>;
-}): { level: "ok" | "warn"; message: string } | null => {
+}): { level: "warn"; message: string } | null => {
   if (enabledPatchCount <= 0) return null;
   const finalEntries: Array<{ enforceable: boolean }> = [];
   let orderIssue = false;
@@ -109,21 +109,14 @@ const getApplyOutputVerification = ({
     }
   }
   if (finalEntries.length) {
-    if (finalEntries.every((entry) => entry.enforceable))
-      return { level: "ok", message: localizer.message("ui.output.verified") };
+    if (finalEntries.every((entry) => entry.enforceable)) return null;
     if (orderIssue) return { level: "warn", message: localizer.message("ui.output.outOfOrder") };
     if (inputIssue) return { level: "warn", message: localizer.message("ui.output.inputMismatch") };
     return { level: "warn", message: localizer.message("ui.output.differentChain") };
   }
   if (bundleOutputChecksum && bundleChainStatus) {
-    if (bundleChainStatus === "full") return { level: "ok", message: localizer.message("ui.output.verified") };
-    return {
-      level: "warn",
-      message:
-        bundleChainStatus === "partial"
-          ? localizer.message("ui.output.bundlePartial")
-          : localizer.message("ui.output.bundleDiverged"),
-    };
+    if (bundleChainStatus === "full" || bundleChainStatus === "partial") return null;
+    return { level: "warn", message: localizer.message("ui.output.bundleDiverged") };
   }
   return null;
 };

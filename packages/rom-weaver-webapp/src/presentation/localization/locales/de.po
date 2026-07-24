@@ -20,6 +20,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.output.bundlePartial"
+#~ msgstr "Die Ausgabe wird nicht überprüft - das erwartete Ergebnis des Pakets gilt nur für die vollständige Patch-Kette."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.verified"
+#~ msgstr "Das gewebte Ergebnis wird gegen die erwartete Ausgabe überprüft."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst gewebt wird."
 
@@ -47,16 +57,6 @@ msgstr "7z-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "oder teilbare Patch-Bundles mit oder ohne ROM erstellen und öffnen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -120,11 +120,6 @@ msgstr "Schließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis"
-msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimiert oder unkomprimiert,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Die Kompression ist fehlgeschlagen."
 
@@ -145,18 +140,13 @@ msgstr "{format}-ROM-Bundle erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Aktuell"
+msgid "ui.hero.thesis"
+msgstr "ROMs dekomprimieren, Patches anwenden und das Ergebnis erneut komprimieren,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Verwerfen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Trinkgeld"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -220,8 +210,18 @@ msgstr "ROM-Header korrigieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis2"
+msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.language"
 msgstr "Sprache"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Vorheriges"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -290,6 +290,16 @@ msgstr "Keine wählbare Datei gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "oder teilbare Patch-Bundles mit oder ohne ROM erstellen und öffnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -310,11 +320,6 @@ msgstr "Die Ausgabe wird nicht überprüft - ein früherer Patch passt nicht zu 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.bundlePartial"
-msgstr "Die Ausgabe wird nicht überprüft - das erwartete Ergebnis des Pakets gilt nur für die vollständige Patch-Kette."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.differentChain"
 msgstr "Die Ausgabe wird nicht überprüft - die erwartete Ausgabe beschreibt eine andere Patch-Kette."
 
@@ -330,6 +335,11 @@ msgstr "Die Ausgabe wird nicht überprüft - die Patches sind in falscher Reihen
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Das Erstellen des Patches ist fehlgeschlagen."
 
@@ -342,11 +352,6 @@ msgstr "Das Parsen des Patches ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Vorheriges"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -445,11 +450,6 @@ msgstr "Download der geteilten Sitzung fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Angezeigtes Protokoll"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Speicher ist nicht verfügbar."
 
@@ -515,11 +515,6 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.verified"
-msgstr "Das gewebte Ergebnis wird gegen die erwartete Ausgabe überprüft."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Design"
 
@@ -540,6 +535,16 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Trinkgeld"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis"
+msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimiert oder unkomprimiert,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update bereit"
 
@@ -557,11 +562,6 @@ msgstr "wird beim Weben überprüft"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
 msgstr "Weben"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "ROMs dekomprimieren, Patches anwenden und das Ergebnis erneut komprimieren,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

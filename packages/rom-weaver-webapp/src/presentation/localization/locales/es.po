@@ -20,6 +20,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.output.bundlePartial"
+#~ msgstr "La salida no se verificará: el resultado esperado del paquete solo cubre su cadena de parches completa."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.verified"
+#~ msgstr "El resultado tejido se verificará contra la salida esperada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se teja primero."
 
@@ -47,16 +57,6 @@ msgstr "Códec 7z"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "o crea y abre bundles de parches compartibles, con o sin ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "en un parche comprimido y compartible que otros puedan aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -120,11 +120,6 @@ msgstr "Cerrar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis"
-msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin comprimir,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "La compresión falló."
 
@@ -145,18 +140,13 @@ msgstr "Crear bundle {format} con ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Actual"
+msgid "ui.hero.thesis"
+msgstr "Descomprime ROMs, aplica parches y vuelve a comprimir el resultado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Descartar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Propina"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -220,8 +210,18 @@ msgstr "Corregir cabecera ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis2"
+msgstr "en un parche comprimido y compartible que otros puedan aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.language"
 msgstr "Idioma"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -290,6 +290,16 @@ msgstr "No se encontró ningún archivo seleccionable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Actual"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "o crea y abre bundles de parches compartibles, con o sin ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -310,11 +320,6 @@ msgstr "La salida no se verificará: un parche anterior no coincide con su entra
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.bundlePartial"
-msgstr "La salida no se verificará: el resultado esperado del paquete solo cubre su cadena de parches completa."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.differentChain"
 msgstr "La salida no se verificará: la salida esperada describe una cadena de parches distinta."
 
@@ -330,6 +335,11 @@ msgstr "La salida no se verificará: los parches están desordenados."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Registro mostrado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "La creación del parche falló."
 
@@ -342,11 +352,6 @@ msgstr "El análisis del parche falló."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Parches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -445,11 +450,6 @@ msgstr "Falló la descarga de la sesión compartida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Registro mostrado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "El almacenamiento no está disponible."
 
@@ -515,11 +515,6 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.verified"
-msgstr "El resultado tejido se verificará contra la salida esperada."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Tema"
 
@@ -540,6 +535,16 @@ msgstr "Hilos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Propina"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis"
+msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin comprimir,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Actualización lista"
 
@@ -557,11 +562,6 @@ msgstr "se verifica durante el tejido"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
 msgstr "Tejer"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Descomprime ROMs, aplica parches y vuelve a comprimir el resultado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

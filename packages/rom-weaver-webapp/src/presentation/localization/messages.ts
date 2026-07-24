@@ -130,10 +130,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.output.bundleDiverged",
     message: "Output won't be verified - the patch chain differs from the bundle.",
   }),
-  "ui.output.bundlePartial": msg({
-    id: "ui.output.bundlePartial",
-    message: "Output won't be verified - the bundle's expected result only covers its full patch chain.",
-  }),
   "ui.output.differentChain": msg({
     id: "ui.output.differentChain",
     message: "Output won't be verified - the expected output describes a different patch chain.",
@@ -145,10 +141,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.output.outOfOrder": msg({
     id: "ui.output.outOfOrder",
     message: "Output won't be verified - the patches are out of order.",
-  }),
-  "ui.output.verified": msg({
-    id: "ui.output.verified",
-    message: "The woven result will be verified against the expected output.",
   }),
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",

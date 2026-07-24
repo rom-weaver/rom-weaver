@@ -20,6 +20,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.output.bundlePartial"
+#~ msgstr "Output won't be verified - the bundle's expected result only covers its full patch chain."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.verified"
+#~ msgstr "The woven result will be verified against the expected output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” woven first."
 
@@ -47,16 +57,6 @@ msgstr "7z codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "All local, in your browser — files never leave your machine."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "or create and open shareable patch bundles, with or without a ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "into a compressed, shareable patch others can apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -120,11 +120,6 @@ msgstr "Close"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis"
-msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Compression failed."
 
@@ -145,18 +140,13 @@ msgstr "Create {format} ROM Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewCurrent"
-msgstr "Now"
+msgid "ui.hero.thesis"
+msgstr "Decompress ROMs, apply patches, and recompress the result,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Dismiss"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Tip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -220,8 +210,18 @@ msgstr "Fix ROM header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis2"
+msgstr "into a compressed, shareable patch others can apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.language"
 msgstr "Language"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.viewPrevious"
+msgstr "Last"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -290,6 +290,16 @@ msgstr "No selectable file was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewCurrent"
+msgstr "Now"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "or create and open shareable patch bundles, with or without a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -310,11 +320,6 @@ msgstr "Output won't be verified - an earlier patch doesn't match its input."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.bundlePartial"
-msgstr "Output won't be verified - the bundle's expected result only covers its full patch chain."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.differentChain"
 msgstr "Output won't be verified - the expected output describes a different patch chain."
 
@@ -330,6 +335,11 @@ msgstr "Output won't be verified - the patches are out of order."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.viewLabel"
+msgstr "Page Logs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Patch creation failed."
 
@@ -342,11 +352,6 @@ msgstr "Patch parsing failed."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.viewPrevious"
-msgstr "Last"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -445,11 +450,6 @@ msgstr "Shared session download failed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.viewLabel"
-msgstr "Page Logs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
 
@@ -515,11 +515,6 @@ msgstr "The selected source type is not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.verified"
-msgstr "The woven result will be verified against the expected output."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Theme"
 
@@ -540,6 +535,16 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Tip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis"
+msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update ready"
 
@@ -557,11 +562,6 @@ msgstr "verified during the weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
 msgstr "Weave"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Decompress ROMs, apply patches, and recompress the result,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -1,4 +1,4 @@
-import { Archive, Disc3, Download, ListChecks, Package, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
@@ -172,7 +172,7 @@ const ApplyDropAfter = ({
         onClick={onLoadSample}
         type="button"
       >
-        {sampleLoading ? "Loading sample…" : "Try a sample weave"}
+        {sampleLoading ? "Loading sample…" : "Try a sample apply"}
       </button>
       {sampleError ? <span role="status">{sampleError}</span> : null}
     </div>
@@ -277,9 +277,9 @@ type BundleToolsState = {
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
   hasOptionalEntries: boolean;
-  /** Whether the woven final result will be verified against an expected output
-   * (`ok`), or why it won't (`warn`); null when nothing declares an output. */
-  outputVerification: { level: "ok" | "warn"; message: string } | null;
+  /** Why the woven final result won't be verified against an expected output;
+   * null when it will be, or when nothing declares an output. */
+  outputVerification: { level: "warn"; message: string } | null;
 };
 
 type BundleExportState = {
@@ -955,17 +955,10 @@ const ApplyOutputAction = ({
     />
     {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
     {bundleTools?.outputVerification ? (
-      bundleTools.outputVerification.level === "warn" ? (
-        <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
-          <TriangleAlert aria-hidden="true" />
-          <span>{bundleTools.outputVerification.message}</span>
-        </p>
-      ) : (
-        <p aria-live="polite" className="patch-off-note is-ok" id="rom-weaver-output-verified">
-          <ShieldCheck aria-hidden="true" />
-          <span>{bundleTools.outputVerification.message}</span>
-        </p>
-      )
+      <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+        <TriangleAlert aria-hidden="true" />
+        <span>{bundleTools.outputVerification.message}</span>
+      </p>
     ) : null}
     {bundleExport && bundleTools?.exportVisible ? (
       bundleExport.busy ? (
