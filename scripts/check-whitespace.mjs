@@ -11,7 +11,7 @@ export function diffCheckArgs(env = process.env) {
   const head = env.HEAD_SHA || "";
   const empty = "0".repeat(40);
   if (base && base !== empty && head) return ["diff", "--check", base, head, "--", ".", ...vendoredExclusions()];
-  if (head) return ["diff-tree", "--check", "--no-commit-id", "--exit-code", "-r", head, "--", ".", ...vendoredExclusions()];
+  if (head) return ["diff-tree", "--check", "--no-commit-id", "-r", head, "--", ".", ...vendoredExclusions()];
   return ["diff", "--cached", "--check", "--", ".", ...vendoredExclusions()];
 }
 
