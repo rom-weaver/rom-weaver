@@ -30,6 +30,39 @@ const parseSections = (changelog) => {
     .filter(Boolean);
 };
 
+const collapseInternalBody = (body) => {
+  const lines = body.split(/\r?\n/);
+  const collapsed = [];
+  let internal = false;
+
+  for (const line of lines) {
+    const text = line.trim();
+    if (text === "### Internal") {
+      collapsed.push("<details>", "<summary>Internal</summary>", "");
+      internal = true;
+      continue;
+    }
+    if (internal && text.startsWith("### ")) {
+      collapsed.push("</details>", "", line);
+      internal = false;
+      continue;
+    }
+    collapsed.push(line);
+  }
+
+  if (internal) collapsed.push("</details>");
+  return collapsed.join("\n");
+};
+
+const collapseInternalSection = (changelog, version) => {
+  const section = parseSections(changelog).find((entry) => entry.version === version);
+  if (!section) return changelog;
+  const bodyStart = section.start + section.heading.length;
+  const body = changelog.slice(bodyStart, section.end);
+  const collapsedBody = collapseInternalBody(body);
+  return changelog.slice(0, bodyStart) + collapsedBody + changelog.slice(section.end);
+};
+
 const addUnique = (entries, entry) => {
   if (entry && !entries.includes(entry)) entries.push(entry);
 };
@@ -43,6 +76,12 @@ const mergeReleaseBodies = (bodies) => {
     for (const line of body.split(/\r?\n/)) {
       const text = line.trim();
       if (!text) continue;
+      if (text === "<details>" || text === "</details>") continue;
+      if (text === "<summary>Internal</summary>") {
+        category = "Internal";
+        if (!categories.has(category)) categories.set(category, []);
+        continue;
+      }
       if (text.startsWith("### ")) {
         category = text.slice(4);
         if (!categories.has(category)) categories.set(category, []);
@@ -75,15 +114,18 @@ const currentSection = (changelog, version) => {
 };
 
 const aggregatePrereleaseChangelog = (changelog, version) => {
-  if (version.includes("-")) return { changed: false, changelog, section: "" };
+  const collapsed = collapseInternalSection(changelog, version);
+  if (version.includes("-")) {
+    return { changed: collapsed !== changelog, changelog: collapsed, section: "" };
+  }
 
-  const sections = parseSections(changelog);
+  const sections = parseSections(collapsed);
   const current = sections.find((section) => section.version === version);
-  if (!current) return { changed: false, changelog, section: "" };
+  if (!current) return { changed: false, changelog: collapsed, section: "" };
 
   const prereleases = sections.filter((section) => section.version.startsWith(`${version}-`));
   if (!prereleases.length) {
-    return { changed: false, changelog, section: currentSection(changelog, version) };
+    return { changed: collapsed !== changelog, changelog: collapsed, section: currentSection(collapsed, version) };
   }
 
   const previousStable = sections.slice(current.index + 1).find((section) => !section.version.includes("-"));
@@ -91,11 +133,12 @@ const aggregatePrereleaseChangelog = (changelog, version) => {
   const mergedHeading = updateCompareHeading(current.heading, previousStable?.version, version);
   const mergedSection = `${mergedHeading}\n\n${mergedBody}`.trim();
 
-  let updated = changelog;
+  let updated = collapsed;
   for (const section of [...prereleases].sort((left, right) => right.start - left.start)) {
     updated = updated.slice(0, section.start) + updated.slice(section.end);
   }
   updated = updated.slice(0, current.start) + `${mergedSection}\n\n` + updated.slice(current.end);
+  updated = collapseInternalSection(updated, version);
 
   return {
     changed: updated !== changelog,
@@ -147,4 +190,9 @@ const run = () => {
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isCli) run();
 
-export { aggregatePrereleaseChangelog, mergeReleaseBodies, replaceReleasePullRequestNotes };
+export {
+  aggregatePrereleaseChangelog,
+  collapseInternalSection,
+  mergeReleaseBodies,
+  replaceReleasePullRequestNotes,
+};
