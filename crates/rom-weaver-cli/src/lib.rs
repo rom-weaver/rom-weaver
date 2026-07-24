@@ -90,6 +90,8 @@ pub enum Commands {
 Identify a file. Reports what format it is, which console it is for, whether it
 carries a copier header, and what is inside it if it is an archive.
 
+`rom-weaver inspect` runs this same command under another name.
+
 Archives are opened automatically, so pointing this at a .zip describes the ROM
 inside rather than the zip itself. Pass --no-extract to describe the file as it
 sits on disk.

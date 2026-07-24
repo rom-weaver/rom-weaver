@@ -36,6 +36,9 @@ pub const PATCH_APPLY_ABOUT: &str = "Apply one or more patches to a ROM, in orde
 pub const PATCH_APPLY_LONG_ABOUT: &str = "\
 Apply one or more patches to a ROM, in order.
 
+`rom-weaver weave` runs this same command under a shorter name, and is what
+most of the examples use.
+
 Repeat --patch once per patch. They run left to right, each one on the result
 of the last. --input takes a plain ROM, an archive or disc image (the ROM
 inside is found for you), or a rom-weaver-bundle.json that already names the
@@ -94,7 +97,10 @@ Output format, such as zip, 7z, chd, rvz, or z3ds.
 
 Normally you do not need this: the format comes from the --output extension.
 Pass it when the output name has no usable extension. If it disagrees with the
-extension, this flag wins and a warning is printed.";
+extension, this flag wins and a warning is printed.
+
+Common alternate spellings are accepted, so `7zip` works as well as `7z` and
+`3ds` as well as `z3ds`. The CLI guide lists every alias.";
 
 pub const CODEC_HELP: &str =
     "Compression method to use, as codec or codec:level (repeatable, comma-separable)";
@@ -107,7 +113,10 @@ this is only for overriding that choice. CHD takes a list, tried in order:
 
   --codec cdzs:19,cdzl,cdfl
 
-Without :level, a codec follows the --level profile.";
+Without :level, a codec follows the --level profile.
+
+Only the codec names a format actually supports are accepted; there are no
+cross-format synonyms. The CLI guide lists them per format.";
 
 /// `--assume-in` means the same thing on apply, validate, and create: trust
 /// this checksum rather than reading the file to compute it.
@@ -679,11 +688,12 @@ pub struct TrimCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            alias = "untrim",
-            alias = "restore",
+            visible_alias = "untrim",
+            visible_alias = "restore",
             help = "Pad a trimmed file back to full size (NDS, GBA, and 3DS only)",
             long_help = "\
-Pad a trimmed file back to full size.
+Pad a trimmed file back to full size. `--untrim` and `--restore` do the same
+thing.
 
 If the file carries a revert footer from an earlier --revert-marker run, the
 original is restored byte for byte. Otherwise the size is worked out from the
@@ -728,7 +738,7 @@ XISO and RVZ scrub cannot be reverted."
         not(target_arch = "wasm32"),
         arg(
             long = "revert-marker",
-            alias = "reversible",
+            visible_alias = "reversible",
             help = "Add a small footer recording what was cut, so --revert can restore the original exactly"
         )
     )]
@@ -1562,7 +1572,16 @@ pub struct PatchCreateCommand {
         arg(
             short = 'f',
             long,
-            help = "Patch format, such as bps, ips, or xdelta [default: from the --output extension]"
+            help = "Patch format, such as bps, ips, or xdelta [default: from the --output extension]",
+            long_help = "\
+Patch format, such as bps, ips, or xdelta.
+
+Normally you do not need this: the format comes from the --output extension, so
+`--output hack.bps` writes a BPS patch. Pass it when the output name has no
+recognizable patch extension.
+
+Common alternate spellings are accepted, so `xdelta3` works as well as `xdelta`
+and `bsdiff` as well as `bdf`. The CLI guide lists every alias."
         )
     )]
     #[serde(default)]

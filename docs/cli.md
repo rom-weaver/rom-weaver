@@ -22,6 +22,7 @@ automation.
 - [First weave](#first-weave)
 - [Common workflows](#common-workflows)
 - [Commands](#commands)
+  - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
 - [Patch apply behavior](#patch-apply-behavior)
 - [Patch validation](#patch-validation)
@@ -212,18 +213,20 @@ rom-weaver probe --input archive.zip --select '*.sfc'
 Apply one patch, or several in order:
 
 ```bash
-rom-weaver patch apply \
+rom-weaver weave \
   --input original.sfc \
   --patch translation.bps \
   --output translated.sfc \
   --no-compress
 
-rom-weaver patch apply \
+rom-weaver weave \
   --input original.sfc \
   --patch base.ips \
   --patch fixes.ups \
   --output patched.zip
 ```
+
+`weave` is the short name for `patch apply`; either spelling works.
 
 The result is compressed by default, into whatever the `--output` extension
 names. Pass `--no-compress` for a plain ROM, or set `--compress-format`,
@@ -304,12 +307,34 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
-| `inspect` | Another name for `probe`. |
-| `weave` | Another name for `patch apply`. |
 | `completions` | Print a tab-completion script for your shell. |
 
 `-h` prints a one-line summary of each option; `--help` prints the full
 explanation, including the extra detail on flags like `--patch-header`.
+
+### Alternate names
+
+Some commands and flags answer to more than one name. They are the same code
+either way, so pick whichever reads better:
+
+| Canonical | Also accepted |
+| --- | --- |
+| `rom-weaver probe` | `rom-weaver inspect` |
+| `rom-weaver patch apply` | `rom-weaver weave`, `rom-weaver patch weave` |
+| `trim --revert` | `trim --untrim`, `trim --restore` |
+| `trim --revert-marker` | `trim --reversible` |
+
+This guide uses `weave` for patching, since it is the shortest way to spell the
+command people reach for most.
+
+Format names have alternates too, accepted anywhere `--format` is: `7zip` for
+`7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more.
+The [format tables](#supported-formats) list every one.
+
+Codecs are stricter. Each format accepts only the codec names in its own row of
+the [codec table](#create-time-codecs), and the only two alternates are CHD's
+`huffman` for `huff` and `avhu` for `avhuff`. Passing `--codec zlib` to a ZIP,
+for instance, is an error rather than a synonym for `deflate`.
 
 Every command accepts these global flags, listed under `Global options` in its
 help:
@@ -635,9 +660,13 @@ orders. `--no-trim-fix` disables automatic trim-boundary variants.
 trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change
 without writing anything.
 
-`--revert` supports NDS, GBA, and 3DS. It does not support XISO or RVZ scrub
-paths. `--revert-marker` embeds a small footer so a later revert can reproduce
-the exact original padding; see the [footer format](trim-revert-footer.md).
+`--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO
+and RVZ scrub cannot be reverted. It also answers to `--untrim` and
+`--restore`.
+
+`--revert-marker` (also `--reversible`) embeds a small footer so a later revert
+reproduces the original padding exactly rather than guessing at it; see the
+[footer format](trim-revert-footer.md).
 
 ## Header detection and repair
 

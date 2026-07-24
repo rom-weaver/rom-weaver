@@ -78,7 +78,7 @@ current install methods and platform coverage.
 # What is this file?
 rom-weaver probe --input game.iso
 
-# Apply a patch, verifying checksums at every step (weave is short for patch apply)
+# Apply a patch, verifying checksums at every step
 rom-weaver weave --input game.sfc --patch hack.bps \
   --output game-hacked.sfc --no-compress
 
@@ -97,6 +97,13 @@ rom-weaver compress --input game.cue --output game.chd
 # Machine-readable output for scripts
 rom-weaver probe --input game.chd --json
 ```
+
+A few commands and flags answer to more than one name: `weave` is the short
+name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore`
+for `trim --revert`. Format names have alternates too, so `--format 7zip` and
+`--format 7z` are the same. The
+[CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#alternate-names)
+lists them all.
 
 The [CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md)
 covers every command, the supported-format tables, compression settings, JSON
