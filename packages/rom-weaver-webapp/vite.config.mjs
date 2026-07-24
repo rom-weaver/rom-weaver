@@ -11,6 +11,8 @@ import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
+/** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
+const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
@@ -681,6 +683,19 @@ export default defineConfig(({ command }) => {
       outDir: "dist",
       rollupOptions: {
         input: path.resolve(rootDir, "index.html"),
+        output: {
+          // Splitting the workflow forms into route chunks (workflow-routes.tsx)
+          // strands their shared leaves in a long tail of sub-kB chunks. Each
+          // chunk is its own brotli stream with its own window, so that tail
+          // costs far more compressed than it saves raw: on the apex route it
+          // was ~8 kB brotli against a ~2 kB raw gain. One shared chunk for
+          // everything two or more chunks reach restores the compression
+          // context; the size floor keeps a future split from re-stranding it.
+          advancedChunks: {
+            groups: [{ minShareCount: 2, name: "shared", priority: 0, test: /./ }],
+            minSize: SHARED_CHUNK_MIN_SIZE,
+          },
+        },
       },
       target: "es2022",
     },
