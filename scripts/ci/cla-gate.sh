@@ -74,7 +74,9 @@ read_signatures() {
     printf '{"sha":"","signatures":[]}'
     return
   fi
-  jq -c '{sha: .sha, signatures: (.content | @base64d | fromjson)}' <<<"$response"
+  # The contents API line-wraps its base64 at 60 characters, and jq's @base64d
+  # rejects the embedded newlines outright rather than ignoring them.
+  jq -c '{sha: .sha, signatures: (.content | gsub("\\s"; "") | @base64d | fromjson)}' <<<"$response"
 }
 
 signatures_state=$(read_signatures)
