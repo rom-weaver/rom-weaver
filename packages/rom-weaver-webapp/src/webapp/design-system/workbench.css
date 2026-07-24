@@ -5,7 +5,7 @@
 .rw-app .panel { overflow: clip; }
 /* Breathing room below the form so the bottom action (run/progress/download)
    can scroll clear of the fold - and the edge on mobile - instead of hugging it. */
-.rw-app .workflow-body { min-width: 0; padding-block-end: clamp(16px, 6vw, 40px); animation: panel-in .3s var(--ease); }
+.rw-app .workflow-body { min-width: 0; padding-block-end: clamp(28px, 9vw, 72px); animation: panel-in .3s var(--ease); }
 /* Reveal form sections after identification finishes. */
 .rw-app .form-ready > .step:not(.unified-drop-step) { animation: form-ready-in .22s var(--ease) both; }
 

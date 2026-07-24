@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { ApplyBandaidIcon } from "./apply-bandaid-icon.tsx";
@@ -27,62 +27,28 @@ function PatcherPrimaryAction({
   totalTime?: string;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
-  const progress = state.applyButton.progress;
-  const running = state.applyButton.loading || !!progress;
+  const running = state.applyButton.loading || !!state.applyButton.progress;
   const downloadReady = !!state.pendingDownloadFileName && !running;
   // The run button, the live-progress panel, and the finished download button
-  // share one slot at the bottom of a long form. On mobile that slot sits below
-  // the fold, and while weaving the per-row progress that expands above it keeps
-  // pushing it further down. Keep it visible: reveal it (centered) when a run
-  // starts and when the download is ready, and re-pin the progress panel as the
-  // page grows during the run - but only when it has actually drifted below the
-  // fold, so a user who scrolls up isn't yanked back while it's already in view.
-  // While running the panel is `rom-weaver-progress-apply`; idle/ready it's the
-  // `rom-weaver-button-apply` element. Refs seed to the mount value so an
-  // already-active/ready state (e.g. restored session) never scrolls unprompted.
-  const wasRunningRef = useRef(running);
-  const wasDownloadReadyRef = useRef(downloadReady);
-  useEffect(() => {
-    const target =
-      document.getElementById("rom-weaver-progress-apply") || document.getElementById("rom-weaver-button-apply");
-    if (!target) return;
-    const startedRunning = running && !wasRunningRef.current;
-    const becameReady = downloadReady && !wasDownloadReadyRef.current;
-    if (startedRunning || becameReady) {
-      target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-    } else if (progress && target.getBoundingClientRect().bottom > window.innerHeight) {
-      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
-    }
-    wasRunningRef.current = running;
-    wasDownloadReadyRef.current = downloadReady;
-  }, [running, downloadReady, progress]);
-  // iOS: tapping the download button opens a native download/share sheet. When
-  // it dismisses, Safari's toolbar and visual viewport reflow, leaving the
-  // (previously centered) button half-covered - and no React state changes, so
-  // the effect above never re-fires. Re-center it whenever the page regains
-  // focus/visibility while a download is ready, but only if it has actually
-  // drifted out of view so a deliberate scroll isn't undone.
-  useEffect(() => {
-    if (!downloadReady) return;
-    const reveal = () => {
-      if (document.visibilityState === "hidden") return;
-      const target = document.getElementById("rom-weaver-button-apply");
-      if (!target) return;
-      const rect = target.getBoundingClientRect();
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-      if (rect.bottom > viewportHeight || rect.top < 0) {
-        target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
-      }
-    };
-    window.addEventListener("focus", reveal);
-    window.addEventListener("pageshow", reveal);
-    document.addEventListener("visibilitychange", reveal);
-    return () => {
-      window.removeEventListener("focus", reveal);
-      window.removeEventListener("pageshow", reveal);
-      document.removeEventListener("visibilitychange", reveal);
-    };
-  }, [downloadReady]);
+  // share one slot at the bottom of the form. Once a run starts, reserve the
+  // progress panel's height for the slot so the progress -> download swap can't
+  // shrink it and jerk the page up (which used to leave the download button
+  // out of view on mobile). Idle keeps its natural, compact height.
+  const slotClass = running || downloadReady ? "primary-action-slot is-reserved" : "primary-action-slot";
+  return <div className={slotClass}>{renderPrimaryAction({ controller, disableRun, state, totalTime })}</div>;
+}
+
+function renderPrimaryAction({
+  controller,
+  disableRun,
+  state,
+  totalTime,
+}: {
+  controller: OutputController;
+  disableRun?: boolean;
+  state: PatcherOutputState;
+  totalTime?: string;
+}) {
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
     // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on
