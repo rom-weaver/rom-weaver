@@ -17,11 +17,19 @@ inputs:
   cache-epoch:
     description: Bump to invalidate every cached module by hand.
     default: "1"
+  save:
+    description: >-
+      "false" restores without registering the post-job save. Callers that
+      never build the module (the preview fast path) must set this: on a miss
+      they hold nothing worth caching, and writing the key first would deny it
+      to the job that does build - permanently, since the key is source-exact
+      and never rewritten.
+    default: "true"
 
 outputs:
   cache-hit:
     description: "'true' when the module was restored and the build can be skipped."
-    value: ${{ steps.cache.outputs.cache-hit }}
+    value: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
   key:
     description: The resolved cache key.
     value: ${{ steps.key.outputs.key }}
@@ -78,7 +86,16 @@ runs:
     # exposes default-branch caches to PRs; PR-written caches remain branch-local.
     - name: Restore built wasm module
       id: cache
+      if: inputs.save != 'false'
       uses: actions/cache@v6
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ inputs.path }}
+
+    - name: Restore built wasm module (read-only)
+      id: restore
+      if: inputs.save == 'false'
+      uses: actions/cache/restore@v6
       with:
         key: ${{ steps.key.outputs.key }}
         path: ${{ inputs.path }}
@@ -88,12 +105,15 @@ runs:
     - name: Report cache status
       shell: bash
       env:
-        HIT: ${{ steps.cache.outputs.cache-hit }}
+        HIT: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
         KEY: ${{ steps.key.outputs.key }}
         VARIANT: ${{ inputs.variant }}
+        SAVE: ${{ inputs.save }}
       run: |
         if [ "$HIT" = "true" ]; then
           echo "**WASM cache hit** (${VARIANT}) - restored, skipping the ~6.5 min build." >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$SAVE" = "false" ]; then
+          echo "**WASM cache miss** (${VARIANT}) - read-only caller, nothing to build here." >> "$GITHUB_STEP_SUMMARY"
         else
           echo "**WASM cache miss** (${VARIANT}) - building from source." >> "$GITHUB_STEP_SUMMARY"
         fi

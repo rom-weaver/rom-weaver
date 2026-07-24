@@ -306,7 +306,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node rust ripgrep cargo-deny cargo-machete nextest
+          tools: node rust cargo-deny cargo-machete nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
 
@@ -724,7 +724,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
 
@@ -778,7 +778,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
 
@@ -809,7 +809,7 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node ripgrep
+          tools: node
           cargo-cache: "false"
           webapp-deps: "true"
           playwright: "true"
@@ -923,6 +923,10 @@ jobs:
       github.event.pull_request.user.login != 'dependabot[bot]'))
     outputs:
       targets: ${{ steps.plan.outputs.targets }}
+      # Non-empty only when this ref publishes a preview. `deploy-preview-fast`
+      # gates on it, which keeps that job from needing the channel list parsed
+      # out of `targets` in an `if:` expression.
+      preview_branch: ${{ steps.plan.outputs.preview_branch }}
     steps:
       # A tag containing a hyphen after the version is a prerelease
       # (v1.2.3-alpha.1) and enters the ladder at beta; a bare vX.Y.Z enters at
@@ -967,6 +971,7 @@ jobs:
                 branch="pr-${PR_NUMBER}"
                 label="pr-${PR_NUMBER}"
                 env=rom-weaver-preview.pages.dev
+                echo "preview_branch=$branch" >> "$GITHUB_OUTPUT"
                 ;;
               *) echo "::error::unknown channel '$channel'"; exit 1 ;;
             esac
@@ -982,18 +987,93 @@ jobs:
           echo "targets=$matrix" >> "$GITHUB_OUTPUT"
           echo "Deploying ref ${GITHUB_REF_NAME} to: $channels"
 
+  # Preview fast path. `deploy` below has to wait for the `wasm` job because it
+  # takes the module from that job's artifact - a runner start, checkout,
+  # verify and upload/download that a preview does not have to sit through when
+  # the module is already cached. On a hit (every pull request that leaves
+  # Cargo.lock and crates/ alone) this restores it directly and the preview URL
+  # lands ~13s sooner.
+  #
+  # On a miss it deploys nothing and `deploy` publishes the preview as before.
+  # It must never build the module itself: that would duplicate the ~6.5 min
+  # build the `wasm` job is already running for the same commit.
+  #
+  # Not re-running `verify-wasm-artifact` here is deliberate. The module was
+  # verified when it was built and cached, and the parallel `wasm` job verifies
+  # this same restore, so a corrupt cache still fails the build - just not
+  # ahead of a preview upload.
+  deploy-preview-fast:
+    name: Webapp deploy (preview, cached wasm)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: deploy-plan
+    # Same non-gating boundary as `deploy`: a Cloudflare outage must not turn a
+    # green build red.
+    continue-on-error: true
+    permissions:
+      contents: read
+      statuses: write
+    if: needs.deploy-plan.outputs.preview_branch != ''
+    # A cache miss still opens a deployment record with no URL. The fallback in
+    # `deploy` runs later and supersedes it, so the PR ends up pointing at the
+    # deployment that actually happened either way.
+    environment:
+      name: rom-weaver-preview.pages.dev
+      url: ${{ steps.pages.outputs.url }}
+    outputs:
+      # False on a cache miss (the deploy step never ran) and equally false if
+      # wrangler failed, so `deploy` picks the preview back up in both cases.
+      deployed: ${{ steps.pages.outputs.url != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 60
+          fetch-tags: true
+
+      - name: Restore built wasm module
+        id: wasm-cache
+        uses: ./.github/actions/wasm-cache
+        with:
+          variant: prod
+          # Read-only: this job never builds the module, so it must not claim
+          # the key ahead of the `wasm` job that does.
+          save: "false"
+          path: |
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
+            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
+            packages/rom-weaver-webapp/src/wasm/NOTICE
+            packages/rom-weaver-webapp/src/wasm/third_party
+
+      - name: Build and deploy preview
+        id: pages
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        uses: ./.github/actions/deploy-webapp-pages
+        with:
+          channel: preview
+          label: ${{ needs.deploy-plan.outputs.preview_branch }}
+          project: rom-weaver-preview
+          branch: ${{ needs.deploy-plan.outputs.preview_branch }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   # Build and publish one channel per matrix leg, to isolated Cloudflare origins
   # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
   # per-PR previews). `deploy-plan` above decides which legs exist.
   #
   # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
-  # minutes or a second toolchain. Depend only on `wasm` so preview URLs arrive
+  # minutes or a second toolchain. Depend only on `wasm` so deploy URLs arrive
   # while the rest of the suite is still running.
+  #
+  # This is also the preview fallback: it publishes the preview whenever
+  # `deploy-preview-fast` above did not, which is any pull request that missed
+  # the wasm cache.
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, deploy-plan]
+    needs: [wasm, deploy-plan, deploy-preview-fast]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.
@@ -1001,12 +1081,24 @@ jobs:
     permissions:
       contents: read
       statuses: write
-    # An empty or missing list would be a hard "matrix contains no values"
-    # error, so guard rather than trusting the planner to always emit one.
-    if: needs.deploy-plan.outputs.targets != '' && needs.deploy-plan.outputs.targets != '[]'
+    # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
+    # main, and a skipped dependency would otherwise skip this job with it. That
+    # weakens the implicit "only after a good wasm build" gate, so state it.
+    #
+    # An empty or missing target list would be a hard "matrix contains no
+    # values" error, so guard rather than trusting the planner to always emit
+    # one.
+    #
+    # On a pull request the only leg is preview, so the last clause needs no
+    # per-channel test - and job-level `if` cannot see `matrix` anyway.
+    if: >-
+      !cancelled() && needs.wasm.result == 'success' &&
+      needs.deploy-plan.outputs.targets != '' &&
+      needs.deploy-plan.outputs.targets != '[]' &&
+      needs.deploy-preview-fast.outputs.deployed != 'true'
     environment:
       name: ${{ matrix.target.env }}
-      url: ${{ steps.deploy.outputs.url }}
+      url: ${{ steps.pages.outputs.url }}
     strategy:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. The
@@ -1018,16 +1110,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The deployed changelog is generated from the latest 50 commits.
-          fetch-depth: 0
-
-      # This job compiles nothing - it runs vite and wrangler over a prebuilt
-      # module - so the Rust toolchain is dead weight here.
-      - uses: ./.github/actions/setup-build-env
-        with:
-          tools: node ripgrep
-          cargo-cache: "false"
-          webapp-deps: "true"
+          # The deployed changelog is generated from the latest 50 commits
+          # (scripts/version.mjs getChangelog), so a full clone is ~97 MB of
+          # pack this job never reads. Tags must still come along: the version
+          # string drops its `+hash` suffix only when `git tag --points-at
+          # HEAD` sees the release tag, and a depth-limited fetch skips tags
+          # unless asked.
+          fetch-depth: 60
+          fetch-tags: true
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -1035,43 +1125,17 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      # The channel stamps the bundle's visible identity - masthead badge, tab
-      # title, PWA name and accent tokens - so a nightly or preview tab is never
-      # mistaken for production. Unset (any local build) resolves to "dev".
-      - name: Build webapp
-        env:
-          ROM_WEAVER_CHANNEL: ${{ matrix.target.channel }}
-          ROM_WEAVER_CHANNEL_LABEL: ${{ matrix.target.label }}
-          # Stage q11 brotli sidecars for every asset where q11 beats
-          # Cloudflare's on-the-fly recompression (~640 KB on the wasm, ~50 KB
-          # on the main bundle) + a _routes.json so the Pages Function
-          # (functions/assets/[name].js) serves our bytes for exactly those
-          # URLs.
-          ROM_WEAVER_PAGES_BROTLI: "1"
-        run: npm --prefix packages/rom-weaver-webapp run build
-
-      # Idempotent, so the first run on a channel bootstraps its own project and
-      # no local wrangler auth is ever needed.
-      #
-      # Uses the REST API rather than `wrangler pages project create`: wrangler
-      # enumerates accounts internally, which a token scoped to specific account
-      # resources cannot do, and it surfaces that as a bare "unknown error
-      # [code: 8000000]" against an endpoint that works fine directly.
-      - name: Ensure Cloudflare Pages project exists
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ matrix.target.project }}
-        run: scripts/ci/ensure-cloudflare-pages-project.sh
-
-      - name: Deploy to Cloudflare Pages
-        id: deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ matrix.target.project }}
-          BRANCH: ${{ matrix.target.branch }}
-        run: scripts/ci/deploy-pages.sh
+      - name: Build and deploy
+        id: pages
+        uses: ./.github/actions/deploy-webapp-pages
+        with:
+          channel: ${{ matrix.target.channel }}
+          label: ${{ matrix.target.label }}
+          project: ${{ matrix.target.project }}
+          branch: ${{ matrix.target.branch }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Every sidecar-backed /assets/* request invokes the Pages Function, so
       # a zone Cache Rule makes the edge cache those responses and the
@@ -1091,27 +1155,3 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: scripts/ci/ensure-cloudflare-assets-cache-rule.sh
-
-      # The GitHub environment above already surfaces the deployment on the PR;
-      # this status just carries the stable branch alias (pr-<n>...pages.dev)
-      # into the checks list, which the environment's raw per-deploy URL does
-      # not. The old marker-backed PR comment is retired - it duplicated the
-      # environment's native "View deployment" link.
-      - name: Publish preview status
-        if: matrix.target.channel == 'preview' && steps.deploy.outputs.url != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ALIAS: https://${{ matrix.target.branch }}.rom-weaver-preview.pages.dev
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
-            --method POST \
-            --field state=success \
-            --field context='preview/webapp' \
-            --field target_url="${ALIAS}" \
-            --field description='Preview deployment - click Details' \
-            --silent
-
-          echo "preview status -> ${ALIAS}"

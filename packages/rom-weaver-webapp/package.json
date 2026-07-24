@@ -41,7 +41,7 @@
   },
   "scripts": {
     "audit:deps": "npm audit --audit-level=high",
-    "audit:strings": "if rg --hidden --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
+    "audit:strings": "if grep -rI --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
     "build": "vite build && node scripts/verify-seo-build.mjs",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
     "dev": "node scripts/ensure-wasm-build.mjs && node scripts/dev-server.mjs",

@@ -1,0 +1,116 @@
+name: Build and deploy the webapp to Cloudflare Pages
+description: >-
+  Build the webapp bundle for one channel and Direct-Upload it to that
+  channel's Pages project. Two jobs reach this: the normal `deploy` matrix,
+  which takes the WASM module from the `wasm` job's artifact, and the preview
+  fast path, which restores the same module from cache. Both need the identical
+  build-and-publish sequence, and a preview must never be deployable two
+  different ways, so the sequence lives here once. Callers are responsible only
+  for putting the module in packages/rom-weaver-webapp/src/wasm first.
+
+inputs:
+  channel:
+    description: prod, beta, nightly or preview. Stamped into the bundle.
+    required: true
+  label:
+    description: Masthead badge / PWA name text (usually the channel, `pr-<n>` for previews).
+    required: true
+  project:
+    description: Cloudflare Pages project name.
+    required: true
+  branch:
+    description: >-
+      Pages branch. The project's production branch (main) publishes a live
+      deployment; anything else is a throwaway preview.
+    required: true
+  cloudflare-api-token:
+    description: CLOUDFLARE_API_TOKEN.
+    required: true
+  cloudflare-account-id:
+    description: CLOUDFLARE_ACCOUNT_ID.
+    required: true
+  github-token:
+    description: Token for the preview commit status. Unused on other channels.
+    default: ""
+
+outputs:
+  url:
+    description: The deployment URL wrangler reported (empty if the deploy failed).
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    # Compiles nothing - runs vite and wrangler over a prebuilt module - so the
+    # Rust toolchain is dead weight here.
+    - uses: ./.github/actions/setup-build-env
+      with:
+        tools: node
+        cargo-cache: "false"
+        webapp-deps: "true"
+
+    # The channel stamps the bundle's visible identity - masthead badge, tab
+    # title, PWA name and accent tokens - so a nightly or preview tab is never
+    # mistaken for production. Unset (any local build) resolves to "dev".
+    - name: Build webapp
+      shell: bash
+      env:
+        ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
+        ROM_WEAVER_CHANNEL_LABEL: ${{ inputs.label }}
+        # Stage q11 brotli sidecars for every asset where q11 beats
+        # Cloudflare's on-the-fly recompression (~640 KB on the wasm, ~50 KB
+        # on the main bundle) + a _routes.json so the Pages Function
+        # (functions/assets/[name].js) serves our bytes for exactly those
+        # URLs.
+        ROM_WEAVER_PAGES_BROTLI: "1"
+      run: npm --prefix packages/rom-weaver-webapp run build
+
+    # Idempotent, so the first run on a channel bootstraps its own project and
+    # no local wrangler auth is ever needed.
+    #
+    # Uses the REST API rather than `wrangler pages project create`: wrangler
+    # enumerates accounts internally, which a token scoped to specific account
+    # resources cannot do, and it surfaces that as a bare "unknown error
+    # [code: 8000000]" against an endpoint that works fine directly.
+    - name: Ensure Cloudflare Pages project exists
+      shell: bash
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+        PROJECT: ${{ inputs.project }}
+      run: scripts/ci/ensure-cloudflare-pages-project.sh
+
+    - name: Deploy to Cloudflare Pages
+      id: deploy
+      shell: bash
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+        PROJECT: ${{ inputs.project }}
+        BRANCH: ${{ inputs.branch }}
+      run: scripts/ci/deploy-pages.sh
+
+    # The caller's GitHub environment already surfaces the deployment on the PR;
+    # this status just carries the stable branch alias (pr-<n>...pages.dev) into
+    # the checks list, which the environment's raw per-deploy URL does not. The
+    # old marker-backed PR comment is retired - it duplicated the environment's
+    # native "View deployment" link.
+    - name: Publish preview status
+      if: inputs.channel == 'preview' && steps.deploy.outputs.url != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ALIAS: https://${{ inputs.branch }}.rom-weaver-preview.pages.dev
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+
+        gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+          --method POST \
+          --field state=success \
+          --field context='preview/webapp' \
+          --field target_url="${ALIAS}" \
+          --field description='Preview deployment - click Details' \
+          --silent
+
+        echo "preview status -> ${ALIAS}"

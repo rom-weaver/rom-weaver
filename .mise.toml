@@ -18,7 +18,6 @@
 node = "24.18.0"
 rust = "1.95.0"
 "aqua:WebAssembly/binaryen" = "129"            # provides wasm-opt
-"aqua:BurntSushi/ripgrep" = "14.1.1"           # provides rg (thread-guard checks)
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
