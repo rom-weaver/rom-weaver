@@ -140,8 +140,8 @@ security ── advisories (warn only, always green)
   except Rust test, bench, and example sources, which select the Rust jobs
   alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
-  module; dependency manifests select the advisory scanners; workflows, shell
-  scripts, and Dockerfiles select the plumbing lint. Documentation
+  module; dependency manifests select the advisory scanners; workflows, composite
+  actions, shell scripts, and Dockerfiles select the plumbing lint. Documentation
   changes select none of those expensive stacks. Manual runs and changes to
   CI, coverage, the toolchain, or the classifier run everything. It also plans
   the `docker` matrix, because a matrix can only be fed by an upstream job's
@@ -149,8 +149,9 @@ security ── advisories (warn only, always green)
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
-  rather than the diff, so it is selected by whether any `.github` entry, shell
-  script, or Dockerfile changed at all - not per file. It installs no language toolchain and
+  rather than the diff, so it is selected by whether anything of those kinds
+  changed at all - workflows, composite actions, `.github` YAML, any `*.sh`,
+  any Dockerfile, `.hadolint.yaml` - not per file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -228,8 +229,9 @@ security ── advisories (warn only, always green)
   same pinned version). nextest does not execute doctests, so each leg runs a
   separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`plumbing`** is an aggregator over `repo-lint`, `docker`,
-  `docker-prebuilt`, and `wasm`, with the same contract as `rust` below. Those
-  four are each skippable, and a matrix leg that is not planned reports no
+  `docker-prebuilt`, and `wasm`, on the same `scripts/ci/assert-jobs.sh` as
+  `rust` below - three calls, because those jobs do not share one selection
+  flag. All four are skippable, and a matrix leg that is not planned reports no
   status at all, so `Plumbing` is the only name branch protection can safely
   require for them.
 - **`rust`** is an aggregator: it fails unless selected jobs succeeded and
@@ -503,8 +505,10 @@ the same everywhere except `linux-arm64-musl`, which cross-builds on x64.
 
 ### `scripts/ci/assert-jobs.sh`
 
-Backs the `rust` and `webapp` aggregate checks, which present one stable name to
-branch protection over a fan-out of parallel jobs. On GitHub a skipped check
+Backs the `rust`, `webapp`, and `plumbing` aggregate checks, which present one
+stable name to branch protection over a fan-out of parallel jobs. It takes one
+selection flag per call, so `plumbing` - whose jobs do not share a flag - calls
+it once per group. On GitHub a skipped check
 counts as passing, so the aggregate has to fail explicitly - which means telling
 "skipped because the path filter said this change cannot affect it" apart from
 "skipped because something upstream failed".

@@ -309,6 +309,13 @@ jobs:
     needs: [changes, repo-lint, docker, docker-prebuilt, wasm]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Three calls rather than one: unlike `rust` and `webapp`, these jobs do
+      # not share a selection flag, and the script's contract is one flag per
+      # group. Every group is evaluated before exiting so one skip-mismatch
+      # does not hide the others.
       - name: Verify plumbing jobs
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -317,15 +324,18 @@ jobs:
           DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
           DOCKER_RESULT: ${{ needs.docker.result }}
           WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
-          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
           WASM_RESULT: ${{ needs.wasm.result }}
+          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
         run: |
-          [[ "$CHANGES_RESULT" == success ]]
-          check() { [[ "$1" == success || ( "$1" == skipped && "$2" != true ) ]]; }
-          check "$REPO_LINT_RESULT" "$REPO_LINT_SELECTED"
-          check "$DOCKER_RESULT" "$DOCKER_SELECTED"
-          check "$DOCKER_PREBUILT_RESULT" "$WEBAPP_SELECTED"
-          check "$WASM_RESULT" "$WEBAPP_SELECTED"
+          set -uo pipefail
+          status=0
+          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$REPO_LINT_SELECTED" \
+            "repo-lint=$REPO_LINT_RESULT" || status=1
+          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$DOCKER_SELECTED" \
+            "docker=$DOCKER_RESULT" || status=1
+          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$WEBAPP_SELECTED" \
+            "wasm=$WASM_RESULT" "docker-prebuilt=$DOCKER_PREBUILT_RESULT" || status=1
+          exit "$status"
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.

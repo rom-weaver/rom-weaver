@@ -100,11 +100,12 @@ else
     esac
 
     # `repo-lint` lints every tracked file of these kinds rather than the diff,
-    # so this selects the whole job, not individual files: any `.github` entry
-    # (actionlint reads the workflows and the composite actions), any shell
-    # script, any Dockerfile.
+    # so this selects the whole job, not individual files: whatever actionlint
+    # reads (the workflows, the composite actions, its own config), any shell
+    # script, any Dockerfile, and hadolint's config.
     case "$path" in
-      .github/* | *.sh | *Dockerfile | *Dockerfile.*)
+      .github/workflows/* | .github/actions/* | .github/*.yml | .github/*.yaml | \
+        .hadolint.yaml | *.sh | *Dockerfile | *Dockerfile.*)
         repo_lint=true
         ;;
     esac
