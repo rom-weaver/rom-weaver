@@ -12,6 +12,20 @@ test("Docker changes select only the affected images", () => {
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
   assert.equal(classify(".dockerignore").docker_cli, "true");
 });
+// The wasm cache key excludes these same trees, so selecting the webapp stack
+// for them can only ever buy a cache hit plus four browser jobs that cannot
+// observe the edit. `.github/actions/wasm-cache` owns the authoritative list.
+test("Rust test-only changes select nothing but Rust", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/tests/cli_smoke/apply.rs",
+    "crates/rom-weaver-core/src/test_support.rs",
+    "crates/rom-weaver-patches/benches/xdelta.rs",
+    "crates/rom-weaver-containers/examples/probe.rs",
+  ]) {
+    assert.deepEqual(classify(path), { rust: "true", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "false", full: "false" }, path);
+  }
+});
+
 test("Rust test-only changes select Rust alone", () => {
   assert.equal(classify("crates/rom-weaver-cli/tests/cli_smoke/apply.rs").webapp, "false");
   assert.equal(classify("crates/rom-weaver-containers/src/chd/tests.rs").webapp, "false");
@@ -46,11 +60,24 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     assert.equal(classify(path).repo_lint, "false", path);
   }
 });
-test("native package and Node script changes select the release stacks", () => {
-  assert.equal(classify("packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json").rust, "true");
-  assert.equal(classify("scripts/ci/classify-changes.mjs").full, "true");
+test("native package changes build every CLI platform", () => {
+  // The shared build action is a composite action, so it also selects the
+  // plumbing lint; the target list beside it is data nothing lints.
+  for (const [path, repoLint] of [
+    ["packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json", "false"],
+    ["scripts/verify-cli-platform.mjs", "true"],
+    [".github/cli-platforms.json", "false"],
+    [".github/actions/build-cli-platform/action.yml", "true"],
+  ]) {
+    assert.deepEqual(classify(path), { rust: "true", webapp: "true", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: repoLint, full: "false" }, path);
+  }
 });
-test("dependency and workflow changes select their broader checks", () => {
-  assert.equal(classify("Cargo.lock").security, "true");
-  assert.equal(classify(".github/workflows/ci.yml").full, "true");
+
+test("dependency and CI changes select their broader checks", () => {
+  assert.deepEqual(classify("Cargo.lock"), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "false", repo_lint: "false", full: "false" });
+  for (const path of [".github/workflows/ci.yml", "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs", "scripts/ci/mise-disable-tools.mjs", "scripts/ci/resolve-wasm-run.mjs"]) {
+    assert.deepEqual(classify(path), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "true", repo_lint: "true", full: "true" }, path);
+  }
 });
+
+test("the dependency policy moved under .config/", () => assert.equal(classify(".config/deny.toml").rust, "true"));
