@@ -97,6 +97,27 @@
     <link rel="manifest" href="./manifest.json" />
     <link rel="icon" href="./logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <script>
+      // Buffer clicks that land on the prerendered shell before React's first
+      // mount attaches any handler - without this they are silently swallowed.
+      // Has to be inline: the bundle is a module, so it only runs after the HTML
+      // is parsed, while the shell is painted and clickable well before that.
+      // Nodes are kept as-is; src/webapp/shell-click-replay.ts reads their
+      // identity off them (they survive detachment) and replays what it can.
+      (function () {
+        function record(event) {
+          if (buffer.clicks.length < 4) buffer.clicks.push({ target: event.target, time: Date.now() });
+        }
+        var buffer = {
+          clicks: [],
+          stop: function () {
+            document.removeEventListener("click", record, true);
+          },
+        };
+        window.ROM_WEAVER_SHELL_CLICKS = buffer;
+        document.addEventListener("click", record, true);
+      })();
+    </script>
     <script type="module" src="./src/webapp/main.tsx"></script>
   </head>
   <body>

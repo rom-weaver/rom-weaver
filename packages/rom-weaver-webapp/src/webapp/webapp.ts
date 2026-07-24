@@ -13,6 +13,7 @@ import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdat
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
+import { captureShellClicks, replayShellClicks } from "./shell-click-replay.ts";
 import { captureShellHeroHover, restoreShellHeroHover } from "./shell-hover-carryover.ts";
 import {
   getDiscardSettingsConfirmationMessage,
@@ -198,7 +199,13 @@ const markWebappMounted = () => {
   if (!appRootElement) return;
   const firstMount = appRootElement.hasAttribute("aria-busy");
   appRootElement.removeAttribute("aria-busy");
-  if (!(firstMount && hadPrerenderedShell)) return;
+  if (!firstMount) return;
+  if (hadPrerenderedShell) settleShellHandoff(appRootElement);
+  // Last, so any state change it triggers lands on a fully settled first frame.
+  replayShellClicks(appRootElement);
+};
+
+const settleShellHandoff = (appRootElement: HTMLElement) => {
   // The replacement also dropped the pointer's :hover off the hero drop zone;
   // hand it back before this frame paints.
   restoreShellHeroHover(appRootElement);
@@ -336,6 +343,8 @@ const renderWebappRoot = (): undefined => {
     const appRootElement = document.getElementById("webapp-root");
     if (appRootElement) {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
+      // Always drained, shell or not, so the inline capture listener stops here.
+      captureShellClicks();
       if (hadPrerenderedShell) {
         captureShellAnimationPhases(appRootElement);
         captureShellHeroHover(appRootElement);
