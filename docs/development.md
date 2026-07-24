@@ -151,6 +151,7 @@ mise run clippy
 mise run test-rust
 mise run typegen-check
 mise run actionlint    # GitHub Actions workflows and composite actions
+mise run shellcheck    # tracked shell scripts
 npm test               # test the Node.js tooling
 mise run hadolint      # Dockerfiles
 

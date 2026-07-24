@@ -10,7 +10,7 @@ inputs:
     description: >-
       Space-separated short names of the .mise.toml tools this job needs
       (node, rust, binaryen, cargo-deny, cargo-machete,
-      cargo-semver-checks, actionlint, hadolint). Everything else
+      cargo-semver-checks, actionlint, shellcheck, hadolint). Everything else
       is disabled. An unknown name fails the job. Empty installs every pinned
       tool.
     default: ""

@@ -93,6 +93,9 @@ pre-commit:
     # only shows up when a workflow, a self-hoster's `docker build`, or a
     # worktree setup run trips over it. Both tasks lint every tracked file, so
     # the glob only decides whether the check is worth running at all.
+    shellcheck:
+      glob: "*.sh"
+      run: mise run shellcheck
     hadolint:
       glob: "{Dockerfile,Dockerfile.*,**/Dockerfile,**/Dockerfile.*,.hadolint.yaml}"
       run: mise run hadolint

@@ -212,7 +212,7 @@ Override with `ROM_WEAVER_INSTALL_DIR` or pin with `ROM_WEAVER_VERSION`.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.mjs | node
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
 ```
 
 </details>

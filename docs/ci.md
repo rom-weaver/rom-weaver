@@ -156,13 +156,14 @@ security ── advisories (warn only, always green)
   the `docker` matrix, because a matrix can only be fed by an upstream job's
   output.
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
-  workflows and composite actions, Node.js tooling tests, and
+  workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
   rather than the diff, so it is selected by whether anything of those kinds
-  changed at all - workflows, composite actions, `.github` YAML, any `*.mjs`,
-  any Dockerfile, `.hadolint.yaml` - not per file. It installs no language toolchain and
+  changed at all - anything under `.github`, any `*.sh`, any `*.mjs`, any
+  Dockerfile, `.hadolint.yaml` - not per file. It installs no language
+  toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
-  behind a build job. `actionlint` checks workflow `run:`
+  behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
 - **`docker`** builds the CLI and webapp images **from source** without
   pushing, so a broken Dockerfile fails here rather than at the moment it
@@ -770,14 +771,14 @@ individual commands below when narrowing a failure or matching a specific job.
 ```bash
 mise run ci                                                  # broad local gate
 
-npm test                                                       # Node.js tooling
-node --test scripts/ci/classify-changes.test.mjs                 # change boundaries
+mise run actionlint ::: shellcheck ::: hadolint              # repo-lint
+node --test scripts/ci/classify-changes.test.mjs             # change boundaries
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
 mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
 cargo publish --workspace --locked --dry-run --no-verify     # rust-host
 mise run wasm-check                                          # local threaded-target check
 mise run build-wasm-prod                                     # wasm
-npm test                                                     # webapp build-script tests
+npm test                                                     # repository tooling tests
 npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
 npm --prefix packages/rom-weaver-webapp run icons:channels:check
 npm --prefix packages/rom-weaver-webapp run test:unit
@@ -787,8 +788,9 @@ npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
-`actionlint` lints workflow `run:` scripts, and the Node.js tooling is covered by
-`npm test`. `docker` is
+`actionlint` is shellcheck-aware and also lints inline workflow `run:` scripts;
+the separate `shellcheck` task covers the tracked shell files, and `npm test`
+covers the Node.js tooling. `docker` is
 conditional on image-plumbing changes and is most directly reproduced with the
 source-build commands in the [self-hosting guide](self-hosting.md);
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle

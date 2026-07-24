@@ -74,9 +74,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - method: install.mjs
+          - method: install.sh
             runner: ubuntu-24.04
-          - method: install.mjs
+          - method: install.sh
             runner: macos-14
           - method: install.ps1
             runner: windows-2025

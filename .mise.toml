@@ -1,6 +1,9 @@
 # WASI / WebAssembly toolchain, build environment, and tasks.
 #
-# Keeps WASM orchestration in the testable Node.js tooling under scripts/wasm.
+# WASM orchestration lives in the testable Node.js tooling under scripts/wasm.
+# The two compiler wrappers stay shell: cargo execs them once per translation
+# unit, so a Node process per file is real build time, and `exec` keeps the
+# compiler's own signal handling and exit status intact.
 # The static threaded rustflags live in .cargo/config.toml; the SDK-relative
 # toolchain wiring lives in [env] below; orchestration lives in [tasks.*].
 #
@@ -23,7 +26,8 @@ rust = "1.95.0"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
 "ubi:nextest-rs/nextest" = { version = "cargo-nextest-0.9.140", exe = "cargo-nextest" }
 "ubi:obi1kenobi/cargo-semver-checks" = "0.46.0"
-"aqua:rhysd/actionlint" = "1.7.12"              # workflow linting
+"aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
+"aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
 [env]
@@ -51,8 +55,8 @@ CXXFLAGS_wasm32_wasip1 = "-msimd128"
 # Threaded target. CC/CXX point at the wrapper scripts that normalize the target
 # triple and force-include the liblzma threading shim; they read WASI_CLANG/
 # WASI_CLANGXX/WASI_SYSROOT from the env above.
-CC_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cc.mjs"
-CXX_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cxx.mjs"
+CC_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cc.sh"
+CXX_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cxx.sh"
 AR_wasm32_wasip1_threads = "{{ env.WASI_AR }}"
 RANLIB_wasm32_wasip1_threads = "{{ env.WASI_RANLIB }}"
 CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
@@ -191,11 +195,21 @@ run = "node {{ config_root }}/scripts/coverage-rust.mjs"
 
 [tasks.actionlint]
 description = "Lint GitHub Actions workflows and composite actions"
-# Catches undefined action inputs, bad expressions, and issues in `run:` scripts.
-# Workflow bugs otherwise only
+# Catches undefined action inputs, bad expressions, and (via the pinned
+# shellcheck above) issues in `run:` scripts. Workflow bugs otherwise only
 # surface as a failed run minutes after a push, so this belongs in the
 # pre-commit hook.
 run = "actionlint"
+
+[tasks.shellcheck]
+description = "Lint shell scripts"
+# The Node.js tooling is covered by `npm test`; the handful of scripts that
+# stay in shell - the container entrypoint, the installer, and the wasm
+# compiler wrappers - are exec-shaped and still need a static analyzer.
+# -x follows `source` directives so the wasm cc/cxx wrappers are checked
+# against the fragment they share; -P SCRIPTDIR resolves those relative paths
+# from each script's own directory, which is how the wrappers actually run.
+run = "node {{ config_root }}/scripts/lint-tracked.mjs '*.sh' -- shellcheck -x -P SCRIPTDIR"
 
 [tasks.whitespace]
 description = "Check for whitespace errors, skipping vendored third-party trees"
@@ -231,5 +245,5 @@ run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
-depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "hadolint", "test-rust", "build-wasm-prod"]
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
 run = "node {{ config_root }}/scripts/run-ci.mjs"

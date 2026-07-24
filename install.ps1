@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Windows counterpart to install.mjs. Downloads the released rom-weaver binary,
+# Windows counterpart to install.sh. Downloads the released rom-weaver binary,
 # verifies its published checksum, and drops it in a per-user directory.
 
 $ErrorActionPreference = 'Stop'

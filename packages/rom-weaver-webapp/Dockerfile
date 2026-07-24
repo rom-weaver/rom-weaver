@@ -87,8 +87,8 @@ ENV PATH="/root/.cargo/bin:/opt/binaryen/bin:${PATH}" \
     RANLIB_wasm32_wasip1=/opt/wasi-sdk/bin/llvm-ranlib \
     CFLAGS_wasm32_wasip1="-msimd128 -O3 -flto" \
     CXXFLAGS_wasm32_wasip1="-msimd128 -O3 -flto" \
-    CC_wasm32_wasip1_threads=/app/scripts/wasm/wasm32-wasip1-threads-cc.mjs \
-    CXX_wasm32_wasip1_threads=/app/scripts/wasm/wasm32-wasip1-threads-cxx.mjs \
+    CC_wasm32_wasip1_threads=/app/scripts/wasm/wasm32-wasip1-threads-cc.sh \
+    CXX_wasm32_wasip1_threads=/app/scripts/wasm/wasm32-wasip1-threads-cxx.sh \
     AR_wasm32_wasip1_threads=/opt/wasi-sdk/bin/llvm-ar \
     RANLIB_wasm32_wasip1_threads=/opt/wasi-sdk/bin/llvm-ranlib \
     CFLAGS_wasm32_wasip1_threads="-matomics -mbulk-memory -msimd128 -O3 -flto" \
@@ -152,7 +152,7 @@ COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
 # into a second layer. See the sticky-bit caveat in docs/ci.md before reusing
 # this on a directory: it takes the low nine bits only, which is exactly right
 # for 0755 and lossy for anything setuid or sticky.
-COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.mjs /usr/local/bin/rom-weaver-docker-entrypoint.mjs
+COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/local/bin/rom-weaver-docker-entrypoint
 COPY --from=compressed /dist /srv
 USER sws
 EXPOSE 8080
@@ -166,5 +166,5 @@ EXPOSE 8080
 # check that only confirms a cert exists stays green after the server dies.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD if [ -n "${HTTPS_PORT}" ]; then wget --no-check-certificate -qO- https://127.0.0.1:8080/health; else wget -qO- http://127.0.0.1:8080/health; fi
-ENTRYPOINT ["node", "/usr/local/bin/rom-weaver-docker-entrypoint.mjs"]
+ENTRYPOINT ["/usr/local/bin/rom-weaver-docker-entrypoint"]
 CMD ["--config-file", "/etc/sws.toml"]

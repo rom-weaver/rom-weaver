@@ -71,7 +71,7 @@ published checksum. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.mjs | node
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
 ```
 
 #### Install script (Windows)

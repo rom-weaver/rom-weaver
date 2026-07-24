@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: changes
-    # It lints every tracked workflow, Node.js script, and Dockerfile rather than
+    # It lints every tracked workflow, shell script, and Dockerfile rather than
     # the diff, so the gate is "did any file of those kinds change at all", not
     # a per-file filter. The `Plumbing` aggregate below is the required check,
     # so skipping this reports nothing to branch protection.
@@ -93,11 +93,16 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: actionlint hadolint
+          # actionlint shells out to shellcheck for `run:` blocks, so the two
+          # are wanted together even though only one of them is named a step.
+          tools: actionlint shellcheck hadolint
           cargo-cache: "false"
 
       - name: Workflows
         run: mise run actionlint
+
+      - name: Shell scripts
+        run: mise run shellcheck
 
       - name: Dockerfiles
         run: mise run hadolint
