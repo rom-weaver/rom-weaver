@@ -389,6 +389,19 @@ entry checks-only. Create re-parses before writing, so it can never emit
   access handles and SharedArrayBuffer are unavailable on the main thread).
   `packages/rom-weaver-webapp/src/workers/` hosts the worker entrypoints; the
   protocol types live in its `protocol/` directory.
+- **Worker URLs always come from `?worker&url`.** A worker entrypoint is
+  referenced as `import workerUrl from "./x.worker.ts?worker&url"`, never as
+  `new URL("./x.worker.ts", import.meta.url)`. Only the `?worker&url` form makes
+  Vite emit a *built* worker chunk; a bare `new URL()` that Vite's worker
+  detection cannot statically match degrades to a plain asset copy and ships the
+  raw TypeScript into `dist/assets/`, which then 404s or parse-fails in
+  production (dev hides it by transforming `.ts` on the fly). Detection is
+  fragile - it misses the URL inside a `??` chain, or when the `new Worker()`
+  call lives in another module - so the import form is the rule, not a
+  case-by-case judgement. Self-referential imports (a worker that transitively
+  imports its own URL, as the WASI thread worker does to self-spawn) are fine:
+  Vite collapses them to `self.location.href` inside that worker's own bundle
+  and emits no duplicate chunk.
 
 ## Build graph
 

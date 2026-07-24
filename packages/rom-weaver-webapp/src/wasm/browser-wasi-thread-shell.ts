@@ -21,6 +21,8 @@ import {
   THREAD_SLOT_TID_INDEX,
   type ThreadStartControl,
 } from "./browser-wasi-thread-protocol.ts";
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+import BUILT_THREAD_WORKER_URL from "./workers/browser-wasi-thread-worker.ts?worker&url";
 
 export const THREAD_WORKER_READY_TIMEOUT_MS = 5000;
 export const THREAD_WORKER_BUSY_RETRY_INTERVAL_MS = 25;
@@ -133,8 +135,6 @@ export function createStandaloneBrowserWasiThread({
   return slot;
 }
 
-const DEFAULT_THREAD_WORKER_URL = () => new URL("./workers/browser-wasi-thread-worker.ts", import.meta.url).href;
-
 // The thread worker runs with full access to the shared wasm memory, so its URL must stay
 // on our own origin. Callers pass a build-resolved URL; anything that resolves elsewhere
 // (a `data:`/`https://evil` string threaded in from untrusted config) is rejected outright
@@ -156,5 +156,5 @@ const assertSameOriginWorkerUrl = (href: string): string => {
 export function resolveThreadWorkerUrl(value: string | URL | undefined): string {
   if (value instanceof URL) return assertSameOriginWorkerUrl(value.href);
   if (typeof value === "string" && value.trim().length > 0) return assertSameOriginWorkerUrl(value);
-  return DEFAULT_THREAD_WORKER_URL();
+  return BUILT_THREAD_WORKER_URL;
 }
