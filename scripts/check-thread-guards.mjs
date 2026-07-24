@@ -2,20 +2,19 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 const files = (root, prefix) =>
-  execFileSync("git", ["ls-files", "-z", "--", prefix], { cwd: root }).toString().split("\0").filter(Boolean);
+  execFileSync("git", ["ls-files", "-z", "--", prefix], { cwd: root, maxBuffer: Infinity }).toString().split("\0").filter(Boolean);
 
 function matches(root, prefix, pattern, excluded = () => false) {
   const result = [];
   for (const file of files(root, prefix)) {
     if (excluded(file)) continue;
-    const lines = readFileSync(`${root}/${file}`, "utf8").split(/\r?\n/);
-    lines.forEach((line, index) => {
+    readFileSync(join(root, file), "utf8").split(/\r?\n/).forEach((line, index) => {
       if (pattern.test(line)) result.push(`${file}:${index + 1}:${line}`);
-      pattern.lastIndex = 0;
     });
   }
   return result;

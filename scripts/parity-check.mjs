@@ -114,9 +114,16 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
 }
 
 function runDolphin(bin, user, input, output, format, extra = []) {
-  const result = spawnSync(bin, ["convert", "-u", user, "-i", input, "-o", output, "-f", format, ...extra], { encoding: "utf8" });
+  const args = ["convert", "-u", user, "-i", input, "-o", output, "-f", format, ...extra];
+  const result = spawnSync(bin, args, { encoding: "utf8", maxBuffer: Infinity });
+  // macOS dolphin-tool chatters a "bundle id" line on every invocation; it is
+  // noise, not a finding.
   const outputText = `${result.stdout || ""}${result.stderr || ""}`.replace(/^.*bundle id.*$/gim, "");
-  if (outputText) process.stdout.write(outputText);
+  if (outputText.trim()) process.stdout.write(outputText);
+  // Checked, not inferred from a missing file: a converter that fails loudly
+  // should say so here rather than surface as an unexplained absent output.
+  if (result.error) fail(`dolphin-tool could not be run: ${result.error.message}`);
+  if (result.status !== 0) fail(`dolphin-tool ${args.join(" ")} exited with status ${result.status}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

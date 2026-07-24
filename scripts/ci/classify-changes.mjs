@@ -14,8 +14,15 @@ const EMPTY = {
   full: false,
 };
 
+// Test, bench, and example sources are compiled by the Rust test jobs and by
+// nothing else: they never enter the production WASM module or the release CLI
+// binary. `.github/actions/wasm-cache` excludes the same set from its cache key
+// for that reason, so selecting the webapp stack for them only buys a guaranteed
+// cache hit followed by four browser jobs that cannot observe the edit. Keep the
+// two lists identical - note `.*` rather than `[^/]*` under src/, because the
+// shell globs this replaced matched across directory separators.
 const isReleaseInput = (path) =>
-  !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/[^/]+\/test[^/]*\.rs$)/.test(path);
+  !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(path);
 
 export function classifyChanges(paths, all = false) {
   const result = { ...EMPTY };
@@ -46,7 +53,7 @@ export function classifyChanges(paths, all = false) {
       /^\.github\/actions\/build-cli-platform\//.test(path) ||
       path === ".github/cli-platforms.json" ||
       /^packages\/rom-weaver-cli-platforms\//.test(path) ||
-      /^(?:bin\/rom-weaver\.mjs|install\.(?:mjs|ps1))$/.test(path) ||
+      /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
       /^(?:scripts\/(?:check-thread-guards|check-whitespace|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(path)
     ) {
       result.rust = true;
@@ -86,13 +93,15 @@ export function classifyChanges(paths, all = false) {
       result.docker_webapp = true;
     }
 
+    // `repo-lint` lints every tracked file of these kinds rather than the diff,
+    // so this selects the whole job, not individual files: any `.github` entry
+    // (actionlint reads the workflows and the composite actions), any shell
+    // script, any Node.js script, any Dockerfile.
     if (
-      /^\.github\/workflows\//.test(path) ||
-      /^\.github\/actions\//.test(path) ||
-      /^\.github\/[^/]+\.(?:yml|yaml)$/.test(path) ||
+      /^\.github\//.test(path) ||
       path === ".hadolint.yaml" ||
       /(?:Dockerfile(?:\.|$))/.test(path) ||
-      /\.mjs$/.test(path)
+      /\.(?:sh|mjs)$/.test(path)
     ) result.repo_lint = true;
   }
 
@@ -111,8 +120,11 @@ export function formatChanges(result) {
   return `${Object.entries(result).map(([key, value]) => `${key}=${value}`).join("\n")}\n`;
 }
 
-export function main(argv = process.argv.slice(2), input = readFileSync(0, "utf8")) {
-  process.stdout.write(formatChanges(classifyChanges(input.split(/\r?\n/), argv[0] === "--all")));
+export function main(argv = process.argv.slice(2), readStdin = () => readFileSync(0, "utf8")) {
+  // stdin is read lazily: as a default parameter it was consumed even for
+  // --all, which blocks forever on an interactive terminal.
+  const all = argv[0] === "--all";
+  process.stdout.write(formatChanges(classifyChanges(all ? [] : readStdin().split(/\r?\n/), all)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

@@ -12,7 +12,21 @@ test("Docker changes select only the affected images", () => {
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
   assert.equal(classify(".dockerignore").docker_cli, "true");
 });
-test("Rust test-only changes select Rust alone", () => assert.equal(classify("crates/rom-weaver-cli/tests/cli_smoke/apply.rs").webapp, "false"));
+test("Rust test-only changes select Rust alone", () => {
+  assert.equal(classify("crates/rom-weaver-cli/tests/cli_smoke/apply.rs").webapp, "false");
+  assert.equal(classify("crates/rom-weaver-containers/src/chd/tests.rs").webapp, "false");
+  // Nested test modules too: the shell globs this replaced matched across `/`.
+  assert.equal(classify("crates/rom-weaver-containers/src/chd/decode/test_frames.rs").webapp, "false");
+  assert.equal(classify("crates/rom-weaver-containers/src/chd/decode/frames.rs").webapp, "true", "non-test sources still drive the release stacks");
+});
+
+test("repo-lint tracks every plumbing file kind it lints", () => {
+  assert.equal(classify("scripts/ci/cla-gate.sh").repo_lint, "true");
+  assert.equal(classify(".github/cli-platforms.json").repo_lint, "true");
+  assert.equal(classify("scripts/warn-only.mjs").repo_lint, "true");
+  assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").repo_lint, "true");
+  assert.equal(classify("docs/ci.md").repo_lint, "false");
+});
 test("native package and Node script changes select the release stacks", () => {
   assert.equal(classify("packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json").rust, "true");
   assert.equal(classify("scripts/ci/classify-changes.mjs").full, "true");

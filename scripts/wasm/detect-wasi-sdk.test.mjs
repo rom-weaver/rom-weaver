@@ -16,3 +16,11 @@ test("prefers an explicit SDK path, then the newest local toolchain", () => {
   mkdirSync(explicit);
   assert.equal(resolveWasiSdk({ home, env: { WASI_SDK_PATH: explicit }, candidates: [] }), explicit);
 });
+
+test("reports no SDK rather than a directory that is not one", () => {
+  const home = mkdtempSync(join(os.tmpdir(), "wasi-sdk-test-"));
+  assert.equal(resolveWasiSdk({ home, env: {}, candidates: [] }), "", "no toolchains directory at all");
+  mkdirSync(join(home, ".local", "toolchains", "unrelated-tool"), { recursive: true });
+  assert.equal(resolveWasiSdk({ home, env: {}, candidates: [] }), "", "toolchains directory holds no wasi-sdk-*");
+  assert.equal(resolveWasiSdk({ home, env: { WASI_SDK_PATH: join(home, "missing") }, candidates: [] }), "", "WASI_SDK_PATH points at nothing");
+});
