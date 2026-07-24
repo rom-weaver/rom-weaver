@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { join } from "./cx.ts";
 
 /**
@@ -80,21 +80,25 @@ const SelectionCheckList = ({
   onSubmit: (ids: string[]) => void;
   submitLabel?: (count: number) => string;
 }) => {
-  const selectableItems = useMemo(() => items.filter((item) => item.selectable), [items]);
-  const selectableIds = useMemo(() => selectableItems.map((item) => item.id), [selectableItems]);
+  const selectableItems = items.filter((item) => item.selectable);
+  const selectableIds = selectableItems.map((item) => item.id);
+  const defaultIds = selectableItems.filter((item) => item.defaultSelected).map((item) => item.id);
   // A picker may nominate default picks (the same-named leaf for a "replace from archive"); when it
   // does, only those start selected. Otherwise every selectable entry starts selected (add-all).
-  const initialSelectedIds = useMemo(() => {
-    const defaults = selectableItems.filter((item) => item.defaultSelected).map((item) => item.id);
-    return defaults.length ? defaults : selectableIds;
-  }, [selectableItems, selectableIds]);
-  const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds);
-  useEffect(() => setSelectedIds(initialSelectedIds), [initialSelectedIds]);
+  const initialSelectedIds = defaultIds.length ? defaultIds : selectableIds;
+  // `items` is a fresh array on every parent render, and the hosting form re-renders on every
+  // background progress tick, so keying the reset on identity wiped the user's unchecks the instant
+  // anything else moved. The candidate set's CONTENT is what decides whether this is a new picker.
+  const candidateKey = selectableItems.map((item) => `${item.defaultSelected ? "*" : ""}${item.id}`).join("|");
+  const [selection, setSelection] = useState({ ids: initialSelectedIds, key: candidateKey });
+  // Documented React "adjust state when props change" pattern: re-seed during render (not in an
+  // effect) so a genuinely new candidate set never paints one frame with the old selection.
+  if (selection.key !== candidateKey) setSelection({ ids: initialSelectedIds, key: candidateKey });
+  const selectedIds = selection.key === candidateKey ? selection.ids : initialSelectedIds;
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+  const setSelectedIds = (ids: string[]) => setSelection({ ids, key: candidateKey });
   const toggle = (id: string) =>
-    setSelectedIds((previous) =>
-      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id],
-    );
+    setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id]);
   const toggleAll = () => setSelectedIds(allSelected ? [] : selectableIds);
   return (
     <div className="selcheckwrap">
