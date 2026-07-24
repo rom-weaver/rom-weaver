@@ -77,21 +77,27 @@ Examples:
 
 /// Shared wording for the archive-lookup flags. Every command that can reach
 /// inside a container takes the same four, so they read the same everywhere.
+#[cfg(not(target_arch = "wasm32"))]
 pub const SELECT_HELP: &str =
     "Pick which file inside the archive to use, by exact name, prefix, or glob (repeatable)";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const FILTER_HELP: &str = "Consider only files that look like a rom or a patch, judged by extension (repeatable, comma-separable)";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const NO_IGNORE_HELP: &str = "Also consider files normally skipped inside archives: readmes, images, checksum sidecars, and OS clutter such as .DS_Store";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const THREADS_HELP: &str =
     "How many threads to use at most. auto uses every core; a format may still use fewer";
 
 /// `compress` and `patch apply` both choose an output container, so the format
 /// and codec flags say the same thing in both places.
+#[cfg(not(target_arch = "wasm32"))]
 pub const FORMAT_HELP: &str =
     "Output format, such as zip, 7z, chd, rvz, or z3ds [default: from the --output extension]";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const FORMAT_LONG_HELP: &str = "\
 Output format, such as zip, 7z, chd, rvz, or z3ds.
 
@@ -102,9 +108,11 @@ extension, this flag wins and a warning is printed.
 Common alternate spellings are accepted, so `7zip` works as well as `7z` and
 `3ds` as well as `z3ds`. The CLI guide lists every alias.";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const CODEC_HELP: &str =
     "Compression method to use, as codec or codec:level (repeatable, comma-separable)";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const CODEC_LONG_HELP: &str = "\
 Compression method to use, written as codec or codec:level.
 
@@ -120,8 +128,10 @@ cross-format synonyms. The CLI guide lists them per format.";
 
 /// `--assume-in` means the same thing on apply, validate, and create: trust
 /// this checksum rather than reading the file to compute it.
+#[cfg(not(target_arch = "wasm32"))]
 pub const ASSUME_IN_HELP: &str = "Take this checksum on trust instead of reading the ROM to compute it, as in crc32=1234abcd (repeatable, comma-separable)";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const ASSUME_IN_LONG_HELP: &str = "\
 Take this checksum on trust instead of reading the ROM to compute it, as in
 crc32=1234abcd. Repeatable and comma-separable.
