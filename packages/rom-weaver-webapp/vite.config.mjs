@@ -82,26 +82,6 @@ const deferDevHotUpdates = () => ({
   name: "rom-weaver-defer-dev-hot-updates",
 });
 
-const suppressNestedWorkerFactoryBundling = () => {
-  const workerFactoriesPath = path.join(rootDir, "src", "workers", "protocol", "worker-factories.ts");
-  const nestedWorkerPattern = /new Worker\(\s*new URL\(/g;
-  return {
-    apply: "build",
-    enforce: "pre",
-    name: "rom-weaver-suppress-nested-worker-factory-bundling",
-    transform(code, id) {
-      const filePath = id.split("?")[0];
-      if (path.normalize(filePath) !== workerFactoriesPath) return null;
-      if (!nestedWorkerPattern.test(code)) return null;
-      nestedWorkerPattern.lastIndex = 0;
-      return {
-        code: code.replace(nestedWorkerPattern, "new Worker(new URL(/* @vite-ignore */ "),
-        map: null,
-      };
-    },
-  };
-};
-
 const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
@@ -675,7 +655,6 @@ export default defineConfig(({ command }) => {
     },
     worker: {
       format: "es",
-      plugins: () => [suppressNestedWorkerFactoryBundling()],
     },
   };
 });
