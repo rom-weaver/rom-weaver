@@ -8,6 +8,12 @@
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px);
   }
 
+  /* Enough scroll room below the form that the last card (the run/progress/
+     download slot) clears the mobile browser's collapsing bottom toolbar - it
+     overlaps the bottom of the viewport, so at max scroll the final card would
+     otherwise stay hidden behind it. */
+  .rw-app .workflow-body { padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 72px); }
+
   .rw-app .masthead {
     display: grid;
     grid-template-columns: minmax(112px, 1fr) auto;

@@ -27,28 +27,6 @@ function PatcherPrimaryAction({
   totalTime?: string;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
-  const running = state.applyButton.loading || !!state.applyButton.progress;
-  const downloadReady = !!state.pendingDownloadFileName && !running;
-  // The run button, the live-progress panel, and the finished download button
-  // share one slot at the bottom of the form. Once a run starts, reserve the
-  // progress panel's height for the slot so the progress -> download swap can't
-  // shrink it and jerk the page up (which used to leave the download button
-  // out of view on mobile). Idle keeps its natural, compact height.
-  const slotClass = running || downloadReady ? "primary-action-slot is-reserved" : "primary-action-slot";
-  return <div className={slotClass}>{renderPrimaryAction({ controller, disableRun, state, totalTime })}</div>;
-}
-
-function renderPrimaryAction({
-  controller,
-  disableRun,
-  state,
-  totalTime,
-}: {
-  controller: OutputController;
-  disableRun?: boolean;
-  state: PatcherOutputState;
-  totalTime?: string;
-}) {
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
     // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on

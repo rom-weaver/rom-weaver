@@ -62,12 +62,6 @@
 /* Derive label space from action size to prevent overlap. */
 .rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }
 .rw-app .prog-panel .cancel { width: var(--ctrl-h); height: var(--ctrl-h); background: var(--well); }
-/* The run button, live-progress panel, and finished download button share one
-   slot. Once a run starts, hold the panel's height (matching .runprog below) so
-   the progress -> download swap doesn't shrink the slot and jump the page -
-   the download button then lands where the progress panel was, still in view.
-   Idle keeps its natural height. */
-.rw-app .primary-action-slot.is-reserved { display: flex; flex-direction: column; justify-content: center; min-height: 106px; }
 .rw-app .runprog .prog { flex: 1 1 auto; }
 /* Avoid double-insetting the run panel inside its card. */
 .rw-app .runprog .prog-actions { inset-inline-end: 0; }
