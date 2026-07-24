@@ -234,6 +234,7 @@ impl CliApp {
             self.run_checksum_variants_with_progress(
                 &request,
                 &context,
+                "checksum",
                 checksum_stage,
                 &mut |progress| {
                     self.emit_running(

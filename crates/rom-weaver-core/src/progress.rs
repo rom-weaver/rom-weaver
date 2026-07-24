@@ -155,8 +155,9 @@ pub fn emit_container_running_progress(
 /// reserve one checks group per eventual variant before the checksums finish - keeping the ROM card
 /// from growing variant-by-variant as values stream in. Shared by the inline-extract write path
 /// (`command`/`family` = the container extract) and the bare-ROM `checksum` path. The payload is
-/// `details.checksum_variant_plan` = `[{id,label}]`, a superset of the final `checksum_variants`
-/// rows (see `rom_weaver_checksum::StreamingVariantChecksums::take_planned_variants`).
+/// `details.checksum_variant_plan` = `[{id,label}]`, a subset of the final `checksum_variants` rows
+/// that only a needed `fix-header` repair can extend (see
+/// `rom_weaver_checksum::StreamingVariantChecksums::take_planned_variants`).
 pub fn emit_variant_plan(
     context: &OperationContext,
     command: &str,

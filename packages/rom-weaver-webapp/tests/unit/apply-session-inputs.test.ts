@@ -51,7 +51,17 @@ describe("getProgressStagedInputInfo checksumVariantPlan from probe-variant-plan
     ]);
   });
 
-  it("drops malformed plan entries and undefined-s an empty plan", () => {
+  it("keeps the well-formed entries and drops the malformed ones", () => {
+    const info = getProgressStagedInputInfo(
+      event({
+        checksum_variant_plan: [{ id: "raw" }, { id: "raw", label: "Raw" }, { label: "no id" }, ["raw", "Raw"], 5],
+        sourceId: "input-1",
+      }),
+    );
+    expect(info.checksumVariantPlan).toEqual([{ id: "raw", label: "Raw" }]);
+  });
+
+  it("undefined-s a plan whose entries are all malformed", () => {
     const info = getProgressStagedInputInfo(
       event({ checksum_variant_plan: [{ id: "raw" }, { label: "no id" }, 5], sourceId: "input-1" }),
     );

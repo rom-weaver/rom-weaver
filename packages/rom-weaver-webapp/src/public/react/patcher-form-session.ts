@@ -717,10 +717,12 @@ const useLocalApplyPatchFormSession = ({
         const nextRow = createRomInputRow({
           ...existing,
           ...patch,
-          archivePathEntries:
-            info.parentCompressions ??
-            (patch as Partial<RomInputRowState>).archivePathEntries ??
-            existing.archivePathEntries,
+          // Detail-less ticks (`probe-identity`, `probe-variant-plan`) parse to an empty array, not
+          // undefined, so `??` would blank a resolved archive path for a frame. Only a non-empty
+          // parse replaces it - matching how `archiveName` falls through on "".
+          archivePathEntries: info.parentCompressions?.length
+            ? info.parentCompressions
+            : ((patch as Partial<RomInputRowState>).archivePathEntries ?? existing.archivePathEntries),
           chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           cueText: info.cueText ?? patch.cueText ?? existing.cueText,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,

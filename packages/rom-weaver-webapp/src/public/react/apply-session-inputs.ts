@@ -85,20 +85,22 @@ const getRomTypeFromProgressDetails = (details: Record<string, unknown>): Staged
 };
 
 // The early `probe-variant-plan` event (Rust) carries the labels of every checksum variant the ROM
-// will produce, known once the header is scanned - before the checksums finish. Reserving one checks
-// group per entry keeps the staging card from growing variant-by-variant as values stream in.
+// is certain to produce, known once the header is scanned - before the checksums finish. Reserving
+// one checks group per entry keeps the staging card from growing variant-by-variant as values
+// stream in.
+const isVariantPlanEntry = (entry: unknown): entry is { id: string; label: string } =>
+  !!entry &&
+  typeof entry === "object" &&
+  !Array.isArray(entry) &&
+  typeof (entry as Record<string, unknown>).id === "string" &&
+  typeof (entry as Record<string, unknown>).label === "string";
+
 const getVariantPlanFromProgressDetails = (
   details: Record<string, unknown>,
 ): StagedInputInfo["checksumVariantPlan"] => {
   const plan = details.checksum_variant_plan;
   if (!Array.isArray(plan)) return undefined;
-  const entries = plan
-    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === "object")
-    .map((entry) => ({ id: entry.id, label: entry.label }))
-    .filter(
-      (entry): entry is { id: string; label: string } =>
-        typeof entry.id === "string" && typeof entry.label === "string",
-    );
+  const entries = plan.filter(isVariantPlanEntry).map((entry) => ({ id: entry.id, label: entry.label }));
   return entries.length ? entries : undefined;
 };
 
