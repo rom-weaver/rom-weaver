@@ -113,6 +113,8 @@ wasm ────┤
          └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
                  ↑
            deploy-plan ── ref -> channel list
+                 └── deploy-preview-fast ── preview, wasm cache hit only
+                                            (skips deploy's preview leg)
 
 webapp-static ── docker-prebuilt (webapp) - the release COPY path
 
@@ -228,6 +230,15 @@ security ── advisories (warn only, always green)
 - **`deploy`** ships the site, one matrix leg per channel (below). Both jobs
   are `continue-on-error: true`, so a Cloudflare outage cannot turn a green
   `main` red and suppress release automation.
+- **`deploy-preview-fast`** publishes the PR preview without waiting on `wasm`.
+  `deploy` needs that job's artifact; this one restores the same module from
+  cache, which hits on every PR that leaves `Cargo.lock` and `crates/` alone
+  and lands the preview URL ~13s sooner. On a miss it deploys nothing - never
+  the module itself, which would duplicate the ~6.5 min build already running -
+  and `deploy` publishes the preview as usual. The two can never both publish:
+  `deploy` skips whenever this job reports a URL. Both share
+  `.github/actions/deploy-webapp-pages` so a preview has exactly one build-and-
+  publish implementation.
 
 ### Tag runs
 
