@@ -107,7 +107,9 @@ changes ── changed paths -> rust / webapp / security
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
              ├── rust-windows ──┤
-             └── cli-platforms ─┘ (9 release targets)
+             └── cli-platforms ─┘ (9 release targets; 6 on a pull request)
+                     ↑
+             cli-platform-plan ── event -> target list
 
          ┌── webapp-static ───┐
          ├── webapp-browser ──┼── webapp (aggregate check name)
@@ -170,13 +172,30 @@ security ── advisories (warn only, always green)
   typegen drift, whitespace, thread guards, the Rust test suite, license
   attribution, `cargo deny` licenses/sources, unused dependencies, and a
   `cargo publish --dry-run`.
-- **`cli-platforms`** builds and packages every native release target before
+- **`cli-platforms`** builds and packages the native release targets before
   release day: macOS arm64/x86-64; Linux x86-64 GNU plus arm64/i686/x86-64
   musl; and Windows arm64/x86/x86-64 MSVC. Every binary verifies a SHA-256;
   round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures;
   and creates/applies fourteen patch formats on its target architecture. Native
   arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs
   only when Rust or native-package inputs change.
+
+  `cli-platform-plan` decides which legs exist, the same way `deploy-plan`
+  feeds `deploy` - a matrix can only come from an upstream job's output. All
+  nine targets build on `main`, on tags, and on manual runs, which is what
+  release day depends on. A **pull request builds six**: one per
+  OS/architecture-class/libc combination (darwin arm64, darwin x64, linux
+  x86-64 GNU, linux x86-64 musl, linux arm64 musl, windows x86-64 MSVC).
+  Deferred to `main` are only same-OS/same-libc siblings - the two i686 legs
+  and windows arm64 - so breaking one of them without breaking its 64-bit
+  sibling takes a pointer-width or arm-codegen specific change, and `main`
+  still catches it before any commit can be released. That is worth ~18 of the
+  ~50 runner-minutes this matrix costs, on a run that never saves the cargo
+  cache anyway (`save-if` is `main`-only). `linux-arm64-musl` is pinned into
+  the subset because `cli-linux-arm64` downloads its artifact.
+- **`cli-linux-arm64`** re-runs `verify-cli-platform.mjs` against the
+  `aarch64-unknown-linux-musl` binary on a native `ubuntu-24.04-arm` runner -
+  the cross build cannot execute what it produced.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p
   rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm`
   already compiles as a strict subset (the app build pulls `containers` in with
@@ -204,7 +223,10 @@ security ── advisories (warn only, always green)
   separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`rust`** is an aggregator: it fails unless selected jobs succeeded and
   unselected jobs were intentionally skipped. It also fails if classification
-  itself failed.
+  itself failed. Because `cli-platforms` is a planned matrix, a green result
+  there is not by itself proof it built anything, so the aggregate also asserts
+  the planned leg count for the event (six on a pull request, nine otherwise) -
+  a shrunken matrix fails the check rather than passing quietly.
   Its only purpose is to present one stable check name (`Rust`) while the work
   runs in parallel, so branch protection has a single thing to require.
 - **`security`** runs on dependency-manifest changes and executes `cargo deny

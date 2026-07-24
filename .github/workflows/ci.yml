@@ -351,14 +351,80 @@ jobs:
         # dependencies from crates.io, which may still contain the pre-change graph.
         run: cargo publish --workspace --locked --dry-run --no-verify
 
-  # Build every native target the release publishes before a change reaches
-  # release day. Linux musl targets use cross; Windows targets select the
-  # matching MSVC environment explicitly.
-  cli-platforms:
-    name: CLI target (${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+  # Which of the nine release targets `cli-platforms` below builds. Split out of
+  # that job for the same reason `deploy-plan` is split out of `deploy`: a
+  # matrix can only be fed by an upstream job's output, and a job-level `if`
+  # cannot drop individual legs.
+  #
+  # The full nine cost ~50 runner-minutes, and a pull request never saves the
+  # cargo cache (`save-if` below is main-only), so every pull request pays close
+  # to the cold price. Pull requests therefore build one leg per
+  # OS/architecture-class/libc combination and defer the rest to main:
+  #
+  #   pull request  darwin arm64, darwin x64, linux x64 gnu,
+  #                 linux x64 musl, linux arm64 musl, windows x64 msvc
+  #   main / tag /  all nine
+  #   dispatch
+  #
+  # What is deferred is only ever a same-OS, same-libc sibling of a leg that
+  # still runs: the two i686 legs (a second architecture inside linux-musl and
+  # inside windows-msvc) and windows arm64. A source change that breaks one of
+  # those without also breaking its 64-bit sibling has to be pointer-width or
+  # arm-codegen specific - rare, and still caught on main before the commit can
+  # reach a release, which is where completeness actually has to hold. Everything
+  # a build can plausibly break on - the C toolchain, cross vs cargo, MSVC vs
+  # clang, musl vs glibc, arm vs x86 - keeps a representative on every pull
+  # request. linux-arm64-musl in particular must stay in the subset: it is the
+  # only producer of the artifact `cli-linux-arm64` runs natively.
+  cli-platform-plan:
+    name: CLI targets (plan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+      # `pr` marks the representative subset; it is stripped from the emitted
+      # entries so the matrix carries only build inputs.
+      - name: Resolve targets
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          all=$(cat <<'JSON'
+          [
+            {"package":"darwin-arm64",     "runner":"macos-14",       "target":"aarch64-apple-darwin",       "build":"build", "binary":"rom-weaver",                                               "pr":true},
+            {"package":"darwin-x64",       "runner":"macos-15-intel", "target":"x86_64-apple-darwin",        "build":"build", "binary":"rom-weaver",                                               "pr":true},
+            {"package":"linux-arm64-musl", "runner":"ubuntu-24.04",   "target":"aarch64-unknown-linux-musl", "build":"cross", "binary":"rom-weaver",                                               "pr":true},
+            {"package":"linux-ia32-musl",  "runner":"ubuntu-24.04",   "target":"i686-unknown-linux-musl",    "build":"cross", "binary":"rom-weaver",                                               "pr":false},
+            {"package":"linux-x64-gnu",    "runner":"ubuntu-24.04",   "target":"x86_64-unknown-linux-gnu",   "build":"build", "binary":"rom-weaver",                                               "pr":true},
+            {"package":"linux-x64-musl",   "runner":"ubuntu-24.04",   "target":"x86_64-unknown-linux-musl",  "build":"cross", "binary":"rom-weaver",                                               "pr":true},
+            {"package":"win32-arm64-msvc", "runner":"windows-11-arm", "target":"aarch64-pc-windows-msvc",    "build":"build", "binary":"rom-weaver.exe", "msvc_arch":"arm64", "msvc_host":"arm64", "pr":false},
+            {"package":"win32-ia32-msvc",  "runner":"windows-2025",   "target":"i686-pc-windows-msvc",       "build":"build", "binary":"rom-weaver.exe", "msvc_arch":"x86", "msvc_host":"amd64",   "pr":false},
+            {"package":"win32-x64-msvc",   "runner":"windows-2025",   "target":"x86_64-pc-windows-msvc",     "build":"build", "binary":"rom-weaver.exe", "msvc_arch":"amd64", "msvc_host":"amd64", "pr":true}
+          ]
+          JSON
+          )
+          if [ "$EVENT_NAME" = pull_request ]; then
+            selected=$(printf '%s' "$all" | jq -c '[.[] | select(.pr)]')
+          else
+            selected=$(printf '%s' "$all" | jq -c '.')
+          fi
+          targets=$(printf '%s' "$selected" | jq -c 'map(del(.pr))')
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          printf '%s' "$targets" | jq -r '"building \(length) target(s):", (.[] | "  \(.target)")'
+
+  # Build the native targets the release publishes before a change reaches
+  # release day. Linux musl targets use cross; Windows targets select the
+  # matching MSVC environment explicitly. `cli-platform-plan` above decides
+  # which legs exist - on main, tags and manual runs that is all nine.
+  cli-platforms:
+    name: CLI target (${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 120
+    needs: [changes, cli-platform-plan]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_INCREMENTAL: "0"
@@ -366,70 +432,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: darwin-arm64
-            runner: macos-14
-            target: aarch64-apple-darwin
-            build: build
-            binary: rom-weaver
-          - package: darwin-x64
-            runner: macos-15-intel
-            target: x86_64-apple-darwin
-            build: build
-            binary: rom-weaver
-          - package: linux-arm64-musl
-            runner: ubuntu-24.04
-            target: aarch64-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: linux-ia32-musl
-            runner: ubuntu-24.04
-            target: i686-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: linux-x64-gnu
-            runner: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-            build: build
-            binary: rom-weaver
-          - package: linux-x64-musl
-            runner: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
-            build: cross
-            binary: rom-weaver
-          - package: win32-arm64-msvc
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: arm64
-            msvc_host: arm64
-          - package: win32-ia32-msvc
-            runner: windows-2025
-            target: i686-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: x86
-            msvc_host: amd64
-          - package: win32-x64-msvc
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-            build: build
-            binary: rom-weaver.exe
-            msvc_arch: amd64
-            msvc_host: amd64
+        platform: ${{ fromJSON(needs.cli-platform-plan.outputs.targets) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.platform.target }}
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cli-platform-${{ matrix.package }}
+          shared-key: cli-platform-${{ matrix.platform.package }}
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -438,7 +453,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build pkg-config
 
       - uses: taiki-e/install-action@v2
-        if: matrix.build == 'cross'
+        if: matrix.platform.build == 'cross'
         with:
           tool: cross@0.2.5
 
@@ -448,43 +463,43 @@ jobs:
           package-manager-cache: false
 
       - name: Build release CLI
-        if: runner.os != 'Windows' && matrix.build != 'cross'
-        run: cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
+        if: runner.os != 'Windows' && matrix.platform.build != 'cross'
+        run: cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.platform.target }}
 
       - name: Build release CLI
-        if: matrix.build == 'cross'
-        run: cross build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
+        if: matrix.platform.build == 'cross'
+        run: cross build --locked --release --package rom-weaver-cli --target ${{ matrix.platform.target }}
 
       - name: Build release CLI
         if: runner.os == 'Windows'
         shell: cmd
         run: |
           for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }} -host_arch=${{ matrix.msvc_host }}
-          cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.target }}
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.platform.msvc_arch }} -host_arch=${{ matrix.platform.msvc_host }}
+          cargo build --locked --release --package rom-weaver-cli --target ${{ matrix.platform.target }}
 
       - name: Verify release CLI
-        if: matrix.package != 'linux-arm64-musl'
+        if: matrix.platform.package != 'linux-arm64-musl'
         run: >-
           node scripts/verify-cli-platform.mjs
-          target/${{ matrix.target }}/release/${{ matrix.binary }}
+          target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
 
       - name: Upload Linux arm64 CLI for native test
-        if: matrix.package == 'linux-arm64-musl'
+        if: matrix.platform.package == 'linux-arm64-musl'
         uses: actions/upload-artifact@v7
         with:
           name: ci-cli-linux-arm64-musl
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
           if-no-files-found: error
 
       - name: Verify platform package
         shell: bash
         run: |
           node scripts/prepare-npm-platform-package.mjs \
-            "${{ matrix.package }}" \
-            "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+            "${{ matrix.platform.package }}" \
+            "target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}"
           npm pack --dry-run --ignore-scripts --json \
-            "packages/rom-weaver-cli-platforms/${{ matrix.package }}"
+            "packages/rom-weaver-cli-platforms/${{ matrix.platform.package }}"
 
   cli-linux-arm64:
     name: CLI target runtime (aarch64-unknown-linux-musl)
@@ -682,11 +697,16 @@ jobs:
   # (superseded by a newer push, or by hand) the dependencies report
   # `cancelled`, and `always()` would turn that into a red Rust check on a
   # build nobody finished.
+  #
+  # `cli-platforms` is a planned matrix, so "it succeeded" is not by itself
+  # proof that it built anything: a planner that emitted a short list would
+  # report green with legs missing. The leg count is asserted against the event
+  # here so a shrunken matrix fails this check instead of passing it quietly.
   rust:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, rust-host, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
+    needs: [changes, rust-host, cli-platform-plan, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Verify Rust jobs
@@ -694,18 +714,33 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUST_SELECTED: ${{ needs.changes.outputs.rust }}
           HOST_RESULT: ${{ needs.rust-host.result }}
+          CLI_PLAN_RESULT: ${{ needs.cli-platform-plan.result }}
+          CLI_PLAN_TARGETS: ${{ needs.cli-platform-plan.outputs.targets }}
           CLI_PLATFORMS_RESULT: ${{ needs.cli-platforms.result }}
           CLI_LINUX_ARM64_RESULT: ${{ needs.cli-linux-arm64.result }}
           MACOS_RESULT: ${{ needs.rust-macos.result }}
           WINDOWS_RESULT: ${{ needs.rust-windows.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           [[ "$CHANGES_RESULT" == success ]]
           check() { [[ "$1" == success || ( "$1" == skipped && "$2" != true ) ]]; }
           check "$HOST_RESULT" "$RUST_SELECTED"
+          check "$CLI_PLAN_RESULT" "$RUST_SELECTED"
           check "$CLI_PLATFORMS_RESULT" "$RUST_SELECTED"
           check "$CLI_LINUX_ARM64_RESULT" "$RUST_SELECTED"
           check "$MACOS_RESULT" "$RUST_SELECTED"
           check "$WINDOWS_RESULT" "$RUST_SELECTED"
+
+          # Six representative targets on a pull request, all nine everywhere
+          # else. Bump these alongside the table in `cli-platform-plan`.
+          if [[ "$RUST_SELECTED" == true ]]; then
+            if [[ "$EVENT_NAME" == pull_request ]]; then expected=6; else expected=9; fi
+            built=$(printf '%s' "$CLI_PLAN_TARGETS" | jq 'length')
+            if [[ "$built" != "$expected" ]]; then
+              echo "::error::cli-platforms built $built target(s) on $EVENT_NAME, expected $expected"
+              exit 1
+            fi
+          fi
 
   # The webapp work consumes the prebuilt wasm module and compiles no Rust of
   # its own. It is split into four jobs so the slow parallel browser suite is
