@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/linux-ia32-musl",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Linux ia32 musl binary for rom-weaver",
   "author": "Brandon Casey",
   "repository": {
