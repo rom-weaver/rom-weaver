@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   aggregatePrereleaseChangelog,
+  collapseInternalSection,
   replaceReleasePullRequestNotes,
 } from "./aggregate-release-changelog.mjs";
 
@@ -50,6 +51,30 @@ test("does not aggregate a prerelease release PR", () => {
 
   assert.equal(result.changed, false);
   assert.equal(result.changelog, changelog);
+});
+
+test("collapses internal release notes by default", () => {
+  const input = `# Changelog
+
+## [0.7.3](https://github.com/example/project/compare/v0.7.2...v0.7.3) (2026-07-24)
+
+### Features
+
+* user-facing feature
+
+### Internal
+
+* ci-only maintenance
+`;
+
+  const result = aggregatePrereleaseChangelog(input, "0.7.3");
+
+  assert.equal(result.changed, true);
+  assert.match(result.changelog, /<details>\n<summary>Internal<\/summary>/);
+  assert.match(result.changelog, /ci-only maintenance/);
+  assert.doesNotMatch(result.changelog, /^### Internal$/m);
+  assert.equal(aggregatePrereleaseChangelog(result.changelog, "0.7.3").changed, false);
+  assert.equal(collapseInternalSection(result.changelog, "0.7.3"), result.changelog);
 });
 
 test("replaces only the release notes in a Release Please PR body", () => {
