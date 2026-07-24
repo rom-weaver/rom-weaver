@@ -40,7 +40,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
 | `commitlint.yml` | PR (open/edit/sync) | **Yes** | Conventional-commit pull request title |
-| `cla.yml` | PR (open/reopen/sync), PR comment | **Yes** | The required `license/cla` status |
+| `cla.yml` | PR (open/reopen/sync), PR comment | **Yes** | The required `CLA Status` check |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -52,10 +52,10 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
 
-`cla.yml` posts the required `license/cla` commit status, checking every
+`cla.yml` posts the required `CLA Status` commit status, checking every
 contributor to a pull request against [CLA version 1.0](../CLA.md). The logic is
-`scripts/ci/cla-gate.sh`, covered by `scripts/ci/cla-gate.test.mjs` against a
-stubbed `gh`.
+`scripts/ci/cla-gate.mjs`, covered by `scripts/ci/cla-gate.test.mjs` against a
+stub GitHub API served over real HTTP.
 
 | Where | What |
 | --- | --- |
@@ -67,6 +67,20 @@ on later runs, never duplicated - asking them to reply with the signing phrase.
 That reply is what appends their record. Anyone can comment `recheck` to re-run
 the gate. Commits whose author email matches no GitHub account are reported as
 `unlinked:<name>` rather than skipped.
+
+The two signals mean different things, and the job deliberately exits 0 on an
+unsigned verdict:
+
+| Signal | Meaning |
+| --- | --- |
+| `CLA Status` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
+| `CLA gate` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
+
+Requiring the **status** rather than the job name is load-bearing. A run
+triggered by `issue_comment` attaches its check run to the default branch rather
+than the pull request head, so a required `CLA gate` job would never be cleared by a
+contributor's signing comment - only by pushing a commit. The script posts
+`CLA Status` against the head SHA explicitly, which works on both paths.
 
 The job runs on `pull_request_target`, so a fork's pull request still receives a
 status and a comment; nothing from the pull request head is checked out or
@@ -105,11 +119,11 @@ unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
 > must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `Conventional
-> commits`, and `license/cla`. The ruleset has no bypass
+> commits`, and `CLA Status`. The ruleset has no bypass
 > actors, so a status that is never reported blocks the merge outright - which
 > is why every required name belongs to an aggregate job that always runs, and
 > never to a job that path classification can skip or drop from a matrix, and
-> why `license/cla` is a workflow that can be rerun rather than an app that
+> why `CLA Status` comes from a workflow that can be rerun rather than an app that
 > cannot.
 
 ## `ci.yml` - the required gate
@@ -159,9 +173,9 @@ security ── advisories (warn only, always green)
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
   rather than the diff, so it is selected by whether anything of those kinds
-  changed at all - anything under `.github`, any `*.sh`, any `*.mjs`, any
-  Dockerfile, `.hadolint.yaml` - not per file. It installs no language
-  toolchain and
+  changed at all - workflows, composite actions, `.github` YAML at any depth,
+  any `*.sh`, any `*.mjs`, any Dockerfile, `.config/hadolint.yaml` - not per
+  file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -807,7 +821,7 @@ inputs change.
   so that CI gate becomes a silent no-op rather than an error.
 - **A glob of `*[bot]` does not match a bot login.** In a bash `[[ ]]` pattern
   `[bot]` is a character class, so it matches a trailing b, o or t - never the
-  literal `[bot]` every GitHub App account ends with. `cla-gate.sh` escapes the
+  literal `[bot]` every GitHub App account ends with. `cla-gate.mjs` escapes the
   brackets before matching; any new glob-matching code needs the same.
 - **The root `package-lock.json` needs generated `@rom-weaver/*` optional
   entries.** The scope is not fully published when Release Please opens a new

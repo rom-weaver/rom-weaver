@@ -16,6 +16,7 @@ import {
   getSettingsFieldPlaceholder,
   getSettingsFieldSuggestion,
   getSettingsFieldSuggestionDataLocalize,
+  getSettingsUiState,
   isSettingsFieldDisabled,
   SETTINGS_FIELD_ID_TO_KEY,
   SETTINGS_FIELD_METADATA,
@@ -30,17 +31,23 @@ import type { ValidationState } from "./webapp-state-types.ts";
  * field-driven implementation; only the surrounding markup changed.
  */
 
-type SettingsPanelProps = {
+type SettingsFieldShared = {
   draftSettings: SettingsDraftState;
   uiState: SettingsUiState;
   validation: ValidationState;
   onDraftChange: (field: SettingsFieldKey, value: string | boolean) => void;
+};
+
+type SettingsPanelProps = Omit<SettingsFieldShared, "uiState"> & {
+  // Derived from `draftSettings` when omitted: keeping the derivation in here is
+  // what lets the panel's whole metadata graph stay off the shared entry chunk.
+  uiState?: SettingsUiState;
   onClose: () => void;
   onRestoreDefaults: () => void;
   onSaveClose: () => void;
 };
 
-type FieldRenderProps = Pick<SettingsPanelProps, "draftSettings" | "uiState" | "validation" | "onDraftChange"> & {
+type FieldRenderProps = SettingsFieldShared & {
   fieldKey: SettingsFieldKey;
 };
 
@@ -355,10 +362,7 @@ const SettingsGroup = ({
   uiState,
   validation,
   onDraftChange,
-}: { section: { fields: SettingsFieldKey[]; title: string } } & Pick<
-  SettingsPanelProps,
-  "draftSettings" | "uiState" | "validation" | "onDraftChange"
->) => {
+}: { section: { fields: SettingsFieldKey[]; title: string } } & SettingsFieldShared) => {
   const shared = { draftSettings, onDraftChange, uiState, validation };
   const fields = section.fields.filter(
     (fieldKey) => SETTINGS_PANEL_FIELD_ORDER.includes(fieldKey) && SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden",
@@ -411,7 +415,7 @@ const AboutSection = () => (
 );
 
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
-  const shared = { draftSettings, onDraftChange, uiState, validation };
+  const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
   const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
   const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (

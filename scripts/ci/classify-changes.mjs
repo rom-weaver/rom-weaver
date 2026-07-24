@@ -48,7 +48,7 @@ export function classifyChanges(paths, all = false) {
     }
 
     if (
-      /^(?:Cargo\.toml|Cargo\.lock|deny\.toml|package\.json|package-lock\.json)$/.test(path) ||
+      /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(path) ||
       /^\.github\/workflows\/(?:npm-publish|release)\.yml$/.test(path) ||
       /^\.github\/actions\/build-cli-platform\//.test(path) ||
       path === ".github/cli-platforms.json" ||
@@ -94,12 +94,15 @@ export function classifyChanges(paths, all = false) {
     }
 
     // `repo-lint` lints every tracked file of these kinds rather than the diff,
-    // so this selects the whole job, not individual files: any `.github` entry
-    // (actionlint reads the workflows and the composite actions), any shell
-    // script, any Node.js script, any Dockerfile.
+    // so this selects the whole job, not individual files: whatever actionlint
+    // reads (the workflows, the composite actions, `.github` YAML at any depth
+    // - the shell `case` globs this replaced matched across `/`), any shell
+    // script, any Node.js script, any Dockerfile, and hadolint's config.
     if (
-      /^\.github\//.test(path) ||
-      path === ".hadolint.yaml" ||
+      /^\.github\/workflows\//.test(path) ||
+      /^\.github\/actions\//.test(path) ||
+      /^\.github\/.*\.(?:yml|yaml)$/.test(path) ||
+      path === ".config/hadolint.yaml" ||
       /(?:Dockerfile(?:\.|$))/.test(path) ||
       /\.(?:sh|mjs)$/.test(path)
     ) result.repo_lint = true;

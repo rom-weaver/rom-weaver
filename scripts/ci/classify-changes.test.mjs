@@ -20,12 +20,31 @@ test("Rust test-only changes select Rust alone", () => {
   assert.equal(classify("crates/rom-weaver-containers/src/chd/decode/frames.rs").webapp, "true", "non-test sources still drive the release stacks");
 });
 
-test("repo-lint tracks every plumbing file kind it lints", () => {
-  assert.equal(classify("scripts/ci/cla-gate.sh").repo_lint, "true");
-  assert.equal(classify(".github/cli-platforms.json").repo_lint, "true");
-  assert.equal(classify("scripts/warn-only.mjs").repo_lint, "true");
-  assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").repo_lint, "true");
-  assert.equal(classify("docs/ci.md").repo_lint, "false");
+test("plumbing lint runs only for the file kinds it lints", () => {
+  for (const path of [
+    ".github/workflows/codeql.yml",
+    // Nested `.github` YAML: the shell `case` glob this replaced matched
+    // across `/`, so keep matching at any depth.
+    ".github/ISSUE_TEMPLATE/config.yml",
+    ".github/actions/wasm-cache/action.yml",
+    "scripts/setup-worktree.sh",
+    "scripts/warn-only.mjs",
+    "packages/rom-weaver-webapp/Dockerfile",
+    ".config/hadolint.yaml",
+  ]) {
+    assert.equal(classify(path).repo_lint, "true", path);
+  }
+  for (const path of [
+    "README.md",
+    "docs/ci.md",
+    "crates/rom-weaver-core/src/lib.rs",
+    "packages/rom-weaver-webapp/src/index.tsx",
+    "install.ps1",
+    ".github/cli-platforms.json",
+    ".github/ISSUE_TEMPLATE/bug.md",
+  ]) {
+    assert.equal(classify(path).repo_lint, "false", path);
+  }
 });
 test("native package and Node script changes select the release stacks", () => {
   assert.equal(classify("packages/rom-weaver-cli-platforms/linux-arm64-musl/package.json").rust, "true");

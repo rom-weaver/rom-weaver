@@ -59,7 +59,7 @@ terms. Keeping that model possible requires a license grant covering every
 contribution, so all contributions require agreeing to the
 [Individual Contributor License Agreement version 1.0](CLA.md).
 
-On your first pull request the `license/cla` check comments with the signing
+On your first pull request the `CLA Status` check comments with the signing
 phrase; reply with that phrase in a new comment to sign. Signing covers all of
 your past and future contributions under that immutable CLA version, and you
 will never be asked again. Comment `recheck` to re-run the check. You keep the copyright in your work, and it is always also released

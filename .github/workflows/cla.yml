@@ -1,6 +1,6 @@
 name: CLA
 
-# Posts the required `license/cla` commit status. This replaced the hosted CLA
+# Posts the required `CLA Status` commit status. This replaced the hosted CLA
 # Assistant app, which had no re-run button and no `synchronize` trigger: a
 # force-push left the new head with no status at all, and the pull request sat
 # on "Expected - waiting for status to be reported" forever with no bypass actor
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   cla:
-    name: CLA
+    name: CLA gate
     # issue_comment fires on plain issues too, and on every unrelated comment.
     if: >-
       github.event_name == 'pull_request_target' ||
@@ -58,4 +58,4 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
-        run: scripts/ci/cla-gate.sh
+        run: node scripts/ci/cla-gate.mjs

@@ -200,7 +200,7 @@ Call sites do not change. `rom_weaver_containers::xdvdfs::...` keeps working in
 `rom-weaver-cli` and `cli_smoke`, and the internal paths (`blockdev`, `layout`,
 `read`, `write::fs`, `write::img`) match upstream's layout.
 
-Also revisit the `RUSTSEC-2025-0141` ignore in `deny.toml`. `bincode` 1.3.3 is
+Also revisit the `RUSTSEC-2025-0141` ignore in `.config/deny.toml`. `bincode` 1.3.3 is
 surfaced by `unmaintained = "workspace"` because it is currently a direct
 dependency of `rom-weaver-containers`; as a transitive dependency of a registry
 crate it falls outside that scope and the ignore can likely go.

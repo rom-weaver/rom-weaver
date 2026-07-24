@@ -92,7 +92,7 @@ it.
 
 ## 7. Practicalities
 
-- Sign on your first pull request. The `license/cla` check comments there asking
+- Sign on your first pull request. The `CLA Status` check comments there asking
   for a signature; reply in a new comment on that pull request containing
   exactly:
 
