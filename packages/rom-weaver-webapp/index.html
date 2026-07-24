@@ -57,6 +57,14 @@
         }
       })();
     </script>
+    <script>
+      // Seed --wall-clock (epoch seconds) before first paint so the prerendered
+      // hero's extension ticker sits at its wall-clock phase - the same phase
+      // the client stamps per mount (layout.tsx) - and the createRoot swap
+      // continues the marquee seamlessly instead of jumping. See formats-ticker
+      // in dropzone.css.
+      document.documentElement.style.setProperty("--wall-clock", `${Date.now() / 1000}s`);
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="RomWeaver" />
