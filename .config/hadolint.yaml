@@ -1,6 +1,6 @@
 # Dockerfile lint policy. Run via `mise run hadolint` (pre-commit + CI).
 #
-# Suppressions carry a written reason, same as deny.toml advisory ignores and
+# Suppressions carry a written reason, same as .config/deny.toml advisory ignores and
 # the cargo-machete false positives.
 ignored:
   # DL3008 wants `apt-get install pkg=<version>`. Debian expires superseded

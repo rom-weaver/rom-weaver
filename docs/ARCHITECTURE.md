@@ -478,7 +478,7 @@ Settings in both themes.
 
 CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`,
 typegen drift check, wasm-target checks, the full Rust test suite, the wasm
-build, and both packages' lint/type/test/build. `lefthook.yml` mirrors the same
+build, and both packages' lint/type/test/build. `.config/lefthook.yml` mirrors the same
 checks pre-commit, scoped by changed paths.
 
 ## Other docs

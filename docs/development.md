@@ -200,7 +200,7 @@ Do not edit files under
 
 ## Dependencies
 
-`deny.toml` owns the dependency policy - advisories, licenses, and sources.
+`.config/deny.toml` owns the dependency policy - advisories, licenses, and sources.
 Check it with:
 
 ```bash
@@ -237,7 +237,7 @@ pin is the only thing keeping `bzip2-sys` selected; drop it and the bzip2
 implementation underneath BDF patch output silently swaps.
 
 `libbz2-rs-sys` therefore compiles but is never linked. Keep the scoped
-`deny.toml` exception for its `bzip2-1.0.6` license. If `qbsdiff` later exposes
+`.config/deny.toml` exception for its `bzip2-1.0.6` license. If `qbsdiff` later exposes
 a feature that disables its default bzip2 backend, remove the extra backend
 and the exception together.
 

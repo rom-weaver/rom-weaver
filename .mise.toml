@@ -164,7 +164,7 @@ test -d "$output_dir/third_party/licenses"
 
 [tasks.deny]
 description = "Check Rust dependencies for advisories, licenses, and unknown sources"
-# Policy lives in deny.toml. This gates what enters the tree; `licenses-check`
+# Policy lives in .config/deny.toml. This gates what enters the tree; `licenses-check`
 # above generates the attribution bundle for what already did.
 #
 # Split into two halves because CI treats them differently: policy violations
@@ -174,11 +174,11 @@ depends = ["deny-policy", "deny-advisories"]
 
 [tasks.deny-policy]
 description = "Check Rust dependencies for disallowed licenses and unknown sources"
-run = "cargo deny check licenses sources"
+run = "cargo deny --config {{ config_root }}/.config/deny.toml check licenses sources"
 
 [tasks.deny-advisories]
 description = "Check Rust dependencies for security advisories"
-run = "cargo deny check advisories"
+run = "cargo deny --config {{ config_root }}/.config/deny.toml check advisories"
 
 [tasks.machete]
 description = "Find unused Rust dependencies"
@@ -250,7 +250,7 @@ run = "bash {{ config_root }}/scripts/check-whitespace.sh"
 
 [tasks.hadolint]
 description = "Lint Dockerfiles"
-run = "bash {{ config_root }}/scripts/lint-tracked.sh '*Dockerfile' '*Dockerfile.*' -- hadolint"
+run = "bash {{ config_root }}/scripts/lint-tracked.sh '*Dockerfile' '*Dockerfile.*' -- hadolint --config .config/hadolint.yaml"
 
 [tasks.thread-guards]
 description = "Fail on threaded-WASM suppression regressions"

@@ -174,7 +174,7 @@ security ── advisories (warn only, always green)
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
   rather than the diff, so it is selected by whether anything of those kinds
   changed at all - workflows, composite actions, `.github` YAML, any `*.sh`,
-  any Dockerfile, `.hadolint.yaml` - not per file. It installs no language toolchain and
+  any Dockerfile, `.config/hadolint.yaml` - not per file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.

@@ -57,7 +57,7 @@ else
     esac
 
     case "$path" in
-      Cargo.toml | Cargo.lock | deny.toml | package.json | package-lock.json | \
+      Cargo.toml | Cargo.lock | .config/deny.toml | package.json | package-lock.json | \
         .github/workflows/npm-publish.yml | .github/workflows/release.yml | \
         .github/actions/build-cli-platform/* | .github/cli-platforms.json | \
         packages/rom-weaver-cli-platforms/* | bin/rom-weaver.mjs | install.sh | install.ps1 | \
@@ -105,7 +105,7 @@ else
     # script, any Dockerfile, and hadolint's config.
     case "$path" in
       .github/workflows/* | .github/actions/* | .github/*.yml | .github/*.yaml | \
-        .hadolint.yaml | *.sh | *Dockerfile | *Dockerfile.*)
+        .config/hadolint.yaml | *.sh | *Dockerfile | *Dockerfile.*)
         repo_lint=true
         ;;
     esac

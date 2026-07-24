@@ -112,7 +112,7 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     ".github/actions/wasm-cache/action.yml",
     "scripts/setup-worktree.sh",
     "packages/rom-weaver-webapp/Dockerfile",
-    ".hadolint.yaml",
+    ".config/hadolint.yaml",
   ]) {
     assert.equal(classify(path).repo_lint, "true", path);
   }
