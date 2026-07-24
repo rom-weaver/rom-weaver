@@ -559,19 +559,34 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           { fileName: romInput.info.fileName, fileSize: romBytes },
         ]
       : undefined;
-  // Phase A reserves the always-present base group; the streamed variant plan
-  // extends it. No group label → bare rows, matching the no-variant layout.
-  const pendingGroups = [
-    {
-      id: "raw",
-      rows: [
-        { label: "CRC32", length: 8 },
-        { label: "BYTES", length: typeof romBytes === "number" ? String(Math.floor(romBytes)).length : 8 },
-        { label: "MD5", length: 32 },
-        { label: "SHA-1", length: 40 },
-      ],
-    },
+  const romByteCount = typeof romBytes === "number" && Number.isFinite(romBytes) ? Math.floor(romBytes) : undefined;
+  const baseRows = [
+    { label: "CRC32", length: 8 },
+    { label: "BYTES", length: romByteCount === undefined ? 8 : String(romByteCount).length },
+    { label: "MD5", length: 32 },
+    { label: "SHA-1", length: 40 },
   ];
+  // Phase A reserves the base group as bare rows (matching the no-variant
+  // layout). A 512-byte copier header (SNES et al., size % 1024 === 512) makes
+  // the resolved card add a labeled "Unchanged" + "Remove header" pair, so when
+  // one is present reserve both groups here - otherwise that second group lands
+  // on hash completion and shoves the Weave button below it down the page.
+  const pendingGroups =
+    romByteCount !== undefined && romByteCount % 1024 === 512
+      ? [
+          { id: "raw", label: "Unchanged", rows: baseRows },
+          {
+            id: "remove-header",
+            label: "Remove header",
+            rows: [
+              { label: "CRC32", length: 8 },
+              { label: "BYTES", length: String(romByteCount - 512).length },
+              { label: "MD5", length: 32 },
+              { label: "SHA-1", length: 40 },
+            ],
+          },
+        ]
+      : [{ id: "raw", rows: baseRows }];
   return {
     card: {
       extract: {
