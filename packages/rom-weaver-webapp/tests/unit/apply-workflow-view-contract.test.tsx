@@ -183,9 +183,11 @@ describe("apply workflow view - staged bench", () => {
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
-    // No Options drawer: a staging patch offers no header choice yet, and
-    // empty drawers stay off the plain apply view.
-    expect(patchLabels).toEqual(["Files"]);
+    // The Checks drawer is reserved through staging (collapsed and empty until
+    // requirements arrive) so the patch card holds its resolved height from
+    // first paint, mirroring the ROM card. No Options drawer yet: a staging
+    // patch offers no header choice.
+    expect(patchLabels).toEqual(["Files", "Checks"]);
   });
 
   it("renders a staging disc as one card with byte-weighted overall progress", () => {
