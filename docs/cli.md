@@ -176,8 +176,8 @@ docker run --rm \
 Tags follow the release: `latest`, the exact version (`X.Y.Z`), and the minor
 series (`X.Y`). Stable releases also receive a major-series tag once the
 project reaches 1.0. Prereleases publish under `beta` instead of `latest`. The
-image is built for `linux/amd64` only, so it runs under emulation on arm64 hosts
-(Apple Silicon included). Install a native build there for large jobs.
+image is built for `linux/amd64` and `linux/arm64`; Docker selects the native
+variant on Apple Silicon and other arm64 hosts.
 
 ### Development checkout
 
