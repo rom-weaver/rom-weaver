@@ -273,9 +273,13 @@ for (const [what, body] of [
   ["a capital letter out of place", SIGN_PHRASE.toUpperCase()],
   ["leading and trailing whitespace", `   ${SIGN_PHRASE}   `],
   ["the emphasis GitHub's editor adds", `**${SIGN_PHRASE}**`],
-  ["a doubled space", SIGN_PHRASE.replace(" hereby", "  hereby")],
+  ["a doubled space", SIGN_PHRASE.replace(" agree", "  agree")],
 ]) {
   test(`${what} still signs`, async () => {
+    // A variant built by a `replace` that no longer matches stops being a
+    // variant and silently re-tests the plain phrase - which is exactly how the
+    // doubled space stopped testing anything when the phrase was shortened.
+    assert.notEqual(body, SIGN_PHRASE, `${what} is not a variant of the phrase`);
     const { calls } = await run({
       prAuthor: "outsider",
       signatures: [],
