@@ -265,7 +265,8 @@ cargo binstall rom-weaver-cli
 <details>
 <summary>mise</summary>
 
-Useful when you want the CLI managed per project in `mise.toml`. mise verifies
+Useful when you want the CLI managed per project in `mise.toml`.
+[Install mise](https://mise.jdx.dev/installing-mise.html) first; it verifies
 the release's GitHub artifact attestations on install. The
 `minimum_release_age=0s` option lets new releases resolve immediately on release
 day; omit it if you prefer mise's default release-age delay.
