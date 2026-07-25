@@ -22,7 +22,15 @@
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
 rust = "1.95.0"
-"aqua:WebAssembly/binaryen" = "129"            # provides wasm-opt
+# provides wasm-opt. ubi rather than aqua because aqua's registry entry covers
+# only darwin and linux/amd64, so `mise install` hard-fails on linux/arm64 with
+# `unsupported env: linux/arm64` - and mise retries that install on every later
+# command, which takes the whole repo down on that host, not just wasm builds.
+# Upstream does publish binaryen-version_129-aarch64-linux.tar.gz; the github
+# backend resolves release assets directly and picks it up. The version is the
+# release tag. (`ubi:` reaches the same assets but mise deprecated it - it warns
+# on every install and is slated for removal in 2027.1.0.)
+"github:WebAssembly/binaryen" = { version = "version_129", exe = "wasm-opt" }
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
