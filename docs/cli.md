@@ -114,7 +114,9 @@ cargo binstall rom-weaver-cli
 #### mise
 
 Manages the CLI per project in `mise.toml` and verifies the release's GitHub
-artifact attestations on install. The `minimum_release_age=0s` option lets
+artifact attestations on install.
+[Install mise](https://mise.jdx.dev/installing-mise.html) first.
+The `minimum_release_age=0s` option lets
 new releases resolve immediately on release day; omit it if you prefer mise's
 default release-age delay.
 

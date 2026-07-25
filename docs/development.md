@@ -25,7 +25,9 @@ tasks.
 
 Install these system tools before the first build:
 
-- [mise](https://mise.jdx.dev)
+- [mise](https://mise.jdx.dev/installing-mise.html), which installs and pins
+  everything in [`.config/mise.toml`](../.config/mise.toml) - including Rust and
+  Node.js, so neither is a prerequisite here
 - CMake, Clang, and a native compiler toolchain
 - [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) for web builds
 - Brotli for optimized production WASM builds
@@ -39,7 +41,12 @@ brew install mise cmake llvm brotli sccache
 
 WASI SDK is detected in `/opt/wasi-sdk`, `/opt/homebrew/opt/wasi-sdk`, or
 `~/.local/toolchains/wasi-sdk-<version>`. Set `WASI_SDK_PATH` when it is
-installed elsewhere.
+installed elsewhere. That detection is
+[`scripts/wasm/detect-wasi-sdk.sh`](../scripts/wasm/detect-wasi-sdk.sh), and it
+is POSIX shell rather than Node.js because mise
+[renders `[env]`][mise-env] before installing the tools it pins.
+
+[mise-env]: https://mise.jdx.dev/templates.html
 
 ## Clone and bootstrap
 
