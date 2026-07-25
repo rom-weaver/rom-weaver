@@ -109,13 +109,21 @@ disabled and squash merges take `PR_TITLE` as the subject, so the title is the
 only text that reaches `main` and the only text Release Please reads. Branch
 commits are squashed away, so they are not linted.
 
-Nothing publishes on a push. `release.yml` does run on every push to `main`,
-but that path passes `skip-github-release` and can only create or refresh the
-release pull request - it exists so the pull request reflects the merge
-immediately instead of trailing a full CI run. The `workflow_run` path, gated on
-a **successful** CI, adds the half that needs a tested artifact: the release
-screenshots. Merging the release pull request is what sets `release_created` and
-unlocks the publish jobs.
+Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
+no `push` trigger: the release pull request is created and refreshed only by a
+manual **Run workflow** dispatch. Merging to `main` just accumulates commits.
+
+That is deliberate. The workflow force-pushes the release branch two or three
+times per run (the release-please commit, the synced metadata, the screenshots),
+and each push starts a full CI matrix on that pull request. Firing it on every
+merge put 20 CI runs on the 0.8.0 release pull request, 17 of them cancelled by
+the next merge, for a pull request nobody had yet decided to merge. Dispatching
+by hand spends that CI once, when a release is actually wanted.
+
+Dispatch after main's CI is green: the release screenshots reuse the `wasm-prod`
+artifact from the CI run for that commit, and without it the job rebuilds WASM
+from source (~6.5 min). Merging the release pull request is what sets
+`release_created` and unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
 > must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `Conventional
@@ -560,11 +568,10 @@ classifier fail open by selecting every stack.
 ### `scripts/ci/resolve-wasm-run.mjs`
 
 Finds the CI run that built `wasm-prod` for a commit, so release packaging ships
-the exact module CI tested. It prefers the
-triggering run, **verifies that run is actually for this commit** (a
-`workflow_run` event can fire for a re-run or lose a race with a newer push),
-otherwise searches by commit, and finally confirms the artifact has not
-expired. Release falls back to a source build when it is unavailable.
+the exact module CI tested. It accepts an optional `PREFERRED_RUN_ID` hint and
+**verifies that run is actually for this commit** before trusting it, otherwise
+searches by commit, and finally confirms the artifact has not expired. Release
+falls back to a source build when it is unavailable.
 
 ### `scripts/ci/npm-publish-package.mjs`
 
@@ -668,14 +675,10 @@ The standalone Cargo and Docker dispatches fall back to `v${version}`, which by
 then exists.
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being
-called by `release.yml`. No `release.yml` run that could publish ever carries an
-event crates.io Trusted Publishing accepts: the runs that set `release_created`
-arrive through `pull_request` (the release pull request closing), which it will
-not accept, or through `workflow_run`, which it rejects outright. The `push`
-runs it *would* accept are exactly the ones barred from creating a release, so
-the fan-out never starts under them. A job inherits its workflow's event, so
-OIDC could never authenticate from inside the fan-out. Keying off the tag also
-orders it naturally last.
+called by `release.yml`, so no crates.io publish ever runs inside the release
+fan-out - the fan-out holds no registry credentials and cannot half-publish on
+failure. Keying off the tag also orders it naturally last: the tag only exists
+once the draft has been published.
 
 `cargo-semver-checks` runs in `release.yml` as the `semver-check` job, not in
 `cargo-publish.yml` where it used to live. By the time the tag exists the

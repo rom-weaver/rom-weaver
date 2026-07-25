@@ -66,15 +66,20 @@ instructions do **not** apply here.
   root + webapp + alias + 4 platform `package.json`s and their locks, the
   `optionalDependencies` pins, `workspace.package.version`, ~43 path-dependency
   pins across `crates/*`, `vendor/*`, and `Cargo.lock`.
-- **Flow:** merge conventional commits to `main` → release-please immediately
-  opens/updates a `chore(main): release X.Y.Z` PR (on the `push` event, so it
-  never trails CI; that path cannot cut a release) → CI goes green and the
-  `workflow_run` path refreshes the release screenshots → merging that PR creates a
-  **draft** GitHub release and sets `release_created=true`, which unlocks the
-  npm/docker/homebrew publish jobs. Each attaches its assets to the draft; the
-  final `publish-release` job publishes it, which creates the `vX.Y.Z` tag,
-  stamps the release immutable, and triggers `cargo-publish.yml`. Merging the
-  release PR is the release decision; nothing publishes before it.
+- **Flow:** merge conventional commits to `main` (nothing happens - there is no
+  `push` trigger) → when you want a release, **run the `Release` workflow
+  manually** from the Actions tab, which opens/refreshes the
+  `chore(main): release X.Y.Z` PR and captures its screenshots → merging that PR
+  creates a **draft** GitHub release and sets `release_created=true`, which
+  unlocks the npm/docker/homebrew publish jobs. Each attaches its assets to the
+  draft; the final `publish-release` job publishes it, which creates the
+  `vX.Y.Z` tag, stamps the release immutable, and triggers `cargo-publish.yml`.
+  Merging the release PR is the release decision; nothing publishes before it.
+- **Dispatch after main's CI is green.** The screenshots reuse the `wasm-prod`
+  artifact from that commit's CI run; without it the job rebuilds WASM from
+  source (~6.5 min). Re-dispatch any time to refresh an open release PR.
+- The dispatch takes an optional `release_as` input (wired to the action's
+  `release-as`) to force a version without a `Release-As:` commit footer.
 - **Immutable releases are ON.** A published release accepts no new assets and
   permanently reserves its tag name - the version can never be re-cut. That is
   why the fan-out is draft-first: a failed release leaves a deletable draft

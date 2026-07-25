@@ -1,31 +1,27 @@
 name: Release
 
 on:
+  # Opening or refreshing the release pull request is a deliberate act, not a
+  # consequence of merging. Automating it on every push to main meant each merge
+  # force-pushed the release branch two or three times, and every one of those
+  # started a full CI matrix on a pull request nobody had decided to merge yet -
+  # 20 runs on the 0.8.0 pull request, 17 of them cancelled by the next push.
+  # Run this by hand when a release is actually wanted; until then main just
+  # accumulates commits and the pull request does not exist.
   workflow_dispatch:
-  # The release PR is bookkeeping, not a release: it says what *would* ship, and
-  # nothing publishes until someone merges it. So it updates the moment a commit
-  # lands on main rather than waiting out a full CI run - waiting only meant the
-  # PR sat stale for the length of CI while the merge it describes was already
-  # in. This path never creates a release (skip-github-release below).
-  push:
-    branches: [main]
+    inputs:
+      release_as:
+        description: Version to release as (e.g. 0.9.0, 0.9.0-alpha.1). Blank = computed from the commits.
+        required: false
+        type: string
   # A merged release PR already passed required checks, so use its close event
   # instead of waiting for a duplicate full CI run on the merge commit. This is
   # the path that actually cuts the draft release.
   pull_request:
     types: [closed]
-  # Green CI is still the gate for the expensive half - the release screenshots,
-  # which are captured from the WASM artifact that run produced.
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
 
-# One group across all four events on purpose: the push and workflow_run paths
-# both force-push the release pull request branch, so they must never overlap.
-# The cost is that a queued screenshot run can be evicted by a newer push during
-# a merge burst; the next green CI captures them again, and the pull request is
-# already correct either way.
+# Both paths force-push the release pull request branch, so they must never
+# overlap.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -35,19 +31,10 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (
-        github.event_name == 'push' &&
-        !startsWith(github.event.head_commit.message, 'chore(main): release ')
-      ) ||
-      (
         github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
-      ) ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release ')
       )
     runs-on: ubuntu-24.04
     permissions:
@@ -69,10 +56,17 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: main
           skip-github-pull-request: ${{ github.event_name == 'pull_request' }}
-          # Cutting a release is the merged release PR's job. The push path runs
-          # on every main commit, long before CI has said anything about it, so
-          # it is explicitly barred from creating one.
-          skip-github-release: ${{ github.event_name == 'push' }}
+          # No `skip-github-release` guard, on either path. It existed to stop
+          # the push path cutting a release from an untested commit, and that
+          # path is gone. Release Please only cuts a release for a merged
+          # release commit it has not already tagged, so a manual run can only
+          # refresh the pull request - or recover a release whose `pull_request`
+          # run failed. It cannot cut one early.
+          #
+          # Empty string on the `pull_request` path, where the `inputs` context
+          # is unset - which is Release Please's "compute the version from the
+          # commits" default.
+          release-as: ${{ inputs.release_as }}
 
       - name: Resolve reusable artifact commit
         id: artifact-sha
@@ -105,10 +99,10 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --prerelease
 
-      # Deliberately not gated on prs_created: the push path already refreshed
-      # the pull request, so the later CI run usually has nothing to write and
-      # reports prs_created=false. The follow-up work below belongs to whichever
-      # release pull request is open, not to the run that happened to touch it.
+      # Deliberately not gated on prs_created: a run that finds the pull request
+      # already up to date reports prs_created=false, and the follow-up work
+      # below still belongs to it. This is how a re-dispatch refreshes the
+      # metadata and screenshots of a release pull request opened earlier.
       - name: Find release pull request
         id: release-pr
         if: github.event_name != 'pull_request'
@@ -169,13 +163,12 @@ jobs:
         run: node scripts/aggregate-release-changelog.mjs
 
       # These PNGs belong in the release PR so the merge contains the exact
-      # captures the release will ship. Skipped on the push path: capturing them
-      # needs the production WASM artifact from that commit's CI run, which does
-      # not exist yet when the commit lands. The CI-success run picks them up.
+      # captures the release will ship. Capturing them reuses the production
+      # WASM artifact from main's CI run for this commit, so dispatch once that
+      # run is green; otherwise the resolver finds nothing and the fallback
+      # below rebuilds WASM from source, adding ~6.5 min.
       - name: Set up screenshot capture
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node
@@ -185,20 +178,21 @@ jobs:
           webapp-deps: "true"
 
       - name: Resolve tested WASM artifact for screenshots
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         id: screenshot-ci
         env:
           GH_TOKEN: ${{ github.token }}
-          PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
-          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # The commit this run was dispatched from, i.e. the tip of main - NOT
+          # the checked-out HEAD, which by now is the release pull request branch
+          # checked out above. Only main's commits have a CI run carrying a
+          # `wasm-prod` artifact; asking for the release branch's sha would find
+          # nothing and silently fall through to a ~6.5 min rebuild every time.
+          TARGET_SHA: ${{ github.sha }}
         run: node scripts/ci/resolve-wasm-run.mjs
 
       - name: Download tested WASM artifact for screenshots
         if: >-
           steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push' &&
           steps.screenshot-ci.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -212,7 +206,6 @@ jobs:
       - name: Set up fallback WASM build for screenshots
         if: >-
           steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push' &&
           steps.screenshot-ci.outputs.available != 'true'
         uses: ./.github/actions/setup-build-env
         with:
@@ -225,28 +218,21 @@ jobs:
       - name: Build fallback WASM for screenshots
         if: >-
           steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push' &&
           steps.screenshot-ci.outputs.available != 'true'
         run: mise run build-wasm-prod
 
       - name: Verify WASM for screenshots
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
       - name: Build production webapp for screenshots
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         env:
           ROM_WEAVER_CHANNEL: prod
         run: npm --prefix packages/rom-weaver-webapp run build
 
       - name: Capture release screenshots
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         run: |
           set -euo pipefail
           node packages/rom-weaver-webapp/scripts/dev-server.mjs preview --port 4173 > screenshot-server.log 2>&1 &
@@ -267,9 +253,7 @@ jobs:
           npm --prefix packages/rom-weaver-webapp run capture:screenshots
 
       - name: Commit release screenshots
-        if: >-
-          steps.release-pr.outputs.found == 'true' &&
-          github.event_name != 'push'
+        if: steps.release-pr.outputs.found == 'true'
         env:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
@@ -415,7 +399,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.release.outputs.artifact_sha }}
-          PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
         # A release PR artifact is reused only when its tree exactly matches the
         # released commit; otherwise resolution falls back to a source build.
         run: node scripts/ci/resolve-wasm-run.mjs
