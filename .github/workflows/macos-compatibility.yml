@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_target:
-        description: Minimum macOS version encoded in the arm64 binary
+        description: Minimum macOS version encoded in the experimental binaries
         required: true
         default: "11.0"
         type: string
@@ -74,6 +74,78 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: macos-26-darwin-arm64
+          path: artifact
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Verify exact artifact
+        run: |
+          set -euo pipefail
+          chmod +x artifact/rom-weaver
+          (cd artifact && shasum -a 256 --check rom-weaver.sha256)
+          node scripts/verify-cli-platform.mjs artifact/rom-weaver
+
+  build-intel:
+    name: Build on macOS 26 Intel
+    runs-on: macos-26-intel
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: always
+      MACOSX_DEPLOYMENT_TARGET: ${{ inputs.deployment_target || '11.0' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Build native CLI
+        run: cargo build --locked --release --package rom-weaver-cli --target x86_64-apple-darwin
+
+      - name: Verify deployment target
+        run: |
+          set -euo pipefail
+          binary=target/x86_64-apple-darwin/release/rom-weaver
+          expected="MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+          test "$(rustc --print=deployment-target --target=x86_64-apple-darwin)" = "$expected"
+          otool -l "$binary" | awk -v expected="$MACOSX_DEPLOYMENT_TARGET" '
+            /LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { in_command = 1; next }
+            in_command && /^( *minos| *version) / {
+              print
+              if ($2 == expected) found = 1
+              in_command = 0
+            }
+            END { exit(found ? 0 : 1) }
+          '
+
+      - name: Stage exact CLI artifact
+        run: |
+          set -euo pipefail
+          mkdir artifact
+          cp target/x86_64-apple-darwin/release/rom-weaver artifact/rom-weaver
+          (cd artifact && shasum -a 256 rom-weaver > rom-weaver.sha256)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-26-darwin-x64
+          path: artifact
+          if-no-files-found: error
+          retention-days: 7
+
+  test-intel:
+    name: Test macOS 26 Intel build on macOS 14 Intel
+    runs-on: macos-14-large
+    timeout-minutes: 30
+    needs: build-intel
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-26-darwin-x64
           path: artifact
 
       - uses: actions/setup-node@v7
