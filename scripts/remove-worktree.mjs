@@ -5,8 +5,10 @@ import { existsSync, realpathSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-export function removeWorktree(worktreeDir) {
-  if (!worktreeDir) throw Object.assign(new Error("usage: node scripts/remove-worktree.mjs <worktree>"), { code: 2 });
+export function removeWorktree(worktreeDir, extra = []) {
+  // Exactly one, as the shell required: silently ignoring a second path is how
+  // you remove one worktree while believing you removed two.
+  if (!worktreeDir || extra.length) throw Object.assign(new Error("usage: node scripts/remove-worktree.mjs <worktree>"), { code: 2 });
   if (!existsSync(worktreeDir)) throw new Error(`remove-worktree: not a directory: ${worktreeDir}`);
   const resolved = realpathSync(worktreeDir);
   try { execFileSync("git", ["-C", resolved, "rev-parse", "--show-toplevel"], { stdio: "ignore" }); }
@@ -17,5 +19,5 @@ export function removeWorktree(worktreeDir) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { removeWorktree(process.argv[2]); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = error.code || 1; }
+  try { removeWorktree(process.argv[2], process.argv.slice(3)); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = error.code || 1; }
 }
