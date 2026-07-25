@@ -13,11 +13,12 @@ import {
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
 } from "../wasm/browser-format-matrix.ts";
+import { runBrowserThreadSweep } from "../wasm/browser-thread-sweep.ts";
 import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
 import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
 
 type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";
-type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "stress";
+type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "stress" | "threads";
 
 type MobileSafariMatrixState = {
   diagnostics: BrowserRuntimeDiagnostics | null;
@@ -59,14 +60,23 @@ const logElement = document.getElementById("matrix-log");
 const runButton = document.getElementById("matrix-run");
 const exhaustiveButton = document.getElementById("matrix-run-exhaustive");
 const stressButton = document.getElementById("matrix-run-stress");
+const threadsButton = document.getElementById("matrix-run-threads");
 const copyButton = document.getElementById("matrix-copy");
 const downloadButton = document.getElementById("matrix-download");
+
+const MOBILE_SAFARI_MATRIX_PROFILES: readonly MobileSafariMatrixProfile[] = ["exhaustive", "fast", "stress", "threads"];
+
+const readProfileFromLocation = (): MobileSafariMatrixProfile => {
+  const requested = new URLSearchParams(location.search).get("profile");
+  const match = MOBILE_SAFARI_MATRIX_PROFILES.find((profile) => profile === requested);
+  return match ?? "fast";
+};
 
 const state: MobileSafariMatrixState = {
   diagnostics: null,
   finishedAt: null,
   lastEvent: null,
-  profile: new URLSearchParams(location.search).get("profile") === "stress" ? "stress" : "fast",
+  profile: readProfileFromLocation(),
   result: null,
   startedAt: null,
   status: "idle",
@@ -192,6 +202,7 @@ const setRunning = (running: boolean) => {
   if (runButton instanceof HTMLButtonElement) runButton.disabled = running;
   if (exhaustiveButton instanceof HTMLButtonElement) exhaustiveButton.disabled = running;
   if (stressButton instanceof HTMLButtonElement) stressButton.disabled = running;
+  if (threadsButton instanceof HTMLButtonElement) threadsButton.disabled = running;
   if (copyButton instanceof HTMLButtonElement) copyButton.disabled = running || !state.result;
   if (downloadButton instanceof HTMLButtonElement) downloadButton.disabled = running || !state.result;
 };
@@ -233,6 +244,20 @@ const acquireWakeLock = async () => {
   }
 };
 
+type MobileSafariMatrixCallbacks = {
+  onEvent: (event: RomWeaverRunJsonEvent) => void;
+  onStep: (step: BrowserFormatMatrixStep) => void;
+};
+
+const runProfile = async (
+  profile: MobileSafariMatrixProfile,
+  callbacks: MobileSafariMatrixCallbacks,
+): Promise<BrowserFormatMatrixSummary> => {
+  if (profile === "stress") return runBrowserArchiveStress(callbacks);
+  if (profile === "threads") return runBrowserThreadSweep(callbacks);
+  return runBrowserFullFormatMatrix({ ...callbacks, prefix: "rom-weaver-ios-safari-matrix-", profile });
+};
+
 const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
   state.profile = profile;
   state.status = "running";
@@ -254,10 +279,7 @@ const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
       throw new Error(`Runtime preflight failed: ${failures.join(", ")}`);
     }
 
-    const callbacks: {
-      onEvent: (event: RomWeaverRunJsonEvent) => void;
-      onStep: (step: BrowserFormatMatrixStep) => void;
-    } = {
+    const callbacks: MobileSafariMatrixCallbacks = {
       onEvent(event: RomWeaverRunJsonEvent) {
         state.lastEvent = event;
       },
@@ -271,14 +293,7 @@ const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
         appendLog(`${status} ${step.name} ${formatDuration(step.durationMs)}`);
       },
     };
-    state.result =
-      profile === "stress"
-        ? await runBrowserArchiveStress(callbacks)
-        : await runBrowserFullFormatMatrix({
-            ...callbacks,
-            prefix: "rom-weaver-ios-safari-matrix-",
-            profile,
-          });
+    state.result = await runProfile(profile, callbacks);
     state.status = "passed";
     appendLog(`matrix passed ${summarizeBrowserFormatMatrixResult(state.result)}`);
   } catch (error) {
@@ -311,6 +326,9 @@ exhaustiveButton?.addEventListener("click", () => {
 });
 stressButton?.addEventListener("click", () => {
   runMatrix("stress");
+});
+threadsButton?.addEventListener("click", () => {
+  runMatrix("threads");
 });
 copyButton?.addEventListener("click", () => {
   copyReport().catch((error) => {
