@@ -1,9 +1,11 @@
 # WASI / WebAssembly toolchain, build environment, and tasks.
 #
 # WASM orchestration lives in the testable Node.js tooling under scripts/wasm.
-# The two compiler wrappers stay shell: cargo execs them once per translation
-# unit, so a Node process per file is real build time, and `exec` keeps the
-# compiler's own signal handling and exit status intact.
+# Three scripts there stay shell. The two compiler wrappers, because cargo execs
+# them once per translation unit, so a Node process per file is real build time,
+# and `exec` keeps the compiler's own signal handling and exit status intact.
+# And detect-wasi-sdk.sh, because [env] below runs it before mise installs the
+# Node.js it pins - see that script's header.
 # The static threaded rustflags live in .cargo/config.toml; the SDK-relative
 # toolchain wiring lives in [env] below; orchestration lives in [tasks.*].
 #
@@ -15,7 +17,7 @@
 #
 # Deliberately not pinned here:
 #   - WASI SDK: its clang shadows the host and breaks libarchive-sys bindgen on
-#     macOS. scripts/wasm/detect-wasi-sdk.mjs locates it without changing PATH.
+#     macOS. scripts/wasm/detect-wasi-sdk.sh locates it without changing PATH.
 #   - sccache: install via OS package (brew install sccache / apt install sccache).
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
@@ -31,11 +33,15 @@ rust = "1.95.0"
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
 [env]
-# WASI SDK discovery. detect-wasi-sdk.mjs prints the SDK root, preferring an
+# WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
 # explicit $WASI_SDK_PATH, then legacy install locations. When no SDK is present
 # these resolve to broken paths and the build tasks fail with a clear toolchain
 # error - harmless for non-wasm commands.
-WASI_SDK_PATH = "{{ exec(command='node ' ~ config_root ~ '/scripts/wasm/detect-wasi-sdk.mjs') }}"
+#
+# It must not need anything mise installs. This block is rendered before [tools]
+# are installed, against a PATH that excludes them, so a `node` here breaks the
+# whole repo on a machine that has no system Node.js - `mise install` included.
+WASI_SDK_PATH = "{{ exec(command='sh ' ~ config_root ~ '/scripts/wasm/detect-wasi-sdk.sh') }}"
 WASI_SYSROOT = "{{ env.WASI_SDK_PATH }}/share/wasi-sysroot"
 WASI_CLANG = "{{ env.WASI_SDK_PATH }}/bin/clang"
 WASI_CLANGXX = "{{ env.WASI_SDK_PATH }}/bin/clang++"
