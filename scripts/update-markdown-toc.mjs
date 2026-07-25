@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 export const DEFAULT_FILES = [
   "README.md",
   "CONTRIBUTING.md",
+  "CLA.md",
   "docs",
   ".github/CODE_OF_CONDUCT.md",
   ".github/RELEASING.md",

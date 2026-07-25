@@ -100,7 +100,7 @@ pre-commit:
       glob: "{Dockerfile,Dockerfile.*,**/Dockerfile,**/Dockerfile.*,.config/hadolint.yaml}"
       run: mise run hadolint
     markdown-toc:
-      files: git diff --name-only --cached --diff-filter=ACMR -- README.md CONTRIBUTING.md docs .github/CODE_OF_CONDUCT.md .github/RELEASING.md .github/SECURITY.md packages/rom-weaver-webapp/design/icon-masters/README.md packages/rom-weaver-webapp/src/wasm/README.md scripts/wasm/README.md
+      files: git diff --name-only --cached --diff-filter=ACMR -- README.md CONTRIBUTING.md CLA.md docs .github/CODE_OF_CONDUCT.md .github/RELEASING.md .github/SECURITY.md packages/rom-weaver-webapp/design/icon-masters/README.md packages/rom-weaver-webapp/src/wasm/README.md scripts/wasm/README.md
       run: node scripts/update-markdown-toc.mjs {files}
       stage_fixed: true
     whitespace:
