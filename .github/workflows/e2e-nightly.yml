@@ -77,7 +77,7 @@ jobs:
           - method: install.sh
             runner: ubuntu-24.04
           - method: install.sh
-            runner: macos-14
+            runner: macos-15
           - method: install.ps1
             runner: windows-2025
           - method: npm
