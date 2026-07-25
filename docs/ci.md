@@ -26,6 +26,8 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [Draft-first releases](#draft-first-releases)
   - [Package managers publish last](#package-managers-publish-last)
   - [Prerelease routing](#prerelease-routing)
+  - [Build provenance](#build-provenance)
+    - [Testing it without cutting a release](#testing-it-without-cutting-a-release)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
@@ -50,6 +52,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
+| `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 
 `pull-request.yml` holds the two gates a **contributor** rather than the code has
 to clear: the CLA signature (`Gates/CLA Check` job) and a Conventional Commits
@@ -838,6 +841,70 @@ image carries the same evidence regardless of which workflow built it.
 Attestation is gated on the push rather than set outright, because it needs an
 exporter that can carry attestations - the plain local build a pull request
 runs is not one, and asking for provenance there fails the build.
+
+### Build provenance
+
+Every artifact the fan-out publishes carries signed provenance, so what a user
+can verify does not depend on which channel they installed from:
+
+| Artifact | Attested by |
+| --- | --- |
+| 9 CLI platform binaries | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
+| static webapp tarball | the same, in `release.yml`'s `static-webapp` |
+| npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
+| container images | `provenance: mode=max` + `actions/attest`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
+
+Two gaps remain, both because no mechanism exists: crates.io has no attestation
+story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
+of their own - both pin the release assets by sha256, so attesting the binaries
+covers them.
+
+Immutable releases separately make GitHub attest every release automatically,
+with an `in-toto.io/attestation/release/v0.2` statement listing each asset's
+digest. That is not build provenance and must not be mistaken for it: it says an
+asset was in a release, which is equally true of one a stolen token uploaded to
+the draft. It is also why every consumer query filters on
+`predicate_type=https://slsa.dev/provenance/v1` - without the filter, the
+automatic attestation answers and the check passes on anything in any release.
+
+This replaced the `.sha256` sidecars that used to ship beside each asset, which
+are no longer published. They were written by the job that wrote the binary, so
+they proved the download was intact and nothing about where it came from. The
+attestation covers both: it ties the asset to a workflow run and commit, and
+altered bytes hash to something it does not cover.
+
+Attestations live in the repository's attestation store, not in the release's
+asset list. That is why adding them does not interact with
+[immutable releases](#draft-first-releases): nothing is attached to the draft,
+and the step is safe on a rerun and after the release is published.
+
+The consumer side is a single query against the digest - see
+[Verifying a download](cli.md#verifying-a-download), where both install scripts'
+check and the `gh attestation verify` route for a file downloaded by hand are
+written out.
+
+#### Testing it without cutting a release
+
+The attest steps run only during a release, which is the one moment their
+failure costs the most: a 403 there strands a draft that has already published
+to npm. `attestation-dry-run.yml` (dispatch only) proves the wiring beforehand.
+It attests a throwaway file two ways - directly, and through a `workflow_call`
+into `attestation-dry-run-called.yml` - because the token cap is the failure
+mode worth catching: a reusable workflow receives the calling job's permissions
+and never more, so a grant declared only in the called workflow fails. Then it
+checks the result on Linux, macOS, and Windows the way each install script does,
+which is the only coverage `install.ps1`'s PowerShell path has anywhere.
+
+It is dispatch only because every run writes a permanent public attestation
+record; firing it per push would be noise in the repository's attestation list.
+
+The installers' fallback is duplicated into that workflow rather than invoked,
+because `install.sh` verifies only an asset it downloaded from a release and the
+dry run's subject is not one. `scripts/install.test.mjs` covers the same code
+against a captured real API response
+(`test/fixtures/attestations-response.json`), so the duplication is checked from
+both ends: the fixture proves the shell agrees with GitHub's response shape, and
+the dry run proves it agrees with a live attestation.
 
 ## Actions cache budget
 

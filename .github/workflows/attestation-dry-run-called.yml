@@ -1,0 +1,34 @@
+name: Attestation dry run (called)
+
+# The called half of `attestation-dry-run.yml`. It exists as a separate file
+# because the token cap it proves only applies across a `workflow_call` boundary:
+# a reusable workflow receives the calling job's permissions and never more, so
+# declaring `attestations: write` here is not enough on its own. If the caller
+# stops granting it, this job fails - which is the whole point.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    name: Attest from a called workflow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Create the subject
+        run: |
+          set -euo pipefail
+          printf 'rom-weaver reusable attestation dry run %s %s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_SHA" > subject.bin
+
+      - name: Attest the subject
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: subject.bin

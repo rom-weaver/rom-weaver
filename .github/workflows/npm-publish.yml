@@ -156,6 +156,11 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # Signed provenance for the release binary. npm generates its own for the
+      # package from the same OIDC token; this covers the loose binary, which
+      # `install.sh`, Homebrew, and Scoop hand to users without going near npm.
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -199,6 +204,7 @@ jobs:
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
+        id: asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -211,12 +217,24 @@ jobs:
             asset_name+=".exe"
           fi
           cp "$binary_path" "$asset_name"
-          checksum=$(node -e \
-            "const fs=require('fs'),c=require('crypto');process.stdout.write(c.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" \
-            "$asset_name")
-          printf '%s  %s\n' "$checksum" "$asset_name" > "$asset_name.sha256"
-          gh release upload "v${{ inputs.version }}" "$asset_name" "$asset_name.sha256" \
+          gh release upload "v${{ inputs.version }}" "$asset_name" \
             --repo "$GITHUB_REPOSITORY" --clobber
+          echo "name=$asset_name" >> "$GITHUB_OUTPUT"
+
+      # This replaced the `.sha256` sidecar that used to ship beside each asset.
+      # The sidecar was written by this same job, so it proved the download was
+      # not corrupted and nothing about where the binary came from; the
+      # attestation covers both, because a corrupted download no longer matches
+      # the digest it was signed over.
+      #
+      # Attestations live in the repository's attestation store, not in the
+      # release's asset list, so this adds nothing to the draft and cannot
+      # interact with immutable releases - it is safe on a rerun and safe after
+      # the release is published.
+      - name: Attest the release binary
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.asset.outputs.name }}
 
   launcher:
     needs: platform
