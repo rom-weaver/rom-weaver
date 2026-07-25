@@ -9,11 +9,13 @@
  * output - Mobile Safari resolves `auto` to a small number, so the interesting
  * counts are the ones above it.
  *
- * Payloads are deliberately small (256 KiB per archive entry, 4 MiB per disc)
- * so the whole matrix finishes in minutes on a phone. A larger tier was
- * measured and dropped: it cost ~20x the runtime and only moved `extract-step`
- * on the small archive formats, so the read side of `zip`/`7z` is NOT covered
- * here - those entries are below the size ingest bothers to split.
+ * Archive formats carry TWO entry sizes that straddle the point where ingest
+ * starts splitting entries across threads, measured on desktop Chromium as
+ * somewhere in (256 KiB, 512 KiB]: at 256 KiB `extract-step` reads 1 at every
+ * thread count, and at 512 KiB it tracks the request exactly, 1..16. Disc
+ * formats already split at 4 MiB, so a second size there would only cost
+ * runtime. Sizes above 512 KiB (1 MiB, 2 MiB) were measured and split
+ * identically, so they buy nothing the 512 KiB tier does not already show.
  *
  * Codecs are never passed: each format runs on its own default (`zip`/deflate,
  * `7z`/lzma2, `z3ds`/zstd, `rvz`/zstd, `chd`/medium-dependent).
@@ -30,14 +32,23 @@
  * `stageThreads` therefore carries the whole breakdown (e.g.
  * `ingest:1 extract:16 extract-step:1`) and the reader decides. On desktop
  * Chromium `create` tracks the request for all five formats, while
- * `extract-step` is the one that varies: 1 for zip/7z entries, 4 for z3ds,
- * tracking the request for chd and rvz.
+ * `extract-step` is the one that varies: 1 for 256 KiB zip/7z entries, tracking
+ * the request for 512 KiB entries and for chd and rvz, and pinned at 4 from
+ * five threads up for z3ds.
  *
  * Input shape is per format: archive formats get 16 entries, and the
  * single-image formats (chd, z3ds, rvz) get one file because that is the only
- * shape they accept. The 16 entries do NOT buy read-side parallelism at this
- * payload size - `extract-step` stays at 1 for zip and 7z at every count - they
- * just keep compress fed at the top of the sweep.
+ * shape they accept.
+ *
+ * RUNTIME, desktop Chromium: ~28 min for the full 112-cell matrix, and that is
+ * almost entirely SIX cells. Nearly every cell runs in about a second, but
+ * `zip`/`7z` at 512 KiB collapse at low-but-not-1 thread counts: measured
+ * 1 thread 1s, 2 threads 61-181s, 4 threads 241s (twice, to the second - that
+ * is a timeout being hit, not slow compute), 16 threads 1s. Non-monotonic, so
+ * it is not "threading is slower". Do NOT "fix" the runtime by dropping the
+ * 512 KiB tier: those cells are the finding. See [[rvz-wasm-threads-2-and-3-fail]]
+ * - rvz fails outright at threads 2 and 3, so two symptoms sit in the same
+ * narrow band and may share a root cause in the wasm thread pool.
  *
  * KNOWN FAILURE, desktop Chromium: `rvz` compress fails at exactly `--threads 2`
  * and `--threads 3` with "Failed to process block 1", deterministically and in
@@ -94,22 +105,43 @@ type ThreadSweepFormat = {
   /** rvz needs a real disc header; the others take arbitrary bytes. */
   gameCubeHeader: boolean;
   name: string;
-  /** Payload bytes per entry. */
-  payloadBytes: number;
+  /** Payload bytes per entry; every size is swept at every thread count. */
+  payloadBytes: readonly number[];
   shape: ThreadSweepShape;
 };
 
 const KIB = 1024;
 const MIB = 1024 * 1024;
 
-// One entry per thread at the top of the sweep, so the highest count still has
-// work for every thread it asked for.
+/** Short label for a payload size, used in step names and fixture paths. */
+const formatSize = (byteLength: number) =>
+  byteLength % MIB === 0 ? `${byteLength / MIB}m` : `${Math.round(byteLength / KIB)}k`;
+
+// Archive formats carry two sizes that straddle the point where ingest starts
+// splitting entries across threads, so the sweep covers the read side on both
+// sides of that boundary; the threshold is measured, see the header. Disc
+// formats already split at 4 MiB, so one size is enough and a second would only
+// cost runtime. 16 entries keeps the highest thread count fed.
 const THREAD_SWEEP_FORMATS: readonly ThreadSweepFormat[] = [
-  { entryCount: 16, format: "zip", gameCubeHeader: false, name: "zip", payloadBytes: 256 * KIB, shape: "entries" },
-  { entryCount: 16, format: "7z", gameCubeHeader: false, name: "7z", payloadBytes: 256 * KIB, shape: "entries" },
-  { entryCount: 1, format: "chd", gameCubeHeader: false, name: "chd", payloadBytes: 4 * MIB, shape: "disc" },
-  { entryCount: 1, format: "z3ds", gameCubeHeader: false, name: "z3ds", payloadBytes: 4 * MIB, shape: "disc" },
-  { entryCount: 1, format: "rvz", gameCubeHeader: true, name: "rvz", payloadBytes: 4 * MIB, shape: "disc" },
+  {
+    entryCount: 16,
+    format: "zip",
+    gameCubeHeader: false,
+    name: "zip",
+    payloadBytes: [256 * KIB, 512 * KIB],
+    shape: "entries",
+  },
+  {
+    entryCount: 16,
+    format: "7z",
+    gameCubeHeader: false,
+    name: "7z",
+    payloadBytes: [256 * KIB, 512 * KIB],
+    shape: "entries",
+  },
+  { entryCount: 1, format: "chd", gameCubeHeader: false, name: "chd", payloadBytes: [4 * MIB], shape: "disc" },
+  { entryCount: 1, format: "z3ds", gameCubeHeader: false, name: "z3ds", payloadBytes: [4 * MIB], shape: "disc" },
+  { entryCount: 1, format: "rvz", gameCubeHeader: true, name: "rvz", payloadBytes: [4 * MIB], shape: "disc" },
 ];
 
 /** Thread telemetry the CLI reported for one command in one cell of the matrix. */
@@ -282,144 +314,150 @@ export async function runBrowserThreadSweep(
 
   try {
     for (const formatCase of formats) {
-      const payloadBytes = formatCase.payloadBytes;
-      const sourceDir = joinGuestPath(fixtureGuestRoot, `src-${formatCase.name}`);
-      const entries: Array<{ bytes: Uint8Array; fileName: string; path: string }> = [];
-      for (let index = 0; index < formatCase.entryCount; index += 1) {
-        const fileName = formatCase.gameCubeHeader
-          ? `disc-${index}.iso`
-          : `entry-${String(index).padStart(2, "0")}.bin`;
-        const bytes = formatCase.gameCubeHeader
-          ? createGameCubeIsoBytes(payloadBytes, 0x9e3779b9 + index)
-          : createPayloadBytes(payloadBytes, 0x9e3779b9 + index);
-        const path = joinGuestPath(sourceDir, fileName);
-        await writeGuestFile(root, path, bytes);
-        entries.push({ bytes, fileName, path });
-      }
-      const inputPaths = entries.map((entry) => entry.path);
-      const bytesByFileName = new Map(entries.map((entry) => [entry.fileName, entry.bytes]));
-
-      for (const threads of threadCounts) {
-        const name = `${formatCase.name}/threads-${threads}`;
-        const cell = {
-          entryCount: formatCase.entryCount,
-          format: formatCase.name,
-          payloadBytes,
-          threads,
-        };
-        const stepStartedAt = performance.now();
-        addStep({ command: "compress+ingest", name, status: "running", timestamp: new Date().toISOString() });
-
-        // A fresh worker per cell keeps a pool sized for N from serving N+1.
-        const worker = createBrowserWorkerClient({});
-        try {
-          await worker.init({
-            runtimeMounts: [OPFS_GUEST_ROOT],
-            ...(sharedMemoryMaximumPages ? { sharedMemoryMaximumPages } : {}),
-            wasmUrl,
-            workGuestPath: OPFS_GUEST_ROOT,
-          });
-          // Every event, not just the terminal one: nested stages are where
-          // orchestrating commands like ingest actually spend their threads.
-          const runJson = async (command: ReturnType<typeof createRomWeaverCommand>) => {
-            const events: RomWeaverRunJsonEvent[] = [];
-            const result = await worker.runJson(command, {
-              onEvent(event: RomWeaverRunJsonEvent) {
-                events.push(event);
-                options.onEvent?.(event);
-              },
-            });
-            return { events, result };
-          };
-
-          const archivePath = joinGuestPath(fixtureGuestRoot, `${formatCase.name}-${threads}.${formatCase.format}`);
-          const compressStartedAt = performance.now();
-          // No codec: each format runs on its own default.
-          const { events: compressEvents, result: compressResult } = await runJson(
-            createRomWeaverCommand("compress", {
-              format: formatCase.format,
-              input: inputPaths,
-              output: archivePath,
-              threads,
-            }),
-          );
-          const compressTerminal = assertRunJsonSucceeded(compressResult, { command: "compress" });
-          const compressObservation = readThreadTelemetry(
-            compressTerminal,
-            compressEvents,
-            "compress",
-            cell,
-            Math.round(performance.now() - compressStartedAt),
-          );
-          assertThreadTelemetry(compressObservation);
-          observations.push(compressObservation);
-          await waitForGuestFile(root, archivePath, compressResult);
-
-          const ingestDir = joinGuestPath(fixtureGuestRoot, `${formatCase.name}-${threads}-out`);
-          const ingestStartedAt = performance.now();
-          const { events: ingestEvents, result: ingestResult } = await runJson(
-            createRomWeaverCommand("ingest", { input: archivePath, output: ingestDir, threads }),
-          );
-          const ingestTerminal = assertRunJsonSucceeded(ingestResult, { command: "ingest" });
-          const ingestObservation = readThreadTelemetry(
-            ingestTerminal,
-            ingestEvents,
-            "ingest",
-            cell,
-            Math.round(performance.now() - ingestStartedAt),
-          );
-          assertThreadTelemetry(ingestObservation);
-          observations.push(ingestObservation);
-
-          // Compare whatever ingest actually emitted against the source it came
-          // from; disc formats rename their output, so match on basename.
-          const emitted = getIngestedPaths(ingestTerminal);
-          assert(
-            emitted.length === entries.length,
-            `${name}: ingest reported ${emitted.length} assets, expected ${entries.length}`,
-          );
-          // Multi-entry archives keep their entry names; a single-image format is
-          // renamed after the archive (a.rvz -> a.iso), so match it by position.
-          let compared = 0;
-          for (const [index, emittedPath] of emitted.entries()) {
-            const expected = entries.length === 1 ? entries[0]?.bytes : bytesByFileName.get(pathBasename(emittedPath));
-            assert(expected, `${name}: ingest emitted an unexpected asset ${pathBasename(emittedPath)}`);
-            await waitForGuestFile(root, emittedPath, ingestResult);
-            assertBytesEqual(
-              await readGuestFile(root, emittedPath),
-              expected,
-              `${name}: asset ${index} (${pathBasename(emittedPath)}) changed in the round trip`,
-            );
-            compared += 1;
-          }
-          // Guards against a silent skip quietly turning verification off.
-          assert(compared === entries.length, `${name}: verified ${compared} of ${entries.length} assets`);
-
-          addStep({
-            command: `compress=${compressObservation.effectiveThreads}/${threads} ingest=${ingestObservation.effectiveThreads}/${threads} verified=${compared}/${emitted.length}`,
-            durationMs: Math.round(performance.now() - stepStartedAt),
-            name,
-            status: "succeeded",
-            terminalStatus: ingestTerminal.status,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (error) {
-          addStep({
-            command: "compress+ingest",
-            durationMs: Math.round(performance.now() - stepStartedAt),
-            error: error instanceof Error ? error.message : String(error),
-            name,
-            status: "failed",
-            timestamp: new Date().toISOString(),
-          });
-          // Deliberately not rethrown: a device that fails one thread count is
-          // the finding, and aborting here would discard every count after it.
-          // `failedSteps` carries the failure to the caller.
-        } finally {
-          worker.terminate();
+      for (const payloadBytes of formatCase.payloadBytes) {
+        const sizeLabel = formatSize(payloadBytes);
+        const sourceDir = joinGuestPath(fixtureGuestRoot, `src-${formatCase.name}-${sizeLabel}`);
+        const entries: Array<{ bytes: Uint8Array; fileName: string; path: string }> = [];
+        for (let index = 0; index < formatCase.entryCount; index += 1) {
+          const fileName = formatCase.gameCubeHeader
+            ? `disc-${index}.iso`
+            : `entry-${String(index).padStart(2, "0")}.bin`;
+          const bytes = formatCase.gameCubeHeader
+            ? createGameCubeIsoBytes(payloadBytes, 0x9e3779b9 + index)
+            : createPayloadBytes(payloadBytes, 0x9e3779b9 + index);
+          const path = joinGuestPath(sourceDir, fileName);
+          await writeGuestFile(root, path, bytes);
+          entries.push({ bytes, fileName, path });
         }
+        const inputPaths = entries.map((entry) => entry.path);
+        const bytesByFileName = new Map(entries.map((entry) => [entry.fileName, entry.bytes]));
+
+        for (const threads of threadCounts) {
+          const name = `${formatCase.name}/${sizeLabel}/threads-${threads}`;
+          const cell = {
+            entryCount: formatCase.entryCount,
+            format: formatCase.name,
+            payloadBytes,
+            threads,
+          };
+          const stepStartedAt = performance.now();
+          addStep({ command: "compress+ingest", name, status: "running", timestamp: new Date().toISOString() });
+
+          // A fresh worker per cell keeps a pool sized for N from serving N+1.
+          const worker = createBrowserWorkerClient({});
+          try {
+            await worker.init({
+              runtimeMounts: [OPFS_GUEST_ROOT],
+              ...(sharedMemoryMaximumPages ? { sharedMemoryMaximumPages } : {}),
+              wasmUrl,
+              workGuestPath: OPFS_GUEST_ROOT,
+            });
+            // Every event, not just the terminal one: nested stages are where
+            // orchestrating commands like ingest actually spend their threads.
+            const runJson = async (command: ReturnType<typeof createRomWeaverCommand>) => {
+              const events: RomWeaverRunJsonEvent[] = [];
+              const result = await worker.runJson(command, {
+                onEvent(event: RomWeaverRunJsonEvent) {
+                  events.push(event);
+                  options.onEvent?.(event);
+                },
+              });
+              return { events, result };
+            };
+
+            const archivePath = joinGuestPath(
+              fixtureGuestRoot,
+              `${formatCase.name}-${sizeLabel}-${threads}.${formatCase.format}`,
+            );
+            const compressStartedAt = performance.now();
+            // No codec: each format runs on its own default.
+            const { events: compressEvents, result: compressResult } = await runJson(
+              createRomWeaverCommand("compress", {
+                format: formatCase.format,
+                input: inputPaths,
+                output: archivePath,
+                threads,
+              }),
+            );
+            const compressTerminal = assertRunJsonSucceeded(compressResult, { command: "compress" });
+            const compressObservation = readThreadTelemetry(
+              compressTerminal,
+              compressEvents,
+              "compress",
+              cell,
+              Math.round(performance.now() - compressStartedAt),
+            );
+            assertThreadTelemetry(compressObservation);
+            observations.push(compressObservation);
+            await waitForGuestFile(root, archivePath, compressResult);
+
+            const ingestDir = joinGuestPath(fixtureGuestRoot, `${formatCase.name}-${sizeLabel}-${threads}-out`);
+            const ingestStartedAt = performance.now();
+            const { events: ingestEvents, result: ingestResult } = await runJson(
+              createRomWeaverCommand("ingest", { input: archivePath, output: ingestDir, threads }),
+            );
+            const ingestTerminal = assertRunJsonSucceeded(ingestResult, { command: "ingest" });
+            const ingestObservation = readThreadTelemetry(
+              ingestTerminal,
+              ingestEvents,
+              "ingest",
+              cell,
+              Math.round(performance.now() - ingestStartedAt),
+            );
+            assertThreadTelemetry(ingestObservation);
+            observations.push(ingestObservation);
+
+            // Compare whatever ingest actually emitted against the source it came
+            // from; disc formats rename their output, so match on basename.
+            const emitted = getIngestedPaths(ingestTerminal);
+            assert(
+              emitted.length === entries.length,
+              `${name}: ingest reported ${emitted.length} assets, expected ${entries.length}`,
+            );
+            // Multi-entry archives keep their entry names; a single-image format is
+            // renamed after the archive (a.rvz -> a.iso), so match it by position.
+            let compared = 0;
+            for (const [index, emittedPath] of emitted.entries()) {
+              const expected =
+                entries.length === 1 ? entries[0]?.bytes : bytesByFileName.get(pathBasename(emittedPath));
+              assert(expected, `${name}: ingest emitted an unexpected asset ${pathBasename(emittedPath)}`);
+              await waitForGuestFile(root, emittedPath, ingestResult);
+              assertBytesEqual(
+                await readGuestFile(root, emittedPath),
+                expected,
+                `${name}: asset ${index} (${pathBasename(emittedPath)}) changed in the round trip`,
+              );
+              compared += 1;
+            }
+            // Guards against a silent skip quietly turning verification off.
+            assert(compared === entries.length, `${name}: verified ${compared} of ${entries.length} assets`);
+
+            addStep({
+              command: `compress=${compressObservation.effectiveThreads}/${threads} ingest=${ingestObservation.effectiveThreads}/${threads} verified=${compared}/${emitted.length}`,
+              durationMs: Math.round(performance.now() - stepStartedAt),
+              name,
+              status: "succeeded",
+              terminalStatus: ingestTerminal.status,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (error) {
+            addStep({
+              command: "compress+ingest",
+              durationMs: Math.round(performance.now() - stepStartedAt),
+              error: error instanceof Error ? error.message : String(error),
+              name,
+              status: "failed",
+              timestamp: new Date().toISOString(),
+            });
+            // Deliberately not rethrown: a device that fails one thread count is
+            // the finding, and aborting here would discard every count after it.
+            // `failedSteps` carries the failure to the caller.
+          } finally {
+            worker.terminate();
+          }
+        }
+        await removeFixtureDirectory(root, `${fixtureName}/${pathBasename(sourceDir)}`);
       }
-      await removeFixtureDirectory(root, `${fixtureName}/${pathBasename(sourceDir)}`);
     }
   } finally {
     await removeFixtureDirectory(root, fixtureName);
