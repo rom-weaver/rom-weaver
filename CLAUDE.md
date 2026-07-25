@@ -88,9 +88,15 @@ instructions do **not** apply here.
 - **Prerelease:** `Release-As: X.Y.Z-alpha.N` commit footer for a one-off, or
   `prerelease`/`prerelease-type` in the config for a sustained track. Routing is
   automatic and keys off a hyphen in the version - no dist-tag step to remember:
-  npm gets `beta` instead of `latest`, docker gets `beta` and skips the series
+  npm gets `beta` instead of `latest`, docker skips `latest` and the series
   tags, and the webapp deploys to `beta.rom-weaver.com`. Cargo needs no guard
   (crates.io has no dist-tags).
+- **Docker channels mirror the webapp's.** `latest`/`beta`/`nightly` are the
+  image-side names for prod/beta/nightly and cascade the same way a deploy
+  does - a stable release moves all three, a prerelease moves `beta` and
+  `nightly`, and a push to `main` moves only `nightly`. The `nightly` images
+  are pushed from `ci.yml` (CLI from the `docker` job, webapp from
+  `docker-prebuilt`), not from `docker-publish.yml`.
 - `npm version` (→ `scripts/sync-version.mjs`) is the legacy manual path that
   cut v0.2.0-v0.5.0. It overlaps release-please and will fight it. Keep it only
   as a break-glass fallback.

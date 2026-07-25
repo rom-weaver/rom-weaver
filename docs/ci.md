@@ -50,7 +50,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
-| `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
+| `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 
 `cla.yml` posts the required `CLA Status` commit status, checking every
 contributor to a pull request against [CLA version 1.0](../CLA.md). The logic is
@@ -187,8 +187,8 @@ security ── advisories (warn only, always green)
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
-- **`docker`** builds the CLI and webapp images **from source** without
-  pushing, so a broken Dockerfile fails here rather than at the moment it
+- **`docker`** builds the CLI and webapp images **from source**, so a broken
+  Dockerfile fails here rather than at the moment it
   blocks a release publish. The CLI leg runs for Cargo workspace sources and
   manifests as well as its image plumbing, so the required check builds the
   image whenever its binary changes. An unselected leg is absent from the
@@ -199,7 +199,12 @@ security ── advisories (warn only, always green)
   `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
   `docker-publish.yml`); ordinary webapp changes use the release-equivalent
   prebuilt smoke below. On `main`, source builds also refresh their registry
-  cache. The CLI leg additionally smokes the `BINARY=prebuilt` release path
+  cache, and the **CLI leg pushes `ghcr.io/rom-weaver/rom-weaver-cli:nightly`**
+  - the image half of the nightly deploy channel. A pull request never pushes,
+  because a fork's token cannot write to the registry. The webapp leg does not
+  publish: it compiles its own wasm, so its bundle is not the one
+  nightly.rom-weaver.com serves; that image comes from `docker-prebuilt` below.
+  The CLI leg additionally smokes the `BINARY=prebuilt` release path
   with a stub binary whenever it is selected.
 
   Handing this job CI's cached wasm to lift the gate does not work. The CLI
@@ -210,7 +215,11 @@ security ── advisories (warn only, always green)
   exactly the fragile half this job exists to test.
 - **`docker-prebuilt`** builds the webapp's `DIST=prebuilt` release path. It
   consumes the real `webapp-dist` artifact `webapp-static` uploads, so
-  `compress-static-assets.mjs` runs over the real bundle. The CLI equivalent
+  `compress-static-assets.mjs` runs over the real bundle. That is also why the
+  webapp's nightly image is published here and not from the `docker` leg: this
+  job wraps the exact artifact `deploy` ships to nightly.rom-weaver.com, so the
+  image and the site are the same bundle. On `main` it pushes
+  `ghcr.io/rom-weaver/rom-weaver-webapp:nightly`. The CLI equivalent
   stays in the image-gated `docker` leg instead of starting a separate runner
   after every Rust or webapp change.
 - **`wasm`** builds the production WASM module. This is the single most
@@ -713,13 +722,38 @@ One rule, applied in five places: a hyphen in the version means prerelease.
 | Target | Stable | Prerelease |
 | --- | --- | --- |
 | npm dist-tag | `latest` | `beta` |
-| docker tags | `X.Y.Z`, `X.Y`, `X` (≥1.0 only), `latest` | `X.Y.Z`, `beta` |
+| docker tags | `X.Y.Z`, `X.Y`, `X` (≥1.0 only), `latest`, `beta`, `nightly` | `X.Y.Z`, `beta`, `nightly` |
 | web channel | rom-weaver.com | beta.rom-weaver.com |
 | GitHub release | normal | marked prerelease |
 | Homebrew | formula updated | skipped |
 
 The docker major tag starts at 1.0.0 because `0` would float across 0.5 → 0.6,
 which semver treats as breaking.
+
+`latest`/`beta`/`nightly` are the image-side names for the webapp's
+prod/beta/nightly channels, and they cascade exactly like the
+[deploy ladder](#webapp-deploy-channels): a publish refreshes its own channel
+plus every less-stable one below it, so `beta` and `nightly` can never serve
+code older than `latest`. The three tags therefore line up one-to-one with the
+three hostnames in [Deploy channels](#deploy-channels):
+
+| Ref | Web channel | Docker tag |
+| --- | --- | --- |
+| `vX.Y.Z` tag | rom-weaver.com, beta, nightly | `latest`, `beta`, `nightly` |
+| `vX.Y.Z-alpha.N` tag | beta, nightly | `beta`, `nightly` |
+| push to `main` | nightly | `nightly` |
+
+The `main` row is the only one not published by `docker-publish.yml`. Its
+images come from `ci.yml` - the CLI from the `docker` job's source build, the
+webapp from `docker-prebuilt` - and carry the same change gating as the deploy
+they mirror, so a push touching neither image leaves `nightly` where it is.
+They are attested exactly like the release images: `provenance: mode=max`, an
+SBOM, and an `actions/attest` signature pushed to the registry. Every published
+image carries the same evidence regardless of which workflow built it.
+
+Attestation is gated on the push rather than set outright, because it needs an
+exporter that can carry attestations - the plain local build a pull request
+runs is not one, and asking for provenance there fails the build.
 
 ## Actions cache budget
 
