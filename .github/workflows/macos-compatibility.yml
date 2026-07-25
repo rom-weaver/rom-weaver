@@ -136,8 +136,8 @@ jobs:
           retention-days: 7
 
   test-intel:
-    name: Test macOS 26 Intel build on macOS 14 Intel
-    runs-on: macos-14-large
+    name: Test macOS 26 Intel build on macOS 15 Intel
+    runs-on: macos-15-intel
     timeout-minutes: 30
     needs: build-intel
     steps:
