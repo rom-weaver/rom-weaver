@@ -284,7 +284,7 @@ nothing but Docker is required:
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "$PWD:/work" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  ghcr.io/rom-weaver/rom-weaver-cli:latest \
   probe --input /work/game.iso
 ```
 
@@ -310,7 +310,7 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "$HOME/roms:/work/in:ro" \
   --volume "$PWD/out:/work/out" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  ghcr.io/rom-weaver/rom-weaver-cli:latest \
   weave --input /work/in/game.sfc --patch /work/in/hack.bps --output /work/out/patched.sfc
 ```
 
