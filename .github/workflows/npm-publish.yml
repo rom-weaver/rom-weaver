@@ -91,9 +91,9 @@ jobs:
           overwrite: true
           retention-days: 7
 
-      # The CLI image is linux/amd64 and consumes this exact binary rather than
-      # compiling the workspace a second time.
-      - name: Upload Linux binary for the container build
+      # The CLI image is multi-platform and consumes these exact binaries
+      # rather than compiling the workspace a second time.
+      - name: Upload Linux x64 binary for the container build
         if: matrix.package == 'linux-x64-gnu'
         uses: actions/upload-artifact@v7
         with:
@@ -106,6 +106,16 @@ jobs:
           # and strand the draft. A rerun rebuilds the same released sha, and
           # publish-containers was skipped in the failed attempt, so nothing can
           # be reading the artifact while it is replaced.
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload Linux arm64 binary for the container build
+        if: matrix.package == 'linux-arm64-musl'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-binary-linux-arm64-musl
+          path: packages/rom-weaver-cli-platforms/linux-arm64-musl/bin/rom-weaver
+          if-no-files-found: error
           overwrite: true
           retention-days: 7
 

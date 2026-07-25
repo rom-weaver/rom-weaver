@@ -127,7 +127,10 @@ jobs:
   docker:
     name: Docker build (${{ matrix.name }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The arm64 source leg runs under QEMU and is substantially slower than
+    # the native amd64 leg. Keep the source build as a real multi-arch gate;
+    # the default one-hour limit cuts it off while Cargo is still compiling.
+    timeout-minutes: 180
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.docker_matrix != '[]'
     permissions:
@@ -151,6 +154,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@v4
 
@@ -180,7 +187,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.file }}
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI') && 'mode=max' || 'false' }}
           sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
@@ -200,8 +207,8 @@ jobs:
         if: matrix.name == 'CLI'
         run: |
           set -euo pipefail
-          mkdir -p prebuilt
-          printf 'stub\n' > prebuilt/rom-weaver
+          mkdir -p prebuilt/amd64
+          printf 'stub\n' > prebuilt/amd64/rom-weaver
           docker build --file Dockerfile --build-arg BINARY=prebuilt --tag prebuilt-smoke .
 
   # Exercise the webapp release COPY path against the real bundle built above,
@@ -230,6 +237,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@v4
 
@@ -261,7 +272,7 @@ jobs:
           context: .
           file: packages/rom-weaver-webapp/Dockerfile
           build-args: DIST=prebuilt
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'mode=max' || 'false' }}
           sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

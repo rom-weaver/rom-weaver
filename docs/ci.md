@@ -712,7 +712,7 @@ produce from the same commit:
 
 | Image | Consumes | Instead of |
 | --- | --- | --- |
-| `rom-weaver-cli` | `cli-binary-linux-x64-gnu`, the `linux-x64-gnu` binary `publish-npm` builds | a second `cargo build --release` of the workspace |
+| `rom-weaver-cli` | `cli-binary-linux-x64-gnu` and `cli-binary-linux-arm64-musl`, the binaries `publish-npm` builds | a second `cargo build --release` of the workspace |
 | `rom-weaver-webapp` | `webapp-dist`, the bundle `static-webapp` packages | rustup + WASI SDK + binaryen + a cold wasm build |
 
 Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`)

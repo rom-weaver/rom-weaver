@@ -46,21 +46,29 @@ jobs:
             image: rom-weaver-cli
             context: .
             file: Dockerfile
-            # Selects the Dockerfile's prebuilt stage, and names the run
-            # artifact holding what that stage assembles the image from.
+            # Selects the Dockerfile's prebuilt stage. The two artifacts are
+            # the target-architecture binaries that stage assembles the image
+            # from.
             build_arg: BINARY
             artifact: cli-binary-linux-x64-gnu
+            arm64_artifact: cli-binary-linux-arm64-musl
+            prebuilt_path: prebuilt/amd64
           - name: webapp
             image: rom-weaver-webapp
             context: .
             file: packages/rom-weaver-webapp/Dockerfile
             build_arg: DIST
             artifact: webapp-dist
+            prebuilt_path: prebuilt
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@v4
 
@@ -80,7 +88,16 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.artifact }}
-          path: prebuilt
+          path: ${{ matrix.prebuilt_path }}
+
+      - name: Download arm64 CLI binary
+        id: prebuilt_arm64
+        if: matrix.name == 'CLI'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.arm64_artifact }}
+          path: prebuilt/arm64
 
       # The fallback is correct but slow, and it is otherwise invisible - a
       # release that quietly went back to compiling everything should say so.
@@ -93,9 +110,11 @@ jobs:
           # tell the two entry points apart, but this can.
           EXPECTED: ${{ inputs.sha != '' }}
           NAME: ${{ matrix.name }}
-          OUTCOME: ${{ steps.prebuilt.outcome }}
+          PRIMARY_OUTCOME: ${{ steps.prebuilt.outcome }}
+          ARM64_OUTCOME: ${{ steps.prebuilt_arm64.outcome || '' }}
         run: |
-          if [ "$OUTCOME" = success ]; then
+          if [ "$PRIMARY_OUTCOME" = success ] && \
+            { [ "$NAME" != CLI ] || [ "$ARM64_OUTCOME" = success ]; }; then
             value=prebuilt
           else
             value=source
@@ -172,7 +191,7 @@ jobs:
           file: ${{ matrix.file }}
           build-args: ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
           labels: ${{ steps.metadata.outputs.labels }}
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           provenance: mode=max
           sbom: true

@@ -6,9 +6,10 @@
 # for that; the image needs no passwd entry for it because rom-weaver reads no
 # home directory or user config. See docs/cli.md ("Run in Docker").
 #
-# `--build-arg BINARY=prebuilt` skips the compile and takes `prebuilt/rom-weaver`
-# out of the build context instead. The release fan-out uses it to reuse the
-# glibc binary npm-publish already built from the same commit; a plain
+# `--build-arg BINARY=prebuilt` skips the compile and takes the target
+# architecture's `prebuilt/<arch>/rom-weaver` out of the build context instead.
+# The release fan-out uses it to reuse the glibc x64 and static musl arm64
+# binaries npm-publish already built from the same commit; a plain
 # `docker build` still compiles from source, which is what self-hosters and the
 # CI image job do. BuildKit builds only the stages the selected one depends on,
 # so the unused half costs nothing - and the `prebuilt/` directory only has to
@@ -44,7 +45,8 @@ FROM scratch AS binary-source
 COPY --from=builder /out/rom-weaver /rom-weaver
 
 FROM scratch AS binary-prebuilt
-COPY prebuilt/rom-weaver /rom-weaver
+ARG TARGETARCH
+COPY prebuilt/${TARGETARCH}/rom-weaver /rom-weaver
 
 # DL3006 reads this as an untagged base image. `binary-source` and
 # `binary-prebuilt` are both defined right above, and BINARY has a default, so
