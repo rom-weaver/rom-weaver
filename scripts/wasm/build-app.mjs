@@ -14,7 +14,15 @@ export const parseMode = (value = "dev") => {
 };
 
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: "inherit", ...options });
-const output = (command, args, options = {}) => execFileSync(command, args, { encoding: "utf8", ...options }).trim();
+// Both streams, as the shell's `$(tool --version 2>&1)` captured. Today's
+// wasm-opt and llvm-strip print to stdout, but a version string that moved to
+// stderr would drop out of the fingerprint silently - and a fingerprint that
+// ignores a toolchain upgrade serves a stale artifact from the cache.
+function toolVersion(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.error) throw new Error(`missing command: ${command} (${result.error.message})`);
+  return `${result.stdout || ""}${result.stderr || ""}`.trim();
+}
 const existsExecutable = (file) => {
   if (!file) return false;
   if (file?.includes("/")) return existsSync(file);
@@ -63,8 +71,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       builtArtifact,
       buildScript: fileURLToPath(import.meta.url),
       quality,
-      wasmOptVersion: output("wasm-opt", ["--version"], { stdio: ["ignore", "pipe", "pipe"] }),
-      stripVersion: output(env.WASI_STRIP, ["--version"], { stdio: ["ignore", "pipe", "pipe"] }),
+      wasmOptVersion: toolVersion("wasm-opt", ["--version"]),
+      stripVersion: toolVersion(env.WASI_STRIP, ["--version"]),
       brotliVersion: `node-zlib libbrotli ${process.versions.brotli}`,
     });
     const brotliArtifactOk = wantBrotli === 1 ? existsSync(`${artifact}.br`) : false;
