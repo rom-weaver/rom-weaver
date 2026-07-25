@@ -106,9 +106,14 @@ install scripts run:
 ```bash
 file=rom-weaver-linux-x64-gnu
 
-# sha256sum on Linux; macOS ships shasum instead.
-digest=$(sha256sum "$file" 2>/dev/null | cut -d ' ' -f 1) ||
+# sha256sum on Linux; macOS ships shasum instead. Probed rather than tried and
+# fallen back from: `$(missing | cut)` exits 0, so a fallback keyed on the exit
+# status never runs and the digest silently comes out empty.
+if command -v sha256sum >/dev/null 2>&1; then
+  digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+else
   digest=$(shasum -a 256 "$file" | cut -d ' ' -f 1)
+fi
 
 if curl -fsS "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1" \
   | grep -q '"repository_id"'
@@ -126,7 +131,20 @@ $file = 'rom-weaver-win32-x64-msvc.exe'
 $digest = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
 $uri = "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${digest}" +
   '?predicate_type=https://slsa.dev/provenance/v1'
-if (@((Invoke-RestMethod -Uri $uri).attestations).Count -gt 0) {
+# A repository with no attestations at all answers 404, which Invoke-RestMethod
+# raises rather than returns - uncaught, it ends the script before the
+# not-verified message it was written for. Unlike the install scripts, this does
+# not tell that apart from an unreachable API; both report NOT VERIFIED here.
+# The property is checked before it is read because `@($null).Count` is 1, so
+# reading a missing one blind would count an unrelated 200 as verified.
+$count = 0
+try {
+  $response = Invoke-RestMethod -Uri $uri
+  if ($response.PSObject.Properties['attestations']) {
+    $count = @($response.attestations).Count
+  }
+} catch { }
+if ($count -gt 0) {
   Write-Host 'VERIFIED: built by the rom-weaver release workflow'
 } else {
   Write-Error 'NOT VERIFIED: no build provenance covers this file'
@@ -189,9 +207,14 @@ is reachable by ordinary use rather than only by attack, which is why it does no
 block. Every refusal prints the way past it:
 
 ```bash
-ROM_WEAVER_SKIP_ATTESTATION=1 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh |
+  ROM_WEAVER_SKIP_ATTESTATION=1 sh
 ```
+
+The assignment belongs on `sh`, not on `curl`: putting it at the front of the
+pipeline sets it for the download and not for the script that reads the
+variable, so the install refuses again.
 
 Going the other way, `ROM_WEAVER_REQUIRE_ATTESTATION=1` promotes that warning to
 a refusal too, so an install that could not be verified fails rather than

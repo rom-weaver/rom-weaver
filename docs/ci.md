@@ -787,18 +787,17 @@ This replaced the `.sha256` sidecars that used to ship beside each asset, which
 are no longer published. They were written by the job that wrote the binary, so
 they proved the download was intact and nothing about where it came from. The
 attestation covers both: it ties the asset to a workflow run and commit, and
-altered bytes hash to something it does not cover. The consumer side is a single
-query against the digest - see
-[Verifying a download](cli.md#verifying-a-download).
+altered bytes hash to something it does not cover.
 
 Attestations live in the repository's attestation store, not in the release's
 asset list. That is why adding them does not interact with
 [immutable releases](#draft-first-releases): nothing is attached to the draft,
 and the step is safe on a rerun and after the release is published.
 
-The consumer side is in [Verifying a download](cli.md#verifying-a-download) -
-both install scripts check provenance, and `gh attestation verify` covers any
-asset by hand.
+The consumer side is a single query against the digest - see
+[Verifying a download](cli.md#verifying-a-download), where both install scripts'
+check and the `gh attestation verify` route for a file downloaded by hand are
+written out.
 
 #### Testing it without cutting a release
 
