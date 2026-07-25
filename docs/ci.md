@@ -39,8 +39,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `commitlint.yml` | PR (open/edit/sync) | **Yes** | Conventional-commit pull request title |
-| `cla.yml` | PR (open/reopen/sync), PR comment | **Yes** | The required `CLA Status` check |
+| `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `Gates/CLA Signed` and `Gates/PR Title Lint` checks |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -52,10 +51,29 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 
-`cla.yml` posts the required `CLA Status` commit status, checking every
-contributor to a pull request against [CLA version 1.0](../CLA.md). The logic is
-`scripts/ci/cla-gate.mjs`, covered by `scripts/ci/cla-gate.test.mjs` against a
-stub GitHub API served over real HTTP.
+`pull-request.yml` holds the two gates a **contributor** rather than the code has
+to clear: the CLA signature (`Gates/CLA Check` job) and a Conventional Commits
+pull request title (`Gates/PR Title Check` job). They share a file because they share every
+constraint - each posts a commit status against the pull request head instead of
+relying on its own check run, each keeps exactly one marker comment on the
+thread, each has to work for a pull request from a fork, and each is required by
+the `main protection` ruleset. Both run on `pull_request_target`, which is what
+supplies a write token on a fork's pull request; nothing from the head is
+checked out or executed, and the scripts, the allowlist and the commitlint
+config all come from the base commit.
+
+| Script | Test | Posts |
+| --- | --- | --- |
+| `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `Gates/CLA Signed` |
+| `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `Gates/PR Title Lint` |
+| `scripts/ci/github-api.mjs` | (exercised by both) | - |
+| `scripts/ci/commitlint-report.mjs` | (exercised by the title gate's step) | - |
+
+Both tests drive the script against a stub GitHub API served over real HTTP, so
+the JSON, base64 and status handling runs rather than a mock of it.
+
+The CLA gate checks every contributor to a pull request against
+[CLA version 1.0](../CLA.md).
 
 | Where | What |
 | --- | --- |
@@ -63,9 +81,31 @@ stub GitHub API served over real HTTP.
 | `cla-signatures` branch, `signatures.json` | The signature records. It lives off the default branch because the `main protection` ruleset forbids direct pushes and names no bypass actor, so a workflow cannot commit there. |
 
 An unsigned contributor gets a failing status and one comment - edited in place
-on later runs, never duplicated - asking them to reply with the signing phrase.
-That reply is what appends their record. Anyone can comment `recheck` to re-run
-the gate. Commits whose author email matches no GitHub account are reported as
+on later runs, never duplicated - asking them to reply with the signing
+phrase, offered in a fenced block so GitHub renders its copy button. That reply
+is what appends their record. Matching ignores case, runs of interior
+whitespace, any trailing `.` or `!`, and the `*`, `_`, `` ` `` or `-` a
+contributor may wrap or bullet the line with - the leading and trailing
+delimiter sets are one constant precisely so they cannot drift apart again. Not
+ignored: a leading `>`, because accepting a quoted line would turn quoting the
+request while asking what it means into assent.
+
+A line that carries the phrase but is not the phrase - quoted, or with other
+words around it - does not sign, and the comment now says so rather than
+rejecting it in silence. That silence was the whole failure being fixed here; a
+contributor who typed the words and got nothing back believes they signed.
+Editing a comment reruns the gate, as does posting another, and between them
+that is the whole re-run story: the near-miss note asks for a correction, and
+editing the comment you just posted is the obvious way to make one. There is deliberately no `recheck` keyword. The prefilter
+already matches any comment mentioning the CLA, and it cannot miss a signing
+attempt - the phrase ends in "the CLA" and a near miss contains the whole phrase -
+so a second keyword bought nothing an edit does not.
+
+An edit signs only when the editor is the comment's own author: anyone with write
+access can edit somebody else's comment, so `sender` and `comment.user` have to
+agree before a signature is recorded.
+
+Commits whose author email matches no GitHub account are reported as
 `unlinked:<name>` rather than skipped.
 
 The two signals mean different things, and the job deliberately exits 0 on an
@@ -73,18 +113,17 @@ unsigned verdict:
 
 | Signal | Meaning |
 | --- | --- |
-| `CLA Status` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
-| `CLA gate` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
+| `Gates/CLA Signed` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
+| `Gates/CLA Check` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
 
 Requiring the **status** rather than the job name is load-bearing. A run
 triggered by `issue_comment` attaches its check run to the default branch rather
-than the pull request head, so a required `CLA gate` job would never be cleared by a
+than the pull request head, so a required `Gates/CLA Check` job would never be cleared by a
 contributor's signing comment - only by pushing a commit. The script posts
-`CLA Status` against the head SHA explicitly, which works on both paths.
-
-The job runs on `pull_request_target`, so a fork's pull request still receives a
-status and a comment; nothing from the pull request head is checked out or
-executed, and both the script and the allowlist come from the base commit.
+`Gates/CLA Signed` against the head SHA explicitly, which works on both paths.
+The title gate posts `Gates/PR Title Lint` the same way, for consistency and so
+neither required check depends on how GitHub attaches a `pull_request_target`
+check run.
 
 **This replaced the hosted CLA Assistant app** ([#129] is the case that forced
 it). That app posted only in response to a `pull_request` event and offered no
@@ -104,10 +143,55 @@ Coverage is deliberately sampled weekly rather than repeated after every green
 a miss, so the report still covers the current commit; manual runs use the same
 path.
 
-`commitlint.yml` lints the **pull request title only**. Merge commits are
-disabled and squash merges take `PR_TITLE` as the subject, so the title is the
-only text that reaches `main` and the only text Release Please reads. Branch
-commits are squashed away, so they are not linted.
+The title gate lints the **pull request title only**. Merge commits are disabled
+and squash merges take `PR_TITLE` as the subject, so the title is the only text
+that reaches `main` and the only text Release Please reads. Branch commits are
+squashed away, so they are not linted.
+
+commitlint runs in the workflow step and hands the gate script a verdict plus a
+file. That split is deliberate: routing an attacker-controlled title through
+`GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step outputs, and it
+keeps the half worth testing free of a commitlint install.
+
+The file is JSON, not commitlint's own paragraph. `scripts/ci/commitlint-report.mjs`
+is a commitlint formatter (`--format`, passed by path so nothing has to be
+installed) that writes the report out structurally - a `name`, `level` and
+`message` per problem - and returns the plain text that lands in the log. The
+gate branches on rule names, which is what lets the comment say something
+specific instead of restating the format under every kind of failure:
+
+| Rules | What the comment adds |
+| --- | --- |
+| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. |
+| `type-case`, `type-enum` | Names the type it rejected, and lists the allowed ones. |
+| `header-max-length` | How many characters have to go, and no example of a shape the title already has. |
+
+**The gate never proposes a replacement title.** commitlint hands it a rule name
+and a message; it never hands over a corrected title, so any rename would be one
+the gate invented - and the type is the part it cannot possibly know. Squash
+merges make the title the commit subject and Release Please reads the type for
+the changelog section and the version bump, so a guessed `fix:` on a feature is
+not a cosmetic miss: it is a wrong bump and a wrong changelog entry, landed
+silently. A rejected title costs a rename and says so out loud. Naming the rule
+that broke and the types that are allowed is the whole job.
+
+Valid types are read from `.config/commitlint.config.mjs` - the same file that
+rejected the title - so the advice cannot drift from the rule. A failure that
+carries no lint result at all is commitlint breaking rather than a bad title, so
+the gate throws instead of posting. Editing the title reruns the gate; passing
+**deletes** the comment, so a green pull request carries no gate chatter. The
+title is quoted in a block quote as an inline code span, opened with a backtick
+run longer than any inside it - inside a span GitHub neither links nor notifies
+an `@mention`, and a shorter run cannot close it. A fence would protect the same
+amount but carries a copy button and a horizontal scrollbar, which is the wrong
+trade for a string you have to read whole and are about to retype. The CLA
+gate's fence around the signing phrase is the opposite case, and keeps its
+fence: there the copy button is the point.
+
+Every sentence in either comment is one unbroken line. GitHub renders a single
+newline inside a comment as a hard break, so prose wrapped to a column shows the
+reader a line break mid-sentence - the source and the render disagree, and only
+the render matters.
 
 Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
 no `push` trigger: the release pull request is created and refreshed only by a
@@ -126,12 +210,12 @@ from source (~6.5 min). Merging the release pull request is what sets
 `release_created` and unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
-> must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `Conventional
-> commits`, and `CLA Status`. The ruleset has no bypass
+> must use squash merge and pass `Rust`, `Webapp`, `Plumbing`,
+> `Gates/PR Title Lint`, and `Gates/CLA Signed`. The ruleset has no bypass
 > actors, so a status that is never reported blocks the merge outright - which
 > is why every required name belongs to an aggregate job that always runs, and
 > never to a job that path classification can skip or drop from a matrix, and
-> why `CLA Status` comes from a workflow that can be rerun rather than an app that
+> why `Gates/CLA Signed` comes from a workflow that can be rerun rather than an app that
 > cannot.
 
 ## `ci.yml` - the required gate

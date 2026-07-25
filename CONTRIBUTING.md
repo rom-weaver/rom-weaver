@@ -41,7 +41,9 @@ becomes the commit on `main` and the input to Release Please. Use
 `type(scope): summary`, for example `fix(webapp): handle empty patch archives`.
 The scope is optional; allowed types are `build`, `chore`, `ci`, `docs`, `dx`,
 `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`. Branch commit
-messages are not linted.
+messages are not linted. The `Gates/PR Title Lint` check comments with the
+exact problem when a title does not parse, and deletes that comment once you
+rename the pull request.
 
 Before submitting a pull request, run the smallest relevant checks and, when
 possible, the complete local gate:
@@ -59,10 +61,11 @@ terms. Keeping that model possible requires a license grant covering every
 contribution, so all contributions require agreeing to the
 [Individual Contributor License Agreement version 1.0](CLA.md).
 
-On your first pull request the `CLA Status` check comments with the signing
-phrase; reply with that phrase in a new comment to sign. Signing covers all of
+On your first pull request the `Gates/CLA Signed` check comments with the signing
+phrase in a copyable block; reply with that phrase in a new comment to sign. Signing covers all of
 your past and future contributions under that immutable CLA version, and you
-will never be asked again. Comment `recheck` to re-run the check. You keep the copyright in your work, and it is always also released
+will never be asked again. Edit a comment or post another to retry the check.
+You keep the copyright in your work, and it is always also released
 under the project's open-source license; see the CLA's open-source assurance
 section.
 
