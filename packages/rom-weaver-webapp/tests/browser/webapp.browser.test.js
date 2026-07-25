@@ -181,6 +181,15 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
+test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
+  // The masthead thread count must follow the Threads setting. It once called
+  // resolveThreads() with no argument, so it always fell through to
+  // navigator.hardwareConcurrency and a user who dialled threads down to 1
+  // still read the host core count in the header.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 threads");
+});
+
 test("WebappRoot keeps diagnostics out of the masthead - the Log dialog owns them", async () => {
   // The header stays theme / log / settings; the console-copy and mobile dev
   // tools toggles were folded into the Log dialog surface.

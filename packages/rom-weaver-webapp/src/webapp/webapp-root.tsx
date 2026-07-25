@@ -383,7 +383,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
                 ? WORKFLOW_TABS
                 : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
             }
-            threads={resolveThreads()}
+            threads={resolveThreads(threads)}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
           />
