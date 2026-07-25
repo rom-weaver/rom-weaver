@@ -169,7 +169,7 @@ test("a conventional title passes and says nothing", async () => {
 test("passing deletes a comment left by an earlier failure", async () => {
   const { calls } = await run({
     verdict: "pass",
-    comments: [{ id: 11, body: `${MARKER}\nrename this` }],
+    comments: [{ id: 11, user: { type: "Bot" }, body: `${MARKER}\nrename this` }],
   });
   assert.equal(statusState(calls), "success");
   assert.ok(called(calls, "DELETE", "issues/comments/11"));
@@ -178,9 +178,31 @@ test("passing deletes a comment left by an earlier failure", async () => {
 test("passing leaves comments from anyone else alone", async () => {
   const { calls } = await run({
     verdict: "pass",
-    comments: [{ id: 12, body: "looks good to me" }],
+    comments: [{ id: 12, user: { type: "User" }, body: "looks good to me" }],
   });
   assert.ok(!called(calls, "DELETE", "issues/comments/"));
+});
+
+// The marker is an HTML comment - invisible once rendered, and nothing stops a
+// contributor pasting one. The token here could delete their comment on the
+// strength of a string they chose, so the author is checked too.
+test("a marker pasted by a human is neither deleted nor edited", async () => {
+  const pasted = { id: 13, user: { type: "User" }, body: `${MARKER}\nnot the gate's comment` };
+
+  const passing = await run({ verdict: "pass", comments: [pasted] });
+  assert.ok(!called(passing.calls, "DELETE", "issues/comments/"));
+
+  const failing = await run({
+    title: "still wrong",
+    verdict: "fail",
+    errors: ["type-empty"],
+    comments: [pasted],
+  });
+  assert.ok(!called(failing.calls, "PATCH", "issues/comments/"));
+  assert.ok(
+    called(failing.calls, "POST", "issues/7/comments"),
+    "the gate must post its own comment rather than take over somebody else's",
+  );
 });
 
 test("a bad title fails the status and explains itself in a comment", async () => {
@@ -284,7 +306,7 @@ test("a second failing run edits the comment instead of adding another", async (
     title: "still wrong",
     verdict: "fail",
     errors: ["type-empty"],
-    comments: [{ id: 11, body: `${MARKER}\nrename this` }],
+    comments: [{ id: 11, user: { type: "Bot" }, body: `${MARKER}\nrename this` }],
   });
   assert.ok(called(calls, "PATCH", "issues/comments/11"));
   assert.ok(!called(calls, "POST", "issues/7/comments"));

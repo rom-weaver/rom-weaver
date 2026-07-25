@@ -171,7 +171,7 @@ test("signing rewrites that comment to the signed badge and callout", async () =
     prAuthor: "outsider",
     signatures: [],
     comment: { author: "outsider", body: SIGN_PHRASE },
-    comments: [{ id: 11, body: "<!-- rom-weaver-cla-gate -->\nCLA signature required" }],
+    comments: [{ id: 11, user: { type: "Bot" }, body: "<!-- rom-weaver-cla-gate -->\nCLA signature required" }],
   });
   const edit = calls.find((call) => call.method === "PATCH" && call.path.includes("issues/comments/"));
   assert.ok(edit, "the existing comment must be edited, not left saying a signature is required");

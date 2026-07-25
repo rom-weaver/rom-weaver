@@ -69,10 +69,17 @@ export function createStatusPoster({ api, repo, sha, context }) {
 
 // One comment per pull request per marker, edited in place, so a rebase or a
 // retitle does not bury the thread under duplicates.
+//
+// The author is checked as well as the marker. The marker is an HTML comment,
+// so it is invisible once rendered and nothing stops a contributor pasting one
+// - and the token here is repo-scoped, so it would happily edit or delete
+// somebody else's comment on the strength of a string they chose. Only a
+// comment this workflow could have written is a candidate; anything else is
+// left alone and a fresh one is posted alongside it.
 export function createMarkerComment({ api, paginate, repo, prNumber, marker }) {
   const find = async () =>
-    (await paginate(`/repos/${repo}/issues/${prNumber}/comments`)).find((comment) =>
-      comment.body.includes(marker),
+    (await paginate(`/repos/${repo}/issues/${prNumber}/comments`)).find(
+      (comment) => comment.user?.type === "Bot" && comment.body.includes(marker),
     );
 
   return {
