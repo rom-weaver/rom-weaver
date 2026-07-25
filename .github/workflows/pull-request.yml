@@ -19,7 +19,7 @@ on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited]
   issue_comment:
-    types: [created]
+    types: [created, edited]
 
 permissions:
   contents: read
@@ -69,6 +69,10 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          # Who triggered the event, which on an `edited` comment is whoever
+          # edited it - not necessarily its author. Anyone with write access can
+          # edit somebody else's comment, so signing requires these to agree.
+          COMMENT_SENDER: ${{ github.event.sender.login }}
         run: node scripts/ci/cla-gate.mjs
 
   pr-title:

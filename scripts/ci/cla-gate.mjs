@@ -20,6 +20,8 @@
 //   PR_NUMBER           pull request number
 //   COMMENT_BODY        body of the triggering comment (empty for pull_request events)
 //   COMMENT_AUTHOR      login of the comment author (empty for pull_request events)
+//   COMMENT_SENDER      login of whoever triggered it; differs from the author
+//                       on an edit, and must match it for the comment to sign
 import { readFileSync } from "node:fs";
 
 import { createGitHubApi, createMarkerComment, createStatusPoster } from "./github-api.mjs";
@@ -30,6 +32,7 @@ const {
   PR_NUMBER,
   COMMENT_BODY = "",
   COMMENT_AUTHOR = "",
+  COMMENT_SENDER = "",
   GITHUB_API_URL = "https://api.github.com",
   GITHUB_SERVER_URL = "https://github.com",
   GITHUB_RUN_ID = "",
@@ -158,9 +161,18 @@ const nearMiss =
 // the authenticated session that posted the comment - not content the commenter
 // controls. Requiring it to be one of this pull request's authors is what stops
 // anyone appending themselves to the file from an unrelated thread.
+//
+// The gate runs on an edited comment too, because the near-miss note asks for a
+// correction and editing the offending comment is the obvious way to make one.
+// That is also why the sender has to be the author: anyone with write access can
+// edit somebody else's comment, and without this a maintainer could type the
+// phrase into a contributor's comment and record a signature that contributor
+// never gave. `sender` is the editor, so signing needs the two to agree.
+const selfAuthored = !COMMENT_SENDER || COMMENT_SENDER === COMMENT_AUTHOR;
 if (
   signedByComment &&
   COMMENT_AUTHOR &&
+  selfAuthored &&
   authors.includes(COMMENT_AUTHOR) &&
   !hasSigned(COMMENT_AUTHOR) &&
   !isAllowed(COMMENT_AUTHOR)

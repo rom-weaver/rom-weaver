@@ -96,6 +96,9 @@ async function run({ prAuthor, commitAuthors = [], signatures = [], comment, com
         PR_NUMBER: "7",
         COMMENT_BODY: comment?.body ?? "",
         COMMENT_AUTHOR: comment?.author ?? "",
+        // Defaults to the author, which is what GitHub sends on a new comment.
+        // An edit by somebody else is the case worth spelling out.
+        COMMENT_SENDER: comment?.sender ?? comment?.author ?? "",
       },
     });
   } catch (error) {
@@ -257,6 +260,32 @@ test("the first signature ever creates the file instead of updating it", async (
   assert.ok(!("sha" in write.body), "creating a file must not send a blob sha");
   assert.equal(statusState(calls), "success");
   assert.equal(status, 0);
+});
+
+// The gate runs on edited comments because the near-miss note asks for a
+// correction, and editing the comment you just posted is the obvious way to make
+// one. Posting a second comment must not be the only path that works.
+test("editing your own comment into the phrase signs", async () => {
+  const { calls } = await run({
+    prAuthor: "outsider",
+    signatures: [],
+    comment: { author: "outsider", sender: "outsider", body: SIGN_PHRASE },
+  });
+  assert.ok(wrote(calls, "PUT", "contents/signatures.json"));
+  assert.equal(statusState(calls), "success");
+});
+
+// Anyone with write access can edit somebody else's comment. Without this the
+// phrase could be typed into a contributor's comment on their behalf and
+// recorded as their signature - one they never gave.
+test("a comment edited by somebody other than its author does not sign", async () => {
+  const { calls } = await run({
+    prAuthor: "outsider",
+    signatures: [],
+    comment: { author: "outsider", sender: "maintainer", body: SIGN_PHRASE },
+  });
+  assert.ok(!wrote(calls, "PUT", "contents/signatures.json"), "a signature may not be forged");
+  assert.equal(statusState(calls), "failure");
 });
 
 test("the phrase from a bystander records nothing", async () => {
