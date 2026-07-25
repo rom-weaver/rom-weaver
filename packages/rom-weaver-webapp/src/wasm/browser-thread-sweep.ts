@@ -29,9 +29,17 @@
  *   - The peak across stages is not it either. `extract:N` echoes the requested
  *     budget in every cell measured, so a peak always equals the request and
  *     could never show a collapse.
+ *   - No stage number is a MEASUREMENT. Every one of them is the negotiated
+ *     `ThreadExecution`, i.e. what the budget allowed, not what got spawned.
+ *     Counting real `wasi_thread_spawn` calls at `--threads 4` found zip
+ *     compress spawning ZERO threads and 7z spawning 2, both while reporting
+ *     `create:4`; only chd/z3ds/rvz actually spawned 4. So this harness cannot
+ *     see a compress-side threading collapse at all - to measure that, count
+ *     the spawner's `thread spawn requested` trace lines instead.
  * `stageThreads` therefore carries the whole breakdown (e.g.
- * `ingest:1 extract:16 extract-step:1`) and the reader decides. On desktop
- * Chromium `create` tracks the request for all five formats, while
+ * `ingest:1 extract:16 extract-step:1`) and the reader decides - as NEGOTIATED
+ * budgets, subject to the caveat above. On desktop Chromium `create` reports the
+ * request for all five formats (true only as a budget - see above), while
  * `extract-step` is the one that varies: 1 for 256 KiB zip/7z entries, tracking
  * the request for 512 KiB entries and for chd and rvz, and pinned at 4 from
  * five threads up for z3ds.
