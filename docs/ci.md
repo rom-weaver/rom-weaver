@@ -47,7 +47,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
-| `release.yml` | push to `main`, after a successful `CI` on `main`, release PR merge, manual | n/a | Release Please, then the publish fan-out |
+| `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io |
