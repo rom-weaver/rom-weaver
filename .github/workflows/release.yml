@@ -462,7 +462,6 @@ jobs:
           tar --create --gzip \
             --file rom-weaver-webapp.tar.gz \
             --directory packages/rom-weaver-webapp/dist .
-          sha256sum rom-weaver-webapp.tar.gz > rom-weaver-webapp.tar.gz.sha256
 
       # Consumed by the webapp image, which would otherwise install rustup, the
       # WASI SDK and binaryen and rebuild the same bundle from scratch. Sharing
@@ -489,14 +488,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.release.outputs.version }}" \
-            rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
+            rom-weaver-webapp.tar.gz \
             --repo "$GITHUB_REPOSITORY" --clobber
 
-      # See the matching step in npm-publish.yml: the `.sha256` sidecar is
-      # written by this job and proves only that the download is intact. The
-      # attestation is what ties the tarball to this run and commit. It lands in
-      # the repository's attestation store rather than the release's asset list,
-      # so it neither touches the draft nor conflicts with immutability.
+      # This is the only integrity and origin check the tarball carries - it
+      # replaced a `.sha256` sidecar, which proved neither, being written by this
+      # same job. The attestation ties the bytes to this run and commit, and it
+      # lands in the repository's attestation store rather than the release's
+      # asset list, so it neither touches the draft nor conflicts with
+      # immutability.
       - name: Attest the static webapp tarball
         uses: actions/attest-build-provenance@v4
         with:

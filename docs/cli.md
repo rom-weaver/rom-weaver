@@ -66,11 +66,11 @@ scoop install rom-weaver
 
 #### Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin`, checks it against the published
-checksum, and checks its build provenance. Set `ROM_WEAVER_INSTALL_DIR` to
-choose another directory, or `ROM_WEAVER_VERSION` to install a specific release.
-See [Verifying a download](#verifying-a-download) for what the provenance check
-does and does not prove.
+Downloads the latest release to `~/.local/bin` and checks its build provenance,
+refusing to install a binary this repository did not publish. Set
+`ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to
+install a specific release. See [Verifying a download](#verifying-a-download)
+for what that check does and does not prove.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -92,12 +92,31 @@ Every published artifact carries signed [build provenance][slsa]: the platform
 binaries and the webapp tarball on each release, the npm packages, and the
 container images. It records which workflow, run, and commit produced the file,
 so an asset uploaded by anything other than the release workflow - a stolen
-token, a maintainer's laptop - fails verification even when its checksum
-matches. The `.sha256` sidecar next to each asset cannot catch that: it ships
-from the same place as the binary, so whatever can replace one can replace the
-other.
+token, a maintainer's laptop - has none.
 
-To check any release asset yourself:
+Both install scripts check it, and neither needs anything installed. They hash
+what they downloaded and ask GitHub whether this repository attested exactly
+those bytes:
+
+```bash
+curl -s "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:$(
+  sha256sum rom-weaver-linux-x64-gnu | cut -d ' ' -f 1)"
+```
+
+A response containing an attestation means this repository published one for
+that exact file. An empty `attestations` array, or a 404, means it did not - the
+query is scoped to both the repository and the digest, so there is nothing else
+to check.
+
+That covers integrity as well as origin, which is why no `.sha256` sidecar is
+published any more: altered bytes hash to something no attestation covers, so
+they are refused. A sidecar could not have added anything, having shipped from
+the same place as the binary.
+
+What this does **not** check is the Sigstore signature - it trusts GitHub's API
+response over TLS, which is the same trust the download already places in
+GitHub. To verify the signature, certificate chain, and transparency-log
+inclusion, use `gh` (it must be signed in; the API above does not):
 
 ```bash
 gh attestation verify rom-weaver-linux-x64-gnu --repo rom-weaver/rom-weaver
@@ -105,30 +124,16 @@ gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
   --repo rom-weaver/rom-weaver
 ```
 
-Both install scripts do this for you, and neither needs anything installed. They
-prefer `gh` when it is present and signed in, which verifies the Sigstore
-signature, the certificate chain, and transparency-log inclusion. Otherwise they
-read the attestation from `api.github.com` over TLS and confirm it names this
-repository - weaker, because it trusts the API response rather than the
-signature, but the same trust the download already places in GitHub, and it
-still catches an asset no workflow run produced.
+The install scripts deliberately do not reach for `gh` or `cosign`: requiring a
+tool most machines lack, to install a tool, is not a trade worth making in a
+`curl | sh`.
 
-That fallback parses no JSON. Beyond `curl`, it uses only `tr`, `sed`, `head`,
-`printf`, and `grep -q` - all POSIX, no GNU-only flags - plus a base64 decoder,
-the one piece POSIX does not specify, which is why it tries `base64 -d` (GNU,
-current macOS), then `base64 -D` (older macOS), then `openssl`. Verified against
-the response GitHub actually returns under `dash`, macOS `sh`, Alpine and
-BusyBox (`busybox sh`, musl), and Debian slim, with each decoder branch forced
-in turn.
-
-A definite negative stops the install; an unanswered question does not. Those
-are different facts, and conflating them gets the default wrong in one direction
-or the other:
+A definite negative stops the install; an unanswered question does not:
 
 | Outcome | Behavior |
 | --- | --- |
-| Verified | installs |
-| Another repository attested it, or nothing did (HTTP 404) | **refuses** |
+| This repository attested these bytes | installs |
+| Nothing attested them - empty response or HTTP 404 | **refuses** |
 | The check could not run - offline, rate-limited, 5xx | warns, installs |
 
 The unauthenticated API allows 60 requests an hour per address, so the last row

@@ -12,22 +12,18 @@ const writeExecutable = (path, source) => {
 
 const DIGEST = "b".repeat(64);
 
-// install.sh hashes the download to build the attestation URL, so the stub has
-// to answer both call shapes: `--check` against the sidecar, and a plain hash of
-// the binary.
+// install.sh hashes the download to build the attestation URL. There is no
+// sidecar to check against any more, so this only has to answer the plain form.
 const SHA256SUM_STUB = `#!/bin/sh
-case "$1" in
-  --check) exit 0 ;;
-esac
 echo "${DIGEST}  $1"
 `;
 
-// Serves the release download, its sidecar, and the attestations API. The
-// attestations call reads its status from ATTESTATION_STATUS and writes it to
-// stdout, because install.sh asks for it with \`--write-out\` rather than leaning
-// on \`--fail\`. ATTESTATION_CURL_FAILS models a network-level failure, where curl
-// exits non-zero having received no status at all.
-const curlStub = (platform, attestationJson) => `#!/bin/sh
+// Serves the release download and the attestations API. The attestations call
+// reads its status from ATTESTATION_STATUS and writes it to stdout, because
+// install.sh asks for it with \`--write-out\` rather than leaning on \`--fail\`.
+// ATTESTATION_CURL_FAILS models a network-level failure, where curl exits
+// non-zero having received no status at all.
+const curlStub = (attestationJson) => `#!/bin/sh
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output=$2; shift 2 ;;
@@ -47,40 +43,32 @@ JSON
     fi
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
-  *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *) echo binary > "$output" ;;
 esac
 `;
 
 // A verbatim response from `GET /repos/{owner}/{repo}/attestations/{digest}`,
-// captured from a real published image and used unmodified except that its
-// `bundle_url` - a time-limited signed blob URL install.sh never reads - is
-// replaced. Testing against the real bytes is the point: install.sh matches
-// fixed strings rather than parsing, so a hand-written response could agree with
-// the code while disagreeing with GitHub.
+// captured from a real published image, unmodified except for its `bundle_url` -
+// a time-limited signed blob URL install.sh never reads. Testing against the
+// real bytes is the point: install.sh looks for a fixed string rather than
+// parsing, so a hand-written response could agree with the code while
+// disagreeing with GitHub.
 const REAL_RESPONSE = readFileSync(resolve("test/fixtures/attestations-response.json"), "utf8");
-const REAL_RESPONSE_REPOSITORY = "https://github.com/rom-weaver/rom-weaver";
 
-// The same response with the attesting repository swapped, which is what an
-// attestation covering these bytes but produced by somebody else looks like.
-const responseFrom = (repository) => {
-  const { attestations } = JSON.parse(REAL_RESPONSE);
-  for (const attestation of attestations) {
-    const envelope = attestation.bundle.dsseEnvelope;
-    const statement = Buffer.from(envelope.payload, "base64").toString("utf8");
-    envelope.payload = Buffer.from(statement.replaceAll(REAL_RESPONSE_REPOSITORY, repository)).toString("base64");
-  }
-  return JSON.stringify({ attestations }, null, 2);
-};
+// What the same endpoint returns for a repository that has attestations but none
+// for these bytes - also captured verbatim, from `cli/cli`. The blank line
+// inside the array is real, and is why "is this empty" cannot be answered by
+// looking at length or whitespace.
+const EMPTY_RESPONSE = '{\n  "attestations": [\n\n  ]\n}\n';
 
 // Everything the provenance tests share: a Darwin host and a stubbed download.
-// `bin` is returned so a test can add its own `gh`.
+// `bin` is returned so a test can shadow a tool inside it.
 const setUpDarwinInstall = (directory, options = {}) => {
   const { attestation = REAL_RESPONSE } = options;
   const bin = join(directory, "bin");
   mkdirSync(bin);
   writeExecutable(join(bin, "uname"), '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo arm64 ;;\nesac\n');
-  writeExecutable(join(bin, "curl"), curlStub("darwin-arm64", attestation));
+  writeExecutable(join(bin, "curl"), curlStub(attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
   return bin;
 };
@@ -105,7 +93,7 @@ const runInstall = (directory, bin, environment = {}) => {
   });
 };
 
-test("installs the checksummed binary for the host platform", () => {
+test("installs the binary for the host platform", () => {
   const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-"));
   try {
     const installDirectory = join(directory, "install");
@@ -125,9 +113,8 @@ test("installs the checksummed binary for the host platform", () => {
     assert.ok(output.includes("Then run: rom-weaver --help"));
     assert.deepEqual(readFileSync(curlLog, "utf8").trim().split("\n"), [
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
-      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64.sha256",
-      // The provenance lookup is keyed by the hash of what was actually
-      // downloaded, not by the sidecar's claim about it.
+      // No `.sha256` fetch: the provenance lookup is keyed by the hash of what
+      // actually arrived, so it subsumes the checksum it used to download.
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}`,
     ]);
   } finally {
@@ -232,75 +219,32 @@ const expectRefusal = (directory, run) => {
 
 // The mirror image: the check could not run, so it warns and installs anyway.
 const expectWarning = (directory, output) => {
-  assert.match(output, /origin is unverified/);
+  assert.match(output, /this download is unverified/);
   assert.ok(existsSync(join(directory, "install", "rom-weaver")), "a warning must not block the install");
 };
 
-// `gh` is the only branch that checks the signature rather than trusting the
-// API, so it has to win whenever it is available.
-const GH_STUB = `#!/bin/sh
-case "$1 $2" in
-  "auth status") exit 0 ;;
-  "attestation verify") exit $GH_VERIFY_STATUS ;;
-esac
-exit 1
-`;
-
-test("verifies build provenance with gh when it is available", () => {
-  withInstall({}, (directory, bin) => {
-    writeExecutable(join(bin, "gh"), GH_STUB);
-    const output = runInstall(directory, bin, { GH_VERIFY_STATUS: "0" });
-    assert.match(output, /Verified build provenance for rom-weaver-darwin-arm64/);
-    // gh verified the file itself, so the weaker API lookup is not made at all.
-    assert.ok(!readFileSync(join(directory, "curl.log"), "utf8").includes("attestations"));
-  });
-});
-
-// gh reports a bad signature and a missing attestation with the same exit
-// status, and both are answers rather than an inability to ask - so a failure
-// here refuses outright, with no dependence on REQUIRE.
-test("refuses when gh verification fails", () => {
-  withInstall({}, (directory, bin) => {
-    writeExecutable(join(bin, "gh"), GH_STUB);
-    const output = expectRefusal(directory, () => runInstall(directory, bin, { GH_VERIFY_STATUS: "1" }));
-    assert.match(output, /build provenance verification FAILED/);
-  });
-});
-
-test("falls back to the attestations API when gh is absent", () => {
+test("accepts a response carrying an attestation for these bytes", () => {
   withInstall({}, (directory, bin) => {
     const output = runInstall(directory, bin);
-    assert.match(output, /Found build provenance for rom-weaver-darwin-arm64/);
+    assert.match(output, /Verified build provenance for rom-weaver-darwin-arm64/);
   });
 });
 
-test("refuses an attestation naming a different repository", () => {
-  withInstall({ attestation: responseFrom("https://github.com/someone-else/rom-weaver") }, (directory, bin) => {
+// The endpoint is scoped to this repository, so an empty array is GitHub saying
+// this repository attested nothing for these bytes. A repository with no
+// attestations at all answers 404 instead; the two mean the same thing and both
+// have to refuse.
+test("refuses a response carrying no attestation for these bytes", () => {
+  withInstall({ attestation: EMPTY_RESPONSE }, (directory, bin) => {
     const output = expectRefusal(directory, () => runInstall(directory, bin));
-    assert.match(output, /did not produce it/);
+    assert.match(output, /no build provenance from/);
   });
 });
 
-// A repository whose name merely starts with this one's must not satisfy the
-// match - the trailing quote in the pattern is what stops `rom-weaver-evil`.
-test("refuses a repository that only prefixes this one", () => {
-  withInstall({ attestation: responseFrom(`${REAL_RESPONSE_REPOSITORY}-evil`) }, (directory, bin) => {
-    expectRefusal(directory, () => runInstall(directory, bin));
-  });
-});
-
-test("refuses a response carrying no attestation at all", () => {
-  withInstall({ attestation: '{\n  "attestations": []\n}' }, (directory, bin) => {
-    expectRefusal(directory, () => runInstall(directory, bin));
-  });
-});
-
-// 404 is GitHub answering the question - nothing attested these bytes - so it is
-// a refusal, not an inability to check.
-test("refuses an asset with no published attestation", () => {
-  withInstall({}, (directory, bin) => {
+test("refuses a 404 from the attestations API", () => {
+  withInstall({ attestation: EMPTY_RESPONSE }, (directory, bin) => {
     const output = expectRefusal(directory, () => runInstall(directory, bin, { ATTESTATION_STATUS: "404" }));
-    assert.match(output, /no build provenance published/);
+    assert.match(output, /no build provenance from/);
   });
 });
 
@@ -337,25 +281,14 @@ test("ROM_WEAVER_SKIP_ATTESTATION installs past a refusal without asking the API
   });
 });
 
-// The check must need nothing beyond a POSIX shell, so the whole thing runs
-// again with jq, and then with every base64 flavor, taken off PATH.
-test("checks provenance with no jq on PATH", () => {
+// The whole check is now curl plus grep, so a box with neither jq nor a base64
+// decoder still gets it. Both are shadowed with stubs that fail loudly if
+// called.
+test("needs no jq and no base64 decoder", () => {
   withInstall({}, (directory, bin) => {
-    writeExecutable(join(bin, "jq"), "#!/bin/sh\necho 'jq must not be called' >&2\nexit 127\n");
-    assert.match(runInstall(directory, bin), /Found build provenance for rom-weaver-darwin-arm64/);
+    for (const tool of ["jq", "base64", "openssl"]) {
+      writeExecutable(join(bin, tool), `#!/bin/sh\necho '${tool} must not be called' >&2\nexit 127\n`);
+    }
+    assert.match(runInstall(directory, bin), /Verified build provenance for rom-weaver-darwin-arm64/);
   });
 });
-
-// GNU and current macOS take -d, older macOS only -D, and a box with neither
-// falls through to openssl. Each is forced by making the others fail.
-for (const [name, stub] of [
-  ["only base64 -D", '#!/bin/sh\ncase "$1" in\n  -d) exit 1 ;;\nesac\nexec /usr/bin/base64 "$@"\n'],
-  ["neither base64 flag", "#!/bin/sh\nexit 1\n"],
-]) {
-  test(`decodes the payload with ${name}`, () => {
-    withInstall({}, (directory, bin) => {
-      writeExecutable(join(bin, "base64"), stub);
-      assert.match(runInstall(directory, bin), /Found build provenance for rom-weaver-darwin-arm64/);
-    });
-  });
-}

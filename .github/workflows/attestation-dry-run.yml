@@ -92,45 +92,51 @@ jobs:
         with:
           name: attestation-subject
 
-      # The strong branch. `gh` is preinstalled and authenticated on every runner
-      # image, so this is the path a developer machine with gh takes.
-      - name: Verify with gh
+      # The installers deliberately do not depend on gh, so this is the one place
+      # the Sigstore signature, certificate chain, and transparency-log
+      # inclusion are actually checked rather than taken from the API's word.
+      # That makes it the reason to keep this workflow: it is stronger than
+      # anything the install path can do for itself.
+      - name: Verify the signature with gh
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh attestation verify subject.bin --repo "$GITHUB_REPOSITORY"
 
-      # The fallback branch, extracted verbatim from install.sh. It is duplicated
-      # rather than invoked because install.sh only ever verifies an asset it
-      # downloaded from a release, and this subject is not one - see the note in
-      # docs/ci.md.
-      - name: Verify the way install.sh does, with no gh and no jq
+      # The installers' own check, extracted verbatim from install.sh. It is
+      # duplicated rather than invoked because install.sh only ever verifies an
+      # asset it downloaded from a release, and this subject is not one.
+      - name: Verify the way install.sh does
         if: matrix.os != 'windows-2025'
         shell: bash
         env:
           DIGEST: ${{ needs.direct.outputs.digest }}
         run: |
           set -euo pipefail
-          curl --fail --silent --location --proto '=https' --tlsv1.2 \
+          status=$(curl --silent --location --proto '=https' --tlsv1.2 \
             --output attestations.json \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$DIGEST"
+            --write-out '%{http_code}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$DIGEST")
+          test "$status" = 200
+          grep -q '"repository_id"' attestations.json
+          echo "install.sh check verified the attestation"
 
-          if base64 -d </dev/null >/dev/null 2>&1; then
-            decode_base64() { base64 -d; }
-          elif base64 -D </dev/null >/dev/null 2>&1; then
-            decode_base64() { base64 -D; }
-          else
-            decode_base64() { openssl base64 -d -A; }
+      # The same query for bytes nothing attested must come back empty, or the
+      # check would pass for any download at all.
+      - name: Confirm an unattested digest is rejected
+        if: matrix.os != 'windows-2025'
+        shell: bash
+        run: |
+          set -euo pipefail
+          absent=$(printf 'not a released artifact %s' "$GITHUB_RUN_ID" | sha256sum | cut -d ' ' -f 1)
+          status=$(curl --silent --location --proto '=https' --tlsv1.2 \
+            --output absent.json \
+            --write-out '%{http_code}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$absent")
+          if [ "$status" = 200 ] && grep -q '"repository_id"' absent.json; then
+            echo "::error::an unattested digest reported provenance"
+            exit 1
           fi
-
-          payload=$(tr -d '\n\r' < attestations.json \
-            | grep -o '"payload"[[:space:]]*:[[:space:]]*"[^"]*"' \
-            | head -n 1 \
-            | sed 's/.*"\([^"]*\)"$/\1/')
-
-          test -n "$payload"
-          printf '%s' "$payload" | decode_base64 \
-            | grep -q "\"repository\":\"https://github.com/$GITHUB_REPOSITORY\""
-          echo "install.sh fallback verified the attestation"
+          echo "install.sh check correctly found nothing (HTTP $status)"
 
       - name: Verify the way install.ps1 does
         if: matrix.os == 'windows-2025'
@@ -142,11 +148,7 @@ jobs:
           Set-StrictMode -Version Latest
           $response = Invoke-RestMethod -UseBasicParsing `
             -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/attestations/sha256:$env:DIGEST"
-          $payload = $response.attestations[0].bundle.dsseEnvelope.payload
-          $statement = [System.Text.Encoding]::UTF8.GetString(
-            [System.Convert]::FromBase64String($payload)) | ConvertFrom-Json
-          $sourceUri = $statement.predicate.buildDefinition.externalParameters.workflow.repository
-          if ($sourceUri -ne "https://github.com/$env:GITHUB_REPOSITORY") {
-            throw "expected this repository, got $sourceUri"
+          if (@($response.attestations).Count -lt 1) {
+            throw 'expected an attestation for this digest'
           }
-          Write-Host 'install.ps1 fallback verified the attestation'
+          Write-Host 'install.ps1 check verified the attestation'

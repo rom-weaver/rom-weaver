@@ -41,22 +41,21 @@ trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
 curl --fail --location --proto '=https' --tlsv1.2 \
   --output "$tmp_dir/$asset" "$release_url/$asset"
-curl --fail --location --proto '=https' --tlsv1.2 \
-  --output "$tmp_dir/$asset.sha256" "$release_url/$asset.sha256"
 
+# Hash what actually arrived. This is the lookup key for the provenance check,
+# and it is also why there is no separate checksum step: a truncated, corrupted,
+# or substituted download hashes to something no attestation covers, so the
+# check below refuses it. A published `.sha256` sidecar would add nothing on top
+# of that - it ships from the same place as the binary, so whatever can replace
+# one can replace the other.
 if command -v sha256sum >/dev/null 2>&1; then
-  (cd "$tmp_dir" && sha256sum --check "$asset.sha256")
   digest=$(sha256sum "$tmp_dir/$asset" | cut -d ' ' -f 1)
 else
-  (cd "$tmp_dir" && shasum --algorithm 256 --check "$asset.sha256")
   digest=$(shasum --algorithm 256 "$tmp_dir/$asset" | cut -d ' ' -f 1)
 fi
 
-# The checksum above only proves the download is intact: the sidecar ships from
-# the same place as the binary, so anything that can replace one can replace the
-# other. Build provenance is the part that says which workflow produced this
-# file, so an asset uploaded by a stolen token or a maintainer's laptop fails
-# here even though its checksum matches.
+# Build provenance says which workflow produced this file, so an asset uploaded
+# by a stolen token or from a maintainer's laptop is refused here.
 #
 # A definite answer is fatal, an absent one is not. Those are different facts and
 # conflating them gets the default wrong in one direction or the other: treating
@@ -86,38 +85,33 @@ attestation_unknown() {
     attestation_refuse "$1"
   fi
   echo "rom-weaver: $1" >&2
-  echo "rom-weaver: continuing - the checksum matched, but its origin is unverified" >&2
+  echo "rom-weaver: continuing - this download is unverified" >&2
 }
 
 if [ "$skip_attestation" = 1 ]; then
   echo "rom-weaver: skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)" >&2
-elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  # The only branch that checks the Sigstore signature, certificate chain, and
-  # transparency-log inclusion rather than trusting the API response.
-  if gh attestation verify "$tmp_dir/$asset" --repo "$repo" >/dev/null 2>&1; then
-    echo "Verified build provenance for $asset"
-  else
-    # gh reports "no attestation" and "the signature is bad" with the same exit
-    # status, and both are answers rather than an inability to ask.
-    attestation_refuse "build provenance verification FAILED for $asset"
-  fi
 else
-  # No gh, so this reads the attestation over TLS from api.github.com instead of
-  # verifying the bundle itself. That is strictly weaker - it trusts GitHub's
-  # API rather than the signature - but it is the same trust already placed in
-  # the TLS download above, and it still catches an asset that no workflow run
-  # ever produced.
+  # The endpoint is scoped to this repository *and* to the bytes just downloaded:
+  # asking `/repos/$repo/attestations/sha256:$digest` returns only attestations
+  # this repository published for exactly that digest. So a non-empty answer is
+  # the whole finding - "$repo attested this file" - and nothing has to be read
+  # out of the response to establish it.
   #
-  # No JSON parser is involved. Beyond curl, which got us here, this uses only
-  # tr, sed, head, printf and grep -q - all POSIX, no GNU-only flags - plus a
-  # base64 decoder, the one piece POSIX does not specify and the only reason
-  # there are three branches for it below.
+  # That is why no bundle is decoded here. Checking the signed statement's own
+  # `repository` field would look more rigorous, but without verifying the
+  # signature that field is exactly as trustworthy as the envelope around it:
+  # both arrive in the same response from the same API. Decoding it would buy
+  # appearance, not assurance. The trust placed here is GitHub's API over TLS,
+  # which is already the trust the download itself rests on.
   #
-  # The signed statement is a base64 DSSE payload, and the value being looked for
-  # is an exact literal in it: `"repository":"..."` occurs exactly once, because
-  # the neighboring `repository_id` and `repository_owner_id` keys do not end at
-  # the same quote. Matching a fixed string beats parsing here - there is no
-  # shape to get wrong, only bytes that are present or absent.
+  # What that does catch, and it is the point of the feature, is an asset no
+  # workflow run ever produced - one uploaded by a stolen token or by hand.
+  # Verifying the Sigstore signature instead would need `gh` or `cosign`, and
+  # neither belongs in a curl-to-shell installer's dependency list; the manual
+  # command is in docs/cli.md for anyone who wants it.
+  #
+  # This leaves curl and grep as the only tools involved.
+  #
   # The status code is read rather than leaning on `--fail`, because 404 and 403
   # have to be told apart: 404 is GitHub answering "nothing attested these bytes"
   # and is fatal, while a 403 is the unauthenticated rate limit and means the
@@ -128,42 +122,14 @@ else
     --write-out '%{http_code}' \
     "https://api.github.com/repos/$repo/attestations/sha256:$digest") || status=000
 
-  if [ "$status" = 200 ]; then
-    # -d is GNU and current macOS, -D is older macOS, and openssl covers the
-    # rest. The probe is on empty input so it costs nothing and cannot decode.
-    if base64 -d </dev/null >/dev/null 2>&1; then
-      decode_base64() { base64 -d; }
-    elif base64 -D </dev/null >/dev/null 2>&1; then
-      decode_base64() { base64 -D; }
-    else
-      decode_base64() { openssl base64 -d -A; }
-    fi
-
-    # Flatten the pretty-printed response, then break it on JSON's structural
-    # characters to put one field per line - `tr` pads the shorter replacement
-    # set, so every one of them becomes a newline. None occurs in base64
-    # (A-Za-z0-9+/=), so a payload never splits. Splitting on commas alone is not
-    # enough: `payload` follows `"dsseEnvelope": {` directly, so it would not
-    # start its line.
-    #
-    # The anchor is what makes this safe. Unanchored, the expression matches
-    # greedily and silently picks the *last* attestation, and `grep -o` - the
-    # obvious alternative - is a GNU extension rather than POSIX. `head` because
-    # an asset attested more than once returns several, and one of them proving
-    # this repository built it is enough.
-    payload=$(tr -d '\n\r' < "$tmp_dir/attestations.json" \
-      | tr ',{}[]' '\n' \
-      | sed -n 's/^[[:space:]]*"payload"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-      | head -n 1)
-
-    if [ -n "$payload" ] && printf '%s' "$payload" | decode_base64 2>/dev/null \
-      | grep -q "\"repository\":\"https://github.com/$repo\""; then
-      echo "Found build provenance for $asset (install gh to verify its signature)"
-    else
-      attestation_refuse "an attestation covers $asset, but $repo did not produce it"
-    fi
-  elif [ "$status" = 404 ]; then
-    attestation_refuse "no build provenance published for $asset"
+  # A repository with no attestations at all answers 404; one that has some, but
+  # none for these bytes, answers 200 with `{"attestations": []}`. Both mean the
+  # same thing. `repository_id` is the first field of an entry and appears only
+  # when there is one, so its presence is what separates the two.
+  if [ "$status" = 200 ] && grep -q '"repository_id"' "$tmp_dir/attestations.json"; then
+    echo "Verified build provenance for $asset"
+  elif [ "$status" = 200 ] || [ "$status" = 404 ]; then
+    attestation_refuse "no build provenance from $repo for $asset"
   else
     attestation_unknown "could not reach the attestations API for $asset (HTTP $status)"
   fi

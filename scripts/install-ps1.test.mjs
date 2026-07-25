@@ -20,30 +20,22 @@ const asset = `rom-weaver-win32-${packageArchitecture}-msvc.exe`;
 
 // Invoke-WebRequest is stubbed by declaring a function of the same name in the
 // caller's scope: PowerShell resolves functions before cmdlets, and install.ps1
-// runs in a child scope that inherits it. The checksum is computed from the
-// binary the stub just wrote, so the script's own verification is exercised
-// rather than bypassed.
+// runs in a child scope that inherits it.
 const harness = (installDirectory, urlLog) => `
 $env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
-# This test is about the download and its checksum. The provenance branches have
-# their own coverage below, and leaving them live here would reach for the real
-# gh - which CI runners have - against a stub binary.
+# This test is about the download itself. The provenance branches have their own
+# coverage below, and leaving them live here would reach the real API for a hash
+# nothing has ever attested.
 $env:ROM_WEAVER_SKIP_ATTESTATION = '1'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   Add-Content -Path '${urlLog}' -Value $Uri
-  if ($Uri.EndsWith('.sha256')) {
-    $binary = $OutFile -replace '\\.sha256$', ''
-    $hash = (Get-FileHash -Path $binary -Algorithm SHA256).Hash
-    Set-Content -Path $OutFile -Value "$hash  ${asset}"
-  } else {
-    Set-Content -Path $OutFile -Value 'binary' -NoNewline
-  }
+  Set-Content -Path $OutFile -Value 'binary' -NoNewline
 }
 & '${resolve("install.ps1")}'
 `;
 
-test("installs the checksummed binary", { skip: hasPowerShell ? false : "pwsh not available" }, () => {
+test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available" }, () => {
   const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-ps1-"));
   try {
     const installDirectory = join(directory, "install");
@@ -59,15 +51,17 @@ test("installs the checksummed binary", { skip: hasPowerShell ? false : "pwsh no
     assert.ok(output.includes(`Installed rom-weaver to ${target}`));
     assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
       `https://github.com/rom-weaver/rom-weaver/releases/latest/download/${asset}`,
-      `https://github.com/rom-weaver/rom-weaver/releases/latest/download/${asset}.sha256`,
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
+// A tampered download used to be caught by the checksum. It is caught by the
+// provenance check now: altered bytes hash to something this repository never
+// attested, so the API returns nothing for them and the install is refused.
 test(
-  "pins the requested version and rejects a tampered download",
+  "pins the requested version and refuses a tampered download",
   { skip: hasPowerShell ? false : "pwsh not available" },
   () => {
     const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-ps1-"));
@@ -78,25 +72,20 @@ $env:ROM_WEAVER_VERSION = 'v9.9.9'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   Add-Content -Path '${urlLog}' -Value $Uri
-  if ($Uri.EndsWith('.sha256')) {
-    Set-Content -Path $OutFile -Value "${"a".repeat(64)}  ${asset}"
-  } else {
-    Set-Content -Path $OutFile -Value 'binary' -NoNewline
-  }
+  Set-Content -Path $OutFile -Value 'tampered' -NoNewline
 }
-& '${resolve("install.ps1")}'
+function Invoke-RestMethod { return ('{"attestations":[]}' | ConvertFrom-Json) }
 `;
       const result = spawnSync(
         "pwsh",
-        ["-NoProfile", "-Command", `$env:ROM_WEAVER_INSTALL_DIR = '${join(directory, "install")}'; ${script}`],
+        ["-NoProfile", "-Command", `$env:ROM_WEAVER_INSTALL_DIR = '${join(directory, "install")}'; ${script}\n& '${resolve("install.ps1")}'`],
         { encoding: "utf8" },
       );
 
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /checksum mismatch/);
+      assert.match(result.stderr, /no build provenance from/);
       assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
         `https://github.com/rom-weaver/rom-weaver/releases/download/v9.9.9/${asset}`,
-        `https://github.com/rom-weaver/rom-weaver/releases/download/v9.9.9/${asset}.sha256`,
       ]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -104,35 +93,21 @@ function Invoke-WebRequest {
   },
 );
 
-// The provenance branches, mirroring scripts/install.test.mjs. `gh` is shadowed
-// away rather than stubbed, so these exercise the API fallback - the branch a
-// machine without gh takes, and the one PowerShell parses itself.
+// The provenance branches, mirroring scripts/install.test.mjs.
 const PROVENANCE_PREAMBLE = (installDirectory) => `
 $env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
-  if ($Uri.EndsWith('.sha256')) {
-    $binary = $OutFile -replace '\\.sha256$', ''
-    $hash = (Get-FileHash -Path $binary -Algorithm SHA256).Hash
-    Set-Content -Path $OutFile -Value "$hash  ${asset}"
-  } else {
-    Set-Content -Path $OutFile -Value 'binary' -NoNewline
-  }
+  Set-Content -Path $OutFile -Value 'binary' -NoNewline
 }
-# Reporting gh as absent is what selects the fallback. install.ps1 asks for it
-# exactly once, so shadowing the cmdlet affects nothing else.
-function Get-Command { param([Parameter(ValueFromRemainingArguments = \$true)]\$Rest) return \$null }
 `;
 
-// The statement shape install.ps1 reads, built the way GitHub returns it.
-const restStub = (repository) => `
+// The endpoint is scoped to this repository and these bytes, so the only thing
+// install.ps1 reads out of the response is whether the array has anything in it.
+const restStub = (attestations) => `
 function Invoke-RestMethod {
   param([string]$Uri, [switch]$UseBasicParsing)
-  $statement = '{"predicate":{"buildDefinition":{"externalParameters":{"workflow":{"repository":"${repository}"}}}}}'
-  $payload = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($statement))
-  return (@"
-{"attestations":[{"bundle":{"dsseEnvelope":{"payload":"$payload"}}}]}
-"@ | ConvertFrom-Json)
+  return ('{"attestations":${attestations}}' | ConvertFrom-Json)
 }
 `;
 
@@ -152,19 +127,19 @@ const withPwsh = (body) => {
 
 const skip = hasPowerShell ? false : "pwsh not available";
 
-test("accepts an attestation from this repository", { skip }, () => {
+test("accepts an attestation for these bytes", { skip }, () => {
   withPwsh((directory) => {
-    const result = runProvenance(directory, restStub("https://github.com/rom-weaver/rom-weaver"));
+    const result = runProvenance(directory, restStub('[{"repository_id":1}]'));
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Found build provenance/);
+    assert.match(result.stdout, /Verified build provenance/);
   });
 });
 
-test("refuses an attestation from another repository", { skip }, () => {
+test("refuses when nothing attested these bytes", { skip }, () => {
   withPwsh((directory) => {
-    const result = runProvenance(directory, restStub("https://github.com/someone-else/rom-weaver"));
+    const result = runProvenance(directory, restStub("[]"));
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /did not produce it/);
+    assert.match(result.stderr, /no build provenance from/);
     // The way out has to be printed, or a refusal is an outage.
     assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
   });

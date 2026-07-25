@@ -775,10 +775,13 @@ story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
 of their own - both pin the release assets by sha256, so attesting the binaries
 covers them.
 
-The `.sha256` sidecars are not a substitute. They are written by the job that
-writes the binary, so they prove the download is intact and nothing about where
-it came from. Provenance is what ties an asset to a workflow run and commit,
-which is what a stolen token or a hand-uploaded asset fails.
+This replaced the `.sha256` sidecars that used to ship beside each asset, which
+are no longer published. They were written by the job that wrote the binary, so
+they proved the download was intact and nothing about where it came from. The
+attestation covers both: it ties the asset to a workflow run and commit, and
+altered bytes hash to something it does not cover. The consumer side is a single
+query against the digest - see
+[Verifying a download](cli.md#verifying-a-download).
 
 Attestations live in the repository's attestation store, not in the release's
 asset list. That is why adding them does not interact with
