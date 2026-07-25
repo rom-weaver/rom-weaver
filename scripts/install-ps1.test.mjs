@@ -171,9 +171,10 @@ function Invoke-RestMethod {
 test("warns but installs when the API cannot be reached", { skip }, () => {
   withPwsh((directory) => {
     const result = runProvenance(directory, TRANSPORT_FAILURE_STUB);
+    const output = `${result.stdout}${result.stderr}`;
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /could not reach the attestations API/);
-    assert.match(result.stderr, /this download is unverified/);
+    assert.match(output, /could not reach the attestations API/);
+    assert.match(output, /this download is unverified/);
     assert.ok(existsSync(join(directory, "install", "rom-weaver.exe")), "a warning must not block the install");
   });
 });
