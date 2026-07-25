@@ -30,8 +30,18 @@ export function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, messa
     actual.byteLength === expected.byteLength,
     `${message}; length ${actual.byteLength} !== ${expected.byteLength}`,
   );
+  // Scan without touching the message: passing a template literal per byte
+  // builds a string for every byte compared, which is minutes of overhead on a
+  // multi-MiB payload even when nothing is wrong.
+  let mismatch = -1;
   for (let index = 0; index < actual.byteLength; index += 1) {
-    assert(actual[index] === expected[index], `${message}; byte ${index} ${actual[index]} !== ${expected[index]}`);
+    if (actual[index] !== expected[index]) {
+      mismatch = index;
+      break;
+    }
+  }
+  if (mismatch >= 0) {
+    throw new Error(`${message}; byte ${mismatch} ${actual[mismatch]} !== ${expected[mismatch]}`);
   }
 }
 
