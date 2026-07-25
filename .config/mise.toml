@@ -21,7 +21,13 @@
 #   - sccache: install via OS package (brew install sccache / apt install sccache).
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
-rust = "1.95.0"
+# rustfmt and clippy are not in the toolchain mise installs by default, and the
+# `fmt` and `clippy` tasks below - which `mise run ci` depends on - are dead
+# without them. Requesting them here means a fresh clone can run the gate after
+# `mise install` alone. Masked on a workstation that already has a rustup
+# `default` profile toolchain, and in CI, which adds them explicitly (see
+# .github/actions/setup-build-env/action.yml).
+rust = { version = "1.95.0", components = "rustfmt,clippy" }
 # provides wasm-opt. ubi rather than aqua because aqua's registry entry covers
 # only darwin and linux/amd64, so `mise install` hard-fails on linux/arm64 with
 # `unsupported env: linux/arm64` - and mise retries that install on every later

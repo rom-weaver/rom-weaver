@@ -643,7 +643,10 @@ jobs:
         id: pin
         shell: bash
         run: |
-          version=$(sed -n 's/^rust = "\(.*\)"$/\1/p' .config/mise.toml)
+          version=$(sed -n \
+            -e 's/^rust = "\(.*\)"$/\1/p' \
+            -e 's/^rust = { version = "\([^"]*\)".*}$/\1/p' \
+            .config/mise.toml)
           if [ -z "$version" ]; then
             echo "::error::no rust pin found in .config/mise.toml"
             exit 1
