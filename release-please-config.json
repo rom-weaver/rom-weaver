@@ -34,6 +34,11 @@
           "path": "package-lock.json",
           "jsonpath": "$.packages[''].optionalDependencies.*"
         },
+        {
+          "type": "json",
+          "path": "package-lock.json",
+          "jsonpath": "$.packages[?(@property.match(/^node_modules\\/@rom-weaver\\//))].version"
+        },
         "packages/rom-weaver-webapp/package.json",
         {
           "type": "json",
