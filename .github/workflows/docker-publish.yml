@@ -137,14 +137,23 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           # A prerelease must never move `latest` or a series tag, or
-          # `docker pull rom-weaver` serves an alpha. Prereleases get `beta`
-          # instead, mirroring the npm dist-tag and the beta web channel.
+          # `docker pull rom-weaver` serves an alpha.
+          #
+          # `latest`/`beta`/`nightly` are the image-side names for the webapp's
+          # prod/beta/nightly channels, and they cascade the same way the deploy
+          # ladder in ci.yml does: a publish refreshes its own channel plus every
+          # less-stable one below it, so `beta` and `nightly` can never serve
+          # code older than `latest`. That is why both are unconditional here -
+          # a stable release owns all three, a prerelease enters at `beta`, and
+          # a push to main only ever reaches `nightly` (pushed from CI, not
+          # here).
           tags: |
             type=semver,pattern={{version}},value=${{ steps.policy.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.policy.outputs.version }},enable=${{ steps.policy.outputs.release == 'true' }}
             type=semver,pattern={{major}},value=${{ steps.policy.outputs.version }},enable=${{ steps.policy.outputs.major_tag == 'true' }}
             type=raw,value=latest,enable=${{ steps.policy.outputs.release == 'true' }}
-            type=raw,value=beta,enable=${{ steps.policy.outputs.release != 'true' }}
+            type=raw,value=beta
+            type=raw,value=nightly
 
       # The build cache lives in the registry beside the images, not in
       # `type=gha`. This job only runs when a release pull request merges, and

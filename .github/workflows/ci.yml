@@ -155,16 +155,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Never pushes an image. On main it refreshes the build cache so the next
-      # release starts warm; on a pull request it only reads, because a fork's
-      # token cannot write to the registry.
+      # On main this publishes the CLI `nightly` image and refreshes the build
+      # cache so the next release starts warm; on a pull request it only reads,
+      # because a fork's token cannot write to the registry.
+      #
+      # Only the CLI leg publishes. This job builds the webapp image from
+      # source, which is the image-plumbing path - it compiles its own wasm and
+      # would ship a bundle that is not the one deployed to
+      # nightly.rom-weaver.com. The webapp `nightly` image is published from
+      # `docker-prebuilt` below, off the exact artifact that deploy uses.
       - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
           platforms: linux/amd64
-          push: false
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:nightly
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
           cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
 
@@ -176,18 +183,30 @@ jobs:
           printf 'stub\n' > prebuilt/rom-weaver
           docker build --file Dockerfile --build-arg BINARY=prebuilt --tag prebuilt-smoke .
 
-  # Exercise the webapp release COPY path against the real bundle built above.
-  # The CLI equivalent rides in its already-gated source job, so it does not
-  # start a separate runner after every Rust or webapp change.
+  # Exercise the webapp release COPY path against the real bundle built above,
+  # and on main publish that same image as the webapp `nightly` channel. The
+  # CLI equivalent rides in its already-gated source job, so it does not start a
+  # separate runner after every Rust or webapp change.
+  #
+  # This is the only place the webapp `nightly` image can come from: it wraps
+  # the `webapp-dist` artifact that `deploy` ships to nightly.rom-weaver.com,
+  # so the image and the site are the same bundle.
   docker-prebuilt:
     name: Docker build (webapp, prebuilt)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: webapp-static
     if: github.ref_type != 'tag'
+    permissions:
+      contents: read
+      # Only exercised on the main push below; a fork pull request receives a
+      # read-only token regardless, which is why the push is gated on the ref.
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
 
       # `.dockerignore` drops `**/dist`, which is why both this and the release
       # fan-out stage the bundle under `prebuilt/` instead.
@@ -197,12 +216,26 @@ jobs:
           name: webapp-dist
           path: prebuilt
 
+      - name: Check the bundle staged
+        run: test -f prebuilt/index.html
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build the prebuilt path
-        run: |
-          set -euo pipefail
-          test -f prebuilt/index.html
-          docker build --file packages/rom-weaver-webapp/Dockerfile \
-            --build-arg DIST=prebuilt --tag prebuilt-smoke .
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/rom-weaver-webapp/Dockerfile
+          build-args: DIST=prebuilt
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
 
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.
