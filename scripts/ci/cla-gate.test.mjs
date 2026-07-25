@@ -274,6 +274,11 @@ for (const [what, body] of [
   ["leading and trailing whitespace", `   ${SIGN_PHRASE}   `],
   ["the emphasis GitHub's editor adds", `**${SIGN_PHRASE}**`],
   ["a doubled space", SIGN_PHRASE.replace(" agree", "  agree")],
+  // The gate offers the phrase in a fenced block, so backticks are exactly what
+  // a contributor has to hand. The leading and trailing delimiter classes drifted
+  // apart once and this was rejected while `**bold**` signed.
+  ["an inline code span", `\`${SIGN_PHRASE}\``],
+  ["a dash bullet", `- ${SIGN_PHRASE}`],
 ]) {
   test(`${what} still signs`, async () => {
     // A variant built by a `replace` that no longer matches stops being a
@@ -300,6 +305,33 @@ test("quoting the request back does not sign", async () => {
   });
   assert.ok(!wrote(calls, "PUT", "contents/signatures.json"));
   assert.equal(statusState(calls), "failure");
+});
+
+// Not signing is the right verdict for all of these. Not SAYING so is not: a
+// contributor who typed the words and got nothing back believes they signed.
+const commentText = (calls) =>
+  calls.find((call) => call.method === "POST" && call.path.endsWith("/comments"))?.body.body ??
+  calls.find((call) => call.method === "PATCH" && call.path.includes("issues/comments/"))?.body.body;
+
+for (const [what, body] of [
+  ["quoted", `> ${SIGN_PHRASE}\n\nwait, what does this mean?`],
+  ["padded with other words", `${SIGN_PHRASE} and I think it is fine`],
+]) {
+  test(`a near miss - ${what} - is told why it did not count`, async () => {
+    const { calls } = await run({
+      prAuthor: "outsider",
+      signatures: [],
+      comment: { author: "outsider", body },
+    });
+    assert.ok(!wrote(calls, "PUT", "contents/signatures.json"), "a near miss must not sign");
+    assert.match(commentText(calls), /^> \[!NOTE\]$/m);
+    assert.ok(commentText(calls).includes("not as the whole line"));
+  });
+}
+
+test("an ordinary unsigned pull request is not accused of a near miss", async () => {
+  const { calls } = await run({ prAuthor: "outsider", signatures: [] });
+  assert.ok(!commentText(calls).includes("not as the whole line"));
 });
 
 test("the phrase is offered in a fenced block, which is what carries the copy button", async () => {

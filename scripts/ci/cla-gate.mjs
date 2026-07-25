@@ -129,14 +129,30 @@ const hasSigned = (login) => signatures.some((entry) => entry.login === login);
 // Accepting a quoted line would turn "quote the request, then ask what it
 // means" into a signature, and the quote-reply flow does not need it - the text
 // you type under the quote is unquoted already.
+// The two classes are kept identical on purpose. They drifted once - the
+// trailing one carried a backtick and a `-` bullet that the leading one did
+// not - so a phrase pasted back inside a code span was rejected while the same
+// phrase in bold signed, and that is the shape of silent rejection this
+// normalizing exists to end. The gate offers the phrase in a fenced block, so
+// backticks are precisely what a contributor has to hand.
+const DELIMITERS = String.raw`\s*_\-\``;
 const normalize = (line) =>
   line
-    .replace(/^[\s*_]+/, "")
-    .replace(/[\s.!*_`]+$/, "")
+    .replace(new RegExp(`^[${DELIMITERS}]+`), "")
+    .replace(new RegExp(`[${DELIMITERS}.!]+$`), "")
     .toLowerCase()
     .replaceAll(/\s+/g, " ");
 const wanted = normalize(SIGN_PHRASE);
 const signedByComment = COMMENT_BODY.split("\n").some((line) => normalize(line) === wanted);
+
+// Said the words, but not as the whole line: extra words around them, or a
+// quote-reply. Neither signs - but both used to fall through in silence, and a
+// contributor who believes they have signed is exactly who this gate owes an
+// answer. The `>` is stripped only to recognise the near miss, never to accept
+// one.
+const nearMiss =
+  !signedByComment &&
+  COMMENT_BODY.split("\n").some((line) => normalize(line.replace(/^[\s>]+/, "")).includes(wanted));
 
 // `COMMENT_AUTHOR` is `github.event.comment.user.login`, which GitHub sets from
 // the authenticated session that posted the comment - not content the commenter
@@ -221,7 +237,11 @@ ${BADGE.required}
 \`\`\`
 ${SIGN_PHRASE}
 \`\`\`
-
+${
+  nearMiss
+    ? "\n> [!NOTE]\n> A comment on this pull request has that phrase, but not as the whole line - it was quoted, or it had other words around it. Post it on a line of its own, unquoted.\n"
+    : ""
+}
 [Agreement](${CLA_DOCUMENT}) \u00b7 \`recheck\` to re-run${
   unlinked.length
     ? "\n\nAn `unlinked:<name>` author has a commit email matching no GitHub account, so they cannot sign by comment - fix the commit author or say so in the thread."

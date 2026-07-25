@@ -83,11 +83,18 @@ The CLA gate checks every contributor to a pull request against
 An unsigned contributor gets a failing status and one comment - edited in place
 on later runs, never duplicated - asking them to reply with the signing
 phrase, offered in a fenced block so GitHub renders its copy button. That reply
-is what appends their record. Matching ignores case, surrounding
-whitespace, trailing punctuation and the emphasis GitHub's editor adds, but not
-a leading `>`: accepting a quoted line would turn quoting the request while
-asking what it means into assent. Anyone can comment `recheck` to re-run
-the gate. Commits whose author email matches no GitHub account are reported as
+is what appends their record. Matching ignores case, runs of interior
+whitespace, any trailing `.` or `!`, and the `*`, `_`, `` ` `` or `-` a
+contributor may wrap or bullet the line with - the leading and trailing
+delimiter sets are one constant precisely so they cannot drift apart again. Not
+ignored: a leading `>`, because accepting a quoted line would turn quoting the
+request while asking what it means into assent.
+
+A line that carries the phrase but is not the phrase - quoted, or with other
+words around it - does not sign, and the comment now says so rather than
+rejecting it in silence. That silence was the whole failure being fixed here; a
+contributor who typed the words and got nothing back believes they signed.
+Anyone can comment `recheck` to re-run the gate. Commits whose author email matches no GitHub account are reported as
 `unlinked:<name>` rather than skipped.
 
 The two signals mean different things, and the job deliberately exits 0 on an
@@ -144,16 +151,18 @@ specific instead of restating the format under every kind of failure:
 
 | Rules | What the comment adds |
 | --- | --- |
-| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. Suggests the title prefixed with `fix:`. |
-| `type-case`, `type-enum` | Names the type it rejected. Suggests the lower-cased title when that alone makes the type valid; otherwise lists the allowed types and suggests nothing. |
-| `header-max-length` | How many characters have to go. No suggestion, and no example of a shape the title already has. |
+| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. |
+| `type-case`, `type-enum` | Names the type it rejected, and lists the allowed ones. |
+| `header-max-length` | How many characters have to go, and no example of a shape the title already has. |
 
-A suggestion is only ever offered when the gate would accept it. Fixing the type
-is not enough on its own - config-conventional also bans a trailing full stop and
-four subject cases - so the full stop is dropped (mechanical, and it changes no
-meaning) and a subject that would trip a case rule is refused rather than
-reworded. Suggesting a title this gate rejects in turn is worse than suggesting
-nothing.
+**The gate never proposes a replacement title.** commitlint hands it a rule name
+and a message; it never hands over a corrected title, so any rename would be one
+the gate invented - and the type is the part it cannot possibly know. Squash
+merges make the title the commit subject and Release Please reads the type for
+the changelog section and the version bump, so a guessed `fix:` on a feature is
+not a cosmetic miss: it is a wrong bump and a wrong changelog entry, landed
+silently. A rejected title costs a rename and says so out loud. Naming the rule
+that broke and the types that are allowed is the whole job.
 
 Valid types are read from `.config/commitlint.config.mjs` - the same file that
 rejected the title - so the advice cannot drift from the rule. A failure that
