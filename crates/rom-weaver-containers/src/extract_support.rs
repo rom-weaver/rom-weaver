@@ -310,6 +310,7 @@ impl ExtractHasher {
         context: &OperationContext,
         total_len: Option<u64>,
         output_path: &Path,
+        decode_concurrency: usize,
     ) -> Result<Self> {
         let algorithms = context.extract_checksum_algorithms();
         if algorithms.is_empty() {
@@ -340,11 +341,18 @@ impl ExtractHasher {
             });
         };
         let name_hint = output_path.file_name().and_then(|name| name.to_str());
-        // Plan the variant hashers' worker budget against the full op budget, independent of the
-        // decode-threading decision (negotiate is pure, so this consumes nothing). The engine
-        // splits it across the active variants so their hashes run in parallel and overlap the
-        // producer. Shared with the standalone `checksum` command for identical parallelism.
-        let hash_thread_budget = context.variant_hash_execution().effective_threads;
+        // Split the op's hash budget across the leaves decoding concurrently. A parallel extract
+        // builds one hasher per in-flight leaf, so giving each the FULL budget multiplied real
+        // threads by the decode width (`--threads 4` over 4 leaves spawned 12 hashers) and
+        // exhausted the browser's fixed wasi worker pool - every spawn past it burned a 30s
+        // timeout. Negotiation is pure, but its result is spawned once per caller, so the divisor
+        // has to come from the caller. Aggregate hashing throughput is unchanged: the same threads
+        // stay busy, just claimed once instead of per leaf.
+        let hash_thread_budget = context
+            .variant_hash_execution()
+            .effective_threads
+            .div_ceil(decode_concurrency.max(1))
+            .max(1);
         let engine =
             StreamingVariantChecksums::new(algorithms, total_len, name_hint, hash_thread_budget)?;
         Ok(Self::Variants {
