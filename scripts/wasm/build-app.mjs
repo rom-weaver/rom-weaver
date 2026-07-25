@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,9 +23,18 @@ function toolVersion(command, args) {
   if (result.error) throw new Error(`missing command: ${command} (${result.error.message})`);
   return `${result.stdout || ""}${result.stderr || ""}`.trim();
 }
+// `-x`, not `-e`: a WASI_CLANG that exists without the executable bit fails
+// later inside cargo, as a compiler error with no mention of the toolchain.
 const existsExecutable = (file) => {
   if (!file) return false;
-  if (file?.includes("/")) return existsSync(file);
+  if (file.includes("/")) {
+    try {
+      accessSync(file, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   return spawnSync(file, ["--version"], { stdio: "ignore" }).status === 0;
 };
 

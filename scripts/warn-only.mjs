@@ -1,19 +1,34 @@
 #!/usr/bin/env node
 
-import { appendFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import os from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-export function runWarnOnly(label, command, env = process.env) {
-  // maxBuffer is lifted because an advisory report against a large lockfile
-  // comfortably exceeds Node's 1 MiB default, and past that spawnSync kills the
-  // child and truncates - losing exactly the report this wrapper exists to
-  // surface. Unlike the shell's `2>&1` the two streams arrive on separate
-  // pipes, so each is complete but they are no longer interleaved with one
-  // another; stderr is appended after stdout.
-  const result = spawnSync(command[0], command.slice(1), { encoding: "utf8", env, maxBuffer: Infinity });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+// Both streams down ONE descriptor, which is what `2>&1` actually is: piping
+// them separately keeps each complete but reorders the report, so an advisory
+// and the line naming the package it belongs to can end up paragraphs apart.
+// A file also has no maxBuffer, so a large report cannot be truncated - or,
+// worse, have its child killed mid-write for exceeding the pipe budget.
+export function captureCombined(command, env) {
+  const directory = mkdtempSync(join(os.tmpdir(), "rom-weaver-warn-only-"));
+  const path = join(directory, "output");
+  let fd = openSync(path, "w");
+  try {
+    const result = spawnSync(command[0], command.slice(1), { env, stdio: ["ignore", fd, fd] });
+    closeSync(fd);
+    fd = null;
+    return { result, output: readFileSync(path, "utf8") };
+  } finally {
+    if (fd !== null) closeSync(fd);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+export function runWarnOnly(label, command, env = process.env, capture = captureCombined) {
+  const { result, output } = capture(command, env);
   process.stdout.write(output);
   if (result.error) {
     process.stdout.write(`::warning title=${label}::could not run (${result.error.message})\n`);

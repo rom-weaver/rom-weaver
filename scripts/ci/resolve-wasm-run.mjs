@@ -28,6 +28,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const { runId, available } = resolveWasmRun({ repository: process.env.GITHUB_REPOSITORY, targetSha: process.env.TARGET_SHA, preferredRunId: process.env.PREFERRED_RUN_ID });
     const line = `run_id=${runId} available=${available} (sha ${process.env.TARGET_SHA})\n`;
     process.stdout.write(line);
-    appendFileSync(process.env.GITHUB_OUTPUT || "/dev/stdout", `run_id=${runId}\navailable=${available}\n`);
+    // Written to stdout directly when unset rather than opening "/dev/stdout",
+    // which is a Linux-ism the shell could afford and this cannot.
+    const outputs = `run_id=${runId}\navailable=${available}\n`;
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, outputs);
+    else process.stdout.write(outputs);
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
 }

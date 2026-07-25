@@ -2,8 +2,8 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
@@ -37,9 +37,20 @@ export function generateFixture(path, size, gamecube = false) {
   writeFileSync(path, buffer);
 }
 
-function requireTool(label, bin) {
-  const result = spawnSync(bin, ["--help"], { stdio: "ignore" });
-  if (result.error && !existsSync(bin)) fail(`${label} binary not found: '${bin}' (set ${label}_BIN or install it)`);
+// A lookup, not an execution: the shell's `command -v "$bin" || [ -x "$bin" ]`.
+// Running `--help` to prove a tool exists takes an opinion on a flag the tool
+// need not support, and it treats "present but not executable" as present.
+export function findTool(bin, env = process.env, exists = (path) => { try { accessSync(path, constants.X_OK); return true; } catch { return false; } }) {
+  if (bin.includes("/")) return exists(bin) ? bin : "";
+  for (const directory of (env.PATH || "").split(delimiter).filter(Boolean)) {
+    const candidate = join(directory, bin);
+    if (exists(candidate)) return candidate;
+  }
+  return "";
+}
+
+function requireTool(label, bin, env) {
+  if (!findTool(bin, env)) fail(`${label} binary not found: '${bin}' (set ${label}_BIN or install it; e.g. npm i -g chdman dolphin-tool)`);
 }
 
 function extractOne(binary, source, output) {
@@ -49,7 +60,14 @@ function extractOne(binary, source, output) {
 }
 
 function reportExtract(path, source, label) {
-  if (!existsSync(path)) { log(`ERROR: ${label} produced no expected output`); return 1; }
+  if (!existsSync(path)) {
+    // What the extractor DID emit: rom-weaver names its output from the source
+    // basename, so a rename upstream looks identical to producing nothing.
+    const directory = dirname(path);
+    const got = existsSync(directory) ? readdirSync(directory).join(" ") || "(empty)" : "(no output directory)";
+    log(`ERROR: ${label} produced no ${basename(path)}; got: ${got}`);
+    return 1;
+  }
   if (same(path, source)) { log(`OK: ${label} is byte-identical to the source`); return 0; }
   log(`ERROR: ${label} differs from source (sha1 want=${sha1(source)} got=${sha1(path)})`);
   return 1;
@@ -60,8 +78,8 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   if (!["debug", "release"].includes(profile)) fail(`PARITY_CARGO_PROFILE must be 'debug' or 'release' (got: ${profile})`);
   const chdman = env.CHDMAN_BIN || "chdman";
   const dolphin = env.DOLPHIN_TOOL_BIN || "dolphin-tool";
-  requireTool("CHDMAN", chdman);
-  requireTool("DOLPHIN_TOOL", dolphin);
+  requireTool("CHDMAN", chdman, env);
+  requireTool("DOLPHIN_TOOL", dolphin, env);
   const cli = env.ROM_WEAVER_BIN || join(root, "target", profile, "rom-weaver");
   if (!env.ROM_WEAVER_BIN && !existsSync(cli)) {
     log(`building rom-weaver CLI (${profile} profile)`);
@@ -69,8 +87,8 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   }
   if (!existsSync(cli)) fail(`rom-weaver CLI not found/executable at: ${cli}`);
   log(`rom-weaver: ${cli}`);
-  log(`chdman:     ${chdman}`);
-  log(`dolphin:    ${dolphin}`);
+  log(`chdman:     ${findTool(chdman, env) || chdman}`);
+  log(`dolphin:    ${findTool(dolphin, env) || dolphin}`);
 
   const workRoot = join(root, "target/parity-check");
   rmSync(workRoot, { recursive: true, force: true });
