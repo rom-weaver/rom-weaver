@@ -115,6 +115,9 @@ jobs:
       # lands in the log.
       - name: Check pull request title
         env:
+          # Read by commitlint and by the gate, so both report on one string. A
+          # retitle mid-run would otherwise leave the comment quoting one title
+          # and counting the characters of another.
           PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

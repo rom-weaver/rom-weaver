@@ -263,6 +263,34 @@ test("a miscased type is fixed by its case, not by prefixing a second type", asy
   assert.ok(!body.includes("fix: Fix:"), "a type must not be prefixed onto a type");
 });
 
+// Fixing the type is not the whole job: config-conventional bans a trailing
+// full stop and four subject cases too, and a rename that trips one of those is
+// a rename this very gate rejects - which sends the contributor round in
+// circles, the one thing the suggestion exists to prevent.
+test("a suggestion drops the full stop config-conventional would reject", async () => {
+  const { calls } = await run({
+    title: "Fixed the thing.",
+    verdict: "fail",
+    errors: ["type-empty"],
+  });
+  const body = commentBody(calls);
+  assert.ok(body.includes("\nfix: fixed the thing\n"), "the full stop must be dropped");
+  assert.ok(!body.includes("fix: fixed the thing."), "a rename ending in a full stop is rejected");
+});
+
+test("a subject that would trip subject-case gets no suggestion", async () => {
+  const { calls } = await run({
+    title: "Fix: The Thing",
+    verdict: "fail",
+    errors: ["type-case", "type-enum"],
+  });
+  const body = commentBody(calls);
+  // Lower-casing the type is not enough here, and rewording the subject is a
+  // decision this script has no business making.
+  assert.ok(!body.includes("Rename it to"), "a rename subject-case rejects must not be offered");
+  assert.ok(body.includes("`feat`"), "but the allowed types must still be listed");
+});
+
 test("an invented type gets the type list and no suggestion", async () => {
   const { calls } = await run({
     title: "wibble: the thing",

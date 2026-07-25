@@ -148,6 +148,13 @@ specific instead of restating the format under every kind of failure:
 | `type-case`, `type-enum` | Names the type it rejected. Suggests the lower-cased title when that alone makes the type valid; otherwise lists the allowed types and suggests nothing. |
 | `header-max-length` | How many characters have to go. No suggestion, and no example of a shape the title already has. |
 
+A suggestion is only ever offered when the gate would accept it. Fixing the type
+is not enough on its own - config-conventional also bans a trailing full stop and
+four subject cases - so the full stop is dropped (mechanical, and it changes no
+meaning) and a subject that would trip a case rule is refused rather than
+reworded. Suggesting a title this gate rejects in turn is worse than suggesting
+nothing.
+
 Valid types are read from `.config/commitlint.config.mjs` - the same file that
 rejected the title - so the advice cannot drift from the rule. A failure that
 carries no lint result at all is commitlint breaking rather than a bad title, so

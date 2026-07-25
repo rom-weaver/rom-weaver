@@ -24,6 +24,8 @@
 //   PR_NUMBER           pull request number
 //   LINT_VERDICT        "pass" or "fail", from commitlint's exit code
 //   LINT_REPORT_FILE    JSON report from commitlint-report.mjs (read on "fail")
+// Optional env:
+//   PULL_REQUEST_TITLE  the exact title commitlint linted; falls back to the API
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -35,6 +37,7 @@ const {
   PR_NUMBER,
   LINT_VERDICT,
   LINT_REPORT_FILE = "",
+  PULL_REQUEST_TITLE = "",
   GITHUB_API_URL = "https://api.github.com",
   GITHUB_SERVER_URL = "https://github.com",
   GITHUB_RUN_ID = "",
@@ -151,6 +154,25 @@ function notes(names, title, { headerLimit }) {
 
 const titleType = (title) => title.match(/^([^\s(:!]+)/)?.[1];
 
+// Fixing the type is not enough on its own: config-conventional also bans a
+// trailing full stop and four subject cases, and a rename that trips one of
+// those is a rename this gate rejects in turn. The full stop is dropped, being
+// mechanical and meaning-preserving; a subject that would trip a case rule is
+// refused instead, because choosing new wording is not this script's call.
+//
+// All four banned cases - sentence, start, pascal and upper - begin with an
+// upper-case character, so testing the first one covers every one of them.
+const subjectOf = (proposed) => proposed.slice(proposed.indexOf(":") + 1).trim();
+
+function conventional(proposed, headerLimit) {
+  if (!proposed) return null;
+  const trimmed = proposed.replace(/[\s.]+$/, "");
+  if (trimmed.length > headerLimit) return null;
+  const [first = ""] = subjectOf(trimmed);
+  if (!first) return null;
+  return first === first.toUpperCase() && first !== first.toLowerCase() ? null : trimmed;
+}
+
 // A mechanically valid rename of the contributor's own title, not a generic
 // placeholder. Only two failures have one: no type at all (prefix one) and a
 // type that is right but miscased (lower-case it). Anything else - an invented
@@ -166,7 +188,7 @@ function suggestion(title, names, { types, headerLimit }) {
     const lowered = type?.toLowerCase();
     if (lowered && types.includes(lowered)) proposed = `${lowered}${title.slice(type.length)}`;
   }
-  return proposed && proposed.length <= headerLimit ? proposed : null;
+  return conventional(proposed, headerLimit);
 }
 
 function failureBody(title, { errors, warnings }, rules) {
@@ -207,6 +229,10 @@ const { api, paginate } = createGitHubApi({
 });
 
 const pr = await api(`/repos/${REPO}/pulls/${PR_NUMBER}`);
+// The title commitlint actually linted, not whatever the pull request carries
+// by the time this runs. A retitle between the two would otherwise quote one
+// string while the report - and the character arithmetic - describe another.
+const title = PULL_REQUEST_TITLE || pr.title;
 const postStatus = createStatusPoster({
   api,
   repo: REPO,
@@ -226,13 +252,13 @@ if (LINT_VERDICT === "pass") {
   // Deleted rather than edited to a success note: the title being right is the
   // normal state, and a passing pull request should carry no gate chatter.
   await comment.remove();
-  console.log(`${STATUS_CONTEXT} success on ${pr.head.sha}: ${pr.title}`);
+  console.log(`${STATUS_CONTEXT} success on ${pr.head.sha}: ${title}`);
   process.exit(0);
 }
 
 const report = readReport();
 const rules = await readRules();
-const body = failureBody(pr.title, report, rules);
+const body = failureBody(title, report, rules);
 
 await postStatus(
   "failure",
@@ -247,7 +273,7 @@ if (GITHUB_STEP_SUMMARY) {
 
 console.log("::error title=Invalid pull request title::Rename the pull request using Conventional Commits; see the comment on the pull request.");
 console.error(
-  `${STATUS_CONTEXT} failure on ${pr.head.sha}: ${pr.title} (${report.errors
+  `${STATUS_CONTEXT} failure on ${pr.head.sha}: ${title} (${report.errors
     .map((problem) => problem.name)
     .join(" ")})`,
 );
