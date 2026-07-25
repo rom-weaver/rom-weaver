@@ -232,7 +232,7 @@ await upsertComment(`${COMMENT_MARKER}
 ${BADGE.required}
 
 > [!WARNING]
-> ${unsigned.map(mention).join(", ")} ${unsigned.length === 1 ? "has" : "have"} not signed the CLA. Post a comment whose own line reads:
+> ${unsigned.map(mention).join(", ")} ${unsigned.length === 1 ? "has" : "have"} not signed the CLA. ${unsigned.length === 1 ? "Post a comment" : "Each of you must post a comment"} whose own line reads:
 
 \`\`\`
 ${SIGN_PHRASE}

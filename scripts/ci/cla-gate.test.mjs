@@ -179,6 +179,28 @@ test("signing rewrites that comment to the signed badge and callout", async () =
   assert.match(edit.body.body, /^> \[!TIP\]$/m);
 });
 
+// One person is told to post a comment; several have to each post their own, and
+// a shared instruction reads as though one signature would cover the branch.
+test("several unsigned contributors are each told to post", async () => {
+  const { calls } = await run({
+    prAuthor: "octocat",
+    commitAuthors: ["octocat", "hubot"],
+    signatures: [],
+  });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  assert.ok(body.includes("Each of you must post a comment"), "each contributor has to sign");
+  assert.ok(body.includes("@octocat") && body.includes("@hubot"));
+});
+
+test("a single unsigned contributor is not addressed as a group", async () => {
+  const { calls } = await run({ prAuthor: "octocat", signatures: [] });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  assert.ok(body.includes("has not signed"), "one person, singular");
+  assert.ok(!body.includes("Each of you"));
+});
+
 test("an unsigned contributor gets a failing status and is asked to sign", async () => {
   const { status, calls } = await run({ prAuthor: "outsider", signatures: [] });
   assert.equal(statusState(calls), "failure");

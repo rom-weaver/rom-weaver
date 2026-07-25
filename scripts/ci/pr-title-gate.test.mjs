@@ -321,35 +321,44 @@ test("a second failing run edits the comment instead of adding another", async (
   assert.ok(!called(calls, "POST", "issues/7/comments"));
 });
 
-// Every fenced block in a body, so an assertion about one of them cannot be
-// satisfied by another block that happens to sit nearby.
-function fencedBlocks(body) {
-  const blocks = [];
-  let open = null;
-  for (const line of body.split("\n")) {
-    const fence = line.match(/^(`{3,})$/)?.[1];
-    if (open && fence === open.fence) {
-      blocks.push({ fence: open.fence, content: open.lines.join("\n") });
-      open = null;
-    } else if (open) {
-      open.lines.push(line);
-    } else if (fence) {
-      open = { fence, lines: [] };
-    }
-  }
-  return blocks;
-}
+// The title is shown in a block quote as an inline code span, not a fence: it
+// wraps rather than growing a scrollbar, and no copy button competes with text
+// the contributor has to read in full. The span still has to neutralise the
+// title, which is untrusted.
+const quotedLine = (body) => body.split("\n").find((line) => line.startsWith("> `"));
 
-test("a title carrying a code fence cannot break out of the quoted block", async () => {
-  const title = "```\n**bold**";
+test("the offending title is quoted, not fenced", async () => {
+  const { calls } = await run({ title: "Fixed the thing", verdict: "fail", errors: ["type-empty"] });
+  const body = commentBody(calls);
+  assert.equal(quotedLine(body), "> `Fixed the thing`");
+  assert.ok(!body.includes("```"), "a fence would bring back the copy button and the scrollbar");
+});
+
+test("a title carrying backticks cannot break out of the code span", async () => {
+  const title = "``` @everyone **bold**";
   const { calls } = await run({ title, verdict: "fail", errors: ["type-empty"] });
-  const blocks = fencedBlocks(commentBody(calls));
-  const quoted = blocks.find((block) => block.content === title);
-  assert.ok(quoted, "the offending title must survive verbatim inside a block of its own");
-  assert.ok(
-    quoted.fence.length > 3,
-    "an embedded fence must be outgrown by the block's own, not merely indented",
-  );
+  const line = quotedLine(commentBody(calls));
+
+  const [, ticks] = line.match(/^> (`+)/);
+  assert.ok(ticks.length > 3, "the span must outgrow the longest backtick run in the title");
+  assert.ok(line.endsWith(`${ticks}`), "and close on a run of the same length");
+  assert.ok(line.includes(title), "the title must survive verbatim");
+  // Inside a code span GitHub neither links nor notifies, so the mention is
+  // inert - but only because the span actually closes after it.
+  assert.equal(line, `> ${ticks} ${title} ${ticks}`);
+});
+
+test("a title cannot smuggle a line break out of the quote", async () => {
+  // GitHub does not allow a newline in a title; the gate flattens one anyway,
+  // because a break here would end the block quote and free the rest.
+  const { calls } = await run({
+    title: "broken\n> [!TIP]\n> injected",
+    verdict: "fail",
+    errors: ["type-empty"],
+  });
+  const body = commentBody(calls);
+  assert.equal(quotedLine(body), "> `broken > [!TIP] > injected`");
+  assert.ok(!body.includes("\n> injected"), "no line of the title may stand on its own");
 });
 
 test("the failure is repeated in the job summary", async () => {

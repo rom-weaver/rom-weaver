@@ -169,9 +169,18 @@ rejected the title - so the advice cannot drift from the rule. A failure that
 carries no lint result at all is commitlint breaking rather than a bad title, so
 the gate throws instead of posting. Editing the title reruns the gate; passing
 **deletes** the comment, so a green pull request carries no gate chatter. The
-title is quoted in a fence longer than any backtick run inside it - inside a
-fence GitHub neither links nor notifies an `@mention`, and a shorter fence
-cannot close the block.
+title is quoted in a block quote as an inline code span, opened with a backtick
+run longer than any inside it - inside a span GitHub neither links nor notifies
+an `@mention`, and a shorter run cannot close it. A fence would protect the same
+amount but carries a copy button and a horizontal scrollbar, which is the wrong
+trade for a string you have to read whole and are about to retype. The CLA
+gate's fence around the signing phrase is the opposite case, and keeps its
+fence: there the copy button is the point.
+
+Every sentence in either comment is one unbroken line. GitHub renders a single
+newline inside a comment as a hard break, so prose wrapped to a column shows the
+reader a line break mid-sentence - the source and the render disagree, and only
+the render matters.
 
 Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
 no `push` trigger: the release pull request is created and refreshed only by a

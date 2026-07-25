@@ -81,26 +81,28 @@ function readReport() {
   return { errors: result.errors ?? [], warnings: result.warnings ?? [] };
 }
 
-// The title is attacker-controlled, so every place it is echoed is a fenced
-// block or an inline code span. Inside either GitHub neither links nor notifies
-// an `@mention`; the only way out is a delimiter, and both helpers below open
-// with one longer than any run in the text. Indenting would not do: CommonMark
-// accepts a closing fence indented up to three spaces.
+// The title is attacker-controlled, so every place it is echoed is an inline
+// code span. Inside one GitHub neither links nor notifies an `@mention`, and
+// the only way out is a backtick run longer than the span's own - so the span
+// always opens with one longer than any run in the text.
 const longestRun = (text) => Math.max(0, ...[...text.matchAll(/`+/g)].map(([run]) => run.length));
 
-const fenced = (text) => {
-  const fence = "`".repeat(Math.max(3, longestRun(text) + 1));
-  return `${fence}\n${text}\n${fence}`;
+// A span may not begin or end with a backtick unless it is padded, and it
+// cannot hold a line break at all: one would end the span, and inside a block
+// quote it would end the quote too and free the rest of the text. GitHub does
+// not allow a newline in a title, so flattening costs nothing real.
+const code = (text) => {
+  const flat = text.replaceAll(/\r?\n/g, " ");
+  const tick = "`".repeat(longestRun(flat) + 1);
+  const pad = flat.startsWith("`") || flat.endsWith("`") ? " " : "";
+  return `${tick}${pad}${flat}${pad}${tick}`;
 };
 
-// A code span may not begin or end with a backtick unless it is padded, and a
-// span cannot hold a line break at all - a title with one falls back to a fence.
-const code = (text) => {
-  if (text.includes("\n")) return `\n\n${fenced(text)}\n`;
-  const tick = "`".repeat(longestRun(text) + 1);
-  const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
-  return `${tick}${pad}${text}${pad}${tick}`;
-};
+// The offending title, shown so it can be read in full. A fence gave it a copy
+// button and a horizontal scrollbar - the wrong trade for a string you have to
+// read whole and are about to retype anyway. A quoted span wraps instead, and
+// protects the same amount.
+const quoted = (text) => `> ${code(text)}`;
 
 const list = (values) => values.map((value) => `\`${value}\``).join(", ");
 
@@ -168,13 +170,15 @@ function failureBody(title, { errors, warnings }, rules) {
   const explanation = notes(names, title, rules);
   const typeRule = ["type-empty", "type-enum", "type-case"].some((name) => names.has(name));
 
+  // Every sentence is one unbroken line. GitHub renders a single newline inside
+  // a comment as a hard break, so wrapping prose to a column puts a line break
+  // in the middle of a sentence for the reader, not just in the source.
   return `${BADGE}
 
 > [!WARNING]
-> This pull request's title is not a Conventional Commit. Rename it with the
-> **Edit** button beside the title at the top of this pull request.
+> The title of this pull request is not a Conventional Commit. Rename it with the **Edit** button beside the title at the top of this page.
 
-${fenced(title)}
+${quoted(title)}
 
 ${table(errors, warnings)}
 ${explanation ? `\n${explanation}\n` : ""}
@@ -187,8 +191,7 @@ The title must read \`type(scope): description\`; the scope is optional.${
     typeRule ? "\n\nExample: `feat(webapp): add sample assets`" : ""
   }
 
-This check reruns when the title is edited, and this comment disappears once it
-passes.`;
+This check reruns when the title is edited, and this comment disappears once it passes.`;
 }
 
 const { api, paginate } = createGitHubApi({
@@ -231,7 +234,7 @@ const body = failureBody(title, report, rules);
 
 await postStatus(
   "failure",
-  "Rename the pull request to type(scope): description",
+  "The pull request title is not a Conventional Commit - rename it to type(scope): description",
   `${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}`,
 );
 await comment.upsert(`${COMMENT_MARKER}\n${body}`);
@@ -240,7 +243,9 @@ if (GITHUB_STEP_SUMMARY) {
   appendFileSync(GITHUB_STEP_SUMMARY, `## Invalid pull request title\n\n${body}\n`);
 }
 
-console.log("::error title=Invalid pull request title::Rename the pull request using Conventional Commits; see the comment on the pull request.");
+console.log(
+  "::error title=Invalid pull request title::The pull request title is not a Conventional Commit. Rename it to type(scope): description; see the comment on this pull request.",
+);
 console.error(
   `${STATUS_CONTEXT} failure on ${pr.head.sha}: ${title} (${report.errors
     .map((problem) => problem.name)
