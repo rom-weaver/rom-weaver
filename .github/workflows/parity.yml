@@ -43,7 +43,7 @@ jobs:
           key: ${{ steps.cli-key.outputs.key }}
           path: target/release/rom-weaver
 
-      # This job builds only the native CLI - scripts/parity-check.sh never
+      # This job builds only the native CLI - scripts/parity-check.mjs never
       # touches wasm - so the WASI SDK download and the wasm32-wasip1-threads
       # target that used to live here were dead setup and have been dropped.
       # The mise-pinned toolchain replaces dtolnay/rust-toolchain@stable so
@@ -89,4 +89,4 @@ jobs:
         # FAILS the job on any byte mismatch -- this is the regression signal.
         env:
           PARITY_CARGO_PROFILE: release
-        run: scripts/parity-check.sh
+        run: node scripts/parity-check.mjs

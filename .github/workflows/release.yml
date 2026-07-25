@@ -192,12 +192,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
-          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          TARGET_SHA="$TRIGGER_SHA"
-          [ -n "$TARGET_SHA" ] || TARGET_SHA=$(git rev-parse HEAD)
-          export TARGET_SHA
-          scripts/ci/resolve-wasm-run.sh
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: node scripts/ci/resolve-wasm-run.mjs
 
       - name: Download tested WASM artifact for screenshots
         if: >-
@@ -422,7 +418,7 @@ jobs:
           PREFERRED_RUN_ID: ${{ github.event.workflow_run.id }}
         # A release PR artifact is reused only when its tree exactly matches the
         # released commit; otherwise resolution falls back to a source build.
-        run: scripts/ci/resolve-wasm-run.sh
+        run: node scripts/ci/resolve-wasm-run.mjs
 
       - name: Set up static webapp build
         uses: ./.github/actions/setup-build-env

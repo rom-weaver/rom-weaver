@@ -92,19 +92,4 @@ jobs:
         shell: bash
         env:
           ROM_WEAVER_INSTALL_DIR: ${{ github.workspace }}/install
-        run: |
-          set -euo pipefail
-          case "${{ matrix.method }}" in
-            install.sh)
-              sh install.sh
-              "$ROM_WEAVER_INSTALL_DIR/rom-weaver" --version
-              ;;
-            install.ps1)
-              pwsh -NoProfile -File install.ps1
-              "$ROM_WEAVER_INSTALL_DIR/rom-weaver.exe" --version
-              ;;
-            npm)
-              npm install --global rom-weaver
-              rom-weaver --version
-              ;;
-          esac
+        run: node scripts/ci/run-install-method.mjs "${{ matrix.method }}"

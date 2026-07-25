@@ -75,7 +75,7 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
         PROJECT: ${{ inputs.project }}
-      run: scripts/ci/ensure-cloudflare-pages-project.sh
+      run: node scripts/ci/ensure-cloudflare-pages-project.mjs
 
     - name: Deploy to Cloudflare Pages
       id: deploy
@@ -85,4 +85,4 @@ runs:
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
         PROJECT: ${{ inputs.project }}
         BRANCH: ${{ inputs.branch }}
-      run: scripts/ci/deploy-pages.sh
+      run: node scripts/ci/deploy-pages.mjs

@@ -117,7 +117,7 @@ COPY . .
 # other's objects.
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
-    bash scripts/wasm/build-app.sh prod \
+    node scripts/wasm/build-app.mjs prod \
     && npm --prefix packages/rom-weaver-webapp run build
 
 FROM scratch AS dist-source

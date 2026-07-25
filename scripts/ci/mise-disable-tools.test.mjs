@@ -1,24 +1,9 @@
-import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import test from "node:test";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const script = join(here, "mise-disable-tools.sh");
-const config = join(here, "..", "..", ".config/mise.toml");
+import { disabledTools } from "./mise-disable-tools.mjs";
 
-const run = (...wanted) =>
-  execFileSync(script, [config, ...wanted], { encoding: "utf8" }).trim();
-
-const runFails = (...wanted) => {
-  try {
-    execFileSync(script, [config, ...wanted], { encoding: "utf8", stdio: "pipe" });
-  } catch (error) {
-    return error.stderr;
-  }
-  return null;
-};
+const config = `${import.meta.dirname}/../../.config/mise.toml`;
 
 // The exclusion lists each CI job used to carry by hand. Regenerating them
 // from .config/mise.toml is only safe if it reproduces them exactly, so the previous
@@ -56,38 +41,9 @@ const JOBS = {
 
 test("reproduces the exclusion list each job used to hard-code", async (t) => {
   for (const [job, [wanted, expected]] of Object.entries(JOBS)) {
-    await t.test(job, () => assert.equal(run(...wanted), expected));
+    await t.test(job, () => assert.equal(disabledTools(config, wanted), expected));
   }
 });
-
-test("wanting every pinned tool disables nothing", () => {
-  const all = [
-    "node",
-    "rust",
-    "binaryen",
-    "cargo-deny",
-    "cargo-machete",
-    "nextest",
-    "cargo-semver-checks",
-    "actionlint",
-    "shellcheck",
-    "hadolint",
-  ];
-  assert.equal(run(...all), "");
-});
-
-// The negative form silently ignored typos; the positive form must not.
-test("rejects a tool that is not pinned", () => {
-  assert.match(runFails("nodejs") ?? "", /unknown tool\(s\): nodejs/);
-});
-
-test("refuses to emit a list from a config with no [tools] table", () => {
-  const empty = join(here, "..", "..", "package.json");
-  let stderr = null;
-  try {
-    execFileSync(script, [empty], { encoding: "utf8", stdio: "pipe" });
-  } catch (error) {
-    stderr = error.stderr;
-  }
-  assert.match(stderr ?? "", /no tools found/);
-});
+test("wanting every pinned tool disables nothing", () => assert.equal(disabledTools(config, ["node", "rust", "binaryen", "cargo-deny", "cargo-machete", "nextest", "cargo-semver-checks", "actionlint", "shellcheck", "hadolint"]), ""));
+test("rejects a tool that is not pinned", () => assert.throws(() => disabledTools(config, ["nodejs"]), /unknown tool\(s\): nodejs/));
+test("refuses a config with no tools table", () => assert.throws(() => disabledTools(new URL("../../package.json", import.meta.url), []), /no tools found/));

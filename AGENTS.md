@@ -9,7 +9,7 @@ Before cleanup, verify the worktree has no real changes, then use the repository
 helper:
 
 ```bash
-scripts/remove-worktree.sh .worktrees/<name>
+node scripts/remove-worktree.mjs .worktrees/<name>
 ```
 
 The helper refuses to remove a worktree with tracked or untracked changes.

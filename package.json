@@ -74,10 +74,10 @@
     "@rom-weaver/win32-x64-msvc": "0.7.2"
   },
   "scripts": {
-    "docs:toc": "bash scripts/update-markdown-toc.sh",
+    "docs:toc": "node scripts/update-markdown-toc.mjs",
     "dev": "mise run dev",
     "preview": "mise run preview",
-    "hooks:install": "lefthook install",
+    "hooks:install": "node scripts/lefthook-install.mjs",
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
     "prepack": "mise run manpages",

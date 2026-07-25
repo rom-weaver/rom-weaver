@@ -152,6 +152,7 @@ mise run test-rust
 mise run typegen-check
 mise run actionlint    # GitHub Actions workflows and composite actions
 mise run shellcheck    # tracked shell scripts
+npm test               # test the Node.js tooling
 mise run hadolint      # Dockerfiles
 
 npm --prefix packages/rom-weaver-webapp run lint    # complete frontend lint fan-out
@@ -247,7 +248,7 @@ After creating a linked worktree, run its setup helper before building or
 testing:
 
 ```bash
-./scripts/setup-worktree.sh
+node scripts/setup-worktree.mjs
 ```
 
 It installs package dependencies and copies existing WASM artifacts when
@@ -257,7 +258,7 @@ After verifying that a worktree has no real changes, remove it from the main
 checkout with:
 
 ```bash
-scripts/remove-worktree.sh .worktrees/<name>
+node scripts/remove-worktree.mjs .worktrees/<name>
 ```
 
 ## Project map

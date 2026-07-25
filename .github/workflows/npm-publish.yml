@@ -49,12 +49,7 @@ jobs:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - id: platforms
-        # Two statements, not `echo "matrix=$(...)"`: a failure inside command
-        # substitution leaves `echo` succeeding, and an empty matrix would only
-        # surface later as an unexplained fromJSON error.
-        run: |
-          matrix=$(scripts/ci/cli-platform-matrix.sh)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        run: node scripts/ci/cli-platform-matrix.mjs
 
   platform-build:
     name: Build ${{ matrix.package }}

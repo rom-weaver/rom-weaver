@@ -61,11 +61,10 @@ runs:
     - name: Install system dependencies
       if: inputs.apt-packages != ''
       shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.apt-packages }}
       run: |
-        sudo apt-get update
-        sudo apt-get install --yes ${{ inputs.apt-packages }}
-        lc="$(find /usr/lib /usr/lib64 -name 'libclang.so*' 2>/dev/null | head -n1)"
-        [ -n "$lc" ] && echo "LIBCLANG_PATH=$(dirname "$lc")" >> "$GITHUB_ENV" || true
+        node scripts/ci/install-system-dependencies.mjs
 
     # Written to GITHUB_ENV rather than passed to mise-action, so every later
     # `mise run` step in the job sees the same restriction the install did.
@@ -74,12 +73,7 @@ runs:
       shell: bash
       env:
         WANTED: ${{ inputs.tools }}
-      run: |
-        # shellcheck disable=SC2086 # deliberate word-splitting of the input list
-        disable=$(scripts/ci/mise-disable-tools.sh .config/mise.toml $WANTED)
-        echo "MISE_DISABLE_TOOLS=$disable" >> "$GITHUB_ENV"
-        echo "installing: $WANTED"
-        echo "disabled:   ${disable:-(none)}"
+      run: node scripts/ci/select-mise-tools.mjs
 
     - name: Install mise-pinned tools
       uses: jdx/mise-action@v4

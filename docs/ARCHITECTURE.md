@@ -414,7 +414,7 @@ npm --prefix packages/rom-weaver-webapp run dev|build
 ```
 
 The WASM build needs a WASI SDK (v33+, auto-detected; see
-`scripts/wasm/detect-wasi-sdk.sh` and the `build-wasm` task in `.config/mise.toml`). Generated wasm artifacts in
+`scripts/wasm/detect-wasi-sdk.mjs` and the `build-wasm` task in `.config/mise.toml`). Generated wasm artifacts in
 `packages/rom-weaver-webapp/src/wasm` are gitignored; the generated *TypeScript*
 files are
 committed and drift-checked.

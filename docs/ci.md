@@ -17,9 +17,9 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
   - [`.github/cli-platforms.json`](#githubcli-platformsjson)
-  - [`scripts/ci/assert-jobs.sh`](#scriptsciassert-jobssh)
-  - [`scripts/ci/classify-changes.sh`](#scriptsciclassify-changessh)
-  - [`scripts/ci/resolve-wasm-run.sh`](#scriptsciresolve-wasm-runsh)
+  - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
+  - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
+  - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
@@ -173,8 +173,9 @@ security ── advisories (warn only, always green)
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
   rather than the diff, so it is selected by whether anything of those kinds
-  changed at all - workflows, composite actions, `.github` YAML, any `*.sh`,
-  any Dockerfile, `.config/hadolint.yaml` - not per file. It installs no language toolchain and
+  changed at all - workflows, composite actions, `.github` YAML at any depth,
+  any `*.sh`, any `*.mjs`, any Dockerfile, `.config/hadolint.yaml` - not per
+  file. It installs no language toolchain and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -252,7 +253,7 @@ security ── advisories (warn only, always green)
   same pinned version). nextest does not execute doctests, so each leg runs a
   separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`plumbing`** is an aggregator over `repo-lint`, `docker`,
-  `docker-prebuilt`, and `wasm`, on the same `scripts/ci/assert-jobs.sh` as
+  `docker-prebuilt`, and `wasm`, on the same `scripts/ci/assert-jobs.mjs` as
   `rust` below - three calls, because those jobs do not share one selection
   flag. All four are skippable, and a matrix leg that is not planned reports no
   status at all, so `Plumbing` is the only name branch protection can safely
@@ -267,7 +268,7 @@ security ── advisories (warn only, always green)
   non-gating** - an advisory can be published against a transitive dependency
   without any commit of ours, and letting that turn every open pull request red
   blocks unrelated work. Findings surface as warnings via
-  `scripts/warn-only.sh`; the job stays green.
+  `scripts/warn-only.mjs`; the job stays green.
 - **`webapp-static`**, **`webapp-browser`**, **`webapp-wasm-e2e`**, and
   **`webapp-webkit-e2e`** consume
   the prebuilt module and compile no Rust. The work is split three ways so the
@@ -458,7 +459,7 @@ WASI SDK, webapp `node_modules`, and Playwright browsers.
 
 The `tools:` input is a **positive** list of short tool names
 (`tools: node rust nextest`). mise offers no allowlist - `MISE_DISABLE_TOOLS`
-is the only lever - so `scripts/ci/mise-disable-tools.sh` reads the `[tools]`
+is the only lever - so `scripts/ci/mise-disable-tools.mjs` reads the `[tools]`
 table of `.config/mise.toml` and computes the complement. Two consequences worth
 knowing:
 
@@ -520,13 +521,13 @@ fan out over them - CI's build plus the fan-out's build, dry-run, and publish.
 They used to be four pasted copies, which let CI quietly stop covering a target
 the release still shipped.
 
-`scripts/ci/cli-platform-matrix.sh` emits it as a one-line matrix (a matrix can
+`scripts/ci/cli-platform-matrix.mjs` emits it as a one-line matrix (a matrix can
 only be fed by an upstream job's output) and documents every field, since JSON
 carries no comments. Note `runner` versus `native_runner`: the first is the host
 that *compiles* a target, the second the host that can *execute* the result -
 the same everywhere except `linux-arm64-musl`, which cross-builds on x64.
 
-### `scripts/ci/assert-jobs.sh`
+### `scripts/ci/assert-jobs.mjs`
 
 Backs the `rust`, `webapp`, and `plumbing` aggregate checks, which present one
 stable name to branch protection over a fan-out of parallel jobs. It takes one
@@ -536,7 +537,7 @@ counts as passing, so the aggregate has to fail explicitly - which means telling
 "skipped because the path filter said this change cannot affect it" apart from
 "skipped because something upstream failed".
 
-### `scripts/ci/classify-changes.sh`
+### `scripts/ci/classify-changes.mjs`
 
 Maps changed paths to the Rust, webapp, dependency-scanning, plumbing-lint, and
 per-image Docker stacks.
@@ -551,7 +552,7 @@ Changes to CI, coverage, toolchain setup, or the
 classifier fail open by selecting every stack.
 `scripts/ci/classify-changes.test.mjs` pins these boundaries.
 
-### `scripts/ci/resolve-wasm-run.sh`
+### `scripts/ci/resolve-wasm-run.mjs`
 
 Finds the CI run that built `wasm-prod` for a commit, so release packaging ships
 the exact module CI tested. It prefers the
@@ -784,14 +785,14 @@ individual commands below when narrowing a failure or matching a specific job.
 ```bash
 mise run ci                                                  # broad local gate
 
-mise run actionlint ::: shellcheck ::: hadolint                  # repo-lint
-node --test scripts/ci/classify-changes.test.mjs                 # change boundaries
+mise run actionlint ::: shellcheck ::: hadolint              # repo-lint
+node --test scripts/ci/classify-changes.test.mjs             # change boundaries
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
 mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
 cargo publish --workspace --locked --dry-run --no-verify     # rust-host
 mise run wasm-check                                          # local threaded-target check
 mise run build-wasm-prod                                     # wasm
-npm test                                                     # webapp build-script tests
+npm test                                                     # repository tooling tests
 npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
 npm --prefix packages/rom-weaver-webapp run icons:channels:check
 npm --prefix packages/rom-weaver-webapp run test:unit
@@ -802,7 +803,8 @@ npm --prefix packages/rom-weaver-webapp run build
 ```
 
 `actionlint` is shellcheck-aware and also lints inline workflow `run:` scripts;
-the separate `shellcheck` task covers tracked shell files. `docker` is
+the separate `shellcheck` task covers the tracked shell files, and `npm test`
+covers the Node.js tooling. `docker` is
 conditional on image-plumbing changes and is most directly reproduced with the
 source-build commands in the [self-hosting guide](self-hosting.md);
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle

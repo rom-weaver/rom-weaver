@@ -7,7 +7,7 @@ const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const WRAPPER_HEADER: &str = "libarchive/wrapper.h";
 // Every directory whose CMakeLists.txt adds a `test` subdirectory that
-// scripts/vendor-libarchive.sh prunes.
+// scripts/vendor-libarchive.mjs prunes.
 const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
 const WASM_PATCH_FILES: &[&str] = &[
     "archive_write_set_format_wasm_shim.c",
@@ -291,7 +291,7 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     }
     if !libarchive_dir.join("CMakeLists.txt").is_file() {
         panic!(
-            "vendored libarchive source is missing from {}; refresh it with scripts/vendor-libarchive.sh",
+            "vendored libarchive source is missing from {}; refresh it with scripts/vendor-libarchive.mjs",
             libarchive_dir.display()
         );
     }

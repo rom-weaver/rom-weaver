@@ -51,12 +51,7 @@ jobs:
       # target list is resolved here rather than in the job that consumes it.
       - name: Resolve CLI platform matrix
         id: cli-platforms
-        # Two statements, not `echo "matrix=$(...)"`: a failure inside command
-        # substitution leaves `echo` succeeding, and the empty output would only
-        # surface later as an unexplained fromJSON error.
-        run: |
-          matrix=$(scripts/ci/cli-platform-matrix.sh)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        run: node scripts/ci/cli-platform-matrix.mjs
 
       - name: Classify changed paths
         id: classify
@@ -64,20 +59,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          if [[ "$EVENT_NAME" == workflow_dispatch || -z "$BASE_SHA" || "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
-            scripts/ci/classify-changes.sh --all | tee -a "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! paths=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null); then
-            echo "base $BASE_SHA is unreachable; classifying everything"
-            scripts/ci/classify-changes.sh --all | tee -a "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf 'changed paths:\n%s\n' "${paths:-(none)}"
-          printf '%s\n' "$paths" | scripts/ci/classify-changes.sh | tee -a "$GITHUB_OUTPUT"
+        run: node scripts/ci/classify-workflow.mjs
 
       # The image table lives here rather than in the `docker` job below because
       # a matrix can only be fed by an upstream job's output, and an unselected
@@ -89,24 +71,9 @@ jobs:
         env:
           CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
           WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
-        run: |
-          set -euo pipefail
-          legs=""
-          if [[ "$CLI_SELECTED" == true ]]; then
-            legs="$legs$(jq -cn '{name: "CLI", image: "rom-weaver-cli", file: "Dockerfile"}')"$'\n'
-          fi
-          if [[ "$WEBAPP_SELECTED" == true ]]; then
-            legs="$legs$(jq -cn '{
-              name: "webapp",
-              image: "rom-weaver-webapp",
-              file: "packages/rom-weaver-webapp/Dockerfile"
-            }')"$'\n'
-          fi
-          matrix=$(printf '%s' "$legs" | jq -cs .)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "Docker legs: $matrix"
+        run: node scripts/ci/docker-matrix.mjs
 
-  # Static analysis of the repository's own plumbing - workflows, shell
+  # Static analysis of the repository's own plumbing - workflows, Node.js
   # scripts, Dockerfiles. Compiles nothing and installs no language toolchain,
   # so it finishes in well under a minute and reports independently of the
   # build jobs instead of hiding behind them.
@@ -326,16 +293,7 @@ jobs:
           WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
           WASM_RESULT: ${{ needs.wasm.result }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
-        run: |
-          set -uo pipefail
-          status=0
-          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$REPO_LINT_SELECTED" \
-            "repo-lint=$REPO_LINT_RESULT" || status=1
-          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$DOCKER_SELECTED" \
-            "docker=$DOCKER_RESULT" || status=1
-          scripts/ci/assert-jobs.sh "$CHANGES_RESULT" "$WEBAPP_SELECTED" \
-            "wasm=$WASM_RESULT" "docker-prebuilt=$DOCKER_PREBUILT_RESULT" || status=1
-          exit "$status"
+        run: node scripts/ci/assert-job-groups.mjs
 
   # Everything that needs a host-profile Rust build and nothing from wasm, so
   # it runs concurrently with the wasm build instead of queueing behind it.
@@ -510,15 +468,15 @@ jobs:
           cargo-cache: "false"
 
       - name: Rust advisories
-        run: scripts/warn-only.sh "Rust advisories" mise run deny-advisories
+        run: node scripts/warn-only.mjs "Rust advisories" mise run deny-advisories
 
       # `npm audit` resolves straight from the lockfiles, so this needs node but
       # no install, keeping the webapp's `npm ci` off this job entirely.
-      - name: npm advisories
-        run: |
-          scripts/warn-only.sh "npm advisories (root)" npm run audit:deps
-          scripts/warn-only.sh "npm advisories (webapp)" \
-            npm --prefix packages/rom-weaver-webapp run audit:deps
+      - name: npm advisories (root)
+        run: node scripts/warn-only.mjs "npm advisories (root)" npm run audit:deps
+
+      - name: npm advisories (webapp)
+        run: node scripts/warn-only.mjs "npm advisories (webapp)" npm --prefix packages/rom-weaver-webapp run audit:deps
 
   # No separate `wasm-check` job. It compiled a strict subset of the production
   # module above, while the source-exact cache already covers every input that
@@ -557,7 +515,7 @@ jobs:
         run: mise run test-rust
 
   # Windows cannot reuse the mise path: the wasm toolchain's compiler shims
-  # are bash scripts a native cargo cannot exec, and mise's [env] templates
+  # are Node.js scripts a native cargo cannot exec, and mise's [env] templates
   # assume a POSIX shell. The npm platform publish already proves the
   # dtolnay + rustup route on this exact image, so the tests ride that instead.
   # The toolchain pin is read from .config/mise.toml so this leg can never drift from
@@ -670,7 +628,7 @@ jobs:
 
       - name: Verify Rust jobs
         run: >-
-          scripts/ci/assert-jobs.sh
+          node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
@@ -865,7 +823,7 @@ jobs:
 
       - name: Verify webapp jobs
         run: >-
-          scripts/ci/assert-jobs.sh
+          node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
           'webapp-static=${{ needs.webapp-static.result }}'
@@ -1133,4 +1091,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-        run: scripts/ci/ensure-cloudflare-assets-cache-rule.sh
+        run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs

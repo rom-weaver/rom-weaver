@@ -101,7 +101,7 @@ pre-commit:
       run: mise run hadolint
     markdown-toc:
       files: git diff --name-only --cached --diff-filter=ACMR -- README.md CONTRIBUTING.md docs .github/CODE_OF_CONDUCT.md .github/RELEASING.md .github/SECURITY.md packages/rom-weaver-webapp/design/icon-masters/README.md packages/rom-weaver-webapp/src/wasm/README.md scripts/wasm/README.md
-      run: bash scripts/update-markdown-toc.sh {files}
+      run: node scripts/update-markdown-toc.mjs {files}
       stage_fixed: true
     whitespace:
       # Same task CI runs, so an exclusion can never apply to one and not the
@@ -115,4 +115,4 @@ pre-commit:
 commit-msg:
   commands:
     strip-ai-attribution:
-      run: ./scripts/strip-ai-attribution.sh {1}
+      run: node ./scripts/strip-ai-attribution.mjs {1}

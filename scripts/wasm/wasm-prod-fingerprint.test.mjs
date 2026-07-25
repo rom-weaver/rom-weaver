@@ -10,7 +10,7 @@ test("production fingerprint covers the raw artifact and post-processing inputs"
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-wasm-fingerprint-"));
   try {
     const artifactPath = path.join(dir, "app.wasm");
-    const buildScriptPath = path.join(dir, "build.sh");
+    const buildScriptPath = path.join(dir, "build.mjs");
     fs.writeFileSync(artifactPath, "wasm-a");
     fs.writeFileSync(buildScriptPath, "wasm-opt -O4");
     const options = {

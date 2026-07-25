@@ -75,7 +75,7 @@ in `crates/rom-weaver-containers/libarchive/vendor/LIBARCHIVE_VERSION`.
 ### Refreshing the snapshot
 
 ```bash
-scripts/vendor-libarchive.sh <path-to-libarchive-checkout> [ref]
+node scripts/vendor-libarchive.mjs <path-to-libarchive-checkout> [ref]
 ```
 
 The script copies `git archive` output and prunes what the build never

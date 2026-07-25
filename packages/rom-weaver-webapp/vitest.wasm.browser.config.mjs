@@ -7,7 +7,7 @@ import { coverageBase } from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // In a git worktree, node_modules entries are symlinks into the main checkout
-// (scripts/setup-worktree.sh); vite resolves their real paths, which fall
+// (scripts/setup-worktree.mjs); vite resolves their real paths, which fall
 // outside the worktree's REPO_ROOT and get 403'd unless also allowed.
 const GIT_COMMON_ROOT = (() => {
   try {
