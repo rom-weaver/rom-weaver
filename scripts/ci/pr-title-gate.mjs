@@ -142,8 +142,9 @@ function notes(names, title, { headerLimit }) {
     out.push(`${code(titleType(title) ?? "The type")} is not one of the types this project allows.`);
   }
   if (names.has("header-max-length")) {
+    const over = title.length - headerLimit;
     out.push(
-      `The title is ${title.length} characters and the limit is ${headerLimit}, so ${title.length - headerLimit} have to go.`,
+      `The title is ${title.length} characters and the limit is ${headerLimit}, so ${over} ${over === 1 ? "character has" : "characters have"} to go.`,
     );
   }
   if (names.has("subject-empty") && !names.has("type-empty")) {

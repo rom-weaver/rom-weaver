@@ -276,12 +276,26 @@ test("an over-long title is told how much to cut, and gets no suggestion", async
     errors: ["header-max-length"],
   });
   const body = commentBody(calls);
-  assert.ok(body.includes("55 have to go"), "the arithmetic is the gate's job, not the contributor's");
+  assert.ok(
+    body.includes("55 characters have to go"),
+    "the arithmetic is the gate's job, not the contributor's",
+  );
   assert.ok(!body.includes("Rename it to"), "a rejected rename must not be proposed");
   // Nothing about this title's shape was wrong, so neither the type list nor an
   // example of the shape has anything to tell whoever wrote it.
   assert.ok(!body.includes("Valid types"));
   assert.ok(!body.includes("feat(webapp): add sample assets"));
+});
+
+test("a title one character too long is told so in the singular", async () => {
+  const { calls } = await run({
+    title: `fix: ${"x".repeat(146)}`,
+    verdict: "fail",
+    errors: ["header-max-length"],
+  });
+  const body = commentBody(calls);
+  assert.ok(body.includes("1 character has to go"), "the count and the verb must agree");
+  assert.ok(!body.includes("1 have to go"));
 });
 
 test("a warning riding along with an error is graded in the table", async () => {
