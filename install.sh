@@ -58,25 +58,48 @@ fi
 # file, so an asset uploaded by a stolen token or a maintainer's laptop fails
 # here even though its checksum matches.
 #
-# Advisory by default - a verification the installer cannot perform must not
-# strand someone on a minimal box. Set ROM_WEAVER_REQUIRE_ATTESTATION=1 to make
-# every branch below fatal instead.
+# A definite answer is fatal, an absent one is not. Those are different facts and
+# conflating them gets the default wrong in one direction or the other: treating
+# "cannot reach the API" as failure strands anyone behind a proxy, and treating
+# "this binary has no provenance" as a warning buries the finding that matters in
+# output nobody reads.
+#
+#   attestation says another repository built this, or none did  -> refuse
+#   the check could not run at all (offline, rate-limited, 5xx)  -> warn
+#
+# ROM_WEAVER_SKIP_ATTESTATION=1 skips the check; ROM_WEAVER_REQUIRE_ATTESTATION=1
+# promotes the warning to a refusal too.
+skip_attestation="${ROM_WEAVER_SKIP_ATTESTATION:-0}"
 require_attestation="${ROM_WEAVER_REQUIRE_ATTESTATION:-0}"
-attestation_failed() {
-  if [ "$require_attestation" = 1 ]; then
-    echo "rom-weaver: $1" >&2
-    exit 1
-  fi
+
+# Every refusal has to say how to get past it, or the only way out is reading
+# this script.
+attestation_refuse() {
   echo "rom-weaver: $1" >&2
+  echo "rom-weaver: refusing to install $asset." >&2
+  echo "rom-weaver: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1" >&2
+  exit 1
 }
 
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+attestation_unknown() {
+  if [ "$require_attestation" = 1 ]; then
+    attestation_refuse "$1"
+  fi
+  echo "rom-weaver: $1" >&2
+  echo "rom-weaver: continuing - the checksum matched, but its origin is unverified" >&2
+}
+
+if [ "$skip_attestation" = 1 ]; then
+  echo "rom-weaver: skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)" >&2
+elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   # The only branch that checks the Sigstore signature, certificate chain, and
   # transparency-log inclusion rather than trusting the API response.
   if gh attestation verify "$tmp_dir/$asset" --repo "$repo" >/dev/null 2>&1; then
     echo "Verified build provenance for $asset"
   else
-    attestation_failed "build provenance verification FAILED for $asset"
+    # gh reports "no attestation" and "the signature is bad" with the same exit
+    # status, and both are answers rather than an inability to ask.
+    attestation_refuse "build provenance verification FAILED for $asset"
   fi
 else
   # No gh, so this reads the attestation over TLS from api.github.com instead of
@@ -95,9 +118,17 @@ else
   # the neighboring `repository_id` and `repository_owner_id` keys do not end at
   # the same quote. Matching a fixed string beats parsing here - there is no
   # shape to get wrong, only bytes that are present or absent.
-  if curl --fail --silent --location --proto '=https' --tlsv1.2 \
+  # The status code is read rather than leaning on `--fail`, because 404 and 403
+  # have to be told apart: 404 is GitHub answering "nothing attested these bytes"
+  # and is fatal, while a 403 is the unauthenticated rate limit and means the
+  # question went unanswered. `|| status=000` covers a network-level failure,
+  # where curl exits non-zero and no code was ever received.
+  status=$(curl --silent --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/attestations.json" \
-    "https://api.github.com/repos/$repo/attestations/sha256:$digest"; then
+    --write-out '%{http_code}' \
+    "https://api.github.com/repos/$repo/attestations/sha256:$digest") || status=000
+
+  if [ "$status" = 200 ]; then
     # -d is GNU and current macOS, -D is older macOS, and openssl covers the
     # rest. The probe is on empty input so it costs nothing and cannot decode.
     if base64 -d </dev/null >/dev/null 2>&1; then
@@ -129,10 +160,12 @@ else
       | grep -q "\"repository\":\"https://github.com/$repo\""; then
       echo "Found build provenance for $asset (install gh to verify its signature)"
     else
-      attestation_failed "no build provenance from $repo for $asset"
+      attestation_refuse "an attestation covers $asset, but $repo did not produce it"
     fi
+  elif [ "$status" = 404 ]; then
+    attestation_refuse "no build provenance published for $asset"
   else
-    attestation_failed "no build provenance published for $asset"
+    attestation_unknown "could not reach the attestations API for $asset (HTTP $status)"
   fi
 fi
 

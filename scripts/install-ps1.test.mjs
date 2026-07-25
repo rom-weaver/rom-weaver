@@ -25,6 +25,10 @@ const asset = `rom-weaver-win32-${packageArchitecture}-msvc.exe`;
 // rather than bypassed.
 const harness = (installDirectory, urlLog) => `
 $env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
+# This test is about the download and its checksum. The provenance branches have
+# their own coverage below, and leaving them live here would reach for the real
+# gh - which CI runners have - against a stub binary.
+$env:ROM_WEAVER_SKIP_ATTESTATION = '1'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   Add-Content -Path '${urlLog}' -Value $Uri
@@ -99,3 +103,69 @@ function Invoke-WebRequest {
     }
   },
 );
+
+// The provenance branches, mirroring scripts/install.test.mjs. `gh` is shadowed
+// away rather than stubbed, so these exercise the API fallback - the branch a
+// machine without gh takes, and the one PowerShell parses itself.
+const PROVENANCE_PREAMBLE = (installDirectory) => `
+$env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
+function Invoke-WebRequest {
+  param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+  if ($Uri.EndsWith('.sha256')) {
+    $binary = $OutFile -replace '\\.sha256$', ''
+    $hash = (Get-FileHash -Path $binary -Algorithm SHA256).Hash
+    Set-Content -Path $OutFile -Value "$hash  ${asset}"
+  } else {
+    Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  }
+}
+# Reporting gh as absent is what selects the fallback. install.ps1 asks for it
+# exactly once, so shadowing the cmdlet affects nothing else.
+function Get-Command { param([Parameter(ValueFromRemainingArguments = \$true)]\$Rest) return \$null }
+`;
+
+// The statement shape install.ps1 reads, built the way GitHub returns it.
+const restStub = (repository) => `
+function Invoke-RestMethod {
+  param([string]$Uri, [switch]$UseBasicParsing)
+  $statement = '{"predicate":{"buildDefinition":{"externalParameters":{"workflow":{"repository":"${repository}"}}}}}'
+  $payload = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($statement))
+  return (@"
+{"attestations":[{"bundle":{"dsseEnvelope":{"payload":"$payload"}}}]}
+"@ | ConvertFrom-Json)
+}
+`;
+
+const runProvenance = (directory, script) =>
+  spawnSync("pwsh", ["-NoProfile", "-Command", `${PROVENANCE_PREAMBLE(join(directory, "install"))}${script}\n& '${resolve("install.ps1")}'`], {
+    encoding: "utf8",
+  });
+
+const withPwsh = (body) => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-ps1-attest-"));
+  try {
+    body(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const skip = hasPowerShell ? false : "pwsh not available";
+
+test("accepts an attestation from this repository", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(directory, restStub("https://github.com/rom-weaver/rom-weaver"));
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Found build provenance/);
+  });
+});
+
+test("refuses an attestation from another repository", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(directory, restStub("https://github.com/someone-else/rom-weaver"));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /did not produce it/);
+    // The way out has to be printed, or a refusal is an outage.
+    assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
+  });
+});

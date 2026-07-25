@@ -62,28 +62,52 @@ try {
   # here even though its checksum matches. Same two branches as install.sh -
   # which parses the response by hand, having no ConvertFrom-Json to lean on.
   # Advisory unless ROM_WEAVER_REQUIRE_ATTESTATION=1.
+  $skipAttestation = $env:ROM_WEAVER_SKIP_ATTESTATION -eq '1'
   $requireAttestation = $env:ROM_WEAVER_REQUIRE_ATTESTATION -eq '1'
+
+  # A definite answer refuses, an absent one warns - see install.sh for why the
+  # two are kept apart. Every refusal says how to get past it.
+  function Deny-Install([string]$message) {
+    Write-Error $message -ErrorAction Continue
+    throw "refusing to install ${asset}: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1"
+  }
   function Write-AttestationWarning([string]$message) {
-    if ($requireAttestation) { throw $message }
+    if ($requireAttestation) { Deny-Install $message }
     Write-Warning $message
+    Write-Warning 'continuing - the checksum matched, but its origin is unverified'
   }
 
-  if (Get-Command gh -ErrorAction SilentlyContinue) {
+  if ($skipAttestation) {
+    Write-Warning 'skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)'
+  } elseif (Get-Command gh -ErrorAction SilentlyContinue) {
     # The only branch that checks the Sigstore signature, certificate chain, and
     # transparency-log inclusion rather than trusting the API response.
     gh attestation verify $binaryPath --repo $repo 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) {
       Write-Host "Verified build provenance for $asset"
     } else {
-      Write-AttestationWarning "build provenance verification FAILED for $asset"
+      Deny-Install "build provenance verification FAILED for $asset"
     }
   } else {
     # No gh, so this trusts GitHub's API over TLS rather than the signature -
     # strictly weaker, but the same trust the download already places in
     # github.com, and it still catches an asset no workflow run produced.
+    $response = $null
+    $status = $null
     try {
       $response = Invoke-RestMethod -UseBasicParsing `
         -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())"
+    } catch {
+      # 404 is GitHub answering "nothing attested these bytes"; anything else
+      # (rate limit, 5xx, no network) means the question went unanswered.
+      $status = $_.Exception.Response.StatusCode.value__
+      if ($status -eq 404) {
+        Deny-Install "no build provenance published for $asset"
+      }
+      Write-AttestationWarning "could not reach the attestations API for ${asset}: $($_.Exception.Message)"
+    }
+
+    if ($null -ne $response) {
       $payload = $response.attestations[0].bundle.dsseEnvelope.payload
       $statement = [System.Text.Encoding]::UTF8.GetString(
         [System.Convert]::FromBase64String($payload)) | ConvertFrom-Json
@@ -91,10 +115,8 @@ try {
       if ($sourceUri -eq "https://github.com/$repo") {
         Write-Host "Found build provenance for $asset (install gh to verify its signature)"
       } else {
-        Write-AttestationWarning "no build provenance from $repo for $asset"
+        Deny-Install "an attestation covers $asset, but $repo did not produce it"
       }
-    } catch {
-      Write-AttestationWarning "no build provenance published for ${asset}: $($_.Exception.Message)"
     }
   }
 

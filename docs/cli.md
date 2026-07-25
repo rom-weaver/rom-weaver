@@ -121,9 +121,28 @@ the response GitHub actually returns under `dash`, macOS `sh`, Alpine and
 BusyBox (`busybox sh`, musl), and Debian slim, with each decoder branch forced
 in turn.
 
-The check is advisory by default so a machine that cannot reach the API is not
-left unable to install. Set `ROM_WEAVER_REQUIRE_ATTESTATION=1` to make a failed
-or absent attestation fatal instead.
+A definite negative stops the install; an unanswered question does not. Those
+are different facts, and conflating them gets the default wrong in one direction
+or the other:
+
+| Outcome | Behavior |
+| --- | --- |
+| Verified | installs |
+| Another repository attested it, or nothing did (HTTP 404) | **refuses** |
+| The check could not run - offline, rate-limited, 5xx | warns, installs |
+
+The unauthenticated API allows 60 requests an hour per address, so the last row
+is reachable by ordinary use rather than only by attack, which is why it does not
+block. Every refusal prints the way past it:
+
+```bash
+ROM_WEAVER_SKIP_ATTESTATION=1 curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
+```
+
+Going the other way, `ROM_WEAVER_REQUIRE_ATTESTATION=1` promotes that warning to
+a refusal too, so an install that could not be verified fails rather than
+proceeding.
 
 [slsa]: https://slsa.dev/spec/v1.0/provenance
 

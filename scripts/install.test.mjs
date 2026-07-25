@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -22,12 +22,16 @@ esac
 echo "${DIGEST}  $1"
 `;
 
-// Serves the release download, its sidecar, and the attestations API. A URL
-// listed in FAIL_URLS exits non-zero the way \`curl --fail\` does on a 404.
+// Serves the release download, its sidecar, and the attestations API. The
+// attestations call reads its status from ATTESTATION_STATUS and writes it to
+// stdout, because install.sh asks for it with \`--write-out\` rather than leaning
+// on \`--fail\`. ATTESTATION_CURL_FAILS models a network-level failure, where curl
+// exits non-zero having received no status at all.
 const curlStub = (platform, attestationJson) => `#!/bin/sh
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output=$2; shift 2 ;;
+    --write-out) shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
@@ -35,10 +39,13 @@ done
 echo "$url" >> "$CURL_LOG"
 case "$url" in
   *attestations*)
-    case " $FAIL_URLS " in *" attestations "*) exit 22 ;; esac
     cat > "$output" <<'JSON'
 ${attestationJson}
 JSON
+    if [ "\${ATTESTATION_CURL_FAILS:-0}" = 1 ]; then
+      exit 6
+    fi
+    printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *) echo binary > "$output" ;;
@@ -87,7 +94,8 @@ const runInstall = (directory, bin, environment = {}) => {
     env: {
       ...process.env,
       CURL_LOG: join(directory, "curl.log"),
-      FAIL_URLS: "",
+      ATTESTATION_STATUS: "200",
+      ATTESTATION_CURL_FAILS: "0",
       HOME: directory,
       PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
@@ -174,6 +182,9 @@ esac
           HOME: directory,
           PATH: `${bin}:/usr/bin:/bin`,
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
+          // This test is about asset selection; the provenance branches have
+          // their own coverage and would only add noise to its output.
+          ROM_WEAVER_SKIP_ATTESTATION: "1",
         },
       });
 
@@ -187,9 +198,11 @@ esac
   }
 });
 
-// The provenance check is advisory by default, so "did it fail" is not a proxy
-// for "did it verify" - each of these asserts the message the branch prints, and
-// the strict-mode twin asserts that the same branch exits non-zero.
+// The split these tests exist to pin down: a definite negative refuses to
+// install, an unanswered question warns and continues. Getting either backwards
+// is the whole risk in this feature, so every branch asserts which of the two it
+// took - and a refusal additionally asserts that the way out is printed, since a
+// refusal nobody can bypass is its own outage.
 const withInstall = (options, body) => {
   const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-attest-"));
   try {
@@ -199,13 +212,28 @@ const withInstall = (options, body) => {
   }
 };
 
-const expectFailure = (run) => {
+// A refusal must exit non-zero, leave nothing installed, and say how to get past
+// it. Asserting all three together is deliberate: an exit code alone would pass
+// even if the binary had already been written, or if the message left the user
+// with no way forward.
+const expectRefusal = (directory, run) => {
+  let output;
   try {
     run();
   } catch (error) {
-    return `${error.stdout ?? ""}${error.stderr ?? ""}`;
+    output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
   }
-  return assert.fail("expected install.sh to exit non-zero");
+  assert.ok(output !== undefined, "expected install.sh to exit non-zero");
+  assert.match(output, /refusing to install/);
+  assert.match(output, /ROM_WEAVER_SKIP_ATTESTATION=1/);
+  assert.ok(!existsSync(join(directory, "install", "rom-weaver")), "refused install must leave no binary");
+  return output;
+};
+
+// The mirror image: the check could not run, so it warns and installs anyway.
+const expectWarning = (directory, output) => {
+  assert.match(output, /origin is unverified/);
+  assert.ok(existsSync(join(directory, "install", "rom-weaver")), "a warning must not block the install");
 };
 
 // `gh` is the only branch that checks the signature rather than trusting the
@@ -228,16 +256,14 @@ test("verifies build provenance with gh when it is available", () => {
   });
 });
 
-test("reports a failed gh verification and honors strict mode", () => {
+// gh reports a bad signature and a missing attestation with the same exit
+// status, and both are answers rather than an inability to ask - so a failure
+// here refuses outright, with no dependence on REQUIRE.
+test("refuses when gh verification fails", () => {
   withInstall({}, (directory, bin) => {
     writeExecutable(join(bin, "gh"), GH_STUB);
-    const output = runInstall(directory, bin, { GH_VERIFY_STATUS: "1" });
+    const output = expectRefusal(directory, () => runInstall(directory, bin, { GH_VERIFY_STATUS: "1" }));
     assert.match(output, /build provenance verification FAILED/);
-
-    const strict = expectFailure(() =>
-      runInstall(directory, bin, { GH_VERIFY_STATUS: "1", ROM_WEAVER_REQUIRE_ATTESTATION: "1" }),
-    );
-    assert.match(strict, /build provenance verification FAILED/);
   });
 });
 
@@ -248,37 +274,66 @@ test("falls back to the attestations API when gh is absent", () => {
   });
 });
 
-test("rejects an attestation naming a different repository", () => {
+test("refuses an attestation naming a different repository", () => {
   withInstall({ attestation: responseFrom("https://github.com/someone-else/rom-weaver") }, (directory, bin) => {
-    assert.match(runInstall(directory, bin), /no build provenance from/);
-
-    const strict = expectFailure(() => runInstall(directory, bin, { ROM_WEAVER_REQUIRE_ATTESTATION: "1" }));
-    assert.match(strict, /no build provenance from/);
+    const output = expectRefusal(directory, () => runInstall(directory, bin));
+    assert.match(output, /did not produce it/);
   });
 });
 
 // A repository whose name merely starts with this one's must not satisfy the
 // match - the trailing quote in the pattern is what stops `rom-weaver-evil`.
-test("rejects a repository that only prefixes this one", () => {
+test("refuses a repository that only prefixes this one", () => {
   withInstall({ attestation: responseFrom(`${REAL_RESPONSE_REPOSITORY}-evil`) }, (directory, bin) => {
-    assert.match(runInstall(directory, bin), /no build provenance from/);
+    expectRefusal(directory, () => runInstall(directory, bin));
   });
 });
 
-test("rejects a response carrying no attestation at all", () => {
+test("refuses a response carrying no attestation at all", () => {
   withInstall({ attestation: '{\n  "attestations": []\n}' }, (directory, bin) => {
-    assert.match(runInstall(directory, bin), /no build provenance from/);
+    expectRefusal(directory, () => runInstall(directory, bin));
   });
 });
 
-test("reports an asset with no published attestation", () => {
+// 404 is GitHub answering the question - nothing attested these bytes - so it is
+// a refusal, not an inability to check.
+test("refuses an asset with no published attestation", () => {
   withInstall({}, (directory, bin) => {
-    assert.match(runInstall(directory, bin, { FAIL_URLS: "attestations" }), /no build provenance published/);
+    const output = expectRefusal(directory, () => runInstall(directory, bin, { ATTESTATION_STATUS: "404" }));
+    assert.match(output, /no build provenance published/);
+  });
+});
 
-    const strict = expectFailure(() =>
-      runInstall(directory, bin, { FAIL_URLS: "attestations", ROM_WEAVER_REQUIRE_ATTESTATION: "1" }),
+// A rate limit or an outage left the question unanswered, which must not stop an
+// install: the unauthenticated API allows 60 requests an hour per address, so
+// this is reachable by ordinary use rather than only by attack.
+test("warns but installs when the API cannot answer", () => {
+  for (const environment of [{ ATTESTATION_STATUS: "403" }, { ATTESTATION_STATUS: "503" }, { ATTESTATION_CURL_FAILS: "1" }]) {
+    withInstall({}, (directory, bin) => {
+      const output = runInstall(directory, bin, environment);
+      assert.match(output, /could not reach the attestations API/);
+      expectWarning(directory, output);
+    });
+  }
+});
+
+// ...unless the caller says an unverifiable download is unacceptable.
+test("refuses an unanswerable check under ROM_WEAVER_REQUIRE_ATTESTATION", () => {
+  withInstall({}, (directory, bin) => {
+    expectRefusal(directory, () =>
+      runInstall(directory, bin, { ATTESTATION_STATUS: "403", ROM_WEAVER_REQUIRE_ATTESTATION: "1" }),
     );
-    assert.match(strict, /no build provenance published/);
+  });
+});
+
+// The escape hatch every refusal advertises. It has to work even for the case
+// that would otherwise be fatal, or the advice printed is wrong.
+test("ROM_WEAVER_SKIP_ATTESTATION installs past a refusal without asking the API", () => {
+  withInstall({ attestation: '{\n  "attestations": []\n}' }, (directory, bin) => {
+    const output = runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1", ATTESTATION_STATUS: "404" });
+    assert.match(output, /skipping the build provenance check/);
+    assert.ok(existsSync(join(directory, "install", "rom-weaver")));
+    assert.ok(!readFileSync(join(directory, "curl.log"), "utf8").includes("attestations"));
   });
 });
 
