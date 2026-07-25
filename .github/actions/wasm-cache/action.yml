@@ -98,7 +98,7 @@ runs:
               /^\[tools\]/ { section = "tools"; next }
               /^\[env\]/ { section = "env"; next }
               /^\[tasks\./ { section = $0 }
-              section == "tools" && /^(node|rust|"aqua:WebAssembly\/binaryen") =/ { print }
+              section == "tools" && /^(node|rust|"github:WebAssembly\/binaryen") =/ { print }
               section == "env" && /^(WASI_|CC_|CXX_|AR_|RANLIB_|CFLAGS_|CXXFLAGS_|CARGO_INCREMENTAL)/ { print }
               (section == "[tasks.build-wasm]" || section == "[tasks.build-wasm-prod]") && /^(env\.|run =)/ { print }
             '
