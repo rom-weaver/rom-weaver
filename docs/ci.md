@@ -768,7 +768,7 @@ can verify does not depend on which channel they installed from:
 | 9 CLI platform binaries | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
 | static webapp tarball | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
-| container images | `provenance: mode=max` + `actions/attest` in `docker-publish.yml` |
+| container images | `provenance: mode=max` + `actions/attest`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
 
 Two gaps remain, both because no mechanism exists: crates.io has no attestation
 story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
