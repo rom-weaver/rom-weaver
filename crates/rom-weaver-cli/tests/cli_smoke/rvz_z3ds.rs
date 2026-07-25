@@ -1,5 +1,42 @@
 use super::shared::*;
 
+// The nod create thread plan parks ~1/4 of the budget on the preloader, so counts 1-3 leave the
+// preloader with zero threads while 2 and 3 still run multiple concurrent block processors. That
+// band regressed in the browser (rvz-wasm-threads-2-and-3-fail); pin it natively too.
+#[test]
+fn rvz_compress_succeeds_across_low_thread_counts() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(4 * 1024 * 1024);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+
+    for threads in 1..=4 {
+        let rvz_path = temp.child(format!("disc-{threads}.rvz"));
+        let output = command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child("disc.iso").path().to_str().expect("path"),
+                "--format",
+                "rvz",
+                "--output",
+                rvz_path.path().to_str().expect("path"),
+                "--codec",
+                "zstd",
+                "--threads",
+                &threads.to_string(),
+                "--json",
+            ],
+            0,
+        );
+        let events = parse_json_lines(&output);
+        let terminal = events.last().expect("compress terminal event");
+        assert_eq!(
+            terminal["status"], "succeeded",
+            "rvz compress failed at --threads {threads}: {terminal}"
+        );
+    }
+}
+
 #[test]
 fn rvz_probe_reports_succeeded() {
     let temp = setup_temp_dir();

@@ -1,4 +1,8 @@
 use super::*;
+#[cfg(target_family = "wasm")]
+use std::collections::HashMap;
+#[cfg(target_family = "wasm")]
+use std::thread::ThreadId;
 use tracing::{debug, trace};
 
 #[derive(Clone, Copy)]
@@ -25,7 +29,14 @@ struct NodCreateThreadPlan {
 #[derive(Debug)]
 struct ReopenablePathDiscStream {
     path: PathBuf,
-    file: Option<File>,
+    // Every spawned wasm thread runs in its own worker with its own WASI fd table, so a descriptor
+    // is only meaningful on the thread that opened it - reading one from another thread yields
+    // EBADF, and *closing* one from another thread evicts whatever that thread has under the same
+    // number. Cloning gives each thread its own handle, but a single instance can still be shared:
+    // nod's preloader falls back to one mutex-guarded loader when it has no preloader threads, and
+    // the block processors then read through it concurrently. Keep one handle per calling thread so
+    // no descriptor is ever read or dropped off-thread.
+    files: HashMap<ThreadId, File>,
 }
 
 #[cfg(target_family = "wasm")]
@@ -33,17 +44,32 @@ impl ReopenablePathDiscStream {
     fn new(path: &Path) -> Self {
         Self {
             path: path.to_path_buf(),
-            file: None,
+            files: HashMap::new(),
         }
     }
 
     fn file(&mut self) -> io::Result<&mut File> {
-        if self.file.is_none() {
-            self.file = Some(File::open(&self.path)?);
+        use std::collections::hash_map::Entry;
+
+        match self.files.entry(std::thread::current().id()) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => Ok(entry.insert(File::open(&self.path)?)),
         }
-        self.file
-            .as_mut()
-            .ok_or_else(|| io::Error::other("failed to reopen disc stream"))
+    }
+}
+
+#[cfg(target_family = "wasm")]
+impl Drop for ReopenablePathDiscStream {
+    fn drop(&mut self) {
+        // Closing another thread's descriptor would corrupt that thread's fd table. Whoever drops
+        // the stream may not be the thread that opened every handle, so release only its own and
+        // leak the rest; those tables die with their worker.
+        let current = std::thread::current().id();
+        for (owner, file) in self.files.drain() {
+            if owner != current {
+                std::mem::forget(file);
+            }
+        }
     }
 }
 
@@ -52,7 +78,7 @@ impl Clone for ReopenablePathDiscStream {
     fn clone(&self) -> Self {
         Self {
             path: self.path.clone(),
-            file: None,
+            files: HashMap::new(),
         }
     }
 }
@@ -110,8 +136,16 @@ impl NodHandlerCore {
         // processor is the throughput bottleneck for disc create - especially at high zstd levels,
         // where compression dwarfs reading a raw source - so an even split parks ~half the budget
         // on a largely idle preloader. Bias toward processors (~3/4), keeping >=1 processor.
-        let processor_threads = (total_threads - total_threads / 4).max(1);
-        let preloader_threads = total_threads - processor_threads;
+        //
+        // Keep >=1 preloader thread whenever there is more than one thread to split: with zero of
+        // them nod's preloader serves every processor from a single shared loader, which is both a
+        // read bottleneck and, in the browser, a cross-thread descriptor hazard.
+        let preloader_threads = if total_threads > 1 {
+            (total_threads / 4).max(1)
+        } else {
+            0
+        };
+        let processor_threads = (total_threads - preloader_threads).max(1);
         NodCreateThreadPlan {
             preloader_threads,
             processor_threads,
