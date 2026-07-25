@@ -289,13 +289,25 @@ const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
           appendLog(`run ${step.name}`);
           return;
         }
-        const status = step.terminalStatus ? `${step.status}/${step.terminalStatus}` : step.status;
-        appendLog(`${status} ${step.name} ${formatDuration(step.durationMs)}`);
+        // Only worth printing when it disagrees with the step status; the sweep
+        // reports both as "succeeded" and the pair reads as noise.
+        const status =
+          step.terminalStatus && step.terminalStatus !== step.status
+            ? `${step.status}/${step.terminalStatus}`
+            : step.status;
+        // `command` carries the per-step detail the harness measured (for the
+        // thread sweep, the actual thread counts), so it has to reach the log.
+        const detail = [step.command, step.error].filter(Boolean).join(" ");
+        appendLog(`${status} ${step.name} ${formatDuration(step.durationMs)}${detail ? ` ${detail}` : ""}`);
       },
     };
     state.result = await runProfile(profile, callbacks);
-    state.status = "passed";
-    appendLog(`matrix passed ${summarizeBrowserFormatMatrixResult(state.result)}`);
+    // A profile that records failures instead of throwing (the thread sweep,
+    // so one bad count cannot discard the rest) still resolves, so the verdict
+    // has to come from the tally rather than from "did it reject".
+    const passed = state.result.failedSteps === 0;
+    state.status = passed ? "passed" : "failed";
+    appendLog(`matrix ${passed ? "passed" : "failed"} ${summarizeBrowserFormatMatrixResult(state.result)}`);
   } catch (error) {
     state.status = "failed";
     state.result = state.result || {
