@@ -1,0 +1,36 @@
+source: https://github.com/brandonocasey/nod
+branch: local-changes
+commit: 0648c5687529fd13cfd99f98d84935f4a8cf81f5
+upstream: https://github.com/encounter/nod
+upstream-commit: ac12dba52493328e803a02df947d07f1fd82e168
+includes-prs: encounter/nod#27 encounter/nod#28
+refreshed-by: hand (there is no vendor-nod script)
+
+The inlined tree is not byte-identical to the branch above. Audited against
+0648c56 on 2026-07-25 by formatting both sides with identical stable rustfmt and
+diffing; 33 of 34 files pair up (python.rs is dropped). Every difference falls
+into one of these, and there are NO functional divergences:
+
+  formatting     nod's rustfmt.toml is nightly (fn_single_line,
+                 use_small_heuristics = "Max", imports_granularity); this repo
+                 uses stable defaults. This is most of the raw diff - io/wia.rs
+                 is 250 differing lines that collapse to 0 once both sides are
+                 formatted the same way.
+  adaptation     `crate::` -> `crate::nod::` and doc paths -> `rom_weaver_containers::nod::`;
+                 lib.rs -> mod.rs; Python bindings and the OpenSSL backend
+                 dropped (util/aes.rs, util/digest.rs - the largest real
+                 category at ~174 lines); compression feature gates resolved to
+                 the pinned set; extra crate-level #![allow] for workspace lints.
+  dead code      Items upstream carries under #[allow(unused)] are deleted here
+                 rather than gated: preloader's group_hashes/GroupHashes,
+                 request_rx/stat_tx, last_adjust and its commented-out adaptive
+                 thread block, thread_id, shutdown(); nkit's ExtraData and
+                 IndexFile variants.
+  clippy         Two refactors that exist only here, replacing upstream #[allow]s
+                 and worth upstreaming: CheckBlockOptions in disc/writer.rs
+                 (replaces #[allow(clippy::too_many_arguments)]; call sites in
+                 io/ciso.rs and io/wbfs.rs) and Window::is_empty in util/mod.rs
+                 (replaces #[allow(clippy::len_without_is_empty)]).
+
+So: diff against the fork expecting differences, and re-sync deliberately. If a
+diff ever shows something outside these categories, it is a real divergence.

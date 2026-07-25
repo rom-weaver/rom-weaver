@@ -117,8 +117,46 @@ it, and is exposed internally as `rom_weaver_containers::nod`.
 
 The inlined copy is adapted from [encounter/nod](https://github.com/encounter/nod)
 and is intentionally self-contained; no nod checkout is required to build or
-publish rom-weaver. When a nod release lands with the needed API and feature
-support, replace the copy with the registry crate:
+publish rom-weaver.
+
+Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local
+patches are developed in the fork
+[brandonocasey/nod](https://github.com/brandonocasey/nod) on the `local-changes`
+branch, which is kept as upstream `main` plus whatever is currently out for
+review upstream ([#27](https://github.com/encounter/nod/pull/27) and
+[#28](https://github.com/encounter/nod/pull/28) today). Anything that lands
+upstream is dropped from `local-changes` rather than carried twice.
+
+Unlike `LIBARCHIVE_VERSION`, `NOD_VERSION` records a **base, not a mirror**, and
+it lists the exact categories the two trees differ by. There is no `vendor-nod`
+script, so re-syncing is a deliberate merge rather than a copy.
+
+Most of the apparent drift is formatting: nod's `rustfmt.toml` uses nightly-only
+options (`fn_single_line`, `use_small_heuristics = "Max"`, `imports_granularity`)
+while this repo has no `rustfmt.toml` and takes stable defaults. Format both sides
+the same way before drawing any conclusion from a diff - `io/wia.rs` looks like
+250 changed lines and is actually identical.
+
+The audit behind that list was done by copying both trees into a neutral
+directory, rewriting `crate::nod::` back to `crate::`, running the same stable
+`rustfmt` over both, and diffing:
+
+```bash
+rsync -a --include='*/' --include='*.rs' --exclude='*' <fork>/nod/src/ /tmp/a/
+rsync -a --include='*/' --include='*.rs' --exclude='*' \
+  crates/rom-weaver-containers/src/nod/ /tmp/b/
+mv /tmp/a/lib.rs /tmp/a/mod.rs
+find /tmp/b -name '*.rs' -exec sed -i '' 's/crate::nod::/crate::/g' {} +
+for f in $(cd /tmp/b && find . -name '*.rs'); do
+  rustfmt --edition 2021 --emit files /tmp/a/$f /tmp/b/$f; diff /tmp/a/$f /tmp/b/$f
+done
+```
+
+Anything that diff reports outside the categories in `NOD_VERSION` is a real
+divergence and should be either upstreamed or written down.
+
+When a nod release lands with the needed API and feature support, replace the copy
+with the registry crate:
 
 1. Verify the release contains the required Rust disc reader/writer APIs and
    compression/threading features.
@@ -144,6 +182,18 @@ Xbox XISO support comes from [antangelo/xdvdfs](https://github.com/antangelo/xdv
 upstream's `LICENSE` beside it, and is re-exported as
 `rom_weaver_containers::xdvdfs`.
 
+Its base is recorded in `crates/rom-weaver-containers/src/xdvdfs/XDVDFS_VERSION`,
+including the crates.io checksum of the exact `.crate` it came from. Like
+`NOD_VERSION` it records a **base, not a mirror**, and lists the categories the
+two trees differ by; see [Local changes against
+0.8.3](#local-changes-against-083) below for the narrative version.
+
+Two things make a diff against upstream awkward. Upstream 0.8.3 is edition 2021
+and this workspace is edition 2024, so neither side parses under the other's
+edition and each has to be formatted under its own. And unlike nod, formatting is
+*not* a source of noise here - neither project has a `rustfmt.toml`, so both
+already use stable defaults.
+
 ### Why it is not a crates.io dependency
 
 The published 0.8.3 release defines `write = ["std", "arrayvec", "wax"]`, so
@@ -158,10 +208,18 @@ write = ["std"]
 remap = ["dep:wax"]
 ```
 
-But no release has been cut since 0.8.3 (2024-11-13), and a `git` dependency is
-not an option because crates.io rejects any crate that has one. Keeping it as a
-vendored workspace member would have meant publishing `rom-weaver-xdvdfs`, so
-it is inlined instead.
+That is [antangelo/xdvdfs#189](https://github.com/antangelo/xdvdfs/pull/189)
+(`6b05af7`, merged 2026-07-18). It matters for reading this vendored tree: in
+0.8.3 the `remap` module is declared unconditionally, so there is no feature to
+turn it off, and the inlined copy simply deletes it. The content here is
+therefore 0.8.3 plus the outcome of that commit, which is why `XDVDFS_VERSION`
+records the sha alongside the release.
+
+But no release has been cut since 0.8.3 (2024-11-13) — still true as of
+2026-07-25, with crates.io's `write` feature still listing `wax` — and a `git`
+dependency is not an option because crates.io rejects any crate that has one.
+Keeping it as a vendored workspace member would have meant publishing
+`rom-weaver-xdvdfs`, so it is inlined instead.
 
 ### Going back to upstream when a release lands
 
@@ -218,10 +276,20 @@ deltas are listed at the top of `src/xdvdfs/mod.rs`; in short:
   would have resolved against `rom-weaver-containers`' own features and silently
   deleted the code they guard. Disabled-feature code is removed, not gated.
 - `crate::` paths rewritten to `crate::xdvdfs::`.
-- Edition 2024 fixes upstream never needed on 2021: `rng.gen()` → `rng.random()`
-  and two `ref` bindings dropped for match ergonomics.
+- Edition 2024 fixes upstream never needed on 2021: `rng.gen()` → `rng.random()`,
+  two `ref` bindings dropped for match ergonomics, and `if let` pairs collapsed
+  into let chains in `write/avl.rs`.
 - Seven clippy fixes, because the module now falls under the workspace
-  `-D warnings` gate.
+  `-D warnings` gate, including `% n > 0` → `!is_multiple_of(n)` and `<'_>`
+  lifetime elision.
+- `#[repr(C)]` dropped from a bitfield newtype in `layout.rs`: proc-bitfield 0.5
+  makes those `#[repr(transparent)]` itself, so the explicit attribute became a
+  hard error. The layout is unchanged.
+- **`layout.rs`'s two tests are not carried over.** They need `futures::executor`
+  and `futures` is not a dependency of `rom-weaver-containers`. The other nine
+  upstream tests (`util.rs` 3, `write/avl.rs` 6) are kept and run. This is the
+  only place the inlining costs coverage; adding `futures` as a dev-dependency
+  would let them come back.
 
 One coupling to know about: `handlers/xiso.rs` matches `ProgressInfo`
 exhaustively with no `_` arm. rustc suppresses the unreachable-pattern lint for
