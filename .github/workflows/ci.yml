@@ -136,6 +136,12 @@ jobs:
       # pull request from a fork receives a read-only token regardless, which is
       # why the export below is restricted to pushes on main anyway.
       packages: write
+      # Attesting the nightly image, so it carries the same signed provenance as
+      # every image the release fan-out pushes. Only the main-push path uses
+      # these; a pull request skips the attest step and cannot mint a token.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     strategy:
       fail-fast: false
       # Planned in `changes` above: an unselected image is absent from the
@@ -164,16 +170,31 @@ jobs:
       # would ship a bundle that is not the one deployed to
       # nightly.rom-weaver.com. The webapp `nightly` image is published from
       # `docker-prebuilt` below, off the exact artifact that deploy uses.
+      #
+      # `provenance`/`sbom` ride the push. They need an exporter that can carry
+      # attestations, which the plain local build this runs on a pull request is
+      # not, so they are gated on the same expression rather than set outright.
       - name: Build image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
+          provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI') && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:nightly
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
           cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
+
+      - name: Sign build provenance
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI'
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
       - name: Build CLI prebuilt path
         if: matrix.name == 'CLI'
@@ -202,6 +223,10 @@ jobs:
       # Only exercised on the main push below; a fork pull request receives a
       # read-only token regardless, which is why the push is gated on the ref.
       packages: write
+      # Same signed provenance the release fan-out attaches to every image.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -227,7 +252,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `provenance`/`sbom` ride the push: they need an exporter that can carry
+      # attestations, which the plain local build a pull request runs is not.
       - name: Build the prebuilt path
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -235,7 +263,17 @@ jobs:
           build-args: DIST=prebuilt
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
+
+      - name: Sign build provenance
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   # Built once and shared. This is the single most expensive step in the
   # pipeline (~6.5 min), and it used to run identically in two jobs.

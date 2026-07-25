@@ -747,8 +747,13 @@ The `main` row is the only one not published by `docker-publish.yml`. Its
 images come from `ci.yml` - the CLI from the `docker` job's source build, the
 webapp from `docker-prebuilt` - and carry the same change gating as the deploy
 they mirror, so a push touching neither image leaves `nightly` where it is.
-Those two are also the only published images without signed provenance and an
-SBOM; the release fan-out attests every image it pushes.
+They are attested exactly like the release images: `provenance: mode=max`, an
+SBOM, and an `actions/attest` signature pushed to the registry. Every published
+image carries the same evidence regardless of which workflow built it.
+
+Attestation is gated on the push rather than set outright, because it needs an
+exporter that can carry attestations - the plain local build a pull request
+runs is not one, and asking for provenance there fails the build.
 
 ## Actions cache budget
 
