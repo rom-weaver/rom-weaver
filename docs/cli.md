@@ -14,6 +14,9 @@ automation.
     - [Install script (macOS, Linux)](#install-script-macos-linux)
     - [Install script (Windows)](#install-script-windows)
     - [Verifying a download](#verifying-a-download)
+      - [Verifying a file you downloaded by hand](#verifying-a-file-you-downloaded-by-hand)
+      - [Checking the signature](#checking-the-signature)
+      - [What the install scripts do](#what-the-install-scripts-do)
     - [npm](#npm)
     - [cargo-binstall](#cargo-binstall)
     - [mise](#mise)
@@ -94,29 +97,60 @@ container images. It records which workflow, run, and commit produced the file,
 so an asset uploaded by anything other than the release workflow - a stolen
 token, a maintainer's laptop - has none.
 
-Both install scripts check it, and neither needs anything installed. They hash
-what they downloaded and ask GitHub whether this repository attested exactly
-those bytes:
+##### Verifying a file you downloaded by hand
+
+Hash the file and ask GitHub whether this repository's release workflow built
+exactly those bytes. Nothing needs installing - this is the same check both
+install scripts run:
 
 ```bash
-curl -s "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:$(
-  sha256sum rom-weaver-linux-x64-gnu | cut -d ' ' -f 1)"
+file=rom-weaver-linux-x64-gnu
+
+# sha256sum on Linux; macOS ships shasum instead.
+digest=$(sha256sum "$file" 2>/dev/null | cut -d ' ' -f 1) ||
+  digest=$(shasum -a 256 "$file" | cut -d ' ' -f 1)
+
+if curl -fsS "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1" \
+  | grep -q '"repository_id"'
+then
+  echo "VERIFIED: built by the rom-weaver release workflow"
+else
+  echo "NOT VERIFIED: no build provenance covers this file" >&2
+fi
 ```
 
-A response containing an attestation means this repository published one for
-that exact file. An empty `attestations` array, or a 404, means it did not - the
-query is scoped to both the repository and the digest, so there is nothing else
-to check.
+The PowerShell equivalent:
 
-That covers integrity as well as origin, which is why no `.sha256` sidecar is
-published any more: altered bytes hash to something no attestation covers, so
-they are refused. A sidecar could not have added anything, having shipped from
-the same place as the binary.
+```powershell
+$file = 'rom-weaver-win32-x64-msvc.exe'
+$digest = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
+$uri = "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${digest}" +
+  '?predicate_type=https://slsa.dev/provenance/v1'
+if (@((Invoke-RestMethod -Uri $uri).attestations).Count -gt 0) {
+  Write-Host 'VERIFIED: built by the rom-weaver release workflow'
+} else {
+  Write-Error 'NOT VERIFIED: no build provenance covers this file'
+}
+```
 
-What this does **not** check is the Sigstore signature - it trusts GitHub's API
-response over TLS, which is the same trust the download already places in
-GitHub. To verify the signature, certificate chain, and transparency-log
-inclusion, use `gh` (it must be signed in; the API above does not):
+**`predicate_type` is not optional.** Immutable releases make GitHub attest
+every release automatically, and that attestation lists the digest of every
+asset in it - so an unfiltered query returns a hit for any file in any release,
+and the check passes on files nothing built. That automatic attestation only
+says "this was in release X", which is also true of an asset a stolen token
+uploaded to the draft. Filtering to SLSA provenance is what makes a hit mean
+"the release workflow produced this".
+
+Because it is the release workflow's own attestation, it only exists for
+releases cut after this was added. Verifying an asset from an earlier release
+correctly reports NOT VERIFIED - there is no build provenance to find.
+
+##### Checking the signature
+
+The queries above trust GitHub's API response over TLS, which is the same trust
+the download itself already places in GitHub. They do not check the Sigstore
+signature. For that - signature, certificate chain, and transparency-log
+inclusion - use `gh`, which must be signed in even for a public repository:
 
 ```bash
 gh attestation verify rom-weaver-linux-x64-gnu --repo rom-weaver/rom-weaver
@@ -124,9 +158,23 @@ gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
   --repo rom-weaver/rom-weaver
 ```
 
-The install scripts deliberately do not reach for `gh` or `cosign`: requiring a
-tool most machines lack, to install a tool, is not a trade worth making in a
-`curl | sh`.
+npm packages carry their own provenance, verified with:
+
+```bash
+npm audit signatures
+```
+
+The install scripts deliberately do not reach for `gh` or `cosign`. Requiring a
+tool most machines lack, in order to install a tool, is not a trade worth making
+in a `curl | sh` - and `gh` refuses to run unauthenticated, so a fresh machine
+could not use it anyway.
+
+##### What the install scripts do
+
+They run the query above against the file they just downloaded, which is also
+why no `.sha256` sidecar is published any more: altered bytes hash to something
+no attestation covers, so the check refuses them. A sidecar could not have added
+anything, having shipped from the same place as the binary.
 
 A definite negative stops the install; an unanswered question does not:
 

@@ -117,10 +117,17 @@ else
   # and is fatal, while a 403 is the unauthenticated rate limit and means the
   # question went unanswered. `|| status=000` covers a network-level failure,
   # where curl exits non-zero and no code was ever received.
+  # `predicate_type` is load-bearing, not tidiness. Immutable releases make
+  # GitHub attest every release automatically, and that attestation lists each
+  # asset's digest - so an unfiltered query returns a hit for any file in any
+  # release and this check would pass on it. That attestation says only "this
+  # was in release X"; an asset uploaded to the draft by a stolen token is in it
+  # too. Filtering to SLSA provenance is what makes the answer mean "the release
+  # workflow built this", which is the claim being made here.
   status=$(curl --silent --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/attestations.json" \
     --write-out '%{http_code}' \
-    "https://api.github.com/repos/$repo/attestations/sha256:$digest") || status=000
+    "https://api.github.com/repos/$repo/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1") || status=000
 
   # A repository with no attestations at all answers 404; one that has some, but
   # none for these bytes, answers 200 with `{"attestations": []}`. Both mean the

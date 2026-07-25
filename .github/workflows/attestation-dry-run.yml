@@ -115,7 +115,7 @@ jobs:
           status=$(curl --silent --location --proto '=https' --tlsv1.2 \
             --output attestations.json \
             --write-out '%{http_code}' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$DIGEST")
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$DIGEST?predicate_type=https://slsa.dev/provenance/v1")
           test "$status" = 200
           grep -q '"repository_id"' attestations.json
           echo "install.sh check verified the attestation"
@@ -131,7 +131,7 @@ jobs:
           status=$(curl --silent --location --proto '=https' --tlsv1.2 \
             --output absent.json \
             --write-out '%{http_code}' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$absent")
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$absent?predicate_type=https://slsa.dev/provenance/v1")
           if [ "$status" = 200 ] && grep -q '"repository_id"' absent.json; then
             echo "::error::an unattested digest reported provenance"
             exit 1
@@ -147,7 +147,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
           $response = Invoke-RestMethod -UseBasicParsing `
-            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/attestations/sha256:$env:DIGEST"
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/attestations/sha256:$env:DIGEST?predicate_type=https://slsa.dev/provenance/v1"
           if (@($response.attestations).Count -lt 1) {
             throw 'expected an attestation for this digest'
           }

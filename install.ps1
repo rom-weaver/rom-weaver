@@ -71,8 +71,10 @@ try {
   } else {
     $attestations = $null
     try {
+      # predicate_type is load-bearing - see install.sh. Without it, GitHub's
+      # automatic immutable-release attestation answers for any release asset.
       $response = Invoke-RestMethod -UseBasicParsing `
-        -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())"
+        -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())?predicate_type=https://slsa.dev/provenance/v1"
       $attestations = $response.attestations
     } catch {
       # 404 is GitHub answering "nothing attested these bytes", which is a

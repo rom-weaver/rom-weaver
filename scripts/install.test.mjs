@@ -115,7 +115,9 @@ test("installs the binary for the host platform", () => {
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
       // No `.sha256` fetch: the provenance lookup is keyed by the hash of what
       // actually arrived, so it subsumes the checksum it used to download.
-      `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}`,
+      // `predicate_type` is asserted here because dropping it silently weakens
+      // the check: GitHub's automatic release attestation would answer instead.
+      `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });

@@ -775,6 +775,14 @@ story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
 of their own - both pin the release assets by sha256, so attesting the binaries
 covers them.
 
+Immutable releases separately make GitHub attest every release automatically,
+with an `in-toto.io/attestation/release/v0.2` statement listing each asset's
+digest. That is not build provenance and must not be mistaken for it: it says an
+asset was in a release, which is equally true of one a stolen token uploaded to
+the draft. It is also why every consumer query filters on
+`predicate_type=https://slsa.dev/provenance/v1` - without the filter, the
+automatic attestation answers and the check passes on anything in any release.
+
 This replaced the `.sha256` sidecars that used to ship beside each asset, which
 are no longer published. They were written by the job that wrote the binary, so
 they proved the download was intact and nothing about where it came from. The
