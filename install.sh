@@ -46,8 +46,65 @@ curl --fail --location --proto '=https' --tlsv1.2 \
 
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$tmp_dir" && sha256sum --check "$asset.sha256")
+  digest=$(sha256sum "$tmp_dir/$asset" | cut -d ' ' -f 1)
 else
   (cd "$tmp_dir" && shasum --algorithm 256 --check "$asset.sha256")
+  digest=$(shasum --algorithm 256 "$tmp_dir/$asset" | cut -d ' ' -f 1)
+fi
+
+# The checksum above only proves the download is intact: the sidecar ships from
+# the same place as the binary, so anything that can replace one can replace the
+# other. Build provenance is the part that says which workflow produced this
+# file, so an asset uploaded by a stolen token or a maintainer's laptop fails
+# here even though its checksum matches.
+#
+# Advisory by default - a verification the installer cannot perform must not
+# strand someone on a minimal box. Set ROM_WEAVER_REQUIRE_ATTESTATION=1 to make
+# every branch below fatal instead.
+require_attestation="${ROM_WEAVER_REQUIRE_ATTESTATION:-0}"
+attestation_failed() {
+  if [ "$require_attestation" = 1 ]; then
+    echo "rom-weaver: $1" >&2
+    exit 1
+  fi
+  echo "rom-weaver: $1" >&2
+}
+
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  # The only branch that checks the Sigstore signature, certificate chain, and
+  # transparency-log inclusion rather than trusting the API response.
+  if gh attestation verify "$tmp_dir/$asset" --repo "$repo" >/dev/null 2>&1; then
+    echo "Verified build provenance for $asset"
+  else
+    attestation_failed "build provenance verification FAILED for $asset"
+  fi
+elif command -v jq >/dev/null 2>&1; then
+  # No gh, so this reads the attestation over TLS from api.github.com instead of
+  # verifying the bundle itself. That is strictly weaker - it trusts GitHub's
+  # API rather than the signature - but it is the same trust already placed in
+  # the TLS download above, and it still catches an asset that no workflow run
+  # ever produced.
+  if curl --fail --silent --location --proto '=https' --tlsv1.2 \
+    --output "$tmp_dir/attestations.json" \
+    "https://api.github.com/repos/$repo/attestations/sha256:$digest"; then
+    # The signed statement is a base64 DSSE payload; its `sourceRepositoryURI`
+    # is what pins the attestation to this repository rather than to any
+    # repository that happens to have attested the same bytes.
+    source_uri=$(jq -r '
+      .attestations[]?.bundle.dsseEnvelope.payload // empty
+      | @base64d | fromjson
+      | .predicate.buildDefinition.externalParameters.workflow.repository // empty
+    ' "$tmp_dir/attestations.json" 2>/dev/null | head -n 1)
+    if [ "$source_uri" = "https://github.com/$repo" ]; then
+      echo "Found build provenance for $asset (install gh to verify its signature)"
+    else
+      attestation_failed "no build provenance from $repo for $asset"
+    fi
+  else
+    attestation_failed "no build provenance published for $asset"
+  fi
+else
+  attestation_failed "skipping provenance check - install gh or jq to enable it"
 fi
 
 mkdir -p "$install_dir"

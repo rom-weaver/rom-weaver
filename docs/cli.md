@@ -13,6 +13,7 @@ automation.
     - [Scoop (Windows)](#scoop-windows)
     - [Install script (macOS, Linux)](#install-script-macos-linux)
     - [Install script (Windows)](#install-script-windows)
+    - [Verifying a download](#verifying-a-download)
     - [npm](#npm)
     - [cargo-binstall](#cargo-binstall)
     - [mise](#mise)
@@ -65,9 +66,11 @@ scoop install rom-weaver
 
 #### Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin` and checks it against the
-published checksum. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or
-`ROM_WEAVER_VERSION` to install a specific release.
+Downloads the latest release to `~/.local/bin`, checks it against the published
+checksum, and checks its build provenance. Set `ROM_WEAVER_INSTALL_DIR` to
+choose another directory, or `ROM_WEAVER_VERSION` to install a specific release.
+See [Verifying a download](#verifying-a-download) for what the provenance check
+does and does not prove.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -77,11 +80,44 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 #### Install script (Windows)
 
 The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It
-honors the same two environment variables.
+honors the same environment variables and runs the same checks.
 
 ```powershell
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
 ```
+
+#### Verifying a download
+
+Every published artifact carries signed [build provenance][slsa]: the platform
+binaries and the webapp tarball on each release, the npm packages, and the
+container images. It records which workflow, run, and commit produced the file,
+so an asset uploaded by anything other than the release workflow - a stolen
+token, a maintainer's laptop - fails verification even when its checksum
+matches. The `.sha256` sidecar next to each asset cannot catch that: it ships
+from the same place as the binary, so whatever can replace one can replace the
+other.
+
+To check any release asset yourself:
+
+```bash
+gh attestation verify rom-weaver-linux-x64-gnu --repo rom-weaver/rom-weaver
+gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
+  --repo rom-weaver/rom-weaver
+```
+
+Both install scripts do this for you. They prefer `gh`, which verifies the
+Sigstore signature, the certificate chain, and transparency-log inclusion. With
+no `gh`, they fall back to reading the attestation from `api.github.com` over
+TLS and confirming it names this repository - weaker, because it trusts the API
+response rather than the signature, but the same trust the download already
+places in GitHub, and it still catches an asset no workflow run produced. With
+neither `gh` nor `jq`, the check is skipped.
+
+The check is advisory by default so a minimal machine is not left unable to
+install. Set `ROM_WEAVER_REQUIRE_ATTESTATION=1` to make every one of those
+outcomes - failed, absent, or skipped - fatal instead.
+
+[slsa]: https://slsa.dev/spec/v1.0/provenance
 
 #### npm
 

@@ -56,6 +56,47 @@ try {
     throw "checksum mismatch for ${asset}: expected $expected, got $actual"
   }
 
+  # The checksum above only proves the download is intact - the sidecar ships
+  # from the same place as the binary. Build provenance is what says which
+  # workflow produced the file, so an asset uploaded by a stolen token fails
+  # here even though its checksum matches. See install.sh for the same two
+  # branches; advisory unless ROM_WEAVER_REQUIRE_ATTESTATION=1.
+  $requireAttestation = $env:ROM_WEAVER_REQUIRE_ATTESTATION -eq '1'
+  function Write-AttestationWarning([string]$message) {
+    if ($requireAttestation) { throw $message }
+    Write-Warning $message
+  }
+
+  if (Get-Command gh -ErrorAction SilentlyContinue) {
+    # The only branch that checks the Sigstore signature, certificate chain, and
+    # transparency-log inclusion rather than trusting the API response.
+    gh attestation verify $binaryPath --repo $repo 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "Verified build provenance for $asset"
+    } else {
+      Write-AttestationWarning "build provenance verification FAILED for $asset"
+    }
+  } else {
+    # No gh, so this trusts GitHub's API over TLS rather than the signature -
+    # strictly weaker, but the same trust the download already places in
+    # github.com, and it still catches an asset no workflow run produced.
+    try {
+      $response = Invoke-RestMethod -UseBasicParsing `
+        -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())"
+      $payload = $response.attestations[0].bundle.dsseEnvelope.payload
+      $statement = [System.Text.Encoding]::UTF8.GetString(
+        [System.Convert]::FromBase64String($payload)) | ConvertFrom-Json
+      $sourceUri = $statement.predicate.buildDefinition.externalParameters.workflow.repository
+      if ($sourceUri -eq "https://github.com/$repo") {
+        Write-Host "Found build provenance for $asset (install gh to verify its signature)"
+      } else {
+        Write-AttestationWarning "no build provenance from $repo for $asset"
+      }
+    } catch {
+      Write-AttestationWarning "no build provenance published for ${asset}: $($_.Exception.Message)"
+    }
+  }
+
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   $target = Join-Path $installDir 'rom-weaver.exe'
   Move-Item -Path $binaryPath -Destination $target -Force
