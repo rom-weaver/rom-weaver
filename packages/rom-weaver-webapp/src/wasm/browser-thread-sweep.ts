@@ -20,8 +20,13 @@
  * The last shape is what a naive sweep would use, and it would pass with
  * threading completely broken - hence the entry count and size defaults here.
  *
- * Reachable from `mobile-safari-matrix.html` (profile `threads`) and from
- * `tests/wasm/browser-thread-sweep.test.mjs`. The app itself never imports it.
+ * Reachable from `mobile-safari-matrix.html` (profile `threads`). The app
+ * itself never imports it.
+ *
+ * The payload is synthetic filler generated in-browser, not ROM data: 1 MiB
+ * entries that are three-quarters smooth ramp and one-quarter PRNG noise,
+ * zipped with deflate. The mix is what keeps entries big enough after
+ * compression for extract to still split them.
  */
 import { resolveAppleMobileSharedMemoryMaximumPages } from "../lib/runtime/op-memory-estimate.ts";
 import type { BrowserFormatMatrixStep, BrowserFormatMatrixSummary } from "./browser-format-matrix.ts";
@@ -41,7 +46,7 @@ import type { RomWeaverRunJsonEvent } from "./rom-weaver-types.d.ts";
 import { createBrowserWorkerClient } from "./workers/browser-worker-client.ts";
 
 /** Every thread count the sweep exercises, including the non-powers of two. */
-export const BROWSER_THREAD_SWEEP_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+const BROWSER_THREAD_SWEEP_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
 
 // One entry per thread at the top of the sweep, so the highest count still has
 // work for every thread it asked for.
