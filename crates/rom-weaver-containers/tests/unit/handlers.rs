@@ -2142,6 +2142,19 @@ mod tests {
 
         let single_thread = ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(8));
         assert_eq!(core.create_thread_counts_for_test(&single_thread), (0, 0));
+
+        // Any split budget keeps a preloader thread. Zero preloader threads makes nod serve every
+        // processor from one shared loader, which in the browser hands a descriptor to a thread
+        // that cannot use it (rvz create failed with EBADF at exactly 2 and 3 threads).
+        // A budget of 1 does not negotiate parallelism at all, so it plans no workers of either kind.
+        for (total, expected) in [(1, (0, 0)), (2, (1, 1)), (3, (1, 2)), (4, (1, 3))] {
+            let execution = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(total));
+            assert_eq!(
+                core.create_thread_counts_for_test(&execution),
+                expected,
+                "unexpected preloader/processor split at {total} threads"
+            );
+        }
     }
 
     #[test]
