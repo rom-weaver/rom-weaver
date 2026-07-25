@@ -60,7 +60,8 @@
 
       #matrix-run,
       #matrix-run-exhaustive,
-      #matrix-run-stress {
+      #matrix-run-stress,
+      #matrix-run-threads {
         background: #2f6f5e;
         border-color: #2f6f5e;
         color: white;
@@ -91,6 +92,8 @@
       }
 
       pre {
+        font-size: 0.7rem;
+        line-height: 1.35;
         margin: 0;
         max-height: 48vh;
         overflow: auto;
@@ -106,6 +109,7 @@
         <button id="matrix-run" type="button">Run fast matrix</button>
         <button id="matrix-run-exhaustive" type="button">Run exhaustive matrix</button>
         <button id="matrix-run-stress" type="button">Run archive stress</button>
+        <button id="matrix-run-threads" type="button">Run thread sweep (1-16)</button>
         <button disabled id="matrix-copy" type="button">Copy report</button>
         <button disabled id="matrix-download" type="button">Download report</button>
       </div>
