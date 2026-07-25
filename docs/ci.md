@@ -67,6 +67,7 @@ config all come from the base commit.
 | `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `Gates/CLA Signed` |
 | `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `Gates/PR Title Lint` |
 | `scripts/ci/github-api.mjs` | (exercised by both) | - |
+| `scripts/ci/commitlint-report.mjs` | (exercised by the title gate's step) | - |
 
 Both tests drive the script against a stub GitHub API served over real HTTP, so
 the JSON, base64 and status handling runs rather than a mock of it.
@@ -130,16 +131,31 @@ that reaches `main` and the only text Release Please reads. Branch commits are
 squashed away, so they are not linted.
 
 commitlint runs in the workflow step and hands the gate script a verdict plus a
-file of its output. That split is deliberate: routing an attacker-controlled
-title through `GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step
-outputs, and it keeps the half worth testing free of a commitlint install. A bad
-title gets a failing status and one comment quoting commitlint's complaint, the
-valid types (read from `.config/commitlint.config.mjs`, so the advice cannot
-drift from the rule), and an example. Editing the title reruns the gate; passing
+file. That split is deliberate: routing an attacker-controlled title through
+`GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step outputs, and it
+keeps the half worth testing free of a commitlint install.
+
+The file is JSON, not commitlint's own paragraph. `scripts/ci/commitlint-report.mjs`
+is a commitlint formatter (`--format`, passed by path so nothing has to be
+installed) that writes the report out structurally - a `name`, `level` and
+`message` per problem - and returns the plain text that lands in the log. The
+gate branches on rule names, which is what lets the comment say something
+specific instead of restating the format under every kind of failure:
+
+| Rules | What the comment adds |
+| --- | --- |
+| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. Suggests the title prefixed with `fix:`. |
+| `type-case`, `type-enum` | Names the type it rejected. Suggests the lower-cased title when that alone makes the type valid; otherwise lists the allowed types and suggests nothing. |
+| `header-max-length` | How many characters have to go. No suggestion, and no example of a shape the title already has. |
+
+Valid types are read from `.config/commitlint.config.mjs` - the same file that
+rejected the title - so the advice cannot drift from the rule. A failure that
+carries no lint result at all is commitlint breaking rather than a bad title, so
+the gate throws instead of posting. Editing the title reruns the gate; passing
 **deletes** the comment, so a green pull request carries no gate chatter. The
-quoted block is fenced with a fence longer than any backtick run inside it -
-inside a fence GitHub neither links nor notifies an `@mention`, and a shorter
-fence cannot close the block.
+title is quoted in a fence longer than any backtick run inside it - inside a
+fence GitHub neither links nor notifies an `@mention`, and a shorter fence
+cannot close the block.
 
 Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
 no `push` trigger: the release pull request is created and refreshed only by a

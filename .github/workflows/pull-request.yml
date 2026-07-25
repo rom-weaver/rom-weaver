@@ -107,20 +107,25 @@ jobs:
       # never has to cross a step boundary: routing an attacker-controlled title
       # through `GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step
       # outputs. A file and one process do not have that problem.
+      #
+      # `--format` points at a path rather than a package name so the formatter
+      # loads without being installed. It writes the structured report to
+      # LINT_REPORT_FILE itself rather than the step redirecting stdout, which
+      # keeps npm's own chatter out of the JSON, and returns the plain text that
+      # lands in the log.
       - name: Check pull request title
         env:
           PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          LINT_OUTPUT_FILE: ${{ runner.temp }}/commitlint.txt
+          LINT_REPORT_FILE: ${{ runner.temp }}/commitlint.json
         run: |
           if printf '%s\n' "$PULL_REQUEST_TITLE" |
             npm exec --yes --package="@commitlint/cli@21.2.1" --package="@commitlint/config-conventional@21.2.0" -- \
-              commitlint --config .config/commitlint.config.mjs >"$LINT_OUTPUT_FILE" 2>&1
+              commitlint --config .config/commitlint.config.mjs --format ./scripts/ci/commitlint-report.mjs
           then
             LINT_VERDICT=pass
           else
             LINT_VERDICT=fail
           fi
-          cat "$LINT_OUTPUT_FILE"
           LINT_VERDICT="$LINT_VERDICT" node scripts/ci/pr-title-gate.mjs

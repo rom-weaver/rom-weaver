@@ -18,6 +18,16 @@ const REPO = "rom-weaver/rom-weaver";
 const HEAD_SHA = "deadbeef";
 const STATUS_CONTEXT = "Gates/PR Title Lint";
 const MARKER = "<!-- rom-weaver-pr-title-gate -->";
+// Verbatim from commitlint, so a test that asserts on rendering asserts on the
+// text a contributor really gets.
+const MESSAGES = {
+  "type-empty": "type may not be empty",
+  "subject-empty": "subject may not be empty",
+  "type-case": "type must be lower-case",
+  "type-enum":
+    "type must be one of [build, chore, ci, docs, dx, feat, fix, perf, refactor, revert, style, test]",
+  "header-max-length": "header must not be longer than 150 characters, current length is 205",
+};
 
 // A stand-in GitHub API, served over real HTTP so the script's own JSON and
 // status handling runs rather than a stub of it - the same shape the CLA gate's
@@ -61,12 +71,42 @@ function startApi({ title, comments }) {
 
 // Must not block the event loop: the stub API is served from this very process,
 // so a synchronous child would deadlock waiting on a server that cannot run.
-async function run({ title = "chore: something", verdict, problems, comments = [] } = {}) {
+async function run({
+  title = "chore: something",
+  verdict,
+  errors = [],
+  warnings = [],
+  report,
+  comments = [],
+} = {}) {
   const api = startApi({ title, comments });
   const summary = join(mkdtempSync(join(tmpdir(), "pr-title-gate-")), "summary.md");
   writeFileSync(summary, "");
-  const outputFile = join(dirname(summary), "commitlint.txt");
-  writeFileSync(outputFile, problems ?? "");
+  const reportFile = join(dirname(summary), "commitlint.json");
+  // The shape `commitlint-report.mjs` writes: a rule name and a message per
+  // problem, which is the whole reason this gate can say more than "invalid".
+  writeFileSync(
+    reportFile,
+    report ??
+      JSON.stringify({
+        valid: errors.length === 0,
+        errorCount: errors.length,
+        warningCount: warnings.length,
+        results: [
+          {
+            valid: errors.length === 0,
+            errors: errors.map((name) => ({ level: 2, valid: false, name, message: MESSAGES[name] })),
+            warnings: warnings.map((name) => ({
+              level: 1,
+              valid: false,
+              name,
+              message: MESSAGES[name],
+            })),
+            input: title,
+          },
+        ],
+      }),
+  );
 
   let status = 0;
   let stdout = "";
@@ -82,7 +122,7 @@ async function run({ title = "chore: something", verdict, problems, comments = [
         GITHUB_REPOSITORY: REPO,
         PR_NUMBER: "7",
         LINT_VERDICT: verdict,
-        LINT_OUTPUT_FILE: outputFile,
+        LINT_REPORT_FILE: reportFile,
         GITHUB_STEP_SUMMARY: summary,
       },
     }));
@@ -147,14 +187,17 @@ test("a bad title fails the status and explains itself in a comment", async () =
   const { status, calls } = await run({
     title: "fixed the thing",
     verdict: "fail",
-    problems: "✖ subject may not be empty [subject-empty]",
+    errors: ["subject-empty", "type-empty"],
   });
   // Green job, red status: a red job is reserved for the gate itself breaking.
   assert.equal(status, 0);
   assert.equal(statusState(calls), "failure");
   const body = commentBody(calls);
   assert.ok(body.startsWith(MARKER), "the comment must carry the marker it is found by");
-  assert.ok(body.includes("subject-empty"), "commitlint's problems must reach the contributor");
+  // Every problem, named by its rule and by what it means - not one paragraph
+  // the contributor has to take apart.
+  assert.match(body, /^\| `subject-empty` \| subject may not be empty \|$/m);
+  assert.match(body, /^\| `type-empty` \| type may not be empty \|$/m);
   // Drift here is the whole failure mode: advice listing a type the config
   // rejects sends contributors round in circles.
   assert.ok(body.includes("`feat`") && body.includes("`dx`"));
@@ -166,7 +209,7 @@ test("the rename is spelled out against the contributor's own title", async () =
   const { calls } = await run({
     title: "Fixed the broken thing",
     verdict: "fail",
-    problems: "\u2716 type may not be empty [type-empty]",
+    errors: ["type-empty"],
   });
   const body = commentBody(calls);
   assert.ok(body.includes("**Edit** button"), "the comment must say how to rename");
@@ -176,53 +219,128 @@ test("the rename is spelled out against the contributor's own title", async () =
   );
 });
 
-test("no suggestion is offered when it would break header-max-length", async () => {
+test("a missing type explains the empty subject it drags in with it", async () => {
   const { calls } = await run({
-    title: `feat ${"x".repeat(150)}`,
+    title: "fixed the thing",
     verdict: "fail",
-    problems: "\u2716 header may not be longer than 150 characters [header-max-length]",
+    errors: ["subject-empty", "type-empty"],
+  });
+  // Two rules fire, one mistake caused them. Saying so is the point of reading
+  // rule names instead of reprinting commitlint's paragraph.
+  assert.ok(commentBody(calls).includes("neither a type nor a subject"));
+});
+
+test("a miscased type is fixed by its case, not by prefixing a second type", async () => {
+  const { calls } = await run({
+    title: "Fix: the thing",
+    verdict: "fail",
+    errors: ["type-case", "type-enum"],
   });
   const body = commentBody(calls);
-  assert.ok(!body.includes("For this title, that would be"), "a rejected rename must not be proposed");
-  assert.ok(body.includes("feat(webapp): add sample assets"), "the generic example must stand in");
+  assert.ok(body.includes("\nfix: the thing\n"), "lower-casing a known type is the whole fix");
+  assert.ok(!body.includes("fix: Fix:"), "a type must not be prefixed onto a type");
+});
+
+test("an invented type gets the type list and no suggestion", async () => {
+  const { calls } = await run({
+    title: "wibble: the thing",
+    verdict: "fail",
+    errors: ["type-enum"],
+  });
+  const body = commentBody(calls);
+  assert.ok(!body.includes("Rename it to"), "a type this script cannot guess gets no rename");
+  assert.ok(body.includes("`feat`"), "but the allowed types must still be listed");
+});
+
+test("an over-long title is told how much to cut, and gets no suggestion", async () => {
+  const { calls } = await run({
+    title: `fix: ${"x".repeat(200)}`,
+    verdict: "fail",
+    errors: ["header-max-length"],
+  });
+  const body = commentBody(calls);
+  assert.ok(body.includes("55 have to go"), "the arithmetic is the gate's job, not the contributor's");
+  assert.ok(!body.includes("Rename it to"), "a rejected rename must not be proposed");
+  // Nothing about this title's shape was wrong, so neither the type list nor an
+  // example of the shape has anything to tell whoever wrote it.
+  assert.ok(!body.includes("Valid types"));
+  assert.ok(!body.includes("feat(webapp): add sample assets"));
+});
+
+test("a warning riding along with an error is graded in the table", async () => {
+  const { calls } = await run({
+    title: "wibble: the thing",
+    verdict: "fail",
+    errors: ["type-enum"],
+    warnings: ["subject-empty"],
+  });
+  const body = commentBody(calls);
+  assert.match(body, /^\| Level \| Rule \| Problem \|$/m);
+  assert.match(body, /^\| warning \| `subject-empty` \|/m);
 });
 
 test("a second failing run edits the comment instead of adding another", async () => {
   const { calls } = await run({
     title: "still wrong",
     verdict: "fail",
-    problems: "✖ type may not be empty [type-empty]",
+    errors: ["type-empty"],
     comments: [{ id: 11, body: `${MARKER}\nrename this` }],
   });
   assert.ok(called(calls, "PATCH", "issues/comments/11"));
   assert.ok(!called(calls, "POST", "issues/7/comments"));
 });
 
+// Every fenced block in a body, so an assertion about one of them cannot be
+// satisfied by another block that happens to sit nearby.
+function fencedBlocks(body) {
+  const blocks = [];
+  let open = null;
+  for (const line of body.split("\n")) {
+    const fence = line.match(/^(`{3,})$/)?.[1];
+    if (open && fence === open.fence) {
+      blocks.push({ fence: open.fence, content: open.lines.join("\n") });
+      open = null;
+    } else if (open) {
+      open.lines.push(line);
+    } else if (fence) {
+      open = { fence, lines: [] };
+    }
+  }
+  return blocks;
+}
+
 test("a title carrying a code fence cannot break out of the quoted block", async () => {
-  const { calls } = await run({
-    title: "```\n**bold**",
-    verdict: "fail",
-    problems: 'found "```" in the title\n```\nnot a fence',
-  });
-  const body = commentBody(calls);
-  const fence = body.match(/^`{4,}$/gm);
-  assert.equal(fence?.length, 2, "the block must open and close on a fence of its own length");
+  const title = "```\n**bold**";
+  const { calls } = await run({ title, verdict: "fail", errors: ["type-empty"] });
+  const blocks = fencedBlocks(commentBody(calls));
+  const quoted = blocks.find((block) => block.content === title);
+  assert.ok(quoted, "the offending title must survive verbatim inside a block of its own");
   assert.ok(
-    fence[0].length > 3,
+    quoted.fence.length > 3,
     "an embedded fence must be outgrown by the block's own, not merely indented",
   );
-  const [, quoted] = body.split(fence[0]);
-  assert.ok(quoted.includes("```"), "the offending text must survive verbatim");
 });
 
 test("the failure is repeated in the job summary", async () => {
-  const { summary } = await run({ title: "nope", verdict: "fail", problems: "✖ nope" });
+  const { summary } = await run({ title: "nope", verdict: "fail", errors: ["type-empty"] });
   assert.ok(summary.includes("Invalid pull request title"));
-  assert.ok(summary.includes("✖ nope"));
+  assert.ok(summary.includes("type-empty"));
 });
 
 test("an unusable verdict is the gate breaking, not a bad title", async () => {
   const { status, calls } = await run({ verdict: "maybe" });
+  assert.notEqual(status, 0);
+  assert.equal(statusState(calls), undefined, "no status may be posted on a broken gate");
+});
+
+test("a failure with no lint result is the gate breaking, not a bad title", async () => {
+  // commitlint exiting non-zero without linting anything - a missing config, a
+  // broken install. Reporting that as an invalid title sends the contributor
+  // after a fault that is not theirs.
+  const { status, calls } = await run({
+    verdict: "fail",
+    report: JSON.stringify({ valid: false, results: [] }),
+  });
   assert.notEqual(status, 0);
   assert.equal(statusState(calls), undefined, "no status may be posted on a broken gate");
 });
