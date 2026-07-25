@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -141,6 +141,71 @@ test("refuses when nothing attested these bytes", { skip }, () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /no build provenance from/);
     // The way out has to be printed, or a refusal is an outage.
+    assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
+  });
+});
+
+// A 200 that is not the shape the check asks for is still an answer, and the
+// answer is "nothing attested these bytes" - the same verdict install.sh reaches
+// by finding no `repository_id`. Reading the property blind would throw under
+// `Set-StrictMode` and be caught as an unreachable API, quietly downgrading this
+// refusal to a warning.
+test("refuses a 200 that is not an attestations response", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(directory, "\nfunction Invoke-RestMethod { return 'a proxy login page' }\n");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /no build provenance from/);
+  });
+});
+
+// The other half of the split: the question went unanswered, so the install
+// continues. HttpRequestException is what PowerShell 7 raises for a transport
+// failure, and it carries no `Response` at all - reaching for one throws a
+// second time from inside the catch, which is what this pins down.
+const TRANSPORT_FAILURE_STUB = `
+function Invoke-RestMethod {
+  throw [System.Net.Http.HttpRequestException]::new('no such host is known')
+}
+`;
+
+test("warns but installs when the API cannot be reached", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(directory, TRANSPORT_FAILURE_STUB);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /could not reach the attestations API/);
+    assert.match(result.stderr, /this download is unverified/);
+    assert.ok(existsSync(join(directory, "install", "rom-weaver.exe")), "a warning must not block the install");
+  });
+});
+
+test("refuses an unreachable API under ROM_WEAVER_REQUIRE_ATTESTATION", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(
+      directory,
+      `$env:ROM_WEAVER_REQUIRE_ATTESTATION = '1'${TRANSPORT_FAILURE_STUB}`,
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
+    assert.ok(!existsSync(join(directory, "install", "rom-weaver.exe")), "refused install must leave no binary");
+  });
+});
+
+// A 404 is GitHub answering rather than failing to, so it refuses like an empty
+// list. HttpResponseException is PowerShell 7 only; Windows PowerShell raises
+// WebException, whose `Response` the same status read handles.
+test("refuses a 404 from the attestations API", { skip }, () => {
+  withPwsh((directory) => {
+    const result = runProvenance(
+      directory,
+      `
+function Invoke-RestMethod {
+  $response = [System.Net.Http.HttpResponseMessage]::new(404)
+  throw [Microsoft.PowerShell.Commands.HttpResponseException]::new('Not Found', $response)
+}
+`,
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /no build provenance from/);
     assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
   });
 });

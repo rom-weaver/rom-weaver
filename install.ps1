@@ -66,21 +66,43 @@ try {
     throw "refusing to install ${asset}: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1"
   }
 
+  # Only an HTTP error carries a response to read a status off. PowerShell 7
+  # raises System.Net.Http.HttpRequestException for a transport failure - no
+  # `Response` property at all - and under `Set-StrictMode` reaching for one
+  # throws a second time, from inside the catch, losing the warn-and-continue
+  # this returns 0 to reach. Windows PowerShell's WebException has the property
+  # and leaves it null, which the same `-eq 404` handles.
+  function Get-StatusCode($exception) {
+    if (-not $exception.PSObject.Properties['Response']) { return 0 }
+    if ($null -eq $exception.Response) { return 0 }
+    return $exception.Response.StatusCode.value__
+  }
+
   if ($skipAttestation) {
     Write-Warning 'skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)'
   } else {
-    $attestations = $null
+    $attestations = @()
+    $answered = $false
     try {
       # predicate_type is load-bearing - see install.sh. Without it, GitHub's
       # automatic immutable-release attestation answers for any release asset.
       $response = Invoke-RestMethod -UseBasicParsing `
         -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())?predicate_type=https://slsa.dev/provenance/v1"
-      $attestations = $response.attestations
+      # A 200 carrying anything other than the expected shape - a proxy's login
+      # page, say - is still an answer, and the answer is that nothing attested
+      # these bytes. Reading the property blind would instead throw under
+      # `Set-StrictMode` and land in the catch below, turning a refusal into a
+      # warn-and-install. install.sh refuses the same case, by finding no
+      # `repository_id` in the body.
+      if ($null -ne $response -and $response.PSObject.Properties['attestations']) {
+        $attestations = @($response.attestations)
+      }
+      $answered = $true
     } catch {
       # 404 is GitHub answering "nothing attested these bytes", which is a
       # verdict; anything else (rate limit, 5xx, no network) left the question
       # unanswered.
-      if ($_.Exception.Response.StatusCode.value__ -eq 404) {
+      if ((Get-StatusCode $_.Exception) -eq 404) {
         Deny-Install "no build provenance from $repo for $asset"
       }
       $message = "could not reach the attestations API for ${asset}: $($_.Exception.Message)"
@@ -89,8 +111,8 @@ try {
       Write-Warning 'continuing - this download is unverified'
     }
 
-    if ($null -ne $attestations) {
-      if (@($attestations).Count -gt 0) {
+    if ($answered) {
+      if ($attestations.Count -gt 0) {
         Write-Host "Verified build provenance for $asset"
       } else {
         Deny-Install "no build provenance from $repo for $asset"
