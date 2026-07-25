@@ -207,9 +207,22 @@ Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
 `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other
 allowed types do not trigger a release by themselves.
 
-Release Please opens or updates a release pull request. Merging it creates a
-**draft** GitHub Release and runs every asset-producing publisher against that
-draft. The `publish-release` job publishes it, which is what creates the
+Merging to `main` does not open a release pull request - nothing runs on push.
+When you want to release, go to **Actions → Release → Run workflow** (branch
+`main`). That dispatch is what creates or refreshes the release pull request,
+syncs the generated version metadata, and captures the release screenshots.
+Re-dispatch whenever you want an open release pull request brought up to date.
+
+Dispatch once CI is green for the commit you are releasing. The screenshot step
+reuses the `wasm-prod` artifact from that commit's CI run; if it cannot find
+one, it rebuilds WASM from source and the run takes ~6.5 min longer.
+
+The optional **Version to release as** input forces a specific version - the
+dispatch equivalent of a `Release-As:` footer. Leave it blank to let Release
+Please compute the bump from the commits.
+
+Merging the release pull request creates a **draft** GitHub Release and runs
+every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the
 `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop
 pushes run after that, because the manifests they write point at release
 download URLs that do not resolve while the release is a draft. Follow progress
@@ -228,7 +241,8 @@ under GitHub's **Actions → Release** page.
 
 Every publisher keys off one thing: whether the version contains a hyphen
 (`0.6.0-alpha.1` is a prerelease, `0.6.0` is not). Nothing else needs setting -
-a `Release-As: X.Y.Z-alpha.N` footer is enough to route the whole pipeline.
+a `Release-As: X.Y.Z-alpha.N` footer, or the same value in the dispatch's
+**Version to release as** input, is enough to route the whole pipeline.
 
 | Target | Release `0.6.0` | Prerelease `0.6.0-alpha.1` |
 | --- | --- | --- |
