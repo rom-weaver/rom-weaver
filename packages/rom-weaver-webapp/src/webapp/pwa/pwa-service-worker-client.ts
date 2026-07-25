@@ -600,9 +600,18 @@ const createPwaServiceWorkerClient = ({
           });
         });
         if (!serviceWorker.controller) {
-          if (pendingReloadReason === COI_RELOAD_REASON_NOT_CONTROLLING)
+          if (pendingReloadReason === COI_RELOAD_REASON_NOT_CONTROLLING) {
             logServiceWorkerClient("uncontrolled reload skipped; page already reloaded for control");
-          else reloadWhenReadyForControl();
+          } else if (isCrossOriginIsolationKnown() && isCrossOriginIsolated()) {
+            // Server headers already isolated us, so the service worker has no COEP to inject.
+            // It claims this client on its own; the controllerchange handler finishes the wiring.
+            logServiceWorkerClient("uncontrolled reload skipped; page is already cross-origin isolated");
+            startServiceWorkerUpdateChecks();
+          } else {
+            reloadWhenReadyForControl();
+            return;
+          }
+          refreshCacheVersion();
           return;
         }
         syncCrossOriginIsolationMode({ allowReload: true });

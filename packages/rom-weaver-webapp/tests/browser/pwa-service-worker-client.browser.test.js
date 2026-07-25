@@ -134,6 +134,19 @@ test("reloads once to gain control when registration is active but uncontrolled"
   expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe("notcontrolling");
 });
 
+test("does not reload to gain control when server headers already isolated the page", async () => {
+  const harness = createHarness({
+    controller: null,
+    crossOriginIsolated: true,
+  });
+
+  harness.client.initialize();
+  await flushAsync();
+
+  expect(harness.location.reload).not.toHaveBeenCalled();
+  expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe(null);
+});
+
 test("auto-applies an update silently without reloading when no work is in progress", async () => {
   const controller = createController();
   const harness = createHarness({
