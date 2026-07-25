@@ -227,7 +227,7 @@ test("a bad title fails the status and explains itself in a comment", async () =
   assert.match(body, /^> \[!WARNING\]$/m);
 });
 
-test("the rename is spelled out against the contributor's own title", async () => {
+test("the comment says how to rename without renaming for them", async () => {
   const { calls } = await run({
     title: "Fixed the broken thing",
     verdict: "fail",
@@ -235,10 +235,7 @@ test("the rename is spelled out against the contributor's own title", async () =
   });
   const body = commentBody(calls);
   assert.ok(body.includes("**Edit** button"), "the comment must say how to rename");
-  assert.ok(
-    body.includes("fix: fixed the broken thing"),
-    "the suggestion must be built from the real title, not a placeholder",
-  );
+  assert.ok(body.includes("feat(webapp): add sample assets"), "the shape is shown by example");
 });
 
 test("a missing type explains the empty subject it drags in with it", async () => {
@@ -252,55 +249,25 @@ test("a missing type explains the empty subject it drags in with it", async () =
   assert.ok(commentBody(calls).includes("neither a type nor a subject"));
 });
 
-test("a miscased type is fixed by its case, not by prefixing a second type", async () => {
-  const { calls } = await run({
-    title: "Fix: the thing",
-    verdict: "fail",
-    errors: ["type-case", "type-enum"],
+// commitlint hands over a rule name and a message, never a corrected title, so
+// any rename would be one this script invented - and the type is the part it
+// cannot know. Squash merges make the title the commit subject and Release
+// Please reads the type, so a guessed `fix:` on a feature is a wrong version
+// bump and a wrong changelog entry, landed silently.
+for (const [what, title, errors] of [
+  ["no type at all", "Fixed the broken thing", ["subject-empty", "type-empty"]],
+  ["a miscased type", "Fix: the thing", ["type-case", "type-enum"]],
+  ["a trailing full stop", "Fixed the thing.", ["type-empty"]],
+  ["a start-case subject", "Fix: The Thing", ["type-case", "type-enum"]],
+  ["an invented type", "wibble: the thing", ["type-enum"]],
+]) {
+  test(`${what} is named, never silently renamed`, async () => {
+    const body = commentBody((await run({ title, verdict: "fail", errors })).calls);
+    assert.ok(!body.includes("Rename it to"), "the gate must not propose a title of its own");
+    assert.ok(!body.includes("\nfix: "), "no fenced replacement title may be offered");
+    assert.ok(body.includes("`feat`"), "the allowed types are what a contributor gets instead");
   });
-  const body = commentBody(calls);
-  assert.ok(body.includes("\nfix: the thing\n"), "lower-casing a known type is the whole fix");
-  assert.ok(!body.includes("fix: Fix:"), "a type must not be prefixed onto a type");
-});
-
-// Fixing the type is not the whole job: config-conventional bans a trailing
-// full stop and four subject cases too, and a rename that trips one of those is
-// a rename this very gate rejects - which sends the contributor round in
-// circles, the one thing the suggestion exists to prevent.
-test("a suggestion drops the full stop config-conventional would reject", async () => {
-  const { calls } = await run({
-    title: "Fixed the thing.",
-    verdict: "fail",
-    errors: ["type-empty"],
-  });
-  const body = commentBody(calls);
-  assert.ok(body.includes("\nfix: fixed the thing\n"), "the full stop must be dropped");
-  assert.ok(!body.includes("fix: fixed the thing."), "a rename ending in a full stop is rejected");
-});
-
-test("a subject that would trip subject-case gets no suggestion", async () => {
-  const { calls } = await run({
-    title: "Fix: The Thing",
-    verdict: "fail",
-    errors: ["type-case", "type-enum"],
-  });
-  const body = commentBody(calls);
-  // Lower-casing the type is not enough here, and rewording the subject is a
-  // decision this script has no business making.
-  assert.ok(!body.includes("Rename it to"), "a rename subject-case rejects must not be offered");
-  assert.ok(body.includes("`feat`"), "but the allowed types must still be listed");
-});
-
-test("an invented type gets the type list and no suggestion", async () => {
-  const { calls } = await run({
-    title: "wibble: the thing",
-    verdict: "fail",
-    errors: ["type-enum"],
-  });
-  const body = commentBody(calls);
-  assert.ok(!body.includes("Rename it to"), "a type this script cannot guess gets no rename");
-  assert.ok(body.includes("`feat`"), "but the allowed types must still be listed");
-});
+}
 
 test("an over-long title is told how much to cut, and gets no suggestion", async () => {
   const { calls } = await run({

@@ -154,47 +154,17 @@ function notes(names, title, { headerLimit }) {
 
 const titleType = (title) => title.match(/^([^\s(:!]+)/)?.[1];
 
-// Fixing the type is not enough on its own: config-conventional also bans a
-// trailing full stop and four subject cases, and a rename that trips one of
-// those is a rename this gate rejects in turn. The full stop is dropped, being
-// mechanical and meaning-preserving; a subject that would trip a case rule is
-// refused instead, because choosing new wording is not this script's call.
-//
-// All four banned cases - sentence, start, pascal and upper - begin with an
-// upper-case character, so testing the first one covers every one of them.
-const subjectOf = (proposed) => proposed.slice(proposed.indexOf(":") + 1).trim();
-
-function conventional(proposed, headerLimit) {
-  if (!proposed) return null;
-  const trimmed = proposed.replace(/[\s.]+$/, "");
-  if (trimmed.length > headerLimit) return null;
-  const [first = ""] = subjectOf(trimmed);
-  if (!first) return null;
-  return first === first.toUpperCase() && first !== first.toLowerCase() ? null : trimmed;
-}
-
-// A mechanically valid rename of the contributor's own title, not a generic
-// placeholder. Only two failures have one: no type at all (prefix one) and a
-// type that is right but miscased (lower-case it). Anything else - an invented
-// type, an over-long header - needs a decision this script cannot make, and
-// suggesting a title the gate would reject in turn is worse than suggesting
-// nothing.
-function suggestion(title, names, { types, headerLimit }) {
-  let proposed = null;
-  if (names.has("type-empty")) {
-    proposed = `fix: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
-  } else if (names.has("type-case") || names.has("type-enum")) {
-    const type = titleType(title);
-    const lowered = type?.toLowerCase();
-    if (lowered && types.includes(lowered)) proposed = `${lowered}${title.slice(type.length)}`;
-  }
-  return conventional(proposed, headerLimit);
-}
-
+// Deliberately no proposed rename. commitlint hands this script a rule name and
+// a message; it never hands it a corrected title, so any rename would be one
+// this script invented - and the type is the part it cannot possibly know.
+// Squash merges make the title the commit subject and Release Please reads the
+// type for the changelog section and the version bump, so guessing `fix:` on a
+// feature is not a cosmetic miss: it is a wrong bump and a wrong changelog
+// entry, landed silently. A rejected title costs a rename and says so out loud.
+// Naming the broken rule and the allowed types is the whole job.
 function failureBody(title, { errors, warnings }, rules) {
   const names = new Set(errors.map((problem) => problem.name));
   const explanation = notes(names, title, rules);
-  const proposed = suggestion(title, names, rules);
   const typeRule = ["type-empty", "type-enum", "type-case"].some((name) => names.has(name));
 
   return `${BADGE}
@@ -206,16 +176,14 @@ function failureBody(title, { errors, warnings }, rules) {
 ${fenced(title)}
 
 ${table(errors, warnings)}
-${explanation ? `\n${explanation}\n` : ""}${
-    proposed ? `\nRename it to:\n\n${fenced(proposed)}\n` : ""
-  }
+${explanation ? `\n${explanation}\n` : ""}
 The title must read \`type(scope): description\`; the scope is optional.${
     typeRule ? ` Valid types: ${list(rules.types)}.` : ""
   }${
     // Worth spelling out only for someone whose type is what went wrong. A
     // title rejected for its length already has the shape right, and being
     // shown the shape again reads as the gate not having looked.
-    typeRule && !proposed ? "\n\nExample: `feat(webapp): add sample assets`" : ""
+    typeRule ? "\n\nExample: `feat(webapp): add sample assets`" : ""
   }
 
 This check reruns when the title is edited, and this comment disappears once it
