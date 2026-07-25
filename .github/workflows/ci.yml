@@ -492,7 +492,7 @@ jobs:
   # needs neither the WASI SDK nor the wasm target.
   rust-macos:
     name: Rust (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'

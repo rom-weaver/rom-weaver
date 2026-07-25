@@ -233,9 +233,11 @@ security ── advisories (warn only, always green)
   default features), and whose cache key covers every input that could break
   it - so a cache hit means nothing checkable changed. The check remains part
   of the broad local `mise run ci` gate.
-- **`rust-macos`** runs the Rust test suite on `macos-14` (arm64) - the
+- **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) - the
   platform the release fan-out ships CLI binaries for, but that nothing
-  previously tested. It uses the same mise/setup-build-env path as the Linux
+  previously tested. The fan-out itself still builds the shipped
+  `darwin-arm64` binary on `macos-14` (`.github/cli-platforms.json`), which
+  keeps its minimum supported macOS lower than the test leg's. It uses the same mise/setup-build-env path as the Linux
   jobs. fmt, clippy, typegen, and the policy checks are platform-independent
   and already gate in `rust-host`.
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
@@ -278,7 +280,10 @@ security ── advisories (warn only, always green)
   `webapp-browser` is the parallel browser suite alone and uses Chrome from the
   Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
   (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the
-  supported Safari-family implementation on macOS.
+  supported Safari-family implementation on macOS. It must stay on `macos-15`
+  or newer: Playwright freezes WebKit at revision 2251 on `mac14`/`mac14-arm64`
+  via `revisionOverrides`, so that build no longer gains the protocol settings
+  newer clients send and every launch fails on an unknown setting.
   `webapp-browser` is itself a two-shard matrix
   (`BROWSER_TEST_SHARD=<i>/2`). The runner script already gives every test file
   its own Vitest process and caps concurrency at `min(4, cores)`, which
