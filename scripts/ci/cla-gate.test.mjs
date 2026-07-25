@@ -356,6 +356,22 @@ test("an ordinary unsigned pull request is not accused of a near miss", async ()
   assert.ok(!commentText(calls).includes("not as the whole line"));
 });
 
+// Naming the document is not the same as reaching it. Every place the comment
+// says CLA is a way to go read it.
+test("the comment links every mention of the CLA to the document", async () => {
+  const { calls } = await run({ prAuthor: "outsider", signatures: [] });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  const doc = "https://github.com/rom-weaver/rom-weaver/blob/main/CLA.md";
+  assert.ok(body.includes(`[CLA](${doc})`), "the warning must link the CLA it names");
+  assert.ok(!body.includes("[Agreement]"), "the footer names the document, not a synonym");
+  assert.equal(
+    body.split(`[CLA](${doc})`).length - 1,
+    2,
+    "both the warning and the footer link it",
+  );
+});
+
 test("the phrase is offered in a fenced block, which is what carries the copy button", async () => {
   const { calls } = await run({ prAuthor: "outsider", signatures: [] });
   const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
