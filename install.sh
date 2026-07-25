@@ -85,12 +85,16 @@ else
   # the TLS download above, and it still catches an asset that no workflow run
   # ever produced.
   #
-  # No JSON parser is involved, so this needs nothing a POSIX box lacks. The
-  # signed statement is a base64 DSSE payload, and the value being looked for is
-  # an exact literal in it: `"repository":"..."` occurs exactly once, because the
-  # neighboring `repository_id` and `repository_owner_id` keys do not end at the
-  # same quote. Matching a fixed string beats parsing here - there is no shape to
-  # get wrong, only bytes that are present or absent.
+  # No JSON parser is involved. Beyond curl, which got us here, this uses only
+  # tr, sed, head, printf and grep -q - all POSIX, no GNU-only flags - plus a
+  # base64 decoder, the one piece POSIX does not specify and the only reason
+  # there are three branches for it below.
+  #
+  # The signed statement is a base64 DSSE payload, and the value being looked for
+  # is an exact literal in it: `"repository":"..."` occurs exactly once, because
+  # the neighboring `repository_id` and `repository_owner_id` keys do not end at
+  # the same quote. Matching a fixed string beats parsing here - there is no
+  # shape to get wrong, only bytes that are present or absent.
   if curl --fail --silent --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/attestations.json" \
     "https://api.github.com/repos/$repo/attestations/sha256:$digest"; then
@@ -104,14 +108,22 @@ else
       decode_base64() { openssl base64 -d -A; }
     fi
 
-    # `tr` first because the response is pretty-printed and the payload has to be
-    # matched on one line; `head` because an asset attested more than once
-    # returns several, and any one of them proving this repository built it is
-    # enough.
+    # Flatten the pretty-printed response, then break it on JSON's structural
+    # characters to put one field per line - `tr` pads the shorter replacement
+    # set, so every one of them becomes a newline. None occurs in base64
+    # (A-Za-z0-9+/=), so a payload never splits. Splitting on commas alone is not
+    # enough: `payload` follows `"dsseEnvelope": {` directly, so it would not
+    # start its line.
+    #
+    # The anchor is what makes this safe. Unanchored, the expression matches
+    # greedily and silently picks the *last* attestation, and `grep -o` - the
+    # obvious alternative - is a GNU extension rather than POSIX. `head` because
+    # an asset attested more than once returns several, and one of them proving
+    # this repository built it is enough.
     payload=$(tr -d '\n\r' < "$tmp_dir/attestations.json" \
-      | grep -o '"payload"[[:space:]]*:[[:space:]]*"[^"]*"' \
-      | head -n 1 \
-      | sed 's/.*"\([^"]*\)"$/\1/')
+      | tr ',{}[]' '\n' \
+      | sed -n 's/^[[:space:]]*"payload"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      | head -n 1)
 
     if [ -n "$payload" ] && printf '%s' "$payload" | decode_base64 2>/dev/null \
       | grep -q "\"repository\":\"https://github.com/$repo\""; then

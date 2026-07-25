@@ -113,6 +113,14 @@ repository - weaker, because it trusts the API response rather than the
 signature, but the same trust the download already places in GitHub, and it
 still catches an asset no workflow run produced.
 
+That fallback parses no JSON. Beyond `curl`, it uses only `tr`, `sed`, `head`,
+`printf`, and `grep -q` - all POSIX, no GNU-only flags - plus a base64 decoder,
+the one piece POSIX does not specify, which is why it tries `base64 -d` (GNU,
+current macOS), then `base64 -D` (older macOS), then `openssl`. Verified against
+the response GitHub actually returns under `dash`, macOS `sh`, Alpine and
+BusyBox (`busybox sh`, musl), and Debian slim, with each decoder branch forced
+in turn.
+
 The check is advisory by default so a machine that cannot reach the API is not
 left unable to install. Set `ROM_WEAVER_REQUIRE_ATTESTATION=1` to make a failed
 or absent attestation fatal instead.
