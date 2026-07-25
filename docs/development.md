@@ -258,8 +258,11 @@ testing:
 node scripts/setup-worktree.mjs
 ```
 
-It installs package dependencies and copies existing WASM artifacts when
-available.
+It installs package dependencies, copies existing WASM artifacts when
+available, and warms the two Cargo target dirs the pre-commit hook builds into
+(`target/hook-typegen` and `target/hook-wasm`). That last step takes a few
+minutes and roughly 1.7 GB; pass `--no-prime` to skip it and let the first
+Rust commit in the worktree pay for it instead.
 
 After verifying that a worktree has no real changes, remove it from the main
 checkout with:
