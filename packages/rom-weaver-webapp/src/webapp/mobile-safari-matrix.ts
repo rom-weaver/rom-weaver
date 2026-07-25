@@ -95,8 +95,9 @@ const importantDiagnosticFields: Array<[string, (diagnostics: BrowserRuntimeDiag
 ];
 
 const appendLog = (line: string) => {
-  const timestamp = new Date().toISOString().slice(11, 19);
-  logLines.push(`${timestamp} ${line}`);
+  // No wall-clock prefix: each step already carries its own duration, and the
+  // narrow phone viewport is better spent on the step detail.
+  logLines.push(line);
   while (logLines.length > MAX_LOG_LINES) logLines.shift();
   if (logElement) logElement.textContent = logLines.join("\n");
 };
