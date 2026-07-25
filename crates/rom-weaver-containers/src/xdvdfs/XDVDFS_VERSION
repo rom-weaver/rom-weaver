@@ -1,0 +1,60 @@
+source: https://crates.io/crates/xdvdfs
+version: 0.8.3
+published: 2024-11-13
+checksum: 1777c1ccae32a2185ac98adae015aed3fb06242084b5e7f8b08a811fe0e7b936
+upstream: https://github.com/antangelo/xdvdfs
+also-reflects: 6b05af7fba79d567ef8c9698c8702b8d782248b8 (antangelo/xdvdfs#189)
+refreshed-by: hand (there is no vendor-xdvdfs script)
+
+Taken from the published crate, not a git checkout. The checksum above is the
+crates.io checksum of xdvdfs-0.8.3.crate and was verified against the registry.
+
+`also-reflects` matters because it is not a feature toggle. In 0.8.3 `mod remap;`
+and `pub use remap::*;` in write/fs/mod.rs are UNCONDITIONAL - there is no way to
+build `write` without `wax`. Upstream 6b05af7 (merged 2026-07-18) is what makes
+remap optional, and this tree reaches the same end state by deleting the module
+outright. So the content here is 0.8.3 plus the outcome of that commit with
+remap off, not plain 0.8.3.
+
+crates.io is still on 0.8.3 as of 2026-07-25 and its `write` feature still lists
+`wax`, so the de-vendoring described in docs/vendor-code.md remains blocked on
+upstream cutting a release that contains 6b05af7. Re-check with:
+`curl -s https://crates.io/api/v1/crates/xdvdfs | jq '.versions[0] | {num, features}'`
+
+The inlined tree is not byte-identical to the release. Audited against 0.8.3 on
+2026-07-25 by copying both trees to a neutral directory, rewriting
+`crate::xdvdfs::` back to `crate::`, and diffing: 14 of 16 files pair up and
+differ by 238 lines. Unlike nod, formatting is NOT a factor here - neither
+upstream nor this repo has a rustfmt.toml, so both use stable defaults. Every
+difference falls into one of these, and there are NO functional divergences:
+
+  features    The pinned set (std, read, write, sync on; logging, checksum,
+              ciso_support off) is resolved rather than gated, so
+              `#[cfg(feature = ...)]` lines are deleted and disabled code with
+              them. This is most of the diff. checksum.rs goes with its feature.
+              The traceln!/debugln! macros are stubbed to expand to nothing
+              because `logging` is off.
+  remap       write/fs/remap.rs and its `mod`/`pub use` lines are gone. NOT a
+              feature toggle in 0.8.3 - see `also-reflects` above.
+  no_std      `#![no_std]` and the `extern crate` lines are dropped; crate-level
+              attributes cannot apply to a module. `extern crate alloc;` lives in
+              the rom-weaver-containers root instead.
+  docs        mod.rs carries a ~28 line inlining header that upstream has no
+              equivalent of.
+  edition     This workspace is edition 2024 and a newer clippy, so: let chains
+              (write/avl.rs), `ref` bindings dropped for match ergonomics
+              (util.rs), `% n > 0` -> `!is_multiple_of(n)` (layout.rs,
+              write/dirtab.rs), and `<'_>` lifetime elision in several signatures.
+              Upstream 0.8.3 does not parse under edition 2024, so a diff has to
+              format each side under its own edition.
+  deps        layout.rs drops `#[repr(C)]` on a bitfield newtype - proc-bitfield
+              0.5 makes those `#[repr(transparent)]` itself and the explicit
+              attribute became a hard error. Layout is unchanged.
+  tests       layout.rs's 2 test fns are dropped because they need
+              `futures::executor` and `futures` is not a dependency of
+              rom-weaver-containers. util.rs (3) and write/avl.rs (6) keep theirs.
+              This is the one difference that costs coverage; restore it by
+              adding `futures` as a dev-dependency if the tests are wanted.
+
+So: diff against the release expecting differences, and re-sync deliberately. If
+a diff ever shows something outside these categories, it is a real divergence.
