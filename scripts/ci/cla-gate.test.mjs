@@ -393,12 +393,31 @@ test("the comment links every mention of the CLA to the document", async () => {
     .body;
   const doc = "https://github.com/rom-weaver/rom-weaver/blob/main/CLA.md";
   assert.ok(body.includes(`[CLA](${doc})`), "the warning must link the CLA it names");
-  assert.ok(!body.includes("[Agreement]"), "the footer names the document, not a synonym");
-  assert.equal(
-    body.split(`[CLA](${doc})`).length - 1,
-    2,
-    "both the warning and the footer link it",
+  assert.ok(!body.includes("[Agreement]"), "the document is named, not paraphrased");
+});
+
+// The magic word is gone: editing a comment is what re-runs the gate, and that
+// is the correction path the near-miss note asks for. A comment advertising a
+// keyword the workflow no longer matches would be worse than saying nothing.
+test("the comment offers editing, not a recheck keyword", async () => {
+  const { calls } = await run({ prAuthor: "outsider", signatures: [] });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  assert.ok(body.includes("Edit a comment or post another to retry."));
+  assert.ok(!body.includes("recheck"), "no keyword the prefilter would ignore");
+});
+
+test("the workflow prefilter matches no keyword the comment does not offer", () => {
+  const workflow = readFileSync(join(repoRoot, ".github/workflows/pull-request.yml"), "utf8");
+  const clauses = [...workflow.matchAll(/contains\(github\.event\.comment\.body, '([^']+)'\)/g)];
+  assert.deepEqual(
+    clauses.map(([, keyword]) => keyword),
+    ["CLA"],
+    "the prefilter keeps exactly one keyword, and the signing phrase carries it",
   );
+  // The guarantee the single keyword rests on.
+  const phrase = readFileSync(script, "utf8").match(/^const SIGN_PHRASE = "(.+)";$/m)[1];
+  assert.ok(phrase.includes("CLA"), "the phrase must carry the keyword that lets the job run");
 });
 
 test("the phrase is offered in a fenced block, which is what carries the copy button", async () => {

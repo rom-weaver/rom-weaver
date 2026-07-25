@@ -35,11 +35,16 @@ jobs:
     # the exact phrase out here would put it in two places, and the copy that
     # rots is the one nobody tests - a stale phrase here means the job never
     # runs and a correct signature is swallowed in silence.
+    #
+    # One keyword is enough, and provably so: the phrase itself ends in "the
+    # CLA", and a near miss is only a near miss because it contains the whole
+    # phrase - so every signing attempt, exact or not, carries this word. A
+    # second keyword for re-running earned nothing that editing a comment does
+    # not already do, and an undocumented one is worse than none.
     if: >-
       (github.event_name == 'pull_request_target' && github.event.action != 'edited') ||
       (github.event.issue.pull_request != null &&
-       (contains(github.event.comment.body, 'CLA') ||
-        contains(github.event.comment.body, 'recheck')))
+       contains(github.event.comment.body, 'CLA'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Two pushes in a row only need the newer verdict; a signing comment must

@@ -64,7 +64,8 @@ contribution, so all contributions require agreeing to the
 On your first pull request the `Gates/CLA Signed` check comments with the signing
 phrase in a copyable block; reply with that phrase in a new comment to sign. Signing covers all of
 your past and future contributions under that immutable CLA version, and you
-will never be asked again. Comment `recheck` to re-run the check. You keep the copyright in your work, and it is always also released
+will never be asked again. Edit a comment or post another to retry the check.
+You keep the copyright in your work, and it is always also released
 under the project's open-source license; see the CLA's open-source assurance
 section.
 

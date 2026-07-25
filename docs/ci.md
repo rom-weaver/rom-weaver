@@ -94,11 +94,16 @@ A line that carries the phrase but is not the phrase - quoted, or with other
 words around it - does not sign, and the comment now says so rather than
 rejecting it in silence. That silence was the whole failure being fixed here; a
 contributor who typed the words and got nothing back believes they signed.
-Anyone can comment `recheck` to re-run the gate, and editing a comment reruns it
-too - the near-miss note asks for a correction, and editing the comment you just
-posted is the obvious way to make one. An edit signs only when the editor is the
-comment's own author: anyone with write access can edit somebody else's comment,
-so `sender` and `comment.user` have to agree before a signature is recorded.
+Editing a comment reruns the gate, as does posting another, and between them
+that is the whole re-run story: the near-miss note asks for a correction, and
+editing the comment you just posted is the obvious way to make one. There is deliberately no `recheck` keyword. The prefilter
+already matches any comment mentioning the CLA, and it cannot miss a signing
+attempt - the phrase ends in "the CLA" and a near miss contains the whole phrase -
+so a second keyword bought nothing an edit does not.
+
+An edit signs only when the editor is the comment's own author: anyone with write
+access can edit somebody else's comment, so `sender` and `comment.user` have to
+agree before a signature is recorded.
 
 Commits whose author email matches no GitHub account are reported as
 `unlinked:<name>` rather than skipped.

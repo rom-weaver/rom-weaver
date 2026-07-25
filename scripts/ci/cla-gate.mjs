@@ -254,7 +254,7 @@ ${
     ? "\n> [!NOTE]\n> A comment on this pull request has that phrase, but not as the whole line - it was quoted, or it had other words around it. Post it on a line of its own, unquoted.\n"
     : ""
 }
-[CLA](${CLA_DOCUMENT}) \u00b7 \`recheck\` to re-run${
+Edit a comment or post another to retry.${
   unlinked.length
     ? "\n\nAn `unlinked:<name>` author has a commit email matching no GitHub account, so they cannot sign by comment - fix the commit author or say so in the thread."
     : ""
