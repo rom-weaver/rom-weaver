@@ -1,3 +1,5 @@
+import { describeThreadWorkerErrorEvent } from "./browser-wasi-thread-load-probe.ts";
+
 type ThreadWorkerErrorContext = {
   index: number | string;
   tid?: number | null;
@@ -34,6 +36,9 @@ export function createThreadWorkerLoadError(
   ];
   const message = typeof event?.message === "string" && event.message.trim() ? event.message.trim() : "";
   if (message) parts.push(`message=${message}`);
+  // WebKit reports a script that never loaded as a bare `Event` with every field empty, and a script
+  // that ran and threw as a populated `ErrorEvent`. Without this the two are indistinguishable.
+  else parts.push(describeThreadWorkerErrorEvent(event));
   if (typeof event?.filename === "string" && event.filename.trim()) parts.push(`filename=${event.filename.trim()}`);
   if (Number.isFinite(event?.lineno)) parts.push(`line=${event.lineno}`);
   if (Number.isFinite(event?.colno)) parts.push(`column=${event.colno}`);

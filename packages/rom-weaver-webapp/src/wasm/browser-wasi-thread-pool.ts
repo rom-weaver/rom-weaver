@@ -6,6 +6,7 @@ import {
   deserializeThreadWorkerError,
   toThreadWorkerError,
 } from "./browser-wasi-thread-errors.ts";
+import { probeThreadWorkerLoadFailure } from "./browser-wasi-thread-load-probe.ts";
 import {
   createThreadWorkerRuntimePayload,
   type ThreadSpawnerRuntime,
@@ -144,6 +145,9 @@ export function createBrowserWasiThreadWorkerPool({
       `[browser-opfs] thread pool shell failed index=${shell.index}` +
         ` online=${shell.online} hadCommand=${Boolean(shell.currentCommand)} ${formatErrorForTrace(error)}`,
     );
+    // A shell that never came online failed to *load*, and the event carries no cause. Probe once
+    // per runtime for what the host served and whether nested module workers work here at all.
+    if (!shell.online) probeThreadWorkerLoadFailure(resolvedThreadWorkerUrl, shell.trace ?? undefined);
     shell.terminated = true;
     try {
       shell.worker?.terminate();
