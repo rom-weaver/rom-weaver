@@ -1498,8 +1498,9 @@ where
                             &task.write_path,
                             overwrite,
                         )?);
+                        // Serial path: one leaf at a time, so this hasher gets the whole budget.
                         let mut hasher =
-                            ExtractHasher::new(context, task.logical_bytes, &task.output_path)?;
+                            ExtractHasher::new(context, task.logical_bytes, &task.output_path, 1)?;
                         let mut copied = 0u64;
                         let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
                         // Split this entry's wall time into decode (libarchive read), output write, and
@@ -1980,8 +1981,14 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                     &write_path,
                                     request.overwrite,
                                 )?);
-                                let hasher =
-                                    ExtractHasher::new(context, logical_bytes, &output_path)?;
+                                // Up to `worker_count` leaves decode at once, each building its own
+                                // hasher, so they share the hash budget rather than each taking it.
+                                let hasher = ExtractHasher::new(
+                                    context,
+                                    logical_bytes,
+                                    &output_path,
+                                    worker_count,
+                                )?;
                                 e.insert(LibarchiveOpenExtractOutput {
                                     archive_name,
                                     hasher,
