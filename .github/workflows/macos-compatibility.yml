@@ -1,6 +1,9 @@
 name: Experimental macOS compatibility
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/macos-compatibility.yml
   workflow_dispatch:
     inputs:
       deployment_target:
@@ -19,7 +22,7 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: always
-      MACOSX_DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ inputs.deployment_target || '11.0' }}
     steps:
       - uses: actions/checkout@v7
 
