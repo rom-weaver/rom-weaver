@@ -54,7 +54,7 @@ v0.7.2 is the first release with every public installation channel completed.
    Issues, and Pull requests read/write access. Release Please needs a
    non-`GITHUB_TOKEN` credential so its release pull requests trigger the
    required CI checks.
-3. Require the `Conventional commits` and normal CI checks in the `main` branch
+3. Require the `Gates/PR Title Lint` and normal CI checks in the `main` branch
    protection rules. Use squash merges so the validated pull request title is
    the commit subject that lands on `main`.
 4. Enable **Immutable releases** in Settings → General. The fan-out is built

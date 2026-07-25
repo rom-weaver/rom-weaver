@@ -13,6 +13,19 @@ to everyone under the project's open-source license.
 By signing this Agreement you accept the following terms for your present and
 future contributions to rom-weaver.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [1. Definitions](#1-definitions)
+- [2. Copyright license](#2-copyright-license)
+- [3. Patent license](#3-patent-license)
+- [4. Open-source assurance](#4-open-source-assurance)
+- [5. Your representations](#5-your-representations)
+- [6. Electronic signature and records](#6-electronic-signature-and-records)
+- [7. Practicalities](#7-practicalities)
+
+<!-- END doctoc -->
+
 ## 1. Definitions
 
 - **"You"** means the individual who signs this Agreement and submits a
@@ -92,11 +105,13 @@ it.
 
 ## 7. Practicalities
 
-- Sign on your first pull request. The `CLA Status` check comments there asking
-  for a signature; reply in a new comment on that pull request containing
-  exactly:
+- Sign on your first pull request. The `Gates/CLA Signed` check comments there
+  asking for a signature; reply in a new comment on that pull request whose own
+  line reads:
 
-  > I have read the CLA Document and I hereby sign the CLA
+  ```
+  I have read and agree to the CLA
+  ```
 
   That comment, posted from your authenticated GitHub account, is the signing
   process referred to in section 6. Your signature covers all of your past and

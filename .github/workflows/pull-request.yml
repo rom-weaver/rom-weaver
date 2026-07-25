@@ -1,0 +1,126 @@
+name: Pull request gates
+
+# The two gates a contributor - rather than the code - has to clear: the CLA
+# signature and a Conventional Commits pull request title. They share a file
+# because they share everything that makes them awkward. Both post a commit
+# status against the pull request head rather than relying on their own check
+# run, both keep exactly one marker comment on the thread, both must work for a
+# pull request from a fork, and both are required by the `main protection`
+# ruleset.
+#
+# `pull_request_target` runs from the base branch with a write token, which is
+# what lets a fork's pull request receive a status and a comment. Nothing from
+# the pull request head is ever checked out or executed here: the scripts, the
+# allowlist and the commitlint config all come from the base commit, and the
+# only head-supplied value either job touches is the pull request title, which
+# reaches commitlint through an environment variable and reaches the comment
+# inside a fenced block.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  cla:
+    name: Gates/CLA Check
+    # A title edit cannot change who signed, and `issue_comment` fires on plain
+    # issues too, and on every unrelated comment.
+    #
+    # This is a cheap prefilter, NOT the signing rule: it deliberately matches
+    # any comment mentioning the CLA and lets `cla-gate.mjs` decide. Spelling
+    # the exact phrase out here would put it in two places, and the copy that
+    # rots is the one nobody tests - a stale phrase here means the job never
+    # runs and a correct signature is swallowed in silence.
+    if: >-
+      (github.event_name == 'pull_request_target' && github.event.action != 'edited') ||
+      (github.event.issue.pull_request != null &&
+       (contains(github.event.comment.body, 'CLA') ||
+        contains(github.event.comment.body, 'recheck')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Two pushes in a row only need the newer verdict; a signing comment must
+    # not be cancelled by one, so the group is per pull request and comments run
+    # to completion.
+    concurrency:
+      group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      # contents: write is for the signature file on the `cla-signatures`
+      # branch only - the default branch's ruleset refuses direct pushes.
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      # Explicitly the base commit, never the pull request head: this checkout
+      # supplies the script and the allowlist, both of which must be the
+      # reviewed versions.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check contributor signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        run: node scripts/ci/cla-gate.mjs
+
+  pr-title:
+    name: Gates/PR Title Check
+    # Only a title edit can change the outcome; body and base edits cannot. A
+    # comment cannot change it at all, so this half sits out `issue_comment`.
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      (github.event.action != 'edited' || github.event.changes.title != null)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Release Please can edit its own pull request within seconds, and a human
+    # retitling by hand types several edits in a row. Only the newest verdict
+    # matters, and the loser has posted nothing by the time it is cancelled.
+    concurrency:
+      # The fallback is never used - the job sits out `issue_comment` - but an
+      # empty group is not a legal value even on a skipped job.
+      group: pr-title-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      # commitlint runs here rather than inside the gate script so its output
+      # never has to cross a step boundary: routing an attacker-controlled title
+      # through `GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step
+      # outputs. A file and one process do not have that problem.
+      - name: Check pull request title
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LINT_OUTPUT_FILE: ${{ runner.temp }}/commitlint.txt
+        run: |
+          if printf '%s\n' "$PULL_REQUEST_TITLE" |
+            npm exec --yes --package="@commitlint/cli@21.2.1" --package="@commitlint/config-conventional@21.2.0" -- \
+              commitlint --config .config/commitlint.config.mjs >"$LINT_OUTPUT_FILE" 2>&1
+          then
+            LINT_VERDICT=pass
+          else
+            LINT_VERDICT=fail
+          fi
+          cat "$LINT_OUTPUT_FILE"
+          LINT_VERDICT="$LINT_VERDICT" node scripts/ci/pr-title-gate.mjs

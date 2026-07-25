@@ -15,13 +15,13 @@ const repoRoot = join(here, "..", "..");
 
 const REPO = "rom-weaver/rom-weaver";
 const HEAD_SHA = "deadbeef";
-const STATUS_CONTEXT = "CLA Status";
-const SIGN_PHRASE = "I have read the CLA Document and I hereby sign the CLA";
+const STATUS_CONTEXT = "Gates/CLA Signed";
+const SIGN_PHRASE = "I have read and agree to the CLA";
 
 // A stand-in GitHub API. Serving real HTTP means the script's own JSON parsing,
 // base64 decoding and status handling are exercised rather than stubbed - both
 // bugs the shell version shipped lived in exactly that layer.
-function startApi({ prAuthor, commitAuthors, signatures }) {
+function startApi({ prAuthor, commitAuthors, signatures, comments }) {
   const calls = [];
   let stored = signatures;
 
@@ -65,7 +65,8 @@ function startApi({ prAuthor, commitAuthors, signatures }) {
           .replaceAll(/.{1,60}/g, "$&\n");
         return send(200, { sha: "sigsha", content });
       }
-      if (path === `/repos/${REPO}/issues/7/comments`) return send(200, []);
+      if (path === `/repos/${REPO}/issues/7/comments`) return send(200, comments);
+      if (path.startsWith(`/repos/${REPO}/issues/comments/`)) return send(200, {});
       if (path.startsWith("/users/")) return send(200, { id: 4242 });
       if (path === `/repos/${REPO}/statuses/${HEAD_SHA}`) return send(201, {});
       return send(404, { message: "Not Found" });
@@ -79,8 +80,8 @@ function startApi({ prAuthor, commitAuthors, signatures }) {
 // Must not block the event loop: the stub API is served from this very
 // process, so a synchronous child would deadlock waiting on a server that
 // cannot run.
-async function run({ prAuthor, commitAuthors = [], signatures = [], comment } = {}) {
-  const api = startApi({ prAuthor, commitAuthors, signatures });
+async function run({ prAuthor, commitAuthors = [], signatures = [], comment, comments = [] } = {}) {
+  const api = startApi({ prAuthor, commitAuthors, signatures, comments });
   let status = 0;
   try {
     await run_(process.execPath, [script], {
@@ -113,6 +114,9 @@ const wrote = (calls, method, path) =>
 const statusState = (calls) =>
   calls.find((call) => call.path === `/repos/${REPO}/statuses/${HEAD_SHA}`)?.body.state;
 
+// The phrase is a signature only because CLA.md says it is: a wording the gate
+// accepts but the document never mentions would be a signature nobody agreed to
+// give.
 test("the signing phrase matches the one CLA.md tells contributors to post", () => {
   const phrase = readFileSync(script, "utf8").match(/^const SIGN_PHRASE = "(.+)";$/m)[1];
   assert.equal(phrase, SIGN_PHRASE);
@@ -122,8 +126,19 @@ test("the signing phrase matches the one CLA.md tells contributors to post", () 
   );
 });
 
+// The phrase belongs to the script alone. A second copy in the workflow's
+// trigger condition would rot without ever failing a test, and a stale one
+// there means the job never runs - a correct signature swallowed in silence.
+test("the workflow does not keep its own copy of the signing phrase", () => {
+  const workflow = readFileSync(join(repoRoot, ".github/workflows/pull-request.yml"), "utf8");
+  assert.ok(
+    !workflow.includes(SIGN_PHRASE),
+    "pull-request.yml must prefilter on a stable substring, not the exact phrase",
+  );
+});
+
 test("the status context matches the one the ruleset requires", () => {
-  const context = readFileSync(script, "utf8").match(/context: "(.+?)"/)[1];
+  const context = readFileSync(script, "utf8").match(/STATUS_CONTEXT = "(.+?)"/)[1];
   assert.equal(context, STATUS_CONTEXT);
   assert.ok(
     readFileSync(join(repoRoot, "docs/ci.md"), "utf8").includes(`\`${STATUS_CONTEXT}\``),
@@ -137,6 +152,31 @@ test("a signed contributor passes", async () => {
   assert.equal(statusState(calls), "success");
   // Nothing to say when the check already passes.
   assert.ok(!wrote(calls, "POST", "issues/7/comments"));
+});
+
+// The badge and the callout are how the verdict reads at a glance, the way the
+// CLA Assistant comment did. A comment that says "required" while the status
+// says success is worse than no comment at all.
+test("the request comment carries the warning badge and callout", async () => {
+  const { calls } = await run({ prAuthor: "outsider", signatures: [] });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  assert.match(body, /^!\[CLA: signature required\]\(https:\/\/img\.shields\.io\/badge\//m);
+  assert.match(body, /^> \[!WARNING\]$/m);
+  assert.ok(!body.includes("CLA-signed-"), "the signed badge must not appear on a failing gate");
+});
+
+test("signing rewrites that comment to the signed badge and callout", async () => {
+  const { calls } = await run({
+    prAuthor: "outsider",
+    signatures: [],
+    comment: { author: "outsider", body: SIGN_PHRASE },
+    comments: [{ id: 11, body: "<!-- rom-weaver-cla-gate -->\nCLA signature required" }],
+  });
+  const edit = calls.find((call) => call.method === "PATCH" && call.path.includes("issues/comments/"));
+  assert.ok(edit, "the existing comment must be edited, not left saying a signature is required");
+  assert.match(edit.body.body, /^!\[CLA: signed\]\(https:\/\/img\.shields\.io\/badge\//m);
+  assert.match(edit.body.body, /^> \[!TIP\]$/m);
 });
 
 test("an unsigned contributor gets a failing status and is asked to sign", async () => {
@@ -224,6 +264,45 @@ test("the phrase on its own line among others still signs", async () => {
   });
   assert.ok(wrote(calls, "PUT", "contents/signatures.json"));
   assert.equal(statusState(calls), "success");
+});
+
+// Every one of these failed before, silently: the gate said nothing and the
+// contributor believed they had signed.
+for (const [what, body] of [
+  ["a trailing full stop", `${SIGN_PHRASE}.`],
+  ["a capital letter out of place", SIGN_PHRASE.toUpperCase()],
+  ["leading and trailing whitespace", `   ${SIGN_PHRASE}   `],
+  ["the emphasis GitHub's editor adds", `**${SIGN_PHRASE}**`],
+  ["a doubled space", SIGN_PHRASE.replace(" hereby", "  hereby")],
+]) {
+  test(`${what} still signs`, async () => {
+    const { calls } = await run({
+      prAuthor: "outsider",
+      signatures: [],
+      comment: { author: "outsider", body },
+    });
+    assert.ok(wrote(calls, "PUT", "contents/signatures.json"), `${what} was rejected`);
+    assert.equal(statusState(calls), "success");
+  });
+}
+
+// Quoting the request while asking what it means must not be assent. This is
+// why the leading `>` is left in place rather than stripped with the rest.
+test("quoting the request back does not sign", async () => {
+  const { calls } = await run({
+    prAuthor: "outsider",
+    signatures: [],
+    comment: { author: "outsider", body: `> ${SIGN_PHRASE}\n\nwait, what does this mean?` },
+  });
+  assert.ok(!wrote(calls, "PUT", "contents/signatures.json"));
+  assert.equal(statusState(calls), "failure");
+});
+
+test("the phrase is offered in a fenced block, which is what carries the copy button", async () => {
+  const { calls } = await run({ prAuthor: "outsider", signatures: [] });
+  const body = calls.find((call) => call.method === "POST" && call.path.endsWith("/comments")).body
+    .body;
+  assert.ok(body.includes(`\`\`\`\n${SIGN_PHRASE}\n\`\`\``), "the phrase must be fenced");
 });
 
 test("a commit author with no linked account is reported, not skipped", async () => {

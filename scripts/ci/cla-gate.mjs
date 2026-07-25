@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Post the required `CLA Status` commit status for a pull request, and record
+// Post the required `Gates/CLA Signed` commit status for a pull request, and record
 // signatures given by comment.
 //
 // This replaces the hosted CLA Assistant app, which only ever posted in
@@ -22,6 +22,8 @@
 //   COMMENT_AUTHOR      login of the comment author (empty for pull_request events)
 import { readFileSync } from "node:fs";
 
+import { createGitHubApi, createMarkerComment, createStatusPoster } from "./github-api.mjs";
+
 const {
   GH_TOKEN,
   GITHUB_REPOSITORY: REPO,
@@ -40,63 +42,28 @@ const CLA_DOCUMENT =
   process.env.CLA_DOCUMENT ?? `${GITHUB_SERVER_URL}/${REPO}/blob/main/CLA.md`;
 // Quoted verbatim in CLA.md section 7. Changing it here without changing it
 // there leaves contributors typing a phrase this gate will not accept.
-const SIGN_PHRASE = "I have read the CLA Document and I hereby sign the CLA";
+const SIGN_PHRASE = "I have read and agree to the CLA";
 const COMMENT_MARKER = "<!-- rom-weaver-cla-gate -->";
+const STATUS_CONTEXT = "Gates/CLA Signed";
+// The verdict at a glance, the way the CLA Assistant comment carried one.
+// shields.io is already the badge service the README uses, and these are static
+// URLs - they encode no repository, pull request or contributor, so GitHub's
+// image proxy has nothing about this pull request to leak upstream. Colours are
+// the README's palette rather than shields' defaults.
+const BADGE = {
+  required: "![CLA: signature required](https://img.shields.io/badge/CLA-signature%20required-c1440e)",
+  signed: "![CLA: signed](https://img.shields.io/badge/CLA-signed-4a6d63)",
+};
 
 for (const [name, value] of Object.entries({ GH_TOKEN, REPO, PR_NUMBER })) {
   if (!value) throw new Error(`cla-gate: ${name} is required but was empty`);
 }
 
-async function api(path, { method = "GET", body, allow404 = false } = {}) {
-  // The key has to be absent rather than undefined on a GET: fetch rejects the
-  // combination, and oxlint flags it statically.
-  const init = {
-    method,
-    headers: {
-      authorization: `Bearer ${GH_TOKEN}`,
-      accept: "application/vnd.github+json",
-      "content-type": "application/json",
-      "user-agent": "rom-weaver-cla-gate",
-    },
-  };
-  if (body !== undefined) init.body = JSON.stringify(body);
-
-  const response = await fetch(`${GITHUB_API_URL}${path}`, init);
-
-  if (response.status === 404 && allow404) return null;
-  if (!response.ok) {
-    throw new Error(
-      `cla-gate: ${method} ${path} failed with ${response.status}: ${await response.text()}`,
-    );
-  }
-  return response.status === 204 ? null : response.json();
-}
-
-// The Link header is the only reliable page count; a short page is not proof of
-// the last one.
-async function paginate(path) {
-  const items = [];
-  let next = `${path}${path.includes("?") ? "&" : "?"}per_page=100`;
-  while (next) {
-    const response = await fetch(`${GITHUB_API_URL}${next}`, {
-      headers: {
-        authorization: `Bearer ${GH_TOKEN}`,
-        accept: "application/vnd.github+json",
-        "user-agent": "rom-weaver-cla-gate",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(
-        `cla-gate: GET ${next} failed with ${response.status}: ${await response.text()}`,
-      );
-    }
-    items.push(...(await response.json()));
-    const link = response.headers.get("link") ?? "";
-    const match = link.match(/<([^>]+)>;\s*rel="next"/);
-    next = match ? match[1].replace(GITHUB_API_URL, "") : null;
-  }
-  return items;
-}
+const { api, paginate } = createGitHubApi({
+  token: GH_TOKEN,
+  apiUrl: GITHUB_API_URL,
+  name: "cla-gate",
+});
 
 // `*` and `?` are wildcards; every other character is literal. Escaping the
 // rest matters most for brackets: every GitHub App login ends in the four
@@ -155,9 +122,21 @@ const authors = [
 let { sha: signaturesSha, signatures } = await readSignatures();
 const hasSigned = (login) => signatures.some((entry) => entry.login === login);
 
-// The phrase must be a line of its own. A substring match signed anyone who
-// quoted it while asking how signing works.
-const signedByComment = COMMENT_BODY.split("\n").some((line) => line.trim() === SIGN_PHRASE);
+// The phrase must still be a line of its own - a substring match signed anyone
+// who quoted it while asking how signing works - but exact equality rejected a
+// trailing full stop, a capital letter, or the emphasis GitHub's editor adds,
+// and rejected it in total silence. Deliberately NOT stripped: a leading `>`.
+// Accepting a quoted line would turn "quote the request, then ask what it
+// means" into a signature, and the quote-reply flow does not need it - the text
+// you type under the quote is unquoted already.
+const normalize = (line) =>
+  line
+    .replace(/^[\s*_]+/, "")
+    .replace(/[\s.!*_`]+$/, "")
+    .toLowerCase()
+    .replaceAll(/\s+/g, " ");
+const wanted = normalize(SIGN_PHRASE);
+const signedByComment = COMMENT_BODY.split("\n").some((line) => normalize(line) === wanted);
 
 // `COMMENT_AUTHOR` is `github.event.comment.user.login`, which GitHub sets from
 // the authenticated session that posted the comment - not content the commenter
@@ -199,58 +178,59 @@ if (
 
 const unsigned = authors.filter((login) => !isAllowed(login) && !hasSigned(login));
 
-const postStatus = (state, description, targetUrl) =>
-  api(`/repos/${REPO}/statuses/${headSha}`, {
-    method: "POST",
-    body: { state, context: "CLA Status", description, target_url: targetUrl },
-  });
+const postStatus = createStatusPoster({ api, repo: REPO, sha: headSha, context: STATUS_CONTEXT });
 
-// One comment per pull request, edited in place, so a rebase does not bury the
-// thread under duplicates. `editOnly` skips creating one at all, which keeps
-// the overwhelmingly common case - a pull request from someone who has already
-// signed - completely silent.
-async function upsertComment(body, { editOnly = false } = {}) {
-  const comments = await paginate(`/repos/${REPO}/issues/${PR_NUMBER}/comments`);
-  const existing = comments.find((comment) => comment.body.includes(COMMENT_MARKER));
-  if (existing) {
-    await api(`/repos/${REPO}/issues/comments/${existing.id}`, { method: "PATCH", body: { body } });
-  } else if (!editOnly) {
-    await api(`/repos/${REPO}/issues/${PR_NUMBER}/comments`, { method: "POST", body: { body } });
-  }
-}
+// `editOnly` on the success path keeps the overwhelmingly common case - a pull
+// request from someone who has already signed - completely silent.
+const { upsert: upsertComment } = createMarkerComment({
+  api,
+  paginate,
+  repo: REPO,
+  prNumber: PR_NUMBER,
+  marker: COMMENT_MARKER,
+});
 
 if (unsigned.length === 0) {
   await postStatus("success", "All contributors have signed the CLA", CLA_DOCUMENT);
   await upsertComment(
-    `${COMMENT_MARKER}\n**CLA signed.** All contributors to this pull request have signed the\n[Contributor License Agreement](${CLA_DOCUMENT}).`,
+    `${COMMENT_MARKER}
+${BADGE.signed}
+
+> [!TIP]
+> Every contributor to this pull request has signed the [CLA](${CLA_DOCUMENT}).`,
     { editOnly: true },
   );
-  console.log(`CLA Status success on ${headSha} (authors: ${authors.join(" ")})`);
+  console.log(`${STATUS_CONTEXT} success on ${headSha} (authors: ${authors.join(" ")})`);
   process.exit(0);
 }
 
 const runUrl = `${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}`;
 await postStatus("failure", `Awaiting CLA signature from ${unsigned.length} contributor(s)`, runUrl);
 
+// `unlinked:<name>` authors cannot be mentioned and cannot sign by comment, so
+// they are shown as code and explained - but only when one is actually present.
+const mention = (login) => (login.startsWith("unlinked:") ? `\`${login}\`` : `@${login}`);
+const unlinked = unsigned.filter((login) => login.startsWith("unlinked:"));
+
 await upsertComment(`${COMMENT_MARKER}
-**CLA signature required.**
+${BADGE.required}
 
-${unsigned.map((login) => `- @${login}`).join("\n")}
+> [!WARNING]
+> ${unsigned.map(mention).join(", ")} ${unsigned.length === 1 ? "has" : "have"} not signed the CLA. Post a comment whose own line reads:
 
-Please read the [Contributor License Agreement](${CLA_DOCUMENT}) and, if you
-agree, post a new comment whose own line reads exactly:
+\`\`\`
+${SIGN_PHRASE}
+\`\`\`
 
-> ${SIGN_PHRASE}
+[Agreement](${CLA_DOCUMENT}) \u00b7 \`recheck\` to re-run${
+  unlinked.length
+    ? "\n\nAn `unlinked:<name>` author has a commit email matching no GitHub account, so they cannot sign by comment - fix the commit author or say so in the thread."
+    : ""
+}`);
 
-Signing covers all of your past and future contributions. Comment \`recheck\` at
-any time to re-run this check.
+console.error(`${STATUS_CONTEXT} failure on ${headSha}; unsigned: ${unsigned.join(" ")}`);
 
-Commits listed as \`unlinked:<name>\` have an author email that matches no
-GitHub account - fix the commit author or say so in the thread.`);
-
-console.error(`CLA Status failure on ${headSha}; unsigned: ${unsigned.join(" ")}`);
-
-// Exit 0 on an unsigned verdict, deliberately. The `CLA Status` status is the
+// Exit 0 on an unsigned verdict, deliberately. The `Gates/CLA Signed` status is the
 // single signal for CLA compliance and the one the ruleset can require; a red
 // job on top of it says the same thing twice. Keeping the job green here means
 // a red `CLA` job says something the status cannot: the gate itself broke - a
