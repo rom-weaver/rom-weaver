@@ -127,7 +127,10 @@ jobs:
   docker:
     name: Docker build (${{ matrix.name }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The arm64 source leg runs under QEMU and is substantially slower than
+    # the native amd64 leg. Keep the source build as a real multi-arch gate;
+    # the default one-hour limit cuts it off while Cargo is still compiling.
+    timeout-minutes: 180
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.docker_matrix != '[]'
     permissions:
