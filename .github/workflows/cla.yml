@@ -47,7 +47,7 @@ jobs:
       # Explicitly the base commit, never the pull request head: this checkout
       # supplies the script and the allowlist, both of which must be the
       # reviewed versions.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           persist-credentials: false
