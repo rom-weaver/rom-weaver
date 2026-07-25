@@ -199,6 +199,17 @@ runs:
           echo "browsers=$(tr ' ' '-' <<< "$BROWSERS")"
         } >> "$GITHUB_OUTPUT"
 
+    # Playwright's default registry is OS-dependent (`~/.cache/ms-playwright`
+    # on Linux, `~/Library/Caches/ms-playwright` on macOS), so the single cache
+    # path below only ever matched the Linux runners - the macOS WebKit job
+    # missed every time and re-downloaded the browser. Pinning the registry
+    # makes the path the same everywhere; it must be set before the install so
+    # the binaries land where the cache saves from.
+    - name: Pin Playwright browser registry
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
+
     # Cache the installed tree, not ~/.npm. The download cache only ever saved
     # the fetch half - `npm ci` still wiped and repopulated node_modules on
     # every run - while costing ~242 MB per lockfile revision, which made it

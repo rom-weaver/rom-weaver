@@ -782,7 +782,12 @@ jobs:
     # The full WASM path requires WebKit OPFS. Playwright's Linux WebKit exposes
     # the API surface but hangs when the first real OPFS-backed operation starts;
     # macOS WebKit exercises the supported Safari-family implementation.
-    runs-on: macos-14
+    # macos-15, not -14: Playwright freezes WebKit at rev 2251 on mac14 (and
+    # mac14-arm64) via `revisionOverrides`, so that build stops gaining protocol
+    # settings the client keeps adding - 1.62.0 began sending
+    # `Page.overrideSetting PushAPIEnabled` and every launch died on
+    # "Unknown setting". mac15 has no override and tracks the current revision.
+    runs-on: macos-15
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
