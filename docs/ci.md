@@ -27,6 +27,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [Package managers publish last](#package-managers-publish-last)
   - [Prerelease routing](#prerelease-routing)
   - [Build provenance](#build-provenance)
+    - [Testing it without cutting a release](#testing-it-without-cutting-a-release)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
@@ -52,6 +53,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
+| `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 
 `cla.yml` posts the required `CLA Status` commit status, checking every
 contributor to a pull request against [CLA version 1.0](../CLA.md). The logic is
@@ -786,6 +788,29 @@ and the step is safe on a rerun and after the release is published.
 The consumer side is in [Verifying a download](cli.md#verifying-a-download) -
 both install scripts check provenance, and `gh attestation verify` covers any
 asset by hand.
+
+#### Testing it without cutting a release
+
+The attest steps run only during a release, which is the one moment their
+failure costs the most: a 403 there strands a draft that has already published
+to npm. `attestation-dry-run.yml` (dispatch only) proves the wiring beforehand.
+It attests a throwaway file two ways - directly, and through a `workflow_call`
+into `attestation-dry-run-called.yml` - because the token cap is the failure
+mode worth catching: a reusable workflow receives the calling job's permissions
+and never more, so a grant declared only in the called workflow fails. Then it
+checks the result on Linux, macOS, and Windows the way each install script does,
+which is the only coverage `install.ps1`'s PowerShell path has anywhere.
+
+It is dispatch only because every run writes a permanent public attestation
+record; firing it per push would be noise in the repository's attestation list.
+
+The installers' fallback is duplicated into that workflow rather than invoked,
+because `install.sh` verifies only an asset it downloaded from a release and the
+dry run's subject is not one. `scripts/install.test.mjs` covers the same code
+against a captured real API response
+(`test/fixtures/attestations-response.json`), so the duplication is checked from
+both ends: the fixture proves the shell agrees with GitHub's response shape, and
+the dry run proves it agrees with a live attestation.
 
 ## Actions cache budget
 

@@ -59,8 +59,9 @@ try {
   # The checksum above only proves the download is intact - the sidecar ships
   # from the same place as the binary. Build provenance is what says which
   # workflow produced the file, so an asset uploaded by a stolen token fails
-  # here even though its checksum matches. See install.sh for the same two
-  # branches; advisory unless ROM_WEAVER_REQUIRE_ATTESTATION=1.
+  # here even though its checksum matches. Same two branches as install.sh -
+  # which parses the response by hand, having no ConvertFrom-Json to lean on.
+  # Advisory unless ROM_WEAVER_REQUIRE_ATTESTATION=1.
   $requireAttestation = $env:ROM_WEAVER_REQUIRE_ATTESTATION -eq '1'
   function Write-AttestationWarning([string]$message) {
     if ($requireAttestation) { throw $message }

@@ -1,0 +1,152 @@
+name: Attestation dry run
+
+# The attest steps in `release.yml` and `npm-publish.yml` only ever execute
+# during a release, which is the one moment their failure is most expensive: a
+# 403 there strands a draft that has already published to npm. This exercises
+# the same actions, the same permission set, and the same reusable-workflow token
+# path against a throwaway file, so the wiring can be proved before it matters.
+#
+# It also runs the consumer half - the provenance check both install scripts
+# perform - against a real attestation on all three runner families, which is
+# the part `scripts/install.test.mjs` can only approximate with a fixture.
+#
+# Dispatch only. Every run writes a permanent public attestation record, so this
+# must not fire on pushes or pull requests.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attestation-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Mirrors `release.yml`'s `static-webapp`: a job attesting a file it produced
+  # itself, with the grants declared on the job that runs the step.
+  direct:
+    name: Attest directly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.subject.outputs.digest }}
+    steps:
+      - name: Create the subject
+        id: subject
+        run: |
+          set -euo pipefail
+          # Unique per run, so every dry run attests bytes nothing else has and
+          # a stale attestation cannot make a broken run look green.
+          printf 'rom-weaver attestation dry run %s %s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_SHA" > subject.bin
+          echo "digest=$(sha256sum subject.bin | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the subject
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: subject.bin
+
+      - name: Upload the subject
+        uses: actions/upload-artifact@v7
+        with:
+          name: attestation-subject
+          path: subject.bin
+          if-no-files-found: error
+          retention-days: 1
+
+  # Mirrors the `publish-npm` -> `npm-publish.yml` hop. A reusable workflow gets
+  # the calling job's token and never more, so this is the arrangement that
+  # actually 403s when a grant is missing from the caller - the failure mode the
+  # duplicated permissions block in `release.yml` exists to prevent.
+  reusable:
+    name: Attest through a reusable workflow
+    permissions:
+      contents: read
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    uses: ./.github/workflows/attestation-dry-run-called.yml
+
+  # The install scripts' own check, against the attestation `direct` just
+  # published. Windows runs install.ps1's PowerShell path, which has no other
+  # coverage anywhere.
+  verify:
+    name: Verify as an installer would (${{ matrix.os }})
+    needs: direct
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: attestation-subject
+
+      # The strong branch. `gh` is preinstalled and authenticated on every runner
+      # image, so this is the path a developer machine with gh takes.
+      - name: Verify with gh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify subject.bin --repo "$GITHUB_REPOSITORY"
+
+      # The fallback branch, extracted verbatim from install.sh. It is duplicated
+      # rather than invoked because install.sh only ever verifies an asset it
+      # downloaded from a release, and this subject is not one - see the note in
+      # docs/ci.md.
+      - name: Verify the way install.sh does, with no gh and no jq
+        if: matrix.os != 'windows-2025'
+        shell: bash
+        env:
+          DIGEST: ${{ needs.direct.outputs.digest }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --location --proto '=https' --tlsv1.2 \
+            --output attestations.json \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/attestations/sha256:$DIGEST"
+
+          if base64 -d </dev/null >/dev/null 2>&1; then
+            decode_base64() { base64 -d; }
+          elif base64 -D </dev/null >/dev/null 2>&1; then
+            decode_base64() { base64 -D; }
+          else
+            decode_base64() { openssl base64 -d -A; }
+          fi
+
+          payload=$(tr -d '\n\r' < attestations.json \
+            | grep -o '"payload"[[:space:]]*:[[:space:]]*"[^"]*"' \
+            | head -n 1 \
+            | sed 's/.*"\([^"]*\)"$/\1/')
+
+          test -n "$payload"
+          printf '%s' "$payload" | decode_base64 \
+            | grep -q "\"repository\":\"https://github.com/$GITHUB_REPOSITORY\""
+          echo "install.sh fallback verified the attestation"
+
+      - name: Verify the way install.ps1 does
+        if: matrix.os == 'windows-2025'
+        shell: pwsh
+        env:
+          DIGEST: ${{ needs.direct.outputs.digest }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $response = Invoke-RestMethod -UseBasicParsing `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/attestations/sha256:$env:DIGEST"
+          $payload = $response.attestations[0].bundle.dsseEnvelope.payload
+          $statement = [System.Text.Encoding]::UTF8.GetString(
+            [System.Convert]::FromBase64String($payload)) | ConvertFrom-Json
+          $sourceUri = $statement.predicate.buildDefinition.externalParameters.workflow.repository
+          if ($sourceUri -ne "https://github.com/$env:GITHUB_REPOSITORY") {
+            throw "expected this repository, got $sourceUri"
+          }
+          Write-Host 'install.ps1 fallback verified the attestation'

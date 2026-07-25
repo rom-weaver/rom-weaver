@@ -105,17 +105,17 @@ gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
   --repo rom-weaver/rom-weaver
 ```
 
-Both install scripts do this for you. They prefer `gh`, which verifies the
-Sigstore signature, the certificate chain, and transparency-log inclusion. With
-no `gh`, they fall back to reading the attestation from `api.github.com` over
-TLS and confirming it names this repository - weaker, because it trusts the API
-response rather than the signature, but the same trust the download already
-places in GitHub, and it still catches an asset no workflow run produced. With
-neither `gh` nor `jq`, the check is skipped.
+Both install scripts do this for you, and neither needs anything installed. They
+prefer `gh` when it is present and signed in, which verifies the Sigstore
+signature, the certificate chain, and transparency-log inclusion. Otherwise they
+read the attestation from `api.github.com` over TLS and confirm it names this
+repository - weaker, because it trusts the API response rather than the
+signature, but the same trust the download already places in GitHub, and it
+still catches an asset no workflow run produced.
 
-The check is advisory by default so a minimal machine is not left unable to
-install. Set `ROM_WEAVER_REQUIRE_ATTESTATION=1` to make every one of those
-outcomes - failed, absent, or skipped - fatal instead.
+The check is advisory by default so a machine that cannot reach the API is not
+left unable to install. Set `ROM_WEAVER_REQUIRE_ATTESTATION=1` to make a failed
+or absent attestation fatal instead.
 
 [slsa]: https://slsa.dev/spec/v1.0/provenance
 

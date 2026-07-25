@@ -78,24 +78,43 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   else
     attestation_failed "build provenance verification FAILED for $asset"
   fi
-elif command -v jq >/dev/null 2>&1; then
+else
   # No gh, so this reads the attestation over TLS from api.github.com instead of
   # verifying the bundle itself. That is strictly weaker - it trusts GitHub's
   # API rather than the signature - but it is the same trust already placed in
   # the TLS download above, and it still catches an asset that no workflow run
   # ever produced.
+  #
+  # No JSON parser is involved, so this needs nothing a POSIX box lacks. The
+  # signed statement is a base64 DSSE payload, and the value being looked for is
+  # an exact literal in it: `"repository":"..."` occurs exactly once, because the
+  # neighboring `repository_id` and `repository_owner_id` keys do not end at the
+  # same quote. Matching a fixed string beats parsing here - there is no shape to
+  # get wrong, only bytes that are present or absent.
   if curl --fail --silent --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/attestations.json" \
     "https://api.github.com/repos/$repo/attestations/sha256:$digest"; then
-    # The signed statement is a base64 DSSE payload; its `sourceRepositoryURI`
-    # is what pins the attestation to this repository rather than to any
-    # repository that happens to have attested the same bytes.
-    source_uri=$(jq -r '
-      .attestations[]?.bundle.dsseEnvelope.payload // empty
-      | @base64d | fromjson
-      | .predicate.buildDefinition.externalParameters.workflow.repository // empty
-    ' "$tmp_dir/attestations.json" 2>/dev/null | head -n 1)
-    if [ "$source_uri" = "https://github.com/$repo" ]; then
+    # -d is GNU and current macOS, -D is older macOS, and openssl covers the
+    # rest. The probe is on empty input so it costs nothing and cannot decode.
+    if base64 -d </dev/null >/dev/null 2>&1; then
+      decode_base64() { base64 -d; }
+    elif base64 -D </dev/null >/dev/null 2>&1; then
+      decode_base64() { base64 -D; }
+    else
+      decode_base64() { openssl base64 -d -A; }
+    fi
+
+    # `tr` first because the response is pretty-printed and the payload has to be
+    # matched on one line; `head` because an asset attested more than once
+    # returns several, and any one of them proving this repository built it is
+    # enough.
+    payload=$(tr -d '\n\r' < "$tmp_dir/attestations.json" \
+      | grep -o '"payload"[[:space:]]*:[[:space:]]*"[^"]*"' \
+      | head -n 1 \
+      | sed 's/.*"\([^"]*\)"$/\1/')
+
+    if [ -n "$payload" ] && printf '%s' "$payload" | decode_base64 2>/dev/null \
+      | grep -q "\"repository\":\"https://github.com/$repo\""; then
       echo "Found build provenance for $asset (install gh to verify its signature)"
     else
       attestation_failed "no build provenance from $repo for $asset"
@@ -103,8 +122,6 @@ elif command -v jq >/dev/null 2>&1; then
   else
     attestation_failed "no build provenance published for $asset"
   fi
-else
-  attestation_failed "skipping provenance check - install gh or jq to enable it"
 fi
 
 mkdir -p "$install_dir"

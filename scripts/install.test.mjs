@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 const writeExecutable = (path, source) => {
@@ -45,46 +45,36 @@ JSON
 esac
 `;
 
-// The shape install.sh reads: a base64 DSSE payload whose statement names the
-// repository that built the asset.
-const attestationFor = (repository) => {
-  const statement = {
-    predicate: { buildDefinition: { externalParameters: { workflow: { repository } } } },
-  };
-  const payload = Buffer.from(JSON.stringify(statement)).toString("base64");
-  return JSON.stringify({ attestations: [{ bundle: { dsseEnvelope: { payload } } }] }, null, 2);
-};
+// A verbatim response from `GET /repos/{owner}/{repo}/attestations/{digest}`,
+// captured from a real published image and used unmodified except that its
+// `bundle_url` - a time-limited signed blob URL install.sh never reads - is
+// replaced. Testing against the real bytes is the point: install.sh matches
+// fixed strings rather than parsing, so a hand-written response could agree with
+// the code while disagreeing with GitHub.
+const REAL_RESPONSE = readFileSync(resolve("test/fixtures/attestations-response.json"), "utf8");
+const REAL_RESPONSE_REPOSITORY = "https://github.com/rom-weaver/rom-weaver";
 
-// The fallback branch shells out to jq. Where the jq expression itself is what
-// is under test the real binary is used, so the tests cannot drift from it;
-// jq is not a documented prerequisite for this repository, so those tests skip
-// rather than fail when it is missing.
-const jqDirectory = () => {
-  try {
-    const path = execFileSync("sh", ["-c", "command -v jq"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    return dirname(path.trim());
-  } catch {
-    return null;
+// The same response with the attesting repository swapped, which is what an
+// attestation covering these bytes but produced by somebody else looks like.
+const responseFrom = (repository) => {
+  const { attestations } = JSON.parse(REAL_RESPONSE);
+  for (const attestation of attestations) {
+    const envelope = attestation.bundle.dsseEnvelope;
+    const statement = Buffer.from(envelope.payload, "base64").toString("utf8");
+    envelope.payload = Buffer.from(statement.replaceAll(REAL_RESPONSE_REPOSITORY, repository)).toString("base64");
   }
+  return JSON.stringify({ attestations }, null, 2);
 };
-
-// A stand-in for jq that returns whatever the test wants the query to yield, so
-// a test that is not about the expression takes the same branch on every host.
-// The expression itself is covered against the real jq below.
-const JQ_STUB = `#!/bin/sh
-printf '%s\\n' "$JQ_REPOSITORY"
-`;
 
 // Everything the provenance tests share: a Darwin host and a stubbed download.
-// `bin` is returned so a test can add its own `gh`, or shadow the jq stub.
+// `bin` is returned so a test can add its own `gh`.
 const setUpDarwinInstall = (directory, options = {}) => {
-  const { attestation = attestationFor("https://github.com/rom-weaver/rom-weaver"), jq = "stub" } = options;
+  const { attestation = REAL_RESPONSE } = options;
   const bin = join(directory, "bin");
   mkdirSync(bin);
   writeExecutable(join(bin, "uname"), '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo arm64 ;;\nesac\n');
   writeExecutable(join(bin, "curl"), curlStub("darwin-arm64", attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
-  if (jq === "stub") writeExecutable(join(bin, "jq"), JQ_STUB);
   return bin;
 };
 
@@ -99,7 +89,6 @@ const runInstall = (directory, bin, environment = {}) => {
       CURL_LOG: join(directory, "curl.log"),
       FAIL_URLS: "",
       HOME: directory,
-      JQ_REPOSITORY: "https://github.com/rom-weaver/rom-weaver",
       PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
       ...rest,
@@ -260,14 +249,25 @@ test("falls back to the attestations API when gh is absent", () => {
 });
 
 test("rejects an attestation naming a different repository", () => {
-  withInstall({}, (directory, bin) => {
-    const environment = { JQ_REPOSITORY: "https://github.com/someone-else/rom-weaver" };
-    assert.match(runInstall(directory, bin, environment), /no build provenance from/);
+  withInstall({ attestation: responseFrom("https://github.com/someone-else/rom-weaver") }, (directory, bin) => {
+    assert.match(runInstall(directory, bin), /no build provenance from/);
 
-    const strict = expectFailure(() =>
-      runInstall(directory, bin, { ...environment, ROM_WEAVER_REQUIRE_ATTESTATION: "1" }),
-    );
+    const strict = expectFailure(() => runInstall(directory, bin, { ROM_WEAVER_REQUIRE_ATTESTATION: "1" }));
     assert.match(strict, /no build provenance from/);
+  });
+});
+
+// A repository whose name merely starts with this one's must not satisfy the
+// match - the trailing quote in the pattern is what stops `rom-weaver-evil`.
+test("rejects a repository that only prefixes this one", () => {
+  withInstall({ attestation: responseFrom(`${REAL_RESPONSE_REPOSITORY}-evil`) }, (directory, bin) => {
+    assert.match(runInstall(directory, bin), /no build provenance from/);
+  });
+});
+
+test("rejects a response carrying no attestation at all", () => {
+  withInstall({ attestation: '{\n  "attestations": []\n}' }, (directory, bin) => {
+    assert.match(runInstall(directory, bin), /no build provenance from/);
   });
 });
 
@@ -282,19 +282,25 @@ test("reports an asset with no published attestation", () => {
   });
 });
 
-// The stub above fixes jq's answer, which would let the real expression rot
-// unnoticed. This runs the expression install.sh actually ships against the
-// response shape the API actually returns.
-test("reads the repository out of a real attestation response", { skip: jqDirectory() === null && "jq is not installed" }, () => {
-  withInstall({ jq: "none" }, (directory, bin) => {
-    const output = runInstall(directory, bin, { PATH: jqDirectory() });
-    assert.match(output, /Found build provenance for rom-weaver-darwin-arm64/);
+// The check must need nothing beyond a POSIX shell, so the whole thing runs
+// again with jq, and then with every base64 flavor, taken off PATH.
+test("checks provenance with no jq on PATH", () => {
+  withInstall({}, (directory, bin) => {
+    writeExecutable(join(bin, "jq"), "#!/bin/sh\necho 'jq must not be called' >&2\nexit 127\n");
+    assert.match(runInstall(directory, bin), /Found build provenance for rom-weaver-darwin-arm64/);
   });
 });
 
-test("rejects a real attestation response naming a different repository", { skip: jqDirectory() === null && "jq is not installed" }, () => {
-  withInstall({ jq: "none", attestation: attestationFor("https://github.com/someone-else/rom-weaver") }, (directory, bin) => {
-    const output = runInstall(directory, bin, { PATH: jqDirectory() });
-    assert.match(output, /no build provenance from/);
+// GNU and current macOS take -d, older macOS only -D, and a box with neither
+// falls through to openssl. Each is forced by making the others fail.
+for (const [name, stub] of [
+  ["only base64 -D", '#!/bin/sh\ncase "$1" in\n  -d) exit 1 ;;\nesac\nexec /usr/bin/base64 "$@"\n'],
+  ["neither base64 flag", "#!/bin/sh\nexit 1\n"],
+]) {
+  test(`decodes the payload with ${name}`, () => {
+    withInstall({}, (directory, bin) => {
+      writeExecutable(join(bin, "base64"), stub);
+      assert.match(runInstall(directory, bin), /Found build provenance for rom-weaver-darwin-arm64/);
+    });
   });
-});
+}
