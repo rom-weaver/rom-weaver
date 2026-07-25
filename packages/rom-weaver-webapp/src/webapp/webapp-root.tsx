@@ -7,6 +7,7 @@ import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
+import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
@@ -144,10 +145,13 @@ const isInsideLocalDropZone = (target: EventTarget | null) =>
 
 type WorkflowView = WebappRootProps["state"]["currentView"];
 
+/* "auto" must resolve exactly the way the runtime and the Threads setting's
+   `auto (N)` placeholder resolve it - raw hardwareConcurrency disagrees with
+   both (it ignores the 4-thread floor and the non-isolated 1-thread case). */
 const resolveThreads = (threads?: unknown): number => {
   const numeric = typeof threads === "number" ? threads : Number.parseInt(String(threads || ""), 10);
   if (Number.isFinite(numeric) && numeric >= 1) return numeric;
-  return typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 0;
+  return getDefaultBrowserThreadCount();
 };
 
 /* Entry animations (card-in / panel-in / …) must play once per mount, never
