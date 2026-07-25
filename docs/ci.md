@@ -26,6 +26,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [Draft-first releases](#draft-first-releases)
   - [Package managers publish last](#package-managers-publish-last)
   - [Prerelease routing](#prerelease-routing)
+  - [Build provenance](#build-provenance)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
@@ -754,6 +755,37 @@ image carries the same evidence regardless of which workflow built it.
 Attestation is gated on the push rather than set outright, because it needs an
 exporter that can carry attestations - the plain local build a pull request
 runs is not one, and asking for provenance there fails the build.
+
+### Build provenance
+
+Every artifact the fan-out publishes carries signed provenance, so what a user
+can verify does not depend on which channel they installed from:
+
+| Artifact | Attested by |
+| --- | --- |
+| 9 CLI platform binaries | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
+| static webapp tarball | the same, in `release.yml`'s `static-webapp` |
+| npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
+| container images | `provenance: mode=max` + `actions/attest` in `docker-publish.yml` |
+
+Two gaps remain, both because no mechanism exists: crates.io has no attestation
+story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
+of their own - both pin the release assets by sha256, so attesting the binaries
+covers them.
+
+The `.sha256` sidecars are not a substitute. They are written by the job that
+writes the binary, so they prove the download is intact and nothing about where
+it came from. Provenance is what ties an asset to a workflow run and commit,
+which is what a stolen token or a hand-uploaded asset fails.
+
+Attestations live in the repository's attestation store, not in the release's
+asset list. That is why adding them does not interact with
+[immutable releases](#draft-first-releases): nothing is attached to the draft,
+and the step is safe on a rerun and after the release is published.
+
+The consumer side is in [Verifying a download](cli.md#verifying-a-download) -
+both install scripts check provenance, and `gh attestation verify` covers any
+asset by hand.
 
 ## Actions cache budget
 

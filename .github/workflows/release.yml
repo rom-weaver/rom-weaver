@@ -385,6 +385,11 @@ jobs:
     permissions:
       actions: read
       contents: write
+      # Signed provenance for the tarball, matching the platform binaries and
+      # the container images.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     steps:
       # The release is still a draft here, so its tag does not exist yet - check
       # out the commit release-please released instead.
@@ -487,6 +492,16 @@ jobs:
             rom-weaver-webapp.tar.gz rom-weaver-webapp.tar.gz.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
+      # See the matching step in npm-publish.yml: the `.sha256` sidecar is
+      # written by this job and proves only that the download is intact. The
+      # attestation is what ties the tarball to this run and commit. It lands in
+      # the repository's attestation store rather than the release's asset list,
+      # so it neither touches the draft nor conflicts with immutability.
+      - name: Attest the static webapp tarball
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: rom-weaver-webapp.tar.gz
+
   publish-npm:
     needs: [release, cargo-publish-dry-run]
     if: >-
@@ -495,6 +510,11 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # A reusable workflow receives the calling job's token and never more, so
+      # the attestation grants in npm-publish.yml are capped here. Without these
+      # the attest step 403s at the very end of an otherwise successful publish.
+      attestations: write
+      artifact-metadata: write
     uses: ./.github/workflows/npm-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}

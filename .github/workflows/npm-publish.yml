@@ -156,6 +156,11 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # Signed provenance for the release binary. npm generates its own for the
+      # package from the same OIDC token; this covers the loose binary, which
+      # `install.sh`, Homebrew, and Scoop hand to users without going near npm.
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -199,6 +204,7 @@ jobs:
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
       - name: Upload platform binary to GitHub release
+        id: asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -217,6 +223,22 @@ jobs:
           printf '%s  %s\n' "$checksum" "$asset_name" > "$asset_name.sha256"
           gh release upload "v${{ inputs.version }}" "$asset_name" "$asset_name.sha256" \
             --repo "$GITHUB_REPOSITORY" --clobber
+          echo "name=$asset_name" >> "$GITHUB_OUTPUT"
+
+      # The `.sha256` sidecar beside each asset is written by this same job, so
+      # it proves the download was not corrupted and nothing about where the
+      # binary came from. This is the part that ties the file to the workflow
+      # run and commit that produced it, and it is what `gh attestation verify`
+      # reads.
+      #
+      # Attestations live in the repository's attestation store, not in the
+      # release's asset list, so this adds nothing to the draft and cannot
+      # interact with immutable releases - it is safe on a rerun and safe after
+      # the release is published.
+      - name: Attest the release binary
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.asset.outputs.name }}
 
   launcher:
     needs: platform
