@@ -62,8 +62,8 @@ lru.workspace = true
 md-5.workspace = true
 polonius-the-crab.workspace = true
 rayon.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.7.2" }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.7.2" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.8.0" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.8.0" }
 sha1.workspace = true
 serde_json.workspace = true
 simple_moving_average.workspace = true
