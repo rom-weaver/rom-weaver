@@ -28,6 +28,7 @@
 <!-- START doctoc -->
 
 - [Why](#why)
+- [Performance](#performance)
 - [Features](#features)
 - [Notices](#notices)
 - [Install](#install)
@@ -65,6 +66,22 @@ many patches as you want in a single pass without unpacking to disk first, and
 record the whole recipe - patch order, checksums, output names - in a bundle
 file you can hand to someone else. It runs the same on Linux, macOS, and
 Windows, and in the browser if you would rather not install anything.
+
+For the current measurements and trade-offs, see the [performance brief](#performance).
+
+## Performance
+
+rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp. In a
+representative 128 MiB GameCube ISO test, native RVZ compression completed in
+about 93 ms with four threads. The browser build completed the same operation
+in about 221 ms with one thread; four-thread RVZ creation is currently limited
+by a browser/OPFS threaded-I/O issue, so these numbers are not apples-to-apples.
+
+Production WASM runs `wasm-opt -O4`. In matched artifact measurements, that
+reduced the raw Wasm from 7.12 MB to 6.44 MB and the Brotli transfer size from
+1.73 MB to 1.71 MB. The full browser codec matrix remains the source of truth
+for runtime comparisons, so these figures are indicative rather than a
+general speed claim.
 
 ## Features
 
