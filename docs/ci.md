@@ -196,13 +196,14 @@ newline inside a comment as a hard break, so prose wrapped to a column shows the
 reader a line break mid-sentence - the source and the render disagree, and only
 the render matters.
 
-Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
-no `push` trigger: the release pull request is created and refreshed only by a
-manual **Run workflow** dispatch. Merging to `main` just accumulates commits.
+`release.yml` has no `push` trigger: the release pull request is created and
+refreshed only by a manual **Run workflow** dispatch. Merging to `main` still
+does not open a release pull request, but it does run the full CI/release
+rehearsal and publish the nightly website and Docker channels.
 
 That is deliberate. The workflow force-pushes the release branch two or three
 times per run (the release-please commit, the synced metadata, the screenshots),
-and each push starts a full CI matrix on that pull request. Firing it on every
+and each push starts the full CI matrix on that pull request. Firing it on every
 merge put 20 CI runs on the 0.8.0 release pull request, 17 of them cancelled by
 the next merge, for a pull request nobody had yet decided to merge. Dispatching
 by hand spends that CI once, when a release is actually wanted.
@@ -253,17 +254,19 @@ security ── advisories (warn only, always green)
 
 ### Jobs
 
-- **`changes`** classifies the pull request or push diff once. Rust and
+- **`changes`** classifies the pull request or push diff once. Ordinary pull
+  requests use the changed stacks; every `main` push and Release Please pull
+  request forces all stacks. Rust and
   vendored C changes select Rust, webapp integration, and the CLI image smoke -
   except Rust test, bench, and example sources, which select the Rust jobs
   alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
   module; dependency manifests select the advisory scanners; workflows, composite
   actions, shell scripts, and Dockerfiles select the plumbing lint. Documentation
-  changes select none of those expensive stacks. Manual runs and changes to
-  CI, coverage, the toolchain, or the classifier run everything. It also plans
-  the `docker` matrix, because a matrix can only be fed by an upstream job's
-  output.
+  changes select none of those expensive stacks on an ordinary pull request.
+  Manual runs and changes to CI, coverage, the toolchain, or the classifier run
+  everything. It also plans the `docker` matrix, because a matrix can only be
+  fed by an upstream job's output.
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
   workflows and composite actions, `shellcheck` over every tracked `.sh`, and
   `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
@@ -821,8 +824,9 @@ three hostnames in [Deploy channels](#deploy-channels):
 
 The `main` row is the only one not published by `docker-publish.yml`. Its
 images come from `ci.yml` - the CLI from the `docker` job's source build, the
-webapp from `docker-prebuilt` - and carry the same change gating as the deploy
-they mirror, so a push touching neither image leaves `nightly` where it is.
+webapp from `docker-prebuilt` - after the full main-push gate. Every main push
+therefore refreshes the nightly images and website, including documentation-only
+commits.
 They are attested exactly like the release images: `provenance: mode=max`, an
 SBOM, and an `actions/attest` signature pushed to the registry. Every published
 image carries the same evidence regardless of which workflow built it.

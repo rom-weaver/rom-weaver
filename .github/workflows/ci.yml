@@ -54,6 +54,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          # Main pushes are the nightly release rehearsal. Release Please PRs
+          # are the release gate, so both run every stack regardless of the
+          # generated changelog/version diff they contain.
+          FORCE_FULL: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')) }}
         run: node scripts/ci/classify-workflow.mjs
 
       # A matrix can only be fed by an upstream job's output, so the shared
@@ -61,8 +65,9 @@ jobs:
       - name: Resolve CLI platform matrix
         id: cli-platforms
         env:
-          # Pull requests keep one native canary per release family. CI/tooling
-          # changes retain the complete matrix; main and manual runs always do.
+          # Ordinary pull requests keep one native canary per release family.
+          # CI/tooling changes, release PRs, main, and manual runs do the full
+          # matrix.
           FULL_MATRIX: ${{ github.event_name != 'pull_request' || steps.classify.outputs.full == 'true' }}
         run: node scripts/ci/cli-platform-matrix.mjs
 

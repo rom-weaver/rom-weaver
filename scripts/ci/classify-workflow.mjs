@@ -2,9 +2,10 @@
 
 // Turns the pushed range into the `changes` job's per-stack outputs.
 //
-// Fails open in both directions - a manual dispatch and an unreachable base
-// both classify everything - because under-selecting silently skips a stack the
-// change actually touched, while over-selecting only costs CI minutes.
+// Fails open in both directions - a manual dispatch, an unreachable base, and
+// an explicitly full event all classify everything - because under-selecting
+// silently skips a stack the change actually touched, while over-selecting only
+// costs CI minutes.
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -29,7 +30,8 @@ runMain(() => {
   if (!process.env.GITHUB_OUTPUT) throw new Error("GITHUB_OUTPUT is required");
   const paths = changedPaths({ eventName: process.env.EVENT_NAME, baseSha: process.env.BASE_SHA, headSha: process.env.HEAD_SHA });
   if (paths) process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
-  const output = formatChanges(classifyChanges(paths ?? [], paths === null));
+  const full = paths === null || process.env.FORCE_FULL === "true";
+  const output = formatChanges(classifyChanges(paths ?? [], full));
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });

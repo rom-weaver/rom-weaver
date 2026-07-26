@@ -152,12 +152,13 @@ nightly serving code older than production - the opposite of what their names
 promise, and useless for reproducing a release-day bug.
 
 Production is CI-gated by construction: Release Please only tags after the
-release PR's required checks are green, so an unreviewed push can never reach
-`rom-weaver.com`. After that PR merges, the release workflow starts from the
-merged PR event rather than waiting for a duplicate full CI run on the merge
-commit. `workflow_dispatch` accepts a `deploy_channel` input to force one
-channel manually; that override deploys only the channel named and does not
-cascade.
+release PR's full required checks are green, so an unreviewed push can never
+reach `rom-weaver.com`. After that PR merges, the release workflow starts from
+the merged PR event rather than waiting for a duplicate full CI run on the merge
+commit; its fan-out rebuilds every release package and both container images
+before publishing the draft. `workflow_dispatch` accepts a `deploy_channel`
+input to force one channel manually; that override deploys only the channel
+named and does not cascade.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
 Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
@@ -207,10 +208,11 @@ Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
 `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other
 allowed types do not trigger a release by themselves.
 
-Merging to `main` does not open a release pull request - nothing runs on push.
-When you want to release, go to **Actions → Release → Run workflow** (branch
-`main`). That dispatch is what creates or refreshes the release pull request,
-syncs the generated version metadata, and captures the release screenshots.
+Merging to `main` does not open a release pull request. It does run the full
+nightly CI and publish the nightly website and Docker images. When you want to
+release, go to **Actions → Release → Run workflow** (branch `main`). That
+dispatch is what creates or refreshes the release pull request, syncs the
+generated version metadata, and captures the release screenshots.
 Re-dispatch whenever you want an open release pull request brought up to date.
 
 Dispatch once CI is green for the commit you are releasing. The screenshot step

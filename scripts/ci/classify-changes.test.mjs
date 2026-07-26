@@ -83,3 +83,16 @@ test("dependency and CI changes select their broader checks", () => {
 });
 
 test("the dependency policy moved under .config/", () => assert.equal(classify(".config/deny.toml").rust, "true"));
+
+test("full mode selects every stack", () => {
+  assert.deepEqual(classifyChanges([], true), {
+    rust: true,
+    webapp: true,
+    security: true,
+    docker_cli: true,
+    docker_webapp: true,
+    docker_source: true,
+    repo_lint: true,
+    full: true,
+  });
+});
