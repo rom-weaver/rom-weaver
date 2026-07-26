@@ -41,7 +41,7 @@ output relative to the reference's, so negative means smaller.
 | --- | --- | --- | --- | --- |
 | CHD | chdman 0.287 | −20.3% to +8.1% | −67.8% to −82.9% | −0.27% to −0.01% |
 | RVZ | dolphin-tool | −19.7% to −25.9% | −35.5% to −50.3% | −0.48% to +0.01% |
-| 7z | 7zz 26.02 | +20.4% to +146.6% | −58.1% to +36.1% | −0.57% to −0.01% |
+| 7z | 7zz 26.02 | +20.4% to +140.7% | −58.1% to +36.1% | −0.57% to −0.01% |
 | zip | Info-ZIP | −7.5% to −19.3% | −37.0% to −63.2% | −0.10% to +0.02% |
 
 ## Benchmarks in this repository
@@ -228,7 +228,7 @@ measure. The `.7z` archives read back on the extract side do contain disc images
 | GBA ROM `.gba` | 16 MB | 1.402 s ± 0.012 | 0.952 s ± 0.002 | +0.450 s (+47.2%) | 5.5 MB | 5.5 MB | −0.01% |
 | GBA ROM (romhack) `.gba` | 32 MB | 3.215 s ± 0.007 | 2.038 s ± 0.017 | +1.177 s (+57.7%) | 9.7 MB | 9.7 MB | −0.01% |
 | DS ROM `.nds` | 256 MB | 11.014 s ± 0.012 | 9.150 s ± 0.124 | +1.864 s (+20.4%) | 60.9 MB | 61.0 MB | −0.08% |
-| 3DS ROM `.cci` | 1 GiB | 36.268 s ± 0.756 | 14.710 s ± 0.038 | +21.558 s (+146.6%) | 313.7 MB | 315.5 MB | −0.57% |
+| 3DS ROM `.cci` | 1 GiB | 35.403 s ± 0.240 | 14.710 s ± 0.038 | +20.693 s (+140.7%) | 313.7 MB | 315.5 MB | −0.57% |
 
 rom-weaver's output is smaller than 7zz's at every size, and the time premium is
 what pays for it: rom-weaver seeds every parallel block with the preceding
