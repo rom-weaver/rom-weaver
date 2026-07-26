@@ -5,9 +5,18 @@ Describe the problem and the focused change that solves it.
 ## Validation
 
 List the checks you ran and any testing that remains. For a bug fix or anything
-platform-specific, name the version you reproduced and verified against
-(`rom-weaver --version`, or the webapp's version badge - hover it for the full
-build string) along with your OS, and browser for webapp changes.
+platform-specific, add:
+
+- **Version and commit** you reproduced and verified against. `rom-weaver --version`
+  prints the version alone, so pair it with `git rev-parse --short HEAD` for a
+  source build. The webapp shows both beside the rom-weaver wordmark - hover it
+  for the full build string.
+- **Platform**: your OS, plus the browser for webapp changes.
+- **Trace logs** for the failure and for the fix. `rom-weaver -vvv` writes them
+  to stderr, and `--dep-trace` adds the bundled libraries. In the webapp, run
+  `await ROM_WEAVER_CONSOLE_LOGS.copy()` in the devtools console - the report
+  carries the build and runtime details with the logs. Attach them as a file or
+  a collapsed `<details>` block rather than inline.
 
 ## Screenshots
 
