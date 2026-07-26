@@ -39,10 +39,42 @@ const {
   SIGNATURES_BRANCH = "cla-signatures",
   SIGNATURES_PATH = "signatures.json",
   ALLOWLIST_FILE = ".github/cla-allowlist.txt",
+  CLA_FILE = "CLA.md",
+  CLA_REF = "",
 } = process.env;
 
+// Section 6 promises the record names the version and links to that exact text.
+// A `blob/main` link cannot keep that promise: publishing a new version silently
+// repoints every past record at wording its signer never read. The workflow
+// checks out the pull request's base commit, so `CLA_REF` pins the link to the
+// commit whose text the contributor was actually shown - immutable by
+// construction, and the same URL the gate quotes back in its comment.
 const CLA_DOCUMENT =
-  process.env.CLA_DOCUMENT ?? `${GITHUB_SERVER_URL}/${REPO}/blob/main/CLA.md`;
+  process.env.CLA_DOCUMENT ??
+  `${GITHUB_SERVER_URL}/${REPO}/blob/${CLA_REF || "main"}/${CLA_FILE}`;
+// The `Version X.Y` line under the title. The URL alone is a weaker record: a
+// reader has to fetch it to learn what was signed, and a moved or renamed
+// repository breaks it, whereas the version stands on its own. Unreadable is
+// fatal rather than merely unrecorded - section 6 promises every signature
+// names its version, and a gate that cannot keep that promise should go red
+// instead of quietly recording signatures against nothing.
+const CLA_VERSION = readClaVersion();
+
+function readClaVersion() {
+  let contents;
+  try {
+    contents = readFileSync(CLA_FILE, "utf8");
+  } catch (cause) {
+    throw new Error(`cla-gate: cannot read the CLA document at ${CLA_FILE}`, { cause });
+  }
+  const version = contents.match(/^Version\s+(\S+)/m)?.[1];
+  if (!version) {
+    throw new Error(
+      `cla-gate: no \`Version X.Y\` line found in ${CLA_FILE}; the signature record cannot name a version`,
+    );
+  }
+  return version;
+}
 // Quoted verbatim in CLA.md section 7. Changing it here without changing it
 // there leaves contributors typing a phrase this gate will not accept.
 const SIGN_PHRASE = "I have read and agree to the CLA";
@@ -185,6 +217,7 @@ if (
       id,
       pullRequest: Number(PR_NUMBER),
       signedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      claVersion: CLA_VERSION,
       cla: CLA_DOCUMENT,
     },
   ];

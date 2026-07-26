@@ -80,7 +80,14 @@ function startApi({ prAuthor, commitAuthors, signatures, comments }) {
 // Must not block the event loop: the stub API is served from this very
 // process, so a synchronous child would deadlock waiting on a server that
 // cannot run.
-async function run({ prAuthor, commitAuthors = [], signatures = [], comment, comments = [] } = {}) {
+async function run({
+  prAuthor,
+  commitAuthors = [],
+  signatures = [],
+  comment,
+  comments = [],
+  env = {},
+} = {}) {
   const api = startApi({ prAuthor, commitAuthors, signatures, comments });
   let status = 0;
   try {
@@ -99,6 +106,7 @@ async function run({ prAuthor, commitAuthors = [], signatures = [], comment, com
         // Defaults to the author, which is what GitHub sends on a new comment.
         // An edit by somebody else is the case worth spelling out.
         COMMENT_SENDER: comment?.sender ?? comment?.author ?? "",
+        ...env,
       },
     });
   } catch (error) {
@@ -246,6 +254,41 @@ test("the signing phrase records a signature and passes", async () => {
   assert.equal(statusState(calls), "success");
   assert.equal(status, 0);
 });
+
+// Section 6 of the CLA promises the record names the version signed and links
+// to that exact text. A `blob/main` link cannot: publishing a new version
+// silently repoints every past record at wording its signer never read.
+test("the record names the CLA version and pins the link to the commit read", async () => {
+  const { calls } = await run({
+    prAuthor: "outsider",
+    signatures: [],
+    comment: { author: "outsider", body: SIGN_PHRASE },
+    env: { CLA_REF: "c0ffee" },
+  });
+  const write = calls.find((call) => call.method === "PUT");
+  const recorded = JSON.parse(Buffer.from(write.body.content, "base64").toString("utf8"));
+  const version = readFileSync(join(repoRoot, "CLA.md"), "utf8").match(/^Version\s+(\S+)/m)[1];
+  assert.equal(recorded[0].claVersion, version);
+  assert.equal(recorded[0].cla, `https://github.com/${REPO}/blob/c0ffee/CLA.md`);
+});
+
+// A gate that cannot read the version cannot keep that promise, so it must go
+// red rather than record signatures against nothing.
+for (const [what, CLA_FILE] of [
+  ["with no version line", ".github/cla-allowlist.txt"],
+  ["that does not exist", "CLA-does-not-exist.md"],
+]) {
+  test(`a CLA document ${what} fails the gate instead of signing`, async () => {
+    const { status, calls } = await run({
+      prAuthor: "outsider",
+      signatures: [],
+      comment: { author: "outsider", body: SIGN_PHRASE },
+      env: { CLA_FILE },
+    });
+    assert.ok(!wrote(calls, "PUT", "contents/signatures.json"));
+    assert.notEqual(status, 0);
+  });
+}
 
 test("the first signature ever creates the file instead of updating it", async () => {
   // `signatures: null` stands for "the file does not exist yet", which is a

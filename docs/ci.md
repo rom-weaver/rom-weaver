@@ -79,12 +79,24 @@ Both tests drive the script against a stub GitHub API served over real HTTP, so
 the JSON, base64 and status handling runs rather than a mock of it.
 
 The CLA gate checks every contributor to a pull request against
-[CLA version 1.0](../CLA.md).
+[CLA version 2.0](../CLA.md), whose grant covers every repository in the
+`rom-weaver` organization rather than this one alone.
 
 | Where | What |
 | --- | --- |
 | `.github/cla-allowlist.txt` (default branch) | Logins exempt from signing, one glob per line. `*[bot]` covers every bot; brackets are literal, and an unescaped `*[bot]` would be a character class matching anything ending in b, o or t. |
 | `cla-signatures` branch, `signatures.json` | The signature records. It lives off the default branch because the `main protection` ruleset forbids direct pushes and names no bypass actor, so a workflow cannot commit there. |
+
+Each record carries `claVersion` and a `cla` link pinned to the commit the gate
+read the document at, because section 6 promises a signature names the version
+it was given against. A `blob/main` link would repoint every past record at the
+next version. `CLA_REF` supplies that commit, resolved with `git rev-parse HEAD`
+in the workflow rather than from the event payload - on `issue_comment`, which
+is the signing path, the checkout ref is the branch name `main`. Every other
+path is env-driven too (`CLA_FILE`, `CLA_DOCUMENT`, `SIGNATURES_BRANCH`,
+`SIGNATURES_PATH`, `ALLOWLIST_FILE`), so pointing the gate at an
+organization-level document and signature store later needs no code change -
+only a token that can write outside this repository.
 
 An unsigned contributor gets a failing status and one comment - edited in place
 on later runs, never duplicated - asking them to reply with the signing
