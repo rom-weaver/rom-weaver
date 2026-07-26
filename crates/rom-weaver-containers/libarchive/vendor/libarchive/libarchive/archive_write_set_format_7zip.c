@@ -2599,18 +2599,35 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 		return (ARCHIVE_FATAL);
 	}
 	/*
-	 * Split one file into parallel blocks smaller than the dictionary,
-	 * seeding each later block with the preceding dictionary bytes so
-	 * cross-block matches survive. Only engages when the total size is
-	 * known and a per-thread block is smaller than the dictionary;
-	 * otherwise one chunk == dictionary as before.
+	 * Split one file into parallel blocks, seeding each later block with
+	 * the preceding dictionary bytes so cross-block matches survive. The
+	 * block is one thread's share of the file, floored at the minimum
+	 * chunk and capped at 3x the dictionary (liblzma's own
+	 * lzma_lzma2_block_size choice) so per-worker memory stays bounded on
+	 * huge inputs. Every split block is seeded; an unseeded block resets
+	 * the dictionary and loses every match that crosses the boundary,
+	 * which costs several percent of output size on inputs larger than
+	 * the dictionary.
 	 */
-	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1 &&
-	    (uint64_t)lzma_opt->dict_size > LZMA2_MT_MIN_CHUNK_SIZE) {
+	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1) {
+		uint64_t cap = (uint64_t)lzma_opt->dict_size * 4;
 		uint64_t per = (size_hint + strm->threads - 1) / strm->threads;
+		if (per > cap) {
+			/*
+			 * Input too large for one block per thread at the
+			 * memory cap: use the smallest multiple of the thread
+			 * count that fits, so every wave of workers stays
+			 * full instead of leaving a straggler block that
+			 * serializes the tail.
+			 */
+			uint64_t blocks = (size_hint + cap - 1) / cap;
+			blocks = ((blocks + strm->threads - 1) / strm->threads)
+			    * strm->threads;
+			per = (size_hint + blocks - 1) / blocks;
+		}
 		if (per < LZMA2_MT_MIN_CHUNK_SIZE)
 			per = LZMA2_MT_MIN_CHUNK_SIZE;
-		if (per < (uint64_t)lzma_opt->dict_size) {
+		if (per <= (uint64_t)(size_t)-1) {
 			strm->chunk_size = (size_t)per;
 			strm->history_cap = (size_t)lzma_opt->dict_size;
 		}
