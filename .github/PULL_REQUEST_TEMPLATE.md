@@ -13,10 +13,11 @@ platform-specific, add:
   for the full build string.
 - **Platform**: your OS, plus the browser for webapp changes.
 - **Trace logs** for the failure and for the fix. `rom-weaver -vvv` writes them
-  to stderr, and `--dep-trace` adds the bundled libraries. In the webapp, run
-  `await ROM_WEAVER_CONSOLE_LOGS.copy()` in the devtools console - the report
-  carries the build and runtime details with the logs. Attach them as a file or
-  a collapsed `<details>` block rather than inline.
+  to stderr, and `--dep-trace` adds the bundled libraries. In the webapp, open
+  the **Log** dialog from the masthead, set the level to `trace`, reproduce, then
+  use its Download button - the level is a persisted setting, so it has to be
+  raised before the run you want captured. Attach the logs as a file or a
+  collapsed `<details>` block rather than inline.
 
 ## Screenshots
 
