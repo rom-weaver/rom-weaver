@@ -51,7 +51,8 @@ const collapseInternalBody = (body) => {
   }
 
   if (internal) collapsed.push("</details>");
-  return collapsed.join("\n");
+  const result = collapsed.join("\n");
+  return body.endsWith("\n") && !result.endsWith("\n") ? `${result}\n` : result;
 };
 
 const collapseInternalSection = (changelog, version) => {
