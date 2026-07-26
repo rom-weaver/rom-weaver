@@ -45,7 +45,9 @@
 * **vendor:** record nod and xdvdfs provenance ([#198](https://github.com/rom-weaver/rom-weaver/issues/198)) ([2e2b151](https://github.com/rom-weaver/rom-weaver/commit/2e2b151bdfe35d87be0d9cfc3f7d669745b59eaf))
 
 
-### Internal
+<details>
+<summary>Internal</summary>
+
 
 * **deny:** drop the dead rustix and linux-raw-sys license exceptions ([#192](https://github.com/rom-weaver/rom-weaver/issues/192)) ([754980c](https://github.com/rom-weaver/rom-weaver/commit/754980c85821c53e2043c19c6c170fef97214d7a))
 * **deps:** bump lucide-react from 1.26.0 to 1.27.0 in /packages/rom-weaver-webapp in the other-webapp group ([#212](https://github.com/rom-weaver/rom-weaver/issues/212)) ([17e1930](https://github.com/rom-weaver/rom-weaver/commit/17e1930b71406a2607301f6d692c6ae90e843f16))
@@ -58,6 +60,8 @@
 * **release:** open the release pull request on manual dispatch only ([#179](https://github.com/rom-weaver/rom-weaver/issues/179)) ([d2aab43](https://github.com/rom-weaver/rom-weaver/commit/d2aab438ed950a056e1a8dbc75f4d2872440f202))
 * **webapp:** sweep 1-16 threads across compress and extract ([#183](https://github.com/rom-weaver/rom-weaver/issues/183)) ([170f359](https://github.com/rom-weaver/rom-weaver/commit/170f359d74c064aa925c041797ab99ab1d60d1a0))
 
+
+</details>
 ## [0.8.0](https://github.com/rom-weaver/rom-weaver/compare/v0.7.2...v0.8.0) (2026-07-25)
 
 
@@ -145,7 +149,8 @@
 * **webapp:** shard the browser test suite across two runners ([#152](https://github.com/rom-weaver/rom-weaver/issues/152)) ([7867473](https://github.com/rom-weaver/rom-weaver/commit/7867473c427979ea7b5c9cb3d0c2a271dbcfabfb))
 
 
-</details>## [0.7.2](https://github.com/brandonocasey/rom-weaver/compare/v0.7.1...v0.7.2) (2026-07-23)
+</details>
+## [0.7.2](https://github.com/brandonocasey/rom-weaver/compare/v0.7.1...v0.7.2) (2026-07-23)
 
 
 ### Bug Fixes
