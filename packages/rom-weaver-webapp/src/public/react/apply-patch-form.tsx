@@ -210,17 +210,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
   });
   const [applyReady, setApplyReady] = useState(false);
-  const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
   const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
   const [resolvedOutputName, setResolvedOutputName] = useState("");
   const [resolvedOutputNameKey, setResolvedOutputNameKey] = useState("");
-  const handleApplyComplete = useCallback(
-    (result: BrowserApplyResult) => {
-      setCompletedOutput(result.output);
-      onApplyComplete?.(result);
-    },
-    [onApplyComplete],
-  );
   const workflowIdRef = useRef(createReactWorkflowId("react-apply"));
   const mutationQueueRef = useRef(Promise.resolve<void>(undefined));
   const selectFileRef = useRef(selectFile);
@@ -305,7 +297,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
-      setCompletedOutput(null);
       syncInputSelectionRefs(nextInputs);
       onInputsChange?.(nextInputs);
     },
@@ -391,7 +382,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
-      setCompletedOutput(null);
       if (!nextPatches.length) {
         setLocalBundleSession(null);
         setBundleDismissed(true);
@@ -946,9 +936,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         if (abortSignal?.aborted) abortWorkflow();
         else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
-          setCompletedOutput(null);
           const result = (await workflow.run()) as BrowserApplyResult;
-          handleApplyComplete(result);
+          onApplyComplete?.(result);
           return normalizeApplyResult(result);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
@@ -1009,7 +998,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [
       emitWorkflowProgress,
-      handleApplyComplete,
+      onApplyComplete,
       threads,
       queueMutation,
       syncSelectionRefs,
@@ -1483,7 +1472,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
-        emulatorOutput={completedOutput}
         {...(activeBundleSession?.chainEndpointChecks.input
           ? { bundleExpectedRomChecks: activeBundleSession.chainEndpointChecks.input }
           : {})}
