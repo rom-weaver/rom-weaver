@@ -17,6 +17,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
   - [`.github/cli-platforms.json`](#githubcli-platformsjson)
+  - [macOS support floor](#macos-support-floor)
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
@@ -252,11 +253,12 @@ security ── advisories (warn only, always green)
   of the broad local `mise run ci` gate.
 - **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) - the
   platform the release fan-out ships CLI binaries for, but that nothing
-  previously tested. The fan-out itself still builds the shipped
-  `darwin-arm64` binary on `macos-14` (`.github/cli-platforms.json`), which
-  keeps its minimum supported macOS lower than the test leg's. It uses the same mise/setup-build-env path as the Linux
-  jobs. fmt, clippy, typegen, and the policy checks are platform-independent
-  and already gate in `rust-host`.
+  previously tested. The fan-out builds the shipped `darwin-arm64` binary on a
+  newer image than this leg tests on (`.github/cli-platforms.json`); what keeps
+  the shipped minimum below both is `MACOSX_DEPLOYMENT_TARGET`, not the runner
+  version - see [macOS support floor](#macos-support-floor). It uses the same
+  mise/setup-build-env path as the Linux jobs. fmt, clippy, typegen, and the
+  policy checks are platform-independent and already gate in `rust-host`.
 - **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
   the toolchain with `dtolnay/rust-toolchain` (pin read from `.config/mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
@@ -546,8 +548,38 @@ the release still shipped.
 `scripts/ci/cli-platform-matrix.mjs` emits it as a one-line matrix (a matrix can
 only be fed by an upstream job's output) and documents every field, since JSON
 carries no comments. Note `runner` versus `native_runner`: the first is the host
-that *compiles* a target, the second the host that can *execute* the result -
-the same everywhere except `linux-arm64-musl`, which cross-builds on x64.
+that *compiles* a target, the second the host that can *execute* the result.
+They differ for `linux-arm64-musl`, which cross-builds on x64, and for both
+Darwin targets, which build on the newest macOS image and are executed back on
+the oldest one still offered - see below.
+
+### macOS support floor
+
+**`rom-weaver` supports macOS 11 (Big Sur) and newer.** That floor lives in one
+place: the `macos-deployment-target` input of
+[`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform), which
+sets `MACOSX_DEPLOYMENT_TARGET` for the Darwin builds and then reads the value
+back out of the emitted Mach-O (`otool -l` → `LC_BUILD_VERSION` /
+`LC_VERSION_MIN_MACOSX`). Checking `rustc --print=deployment-target` alone would
+only prove what rustc intended; the floor is a property of the binary.
+
+The build runners deliberately track the newest macOS images GitHub offers
+rather than the oldest supported one. Pinning builders to old images looks like
+it guarantees compatibility, but it only ever did so implicitly - and it means
+inheriting each image's retirement. `macos-14`'s
+([actions/runner-images#13518](https://github.com/actions/runner-images/issues/13518))
+is what forced this arrangement.
+
+Two checks keep it honest. The deployment-target assertion above runs on every
+CI build, so a regression fails in the pull request. Then the release fan-out's
+`platform-dry-run` leg runs the full `scripts/verify-cli-platform.mjs` suite
+against the exact staged artifact on every target's `native_runner` - which for
+Darwin is the oldest macOS still offered - so a binary that will not run there
+fails before anything is published. That gate matters more here than elsewhere:
+releases are immutable, so a bad Darwin binary permanently burns the version.
+
+Raising the floor is a user-visible change. Change the default in the action,
+update this section, and say so in the release notes.
 
 ### `scripts/ci/assert-jobs.mjs`
 

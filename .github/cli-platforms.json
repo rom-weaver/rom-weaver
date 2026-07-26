@@ -1,8 +1,8 @@
 [
   {
     "package": "darwin-arm64",
-    "runner": "macos-14",
-    "native_runner": "macos-14",
+    "runner": "macos-26",
+    "native_runner": "macos-15",
     "target": "aarch64-apple-darwin",
     "build": "build",
     "binary": "rom-weaver",
@@ -10,7 +10,7 @@
   },
   {
     "package": "darwin-x64",
-    "runner": "macos-15-intel",
+    "runner": "macos-26-intel",
     "native_runner": "macos-15-intel",
     "target": "x86_64-apple-darwin",
     "build": "build",

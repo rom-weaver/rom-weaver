@@ -25,6 +25,13 @@ inputs:
   msvc-host:
     description: VsDevCmd.bat -host_arch value. Windows targets only.
     default: ""
+  macos-deployment-target:
+    description: >-
+      Oldest macOS the shipped Darwin binaries must run on. Load-bearing: the
+      build runners track the newest image GitHub offers, so this - not the
+      runner version - is what holds the support floor still. macOS targets
+      only; ignored elsewhere.
+    default: "11.0"
   cache-save:
     description: >-
       Save the cargo cache after a miss. CI saves only on main; the release
@@ -73,6 +80,10 @@ runs:
     - name: Build release CLI
       if: runner.os != 'Windows' && inputs.build != 'cross'
       shell: bash
+      # Empty on Linux, where no Darwin target is in play and the variable means
+      # nothing to rustc.
+      env:
+        MACOSX_DEPLOYMENT_TARGET: ${{ runner.os == 'macOS' && inputs.macos-deployment-target || '' }}
       run: cargo build --locked --release --package rom-weaver-cli --target ${{ inputs.target }}
 
     - name: Build release CLI
@@ -91,6 +102,33 @@ runs:
         for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
         call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ inputs.msvc-arch }} -host_arch=${{ inputs.msvc-host }}
         cargo build --locked --release --package rom-weaver-cli --target ${{ inputs.target }}
+
+    # rustc's own default deployment target differs per Darwin target and moves
+    # with the toolchain, so read the floor back out of the Mach-O rather than
+    # trusting that the env var on the build step took. Asserting only
+    # `rustc --print=deployment-target` would prove what rustc *intended*, never
+    # what it emitted - which is the whole question when the build image is
+    # newer than the oldest macOS we ship for.
+    - name: Verify macOS deployment target
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        MACOSX_DEPLOYMENT_TARGET: ${{ inputs.macos-deployment-target }}
+        BINARY: target/${{ inputs.target }}/release/${{ inputs.binary }}
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        test "$(rustc --print=deployment-target --target="$TARGET")" \
+          = "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+        otool -l "$BINARY" | awk -v expected="$MACOSX_DEPLOYMENT_TARGET" '
+          /LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { in_command = 1; next }
+          in_command && /^( *minos| *version) / {
+            print
+            if ($2 == expected) found = 1
+            in_command = 0
+          }
+          END { exit(found ? 0 : 1) }
+        '
 
     - name: Stage the platform package
       shell: bash
