@@ -2821,6 +2821,29 @@ compression_init_encoder_lzma(struct archive *a,
 		return (ARCHIVE_FATAL);
 	}
 	/*
+	 * Use 7-Zip's per-level LZMA2 dictionary table (probed from 7zz
+	 * 26.02: 256 KiB at -mx1 up to 256 MiB at -mx8/9) instead of
+	 * liblzma's smaller presets, so archive sizes stay at parity with
+	 * 7zz on inputs larger than the liblzma dictionary. wasm32 keeps
+	 * the old 64 MiB ceiling: a 256 MiB dictionary needs a ~3 GiB
+	 * match finder, which cannot fit the 4 GiB linear memory.
+	 */
+	if (filter_id == LZMA_FILTER_LZMA2) {
+		uint32_t dict_size;
+
+		if (level <= 4)
+			dict_size = (uint32_t)1 << (level * 2 + 16);
+		else if (level <= 7)
+			dict_size = (uint32_t)1 << (level + 20);
+		else
+			dict_size = (uint32_t)1 << 28;
+#if defined(__wasm__) || defined(__wasi__)
+		if (dict_size > ((uint32_t)1 << 26))
+			dict_size = (uint32_t)1 << 26;
+#endif
+		lzma_opt.dict_size = dict_size;
+	}
+	/*
 	 * A dictionary larger than the data can never be referenced, so reduce
 	 * it to the input size (rounded up to the next representable dictionary
 	 * and capped at the preset). For LZMA2 this also shrinks the per-thread
