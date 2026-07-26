@@ -24,6 +24,12 @@ const fail = (message) => { throw new Error(message); };
 const DEFAULT_WARMUP = 1;
 const DEFAULT_RUNS = 3;
 
+// A ROM corpus carries small files that are not ROMs - patch bundles, manifest
+// fixtures, a stray text archive. Below a megabyte both tools finish in single
+// milliseconds and what is being compared is process startup, so the default
+// floor drops them. `--min-size 0` benchmarks everything.
+const DEFAULT_MIN_SIZE_MB = 1;
+
 // RVZ has no single "default" both tools agree on the way CHD does, so the
 // suites below pin dolphin-tool's own suggested RVZ settings (zstd, level 5,
 // 128 KiB blocks) on both sides. rom-weaver's RVZ block size is already
@@ -38,10 +44,11 @@ const RVZ_BLOCK = "131072";
 const LZMA2_LEVEL = "5";
 const DEFLATE_LEVEL = "6";
 
-// What an archive suite will pack. Disc images are excluded on purpose: an
-// LZMA2 pass over a 1.5 GB ISO runs for minutes and says more about the disc
-// than about the archiver.
-const ARCHIVE_INPUTS = [".gba", ".nds", ".sfc", ".smc", ".n64", ".z64", ".nes", ".gb", ".gbc"];
+// What an archive suite will pack: cartridge ROMs, from 128 KB up to the 1 GiB
+// 3DS images, so the suite spans the range where startup cost stops mattering.
+// Disc images are excluded on purpose - they are what the chd and rvz suites
+// measure, and packing one says more about the disc than about the archiver.
+const ARCHIVE_INPUTS = [".gba", ".nds", ".3ds", ".cci", ".sfc", ".smc", ".n64", ".z64", ".nes", ".gb", ".gbc"];
 
 // rom-weaver unpacks archives found inside archives; 7zz and unzip stop after
 // one layer. Without this the two sides would not be doing the same work.
@@ -125,6 +132,7 @@ export function parseArgs(argv) {
     runs: DEFAULT_RUNS,
     cases: "compress,extract",
     suite: "chd",
+    minSizeMb: DEFAULT_MIN_SIZE_MB,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const [flag, inlineValue] = argv[index].split(/=(.*)/s);
@@ -139,6 +147,7 @@ export function parseArgs(argv) {
       case "--runs": options.runs = Number(consume()); break;
       case "--cases": options.cases = consume(); break;
       case "--suite": options.suite = consume(); break;
+      case "--min-size": options.minSizeMb = Number(consume()); break;
       default: fail(`unknown option: ${flag}`);
     }
   }
@@ -146,6 +155,7 @@ export function parseArgs(argv) {
   if (!options.corpus) fail("--corpus <dir> is required: a directory of disc images to benchmark against");
   if (!Number.isInteger(options.runs) || options.runs < 1) fail(`--runs must be a positive integer (got: ${options.runs})`);
   if (!Number.isInteger(options.warmup) || options.warmup < 0) fail(`--warmup must be a non-negative integer (got: ${options.warmup})`);
+  if (!Number.isFinite(options.minSizeMb) || options.minSizeMb < 0) fail(`--min-size must be a non-negative number of MB (got: ${options.minSizeMb})`);
   options.reference ||= SUITES[options.suite].reference;
   return options;
 }
@@ -299,8 +309,14 @@ export function runBenchmark(options) {
   ];
   if (wanted.length === 0) fail(`no ${options.suite} sources found under ${options.corpus}`);
 
+  const floor = options.minSizeMb * 1024 * 1024;
+  const cases = wanted.filter(([, source]) => sourceSize(source) >= floor);
+  const dropped = wanted.length - cases.length;
+  if (dropped > 0) log(`skipping ${dropped} source(s) under ${options.minSizeMb} MB (--min-size)`);
+  if (cases.length === 0) fail(`every ${options.suite} source under ${options.corpus} is below --min-size ${options.minSizeMb} MB`);
+
   const entries = [];
-  for (const [kind, source] of wanted) {
+  for (const [kind, source] of cases) {
     // A corpus is heterogeneous - a disc subtype one tool declines is a normal
     // thing to find in it. Recording the refusal keeps the rest of the run,
     // which aborting would throw away.
@@ -324,6 +340,7 @@ export function runBenchmark(options) {
     reference: options.reference,
     runs: options.runs,
     warmup: options.warmup,
+    minSizeMb: options.minSizeMb,
     entries,
   };
   writeFileSync(join(out, `report-${options.suite}.json`), `${JSON.stringify(report, null, 2)}\n`);

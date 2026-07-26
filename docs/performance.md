@@ -35,10 +35,12 @@ compress that wins on speed by compressing less has not won.
 
 ## Summary
 
-rom-weaver's advantage is concentrated in **extraction**, where the reference
-tools are single-threaded and it is not. Compression is close to parity: it wins
-some, loses some, and sizes track the reference within a fraction of a percent
-almost everywhere.
+rom-weaver's advantage is concentrated in **extraction**, and it comes from
+threading: wherever the work splits across hunks, blocks, or archive members it
+wins by a wide margin, and wherever the format forces a single serial stream —
+LZMA2 decoding of a one-file `.7z` — it loses. Compression is close to parity on
+time, and sizes track the reference within a fraction of a percent everywhere
+except 7z above 256 MB.
 
 Times below are rom-weaver's elapsed time relative to the reference tool's, so a
 negative percentage means rom-weaver finished sooner.
@@ -47,12 +49,13 @@ negative percentage means rom-weaver finished sooner.
 | --- | --- | --- | --- | --- |
 | CHD | chdman 0.287 | −20.3% to +8.1% | **−67.8% to −82.9%** | −0.27% to −0.01% (smaller) |
 | RVZ | dolphin-tool | −19.7% to −25.9% | **−35.5% to −50.3%** | +0.01%, and **+8.38%** on one title |
-| 7z | 7zz 26.02 | −14.0% to **+30.8%** | **+29.9%** | +0.16% to +1.87% (larger) |
-| zip | Info-ZIP | −9.0% to **+40.0%** | **−42.0% to −52.2%** | −0.03% to **+9.39%** |
+| 7z | 7zz 26.02 | −42.8% to **+26.5%** | −60.8% to **+40.0%** | +0.16% to **+9.24%** (larger) |
+| zip | Info-ZIP | −7.5% to −19.3% | **−37.0% to −63.2%** | −0.10% to +0.02% |
 
-Two results are genuine rom-weaver deficits rather than noise: the **+8.38% RVZ
-output on Kururin Squash** and the **+29.9% 7z extract time**. Both are discussed
-in their sections.
+Three results are genuine rom-weaver deficits rather than noise: the **+8.38% RVZ
+output on Kururin Squash**, the **7z extract time on single-member archives**,
+and the **7z output size on inputs above 256 MB**. All three are discussed in
+their sections.
 
 ## Benchmarks in this repository
 
@@ -103,6 +106,10 @@ Two further fairness details:
   `--no-nested-extract` so both sides do the same work.
 - **The zip suite uses two reference binaries**, `zip` to write and `unzip` to
   read, since Info-ZIP splits them.
+- **Sources under 1 MB are skipped** (`--min-size`). A ROM corpus carries patch
+  bundles and manifest fixtures that are not ROMs; at that size both tools finish
+  in single milliseconds and the comparison is between process startups rather
+  than between codecs. `--min-size 0` benchmarks everything.
 
 ### Two chdman behaviors the harness works around
 
@@ -126,7 +133,9 @@ Both will bite anyone writing their own comparison:
 Measured 2026-07-26 on an Apple M1 Max with rom-weaver 0.8.0 built `--release`,
 against chdman 0.287, dolphin-tool, 7zz 26.02, and Info-ZIP. Three timed runs
 per command after one warmup; `±` is the standard deviation across those runs.
-All four suites ran back to back on an otherwise idle machine.
+Each group of suites ran back to back on an otherwise idle machine — `chd` and
+`rvz` in one sitting, `7z` and `zip` in a second after the archive corpus grew to
+include the 256 MB and 1 GiB ROMs.
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished
@@ -217,30 +226,49 @@ It costs size only, not correctness.
 
 ### 7z vs 7zz
 
-LZMA2 at level 5 on both sides. Disc images are deliberately excluded from the
-archive suites: an LZMA2 pass over a 1.5 GB ISO runs for minutes and says more
-about the disc than about the archiver.
+LZMA2 at level 5 on both sides. The inputs are cartridge ROMs, 16 MB to 1 GiB;
+disc images are excluded because they are what the `chd` and `rvz` suites
+measure. The `.7z` archives read back on the extract side do contain disc images,
+which is fine — decompressing one measures the LZMA2 decoder regardless of what
+the bytes turn out to be.
 
 #### Compress
 
 | Input | Input size | rom-weaver | 7zz | Time change | rom-weaver | 7zz | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Zelda (PRG0) `.nes` | 128 KB | 0.017 s ± 0.001 | 0.013 s ± 0.001 | +0.004 s (+30.8%) | 60.0 KB | 58.9 KB | +1.87% |
-| Pokémon Emerald `.gba` | 16 MB | 1.250 s ± 0.017 | 0.965 s ± 0.011 | +0.285 s (+29.5%) | 5.5 MB | 5.5 MB | +0.16% |
-| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 1.771 s ± 0.038 | 2.060 s ± 0.004 | **−0.289 s (−14.0%)** | 9.7 MB | 9.7 MB | +0.19% |
+| Pokémon Emerald `.gba` | 16 MB | 1.204 s ± 0.006 | 0.951 s ± 0.002 | +0.253 s (+26.5%) | 5.5 MB | 5.5 MB | +0.16% |
+| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 1.868 s ± 0.052 | 2.049 s ± 0.010 | **−0.181 s (−8.8%)** | 9.7 MB | 9.7 MB | +0.19% |
+| Pokémon Black `.nds` | 256 MB | 5.211 s ± 0.011 | 9.107 s ± 0.030 | **−3.896 s (−42.8%)** | 66.6 MB | 61.0 MB | **+9.24%** |
+| Star Fox 64 3D `.cci` | 1 GiB | 17.266 s ± 0.121 | 14.597 s ± 0.018 | +2.669 s (+18.3%) | 333.7 MB | 315.5 MB | **+5.75%** |
+
+**The size columns are the story here, not the times.** Up to 32 MB the two
+tools' output matches to within 0.2%. At 256 MB rom-weaver is 3.9 s faster but
+emits 9.24% more bytes, and at 1 GiB it is both slower *and* 5.75% larger. A
+speed win bought with 5.6 MB of extra output is not a win, which is exactly the
+failure mode the size columns exist to catch. The pattern — parity on small
+inputs, a widening gap once the input exceeds the LZMA2 dictionary — points at
+rom-weaver splitting large inputs into independently compressed blocks to thread
+them, and paying ratio for the matches that no longer cross block boundaries.
 
 #### Extract
 
 | Input | Input size | rom-weaver | 7zz | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| Kururin Squash! (Japan) `.7z` | 77 MB | 3.277 s ± 0.043 | 2.523 s ± 0.014 | +0.754 s (+29.9%) | 227.4 MB |
+| Kururin Squash! (Japan) `.7z` | 77 MB | 3.375 s ± 0.073 | 2.506 s ± 0.018 | +0.869 s (+34.7%) | 227.4 MB |
+| Worms (USA) `.7z` | 287 MB | 4.130 s ± 0.025 | 10.549 s ± 1.108 | **−6.419 s (−60.8%)** | 515.4 MB |
+| Star Fox 64 3D `.7z` | 297 MB | 13.028 s ± 0.336 | 9.305 s ± 0.038 | +3.724 s (+40.0%) | 1,024.0 MB |
+| Dynasty Warriors 2 (USA) `.7z` | 459 MB | 17.635 s ± 0.208 | 13.482 s ± 0.175 | +4.153 s (+30.8%) | 657.2 MB |
+| Space Channel 5 Part 2 (Japan) `.7z` | 673 MB | 27.317 s ± 0.098 | 20.370 s ± 0.232 | +6.947 s (+34.1%) | 1,134.7 MB |
 
-**7z is the one suite rom-weaver loses outright.** It is slower on both small
-inputs and on extract, and its output is consistently a fraction of a percent
-larger. Only the 32 MB input goes its way. The extract result is the notable
-one: +29.9% is the only place in this document where a reference tool beats
-rom-weaver at decompression, and unlike the compress cases it cannot be
-explained away by codec tuning — 7zz simply has the faster LZMA2 decoder here.
+Every extract is byte-exact against 7zz's, so this is purely a speed result.
+
+The one win explains the four losses. Worms is the only archive here with many
+members — eight track files — and it is the only one rom-weaver decodes faster,
+by 60.8%. The other four each hold a single large file, and on those rom-weaver
+loses by a consistent 31–40%. LZMA2 decoding of one stream is inherently serial,
+so rom-weaver's threading has nothing to spread across, and what is left is
+decoder throughput, where 7zz is simply ahead. **This is the only place in this
+document where a reference tool beats rom-weaver at decompression.**
 
 ### zip vs Info-ZIP
 
@@ -250,23 +278,32 @@ Deflate at level 6 on both sides; `zip` writes, `unzip` reads.
 
 | Input | Input size | rom-weaver | unzip | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| Ocarina of Time `.zip` | 25 MB | 0.160 s ± 0.000 | 0.276 s ± 0.001 | **−0.116 s (−42.0%)** | 32.0 MB |
-| Pokémon Black `.zip` | 106 MB | 0.793 s ± 0.004 | 1.660 s ± 0.004 | **−0.867 s (−52.2%)** | 256.0 MB |
+| Pokémon Emerald `.zip` | 6.7 MB | 0.065 s ± 0.001 | 0.120 s ± 0.000 | **−0.055 s (−45.9%)** | 16.0 MB |
+| pkmn_rowe patch `.zip` | 8.9 MB | 0.060 s ± 0.001 | 0.095 s ± 0.001 | **−0.035 s (−37.0%)** | 10.1 MB |
+| Pokémon Emerald (pkmn_rowe) `.zip` | 11.7 MB | 0.110 s ± 0.001 | 0.224 s ± 0.001 | **−0.114 s (−51.0%)** | 32.0 MB |
+| Ocarina of Time `.zip` | 24.9 MB | 0.177 s ± 0.003 | 0.479 s ± 0.024 | **−0.303 s (−63.2%)** | 32.0 MB |
+| Pokémon Black `.zip` | 106 MB | 0.843 s ± 0.003 | 1.723 s ± 0.022 | **−0.880 s (−51.1%)** | 256.0 MB |
+| Luigi's Mansion mod `.zip` | 124 MB | 0.568 s ± 0.028 | 1.087 s ± 0.041 | **−0.519 s (−47.8%)** | 131.6 MB |
 
 #### Compress
 
 | Input | Input size | rom-weaver | zip | Time change | rom-weaver | zip | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Zelda (PRG0) `.nes` | 128 KB | 0.007 s ± 0.000 | 0.005 s ± 0.000 | +0.002 s (+40.0%) | 70.0 KB | 64.0 KB | **+9.39%** |
-| Pokémon Emerald `.gba` | 16 MB | 0.374 s ± 0.001 | 0.411 s ± 0.004 | **−0.037 s (−9.0%)** | 6.7 MB | 6.7 MB | −0.03% |
-| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 0.733 s ± 0.024 | 0.787 s ± 0.001 | **−0.054 s (−6.9%)** | 11.8 MB | 11.8 MB | −0.01% |
+| Pokémon Emerald `.gba` | 16 MB | 0.392 s ± 0.003 | 0.424 s ± 0.002 | **−0.032 s (−7.5%)** | 6.7 MB | 6.7 MB | −0.03% |
+| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 0.746 s ± 0.002 | 0.828 s ± 0.011 | **−0.083 s (−10.0%)** | 11.8 MB | 11.8 MB | −0.01% |
+| Pokémon Black `.nds` | 256 MB | 6.197 s ± 0.049 | 7.683 s ± 1.429 | **−1.487 s (−19.3%)** | 105.8 MB | 105.9 MB | −0.10% |
+| Star Fox 64 3D `.cci` | 1 GiB | 16.451 s ± 1.119 | 19.924 s ± 1.868 | **−3.473 s (−17.4%)** | 373.9 MB | 373.8 MB | +0.02% |
 
-Deflate favours rom-weaver on anything large enough to thread, in both
-directions. The `.nes` row is the exception across both archive suites: at 128 KB
-the whole job is process startup, and rom-weaver's fixed overhead is the larger
-share of it — the +40.0% there is 2 ms. The +9.39% on that same row is 6 KB in
-absolute terms — real, but a
-small-file constant rather than a ratio deficit, and it is gone by 16 MB.
+**zip is the clean sweep: rom-weaver wins all ten cases, both directions, at
+matched output size.** Deflate's 32 KB window makes the whole file trivially
+splittable, so nothing has to be traded for threading — the sizes agree to within
+0.1% at every input size, including the 1 GiB one where 7z gave up 5.75%.
+
+Info-ZIP's own numbers get noisy on the two largest compress inputs (± 1.4 s and
+± 1.9 s, against rom-weaver's ± 0.05 s and ± 1.1 s), because a single-threaded
+deflate over a gigabyte is long enough for the machine's own background work to
+land inside it. The margins are several times that spread, so the direction is
+not in doubt, but do not read those two percentages as precise.
 
 ## Reproducing
 
@@ -301,8 +338,10 @@ each suite picks up only what it can use:
 | `7z` | `7zz` | ROM files | `.7z` |
 | `zip` | `zip` / `unzip` | ROM files | `.zip` |
 
-"ROM files" means `.gba`, `.nds`, `.sfc`, `.smc`, `.n64`, `.z64`, `.nes`, `.gb`,
-`.gbc`.
+"ROM files" means `.gba`, `.nds`, `.3ds`, `.cci`, `.sfc`, `.smc`, `.n64`,
+`.z64`, `.nes`, `.gb`, `.gbc` — cartridge dumps, which range from a 128 KB NES
+ROM to a 1 GiB 3DS image. Some of the larger ones only exist inside the corpus's
+own archives; extract those once and the archive suites pick them up.
 
 Flags:
 
@@ -312,6 +351,7 @@ Flags:
 | `--corpus <dir>` | required | Directory of ROMs or disc images |
 | `--out <dir>` | `dist/bench/disc-tools` | Where `report-<suite>.json` and the per-case hyperfine JSON land |
 | `--cases compress,extract` | both | Restrict to one direction |
+| `--min-size <MB>` | 1 | Skip sources smaller than this; `0` benchmarks everything |
 | `--runs <n>` | 3 | Measured runs per command |
 | `--warmup <n>` | 1 | Warmup runs per command |
 | `--rom-weaver-bin <path>` | `target/release/rom-weaver` | Binary under test |
@@ -338,7 +378,13 @@ get the source into cache so the measured runs compare compression work rather
 than first-read disk latency. On a machine without room to cache the whole source
 the numbers describe an I/O-bound workload instead, and the tools converge.
 
-Small inputs measure process startup, not the codec. The 128 KB `.nes` rows in
-the archive suites are the clearest case: every tool finishes in under 20 ms, so
-what is being compared is who starts up and exits fastest. Prefer inputs large
-enough to run for at least a second before drawing a conclusion.
+Small inputs measure process startup, not the codec, which is what `--min-size`
+exists to keep out. A 128 KB ROM finishes in under 20 ms in every tool here, so
+what gets compared is who starts up and exits fastest; rom-weaver loses those by
+a couple of milliseconds and it means nothing. Prefer inputs large enough to run
+for at least a second before drawing a conclusion.
+
+Input size changes the answer, so do not extrapolate from one. The 7z suite is
+the case in point: at 16–32 MB rom-weaver's output matches 7zz to within 0.2%,
+and at 256 MB the same settings give up 9.24%. A suite that stopped at 32 MB —
+as this one originally did — would have reported parity and missed it entirely.
