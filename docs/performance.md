@@ -40,16 +40,19 @@ tools are single-threaded and it is not. Compression is close to parity: it wins
 some, loses some, and sizes track the reference within a fraction of a percent
 almost everywhere.
 
-| Suite | Reference | Compress | Extract | Size vs reference |
+Times below are rom-weaver's elapsed time relative to the reference tool's, so a
+negative percentage means rom-weaver finished sooner.
+
+| Suite | Reference | Compress time | Extract time | Size vs reference |
 | --- | --- | --- | --- | --- |
-| CHD | chdman 0.287 | 0.93×–1.25× | **3.10×–5.84×** | −0.27% to −0.01% (smaller) |
-| RVZ | dolphin-tool | 1.24×–1.35× | **1.55×–2.01×** | +0.01%, and **+8.38%** on one title |
-| 7z | 7zz 26.02 | 0.74×–1.16× | 0.77× | +0.16% to +1.87% (larger) |
-| zip | Info-ZIP | 0.80×–1.10× | **1.72×–2.09×** | −0.03% to **+9.39%** |
+| CHD | chdman 0.287 | −20.3% to +8.1% | **−67.8% to −82.9%** | −0.27% to −0.01% (smaller) |
+| RVZ | dolphin-tool | −19.7% to −25.9% | **−35.5% to −50.3%** | +0.01%, and **+8.38%** on one title |
+| 7z | 7zz 26.02 | −14.0% to **+30.8%** | **+29.9%** | +0.16% to +1.87% (larger) |
+| zip | Info-ZIP | −9.0% to **+40.0%** | **−42.0% to −52.2%** | −0.03% to **+9.39%** |
 
 Two results are genuine rom-weaver deficits rather than noise: the **+8.38% RVZ
-output on Kururin Squash** and the **0.77× 7z extract**. Both are discussed in
-their sections.
+output on Kururin Squash** and the **+29.9% 7z extract time**. Both are discussed
+in their sections.
 
 ## Benchmarks in this repository
 
@@ -125,8 +128,10 @@ against chdman 0.287, dolphin-tool, 7zz 26.02, and Info-ZIP. Three timed runs
 per command after one warmup; `±` is the standard deviation across those runs.
 All four suites ran back to back on an otherwise idle machine.
 
-Speedup is reference ÷ rom-weaver, so above 1.00 means rom-weaver is faster.
-Size change is rom-weaver relative to the reference, so negative means smaller.
+Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
+and as a percentage of the reference, so negative means rom-weaver finished
+sooner. Size change is rom-weaver's output relative to the reference's, so
+negative means smaller.
 
 ### CHD vs chdman
 
@@ -136,13 +141,13 @@ Dreamcast GD-ROM (`CHGD`), and a PS2 DVD (`DVD `).
 
 #### Extract
 
-| Disc | Type | rom-weaver | chdman | Speedup | Output |
+| Disc | Type | rom-weaver | chdman | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| Worms (USA) | CD | 1.516 s ± 0.011 | 7.517 s ± 0.023 | **4.96×** | 515.4 MB |
-| Crash Bandicoot (USA) | CD | 2.021 s ± 0.008 | 11.807 s ± 0.026 | **5.84×** | 602.8 MB |
-| Dynasty Warriors 2 (USA) | CD | 2.967 s ± 0.018 | 16.074 s ± 0.033 | **5.42×** | 657.2 MB |
-| Sonic Adventure 2 (USA) | GD-ROM | 5.394 s ± 0.096 | 27.031 s ± 0.032 | **5.01×** | 1,145.4 MB |
-| Ape Escape 2 (USA) | DVD | 5.726 s ± 0.062 | 17.766 s ± 0.034 | **3.10×** | 1,697.8 MB |
+| Worms (USA) | CD | 1.516 s ± 0.011 | 7.517 s ± 0.023 | **−6.001 s (−79.8%)** | 515.4 MB |
+| Crash Bandicoot (USA) | CD | 2.021 s ± 0.008 | 11.807 s ± 0.026 | **−9.786 s (−82.9%)** | 602.8 MB |
+| Dynasty Warriors 2 (USA) | CD | 2.967 s ± 0.018 | 16.074 s ± 0.033 | **−13.107 s (−81.5%)** | 657.2 MB |
+| Sonic Adventure 2 (USA) | GD-ROM | 5.394 s ± 0.096 | 27.031 s ± 0.032 | **−21.637 s (−80.0%)** | 1,145.4 MB |
+| Ape Escape 2 (USA) | DVD | 5.726 s ± 0.062 | 17.766 s ± 0.034 | **−12.040 s (−67.8%)** | 1,697.8 MB |
 
 The gap is threading: chdman decompresses hunks on one core, so its extract runs
 at roughly 100% CPU while rom-weaver's runs at several hundred. The DVD case is
@@ -155,17 +160,17 @@ endings — not image data.
 
 #### Compress
 
-| Disc | Type | rom-weaver | chdman | Speedup | rom-weaver | chdman | Size change |
+| Disc | Type | rom-weaver | chdman | Time change | rom-weaver | chdman | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Worms (USA) | CD | 9.080 s ± 0.485 | 8.402 s ± 0.032 | 0.93× | 243.7 MB | 244.4 MB | **−0.27%** |
-| Dynasty Warriors 2 (USA) | CD | 13.887 s ± 0.087 | 15.110 s ± 0.081 | **1.09×** | 419.2 MB | 419.5 MB | −0.07% |
-| Space Channel 5 Part 2 (Japan) | GD-ROM | 13.855 s ± 0.085 | 17.382 s ± 0.048 | **1.25×** | 646.8 MB | 646.8 MB | −0.01% |
-| Sonic Adventure 2 (USA) | GD-ROM | 15.712 s ± 0.161 | 18.675 s ± 0.364 | **1.19×** | 872.2 MB | 872.3 MB | −0.01% |
+| Worms (USA) | CD | 9.080 s ± 0.485 | 8.402 s ± 0.032 | +0.678 s (+8.1%) | 243.7 MB | 244.4 MB | **−0.27%** |
+| Dynasty Warriors 2 (USA) | CD | 13.887 s ± 0.087 | 15.110 s ± 0.081 | **−1.223 s (−8.1%)** | 419.2 MB | 419.5 MB | −0.07% |
+| Space Channel 5 Part 2 (Japan) | GD-ROM | 13.855 s ± 0.085 | 17.382 s ± 0.048 | **−3.527 s (−20.3%)** | 646.8 MB | 646.8 MB | −0.01% |
+| Sonic Adventure 2 (USA) | GD-ROM | 15.712 s ± 0.161 | 18.675 s ± 0.364 | **−2.963 s (−15.9%)** | 872.2 MB | 872.3 MB | −0.01% |
 
 Compression is close, which is expected: both tools saturate every core in the
 same LZMA-dominated codec set, so there is no threading gap to exploit and what
 remains is the compressor itself. rom-weaver wins three of four and loses Worms
-by 7%.
+by 0.678 s (8.1%).
 
 rom-weaver's output is smaller on all four. The margins are too small to claim a
 compression-ratio win, but they rule out the failure mode the size columns exist
@@ -180,17 +185,17 @@ compress inputs were produced by extracting them.
 
 #### Extract (RVZ → ISO)
 
-| Disc | rom-weaver | dolphin-tool | Speedup | Output |
+| Disc | rom-weaver | dolphin-tool | Time change | Output |
 | --- | --- | --- | --- | --- |
-| Kururin Squash! (Japan) | 0.350 s ± 0.013 | 0.543 s ± 0.023 | **1.55×** | 1,392.3 MB |
-| Luigi's Mansion (USA) | 0.357 s ± 0.015 | 0.718 s ± 0.021 | **2.01×** | 1,392.3 MB |
+| Kururin Squash! (Japan) | 0.350 s ± 0.013 | 0.543 s ± 0.023 | **−0.193 s (−35.5%)** | 1,392.3 MB |
+| Luigi's Mansion (USA) | 0.357 s ± 0.015 | 0.718 s ± 0.021 | **−0.361 s (−50.3%)** | 1,392.3 MB |
 
 #### Compress (ISO → RVZ)
 
-| Disc | rom-weaver | dolphin-tool | Speedup | rom-weaver | dolphin | Size change |
+| Disc | rom-weaver | dolphin-tool | Time change | rom-weaver | dolphin | Size change |
 | --- | --- | --- | --- | --- | --- | --- |
-| Kururin Squash! (Japan) | 0.273 s ± 0.018 | 0.340 s ± 0.004 | **1.24×** | 112.6 MB | 103.9 MB | **+8.38%** |
-| Luigi's Mansion (USA) | 0.269 s ± 0.014 | 0.363 s ± 0.008 | **1.35×** | 156.9 MB | 156.9 MB | +0.01% |
+| Kururin Squash! (Japan) | 0.273 s ± 0.018 | 0.340 s ± 0.004 | **−0.067 s (−19.7%)** | 112.6 MB | 103.9 MB | **+8.38%** |
+| Luigi's Mansion (USA) | 0.269 s ± 0.014 | 0.363 s ± 0.008 | **−0.094 s (−25.9%)** | 156.9 MB | 156.9 MB | +0.01% |
 
 The sub-second times are not a mistake, and they are why these numbers are not
 comparable to the CHD ones. Most of a GameCube disc is pseudorandom padding, and
@@ -218,22 +223,22 @@ about the disc than about the archiver.
 
 #### Compress
 
-| Input | Input size | rom-weaver | 7zz | Speedup | rom-weaver | 7zz | Size change |
+| Input | Input size | rom-weaver | 7zz | Time change | rom-weaver | 7zz | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Zelda (PRG0) `.nes` | 128 KB | 0.017 s ± 0.001 | 0.013 s ± 0.001 | 0.74× | 60.0 KB | 58.9 KB | +1.87% |
-| Pokémon Emerald `.gba` | 16 MB | 1.250 s ± 0.017 | 0.965 s ± 0.011 | 0.77× | 5.5 MB | 5.5 MB | +0.16% |
-| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 1.771 s ± 0.038 | 2.060 s ± 0.004 | **1.16×** | 9.7 MB | 9.7 MB | +0.19% |
+| Zelda (PRG0) `.nes` | 128 KB | 0.017 s ± 0.001 | 0.013 s ± 0.001 | +0.004 s (+30.8%) | 60.0 KB | 58.9 KB | +1.87% |
+| Pokémon Emerald `.gba` | 16 MB | 1.250 s ± 0.017 | 0.965 s ± 0.011 | +0.285 s (+29.5%) | 5.5 MB | 5.5 MB | +0.16% |
+| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 1.771 s ± 0.038 | 2.060 s ± 0.004 | **−0.289 s (−14.0%)** | 9.7 MB | 9.7 MB | +0.19% |
 
 #### Extract
 
-| Input | Input size | rom-weaver | 7zz | Speedup | Output |
+| Input | Input size | rom-weaver | 7zz | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| Kururin Squash! (Japan) `.7z` | 77 MB | 3.277 s ± 0.043 | 2.523 s ± 0.014 | 0.77× | 227.4 MB |
+| Kururin Squash! (Japan) `.7z` | 77 MB | 3.277 s ± 0.043 | 2.523 s ± 0.014 | +0.754 s (+29.9%) | 227.4 MB |
 
 **7z is the one suite rom-weaver loses outright.** It is slower on both small
 inputs and on extract, and its output is consistently a fraction of a percent
 larger. Only the 32 MB input goes its way. The extract result is the notable
-one: 0.77× is the only place in this document where a reference tool beats
+one: +29.9% is the only place in this document where a reference tool beats
 rom-weaver at decompression, and unlike the compress cases it cannot be
 explained away by codec tuning — 7zz simply has the faster LZMA2 decoder here.
 
@@ -243,23 +248,24 @@ Deflate at level 6 on both sides; `zip` writes, `unzip` reads.
 
 #### Extract
 
-| Input | Input size | rom-weaver | unzip | Speedup | Output |
+| Input | Input size | rom-weaver | unzip | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| Ocarina of Time `.zip` | 25 MB | 0.160 s ± 0.000 | 0.276 s ± 0.001 | **1.72×** | 32.0 MB |
-| Pokémon Black `.zip` | 106 MB | 0.793 s ± 0.004 | 1.660 s ± 0.004 | **2.09×** | 256.0 MB |
+| Ocarina of Time `.zip` | 25 MB | 0.160 s ± 0.000 | 0.276 s ± 0.001 | **−0.116 s (−42.0%)** | 32.0 MB |
+| Pokémon Black `.zip` | 106 MB | 0.793 s ± 0.004 | 1.660 s ± 0.004 | **−0.867 s (−52.2%)** | 256.0 MB |
 
 #### Compress
 
-| Input | Input size | rom-weaver | zip | Speedup | rom-weaver | zip | Size change |
+| Input | Input size | rom-weaver | zip | Time change | rom-weaver | zip | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Zelda (PRG0) `.nes` | 128 KB | 0.007 s ± 0.000 | 0.005 s ± 0.000 | 0.80× | 70.0 KB | 64.0 KB | **+9.39%** |
-| Pokémon Emerald `.gba` | 16 MB | 0.374 s ± 0.001 | 0.411 s ± 0.004 | **1.10×** | 6.7 MB | 6.7 MB | −0.03% |
-| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 0.733 s ± 0.024 | 0.787 s ± 0.001 | **1.07×** | 11.8 MB | 11.8 MB | −0.01% |
+| Zelda (PRG0) `.nes` | 128 KB | 0.007 s ± 0.000 | 0.005 s ± 0.000 | +0.002 s (+40.0%) | 70.0 KB | 64.0 KB | **+9.39%** |
+| Pokémon Emerald `.gba` | 16 MB | 0.374 s ± 0.001 | 0.411 s ± 0.004 | **−0.037 s (−9.0%)** | 6.7 MB | 6.7 MB | −0.03% |
+| Pokémon Emerald (pkmn_rowe) `.gba` | 32 MB | 0.733 s ± 0.024 | 0.787 s ± 0.001 | **−0.054 s (−6.9%)** | 11.8 MB | 11.8 MB | −0.01% |
 
 Deflate favours rom-weaver on anything large enough to thread, in both
 directions. The `.nes` row is the exception across both archive suites: at 128 KB
 the whole job is process startup, and rom-weaver's fixed overhead is the larger
-share of it. The +9.39% on that same row is 6 KB in absolute terms — real, but a
+share of it — the +40.0% there is 2 ms. The +9.39% on that same row is 6 KB in
+absolute terms — real, but a
 small-file constant rather than a ratio deficit, and it is gone by 16 MB.
 
 ## Reproducing
@@ -323,9 +329,9 @@ heterogeneous corpus does not cost you the whole run.
 Benchmark on a quiet machine. The disc workloads are wide — both sides saturate
 every core — so anything else compiling or indexing shows up directly in the
 mean. It is visible when it happens: an early draft of the CHD run overlapped
-with another benchmark and the same case moved from 1.14× ± 0.02 to 1.17× ± 0.13,
-the standard deviation growing sixfold. Treat a spread that large as a rerun, not
-a result.
+with another benchmark, and on the same case the standard deviation grew sixfold
+between runs while the mean barely moved. Treat a spread that large as a rerun,
+not a result.
 
 Disc images are big enough that the page cache matters. The warmup run exists to
 get the source into cache so the measured runs compare compression work rather
