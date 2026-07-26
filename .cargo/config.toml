@@ -12,4 +12,15 @@ rustflags = [
   # Threaded WASM requires a fixed shared-memory maximum. Reserve the full wasm32
   # address space; the browser allocation ladder steps down when that fails.
   "-C", "link-arg=--max-memory=4294967296",
+  # Deny warnings here rather than via a RUSTFLAGS override in the pre-commit
+  # hook. The env var replaces this list instead of extending it, so the hook's
+  # "threaded WASM check" was silently checking the *non-threaded config* - no
+  # atomics, no bulk-memory, no --max-memory. Same trap verify-wasm-artifact.mjs
+  # guards the build against.
+  #
+  # Unlike clippy's `-- -D warnings`, this reaches dependency units too, so a
+  # warning in a bumped crate fails the wasm build. Verified clean across the
+  # whole rom-weaver-app graph. The per-crate "unstable feature specified for
+  # `-Ctarget-feature`: `atomics`" note is not a named lint and cannot escalate.
+  "-D", "warnings",
 ]
