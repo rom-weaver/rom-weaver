@@ -80,3 +80,8 @@
 .rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }
 .rw-app .tracelog .msg { color: var(--ink-2); }
 .rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }
+
+/* Optional local EmulatorJS smoke test. Its assets are fetched only after the user opens it. */
+.rw-app .emulatorjs-test { display: grid; gap: var(--sp-s); margin-block-start: var(--sp-s); }
+.rw-app .emulatorjs-note { color: var(--ink-3); font-size: .72rem; }
+.rw-app .emulatorjs-error { margin: 0; color: var(--fault); font-size: .78rem; }

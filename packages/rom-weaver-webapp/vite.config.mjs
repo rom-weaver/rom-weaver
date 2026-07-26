@@ -68,6 +68,117 @@ const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
   "/WEBAPP_NOTICE": path.join(rootDir, "src", "wasm", "WEBAPP_NOTICE"),
 };
+const EMULATORJS_DATA_PREFIX = "/emulatorjs/data/";
+const emulatorJsDataSourceDir = path.join(rootDir, "vendor", "emulatorjs", "data");
+
+const isRegularFile = (sourcePath) => {
+  try {
+    return fs.statSync(sourcePath).isFile();
+  } catch {
+    return false;
+  }
+};
+
+const emulatorJsRelativePath = (requestPath) => {
+  if (!requestPath.startsWith(EMULATORJS_DATA_PREFIX)) return null;
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(requestPath.slice(EMULATORJS_DATA_PREFIX.length));
+  } catch {
+    return null;
+  }
+  const segments = relativePath.split("/");
+  if (!relativePath || segments.some((segment) => !segment || segment === "." || segment === "..")) return null;
+  return relativePath;
+};
+
+const resolveEmulatorJsSource = (requestPath) => {
+  const relativePath = emulatorJsRelativePath(requestPath);
+  if (!relativePath) return null;
+  const commonSourcePath = path.join(emulatorJsDataSourceDir, ...relativePath.split("/"));
+  if (isRegularFile(commonSourcePath)) return commonSourcePath;
+  return null;
+};
+
+const toLocalOnlyEmulatorJs = (source) => {
+  const updateStart = source.indexOf("    checkForUpdates() {");
+  const updateEnd = source.indexOf("    versionAsInt(ver)", updateStart);
+  if (updateStart < 0 || updateEnd < 0) {
+    throw new Error("rom-weaver-emulatorjs: EmulatorJS update check changed");
+  }
+  const localOnlySource = `${source.slice(0, updateStart)}    checkForUpdates() {}\n${source.slice(updateEnd)}`;
+  const fallbackStart = localOnlySource.indexOf(
+    '            if (res === -1) {\n                console.log("File not found',
+  );
+  const fallbackEnd = localOnlySource.indexOf("            gotCore(res.data);", fallbackStart);
+  if (fallbackStart < 0 || fallbackEnd < 0) {
+    throw new Error("rom-weaver-emulatorjs: EmulatorJS CDN fallback block changed");
+  }
+  const localOnlyError = `            if (res === -1) {
+                if (!this.supportsWebgl2) {
+                    this.startGameError(this.localization("Outdated graphics driver"));
+                } else {
+                    this.startGameError(this.localization("Error downloading core") + " (" + filename + ")");
+                }
+                return;
+            }
+`;
+  return `${localOnlySource.slice(0, fallbackStart)}${localOnlyError}${localOnlySource.slice(fallbackEnd)}`;
+};
+
+const setEmulatorJsContentType = (requestPath, res) => {
+  if (requestPath.endsWith(".js")) res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+  else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
+  else if (requestPath.endsWith(".css")) res.setHeader("Content-Type", "text/css; charset=utf-8");
+  else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
+  else if (requestPath.endsWith(".wasm.data")) res.setHeader("Content-Type", "application/octet-stream");
+};
+
+const serveEmulatorJsAssets = () => {
+  const middleware = (req, res, next) => {
+    const requestPath = req.url ? req.url.split("?")[0] : "";
+    if (!requestPath.startsWith(EMULATORJS_DATA_PREFIX)) {
+      next();
+      return;
+    }
+    const relativePath = emulatorJsRelativePath(requestPath);
+    const sourcePath = resolveEmulatorJsSource(requestPath);
+    if (!(relativePath && sourcePath)) {
+      res.statusCode = 404;
+      res.end("EmulatorJS asset not found");
+      return;
+    }
+    fs.readFile(sourcePath, (err, source) => {
+      if (err) {
+        next(err);
+        return;
+      }
+      const response =
+        relativePath === "src/emulator.js" ? Buffer.from(toLocalOnlyEmulatorJs(source.toString())) : source;
+      res.statusCode = 200;
+      setEmulatorJsContentType(requestPath, res);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.end(response);
+    });
+  };
+  return {
+    apply: "serve",
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    name: "rom-weaver-emulatorjs-assets",
+  };
+};
+
+const copyEmulatorJsAssets = (distDir) => {
+  const outputDir = path.join(distDir, "emulatorjs");
+  fs.cpSync(path.join(rootDir, "vendor", "emulatorjs"), outputDir, { recursive: true });
+  const outputSourcePath = path.join(outputDir, "data", "src", "emulator.js");
+  fs.writeFileSync(outputSourcePath, toLocalOnlyEmulatorJs(fs.readFileSync(outputSourcePath, "utf8")));
+};
 // SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
 // document and COEP on every dedicated-worker script, so these apply to every response. Also the
 // source for the deployed _headers file - see writeCloudflareHeadersAsset.
@@ -353,6 +464,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
     apply: "build",
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
+      copyEmulatorJsAssets(distDir);
       const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
       for (const assetPath of Object.keys(rootStaticAssetSources)) {
         const outputPath = path.join(distDir, assetPath);
@@ -961,6 +1073,7 @@ export default defineConfig(({ command, mode }) => {
       docsVirtualModule(),
       shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
+      serveEmulatorJsAssets(),
       serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),

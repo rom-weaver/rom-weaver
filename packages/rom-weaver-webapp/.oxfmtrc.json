@@ -12,5 +12,11 @@
   "bracketSameLine": false,
   "bracketSpacing": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["**/*.md", "**/*.css", "src/wasm/generated/**", "src/presentation/localization/locales/*.ts"]
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.css",
+    "vendor/**",
+    "src/wasm/generated/**",
+    "src/presentation/localization/locales/*.ts"
+  ]
 }
