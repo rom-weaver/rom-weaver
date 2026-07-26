@@ -118,12 +118,13 @@ jobs:
   # image-plumbing only because its release path is exercised by the prebuilt
   # smoke below.
   #
-  # Reusing CI's cached wasm here is not an option: the CLI image contains no
-  # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
-  # webapp `DIST=prebuilt` skips the whole builder stage - rustup, the WASI SDK
-  # pins, binaryen - which is precisely the fragile half this job exists to
-  # test. That path is covered instead, unconditionally and for free, by
-  # the webapp prebuilt smoke below.
+  # `DIST=prebuilt` is not the way to lift the cost here: it skips the whole
+  # builder stage - rustup, the WASI SDK pins, binaryen - which is precisely the
+  # fragile half this job exists to test. That path is covered instead,
+  # unconditionally and for free, by the webapp prebuilt smoke below. What the
+  # webapp leg does reuse is the wasm module itself, through `WASM=prebuilt` on
+  # a cache hit; see the restore step. The CLI image has no wasm in it at all -
+  # it is `cargo build --release -p rom-weaver-cli`.
   #
   # Both architectures build here, each on a runner of its own architecture.
   # arm64 is not a formality: the webapp Dockerfile pins an arm64 WASI SDK and
@@ -163,6 +164,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The webapp image compiles the wasm module the `wasm` job has already
+      # built in this same run - ~390s of this job's ~570s, spent reproducing a
+      # module the cache can hand over. Restored here, the Dockerfile takes it
+      # from the context instead (`WASM=prebuilt`); on a miss it compiles as
+      # before, so this only ever removes duplicated work.
+      #
+      # Read-only, because this job never builds the module: claiming the
+      # source-exact key on a miss would deny it to the `wasm` job that does,
+      # permanently.
+      #
+      # amd64 only. The arm64 leg keeps compiling from source so every run still
+      # exercises the full Dockerfile path - the WASI SDK and binaryen pins
+      # included - rather than leaving it to whoever next edits the image. No
+      # `needs: wasm` edge for the same reason the fast preview path has none:
+      # it would make the CLI legs, which want nothing from wasm, queue behind a
+      # six-minute build.
+      - name: Restore the built wasm module
+        id: wasm
+        if: matrix.name == 'webapp' && matrix.arch == 'amd64'
+        uses: ./.github/actions/wasm-cache
+        with:
+          variant: prod
+          save: "false"
+
       # On main the CLI legs push by digest for `docker-nightly` to join into
       # the `nightly` manifest list, and both images refresh the build cache so
       # the next release starts warm. On a pull request nothing is pushed,
@@ -180,6 +205,7 @@ jobs:
           file: ${{ matrix.file }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
+          build-args: ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 

@@ -304,12 +304,29 @@ security ── advisories (warn only, always green)
   The CLI leg additionally smokes the `BINARY=prebuilt` release path
   with a stub binary whenever it is selected.
 
-  Handing this job CI's cached wasm to lift the gate does not work. The CLI
-  image contains no wasm at all - it is `cargo build --release -p
-  rom-weaver-cli`, and CI publishes no Linux release binary to reuse - and for
-  the webapp, `DIST=prebuilt` skips the entire builder stage (rustup, the
-  pinned WASI SDK and binaryen checksums, `npm ci`, the wasm compile), which is
-  exactly the fragile half this job exists to test.
+  `DIST=prebuilt` is not the way to lift the cost here: it skips the entire
+  builder stage (rustup, the pinned WASI SDK and binaryen checksums, `npm ci`,
+  the wasm compile), which is exactly the fragile half this job exists to test.
+  The CLI image has no wasm in it at all - it is `cargo build --release -p
+  rom-weaver-cli`, and CI publishes no Linux release binary to reuse.
+
+  The webapp leg does reuse the **wasm module**, which is a narrower thing. It
+  restores the same source-exact cache the `wasm` job uses (read-only - it never
+  builds the module, so claiming the key on a miss would deny it to the job that
+  does) and on a hit passes `WASM=prebuilt`, which takes the module out of the
+  build context instead of compiling a second identical copy. That compile was
+  ~390s of the job's ~570s, and the job was the whole tail of an uncontended
+  run. Everything else still builds from source, the toolchain layers still
+  verify this architecture's WASI SDK and binaryen checksums, and a miss simply
+  compiles as before.
+
+  **amd64 only.** The arm64 leg always compiles from source, so every run still
+  drives the full Dockerfile path rather than leaving it to whoever next edits
+  the image. There is deliberately no `needs: wasm` edge - the `docker` matrix
+  carries the CLI legs too, and they want nothing from wasm; an edge would queue
+  them behind a six-minute build. `WASM=prebuilt` refuses to build if the module
+  is not actually staged, so a mis-wired caller fails loudly instead of shipping
+  whatever `COPY . .` happened to carry.
 - **`docker-prebuilt`** builds the webapp's `DIST=prebuilt` release path. It
   consumes the real `webapp-dist` artifact `webapp-static` uploads, so
   `compress-static-assets.mjs` runs over the real bundle. That is also why the
@@ -741,6 +758,11 @@ produce from the same commit:
 | --- | --- | --- |
 | `rom-weaver-cli` | `cli-binary-linux-x64-gnu` and `cli-binary-linux-arm64-musl`, the binaries `publish-npm` builds | a second `cargo build --release` of the workspace |
 | `rom-weaver-webapp` | `webapp-dist`, the bundle `static-webapp` packages | rustup + WASI SDK + binaryen + a cold wasm build |
+
+The webapp image has a third build arg, `WASM`, which is not part of this
+release path: it keeps the whole source build and only takes the compiled wasm
+module from the context. CI uses it on the amd64 image leg; the release fan-out
+never sets it, so a fallback-to-source release still compiles everything.
 
 Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`)
 that defaults to building from source, so `docker build` with no arguments -
