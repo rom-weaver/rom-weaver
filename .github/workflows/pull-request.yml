@@ -78,7 +78,12 @@ jobs:
           # edited it - not necessarily its author. Anyone with write access can
           # edit somebody else's comment, so signing requires these to agree.
           COMMENT_SENDER: ${{ github.event.sender.login }}
-        run: node scripts/ci/cla-gate.mjs
+        # `CLA_REF` is resolved here rather than from the event, because the
+        # checkout ref is a branch name on `issue_comment` - and that is the
+        # signing path, so the record would pin to a moving `main` exactly when
+        # it matters. `rev-parse` names the commit whose CLA text this run read.
+        run: |
+          CLA_REF="$(git rev-parse HEAD)" node scripts/ci/cla-gate.mjs
 
   pr-title:
     name: Title Check

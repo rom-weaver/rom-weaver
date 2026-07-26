@@ -380,7 +380,12 @@ integration, development, architecture, and format-reference guides.
 
 Bug reports and contributions are welcome. Read the
 [contribution guide](CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
-before submitting a change, and report
+before submitting a change. Because rom-weaver is dual-licensed, code and
+documentation changes need a one-time signature on the
+[Contributor License Agreement](CLA.md) - the `CLA Signed` check asks for
+it on your first pull request, it covers every repository in the
+[`rom-weaver` organization](https://github.com/rom-weaver), and you keep the
+copyright in your work. Report
 suspected vulnerabilities through GitHub's private reporting form in the
 [security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
 support continued development through

@@ -42,6 +42,10 @@ Choose the guide that matches what you are trying to do.
 
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes,
   validation, and contribution licensing.
+- [Commit conventions](commits.md): pull request title format, allowed types and
+  scopes, breaking changes, and the footers that steer a release.
+- [Contributor License Agreement](../CLA.md): the one-time signature every
+  contributor gives, and what it does and does not grant.
 - [Code of conduct](../.github/CODE_OF_CONDUCT.md): expectations for respectful project
   participation and reporting conduct concerns.
 - [Security policy](../.github/SECURITY.md): supported versions and private
