@@ -467,7 +467,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    # Every main push is a full release rehearsal, even when path
+    # classification finds no Rust input. Pull requests keep the canaries.
+    if: >-
+      github.ref_type != 'tag' &&
+      (needs.changes.outputs.rust == 'true' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
@@ -515,7 +520,10 @@ jobs:
     name: CLI target runtime (aarch64-unknown-linux-musl)
     runs-on: ubuntu-24.04-arm
     needs: [changes, cli-platforms]
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: >-
+      github.ref_type != 'tag' &&
+      (needs.changes.outputs.rust == 'true' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     steps:
       - uses: actions/checkout@v7
 
