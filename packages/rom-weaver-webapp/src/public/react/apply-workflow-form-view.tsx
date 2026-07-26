@@ -1,23 +1,12 @@
 import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
-import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
-import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
   buildOutputCompressionPanel,
   FieldInfoToggle,
@@ -56,25 +45,6 @@ import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
-
-const EmulatorJsTest = lazy(() =>
-  import("./components/emulatorjs-test.tsx").then((module) => ({ default: module.EmulatorJsTest })),
-);
-
-const EmulatorJsAction = ({
-  core,
-  output,
-}: {
-  core: string | undefined;
-  output?: BrowserApplyResult["output"] | null;
-}) => {
-  if (!(core && output)) return null;
-  return (
-    <Suspense fallback={null}>
-      <EmulatorJsTest core={core} output={output} />
-    </Suspense>
-  );
-};
 
 const usePendingCardMorph = (pendingCount: number, _resolvedCount: number) => {
   const knownCards = useRef(new WeakSet<Element>());
@@ -924,7 +894,6 @@ const ApplyOutputAction = ({
   controllers,
   disabledPatchCount,
   enabledPatchCount,
-  emulatorOutput,
   errorNotice,
   localizer,
   noticeController,
@@ -942,7 +911,6 @@ const ApplyOutputAction = ({
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
   enabledPatchCount: number;
-  emulatorOutput?: BrowserApplyResult["output"] | null;
   errorNotice: NoticeState | null;
   localizer: ReturnType<typeof useUiLocalizer>;
   noticeController?: NoticeController;
@@ -999,10 +967,6 @@ const ApplyOutputAction = ({
       controller={controllers.output}
       disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
       totalTime={applyTotalTime || undefined}
-    />
-    <EmulatorJsAction
-      core={getEmulatorJsCore(romInputs[0]?.info.romType?.platform, outputState.pendingDownloadFileName ?? undefined)}
-      output={emulatorOutput}
     />
     {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
     {bundleTools?.outputVerification ? (
@@ -1162,7 +1126,6 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
 
 function ApplyWorkflowFormView({
   controllers,
-  emulatorOutput,
   bundleExpectedRomChecks,
   bundleExport,
   bundleMetaById,
@@ -1181,8 +1144,6 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
     dialog?: DialogController;
   };
-  /** Raw output retained for the opt-in local EmulatorJS smoke test. */
-  emulatorOutput?: BrowserApplyResult["output"] | null;
   /** Bundle export controls live directly in the Output options drawer. */
   bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
@@ -1381,7 +1342,6 @@ function ApplyWorkflowFormView({
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
       enabledPatchCount={enabledPatchCount}
-      emulatorOutput={emulatorOutput}
       errorNotice={errorNotice}
       localizer={localizer}
       noticeController={noticeController}

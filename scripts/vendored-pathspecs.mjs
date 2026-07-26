@@ -7,7 +7,6 @@ export const VENDORED_PATHS = [
   "crates/rom-weaver-containers/libarchive/vendor",
   "crates/rom-weaver-containers/src/nod",
   "crates/rom-weaver-containers/src/xdvdfs",
-  "packages/rom-weaver-webapp/vendor",
 ];
 
 export const vendoredExclusions = () => VENDORED_PATHS.map((path) => `:(exclude)${path}`);
