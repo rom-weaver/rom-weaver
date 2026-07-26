@@ -2602,15 +2602,17 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 	 * Split one file into parallel blocks, seeding each later block with
 	 * the preceding dictionary bytes so cross-block matches survive. The
 	 * block is one thread's share of the file, floored at the minimum
-	 * chunk and capped at 3x the dictionary (liblzma's own
-	 * lzma_lzma2_block_size choice) so per-worker memory stays bounded on
-	 * huge inputs. Every split block is seeded; an unseeded block resets
-	 * the dictionary and loses every match that crosses the boundary,
-	 * which costs several percent of output size on inputs larger than
-	 * the dictionary.
+	 * chunk and capped at 2x the dictionary: the cap bounds per-worker
+	 * memory on huge inputs and, more importantly, yields more blocks
+	 * than threads there, so the OS rebalances them across asymmetric
+	 * (performance/efficiency) cores instead of the wall clock tracking
+	 * the slowest core's single equal-share block. Every split block is
+	 * seeded; an unseeded block resets the dictionary and loses every
+	 * match that crosses the boundary, which costs several percent of
+	 * output size on inputs larger than the dictionary.
 	 */
 	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1) {
-		uint64_t cap = (uint64_t)lzma_opt->dict_size * 4;
+		uint64_t cap = (uint64_t)lzma_opt->dict_size * 2;
 		uint64_t per = (size_hint + strm->threads - 1) / strm->threads;
 		if (per > cap) {
 			/*
