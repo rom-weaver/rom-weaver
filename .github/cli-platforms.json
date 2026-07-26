@@ -6,7 +6,8 @@
     "target": "aarch64-apple-darwin",
     "build": "build",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": true
   },
   {
     "package": "darwin-x64",
@@ -15,7 +16,8 @@
     "target": "x86_64-apple-darwin",
     "build": "build",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": false
   },
   {
     "package": "linux-arm64-musl",
@@ -24,7 +26,8 @@
     "target": "aarch64-unknown-linux-musl",
     "build": "cross",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": true
   },
   {
     "package": "linux-ia32-musl",
@@ -33,7 +36,8 @@
     "target": "i686-unknown-linux-musl",
     "build": "cross",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": false
   },
   {
     "package": "linux-x64-gnu",
@@ -42,7 +46,8 @@
     "target": "x86_64-unknown-linux-gnu",
     "build": "build",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": true
   },
   {
     "package": "linux-x64-musl",
@@ -51,7 +56,8 @@
     "target": "x86_64-unknown-linux-musl",
     "build": "cross",
     "binary": "rom-weaver",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": false
   },
   {
     "package": "win32-arm64-msvc",
@@ -62,7 +68,8 @@
     "binary": "rom-weaver.exe",
     "msvc_arch": "arm64",
     "msvc_host": "arm64",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": false
   },
   {
     "package": "win32-ia32-msvc",
@@ -73,7 +80,8 @@
     "binary": "rom-weaver.exe",
     "msvc_arch": "x86",
     "msvc_host": "amd64",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": false
   },
   {
     "package": "win32-x64-msvc",
@@ -84,6 +92,7 @@
     "binary": "rom-weaver.exe",
     "msvc_arch": "amd64",
     "msvc_host": "amd64",
-    "bootstrap": false
+    "bootstrap": false,
+    "pr": true
   }
 ]

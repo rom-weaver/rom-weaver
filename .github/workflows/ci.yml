@@ -49,8 +49,12 @@ jobs:
 
       # A matrix can only be fed by an upstream job's output, so the shared
       # target list is resolved here rather than in the job that consumes it.
+      # The event name narrows it to the pull-request subset; see the
+      # `cli-platforms` job below.
       - name: Resolve CLI platform matrix
         id: cli-platforms
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
       - name: Classify changed paths
@@ -538,11 +542,19 @@ jobs:
         # dependencies from crates.io, which may still contain the pre-change graph.
         run: cargo publish --workspace --locked --dry-run --no-verify
 
-  # Build every native target the release publishes before a change reaches
+  # Build the native targets the release publishes before a change reaches
   # release day. The target list and the build itself are shared with the
   # release fan-out (.github/cli-platforms.json,
   # .github/actions/build-cli-platform) so CI cannot cover a different set of
   # targets, or build them differently, than the one that ships.
+  #
+  # Pull requests build only the entries marked `"pr": true` - one representative
+  # leg per OS family plus linux-arm64-musl, whose artifact cli-linux-arm64
+  # consumes - because nine legs put ~7.5 minutes of Windows and macOS compile on
+  # the critical path of every Rust pull request. Pushes to main, manual
+  # dispatches, and the release fan-out all build the full nine, and every main
+  # commit is a release candidate, so full coverage still lands before anything
+  # ships. scripts/ci/cli-platform-matrix.mjs owns the split.
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}

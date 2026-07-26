@@ -13,10 +13,25 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
   return matrix;
 }
 
-export function main(argv = process.argv.slice(2)) {
-  const matrix = JSON.stringify(readPlatformMatrix(argv[0]));
+// Pull requests build one representative leg per OS family - the entries marked
+// `"pr": true` - instead of all nine. Every push to main still builds the full
+// set, and every main commit is a release candidate, so nothing ever ships on
+// coverage a pull request skipped.
+//
+// Only `pull_request` narrows, and an absent EVENT_NAME means the full matrix:
+// a caller that does not pass one (the release fan-out's `plan` job in
+// npm-publish.yml) can never silently publish a subset.
+export function selectPlatformMatrix(matrix, eventName) {
+  if (eventName !== "pull_request") return matrix;
+  const subset = matrix.filter((platform) => platform.pr === true);
+  if (subset.length === 0) throw new Error('no CLI platform is marked "pr": true; refusing to emit an empty matrix');
+  return subset;
+}
+
+export function main(argv = process.argv.slice(2), env = process.env) {
+  const matrix = JSON.stringify(selectPlatformMatrix(readPlatformMatrix(argv[0]), env.EVENT_NAME));
   process.stdout.write(`${matrix}\n`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${matrix}\n`);
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `matrix=${matrix}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
