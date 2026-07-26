@@ -77,7 +77,7 @@ test("native package changes build every CLI platform", () => {
 
 test("dependency and CI changes select their broader checks", () => {
   assert.deepEqual(classify("Cargo.lock"), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "false", docker_source: "true", repo_lint: "false", full: "false" });
-  for (const path of [".github/workflows/ci.yml", ".github/workflows/ci-nightly.yml", "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs", "scripts/ci/mise-disable-tools.mjs", "scripts/ci/resolve-wasm-run.mjs"]) {
+  for (const path of [".github/workflows/ci.yml", "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs", "scripts/ci/mise-disable-tools.mjs", "scripts/ci/resolve-wasm-run.mjs"]) {
     assert.deepEqual(classify(path), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "true", docker_source: "true", repo_lint: "true", full: "true" }, path);
   }
 });

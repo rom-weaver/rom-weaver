@@ -77,6 +77,7 @@ jobs:
           CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
           WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
           SOURCE_BUILD: ${{ github.event_name != 'pull_request' || steps.classify.outputs.docker_source == 'true' }}
+          FULL_BUILD: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: node scripts/ci/docker-matrix.mjs
 
   # Static analysis of the repository's own plumbing - workflows, Node.js
@@ -117,10 +118,10 @@ jobs:
   # that no longer builds surfaced at the moment it blocked a publish. hadolint
   # above reads the Dockerfile; it does not run it.
   #
-  # This job builds images from source for main/manual runs and for pull
-  # requests that change Docker or builder inputs. Ordinary pull requests keep
-  # the CLI prebuilt smoke below; the webapp's release-equivalent prebuilt path
-  # is exercised by docker-prebuilt.
+  # This job builds both images from source on every main push, and retains the
+  # source build for pull requests that change Docker or builder inputs.
+  # Ordinary pull requests keep the CLI prebuilt smoke below; the webapp's
+  # release-equivalent prebuilt path is exercised by docker-prebuilt.
   #
   # Reusing CI's cached wasm here is not an option: the CLI image contains no
   # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the

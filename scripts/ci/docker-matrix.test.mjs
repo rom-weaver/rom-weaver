@@ -19,3 +19,10 @@ test("Docker source inputs retain both source image legs", () => {
     { name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile", source: true },
   ]);
 });
+
+test("main builds both source image legs", () => {
+  assert.deepEqual(plan({ CLI_SELECTED: "false", WEBAPP_SELECTED: "false", FULL_BUILD: "true" }), [
+    { name: "CLI", image: "rom-weaver-cli", file: "Dockerfile", source: true },
+    { name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile", source: true },
+  ]);
+});

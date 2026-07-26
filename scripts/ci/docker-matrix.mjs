@@ -10,9 +10,10 @@ import { runMain } from "../run-main.mjs";
 
 runMain(() => {
   const legs = [];
-  const source = process.env.SOURCE_BUILD === "true";
-  if (process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile", source });
-  if (process.env.WEBAPP_SELECTED === "true" && source) {
+  const full = process.env.FULL_BUILD === "true";
+  const source = full || process.env.SOURCE_BUILD === "true";
+  if (full || process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile", source });
+  if ((full || process.env.WEBAPP_SELECTED === "true") && source) {
     legs.push({ name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile", source });
   }
   const matrix = JSON.stringify(legs);

@@ -33,7 +33,7 @@ export function classifyChanges(paths, all = false) {
 
   for (const path of paths.filter(Boolean)) {
     if (
-      /^\.github\/workflows\/(?:ci|ci-nightly|coverage)\.yml$/.test(path) ||
+      /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
       /^\.cargo\//.test(path) ||
       path === ".config/mise.toml" ||

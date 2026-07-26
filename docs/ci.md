@@ -41,7 +41,6 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `ci-nightly.yml` | nightly 07:31 UTC, manual | No | All CLI targets and both source Docker builders |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `Gates/CLA Signed` and `Gates/PR Title Lint` checks |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
@@ -230,7 +229,7 @@ changes ── changed paths -> rust / webapp / security / repo_lint / docker le
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
              ├── rust-windows ──┤
-             └── cli-platforms ─┘ (4 PR canaries; 9 nightly/release targets)
+             └── cli-platforms ─┘ (4 PR canaries; 9 main/release targets)
 
          ┌── webapp-static ───┐
          ├── webapp-browser ──┼── webapp (aggregate check name)
@@ -281,9 +280,10 @@ security ── advisories (warn only, always green)
   pushes and manual runs do too. An unselected leg is absent from the matrix
   entirely rather than starting a runner to skip its own steps, which is why
   the required check name is the `plumbing` aggregate and not the legs.
-  `docker-prebuilt` covers the webapp's release-equivalent path below. The CLI
-  source leg still pushes `ghcr.io/rom-weaver/rom-weaver-cli:nightly` on main,
-  while the webapp nightly image comes from the exact bundle used by the site.
+  `docker-prebuilt` covers the webapp's release-equivalent path below. Main
+  pushes build both source image legs, and the CLI source leg still pushes
+  `ghcr.io/rom-weaver/rom-weaver-cli:nightly`; the webapp nightly image comes
+  from the exact bundle used by the site.
 
   Handing this job CI's cached wasm to lift the gate does not work. The CLI
   image contains no wasm at all - it is `cargo build --release -p
@@ -315,14 +315,11 @@ security ── advisories (warn only, always green)
   pull request: macOS arm64, Linux arm64 musl, Linux x64 GNU, and Windows x64
   MSVC. Every selected binary still verifies a SHA-256, round-trips ZIP, 7z,
   and Z3DS, extracts fixed CHD, RVZ, TAR, and RAR fixtures, and creates/applies
-  fourteen patch formats. The complete nine-target matrix runs in
-  `ci-nightly.yml` and the release fan-out. Both the target list
+  fourteen patch formats. The complete nine-target matrix runs on main and in
+  the release fan-out. Both the target list
   ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build
   itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform))
-  remain shared, so nightly and release cannot silently drift apart.
-- **`ci-nightly.yml`** runs the complete nine-target CLI matrix and both
-  multi-architecture source Docker builders every night. It is informational;
-  the release fan-out remains the final required check before publishing.
+  remain shared, so main and release cannot silently drift apart.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p
   rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm`
   already compiles as a strict subset (the app build pulls `containers` in with
