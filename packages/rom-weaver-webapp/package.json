@@ -93,7 +93,7 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.6.0",
-    "lucide-react": "1.26.0",
+    "lucide-react": "1.27.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "valibot": "1.4.2"
