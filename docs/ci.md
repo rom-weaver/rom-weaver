@@ -660,6 +660,11 @@ build dependencies, `cross` for the musl targets, and - for Windows - the
 `vswhere` + `VsDevCmd.bat` dance that puts the right MSVC toolchain on `PATH`
 for the cross-arch legs.
 
+The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and
+`TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same
+IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has
+no such drive; `windows-11-arm`'s disk layout is not documented.
+
 CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a
 release restores what CI already built rather than compiling a second,
 differently-configured copy. `cache-save` and `registry-url` are the only
