@@ -118,48 +118,44 @@ jobs:
   # image-plumbing only because its release path is exercised by the prebuilt
   # smoke below.
   #
-  # Reusing CI's cached wasm here is not an option: the CLI image contains no
-  # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
-  # webapp `DIST=prebuilt` skips the whole builder stage - rustup, the WASI SDK
-  # pins, binaryen - which is precisely the fragile half this job exists to
-  # test. That path is covered instead, unconditionally and for free, by
-  # the webapp prebuilt smoke below.
+  # `DIST=prebuilt` is not the way to lift the cost here: it skips the whole
+  # builder stage - rustup, the WASI SDK pins, binaryen - which is precisely the
+  # fragile half this job exists to test. That path is covered instead,
+  # unconditionally and for free, by the webapp prebuilt smoke below. What the
+  # webapp leg does reuse is the wasm module itself, through `WASM=prebuilt` on
+  # a cache hit; see the restore step. The CLI image has no wasm in it at all -
+  # it is `cargo build --release -p rom-weaver-cli`.
+  #
+  # Both architectures build here, each on a runner of its own architecture.
+  # arm64 is not a formality: the webapp Dockerfile pins an arm64 WASI SDK and
+  # binaryen by sha256 that no amd64 build ever checks, so an unbuilt arm64
+  # source path ships broken to self-hosters. Under QEMU that coverage cost 81
+  # minutes for the CLI image and just over two hours for the webapp's, which is
+  # why these are native.
   docker:
-    name: Docker build (${{ matrix.name }})
-    runs-on: ubuntu-24.04
-    # The arm64 source leg runs under QEMU and is substantially slower than
-    # the native amd64 leg. Keep the source build as a real multi-arch gate;
-    # the default one-hour limit cuts it off while Cargo is still compiling.
-    timeout-minutes: 180
+    name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.docker_matrix != '[]'
     permissions:
       contents: read
-      # Read to restore the cache; write so a merge to main can refresh it. A
-      # pull request from a fork receives a read-only token regardless, which is
-      # why the export below is restricted to pushes on main anyway.
+      # Read to restore the cache; write so a merge to main can refresh it and
+      # push the digest `docker-manifest` below assembles. A pull request from a
+      # fork receives a read-only token regardless, which is why the push is
+      # restricted to main anyway.
       packages: write
-      # Attesting the nightly image, so it carries the same signed provenance as
-      # every image the release fan-out pushes. Only the main-push path uses
-      # these; a pull request skips the attest step and cannot mint a token.
-      attestations: write
-      artifact-metadata: write
-      id-token: write
     strategy:
       fail-fast: false
       # Planned in `changes` above: an unselected image is absent from the
       # matrix entirely rather than starting a runner to skip its own steps.
+      # Each selected image expands to one leg per architecture, each on a
+      # runner of that architecture.
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.docker_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -168,48 +164,107 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # On main this publishes the CLI `nightly` image and refreshes the build
-      # cache so the next release starts warm; on a pull request it only reads,
+      # The webapp image compiles the wasm module the `wasm` job has already
+      # built in this same run - ~390s of this job's ~570s, spent reproducing a
+      # module the cache can hand over. Restored here, the Dockerfile takes it
+      # from the context instead (`WASM=prebuilt`); on a miss it compiles as
+      # before, so this only ever removes duplicated work.
+      #
+      # Read-only, because this job never builds the module: claiming the
+      # source-exact key on a miss would deny it to the `wasm` job that does,
+      # permanently.
+      #
+      # amd64 only. The arm64 leg keeps compiling from source so every run still
+      # exercises the full Dockerfile path - the WASI SDK and binaryen pins
+      # included - rather than leaving it to whoever next edits the image. No
+      # `needs: wasm` edge for the same reason the fast preview path has none:
+      # it would make the CLI legs, which want nothing from wasm, queue behind a
+      # six-minute build.
+      - name: Restore the built wasm module
+        id: wasm
+        if: matrix.name == 'webapp' && matrix.arch == 'amd64'
+        uses: ./.github/actions/wasm-cache
+        with:
+          variant: prod
+          save: "false"
+
+      # On main the CLI legs push by digest for `docker-nightly` to join into
+      # the `nightly` manifest list, and both images refresh the build cache so
+      # the next release starts warm. On a pull request nothing is pushed,
       # because a fork's token cannot write to the registry.
       #
-      # Only the CLI leg publishes. This job builds the webapp image from
-      # source, which is the image-plumbing path - it compiles its own wasm and
-      # would ship a bundle that is not the one deployed to
+      # Only the CLI image publishes from here. This job builds the webapp image
+      # from source, which is the image-plumbing path - it compiles its own wasm
+      # and would ship a bundle that is not the one deployed to
       # nightly.rom-weaver.com. The webapp `nightly` image is published from
       # `docker-prebuilt` below, off the exact artifact that deploy uses.
-      #
-      # `provenance`/`sbom` ride the push. They need an exporter that can carry
-      # attestations, which the plain local build this runs on a pull request is
-      # not, so they are gated on the same expression rather than set outright.
       - name: Build image
-        id: build
-        uses: docker/build-push-action@v7
+        uses: ./.github/actions/docker-build-arch
         with:
-          context: .
+          image: ${{ matrix.image }}
           file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
+          arch: ${{ matrix.arch }}
+          registry-owner: ${{ github.repository_owner }}
+          build-args: ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
-          provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI') && 'mode=max' || 'false' }}
-          sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:nightly
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
-          cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
+          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
-      - name: Sign build provenance
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI'
-        uses: actions/attest@v4
-        with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
+      # The prebuilt stage takes the binary out of `prebuilt/<arch>/`, so each
+      # leg smokes the directory its own architecture resolves.
       - name: Build CLI prebuilt path
         if: matrix.name == 'CLI'
         run: |
           set -euo pipefail
-          mkdir -p prebuilt/amd64
-          printf 'stub\n' > prebuilt/amd64/rom-weaver
+          mkdir -p "prebuilt/${{ matrix.arch }}"
+          printf 'stub\n' > "prebuilt/${{ matrix.arch }}/rom-weaver"
           docker build --file Dockerfile --build-arg BINARY=prebuilt --tag prebuilt-smoke .
+
+  # The per-arch legs above push tagless digests; this is what makes them a
+  # single `nightly` tag that resolves per architecture.
+  docker-nightly:
+    name: Docker publish (CLI, nightly)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [changes, docker]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.docker.result == 'success'
+      && contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
+    permissions:
+      contents: read
+      packages: write
+      # Attesting the nightly image, so it carries the same signed provenance as
+      # every image the release fan-out pushes.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble the manifest list
+        id: manifest
+        uses: ./.github/actions/docker-manifest
+        with:
+          image: rom-weaver-cli
+          registry-owner: ${{ github.repository_owner }}
+          tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-cli:nightly
+
+      # The manifest list, not either architecture's image: that is what a pull
+      # of `:nightly` resolves against.
+      - name: Sign build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-cli
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
 
   # Exercise the webapp release COPY path against the real bundle built above,
   # and on main publish that same image as the webapp `nightly` channel. The
@@ -220,8 +275,8 @@ jobs:
   # the `webapp-dist` artifact that `deploy` ships to nightly.rom-weaver.com,
   # so the image and the site are the same bundle.
   docker-prebuilt:
-    name: Docker build (webapp, prebuilt)
-    runs-on: ubuntu-24.04
+    name: Docker build (webapp, prebuilt, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     needs: webapp-static
     if: github.ref_type != 'tag'
@@ -230,19 +285,22 @@ jobs:
       # Only exercised on the main push below; a fork pull request receives a
       # read-only token regardless, which is why the push is gated on the ref.
       packages: write
-      # Same signed provenance the release fan-out attaches to every image.
-      attestations: write
-      artifact-metadata: write
-      id-token: write
+    strategy:
+      fail-fast: false
+      # The bundle is architecture-independent, but the image is not: the
+      # compression stage runs Node.js and the runtime is an Alpine base, so
+      # each architecture still needs its own build. They are short - it is a
+      # COPY and a compression pass - which is why this list is inline rather
+      # than planned in `changes`.
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - uses: docker/setup-buildx-action@v4
 
       # `.dockerignore` drops `**/dist`, which is why both this and the release
       # fan-out stage the bundle under `prebuilt/` instead.
@@ -263,27 +321,59 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `provenance`/`sbom` ride the push: they need an exporter that can carry
-      # attestations, which the plain local build a pull request runs is not.
       - name: Build the prebuilt path
-        id: build
-        uses: docker/build-push-action@v7
+        uses: ./.github/actions/docker-build-arch
         with:
-          context: .
+          image: rom-weaver-webapp
           file: packages/rom-weaver-webapp/Dockerfile
           build-args: DIST=prebuilt
-          platforms: linux/amd64,linux/arm64
+          arch: ${{ matrix.arch }}
+          registry-owner: ${{ github.repository_owner }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          provenance: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'mode=max' || 'false' }}
-          sbom: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # `DIST=prebuilt` skips the builder stage the cache holds, and a pull
+          # request has not logged in to pull it with.
+          cache-from: "false"
+
+  # As with `docker-nightly` above: the legs push digests, this names them.
+  docker-prebuilt-nightly:
+    name: Docker publish (webapp, nightly)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: docker-prebuilt
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.docker-prebuilt.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+      # Same signed provenance the release fan-out attaches to every image.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble the manifest list
+        id: manifest
+        uses: ./.github/actions/docker-manifest
+        with:
+          image: rom-weaver-webapp
+          registry-owner: ${{ github.repository_owner }}
           tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
 
       - name: Sign build provenance
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true
 
   # Built once and shared. This is the single most expensive step in the

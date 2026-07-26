@@ -130,13 +130,18 @@ runs:
         key: ${{ steps.key.outputs.key }}
         path: ${{ steps.paths.outputs.path }}
 
+    # `steps.paths`, not `inputs.path`: the resolve step above already returns
+    # the override when one was given, and falls back to the variant's canonical
+    # set when none was. Reading the raw input instead restored *nothing* for a
+    # read-only caller that did not pass one - reporting a miss on every run,
+    # with no signal that the path list was empty rather than the cache cold.
     - name: Restore built wasm module (read-only)
       id: restore
       if: inputs.save == 'false'
       uses: actions/cache/restore@v6
       with:
         key: ${{ steps.key.outputs.key }}
-        path: ${{ inputs.path }}
+        path: ${{ steps.paths.outputs.path }}
 
     # Without this the only evidence the cache works is an unexplained swing
     # in job duration, which is a poor thing to debug from months later.

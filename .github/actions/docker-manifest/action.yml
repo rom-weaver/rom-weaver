@@ -1,0 +1,86 @@
+name: Assemble a multi-arch Docker manifest
+description: >-
+  Collect the per-architecture digests that `docker-build-arch` pushed and join
+  them into one manifest list under the given tags. This is what makes
+  `docker pull` resolve to the caller's architecture; the digests themselves are
+  tagless until this runs.
+
+inputs:
+  image:
+    description: Image name without a registry host, e.g. `rom-weaver-cli`.
+    required: true
+  tags:
+    description: Newline-separated tags to point at the manifest list, name included.
+    required: true
+  registry-owner:
+    description: GHCR namespace, normally `github.repository_owner`.
+    required: true
+
+outputs:
+  digest:
+    description: >-
+      Digest of the assembled manifest list. This, not a per-arch digest, is
+      what an attestation has to name - it is what a `docker pull` of the tag
+      resolves against.
+    value: ${{ steps.manifest.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@v4
+
+    # Both legs land in one directory; each file is named for the digest it
+    # carries and has no contents.
+    - name: Download the digests
+      uses: actions/download-artifact@v8
+      with:
+        pattern: docker-digest-${{ inputs.image }}-*
+        merge-multiple: true
+        path: /tmp/digests
+
+    - name: Create the manifest list
+      id: manifest
+      shell: bash
+      env:
+        IMAGE: ghcr.io/${{ inputs.registry-owner }}/${{ inputs.image }}
+        TAGS: ${{ inputs.tags }}
+      run: |
+        set -euo pipefail
+        cd /tmp/digests
+
+        # A missing leg would otherwise publish a manifest list quietly
+        # advertising one architecture, which pulls fine on amd64 and fails
+        # only for the arm64 users the list exists for.
+        count=$(find . -type f | wc -l | tr -d '[:space:]')
+        if [ "$count" -lt 2 ]; then
+          echo "expected a digest per architecture, found $count" >&2
+          exit 1
+        fi
+
+        # `if` rather than `[ ... ] && ...`: under `set -e` a trailing AND-list
+        # that fails takes the loop body's exit status with it.
+        tag_args=()
+        first_tag=""
+        while IFS= read -r tag; do
+          if [ -n "$tag" ]; then
+            tag_args+=(--tag "$tag")
+            if [ -z "$first_tag" ]; then first_tag="$tag"; fi
+          fi
+        done <<< "$TAGS"
+
+        if [ -z "$first_tag" ]; then
+          echo "no tags given for $IMAGE" >&2
+          exit 1
+        fi
+
+        source_args=()
+        for digest in *; do
+          source_args+=("${IMAGE}@sha256:${digest}")
+        done
+
+        docker buildx imagetools create "${tag_args[@]}" "${source_args[@]}"
+
+        # Every tag names the same list, so any of them resolves the digest the
+        # attestation below has to sign.
+        digest=$(docker buildx imagetools inspect --format '{{ .Manifest.Digest }}' "$first_tag")
+        echo "digest=${digest}" >> "$GITHUB_OUTPUT"

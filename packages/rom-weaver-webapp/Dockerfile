@@ -9,7 +9,12 @@
 # still builds from source. BuildKit builds
 # only the stages the selected one depends on, so the unused half costs nothing
 # - and `prebuilt/` only has to exist for the build that asks for it.
+#
+# `--build-arg WASM=prebuilt` is the narrower version of the same idea: it keeps
+# the whole source build but takes the compiled wasm module out of the context
+# rather than compiling it. See the `wasm-prebuilt` stage below.
 ARG DIST=source
+ARG WASM=source
 
 FROM node:22-bookworm AS builder
 
@@ -103,6 +108,7 @@ RUN npm ci
 
 WORKDIR /app
 COPY . .
+
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
 # across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit
 # exports no cache mount to a registry or gha cache, so CI still pays a cold
@@ -115,13 +121,40 @@ COPY . .
 # artifacts, so it is keyed by arch. Unkeyed, a multi-arch build would point
 # both arches at one `sharing=locked` directory and serialize them onto each
 # other's objects.
+FROM builder AS wasm-source
+ARG TARGETARCH
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
-    node scripts/wasm/build-app.mjs prod \
-    && npm --prefix packages/rom-weaver-webapp run build
+    node scripts/wasm/build-app.mjs prod
+
+# `--build-arg WASM=prebuilt` takes the module out of the build context instead
+# of compiling it, for a caller that already has the identical one. CI passes it
+# on the amd64 leg when its source-exact wasm cache hits: the same module was
+# already built (or restored) by the `wasm` job in the same run, and compiling a
+# second copy of it cost ~390s of the critical path.
+#
+# The toolchain layers above are deliberately still installed and still verify
+# this architecture's WASI SDK and binaryen checksums - those pins are the
+# fragile part, they are per-architecture, and the registry cache serves those
+# layers for free. Only the redundant compile is skipped. The arm64 leg always
+# builds from source, so every run still compiles the module through this
+# Dockerfile once.
+FROM builder AS wasm-prebuilt
+# A missing module here means the caller asked for `prebuilt` without staging
+# one. Falling through to an image built from whatever `COPY . .` happened to
+# carry is exactly the silent staleness this has to refuse.
+RUN set -eux; \
+    dir=packages/rom-weaver-webapp/src/wasm; \
+    for file in rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256; do \
+      test -s "$dir/$file" || { echo "WASM=prebuilt but $file is missing from the build context" >&2; exit 1; }; \
+    done
+
+# hadolint ignore=DL3006
+FROM wasm-${WASM} AS app
+RUN npm --prefix packages/rom-weaver-webapp run build
 
 FROM scratch AS dist-source
-COPY --from=builder /app/packages/rom-weaver-webapp/dist /
+COPY --from=app /app/packages/rom-weaver-webapp/dist /
 
 FROM scratch AS dist-prebuilt
 COPY prebuilt/ /

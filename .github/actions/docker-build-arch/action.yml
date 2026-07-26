@@ -1,0 +1,113 @@
+name: Build one architecture of a Docker image
+description: >-
+  Build a single-architecture image on a runner of that architecture and, when
+  pushing, publish it by digest so a later job can assemble the multi-arch
+  manifest list. Every image in this repository is built this way - CI's nightly
+  legs and the release fan-out - so the exporter, cache ref, and digest hand-off
+  live here once instead of in three workflows.
+
+  Native runners rather than QEMU: emulating arm64 cost 81 minutes for the CLI
+  image and just over two hours for the webapp's source build, against roughly
+  five and nine minutes on `ubuntu-24.04-arm`.
+
+inputs:
+  image:
+    description: Image name without a registry host, e.g. `rom-weaver-cli`.
+    required: true
+  file:
+    description: Dockerfile path.
+    required: true
+  arch:
+    description: Docker architecture of *this* runner - `amd64` or `arm64`.
+    required: true
+  context:
+    description: Build context.
+    default: "."
+  build-args:
+    description: Newline-separated build args, as `docker/build-push-action` takes them.
+    default: ""
+  labels:
+    description: >-
+      Newline-separated OCI labels. They land in each architecture's image
+      config; the manifest list that joins them carries none, which is what
+      `docker buildx imagetools` produces and what registries display from the
+      resolved image anyway.
+    default: ""
+  push:
+    description: >-
+      Push the single-arch image by digest. A pull request leaves this false: a
+      fork's token cannot write to the registry, and nothing consumes the image.
+    default: "false"
+  cache-from:
+    description: >-
+      Import the image's per-arch buildcache ref. Off for a build that skips the
+      expensive stages anyway (`DIST=prebuilt`), which would otherwise pull a
+      source layer graph it cannot use - and pull it unauthenticated on a pull
+      request, where nothing has logged in.
+    default: "true"
+  cache-to:
+    description: Export the layer cache to the image's per-arch buildcache ref.
+    default: "false"
+  registry-owner:
+    description: GHCR namespace, normally `github.repository_owner`.
+    required: true
+
+outputs:
+  digest:
+    description: Digest of the image this leg built. Empty unless `push` was set.
+    value: ${{ steps.build.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@v4
+
+    # `provenance`/`sbom` ride the push: they need an exporter that can carry
+    # attestations, which the discard-only build a pull request runs is not.
+    #
+    # `push-by-digest` uploads the image without claiming a tag, so the two
+    # arch legs cannot race each other for `:nightly`. The manifest list that
+    # does claim the tag is assembled by `docker-manifest` once both have
+    # landed.
+    #
+    # The cache ref is keyed by architecture. One shared ref would have each
+    # leg overwrite the other's layers every run, so neither would ever restore.
+    - name: Build image
+      id: build
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        build-args: ${{ inputs.build-args }}
+        labels: ${{ inputs.labels }}
+        platforms: linux/${{ inputs.arch }}
+        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
+        sbom: ${{ inputs.push }}
+        outputs: >-
+          ${{ inputs.push == 'true'
+          && format('type=image,name=ghcr.io/{0}/{1},push-by-digest=true,name-canonical=true,push=true', inputs.registry-owner, inputs.image)
+          || 'type=cacheonly' }}
+        cache-from: ${{ inputs.cache-from == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2}', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
+        cache-to: ${{ inputs.cache-to == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2},mode=max', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
+
+    # An artifact rather than a job output: a matrix leg's outputs collapse to
+    # whichever leg finished last, so the two digests would overwrite each
+    # other. The file name is the digest; its contents are never read.
+    - name: Stage the digest
+      if: inputs.push == 'true'
+      shell: bash
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        set -euo pipefail
+        mkdir -p /tmp/digests
+        touch "/tmp/digests/${DIGEST#sha256:}"
+
+    - name: Upload the digest
+      if: inputs.push == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: docker-digest-${{ inputs.image }}-${{ inputs.arch }}
+        path: /tmp/digests/*
+        if-no-files-found: error
+        retention-days: 1

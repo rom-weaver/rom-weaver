@@ -11,6 +11,21 @@ test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
   assert.equal(classify(".dockerignore").docker_cli, "true");
+  assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_cli, "false");
+});
+
+// The shared build/tag path. An edit here that breaks an image would otherwise
+// only surface at the release that publishes it.
+test("the shared Docker actions select both images", () => {
+  for (const path of [".github/actions/docker-build-arch/action.yml", ".github/actions/docker-manifest/action.yml"]) {
+    const result = classify(path);
+    assert.equal(result.docker_cli, "true", path);
+    assert.equal(result.docker_webapp, "true", path);
+  }
+  // A composite action that builds no image selects no image. (`wasm-cache` and
+  // `setup-build-env` are no counter-example - they select `full`, so they
+  // select everything.)
+  assert.equal(classify(".github/actions/deploy-webapp-pages/action.yml").docker_cli, "false");
 });
 // The wasm cache key excludes these same trees, so selecting the webapp stack
 // for them can only ever buy a cache hit plus four browser jobs that cannot
