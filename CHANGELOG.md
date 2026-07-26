@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.9.0](https://github.com/rom-weaver/rom-weaver/compare/v0.8.0...v0.9.0) (2026-07-26)
+
+
+### Features
+
+* **wasm:** name the cause when a thread worker fails to load ([#184](https://github.com/rom-weaver/rom-weaver/issues/184)) ([8df0302](https://github.com/rom-weaver/rom-weaver/commit/8df0302fea3f800e7d1750b85e59d013940b7a57))
+* **webapp:** add local EmulatorJS smoke test ([#194](https://github.com/rom-weaver/rom-weaver/issues/194)) ([b8623b7](https://github.com/rom-weaver/rom-weaver/commit/b8623b74fcc7e57b751df669aae5501e6ccc5e48))
+
+
+### Bug Fixes
+
+* **containers:** share the hash budget across concurrently decoded leaves ([#197](https://github.com/rom-weaver/rom-weaver/issues/197)) ([8609751](https://github.com/rom-weaver/rom-weaver/commit/8609751fef4a3a4d3887c2e55b73a9bc099209c0))
+* **containers:** stop nod disc reads crossing wasm threads ([#196](https://github.com/rom-weaver/rom-weaver/issues/196)) ([12db144](https://github.com/rom-weaver/rom-weaver/commit/12db144ce0be09e009e50af732c7b156ad0917a3))
+* **dx:** detect the WASI SDK in POSIX sh so mise can bootstrap without Node.js ([#193](https://github.com/rom-weaver/rom-weaver/issues/193)) ([e6bf303](https://github.com/rom-weaver/rom-weaver/commit/e6bf303c31699234036deea391a791897a8f6ae1))
+* **dx:** install binaryen through the github backend so linux/arm64 can bootstrap ([#199](https://github.com/rom-weaver/rom-weaver/issues/199)) ([cae471b](https://github.com/rom-weaver/rom-weaver/commit/cae471b14df22d1621778ff490aaf6aa82a78ffb))
+* **dx:** request rustfmt and clippy with the pinned Rust toolchain ([#195](https://github.com/rom-weaver/rom-weaver/issues/195)) ([a32527f](https://github.com/rom-weaver/rom-weaver/commit/a32527fddd5bd62b91071a4c03479d9fdce30f18))
+* **release:** bump the lockfile's local platform package versions ([#186](https://github.com/rom-weaver/rom-weaver/issues/186)) ([03b57a8](https://github.com/rom-weaver/rom-weaver/commit/03b57a8a750e6703ea2d5a045d0e7ac5cf867aea))
+* **release:** preserve changelog section boundaries ([#216](https://github.com/rom-weaver/rom-weaver/issues/216)) ([dc06059](https://github.com/rom-weaver/rom-weaver/commit/dc060590c2b99efe277ad9e5f33f36858a08a24a))
+* **wasm:** deny warnings in threaded config ([#202](https://github.com/rom-weaver/rom-weaver/issues/202)) ([0e22636](https://github.com/rom-weaver/rom-weaver/commit/0e2263657f79adabec80e5def76218dae99965ea))
+* **webapp:** show the configured thread count in the masthead ([#182](https://github.com/rom-weaver/rom-weaver/issues/182)) ([aed4f9c](https://github.com/rom-weaver/rom-weaver/commit/aed4f9c6f6f379757bdf850f5feaab9f3cc92cac))
+* **webapp:** skip the gain-control reload when already cross-origin isolated ([#180](https://github.com/rom-weaver/rom-weaver/issues/180)) ([f25e5aa](https://github.com/rom-weaver/rom-weaver/commit/f25e5aaba74959f2f7c8a754f8c997160151c590))
+
+
+### Performance Improvements
+
+* **ci:** build multi-arch images on native runners instead of QEMU ([#204](https://github.com/rom-weaver/rom-weaver/issues/204)) ([c97f7a5](https://github.com/rom-weaver/rom-weaver/commit/c97f7a5f04d5088935f38d31cc3c5964fede7275))
+* **ci:** trim the PR CLI target matrix and speed up Windows builds ([#210](https://github.com/rom-weaver/rom-weaver/issues/210)) ([288a537](https://github.com/rom-weaver/rom-weaver/commit/288a537e157f709bb324b3aa1b3b3b5402d12baf))
+* **containers:** read the GameCube FST so RVZ junk detection, improve compression ([#213](https://github.com/rom-weaver/rom-weaver/issues/213)) ([a1c44fb](https://github.com/rom-weaver/rom-weaver/commit/a1c44fb976f8088aacba2cfc669d8caaeaa9233f))
+* **dx:** split the pre-commit cargo checks into their own target dirs ([#201](https://github.com/rom-weaver/rom-weaver/issues/201)) ([7bcb164](https://github.com/rom-weaver/rom-weaver/commit/7bcb1647d9e31d5a9eb1577a05b8679068fdcf7f))
+
+
+### Reverts
+
+* **webapp:** remove the local EmulatorJS smoke test ([#207](https://github.com/rom-weaver/rom-weaver/issues/207)) ([6d89014](https://github.com/rom-weaver/rom-weaver/commit/6d89014731d9e9e0120bdae21437bf5a9c879ce9))
+
+
+### Documentation
+
+* **ci:** correct the release.yml trigger row ([#187](https://github.com/rom-weaver/rom-weaver/issues/187)) ([72fcecd](https://github.com/rom-weaver/rom-weaver/commit/72fcecd64b70d8c427b96a5c40799651074a8c79))
+* **cla:** scope the agreement to the organization and pin signature records ([#214](https://github.com/rom-weaver/rom-weaver/issues/214)) ([5bcd003](https://github.com/rom-weaver/rom-weaver/commit/5bcd00302880e96d20769334509e816cd50af5b4))
+* **cli:** use current GHCR image path ([#200](https://github.com/rom-weaver/rom-weaver/issues/200)) ([3644a8e](https://github.com/rom-weaver/rom-weaver/commit/3644a8e199c0ec376ebf5bb24ff89488ce174537))
+* **perf:** benchmark against chdman, dolphin-tool, 7zz, and Info-ZIP ([#211](https://github.com/rom-weaver/rom-weaver/issues/211)) ([c887869](https://github.com/rom-weaver/rom-weaver/commit/c887869cc4795aa022b9ee4b3b94309ac1f14214))
+* **vendor:** record nod and xdvdfs provenance ([#198](https://github.com/rom-weaver/rom-weaver/issues/198)) ([2e2b151](https://github.com/rom-weaver/rom-weaver/commit/2e2b151bdfe35d87be0d9cfc3f7d669745b59eaf))
+
+
+<details>
+<summary>Internal</summary>
+
+
+* **deny:** drop the dead rustix and linux-raw-sys license exceptions ([#192](https://github.com/rom-weaver/rom-weaver/issues/192)) ([754980c](https://github.com/rom-weaver/rom-weaver/commit/754980c85821c53e2043c19c6c170fef97214d7a))
+* **deps:** bump lucide-react from 1.26.0 to 1.27.0 in /packages/rom-weaver-webapp in the other-webapp group ([#212](https://github.com/rom-weaver/rom-weaver/issues/212)) ([17e1930](https://github.com/rom-weaver/rom-weaver/commit/17e1930b71406a2607301f6d692c6ae90e843f16))
+* **docker:** mirror the webapp deploy channels in the image tags ([#188](https://github.com/rom-weaver/rom-weaver/issues/188)) ([1a12be8](https://github.com/rom-weaver/rom-weaver/commit/1a12be880859c195f76a9aa9f6ef41fb924eeb1f))
+* **docker:** publish multi-arch images ([#191](https://github.com/rom-weaver/rom-weaver/issues/191)) ([7a51d75](https://github.com/rom-weaver/rom-weaver/commit/7a51d75b0c0b8608bc402dcf5f4c6e3047f60cba))
+* **gates:** rename the pull request gates to PR Gates ([#209](https://github.com/rom-weaver/rom-weaver/issues/209)) ([ffbb72e](https://github.com/rom-weaver/rom-weaver/commit/ffbb72e07fd1595949136360a65a82f82c8eb71c))
+* **macos:** build Darwin release binaries on the latest macOS runners ([#205](https://github.com/rom-weaver/rom-weaver/issues/205)) ([c901d8d](https://github.com/rom-weaver/rom-weaver/commit/c901d8d94753d1360c4fbde13e0b7eb3345edece)), closes [#181](https://github.com/rom-weaver/rom-weaver/issues/181)
+* **pull-request:** merge the CLA and title gates into one workflow ([#190](https://github.com/rom-weaver/rom-weaver/issues/190)) ([ca40bdc](https://github.com/rom-weaver/rom-weaver/commit/ca40bdce0b63cb3b5bb7c0c3ffefbc7b299f7145))
+* **release:** attest the release binaries and the webapp tarball ([#189](https://github.com/rom-weaver/rom-weaver/issues/189)) ([69b50e7](https://github.com/rom-weaver/rom-weaver/commit/69b50e74fe4fda23f27772cc8d49921ec0b809bf))
+* **release:** open the release pull request on manual dispatch only ([#179](https://github.com/rom-weaver/rom-weaver/issues/179)) ([d2aab43](https://github.com/rom-weaver/rom-weaver/commit/d2aab438ed950a056e1a8dbc75f4d2872440f202))
+* **webapp:** sweep 1-16 threads across compress and extract ([#183](https://github.com/rom-weaver/rom-weaver/issues/183)) ([170f359](https://github.com/rom-weaver/rom-weaver/commit/170f359d74c064aa925c041797ab99ab1d60d1a0))
+
+
+</details>
 ## [0.8.0](https://github.com/rom-weaver/rom-weaver/compare/v0.7.2...v0.8.0) (2026-07-25)
 
 
@@ -87,7 +149,8 @@
 * **webapp:** shard the browser test suite across two runners ([#152](https://github.com/rom-weaver/rom-weaver/issues/152)) ([7867473](https://github.com/rom-weaver/rom-weaver/commit/7867473c427979ea7b5c9cb3d0c2a271dbcfabfb))
 
 
-</details>## [0.7.2](https://github.com/brandonocasey/rom-weaver/compare/v0.7.1...v0.7.2) (2026-07-23)
+</details>
+## [0.7.2](https://github.com/brandonocasey/rom-weaver/compare/v0.7.1...v0.7.2) (2026-07-23)
 
 
 ### Bug Fixes
