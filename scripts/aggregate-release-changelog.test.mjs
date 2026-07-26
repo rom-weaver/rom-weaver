@@ -99,6 +99,28 @@ test("keeps the next release outside the collapsed current section", () => {
   assert.doesNotMatch(result.section, /^## \[0\.7\.2\]/m);
 });
 
+test("repairs a previously collapsed release boundary", () => {
+  const input = `# Changelog
+
+## [0.7.3](https://github.com/example/project/compare/v0.7.2...v0.7.3) (2026-07-24)
+
+<details>
+<summary>Internal</summary>
+
+* ci-only maintenance
+</details>## [0.7.2](https://github.com/example/project/compare/v0.7.1...v0.7.2) (2026-07-23)
+
+### Features
+
+* previous feature
+`;
+
+  const result = aggregatePrereleaseChangelog(input, "0.7.3");
+
+  assert.match(result.changelog, /<\/details>\n## \[0\.7\.2\]/);
+  assert.doesNotMatch(result.section, /^## \[0\.7\.2\]/m);
+});
+
 test("replaces only the release notes in a Release Please PR body", () => {
   const body = `:robot: I have created a release *beep* *boop*
 ---
