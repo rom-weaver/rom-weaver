@@ -10,6 +10,7 @@ const EMPTY = {
   security: false,
   docker_cli: false,
   docker_webapp: false,
+  docker_source: false,
   repo_lint: false,
   full: false,
 };
@@ -32,7 +33,7 @@ export function classifyChanges(paths, all = false) {
 
   for (const path of paths.filter(Boolean)) {
     if (
-      /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
+      /^\.github\/workflows\/(?:ci|ci-nightly|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
       /^\.cargo\//.test(path) ||
       path === ".config/mise.toml" ||
@@ -93,6 +94,21 @@ export function classifyChanges(paths, all = false) {
       result.docker_webapp = true;
     }
 
+    if (
+      path === "Dockerfile" ||
+      path === "packages/rom-weaver-webapp/Dockerfile" ||
+      path === ".dockerignore" ||
+      path === "docker-compose.yml" ||
+      path === "packages/rom-weaver-webapp/sws.toml" ||
+      path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs" ||
+      path === ".github/workflows/docker-publish.yml" ||
+      /^\.github\/workflows\/ci\.yml$/.test(path) ||
+      /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
+      /^\.cargo\//.test(path) ||
+      /^(?:Cargo\.toml|Cargo\.lock)$/.test(path) ||
+      path === ".config/mise.toml"
+    ) result.docker_source = true;
+
     // `repo-lint` lints every tracked file of these kinds rather than the diff,
     // so this selects the whole job, not individual files: whatever actionlint
     // reads (the workflows, the composite actions, `.github` YAML at any depth
@@ -114,6 +130,7 @@ export function classifyChanges(paths, all = false) {
     result.security = true;
     result.docker_cli = true;
     result.docker_webapp = true;
+    result.docker_source = true;
     result.repo_lint = true;
   }
   return result;

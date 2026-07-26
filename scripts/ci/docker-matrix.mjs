@@ -10,8 +10,11 @@ import { runMain } from "../run-main.mjs";
 
 runMain(() => {
   const legs = [];
-  if (process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile" });
-  if (process.env.WEBAPP_SELECTED === "true") legs.push({ name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile" });
+  const source = process.env.SOURCE_BUILD === "true";
+  if (process.env.CLI_SELECTED === "true") legs.push({ name: "CLI", image: "rom-weaver-cli", file: "Dockerfile", source });
+  if (process.env.WEBAPP_SELECTED === "true" && source) {
+    legs.push({ name: "webapp", image: "rom-weaver-webapp", file: "packages/rom-weaver-webapp/Dockerfile", source });
+  }
   const matrix = JSON.stringify(legs);
   process.stdout.write(`Docker legs: ${matrix}\n`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${matrix}\n`);

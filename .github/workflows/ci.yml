@@ -38,6 +38,7 @@ jobs:
       webapp: ${{ steps.classify.outputs.webapp }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      docker_source: ${{ steps.classify.outputs.docker_source }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
@@ -47,12 +48,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # A matrix can only be fed by an upstream job's output, so the shared
-      # target list is resolved here rather than in the job that consumes it.
-      - name: Resolve CLI platform matrix
-        id: cli-platforms
-        run: node scripts/ci/cli-platform-matrix.mjs
-
       - name: Classify changed paths
         id: classify
         env:
@@ -60,6 +55,16 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
         run: node scripts/ci/classify-workflow.mjs
+
+      # A matrix can only be fed by an upstream job's output, so the shared
+      # target list is resolved here rather than in the job that consumes it.
+      - name: Resolve CLI platform matrix
+        id: cli-platforms
+        env:
+          # Pull requests keep one native canary per release family. CI/tooling
+          # changes retain the complete matrix; main and manual runs always do.
+          FULL_MATRIX: ${{ github.event_name != 'pull_request' || steps.classify.outputs.full == 'true' }}
+        run: node scripts/ci/cli-platform-matrix.mjs
 
       # The image table lives here rather than in the `docker` job below because
       # a matrix can only be fed by an upstream job's output, and an unselected
@@ -71,6 +76,7 @@ jobs:
         env:
           CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
           WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
+          SOURCE_BUILD: ${{ github.event_name != 'pull_request' || steps.classify.outputs.docker_source == 'true' }}
         run: node scripts/ci/docker-matrix.mjs
 
   # Static analysis of the repository's own plumbing - workflows, Node.js
@@ -111,12 +117,10 @@ jobs:
   # that no longer builds surfaced at the moment it blocked a publish. hadolint
   # above reads the Dockerfile; it does not run it.
   #
-  # This job builds the images from source, and each leg is gated on its actual
-  # inputs rather than running for unrelated changes. The CLI leg includes its
-  # Cargo workspace sources, so the `Plumbing` aggregate always exercises the
-  # image when the binary changes. The webapp's source build remains
-  # image-plumbing only because its release path is exercised by the prebuilt
-  # smoke below.
+  # This job builds images from source for main/manual runs and for pull
+  # requests that change Docker or builder inputs. Ordinary pull requests keep
+  # the CLI prebuilt smoke below; the webapp's release-equivalent prebuilt path
+  # is exercised by docker-prebuilt.
   #
   # Reusing CI's cached wasm here is not an option: the CLI image contains no
   # wasm at all (it is `cargo build --release -p rom-weaver-cli`), and for the
@@ -156,12 +160,15 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: docker/setup-qemu-action@v3
+        if: matrix.source
         with:
           platforms: arm64
 
       - uses: docker/setup-buildx-action@v4
+        if: matrix.source
 
       - name: Log in to GitHub Container Registry
+        if: matrix.source
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -169,8 +176,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # On main this publishes the CLI `nightly` image and refreshes the build
-      # cache so the next release starts warm; on a pull request it only reads,
-      # because a fork's token cannot write to the registry.
+      # cache so the next release starts warm. A normal pull request skips the
+      # source build and only runs the prebuilt smoke below.
       #
       # Only the CLI leg publishes. This job builds the webapp image from
       # source, which is the image-plumbing path - it compiles its own wasm and
@@ -183,6 +190,7 @@ jobs:
       # not, so they are gated on the same expression rather than set outright.
       - name: Build image
         id: build
+        if: matrix.source
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -196,7 +204,7 @@ jobs:
           cache-to: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
 
       - name: Sign build provenance
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI'
+        if: matrix.source && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI'
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}

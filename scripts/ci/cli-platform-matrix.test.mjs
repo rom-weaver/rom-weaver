@@ -17,6 +17,13 @@ test("emits the platform list as a single-line matrix", () => {
   assert.deepEqual(JSON.parse(matrix), platforms);
 });
 
+test("PR matrix keeps one representative native target per release family", () => {
+  assert.deepEqual(
+    readPlatformMatrix(undefined, false).map((platform) => platform.package),
+    ["darwin-arm64", "linux-arm64-musl", "linux-x64-gnu", "win32-x64-msvc"],
+  );
+});
+
 // An empty matrix is a "matrix contains no values" hard error in Actions, but a
 // truncated one is worse: the run stays green having built nothing.
 test("rejects an empty list rather than emitting a matrix with no legs", () => {

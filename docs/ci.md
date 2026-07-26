@@ -41,6 +41,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
+| `ci-nightly.yml` | nightly 07:31 UTC, manual | No | All CLI targets and both source Docker builders |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `Gates/CLA Signed` and `Gates/PR Title Lint` checks |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
@@ -229,7 +230,7 @@ changes ── changed paths -> rust / webapp / security / repo_lint / docker le
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
              ├── rust-windows ──┤
-             └── cli-platforms ─┘ (9 release targets)
+             └── cli-platforms ─┘ (4 PR canaries; 9 nightly/release targets)
 
          ┌── webapp-static ───┐
          ├── webapp-browser ──┼── webapp (aggregate check name)
@@ -254,7 +255,7 @@ security ── advisories (warn only, always green)
 ### Jobs
 
 - **`changes`** classifies the pull request or push diff once. Rust and
-  vendored C changes select Rust, webapp integration, and the CLI image build -
+  vendored C changes select Rust, webapp integration, and the CLI image smoke -
   except Rust test, bench, and example sources, which select the Rust jobs
   alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
@@ -274,25 +275,15 @@ security ── advisories (warn only, always green)
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
-- **`docker`** builds the CLI and webapp images **from source**, so a broken
-  Dockerfile fails here rather than at the moment it
-  blocks a release publish. The CLI leg runs for Cargo workspace sources and
-  manifests as well as its image plumbing, so the required check builds the
-  image whenever its binary changes. An unselected leg is absent from the
-  matrix entirely rather than starting a runner to skip its own steps, which is
-  why the required check name is the `plumbing` aggregate and not the legs.
-  The webapp source leg runs only when its
-  image plumbing changes (the Dockerfile, `.dockerignore`,
-  `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
-  `docker-publish.yml`); ordinary webapp changes use the release-equivalent
-  prebuilt smoke below. On `main`, source builds also refresh their registry
-  cache, and the **CLI leg pushes `ghcr.io/rom-weaver/rom-weaver-cli:nightly`**
-  - the image half of the nightly deploy channel. A pull request never pushes,
-  because a fork's token cannot write to the registry. The webapp leg does not
-  publish: it compiles its own wasm, so its bundle is not the one
-  nightly.rom-weaver.com serves; that image comes from `docker-prebuilt` below.
-  The CLI leg additionally smokes the `BINARY=prebuilt` release path
-  with a stub binary whenever it is selected.
+- **`docker`** keeps the Docker image check on every relevant PR, but ordinary
+  source changes run only the cheap `BINARY=prebuilt` CLI smoke. Dockerfiles,
+  builder/toolchain inputs, and CI plumbing retain the full source build; main
+  pushes and manual runs do too. An unselected leg is absent from the matrix
+  entirely rather than starting a runner to skip its own steps, which is why
+  the required check name is the `plumbing` aggregate and not the legs.
+  `docker-prebuilt` covers the webapp's release-equivalent path below. The CLI
+  source leg still pushes `ghcr.io/rom-weaver/rom-weaver-cli:nightly` on main,
+  while the webapp nightly image comes from the exact bundle used by the site.
 
   Handing this job CI's cached wasm to lift the gate does not work. The CLI
   image contains no wasm at all - it is `cargo build --release -p
@@ -320,17 +311,18 @@ security ── advisories (warn only, always green)
   typegen drift, whitespace, thread guards, the Rust test suite, license
   attribution, `cargo deny` licenses/sources, unused dependencies, and a
   `cargo publish --dry-run`.
-- **`cli-platforms`** builds and packages every native release target before
-  release day: macOS arm64/x86-64; Linux x86-64 GNU plus arm64/i686/x86-64
-  musl; and Windows arm64/x86/x86-64 MSVC. Every binary verifies a SHA-256;
-  round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures;
-  and creates/applies fourteen patch formats on its target architecture. Native
-  arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs
-  only when Rust or native-package inputs change. Both the target list
+- **`cli-platforms`** builds four representative native release targets on a
+  pull request: macOS arm64, Linux arm64 musl, Linux x64 GNU, and Windows x64
+  MSVC. Every selected binary still verifies a SHA-256, round-trips ZIP, 7z,
+  and Z3DS, extracts fixed CHD, RVZ, TAR, and RAR fixtures, and creates/applies
+  fourteen patch formats. The complete nine-target matrix runs in
+  `ci-nightly.yml` and the release fan-out. Both the target list
   ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build
   itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform))
-  are shared with the release fan-out, so this job cannot cover a different set
-  of targets - or build them differently - than the one that ships.
+  remain shared, so nightly and release cannot silently drift apart.
+- **`ci-nightly.yml`** runs the complete nine-target CLI matrix and both
+  multi-architecture source Docker builders every night. It is informational;
+  the release fan-out remains the final required check before publishing.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p
   rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm`
   already compiles as a strict subset (the app build pulls `containers` in with
