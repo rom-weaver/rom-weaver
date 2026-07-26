@@ -152,6 +152,21 @@ jobs:
       - name: Install npm dependencies
         run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
+      # Runs the exact staged artifact the publish job will upload, on the
+      # oldest OS this target supports - the only check that a newer build image
+      # did not quietly raise the runtime floor. CI's own verify runs on the
+      # *build* runner, so for Darwin it cannot see that regression at all.
+      # Actions artifacts drop the executable bit; the publish helper restores it
+      # before packing, but this step must not depend on running after it.
+      - name: Verify release CLI
+        shell: bash
+        env:
+          BINARY: packages/rom-weaver-cli-platforms/${{ matrix.package }}/bin/${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_OS" == "Windows" ]] || chmod +x "$BINARY"
+          node scripts/verify-cli-platform.mjs "$BINARY"
+
       - name: Dry-run platform package publish
         shell: bash
         run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-cli-platforms/${{ matrix.package }}
