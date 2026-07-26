@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Post the required `Gates/PR Title Lint` commit status, and keep one comment
+// Post the required `PR Title Lint` commit status, and keep one comment
 // on the pull request for as long as - and only as long as - the title is
 // wrong.
 //
@@ -45,7 +45,7 @@ const {
   COMMITLINT_CONFIG = ".config/commitlint.config.mjs",
 } = process.env;
 
-const STATUS_CONTEXT = "Gates/PR Title Lint";
+const STATUS_CONTEXT = "PR Title Lint";
 const COMMENT_MARKER = "<!-- rom-weaver-pr-title-gate -->";
 // Matches the CLA gate's badge, for the same reason and from the same palette.
 // This gate has no signed-style twin: a passing title deletes the comment.

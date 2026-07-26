@@ -44,7 +44,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
-| `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `Gates/CLA Signed` and `Gates/PR Title Lint` checks |
+| `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -58,8 +58,8 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 
 `pull-request.yml` holds the two gates a **contributor** rather than the code has
-to clear: the CLA signature (`Gates/CLA Check` job) and a Conventional Commits
-pull request title (`Gates/PR Title Check` job). They share a file because they share every
+to clear: the CLA signature (`CLA Check` job) and a Conventional Commits pull
+request title (`Title Check` job), under the `PR Gates` workflow. They share a file because they share every
 constraint - each posts a commit status against the pull request head instead of
 relying on its own check run, each keeps exactly one marker comment on the
 thread, each has to work for a pull request from a fork, and each is required by
@@ -70,8 +70,8 @@ config all come from the base commit.
 
 | Script | Test | Posts |
 | --- | --- | --- |
-| `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `Gates/CLA Signed` |
-| `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `Gates/PR Title Lint` |
+| `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `CLA Signed` |
+| `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `PR Title Lint` |
 | `scripts/ci/github-api.mjs` | (exercised by both) | - |
 | `scripts/ci/commitlint-report.mjs` | (exercised by the title gate's step) | - |
 
@@ -119,17 +119,24 @@ unsigned verdict:
 
 | Signal | Meaning |
 | --- | --- |
-| `Gates/CLA Signed` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
-| `Gates/CLA Check` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
+| `CLA Signed` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
+| `CLA Check` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
 
 Requiring the **status** rather than the job name is load-bearing. A run
 triggered by `issue_comment` attaches its check run to the default branch rather
-than the pull request head, so a required `Gates/CLA Check` job would never be cleared by a
-contributor's signing comment - only by pushing a commit. The script posts
-`Gates/CLA Signed` against the head SHA explicitly, which works on both paths.
-The title gate posts `Gates/PR Title Lint` the same way, for consistency and so
-neither required check depends on how GitHub attaches a `pull_request_target`
-check run.
+than the pull request head, so a required `CLA Check` job would never be cleared
+by a contributor's signing comment - only by pushing a commit. The script posts
+`CLA Signed` against the head SHA explicitly, which works on both paths. The
+title gate posts `PR Title Lint` the same way, for consistency and so neither
+required check depends on how GitHub attaches a `pull_request_target` check run.
+
+The naming follows from that split. The jobs are named for the machinery and
+render under the workflow (`PR Gates / CLA Check`, `PR Gates / Title Check`);
+the statuses are named for the verdict and render bare in the ruleset's required
+list, so they carry the context the jobs get from the prefix (`CLA Signed`,
+`PR Title Lint`). Never give a job and a status the same name - the required-check
+picker lists check runs and commit statuses in one flat list, so a collision can
+silently bind the requirement to the check run, which is the broken half.
 
 **This replaced the hosted CLA Assistant app** ([#129] is the case that forced
 it). That app posted only in response to a `pull_request` event and offered no
@@ -216,13 +223,12 @@ from source (~6.5 min). Merging the release pull request is what sets
 `release_created` and unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
-> must use squash merge and pass `Rust`, `Webapp`, `Plumbing`,
-> `Gates/PR Title Lint`, and `Gates/CLA Signed`. The ruleset has no bypass
-> actors, so a status that is never reported blocks the merge outright - which
-> is why every required name belongs to an aggregate job that always runs, and
-> never to a job that path classification can skip or drop from a matrix, and
-> why `Gates/CLA Signed` comes from a workflow that can be rerun rather than an app that
-> cannot.
+> must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `PR Title Lint`,
+> and `CLA Signed`. The ruleset has no bypass actors, so a status that is never
+> reported blocks the merge outright - which is why every required name belongs
+> to an aggregate job that always runs, and never to a job that path
+> classification can skip or drop from a matrix, and why `CLA Signed` comes from
+> a workflow that can be rerun rather than an app that cannot.
 
 ## `ci.yml` - the required gate
 
