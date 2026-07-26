@@ -51,16 +51,18 @@ const collapseInternalBody = (body) => {
   }
 
   if (internal) collapsed.push("</details>");
-  return collapsed.join("\n");
+  const result = collapsed.join("\n");
+  return body.endsWith("\n") && !result.endsWith("\n") ? `${result}\n` : result;
 };
 
 const collapseInternalSection = (changelog, version) => {
-  const section = parseSections(changelog).find((entry) => entry.version === version);
-  if (!section) return changelog;
+  const normalized = changelog.replace(/<\/details>(?=## )/g, "</details>\n");
+  const section = parseSections(normalized).find((entry) => entry.version === version);
+  if (!section) return normalized;
   const bodyStart = section.start + section.heading.length;
-  const body = changelog.slice(bodyStart, section.end);
+  const body = normalized.slice(bodyStart, section.end);
   const collapsedBody = collapseInternalBody(body);
-  return changelog.slice(0, bodyStart) + collapsedBody + changelog.slice(section.end);
+  return normalized.slice(0, bodyStart) + collapsedBody + normalized.slice(section.end);
 };
 
 const addUnique = (entries, entry) => {
