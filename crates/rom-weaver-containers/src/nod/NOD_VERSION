@@ -1,14 +1,15 @@
 source: https://github.com/brandonocasey/nod
 branch: local-changes
-commit: 0648c5687529fd13cfd99f98d84935f4a8cf81f5
+commit: 23ce2cb1678e6686c1ac9b65301156795ff79941
 upstream: https://github.com/encounter/nod
 upstream-commit: ac12dba52493328e803a02df947d07f1fd82e168
-includes-prs: encounter/nod#27 encounter/nod#28
+includes-prs: encounter/nod#27 encounter/nod#28 encounter/nod#29
 refreshed-by: hand (there is no vendor-nod script)
 
 The inlined tree is not byte-identical to the branch above. Audited against
 0648c56 on 2026-07-25 by formatting both sides with identical stable rustfmt and
-diffing; 33 of 34 files pair up (python.rs is dropped). Every difference falls
+diffing; 33 of 34 files pair up (python.rs is dropped). 23ce2cb adds only the
+GameCube FST read in disc/reader.rs (encounter/nod#29), mirrored here verbatim. Every difference falls
 into one of these, and there are NO functional divergences:
 
   formatting     nod's rustfmt.toml is nightly (fn_single_line,
