@@ -16,6 +16,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`.github/actions/setup-build-env`](#githubactionssetup-build-env)
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
+  - [`.github/actions/docker-build-arch` and `docker-manifest`](#githubactionsdocker-build-arch-and-docker-manifest)
   - [`.github/cli-platforms.json`](#githubcli-platformsjson)
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
@@ -23,6 +24,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
+  - [Multi-arch images](#multi-arch-images)
   - [Draft-first releases](#draft-first-releases)
   - [Package managers publish last](#package-managers-publish-last)
   - [Prerelease routing](#prerelease-routing)
@@ -244,9 +246,12 @@ wasm ────┤
                                             (skips deploy's preview leg)
 
              ┌── repo-lint ───────────┐
-changes ─────┼── docker (0-2 legs) ───┼── plumbing (aggregate check name)
+changes ─────┼── docker (0-4 legs) ───┼── plumbing (aggregate check name)
              ├── wasm ────────────────┤
              └── docker-prebuilt ─────┘ (via webapp-static: the release COPY path)
+                    │      │
+                    │      └── docker-prebuilt-nightly ┐ manifest list + attest
+                    └───────── docker-nightly ─────────┘ (main pushes only)
 
 security ── advisories (warn only, always green)
 ```
@@ -281,13 +286,18 @@ security ── advisories (warn only, always green)
   image whenever its binary changes. An unselected leg is absent from the
   matrix entirely rather than starting a runner to skip its own steps, which is
   why the required check name is the `plumbing` aggregate and not the legs.
+  Each selected image expands to one leg per architecture - amd64 on
+  `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` - so nothing here runs under
+  emulation; see [Multi-arch images](#multi-arch-images).
   The webapp source leg runs only when its
   image plumbing changes (the Dockerfile, `.dockerignore`,
-  `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`, or
-  `docker-publish.yml`); ordinary webapp changes use the release-equivalent
+  `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`,
+  `docker-publish.yml`, or either shared Docker action); ordinary webapp changes
+  use the release-equivalent
   prebuilt smoke below. On `main`, source builds also refresh their registry
-  cache, and the **CLI leg pushes `ghcr.io/rom-weaver/rom-weaver-cli:nightly`**
-  - the image half of the nightly deploy channel. A pull request never pushes,
+  cache, and the **CLI legs push `ghcr.io/rom-weaver/rom-weaver-cli:nightly`**
+  - the image half of the nightly deploy channel - by digest, for
+  `docker-nightly` to tag. A pull request never pushes,
   because a fork's token cannot write to the registry. The webapp leg does not
   publish: it compiles its own wasm, so its bundle is not the one
   nightly.rom-weaver.com serves; that image comes from `docker-prebuilt` below.
@@ -308,7 +318,13 @@ security ── advisories (warn only, always green)
   image and the site are the same bundle. On `main` it pushes
   `ghcr.io/rom-weaver/rom-weaver-webapp:nightly`. The CLI equivalent
   stays in the image-gated `docker` leg instead of starting a separate runner
-  after every Rust or webapp change.
+  after every Rust or webapp change. It builds per architecture like `docker`
+  above: the bundle is architecture-independent, but the image around it is not
+  (a Node.js compression stage, an Alpine runtime).
+- **`docker-nightly`** and **`docker-prebuilt-nightly`** run on `main` pushes
+  only. The build legs above push tagless digests; these join each image's two
+  digests into the manifest list that actually claims `:nightly`, then attest
+  that list. See [Multi-arch images](#multi-arch-images).
 - **`wasm`** builds the production WASM module. This is the single most
   expensive step in the pipeline (~6.5 min) and it used to run twice, so it is
   built once here and shared with `webapp` and `deploy` as an artifact, and
@@ -623,6 +639,17 @@ release restores what CI already built rather than compiling a second,
 differently-configured copy. `cache-save` and `registry-url` are the only
 things the two callers set differently.
 
+### `.github/actions/docker-build-arch` and `docker-manifest`
+
+The two halves of every image build in the repository. `docker-build-arch`
+builds one architecture on a runner of that architecture and, when pushing,
+publishes it **by digest** under no tag; `docker-manifest` collects both digests
+and joins them into the manifest list that does claim the tags. `ci.yml` uses
+them for the `nightly` channel and `docker-publish.yml` for everything else, so
+the exporter, the per-architecture cache refs, and the digest hand-off are
+defined once. See [Multi-arch images](#multi-arch-images) for why the split
+exists and what it is worth.
+
 ### `.github/cli-platforms.json`
 
 The nine released CLI targets, and the single source for all four matrices that
@@ -746,9 +773,48 @@ Two consequences worth knowing:
   `deploy` job passes its own channel per target; an unset channel builds as
   `prod`, which is what a plain `npm run build` by a self-hoster should be.
 
-A prebuilt build deliberately does **not** write the `buildcache` tag: it has
+A prebuilt build deliberately does **not** write the buildcache ref: it has
 nothing expensive to cache, and exporting its handful of `COPY` layers would
 evict the source layer graph that the `docker` job in `ci.yml` restores.
+
+### Multi-arch images
+
+Every published image is a manifest list covering `linux/amd64` and
+`linux/arm64`, and **no leg of it runs under emulation**. Both `ci.yml` and
+`docker-publish.yml` build one architecture per job on a runner of that
+architecture - amd64 on `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` - through
+the shared `.github/actions/docker-build-arch`, then join the results with
+`.github/actions/docker-manifest`.
+
+The alternative, one job emulating arm64 through QEMU, is what the first
+multi-arch implementation did, and it is not close:
+
+| Build | QEMU on `ubuntu-24.04` | Native |
+| --- | --- | --- |
+| CLI image, from source | 81 min | ~6 min |
+| webapp image, from source | 121 min | ~9 min |
+| webapp image, `DIST=prebuilt` | 5 min | ~1.5 min |
+
+It took `ci.yml` on `main` from roughly 20 minutes to just over two hours.
+
+Two mechanics follow from the split:
+
+- The build legs push **by digest** (`push-by-digest=true`), claiming no tag.
+  Nothing is tagged until a later job runs `docker buildx imagetools create`
+  over both digests, so the two architectures can never race each other for
+  `:nightly` and a half-published tag cannot exist. The digests travel between
+  the jobs as artifacts rather than job outputs, because a matrix leg's outputs
+  collapse to whichever leg finished last. The merge fails outright if it finds
+  fewer than two - a manifest list quietly advertising one architecture pulls
+  fine on amd64 and fails only for the arm64 users it exists for.
+- Attestations name the **manifest list** digest, not either architecture's
+  image: that is what a `docker pull` of the tag resolves against. Per-arch
+  provenance and SBOMs still ride each leg's push.
+
+The registry build cache is keyed per architecture
+(`<image>:buildcache-amd64`, `<image>:buildcache-arm64`). One shared ref would
+have each leg overwrite the other's layers on every run, so neither would ever
+restore.
 
 ### Draft-first releases
 
@@ -934,7 +1000,7 @@ produces most of the garbage.
 
 ### Why the Docker build cache is not in this budget
 
-The image builds cache to `ghcr.io/rom-weaver/<image>:buildcache`, not
+The image builds cache to `ghcr.io/rom-weaver/<image>:buildcache-<arch>`, not
 `type=gha`.
 Publishing runs only when a release pull request merges, and Actions entries are
 evicted after seven days without a read, so a gha cache was reliably cold by the
@@ -942,7 +1008,7 @@ next release while `mode=max` still wrote the whole layer graph - Rust builder
 stage included - into the 10 GiB budget above. Those entries were also beyond
 the cleanup's reach, which reaps closed-pull-request scopes while these were
 written on a tag. A registry cache costs no Actions budget, expires on no timer,
-and the `docker` job in `ci.yml` reads the same ref.
+and the `docker` job in `ci.yml` reads the same refs.
 
 Cache **mounts** (`--mount=type=cache`) are a separate mechanism and remain
 local-only: BuildKit exports them to neither backend, so CI always pays a cold

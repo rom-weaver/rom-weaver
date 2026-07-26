@@ -35,29 +35,51 @@ permissions:
   packages: write
 
 jobs:
-  publish:
-    name: Publish ${{ matrix.name }} image
-    runs-on: ubuntu-24.04
+  # One leg per image per architecture, each on a runner of that architecture,
+  # each pushing a tagless digest that `publish` below joins into a manifest
+  # list. Emulating arm64 instead put a QEMU-bound build on the release path,
+  # which is measured in hours whenever the prebuilt fallback below trips.
+  build:
+    name: Build ${{ matrix.name }} image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
+          # `build_arg` selects the Dockerfile's prebuilt stage; `artifact` is
+          # the target-architecture output the rest of the fan-out already
+          # produced for that stage to assemble.
           - name: CLI
             image: rom-weaver-cli
-            context: .
             file: Dockerfile
-            # Selects the Dockerfile's prebuilt stage. The two artifacts are
-            # the target-architecture binaries that stage assembles the image
-            # from.
             build_arg: BINARY
+            arch: amd64
+            runner: ubuntu-24.04
             artifact: cli-binary-linux-x64-gnu
-            arm64_artifact: cli-binary-linux-arm64-musl
             prebuilt_path: prebuilt/amd64
+          - name: CLI
+            image: rom-weaver-cli
+            file: Dockerfile
+            build_arg: BINARY
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            artifact: cli-binary-linux-arm64-musl
+            prebuilt_path: prebuilt/arm64
           - name: webapp
             image: rom-weaver-webapp
-            context: .
             file: packages/rom-weaver-webapp/Dockerfile
             build_arg: DIST
+            arch: amd64
+            runner: ubuntu-24.04
+            artifact: webapp-dist
+            prebuilt_path: prebuilt
+          - name: webapp
+            image: rom-weaver-webapp
+            file: packages/rom-weaver-webapp/Dockerfile
+            build_arg: DIST
+            arch: arm64
+            runner: ubuntu-24.04-arm
             artifact: webapp-dist
             prebuilt_path: prebuilt
     steps:
@@ -65,12 +87,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
-
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - uses: docker/setup-buildx-action@v4
 
       # Every image here was previously rebuilt from source even though the rest
       # of the fan-out had already produced the exact same output from the exact
@@ -81,7 +97,9 @@ jobs:
       # bytes rather than two independent builds that ought to agree.
       #
       # A standalone workflow_dispatch has no sibling jobs and so no artifacts;
-      # that is not an error, it just falls back to building from source.
+      # that is not an error, it just falls back to building from source. Each
+      # architecture resolves this on its own artifact, so a missing arm64
+      # binary costs a source build on that leg only.
       - name: Download prebuilt artifact
         id: prebuilt
         continue-on-error: true
@@ -90,40 +108,98 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.prebuilt_path }}
 
-      - name: Download arm64 CLI binary
-        id: prebuilt_arm64
-        if: matrix.name == 'CLI'
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ matrix.arm64_artifact }}
-          path: prebuilt/arm64
-
       # The fallback is correct but slow, and it is otherwise invisible - a
       # release that quietly went back to compiling everything should say so.
       - name: Resolve build source
         id: source
         env:
           ARTIFACT: ${{ matrix.artifact }}
+          ARCH: ${{ matrix.arch }}
           # `sha` is supplied only by the release fan-out, and a reusable
           # workflow inherits its caller's event - so github.event_name cannot
           # tell the two entry points apart, but this can.
           EXPECTED: ${{ inputs.sha != '' }}
           NAME: ${{ matrix.name }}
-          PRIMARY_OUTCOME: ${{ steps.prebuilt.outcome }}
-          ARM64_OUTCOME: ${{ steps.prebuilt_arm64.outcome || '' }}
+          OUTCOME: ${{ steps.prebuilt.outcome }}
         run: |
-          if [ "$PRIMARY_OUTCOME" = success ] && \
-            { [ "$NAME" != CLI ] || [ "$ARM64_OUTCOME" = success ]; }; then
+          if [ "$OUTCOME" = success ]; then
             value=prebuilt
           else
             value=source
             if [ "$EXPECTED" = true ]; then
-              echo "::warning::no ${ARTIFACT} artifact; rebuilding the ${NAME} image from source"
+              echo "::warning::no ${ARTIFACT} artifact; rebuilding the ${NAME} ${ARCH} image from source"
             fi
           fi
           echo "value=$value" >> "$GITHUB_OUTPUT"
-          echo "building the ${NAME} image from ${value}"
+          echo "building the ${NAME} ${ARCH} image from ${value}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve tag policy
+        id: policy
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: node scripts/ci/docker-tag-policy.mjs
+
+      # Consumed for its labels only - `org.opencontainers.image.version` is
+      # taken from the primary tag, so the version still has to be right here.
+      # Which tags the image answers to is decided once, by the manifest list
+      # `publish` assembles; these legs are pushed by digest and claim none.
+      - id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: type=semver,pattern={{version}},value=${{ steps.policy.outputs.version }}
+
+      # The build cache lives in the registry beside the images, not in
+      # `type=gha`. This job only runs when a release pull request merges, and
+      # Actions cache entries are evicted after seven days without a read, so a
+      # gha cache was reliably cold by the next release - while `mode=max` still
+      # wrote the whole layer graph, Rust builder stage included, into the 10 GiB
+      # repository budget that `cache-cleanup.yml` exists to defend. Those
+      # entries also sat outside its reach: it reaps closed-pull-request scopes,
+      # and these were written on a tag. A registry cache costs no Actions
+      # budget, never expires on a timer, and CI reads the same refs.
+      - name: Build and push image
+        uses: ./.github/actions/docker-build-arch
+        with:
+          image: ${{ matrix.image }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          arch: ${{ matrix.arch }}
+          registry-owner: ${{ github.repository_owner }}
+          push: "true"
+          # Only a source build has anything worth caching, and only a source
+          # build produces the layer graph the CI image job restores. Exporting
+          # a prebuilt graph here would overwrite the buildcache ref with a
+          # handful of cheap COPY layers and leave the next Dockerfile pull
+          # request to pay a cold compile.
+          cache-to: ${{ steps.source.outputs.value == 'source' }}
+
+  publish:
+    name: Publish ${{ matrix.name }} image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CLI
+            image: rom-weaver-cli
+          - name: webapp
+            image: rom-weaver-webapp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -136,20 +212,9 @@ jobs:
       # `0.6.0`) and decides which moving tags are safe for this version.
       - name: Resolve tag policy
         id: policy
-        run: |
-          version="${{ inputs.version || github.ref_name }}"
-          version="${version#v}"
-          case "$version" in *-*) release=false ;; *) release=true ;; esac
-          major="${version%%.*}"
-          # `0` would float across 0.5 -> 0.6, which semver treats as breaking,
-          # so the major series tag only starts at 1.0.0.
-          if [ "$release" = true ] && [ "$major" != 0 ]; then major_tag=true; else major_tag=false; fi
-          {
-            echo "version=$version"
-            echo "release=$release"
-            echo "major_tag=$major_tag"
-          } >> "$GITHUB_OUTPUT"
-          echo "version=$version release=$release major_tag=$major_tag"
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: node scripts/ci/docker-tag-policy.mjs
 
       - id: metadata
         uses: docker/metadata-action@v6
@@ -174,39 +239,19 @@ jobs:
             type=raw,value=beta
             type=raw,value=nightly
 
-      # The build cache lives in the registry beside the images, not in
-      # `type=gha`. This job only runs when a release pull request merges, and
-      # Actions cache entries are evicted after seven days without a read, so a
-      # gha cache was reliably cold by the next release - while `mode=max` still
-      # wrote the whole layer graph, Rust builder stage included, into the 10 GiB
-      # repository budget that `cache-cleanup.yml` exists to defend. Those
-      # entries also sat outside its reach: it reaps closed-pull-request scopes,
-      # and these were written on a tag. A registry cache costs no Actions
-      # budget, never expires on a timer, and CI reads the same ref.
-      - name: Build and push image
-        id: build
-        uses: docker/build-push-action@v7
+      - name: Assemble the manifest list
+        id: manifest
+        uses: ./.github/actions/docker-manifest
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          provenance: mode=max
-          sbom: true
+          image: ${{ matrix.image }}
+          registry-owner: ${{ github.repository_owner }}
           tags: ${{ steps.metadata.outputs.tags }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:buildcache
-          # Only a source build has anything worth caching, and only a source
-          # build produces the layer graph the CI image job restores. Exporting
-          # a prebuilt graph here would overwrite `buildcache` with a handful of
-          # cheap COPY layers and leave the next Dockerfile pull request to pay
-          # a cold compile.
-          cache-to: ${{ steps.source.outputs.value == 'source' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', github.repository_owner, matrix.image) || '' }}
 
+      # The manifest list, not either architecture's image: that is what a pull
+      # of any of the tags above resolves against.
       - name: Sign build provenance
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true

@@ -88,7 +88,14 @@ export function classifyChanges(paths, all = false) {
       path === "packages/rom-weaver-webapp/sws.toml" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
     ) result.docker_webapp = true;
-    if (path === ".dockerignore" || path === "docker-compose.yml" || path === ".github/workflows/docker-publish.yml") {
+    if (
+      path === ".dockerignore" ||
+      path === "docker-compose.yml" ||
+      path === ".github/workflows/docker-publish.yml" ||
+      // Both images are built and tagged through these, so an edit to either
+      // has to be exercised on an image before it reaches a release.
+      /^\.github\/actions\/docker-(?:build-arch|manifest)\//.test(path)
+    ) {
       result.docker_cli = true;
       result.docker_webapp = true;
     }
