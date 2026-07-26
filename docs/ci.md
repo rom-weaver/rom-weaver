@@ -238,7 +238,7 @@ changes ── changed paths -> rust / webapp / security / repo_lint / docker le
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
              ├── rust-windows ──┤
-             └── cli-platforms ─┘ (9 release targets)
+             └── cli-platforms ─┘ (9 release targets; 4 on a pull request)
 
          ┌── webapp-static ───┐
          ├── webapp-browser ──┼── webapp (aggregate check name)
@@ -360,13 +360,20 @@ security ── advisories (warn only, always green)
   typegen drift, whitespace, thread guards, the Rust test suite, license
   attribution, `cargo deny` licenses/sources, unused dependencies, and a
   `cargo publish --dry-run`.
-- **`cli-platforms`** builds and packages every native release target before
+- **`cli-platforms`** builds and packages the native release targets before
   release day: macOS arm64/x86-64; Linux x86-64 GNU plus arm64/i686/x86-64
   musl; and Windows arm64/x86/x86-64 MSVC. Every binary verifies a SHA-256;
   round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures;
   and creates/applies fourteen patch formats on its target architecture. Native
   arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs
-  only when Rust or native-package inputs change. Both the target list
+  only when Rust or native-package inputs change. **Pull requests build four of
+  the nine** - the entries marked `pr` in
+  ([`.github/cli-platforms.json`](#githubcli-platformsjson)): one representative
+  leg per OS family plus `linux-arm64-musl`, whose artifact `cli-linux-arm64`
+  consumes. Nine legs put ~7.5 minutes of Windows and macOS compile on the
+  critical path of every Rust pull request; pushes to main and manual dispatches
+  still build all nine, and every main commit is a release candidate, so full
+  coverage always lands before a release. Both the target list
   ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build
   itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform))
   are shared with the release fan-out, so this job cannot cover a different set
@@ -659,6 +666,11 @@ build dependencies, `cross` for the musl targets, and - for Windows - the
 `vswhere` + `VsDevCmd.bat` dance that puts the right MSVC toolchain on `PATH`
 for the cross-arch legs.
 
+The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and
+`TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same
+IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has
+no such drive; `windows-11-arm`'s disk layout is not documented.
+
 CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a
 release restores what CI already built rather than compiling a second,
 differently-configured copy. `cache-save` and `registry-url` are the only
@@ -689,6 +701,13 @@ that *compiles* a target, the second the host that can *execute* the result.
 They differ for `linux-arm64-musl`, which cross-builds on x64, and for both
 Darwin targets, which build on the newest macOS image and are executed back on
 the oldest one still offered - see below.
+
+`pr` marks the four entries a pull request builds: `linux-x64-gnu`,
+`darwin-arm64`, `win32-x64-msvc` (one fast leg per OS family) and
+`linux-arm64-musl`, whose artifact `cli-linux-arm64` downloads. The script
+narrows to them only when `EVENT_NAME=pull_request`; every other caller -
+including the release fan-out's `plan` job, which passes no event at all - gets
+all nine.
 
 ### macOS support floor
 

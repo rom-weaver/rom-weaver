@@ -46,6 +46,37 @@ inputs:
 runs:
   using: composite
   steps:
+    # The Windows runners' C: is remote-backed managed storage (~4-6k IOPS and
+    # often worse); D: is the local temp disk (~9-19k IOPS). Move the hot paths
+    # off C:: the crate registry and installed cargo binaries, the toolchain
+    # rustc/std read on every compile, and the temp dirs the build churns
+    # through. rustup, taiki-e/install-action, and rust-cache all honor these,
+    # which is why this runs before the toolchain and cache steps below.
+    #
+    # D: is not documented as guaranteed - the win32-arm64 leg runs on
+    # windows-11-arm, whose disk layout the runner-images docs do not state - so
+    # the cargo/rustup moves are conditional on it existing. RUNNER_TEMP is
+    # wherever the runner put it and is always the better temp dir, so TMP/TEMP
+    # move either way. A one-time cache re-population is expected the first time
+    # this lands; the shared-key scheme is unchanged.
+    - name: Move Windows hot paths off the OS disk
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "TMP=$RUNNER_TEMP"
+          echo "TEMP=$RUNNER_TEMP"
+        } >> "$GITHUB_ENV"
+        if [ -d "/d" ]; then
+          {
+            echo 'CARGO_HOME=D:\cargo-home'
+            echo 'RUSTUP_HOME=D:\rustup-home'
+          } >> "$GITHUB_ENV"
+        else
+          echo "no D: drive on this runner; leaving CARGO_HOME/RUSTUP_HOME on C:"
+        fi
+
     - uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ inputs.target }}
