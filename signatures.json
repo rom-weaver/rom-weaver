@@ -2,9 +2,9 @@
   {
     "login": "brandonocasey",
     "id": 2381475,
-    "pullRequest": 169,
-    "signedAt": "2026-07-24T22:26:27Z",
-    "claVersion": "1.0",
-    "cla": "https://github.com/rom-weaver/rom-weaver/blob/2e497f68201d4372ea4b957f3902d999e755336a/CLA.md"
+    "pullRequest": 214,
+    "signedAt": "2026-07-26T15:43:47Z",
+    "claVersion": "2.0",
+    "cla": "https://github.com/rom-weaver/rom-weaver/blob/77abde8dd098211a9d3fad46b1622b147d01bc22/CLA.md"
   }
 ]
