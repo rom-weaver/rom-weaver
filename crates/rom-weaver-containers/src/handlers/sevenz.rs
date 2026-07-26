@@ -172,8 +172,8 @@ fn lzma2_budget_max_threads() -> Option<usize> {
 
 fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
     // Encoder match finder ~11.5x the dictionary, plus the input chunk (up to
-    // 4x the dictionary - the C writer's split cap), its seed prefix, and the
-    // output buffer: ~20x the dictionary per worker at the block-size cap.
+    // 2x the dictionary - the C writer's split cap), its seed prefix, and the
+    // output buffer: ~20x the dictionary per worker is a conservative bound.
     lzma2_effective_dict_bytes(total_bytes, level)
         .saturating_mul(20)
         .max(1)
