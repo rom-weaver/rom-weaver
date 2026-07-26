@@ -189,7 +189,9 @@ pub(crate) use sevenz::SevenZContainerHandler;
 #[cfg(test)]
 pub(crate) use sevenz::SevenZMethod;
 #[cfg(test)]
-pub(crate) use sevenz::{lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits};
+pub(crate) use sevenz::{
+    lzma2_preset_dict_bytes, lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits,
+};
 
 #[path = "handlers/rar.rs"]
 mod rar;

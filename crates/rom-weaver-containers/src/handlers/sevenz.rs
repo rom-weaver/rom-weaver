@@ -121,17 +121,23 @@ fn lzma2_achievable_blocks(total_bytes: u64) -> usize {
     usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_CHUNK_BYTES).max(1)).unwrap_or(usize::MAX)
 }
 
-/// liblzma preset dictionary size for a 0..=9 level (matches `lzma_lzma_preset`).
-fn lzma2_preset_dict_bytes(level: u32) -> u64 {
-    match level {
-        0 => 256 << 10,
-        1 => 1 << 20,
-        2 => 2 << 20,
-        3 | 4 => 4 << 20,
-        5 | 6 => 8 << 20,
-        7 => 16 << 20,
-        8 => 32 << 20,
-        _ => 64 << 20,
+/// Half the target's pointer width in bytes - `sizeof(size_t) / 2` as the C
+/// writer and `LzmaEncProps_Normalize` spell it.
+const LZMA2_DICT_POINTER_HALF_BYTES: u32 = usize::BITS / 16;
+
+/// Per-level LZMA2 dictionary size, mirroring the 7-Zip table the C writer
+/// applies (probed from 7zz 26.02: 256 KiB at level 1 up to 256 MiB at 8/9).
+/// A 32-bit target tops out at 64 MiB, exactly as `LzmaEncProps_Normalize`
+/// does: a 256 MiB dictionary needs a ~3 GiB match finder, which fits no
+/// 32-bit address space (wasm32's linear memory, linux-ia32, win32-ia32).
+pub(crate) fn lzma2_preset_dict_bytes(level: u32) -> u64 {
+    let level = level.min(9);
+    if level <= 4 {
+        1u64 << (level * 2 + 16)
+    } else if level <= LZMA2_DICT_POINTER_HALF_BYTES + 4 {
+        1u64 << (level + 20)
+    } else {
+        1u64 << (LZMA2_DICT_POINTER_HALF_BYTES + 24)
     }
 }
 
@@ -167,8 +173,11 @@ fn lzma2_budget_max_threads() -> Option<usize> {
 }
 
 fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
+    // Encoder match finder ~11.5x the dictionary, plus the input chunk (up to
+    // 4x the dictionary - the C writer's split cap), its seed prefix, and the
+    // output buffer: ~20x the dictionary per worker at the block-size cap.
     lzma2_effective_dict_bytes(total_bytes, level)
-        .saturating_mul(12)
+        .saturating_mul(20)
         .max(1)
 }
 
@@ -186,7 +195,7 @@ pub(crate) fn lzma2_threads_for_budget_with_limits(
 }
 
 /// Cap the worker count so peak memory fits a fraction of system RAM. Each seeded
-/// block runs its own full-dictionary encoder (~12x the dictionary including the
+/// block runs its own full-dictionary encoder (~20x the dictionary including the
 /// seed copy and buffers), so on a memory-constrained host this collapses toward
 /// a single encoder (close to single-thread 7-Zip), while a large host keeps more
 /// workers.
