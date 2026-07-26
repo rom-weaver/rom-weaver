@@ -1,6 +1,16 @@
 pre-commit:
-  # Run independent checks concurrently. The cargo commands share one target
-  # dir and serialize on its build lock, but the npm checks overlap with them.
+  # Run independent checks concurrently.
+  #
+  # The three cargo commands below each get their own CARGO_TARGET_DIR. On a
+  # shared dir they serialize on Cargo's build lock, so `parallel: true` bought
+  # almost nothing: measured on a one-line edit to rom-weaver-core, three in
+  # parallel took 32.3s against 34.9s run back to back. Split dirs: 17.4s. Cold,
+  # it is ~400s serial against ~187s (the wasm check alone). Costs ~1.5 GB of
+  # target/ per checkout and one warm-up build each.
+  #
+  # Hook-local on purpose. CI's `rust-host` job runs clippy and typegen-check
+  # sequentially in one job, so splitting there would only duplicate dependency
+  # artifacts into its rust-cache entry against the shared 10 GiB budget.
   parallel: true
   commands:
     # `glob` only gates whether a command runs (no `{staged_files}` template, so
@@ -14,10 +24,14 @@ pre-commit:
       run: mise run clippy
     rust-typegen:
       glob: "*.rs"
-      run: mise run typegen-check
+      run: CARGO_TARGET_DIR=target/hook-typegen mise run typegen-check
+    # No RUSTFLAGS override here: the env var replaces the configured
+    # [target.wasm32-wasip1-threads] rustflags rather than extending them, which
+    # is how this check spent its life verifying the non-threaded config.
+    # `-D warnings` lives in .cargo/config.toml alongside the rest of the list.
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
-      run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check'
+      run: CARGO_TARGET_DIR=target/hook-wasm mise run wasm-check
     licenses-check:
       glob: "*.{toml,lock}"
       run: mise run licenses-check

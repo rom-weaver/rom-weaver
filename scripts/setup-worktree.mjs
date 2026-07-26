@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -8,13 +8,39 @@ import { pathToFileURL } from "node:url";
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
+// The pre-commit hook runs typegen-check and wasm-check in their own target
+// dirs so the three cargo commands stop serializing on Cargo's build lock (see
+// .config/lefthook.yml). A fresh worktree starts with both empty, which turns
+// its first Rust commit into a multi-minute build. Warm them here instead.
+//
+// The env has to match the hook's exactly or the fingerprints differ and the
+// warm-up buys nothing; setup-worktree.test.mjs asserts these stay in sync with
+// the hook. Primed in parallel - separate target dirs is the whole point.
+export const HOOK_CARGO_PRIMES = [
+  { task: "typegen-check", targetDir: "target/hook-typegen", rustflags: "" },
+  { task: "wasm-check", targetDir: "target/hook-wasm", rustflags: "" },
+];
+
+export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
+  return Promise.all(primes.map((prime) => new Promise((done) => {
+    const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir };
+    if (prime.rustflags) env.RUSTFLAGS = `${process.env.RUSTFLAGS ?? ""} ${prime.rustflags}`.trim();
+    execFile("mise", ["run", prime.task], { cwd: root, env }, (error) => {
+      // Advisory: wasm-check needs the WASI SDK, and a worktree is still usable
+      // without it. Failing setup here would strand a checkout that works.
+      process.stdout.write(error ? `  ${prime.task} could not be primed (${error.message.split("\n")[0]})\n` : `  primed ${prime.targetDir}\n`);
+      done();
+    }).stderr?.pipe(process.stderr);
+  })));
+}
+
 export function worktreePaths(cwd = process.cwd()) {
   const root = git(["rev-parse", "--show-toplevel"], cwd);
   const commonDir = resolve(cwd, git(["rev-parse", "--git-common-dir"], cwd));
   return { root, main: dirname(commonDir) };
 }
 
-export function main(cwd = process.cwd()) {
+export async function main(cwd = process.cwd(), { prime = true } = {}) {
   const { root, main: mainRoot } = worktreePaths(cwd);
   if (root === mainRoot) throw new Error("setup-worktree: run this from inside a worktree, not the main checkout");
   process.stdout.write("setup-worktree: npm ci (root)\n");
@@ -35,9 +61,14 @@ export function main(cwd = process.cwd()) {
     cpSync(join(source, "third_party"), join(destination, "third_party"), { recursive: true });
     process.stdout.write("  copied third_party/ from main checkout\n");
   }
+  if (prime) {
+    process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
+    await primeHookTargets(root);
+  }
   process.stdout.write(`setup-worktree: done for ${root}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { main(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
+  main(process.cwd(), { prime: !process.argv.includes("--no-prime") })
+    .catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
