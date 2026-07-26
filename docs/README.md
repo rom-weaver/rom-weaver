@@ -50,6 +50,8 @@ Choose the guide that matches what you are trying to do.
   builds, the dev server, tests, generated files, and linked worktrees.
 - [Architecture](ARCHITECTURE.md): workspace layout, crate graph, command core,
   browser boundary, OPFS, workers, and test organization.
+- [Performance](performance.md): the benchmark harnesses, recorded results
+  against chdman, dolphin-tool, 7zz, and Info-ZIP, and how to reproduce them.
 - [Browser concurrency](browser-concurrency.md): shared memory, worker protocols,
   the thread-start barrier, the OPFS proxy, and file ownership.
 - [Mobile Safari verification](mobile-safari-verification.md): automated and

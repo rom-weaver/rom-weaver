@@ -267,3 +267,22 @@ run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 description = "Run the full local quality gate (mirrors CI)"
 depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
 run = "node {{ config_root }}/scripts/run-ci.mjs"
+
+# Benchmarks are not part of `ci`: they need a corpus of real disc images, which
+# is not redistributable and so cannot live in the repository. Point BENCH_CORPUS
+# at your own. See docs/performance.md.
+[tasks.bench-chd]
+description = "Benchmark CHD compress/extract against chdman (needs BENCH_CORPUS, hyperfine, chdman)"
+run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite chd --corpus '{{ env.BENCH_CORPUS }}'"
+
+[tasks.bench-rvz]
+description = "Benchmark RVZ compress/extract against dolphin-tool (needs BENCH_CORPUS, hyperfine, dolphin-tool)"
+run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite rvz --corpus '{{ env.BENCH_CORPUS }}'"
+
+[tasks.bench-7z]
+description = "Benchmark 7z LZMA2 compress/extract against 7zz (needs BENCH_CORPUS, hyperfine, 7zz)"
+run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite 7z --corpus '{{ env.BENCH_CORPUS }}'"
+
+[tasks.bench-zip]
+description = "Benchmark zip deflate compress/extract against Info-ZIP (needs BENCH_CORPUS, hyperfine, zip/unzip)"
+run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite zip --corpus '{{ env.BENCH_CORPUS }}'"
