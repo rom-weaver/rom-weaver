@@ -16,7 +16,7 @@ const repoRoot = join(here, "..", "..");
 
 const REPO = "rom-weaver/rom-weaver";
 const HEAD_SHA = "deadbeef";
-const STATUS_CONTEXT = "Gates/PR Title Lint";
+const STATUS_CONTEXT = "PR Title Lint";
 const MARKER = "<!-- rom-weaver-pr-title-gate -->";
 // Verbatim from commitlint, so a test that asserts on rendering asserts on the
 // text a contributor really gets.

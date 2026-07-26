@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Post the required `Gates/CLA Signed` commit status for a pull request, and record
+// Post the required `CLA Signed` commit status for a pull request, and record
 // signatures given by comment.
 //
 // This replaces the hosted CLA Assistant app, which only ever posted in
@@ -47,7 +47,7 @@ const CLA_DOCUMENT =
 // there leaves contributors typing a phrase this gate will not accept.
 const SIGN_PHRASE = "I have read and agree to the CLA";
 const COMMENT_MARKER = "<!-- rom-weaver-cla-gate -->";
-const STATUS_CONTEXT = "Gates/CLA Signed";
+const STATUS_CONTEXT = "CLA Signed";
 // The verdict at a glance, the way the CLA Assistant comment carried one.
 // shields.io is already the badge service the README uses, and these are static
 // URLs - they encode no repository, pull request or contributor, so GitHub's
@@ -262,10 +262,10 @@ Edit a comment or post another to retry.${
 
 console.error(`${STATUS_CONTEXT} failure on ${headSha}; unsigned: ${unsigned.join(" ")}`);
 
-// Exit 0 on an unsigned verdict, deliberately. The `Gates/CLA Signed` status is the
+// Exit 0 on an unsigned verdict, deliberately. The `CLA Signed` status is the
 // single signal for CLA compliance and the one the ruleset can require; a red
 // job on top of it says the same thing twice. Keeping the job green here means
-// a red `CLA` job says something the status cannot: the gate itself broke - a
+// a red `CLA Check` job says something the status cannot: the gate itself broke - a
 // failed API call, an unparseable signature file - rather than someone simply
 // not having signed. Every other failure path throws.
 process.exit(0);

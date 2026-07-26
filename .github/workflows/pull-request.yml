@@ -1,4 +1,4 @@
-name: Pull request gates
+name: PR Gates
 
 # The two gates a contributor - rather than the code - has to clear: the CLA
 # signature and a Conventional Commits pull request title. They share a file
@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   cla:
-    name: Gates/CLA Check
+    name: CLA Check
     # A title edit cannot change who signed, and `issue_comment` fires on plain
     # issues too, and on every unrelated comment.
     #
@@ -81,7 +81,7 @@ jobs:
         run: node scripts/ci/cla-gate.mjs
 
   pr-title:
-    name: Gates/PR Title Check
+    name: Title Check
     # Only a title edit can change the outcome; body and base edits cannot. A
     # comment cannot change it at all, so this half sits out `issue_comment`.
     if: >-

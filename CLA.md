@@ -105,7 +105,7 @@ it.
 
 ## 7. Practicalities
 
-- Sign on your first pull request. The `Gates/CLA Signed` check comments there
+- Sign on your first pull request. The `CLA Signed` check comments there
   asking for a signature; reply in a new comment on that pull request whose own
   line reads:
 

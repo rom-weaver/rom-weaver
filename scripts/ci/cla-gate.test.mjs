@@ -15,7 +15,7 @@ const repoRoot = join(here, "..", "..");
 
 const REPO = "rom-weaver/rom-weaver";
 const HEAD_SHA = "deadbeef";
-const STATUS_CONTEXT = "Gates/CLA Signed";
+const STATUS_CONTEXT = "CLA Signed";
 const SIGN_PHRASE = "I have read and agree to the CLA";
 
 // A stand-in GitHub API. Serving real HTTP means the script's own JSON parsing,
