@@ -29,11 +29,26 @@ const LZMA_SDK_CORE_SOURCES: &[&str] = &[
 ];
 const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c", "Threads.c"];
 // The hand-written LZMA decode loop. Same bitstream as the C fallback and what
-// 7zz itself runs on arm64; measured ~26% off a 1 GiB LZMA1 extract. Only the
-// arm64 port is GNU-as syntax - the x86-64 one is MASM and needs an assembler
-// this repo does not carry, so x86-64 stays on LzmaDec.c's C loop.
+// 7zz itself runs; measured ~26% off a 1 GiB LZMA1 extract on arm64. Without it
+// the SDK's C decoder is no faster than liblzma's, so this is the whole extract
+// win.
+//
+// arm64 is GNU-as syntax and clang assembles it directly. x86-64 is MASM syntax
+// and needs a MASM-compatible assembler at build time; `lzma_sdk_x86_asm_object`
+// probes for one and the build silently falls back to the C loop when there is
+// none. See docs/vendor-code.md for the per-platform matrix.
 const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
 const LZMA_SDK_ARM64_ASM_SOURCES: &[&str] = &["arm64/LzmaDecOpt.S"];
+const LZMA_SDK_X86_ASM_SOURCE: &str = "x86/LzmaDecOpt.asm";
+// Probed in order. jwasm is first because it is the one that builds from source
+// on any host in seconds (Sybase Open Watcom licence, plain C), which is what
+// the Docker/CI images install. asmc is upstream's own default and ships a
+// prebuilt static Linux binary; uasm is the third MASM-compatible option; ml64
+// is MASM proper and is simply already there on a Windows box with MSVC.
+const LZMA_SDK_X86_ASSEMBLERS: &[&str] = &["jwasm", "asmc", "asmc64", "uasm", "ml64"];
+// Explicit override: an absolute path (or bare command name) to use instead of
+// probing. ROM_WEAVER_UASM is accepted as an alias for the same thing.
+const LZMA_SDK_ASM_ENV: &[&str] = &["ROM_WEAVER_LZMA_ASM", "ROM_WEAVER_UASM"];
 // Every directory whose CMakeLists.txt adds a `test` subdirectory that
 // scripts/vendor-libarchive.mjs prunes.
 const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
@@ -223,6 +238,7 @@ pub fn build() {
     let lzma_asm_dir = manifest_dir.join(VENDORED_LZMA_SDK_ASM);
     println!("cargo:rerun-if-changed={}", lzma_sdk_dir.display());
     println!("cargo:rerun-if-changed={}", lzma_glue_dir.display());
+    println!("cargo:rerun-if-changed={}", lzma_asm_dir.display());
 
     build_libarchive(&source_dir, &lzma_glue_dir, target_sysroot.as_deref());
     // After libarchive: the 7z reader/writer objects inside libarchive.a
@@ -238,6 +254,146 @@ fn lzma_sdk_threads_enabled() -> bool {
 
 fn lzma_sdk_arm64_asm_enabled() -> bool {
     !is_wasm32_target() && env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("aarch64")
+}
+
+fn is_x86_64_target() -> bool {
+    !is_wasm32_target() && env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("x86_64")
+}
+
+/// How the target OS wants the SDK's x86-64 assembly packaged, as flags for a
+/// MASM-compatible assembler. `None` means no assembler this build knows about
+/// can emit the target's object format.
+///
+/// Mach-O is the gap: jwasm has no Mach-O writer at all, asmc only builds on an
+/// x86 host, and uasm carries a `macho64.c` but does not compile on a modern
+/// Unix host. So `x86_64-apple-darwin` keeps the C decode loop rather than
+/// growing a bespoke object-format shim for it.
+fn lzma_sdk_x86_asm_format() -> Option<Vec<String>> {
+    match env::var("CARGO_CFG_TARGET_OS").ok().as_deref()? {
+        // ABI_LINUX switches 7zAsm.asm to the SysV register order; every
+        // SysV-ABI ELF platform wants it, not just Linux.
+        "linux" | "android" | "freebsd" | "netbsd" | "openbsd" | "dragonfly" => {
+            Some(vec!["-elf64".to_string(), "-DABI_LINUX".to_string()])
+        }
+        "windows" => Some(vec!["-win64".to_string()]),
+        _ => None,
+    }
+}
+
+fn lzma_sdk_asm_candidates() -> Vec<String> {
+    let mut candidates: Vec<String> = LZMA_SDK_ASM_ENV
+        .iter()
+        .filter_map(|name| {
+            println!("cargo:rerun-if-env-changed={name}");
+            env::var(name).ok()
+        })
+        .filter(|value| !value.trim().is_empty())
+        .collect();
+    if candidates.is_empty() {
+        candidates.extend(
+            LZMA_SDK_X86_ASSEMBLERS
+                .iter()
+                .map(|name| (*name).to_string()),
+        );
+    }
+    candidates
+}
+
+/// Assemble the SDK's x86-64 decode loop, returning the object to fold into the
+/// static library. Every failure path returns `None` after a `cargo:warning`:
+/// the assembler is an optimisation, and a machine without one must still get a
+/// working build.
+fn lzma_sdk_x86_asm_object(asm_dir: &Path, out_dir: &Path) -> Option<PathBuf> {
+    let format_flags = match lzma_sdk_x86_asm_format() {
+        Some(flags) => flags,
+        None => {
+            println!(
+                "cargo:warning=lzma-sdk: no MASM-compatible assembler emits this target's \
+object format, so 7z decode uses the portable C loop (slower than 7zz). See \
+docs/vendor-code.md."
+            );
+            return None;
+        }
+    };
+
+    let source = asm_dir.join(LZMA_SDK_X86_ASM_SOURCE);
+    if !source.is_file() {
+        println!(
+            "cargo:warning=lzma-sdk: {} is missing; 7z decode uses the portable C loop.",
+            source.display()
+        );
+        return None;
+    }
+    let include_dir = source.parent()?.to_path_buf();
+    let object = out_dir.join("lzma_sdk_LzmaDecOpt.o");
+
+    let mut attempted = Vec::new();
+    for candidate in lzma_sdk_asm_candidates() {
+        // ml64 is MASM proper: MSVC switch syntax, and it has no -elf64 to
+        // offer, so it is only ever a Windows answer.
+        let is_ml64 = Path::new(&candidate)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(|stem| stem.eq_ignore_ascii_case("ml64"))
+            .unwrap_or(false);
+        let mut command = std::process::Command::new(&candidate);
+        if is_ml64 {
+            if !format_flags.iter().any(|flag| flag == "-win64") {
+                continue;
+            }
+            command
+                .arg("/c")
+                .arg(format!("/I{}", include_dir.display()))
+                .arg(format!("/Fo{}", object.display()));
+        } else {
+            // No banner-suppression flag: each assembler spells it
+            // differently, and the output is captured either way.
+            command
+                .arg("-c")
+                .args(&format_flags)
+                .arg(format!("-I{}", include_dir.display()))
+                .arg(format!("-Fo{}", object.display()));
+        }
+        command.arg(&source);
+
+        let _ = fs::remove_file(&object);
+        match command.output() {
+            // A missing assembler is the common case, not an error worth
+            // reporting per candidate. glibc's posix_spawn reports a failed
+            // exec as a child that exited 127 rather than as a spawn error, so
+            // that has to count as "not found" too.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Ok(output) if output.status.code() == Some(127) => continue,
+            Err(error) => attempted.push(format!("{candidate}: {error}")),
+            Ok(output) if output.status.success() && object.is_file() => {
+                println!(
+                    "cargo:warning=lzma-sdk: assembled the x86-64 LZMA decode loop with {candidate}."
+                );
+                return Some(object);
+            }
+            Ok(output) => attempted.push(format!(
+                "{candidate}: exited {} ({})",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+                    .trim()
+                    .replace('\n', "; ")
+            )),
+        }
+    }
+
+    let detail = if attempted.is_empty() {
+        format!(
+            "none of {} were found on PATH",
+            LZMA_SDK_X86_ASSEMBLERS.join(", ")
+        )
+    } else {
+        attempted.join(" | ")
+    };
+    println!(
+        "cargo:warning=lzma-sdk: no usable MASM-compatible assembler ({detail}), so 7z decode \
+uses the portable C loop (slower than 7zz). Install jwasm or set ROM_WEAVER_LZMA_ASM."
+    );
+    None
 }
 
 fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
@@ -281,6 +437,14 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
         for source in LZMA_SDK_ARM64_ASM_SOURCES {
             build.file(asm_dir.join(source));
         }
+    } else if is_x86_64_target()
+        && let Some(object) =
+            lzma_sdk_x86_asm_object(asm_dir, &PathBuf::from(env::var("OUT_DIR").unwrap()))
+    {
+        // Assembled ahead of cc's own invocation because it is MASM syntax that
+        // no C compiler driver understands; the object just joins the archive.
+        build.define("Z7_LZMA_DEC_OPT", None);
+        build.object(object);
     }
 
     build.compile("lzma_sdk");

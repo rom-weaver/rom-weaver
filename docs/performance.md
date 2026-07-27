@@ -263,10 +263,15 @@ coder-speed comparison.
 
 The single-member rows were +29% to +36% before the SDK swap. Nearly all of that
 gap was the decode loop itself: the SDK's C decoder is no faster than liblzma's,
-but its hand-written arm64 loop (`LzmaDecOpt.S`) — which is what `7zz` runs —
-is. **x86-64 does not get that win**: the SDK only ships the optimised loop in
-MASM syntax there, so those builds keep the C decoder and stay roughly where the
-old rows were.
+but its hand-written loop — which is what `7zz` runs — is.
+
+These numbers are arm64, where that loop needs no extra tooling. On x86-64 it is
+MASM assembly and the build only uses it when a MASM-compatible assembler is on
+`PATH`; the shipped Linux x86-64 (glibc) and Windows x86-64 builds have one, and
+`x86_64-apple-darwin` never does. A build without one keeps the C decoder and
+lands roughly where the old rows did, and says so in a `cargo:warning`. See
+[Which platforms get the assembly decode loop](vendor-code.md#which-platforms-get-the-assembly-decode-loop)
+for the full matrix.
 
 ### zip vs Info-ZIP
 

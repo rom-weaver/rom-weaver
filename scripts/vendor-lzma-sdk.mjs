@@ -56,11 +56,19 @@ export const VENDORED_FILES = [
   "Threads.h",
 ];
 
-// The ARM64 hand-written LZMA decoder inner loop. Same bitstream, ~35% faster
-// than the C fallback, and it is what 7zz itself runs on arm64. GNU-as syntax,
-// so clang assembles it directly. (The x86-64 equivalent is MASM-syntax .asm
-// and needs an assembler we do not carry, so x86-64 stays on the C path.)
-export const VENDORED_ASM_FILES = ["arm64/7zAsm.S", "arm64/LzmaDecOpt.S"];
+// The hand-written LZMA decoder inner loop, in both of the SDK's ports. Same
+// bitstream as the C fallback and what 7zz itself runs; the C loop is no faster
+// than liblzma's, so this is where the extract win comes from.
+//
+// arm64 is GNU-as syntax, which clang assembles directly. x86-64 is MASM syntax
+// and needs a MASM-compatible assembler at build time (jwasm/asmc/uasm/ml64) -
+// build.rs probes for one and silently falls back to the C loop without it.
+export const VENDORED_ASM_FILES = [
+  "arm64/7zAsm.S",
+  "arm64/LzmaDecOpt.S",
+  "x86/7zAsm.asm",
+  "x86/LzmaDecOpt.asm",
+];
 
 const LICENSE_FILES = ["lzma-sdk.txt"];
 
@@ -105,6 +113,7 @@ export async function vendorLzmaSdk(version = PINNED_VERSION, root = repoRoot())
     const stagedVendor = join(staging, "vendor");
     mkdirSync(join(stagedVendor, "C"), { recursive: true });
     mkdirSync(join(stagedVendor, "Asm/arm64"), { recursive: true });
+    mkdirSync(join(stagedVendor, "Asm/x86"), { recursive: true });
     for (const file of VENDORED_FILES) cpSync(join(sourceDir, file), join(stagedVendor, "C", file));
     for (const file of VENDORED_ASM_FILES) cpSync(join(asmDir, file), join(stagedVendor, "Asm", file));
     for (const file of LICENSE_FILES) {

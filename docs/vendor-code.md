@@ -14,6 +14,7 @@ why, and the exact steps to go back to upstream.
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
 - [LZMA SDK, inlined into `rom-weaver-containers`](#lzma-sdk-inlined-into-rom-weaver-containers)
+  - [Which platforms get the assembly decode loop](#which-platforms-get-the-assembly-decode-loop)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
@@ -153,13 +154,47 @@ Build wiring lives in `libarchive/build.rs`:
   semaphores, so no shim is needed.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
-- On `aarch64` the SDK's hand-written decode loop
-  (`vendor/Asm/arm64/LzmaDecOpt.S`, selected with `Z7_LZMA_DEC_OPT`) replaces
-  `LzmaDec.c`'s C loop. It is the same bitstream and is what `7zz` itself runs;
-  it is worth ~26% of a 1 GiB LZMA1 extract, and without it the C decoder is no
-  faster than liblzma's. The x86-64 equivalent is MASM-syntax `.asm` that needs
-  an assembler this repo does not carry, so x86-64 keeps the C loop and does not
-  get that win.
+- The SDK's hand-written decode loop (`vendor/Asm/`, selected with
+  `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
+  assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
+  ~26% of a 1 GiB LZMA1 extract, and **without it the SDK's C decoder is no
+  faster than liblzma's** - the whole 7z extract win is this file. Which
+  platforms get it is the matrix below.
+
+### Which platforms get the assembly decode loop
+
+| Target | Decode loop | Why |
+| --- | --- | --- |
+| `aarch64-*` (macOS, Linux, Windows) | assembly, always | `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
+| `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
+| `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
+| `x86_64-apple-darwin` | C loop, always | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
+| `i686-*`, other arches | C loop | The SDK ships no loop this build uses for them |
+| `wasm32-*` | C loop | No assembler |
+
+`build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an
+explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an
+alias). **A missing assembler is never a build failure** - it prints a
+`cargo:warning` naming what it looked for and compiles the C loop instead. A
+build that found one says so in a warning too, so which loop a binary carries is
+always visible in its build log.
+
+`scripts/install-jwasm.sh` builds and installs the assembler (pinned to JWasm
+`v2.20`; plain C, builds anywhere in seconds). It runs in the `Dockerfile`
+builder stage on `amd64`, in `.github/actions/build-cli-platform` for the native
+x86-64 Linux leg, and in `ci.yml`'s Rust job so the test suite actually covers
+the x86-64 loop. JWasm rather than the alternatives because asmc is itself
+written in assembly (so it only bootstraps on an x86 host, and its repo ships
+prebuilt binaries instead) and uasm's tree no longer compiles on a current Unix
+host; all three emit a byte-identical object from this source.
+
+**Known gap:** the `linux-x64-musl` npm package builds through `cross`, which
+compiles inside cross-rs' own container where that script never runs, so that
+one binary keeps the C loop. Closing it means a repo-root `Cross.toml` with a
+`pre-build` that inlines the install (the project directory is not mounted
+during `pre-build`, so it cannot call the script), which would apply to every
+`cross` leg of the release fan-out. `linux-x64-gnu`, the Docker image, and
+anything built from source with the assembler present are unaffected.
 - The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
   directory, so the 7z sources can gate every SDK code path behind one define
   and still build on liblzma alone if the vendor drop is absent.

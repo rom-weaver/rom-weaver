@@ -509,6 +509,14 @@ jobs:
           rust-components: clippy rustfmt
           webapp-deps: "true"
 
+      # This runner is x86-64, so installing the assembler here is what puts the
+      # vendored LZMA SDK's x86-64 decode loop under the Rust test suite below -
+      # otherwise the only asm loop CI ever exercises is the arm64 one. build.rs
+      # falls back to the C loop without it, so a failure here cannot break the
+      # job, only reduce what it covers.
+      - name: Install the x86-64 LZMA assembler
+        run: sudo scripts/install-jwasm.sh
+
       - name: Rust format
         run: mise run fmt
 
