@@ -26,6 +26,7 @@ export const PINNED_VERSION = "26.02";
 // those pull in. Everything else in the SDK's C/ directory (AES, PPMd, BCJ2,
 // the 7z archive reader, the sample apps) stays out of the tree.
 export const VENDORED_FILES = [
+  "7zStream.c",
   "7zTypes.h",
   "7zWindows.h",
   "Compiler.h",

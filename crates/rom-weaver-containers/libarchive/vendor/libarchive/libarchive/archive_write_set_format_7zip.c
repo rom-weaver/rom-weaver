@@ -46,6 +46,12 @@
 #if HAVE_LZMA_H
 #include <lzma.h>
 #endif
+#if ROM_WEAVER_LZMA_SDK
+/* 7-Zip's own LZMA2 encoder (public domain LZMA SDK, vendored at
+ * crates/rom-weaver-containers/lzma-sdk), behind an opaque header because
+ * libarchive's archive_ppmd_private.h collides with the SDK's 7zTypes.h. */
+#include "rom_weaver_lzma_sdk.h"
+#endif
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
@@ -2851,6 +2857,107 @@ compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
 }
 #endif
 
+#if ROM_WEAVER_LZMA_SDK_MT
+/*
+ * LZMA2 through 7-Zip's own encoder, with the SDK's native block
+ * multithreading. This is the default backend: it is the same coder and the
+ * same thread split 7zz runs, so create time lands at 7zz parity instead of
+ * liblzma's ~1.2x-per-byte premium.
+ *
+ * ROM_WEAVER_7Z_ENCODER=liblzma selects the seeded parallel-block liblzma path
+ * below instead. That one seeds every parallel block with the preceding
+ * dictionary bytes, so it produces output a few tenths of a percent *smaller*
+ * than 7zz on inputs larger than the dictionary - but each worker re-indexes
+ * its seed before encoding, which is exactly the work that made it slower than
+ * 7zz. The trade is size for time; the SDK backend takes the 7zz side of it.
+ */
+static int
+compression_code_lzma2_sdk(struct archive *a, struct la_zstream *lastrm,
+    enum la_zaction action)
+{
+	rw_lzma2_enc *enc = (rw_lzma2_enc *)lastrm->real_stream;
+	size_t in_len = lastrm->avail_in;
+	size_t out_len = lastrm->avail_out;
+	uint64_t consumed;
+	int done = 0;
+	int r;
+
+	r = rw_lzma2_enc_code(enc, lastrm->next_in, &in_len, lastrm->next_out,
+	    &out_len, action == ARCHIVE_Z_FINISH, &done);
+	if (r != RW_LZMA_OK) {
+		archive_set_error(a, r == RW_LZMA_ERR_MEM ? ENOMEM :
+		    ARCHIVE_ERRNO_MISC, "lzma2 compression failed (%d)", r);
+		return (ARCHIVE_FATAL);
+	}
+	lastrm->next_in += in_len;
+	lastrm->avail_in -= in_len;
+	lastrm->total_in += in_len;
+	lastrm->next_out += out_len;
+	lastrm->avail_out -= out_len;
+	lastrm->total_out += out_len;
+
+	if (lastrm->progress_callback != NULL) {
+		consumed = rw_lzma2_enc_consumed(enc);
+		if (consumed > lastrm->progress_bytes_reported) {
+			lastrm->progress_bytes_reported = consumed;
+			lastrm->progress_callback(
+			    lastrm->progress_callback_data, consumed);
+		}
+	}
+	return (done ? ARCHIVE_EOF : ARCHIVE_OK);
+}
+
+static int
+compression_end_lzma2_sdk(struct archive *a, struct la_zstream *lastrm)
+{
+	(void)a;/* UNUSED */
+	rw_lzma2_enc_free((rw_lzma2_enc *)lastrm->real_stream);
+	lastrm->real_stream = NULL;
+	lastrm->valid = 0;
+	return (ARCHIVE_OK);
+}
+
+static int
+compression_init_encoder_lzma2_sdk(struct archive *a,
+    struct la_zstream *lastrm, int level, uint32_t dict_size, int threads,
+    uint64_t size_hint,
+    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
+{
+	rw_lzma2_enc *enc;
+
+	enc = rw_lzma2_enc_new(level, threads, dict_size, size_hint);
+	if (enc == NULL) {
+		archive_set_error(a, ENOMEM,
+		    "Couldn't initialize the LZMA2 encoder");
+		return (ARCHIVE_FATAL);
+	}
+	lastrm->props = malloc(1);
+	if (lastrm->props == NULL) {
+		rw_lzma2_enc_free(enc);
+		archive_set_error(a, ENOMEM, "Cannot allocate memory");
+		return (ARCHIVE_FATAL);
+	}
+	lastrm->props[0] = rw_lzma2_enc_props(enc);
+	lastrm->prop_size = 1;
+	lastrm->real_stream = enc;
+	lastrm->progress_callback = progress_callback;
+	lastrm->progress_callback_data = progress_callback_data;
+	lastrm->progress_bytes_reported = 0;
+	lastrm->valid = 1;
+	lastrm->code = compression_code_lzma2_sdk;
+	lastrm->end = compression_end_lzma2_sdk;
+	return (ARCHIVE_OK);
+}
+
+static int
+lzma2_sdk_encoder_enabled(void)
+{
+	const char *choice = getenv("ROM_WEAVER_7Z_ENCODER");
+
+	return (choice == NULL || strcmp(choice, "liblzma") != 0);
+}
+#endif /* ROM_WEAVER_LZMA_SDK_MT */
+
 /*
  * Round an uncompressed-size hint up to the smallest LZMA2-representable
  * dictionary size (2^n or 3*2^(n-1)), capped at the preset dictionary, so the
@@ -2925,6 +3032,16 @@ compression_init_encoder_lzma(struct archive *a,
 	if (size_hint > 0 && size_hint < (uint64_t)lzma_opt.dict_size)
 		lzma_opt.dict_size =
 		    lzma_reduce_dict_size(size_hint, lzma_opt.dict_size);
+#if ROM_WEAVER_LZMA_SDK_MT
+	/* The dictionary is already 7-Zip's per-level value, wasm-capped and
+	 * reduced to the input; hand it over verbatim so the SDK stores the
+	 * same properties byte liblzma would have. */
+	if (filter_id == LZMA_FILTER_LZMA2 && lzma2_sdk_encoder_enabled())
+		return (compression_init_encoder_lzma2_sdk(a, lastrm, level,
+		    lzma_opt.dict_size, threads, size_hint, progress_callback,
+		    progress_callback_data));
+#endif
+
 	lzmafilters[0].id = filter_id;
 	lzmafilters[0].options = &lzma_opt;
 	lzmafilters[1].id = LZMA_VLI_UNKNOWN;/* Terminate */

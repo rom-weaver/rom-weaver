@@ -17,6 +17,8 @@ const WRAPPER_HEADER: &str = "libarchive/wrapper.h";
 // 7zz's coder speed instead of liblzma's. Single-threaded units first, then the
 // SDK's thread/mt-coder layer (dropped entirely when Z7_ST is on).
 const LZMA_SDK_CORE_SOURCES: &[&str] = &[
+    // SeqInStream_ReadMax, which MtCoder/MtDec call.
+    "7zStream.c",
     "CpuArch.c",
     "LzFind.c",
     "LzFindOpt.c",
