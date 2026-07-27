@@ -13,6 +13,7 @@ why, and the exact steps to go back to upstream.
 - [`libarchive`, inlined into `rom-weaver-containers`](#libarchive-inlined-into-rom-weaver-containers)
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
+- [LZMA SDK, inlined into `rom-weaver-containers`](#lzma-sdk-inlined-into-rom-weaver-containers)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
@@ -48,6 +49,7 @@ See [`src/xdvdfs`](#xdvdfs-inlined-into-rom-weaver-containers) below.
 | Code | Form | Packaged as | Reason |
 | --- | --- | --- | --- |
 | `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Built by `crates/rom-weaver-containers/libarchive/build.rs`; carries local patches upstream has not taken |
+| `crates/rom-weaver-containers/lzma-sdk/vendor/C` | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's own LZMA1/LZMA2 coders, so the 7z paths match `7zz` speed instead of liblzma's |
 | `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
@@ -107,6 +109,53 @@ a C library, and `libarchive-sys` style crates do not carry the local patches or
 the wasm build. The realistic end state is upstream accepting the fork's
 commits, at which point the fork resets to an upstream tag and the snapshot is
 refreshed from it. Track that in the fork's branches, not here.
+
+## LZMA SDK, inlined into `rom-weaver-containers`
+
+7-Zip's own LZMA SDK (public domain) supplies the LZMA1/LZMA2 coders the 7z
+reader and writer use. The C sources live at
+`crates/rom-weaver-containers/lzma-sdk/vendor/C/`, upstream's `lzma-sdk.txt`
+sits beside them, and `libarchive/build.rs` compiles them with `cc` into a
+`lzma_sdk` static library that links after `libarchive.a`.
+
+Why it is here at all: liblzma is a *format* library first, and its LZMA2
+encoder/decoder are measurably slower than 7-Zip's, which is what `7zz` itself
+runs. Matching 7zz's wall time on 7z create/extract is not reachable through
+liblzma, and the SDK is public domain so vendoring it costs nothing in license
+surface.
+
+The exact upstream drop is pinned in
+`crates/rom-weaver-containers/lzma-sdk/LZMA_SDK_VERSION` (version, source URL,
+and the SHA-256 of the published `.7z`). Refresh it with:
+
+```bash
+node scripts/vendor-lzma-sdk.mjs           # re-fetch the pinned version
+node scripts/vendor-lzma-sdk.mjs 26.03     # move the pin
+```
+
+The script fetches `https://www.7-zip.org/a/lzma<ver>.7z`, extracts it with
+whatever 7z reader is on `PATH`, and copies only the files the coders need
+(`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders,
+the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything
+else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the
+sample programs - stays out of the tree. The copy is **verbatim**: there are no
+local patches, and a refresh is a copy rather than a merge. Keep it that way.
+
+Build wiring lives in `libarchive/build.rs`:
+
+- `build_lzma_sdk` compiles the sources at `-O3` regardless of the Cargo
+  profile. They are third-party coders nobody steps through, and a debug-profile
+  build of them makes the test suite unusably slow.
+- The threaded units (`LzFindMt`, `MtCoder`, `MtDec`, `Threads`) are dropped and
+  `Z7_ST` is defined on `wasm32-wasip1`, which has no threads.
+  `wasm32-wasip1-threads` builds them against wasi-threads' pthreads; the SDK's
+  POSIX backend uses only `pthread_create`/`join`/mutex/cond, no POSIX
+  semaphores, so no shim is needed.
+- `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
+  `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
+- The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
+  directory, so the 7z sources can gate every SDK code path behind one define
+  and still build on liblzma alone if the vendor drop is absent.
 
 ## `nod`, inlined into `rom-weaver-containers`
 

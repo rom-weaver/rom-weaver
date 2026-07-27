@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 export const VENDORED_PATHS = [
   "crates/rom-weaver-containers/libarchive/vendor",
+  "crates/rom-weaver-containers/lzma-sdk/vendor",
   "crates/rom-weaver-containers/src/nod",
   "crates/rom-weaver-containers/src/xdvdfs",
 ];

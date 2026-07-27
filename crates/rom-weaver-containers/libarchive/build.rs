@@ -5,7 +5,22 @@ use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
+const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 const WRAPPER_HEADER: &str = "libarchive/wrapper.h";
+
+// 7-Zip's own LZMA SDK, compiled into the 7z read/write paths so they match
+// 7zz's coder speed instead of liblzma's. Single-threaded units first, then the
+// SDK's thread/mt-coder layer (dropped entirely when Z7_ST is on).
+const LZMA_SDK_CORE_SOURCES: &[&str] = &[
+    "CpuArch.c",
+    "LzFind.c",
+    "LzFindOpt.c",
+    "Lzma2Dec.c",
+    "Lzma2Enc.c",
+    "LzmaDec.c",
+    "LzmaEnc.c",
+];
+const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c", "Threads.c"];
 // Every directory whose CMakeLists.txt adds a `test` subdirectory that
 // scripts/vendor-libarchive.mjs prunes.
 const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
@@ -190,9 +205,53 @@ pub fn build() {
 
     let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
     let target_sysroot = target_compiler_sysroot();
+    let lzma_sdk_dir = manifest_dir.join(VENDORED_LZMA_SDK);
+    println!("cargo:rerun-if-changed={}", lzma_sdk_dir.display());
 
-    build_libarchive(&source_dir, target_sysroot.as_deref());
+    build_libarchive(&source_dir, &lzma_sdk_dir, target_sysroot.as_deref());
+    // After libarchive: the 7z reader/writer objects inside libarchive.a
+    // reference these symbols, and single-pass static linkers only resolve
+    // backwards through the link line.
+    build_lzma_sdk(&lzma_sdk_dir);
     generate_bindings(&source_dir, target_sysroot.as_deref());
+}
+
+fn lzma_sdk_threads_enabled() -> bool {
+    !is_wasm32_target() || is_wasm_threads_target()
+}
+
+fn build_lzma_sdk(source_dir: &Path) {
+    let mut build = cc::Build::new();
+    build
+        .include(source_dir)
+        // Vendored third-party coders that are never stepped through, and the
+        // whole point of the swap is coder throughput - a debug-profile build
+        // of these makes the test suite unusably slow.
+        .opt_level(3)
+        .warnings(false)
+        .extra_warnings(false);
+
+    for source in LZMA_SDK_CORE_SOURCES {
+        build.file(source_dir.join(source));
+    }
+
+    if lzma_sdk_threads_enabled() {
+        for source in LZMA_SDK_THREADED_SOURCES {
+            build.file(source_dir.join(source));
+        }
+    } else {
+        // wasm32-wasip1 has no threads at all; Z7_ST compiles the SDK's whole
+        // mt layer (and its pthread dependency) out of LzmaEnc/Lzma2Enc.
+        build.define("Z7_ST", None);
+    }
+
+    if is_wasm32_target() {
+        // wasi-libc has no sched_setaffinity, and the SDK's CPU probe reaches
+        // for <cpuid.h>/<sys/auxv.h> that the sysroot does not ship.
+        build.define("Z7_AFFINITY_DISABLE", None);
+    }
+
+    build.compile("lzma_sdk");
 }
 
 fn target_compiler_sysroot() -> Option<PathBuf> {
@@ -527,8 +586,23 @@ fn should_drop_cmakelists_line(trimmed: &str, drop_entries: &HashSet<String>) ->
         && drop_entries.iter().any(|entry| trimmed.contains(entry))
 }
 
-fn build_libarchive(libarchive_dir: &Path, target_sysroot: Option<&Path>) {
+fn build_libarchive(libarchive_dir: &Path, lzma_sdk_dir: &Path, target_sysroot: Option<&Path>) {
+    // The 7z reader/writer compile against the vendored SDK headers and gate
+    // every SDK code path on this define, so a source tree without the vendor
+    // drop still builds on liblzma alone.
+    // Z7_ST never reaches here: it changes no public SDK header, only which
+    // translation units build_lzma_sdk compiles.
+    let mut sdk_flags = vec![
+        "-DROM_WEAVER_LZMA_SDK=1".to_string(),
+        format!("-I{}", lzma_sdk_dir.display()),
+    ];
+    if lzma_sdk_threads_enabled() {
+        sdk_flags.push("-DROM_WEAVER_LZMA_SDK_MT=1".to_string());
+    }
     let mut cmake_config = cmake::Config::new(libarchive_dir);
+    for flag in &sdk_flags {
+        cmake_config.cflag(flag);
+    }
     cmake_config
         .build_target("archive_static")
         .define("BUILD_SHARED_LIBS", "OFF")
@@ -554,7 +628,10 @@ fn build_libarchive(libarchive_dir: &Path, target_sysroot: Option<&Path>) {
 
     if is_wasm32_target() {
         let target = env::var("TARGET").unwrap_or_else(|_| "wasm32-wasip1".to_string());
-        let target_flags = wasm_cmake_flags(&target);
+        let mut target_flags = wasm_cmake_flags(&target);
+        // An explicit -DCMAKE_C_FLAGS wins over the CFLAGS env var cmake-rs
+        // derives from cflag(), so the SDK flags have to be folded in here too.
+        target_flags.extend(sdk_flags.iter().cloned());
         let joined = target_flags.join(" ");
         cmake_config
             .define("CMAKE_C_COMPILER_TARGET", target.as_str())
