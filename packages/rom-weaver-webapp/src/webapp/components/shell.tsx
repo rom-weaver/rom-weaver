@@ -213,7 +213,13 @@ const Masthead = ({
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
   const serviceWorkerLabel =
-    serviceWorkerStatus === "active" ? "sw" : serviceWorkerStatus ? `sw ${serviceWorkerStatus}` : null;
+    serviceWorkerStatus === "active"
+      ? "sw"
+      : serviceWorkerStatus === "ready"
+        ? "sw ok"
+        : serviceWorkerStatus
+          ? `sw ${serviceWorkerStatus}`
+          : null;
   const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
   const runtimeStatusTitle =
     serviceWorkerStatus === "active"

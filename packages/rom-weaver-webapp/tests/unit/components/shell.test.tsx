@@ -99,7 +99,7 @@ describe("Masthead", () => {
     );
     expect(container.querySelector(".runtime-badge")).toBeNull();
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="ready" />));
-    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw ready");
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw ok");
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw off");
     expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(
