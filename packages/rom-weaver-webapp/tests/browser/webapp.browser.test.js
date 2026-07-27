@@ -7,6 +7,7 @@ import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.t
 import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts";
 import { WebappRoot } from "../../src/webapp/webapp-root.tsx";
 import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root-types.ts";
+import "../../src/webapp/design-system/index.css";
 import {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
@@ -90,6 +91,7 @@ const createNoopActions = () => ({
 
 const createServiceWorkerCacheState = () => ({
   label: "Offline cache unavailable",
+  serviceWorkerStatus: null,
   title: "",
   updateLabel: "Reload to update",
   updateReady: false,
@@ -188,7 +190,20 @@ test("WebappRoot reports the configured thread count in the masthead, not the co
   // navigator.hardwareConcurrency and a user who dialled threads down to 1
   // still read the host core count in the header.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 threads");
+  await expect.poll(() => document.querySelector(".masthead-threads-full")?.textContent || "").toContain("1 threads");
+  await expect.poll(() => document.querySelector(".masthead-threads-short")?.textContent || "").toContain("1T");
+});
+
+test("WebappRoot uses the compact thread label only on mobile", async () => {
+  page.viewport(1280, 900);
+  mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
+  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("inline");
+  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("none");
+
+  page.viewport(390, 844);
+  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("none");
+  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("inline");
+  page.viewport(1280, 900);
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
@@ -204,7 +219,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
     expect(expected).not.toBe(2);
     mountWebappRoot({ settings: { ...getDefaultSettings(), threads: "auto" } });
     await expect
-      .poll(() => document.querySelector(".masthead-threads")?.textContent || "")
+      .poll(() => document.querySelector(".masthead-threads-full")?.textContent || "")
       .toContain(`${expected} threads`);
   } finally {
     Reflect.deleteProperty(navigator, "hardwareConcurrency");

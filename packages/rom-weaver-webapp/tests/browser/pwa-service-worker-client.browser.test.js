@@ -116,6 +116,7 @@ test("initializes in controlled isolated mode without reloading", async () => {
   await flushAsync();
 
   expect(harness.location.reload).not.toHaveBeenCalled();
+  expect(harness.client.getState().serviceWorkerStatus).toBe("active");
   expect(harness.controller.postMessage).toHaveBeenCalledWith({
     action: COI_COEP_CREDENTIALLESS_ACTION,
     value: true,
@@ -130,6 +131,7 @@ test("reloads once to gain control when registration is active but uncontrolled"
   harness.client.initialize();
   await flushAsync();
 
+  expect(harness.client.getState().serviceWorkerStatus).toBe("ready");
   expect(harness.location.reload).toHaveBeenCalledTimes(1);
   expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe("notcontrolling");
 });

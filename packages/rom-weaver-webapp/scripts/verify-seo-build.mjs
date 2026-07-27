@@ -58,6 +58,9 @@ assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create desc
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(weaveHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "weave prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
+assertIncludes(weaveHtml, 'class="build-version-label"', "preloaded build version");
+assertIncludes(weaveHtml, 'class="masthead-threads-full"', "preloaded full thread label");
+assertIncludes(weaveHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
 assertIncludes(
   read("create/index.html"),
   'aria-selected="true" class="mode" data-mode="creator"',

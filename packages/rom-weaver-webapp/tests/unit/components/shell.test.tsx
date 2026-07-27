@@ -64,7 +64,10 @@ describe("Masthead", () => {
     const settings = getByRole("button", { name: "Settings" });
     expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
     const reset = getByRole("button", { name: "Reset" });
-    expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3 · main* · a1b2c3d· 8 threads");
+    expect(container.querySelector(".masthead-threads-full")?.textContent).toBe("· 8 threads");
+    expect(container.querySelector(".masthead-threads-short")?.textContent).toBe("· 8T");
+    expect(container.querySelector(".masthead-threads .sr-only")?.textContent).toBe("8 threads");
+    expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
@@ -86,6 +89,24 @@ describe("Masthead", () => {
     fireEvent.focus(log);
     fireEvent.pointerDown(log);
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows the launch surface and service worker status beside the version", () => {
+    const { container, rerender } = render(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" />));
+    const runtimeStatus = container.querySelector(".masthead-runtime");
+    expect(runtimeStatus?.textContent).toBe("· web · sw");
+    expect(runtimeStatus?.closest(".masthead-version")).toBeTruthy();
+    expect(runtimeStatus?.getAttribute("title")).toBe(
+      "This page is controlled by the service worker and its offline cache is available.",
+    );
+    expect(container.querySelector(".runtime-badge")).toBeNull();
+    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="ready" />));
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw ok");
+    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw off");
+    expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(
+      "Service-worker offline support is unavailable.",
+    );
   });
 });
 

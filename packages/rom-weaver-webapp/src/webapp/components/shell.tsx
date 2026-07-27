@@ -7,6 +7,7 @@ import type { Localizer } from "../../presentation/localization/index.ts";
 import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
+import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 const Github = createLucideIcon("github", [
   [
@@ -20,6 +21,17 @@ const Github = createLucideIcon("github", [
 ] satisfies IconNode);
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
+
+const readPwaState = () => {
+  const displayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+  const displayModeMatches =
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? displayModes.some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches)
+      : false;
+  const iosStandalone =
+    typeof navigator !== "undefined" && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return displayModeMatches || iosStandalone;
+};
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const supportsAnchoredThumb = () =>
@@ -167,6 +179,7 @@ const Masthead = ({
   onOpenSettings,
   onReset,
   tabsControlPanels = true,
+  serviceWorkerStatus,
   confirmExternalNavigation,
   githubHref,
   donateHref,
@@ -185,6 +198,7 @@ const Masthead = ({
   onOpenSettings: () => void;
   onReset: () => void;
   tabsControlPanels?: boolean;
+  serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubHref?: string;
   donateHref?: string;
@@ -197,6 +211,24 @@ const Masthead = ({
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
+  const isPwa = readPwaState();
+  const serviceWorkerLabel =
+    serviceWorkerStatus === "active"
+      ? "sw"
+      : serviceWorkerStatus === "ready"
+        ? "sw ok"
+        : serviceWorkerStatus
+          ? `sw ${serviceWorkerStatus}`
+          : null;
+  const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
+  const runtimeStatusTitle =
+    serviceWorkerStatus === "active"
+      ? "This page is controlled by the service worker and its offline cache is available."
+      : serviceWorkerStatus === "ready"
+        ? "A service worker is installed and ready to take control."
+        : serviceWorkerStatus === "off"
+          ? "Service-worker offline support is unavailable."
+          : undefined;
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
     event.preventDefault();
@@ -221,9 +253,30 @@ const Masthead = ({
               <span className="build-version-label" title={versionTitle}>
                 {version}
               </span>
-              <span className="masthead-threads" data-thread-label={threadsLabel}>
-                {threads ? `· ${threads} ${threadsLabel}` : null}
+              <span
+                className="masthead-threads"
+                data-thread-label={threadsLabel}
+                title={threads ? `${threads} ${threadsLabel}` : undefined}
+              >
+                {threads ? (
+                  <>
+                    <span aria-hidden="true" className="masthead-threads-full">
+                      · {threads} {threadsLabel}
+                    </span>
+                    <span aria-hidden="true" className="masthead-threads-short">
+                      · {threads}T
+                    </span>
+                    <span className="sr-only">
+                      {threads} {threadsLabel}
+                    </span>
+                  </>
+                ) : null}
               </span>
+              {runtimeStatus ? (
+                <span className="masthead-runtime" title={runtimeStatusTitle}>
+                  {runtimeStatus}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>

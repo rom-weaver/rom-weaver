@@ -185,7 +185,15 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
-function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession, notFound = false }: WebappRootProps) {
+function WebappRoot({
+  state,
+  pageUpdate,
+  confirmationDialog,
+  actions,
+  serviceWorkerCache,
+  urlSession,
+  notFound = false,
+}: WebappRootProps) {
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
@@ -387,6 +395,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             settingsOpen={state.settingsDialogOpen}
             tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
             tabsControlPanels={!notFound}
+            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             threads={resolveThreads(threads)}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
