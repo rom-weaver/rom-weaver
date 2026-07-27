@@ -780,12 +780,6 @@ describe("rom-weaver-wasm browser runner parity", () => {
               "10",
             ],
             {
-              env: {
-                // Level 5 now carries a 32 MiB dictionary (7-Zip's table), so
-                // two seeded workers need the same explicit budget the level-9
-                // test below grants for its two 32 MiB dictionaries.
-                ROM_WEAVER_7Z_MEM_BUDGET_MB: "1024",
-              },
               onEvent(event) {
                 events.push(event);
                 if (isCodecProgressEvent(event)) resolveCodecEvent(event);
