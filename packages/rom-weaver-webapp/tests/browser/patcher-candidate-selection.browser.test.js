@@ -117,13 +117,7 @@ test("candidate selection resolves multi-entry archive inputs", async () => {
   );
 
   await clickCandidateSelectionOption("game.bin");
-
-  await expect
-    .poll(
-      () => document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file")?.textContent || "",
-      { timeout: 30000 },
-    )
-    .toMatch(/\S+/);
+  await waitForInputStackFileName();
 });
 
 test("clearing ROM input releases extracted OPFS files", async () => {

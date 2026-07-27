@@ -244,6 +244,9 @@ const main = async () => {
   if (initialFailures.length) {
     process.stdout.write(`\nRetrying ${initialFailures.length} failed file(s) in isolation…\n`);
     for (const file of initialFailures) {
+      process.stdout.write(`\n──── initial ${path.basename(file)} failure ────\n`);
+      process.stdout.write(results.get(file).output.trimEnd());
+      process.stdout.write("\n");
       const result = await runFile(file, vitestArgs);
       results.set(file, result);
       const name = path.basename(file);
