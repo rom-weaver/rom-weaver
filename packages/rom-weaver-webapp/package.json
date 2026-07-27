@@ -67,6 +67,7 @@
     "lint:types": "tsc -p tsconfig.json --noEmit",
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
+    "samples:generate": "node scripts/first-sample-assets.mjs",
     "test": "npm run test:browser",
     "test:browser": "node scripts/run-browser-tests.mjs",
     "test:browser:chromium": "ROM_WEAVER_BROWSER=chromium node scripts/run-browser-tests.mjs",

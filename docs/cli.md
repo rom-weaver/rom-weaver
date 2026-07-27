@@ -328,18 +328,20 @@ and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
 
 ## First weave
 
-Run a complete patch with the tiny made-up sample the webapp uses. The download
-holds the ROM, the patch, and the checksum the result should have, so there is
-nothing else to supply.
+Run a complete patch with the tiny original homebrew NES ROM the webapp uses.
+The download holds the ROM, the patch, and the checksum the result should have,
+so there is nothing else to supply.
 
 ```bash
 curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
-rom-weaver checksum --input woven.bin --algo sha256
+rom-weaver weave --input first-weave.zip --output modified-world.nes --no-compress
+rom-weaver checksum --input modified-world.nes --algo sha256
 ```
 
-The final SHA-256 should be
-`43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb`.
+The original ROM displays `HELLO WORLD`; the IPS patch changes it to
+`MODIFIED WORLD`. The final SHA-256 should be
+`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`.
+Open the result in any NES emulator to run it.
 
 ## Common workflows
 
