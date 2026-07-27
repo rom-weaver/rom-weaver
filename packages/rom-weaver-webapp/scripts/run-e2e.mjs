@@ -11,20 +11,26 @@ const REPO_ROOT = path.resolve(PACKAGE_DIR, "..", "..");
 const PROFILES = {
   fast: {
     buildName: "wasm build",
-    suites: [
-      ["CLI", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
-      ["WASM", "npm", ["run", "test:browser:wasm"], PACKAGE_DIR],
-      ["browser", "npm", ["run", "test:browser"], PACKAGE_DIR],
-      ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
+    batches: [
+      [
+        ["CLI", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
+        ["browser", "npm", ["run", "test:browser"], PACKAGE_DIR],
+      ],
+      [
+        ["WASM", "npm", ["run", "test:browser:wasm"], PACKAGE_DIR],
+        ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
+      ],
     ],
     wallTimeLabel: "Fast E2E wall time",
   },
   nightly: {
     buildName: "WASM build",
-    suites: [
-      ["CLI matrix", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
-      ["exhaustive WASM matrix", "npm", ["run", "test:browser:wasm:exhaustive"], PACKAGE_DIR],
-      ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
+    batches: [
+      [
+        ["CLI matrix", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
+        ["exhaustive WASM matrix", "npm", ["run", "test:browser:wasm:exhaustive"], PACKAGE_DIR],
+        ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
+      ],
     ],
   },
 };
@@ -47,7 +53,10 @@ const main = async () => {
   }
 
   const startedAt = Date.now();
-  const results = await Promise.all(profile.suites.map(([name, command, args, cwd]) => run(name, command, args, cwd)));
+  const results = [];
+  for (const batch of profile.batches) {
+    results.push(...(await Promise.all(batch.map(([name, command, args, cwd]) => run(name, command, args, cwd)))));
+  }
   const elapsedSeconds = profile.wallTimeLabel ? ((Date.now() - startedAt) / 1000).toFixed(1) : null;
   for (const result of results) {
     const duration = (result.durationMs / 1000).toFixed(1);
