@@ -588,16 +588,18 @@ channel named, with no cascade - it is a break-glass override, not a release.
 
 Preview deployments are skipped for forks and Dependabot, which are not given
 the Cloudflare secrets and could only ever fail. The preview URL reaches the
-pull request through the GitHub `environment` below; the old `preview/webapp`
-commit status that duplicated it is retired.
+pull request through the GitHub `environment` below and through the
+`Webapp Deploy / preview` commit status.
 
 Each leg also declares a GitHub `environment` named for the hostname it serves
 (`rom-weaver.com`, `beta.rom-weaver.com`, `nightly.rom-weaver.com`, and
 `rom-weaver-preview.pages.dev` for previews), so wrangler's Direct Upload is
 mirrored into GitHub's Deployments API - PRs get a native "View deployment"
-button, and every commit carries its deployed URL and pending/success/failure
-state. The channel is one of `prod`/`beta`/`nightly`/`preview`, so this resolves
-to exactly four stable environments; all previews share
+button. Each leg also posts a `Webapp Deploy / <channel>` commit status against
+the deployed commit: pending and failure link to the workflow run, while
+success links to the exact Cloudflare deployment URL. The channel is one of
+`prod`/`beta`/`nightly`/`preview`, so this resolves to exactly four stable
+environments; all previews share
 `rom-weaver-preview.pages.dev` (each PR's actual URL is
 `pr-<n>.rom-weaver-preview.pages.dev`) rather than minting one per PR. They are
 informational only - no protection rules or approvals, and `continue-on-error`
