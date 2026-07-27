@@ -46,6 +46,17 @@ type WasiFdPreadImport = (
   nreadPtr: number,
 ) => unknown;
 type WasiFdWriteImport = (fd: number, iovsPtr: number, iovsLen: number, nwrittenPtr: number) => unknown;
+type WasiPathOpenImport = (
+  dirfd: number,
+  dirflags: number,
+  pathPtr: number,
+  pathLen: number,
+  oflags: number,
+  fsRightsBase: bigint,
+  fsRightsInheriting: bigint,
+  fdFlags: number,
+  openedFdPtr: number,
+) => number;
 type WasiFdPwriteImport = (
   fd: number,
   iovsPtr: number,
@@ -64,13 +75,14 @@ type DirectFileIoImportTable = Record<string, unknown> & {
   fd_pwrite?: WasiFdPwriteImport;
   fd_read?: WasiFdReadImport;
   fd_write?: WasiFdWriteImport;
+  path_open?: WasiPathOpenImport;
 };
 
 // Structural view of the parts of a WASI instance this module touches. Weak enough that
 // both shim WASI instances and the runtime's extended wasi objects are assignable.
 type DirectIoWasi = {
   fds?: ReadonlyArray<unknown>;
-  inst?: { exports?: { memory?: unknown } };
+  inst?: { exports?: { memory?: WebAssembly.Memory } };
   wasiImport?: DirectFileIoImportTable;
 };
 
@@ -139,6 +151,9 @@ export function formatArgsForTrace(args: unknown): string {
   return JSON.stringify(args.map((value: unknown) => basenameForTrace(value)));
 }
 
+/** Per-WASI-instance cap on traced open failures. */
+const MAX_TRACED_PATH_OPEN_FAILURES = 20;
+
 export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undefined, trace?: TraceLine | null): void {
   if (!wasi) return;
   const imports = wasi.wasiImport;
@@ -158,6 +173,35 @@ export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undef
     return;
   }
   const stats = createDirectWasiFileIoStats();
+  // A failed guest open surfaces to the user as an opaque format error ("archive is invalid") -
+  // the errno and the path only exist here, so trace them. This is what identified the ENOENT from
+  // a thread whose mount resolved to the wrong OPFS directory.
+  const originalPathOpen = imports.path_open;
+  if (typeof originalPathOpen === "function") {
+    // Capped: a guest that probes many candidate paths would otherwise bury the run log. The first
+    // few carry the diagnosis; the rest are the same story repeated.
+    let tracedOpenFailures = 0;
+    imports.path_open = (dirfd, dirflags, pathPtr, pathLen, oflags, rightsBase, rightsInheriting, fdFlags, fdPtr) => {
+      const ret = originalPathOpen(
+        dirfd,
+        dirflags,
+        pathPtr,
+        pathLen,
+        oflags,
+        rightsBase,
+        rightsInheriting,
+        fdFlags,
+        fdPtr,
+      );
+      if (ret !== 0 && tracedOpenFailures < MAX_TRACED_PATH_OPEN_FAILURES) {
+        tracedOpenFailures += 1;
+        trace?.(
+          `[browser-opfs] wasi path_open failed dirfd=${dirfd} errno=${ret} path=${readGuestString(wasi, pathPtr, pathLen)}`,
+        );
+      }
+      return ret;
+    };
+  }
   imports.fd_read = (fd, iovsPtr, iovsLen, nreadPtr) => {
     const fdObj = wasi.fds?.[fd];
     if (!isDirectIoReadableFd(fdObj, "fd_read_into")) {
@@ -233,6 +277,17 @@ function isDirectIoReadableFd(value: unknown, method: keyof DirectIoReadableFd):
 function isDirectIoWritableFd(value: unknown, method: keyof DirectIoWritableFd): value is DirectIoWritableFd {
   if (!value) return false;
   return typeof (value as Partial<DirectIoWritableFd>)[method] === "function";
+}
+
+/** Decode a guest path out of wasm memory for tracing. SAB-backed memory rejects TextDecoder, so copy. */
+function readGuestString(wasi: DirectIoWasi, pointer: number, length: number): string {
+  try {
+    const memory = wasi.inst?.exports?.memory?.buffer;
+    if (!memory) return "?";
+    return new TextDecoder().decode(new Uint8Array(new Uint8Array(memory, pointer, length)));
+  } catch {
+    return "?";
+  }
 }
 
 function createDirectWasiFileIoStats(): DirectWasiFileIoStats {

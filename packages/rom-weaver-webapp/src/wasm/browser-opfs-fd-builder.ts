@@ -160,8 +160,12 @@ export async function buildBrowserOpfsWasiFds({
   };
 }
 
+/** Per-preopen cap on traced misses; matches the WASI-level cap in installDirectWasiFileIoImports. */
+const MAX_TRACED_MISSING_OPENS = 20;
+
 class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
   mount: BrowserOpfsMount;
+  private tracedMissingOpens = 0;
 
   constructor(mount: BrowserOpfsMount, options: { preopenName?: string } = {}) {
     super(options.preopenName ?? mount.mountPath, mount.contents);
@@ -183,6 +187,13 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     let entry = findEntryInDirectory(this.mount.contents, pathStr);
     if (!entry) {
       if ((oflags & wasiShim.wasi.OFLAGS_CREAT) !== wasiShim.wasi.OFLAGS_CREAT) {
+        if (this.tracedMissingOpens < MAX_TRACED_MISSING_OPENS) {
+          this.tracedMissingOpens += 1;
+          // `entries=0` is the signature of a mount that resolved to the wrong OPFS directory.
+          this.mount.trace?.(
+            `[browser-opfs] path open missing mount=${this.mount.mountPath} path=${basenameForTrace(pathStr)} entries=${this.mount.contents.size}`,
+          );
+        }
         return { fd_obj: null, ret: wasiShim.wasi.ERRNO_NOENT };
       }
       if (!this.mount.isWritablePath(guestPath)) {
@@ -208,7 +219,15 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
       return { fd_obj: null, ret: wasiShim.wasi.ERRNO_NOTDIR };
     }
 
-    return entry.path_open(oflags, fsRightsBase, fdFlags);
+    const opened = entry.path_open(oflags, fsRightsBase, fdFlags);
+    if (opened.ret !== wasiShim.wasi.ERRNO_SUCCESS) {
+      // A guest open that fails surfaces to the user as an opaque format error ("archive is
+      // invalid"); the errno only exists here.
+      this.mount.trace?.(
+        `[browser-opfs] path open failed path=${basenameForTrace(pathStr)} oflags=${oflags} errno=${opened.ret}`,
+      );
+    }
+    return opened;
   }
 
   override path_create_directory(pathStr: string) {

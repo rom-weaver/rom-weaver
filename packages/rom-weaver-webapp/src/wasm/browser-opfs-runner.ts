@@ -207,11 +207,16 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   // nested worker, so send root-relative mount paths for the proxy to resolve.
   const opfsRootForResolve = await navigator.storage.getDirectory();
   const proxyMounts: OpfsProxyMountBootstrap[] = [];
+  // Spawned WASI threads cannot receive the directory handles either, so they re-derive them from
+  // the same root-relative paths. Without this a mount that is not the OPFS root silently resolves
+  // to the root inside every thread, and the guest sees ENOENT for files that plainly exist.
+  const mountRootRelativeParts: Record<string, string[]> = {};
   for (const mountPath of runtimeMounts) {
     const directoryHandle = baseMountHandles[mountPath];
     if (!directoryHandle) continue;
     const rootRelativeParts = (await opfsRootForResolve.resolve(directoryHandle as unknown as FileSystemHandle)) ?? [];
     proxyMounts.push({ mountPath, rootRelativeParts, writableRoots: baseWritableRoots });
+    mountRootRelativeParts[mountPath] = rootRelativeParts;
   }
   const opfsProxy = await startOpfsProxyRuntime({
     mounts: proxyMounts,
@@ -318,6 +323,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           knownInputPaths,
           mountHandles,
+          mountRootRelativeParts,
           opfsProxyTransfer: opfsProxy.transfer,
           request,
           runtimeMounts,

@@ -99,6 +99,16 @@ const parseHandleStats = (traceLines) => {
   };
 };
 
+const listDirectoryEntries = async (rootHandle, relativePath) => {
+  let directory = rootHandle;
+  for (const part of relativePath.split("/").filter(Boolean)) {
+    directory = await directory.getDirectoryHandle(part, { create: false });
+  }
+  const names = [];
+  for await (const [name] of directory.entries()) names.push(name);
+  return names;
+};
+
 async function measureManyEntryExtract({ entryCount, entrySize }) {
   let measurement = null;
   await withTempFixture(
@@ -112,12 +122,22 @@ async function measureManyEntryExtract({ entryCount, entrySize }) {
         onTraceNonJsonLine: (line) => traceLines.push(line),
       });
       assertRunJsonSucceeded(result);
-      measurement = parseHandleStats(traceLines);
+      const names = await listDirectoryEntries(opfsHandle, "out");
+      // The extract transaction leaves its empty `.rom-weaver-extract-*` staging directory behind,
+      // so count the real outputs rather than every directory entry.
+      measurement = {
+        ...parseHandleStats(traceLines),
+        extractedFiles: names.filter((name) => /^entry-\d+\.bin$/.test(name)).length,
+      };
     },
     { prefix: "rom-weaver-many-entries-" },
   );
   return measurement;
 }
+
+// Live handles are bounded by concurrency, not entry count: each participating realm keeps at most
+// IdleFilePool's capacity (8) parked plus its in-flight fds. Well under the proxy's 1024-handle table.
+const MAX_EXPECTED_PEAK_HANDLES = 64;
 
 describe("many-entry archive extract", () => {
   it("keeps peak OPFS handles bounded as entry count grows", async () => {
@@ -127,16 +147,32 @@ describe("many-entry archive extract", () => {
     // Diagnostic breadcrumb: the growth curve is the evidence this test exists to protect.
     console.debug("[rom-weaver test] many-entry handle gauge", { large, small });
 
+    expect(small.extractedFiles).toBe(24);
+    expect(large.extractedFiles).toBe(384);
     // Every entry is still opened (and closed) - the fan-out is real work, not skipped work.
     expect(large.opened).toBeGreaterThan(small.opened);
     // ...but nothing may be *held*: a 16x entry count must not grow the live handle high-water mark.
     expect(large.peak).toBeLessThanOrEqual(small.peak + 2);
     // An absolute ceiling too, so a future regression that scales both measurements equally still fails.
-    expect(large.peak).toBeLessThanOrEqual(16);
-    expect(large.live).toBeLessThanOrEqual(16);
+    expect(large.peak).toBeLessThanOrEqual(MAX_EXPECTED_PEAK_HANDLES);
+    expect(large.live).toBeLessThanOrEqual(MAX_EXPECTED_PEAK_HANDLES);
     // Each live adapter can retain 8 MiB of coalescing buffers; per-entry retention was the other
     // half of the tab kill. Bound it to a handful of adapters' worth, independent of entry count.
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(small.adapterBufferBytes + 8 * 1024 * 1024);
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
+  });
+
+  // The iOS stress corpus shape. Above roughly a thousand entries the extract fans out to spawned
+  // WASI threads, which build their own mounts - the path that used to resolve to the wrong OPFS
+  // directory and fail the whole run with "zip archive is invalid: Failed to open".
+  it("validates and extracts a stress-size 2048-entry archive", async () => {
+    const measured = await measureManyEntryExtract({ entryCount: 2048, entrySize: 4096 });
+
+    console.debug("[rom-weaver test] stress-size handle gauge", measured);
+
+    expect(measured.extractedFiles).toBe(2048);
+
+    expect(measured.peak).toBeLessThanOrEqual(MAX_EXPECTED_PEAK_HANDLES);
+    expect(measured.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
   });
 });

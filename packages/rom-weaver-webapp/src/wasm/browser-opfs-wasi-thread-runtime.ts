@@ -260,9 +260,23 @@ async function resolveThreadRuntimeMountHandles({
 
   const opfsHandle = await navigator.storage.getDirectory();
   assertDirectoryHandle(opfsHandle, "thread opfsHandle");
-  for (const mountPath of missingMounts) mountHandles[mountPath] = opfsHandle;
+  // Walk to each mount's own directory rather than assuming it is the OPFS root. The runner sends
+  // the same root-relative parts it gives the proxy worker; a mount that IS the root has no parts,
+  // which collapses to the root handle. Resolving to the wrong directory here is silent: the mount
+  // builds empty, input hydration finds nothing, and the guest gets ENOENT on a file that exists.
+  const rootRelativeParts = runtime?.mountRootRelativeParts ?? {};
+  for (const mountPath of missingMounts) {
+    const parts = rootRelativeParts[mountPath] ?? [];
+    let directoryHandle = opfsHandle as unknown as FileSystemDirectoryHandleLike;
+    for (const part of parts) {
+      directoryHandle = (await directoryHandle.getDirectoryHandle(part, {
+        create: false,
+      })) as FileSystemDirectoryHandleLike;
+    }
+    mountHandles[mountPath] = directoryHandle;
+  }
   trace?.(
-    `[browser-opfs-thread] mount handles resolved in worker missing=${missingMounts.length} total=${Object.keys(mountHandles).length}`,
+    `[browser-opfs-thread] mount handles resolved in worker missing=${missingMounts.length} total=${Object.keys(mountHandles).length} paths=${missingMounts.map((mountPath) => `${mountPath}->${(rootRelativeParts[mountPath] ?? []).join("/") || "<root>"}`).join(",")}`,
   );
   return mountHandles;
 }

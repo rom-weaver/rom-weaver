@@ -203,6 +203,17 @@ at teardown as `[perf] opfs proxy handles live=… peak=… opened=…
 adapterBufferBytes=…`, which is the first thing to check for a many-small-files
 regression.
 
+**Mount handles inside spawned threads** - Safari cannot structured-clone a
+`FileSystemDirectoryHandle` into a nested worker, so the runner sends every
+consumer the mount's *root-relative path* (`root.resolve(handle)`) and each
+re-walks it from `navigator.storage.getDirectory()`. Both the OPFS proxy worker
+and the WASI thread runtime do this (`mountRootRelativeParts` on the thread
+runtime payload). A thread that assumes the mount *is* the OPFS root fails
+silently and confusingly: its mount builds empty, input hydration finds nothing,
+and the guest gets `ENOENT` for a file that plainly exists - surfacing as
+"archive is invalid". Only threaded work hits it, so it looks like a
+size/entry-count threshold rather than a mount bug.
+
 **Native (CLI)** - plain `std::fs::File` + `BufReader`/`BufWriter`,
 `SplitFileReader` for split inputs, `create_extract_output_file` for outputs
 (`rom-weaver-core`). Container decode uses the same **per-worker** reader shape
