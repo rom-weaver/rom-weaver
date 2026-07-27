@@ -20,6 +20,7 @@ import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
+import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -163,21 +164,45 @@ const ApplyDropAfter = ({
   }
   if (!workflowEmpty) return null;
   return (
-    <div className="first-weave-demo">
-      <span>New here?</span>
-      <button
-        aria-busy={sampleLoading}
-        className="btn ghost slim"
-        disabled={sampleLoading}
-        onClick={onLoadSample}
-        type="button"
-      >
-        {sampleLoading ? "Loading sample…" : "Try a sample apply"}
-      </button>
-      {sampleError ? <span role="status">{sampleError}</span> : null}
-    </div>
+    <SampleTutorialStart
+      error={sampleError}
+      label="Start guided Apply"
+      loading={sampleLoading}
+      onStart={onLoadSample}
+    />
   );
 };
+
+const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    body: "The bundle is unpacked. Open Files to see the exact ROM RomWeaver will change.",
+    target: "#rom-weaver-row-file-rom .cks-head",
+    title: "Inspect the base ROM",
+  },
+  {
+    body: "This is the untouched starting file. RomWeaver checks its identity before making any changes.",
+    title: "Base ROM found",
+  },
+  {
+    body: "Now open the patch's Files drawer. The patch is the small recipe that changes the ROM.",
+    target: "#rom-weaver-row-patch-stack .cks-head",
+    title: "Find the patch",
+  },
+  {
+    body: "RomWeaver keeps the patch separate from the ROM, then checks that they belong together.",
+    title: "Patch identified",
+  },
+  {
+    body: "The practice ROM and patch match. Press Weave & Download to build the changed copy in this browser.",
+    placement: "top",
+    target: "#rom-weaver-button-apply",
+    title: "Weave the result",
+  },
+  {
+    body: "RomWeaver is applying the patch and checking the result. When it finishes, the same button becomes your download.",
+    title: "The loom is moving",
+  },
+];
 
 /**
  * Purely presentational apply-workflow view: renders the step layout from the
@@ -1287,6 +1312,7 @@ function ApplyWorkflowFormView({
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
+  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const loadFirstWeave = async () => {
     setSampleLoading(true);
     setSampleError("");
@@ -1296,6 +1322,7 @@ function ApplyWorkflowFormView({
       const blob = await response.blob();
       handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
     } catch {
+      setSampleTutorialActive(false);
       setSampleError("Could not load the sample. Try again.");
     } finally {
       setSampleLoading(false);
@@ -1306,6 +1333,13 @@ function ApplyWorkflowFormView({
   // continues on its existing schedule behind the transition.
   const [dropStarted, setDropStarted] = useState(false);
   const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
+  const sampleTutorialReady =
+    romInputs.length > 0 &&
+    patches.length > 0 &&
+    pendingDrops.length === 0 &&
+    !inputsStaging &&
+    romInputs.every((input) => !input.progress) &&
+    patches.every((patch) => !patch.progress);
   const formReady = pendingDrops.length === 0 && (romInputs.length > 0 || patches.length > 0 || inputsStaging);
   useEffect(() => {
     if (dropStarted && workflowHasContent) setDropStarted(false);
@@ -1370,7 +1404,10 @@ function ApplyWorkflowFormView({
         addLabel="Replace the ROM or add patches"
         afterDropZone={
           <ApplyDropAfter
-            onLoadSample={() => void loadFirstWeave()}
+            onLoadSample={() => {
+              setSampleTutorialActive(true);
+              void loadFirstWeave();
+            }}
             pendingDrops={pendingDrops}
             sampleError={sampleError}
             sampleLoading={sampleLoading}
@@ -1559,6 +1596,14 @@ function ApplyWorkflowFormView({
         </>
       )}
 
+      {sampleTutorialActive ? (
+        <SampleTutorial
+          loadingBody="RomWeaver is unpacking one tiny ROM and one patch, then checking what each file is."
+          onClose={() => setSampleTutorialActive(false)}
+          ready={sampleTutorialReady}
+          steps={APPLY_SAMPLE_TUTORIAL_STEPS}
+        />
+      ) : null}
       <SharedArchiveDialog controller={controllers.dialog} />
     </section>
   );

@@ -277,6 +277,133 @@
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-s);
   padding-block: var(--sp-s); color: var(--ink-3); font-size: .78rem;
 }
+.rw-app .sample-tutorial-start .btn {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
+  color: var(--thread-text);
+}
+.rw-app .sample-tutorial-start-beacon {
+  display: inline-grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 3px; background: var(--fault); color: var(--plate);
+  font-family: var(--mono); font-size: .72rem; font-weight: 900;
+}
+.rw-app .sample-tutorial-start [role="status"] { flex-basis: 100%; color: var(--fault); text-align: center; }
+
+/* Guided samples behave like a cartridge-era tutorial: the page dims, the
+   required live control flashes, and a fixed command box explains the move. */
+.rw-app .sample-tutorial-layer { display: contents; }
+.rw-app .sample-tutorial-scrim {
+  position: fixed; inset: 0; z-index: 1000; pointer-events: auto;
+  background: color-mix(in oklab, var(--scrim) 88%, transparent);
+}
+.rw-app .sample-tutorial-stage {
+  z-index: 1001 !important;
+  overflow: visible !important;
+}
+.rw-app .sample-tutorial-target {
+  position: relative !important; z-index: 1002 !important; overflow: visible !important;
+  outline: 3px solid var(--fault); outline-offset: 5px;
+  animation: sample-tutorial-alert 1.8s steps(1, end) infinite;
+}
+.rw-app .sample-tutorial-target::after {
+  content: ""; position: absolute; z-index: 2; inset-block-start: 50%; inset-inline-end: 8px; translate: 0 -50%;
+  display: grid; place-items: center; width: 23px; height: 23px;
+  border: 2px solid var(--plate); border-radius: 3px;
+  background:
+    linear-gradient(var(--plate), var(--plate)) center 4px / 3px 10px no-repeat,
+    radial-gradient(circle, var(--plate) 0 2px, transparent 2.2px) center 17px / 5px 5px no-repeat,
+    var(--fault);
+  box-shadow: 0 0 0 2px var(--fault);
+  animation: sample-tutorial-beacon 1.8s steps(1, end) infinite;
+}
+.rw-app .cks-head.sample-tutorial-target { padding-inline-end: 42px; }
+.rw-app .sample-tutorial-dialog {
+  position: fixed; z-index: 1003; inset-inline: var(--gutter);
+  bottom: max(18px, env(safe-area-inset-bottom)); display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto; align-items: start; gap: var(--sp-l);
+  width: min(720px, calc(100vw - 2 * var(--gutter))); max-height: min(320px, calc(100dvh - 36px));
+  margin-inline: auto; padding: var(--sp-l);
+  overflow: auto; border: 2px solid var(--thread); border-radius: 4px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in oklab, var(--thread) 5%, transparent) 3px 4px),
+    var(--plate);
+  color: var(--ink);
+  box-shadow: 0 0 0 3px var(--plate), 0 0 0 5px var(--fault), var(--overlay-shadow);
+  animation: sample-tutorial-dialog-in .22s var(--ease) both;
+}
+.rw-app .sample-tutorial-dialog[data-placement="top"] {
+  top: max(18px, env(safe-area-inset-top));
+  bottom: auto;
+}
+.rw-app .sample-tutorial-beacon {
+  display: grid; place-items: center; width: 48px; height: 48px;
+  border: 2px solid var(--plate); border-radius: 4px;
+  background: var(--fault); color: var(--plate); box-shadow: 0 0 0 2px var(--fault);
+  font-family: var(--mono); font-size: 1.35rem; font-weight: 900;
+  animation: sample-tutorial-beacon 1.8s steps(1, end) infinite;
+}
+.rw-app .sample-tutorial-copy {
+  min-width: 0;
+  animation: sample-tutorial-copy-in .18s var(--ease) both;
+}
+.rw-app .sample-tutorial-kicker {
+  display: block; margin-block-end: var(--sp-xs);
+  color: var(--fault); font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+}
+.rw-app .sample-tutorial-copy h2 {
+  margin: 0 0 var(--sp-xs); color: var(--ink);
+  font-size: clamp(1rem, 2vw, 1.15rem); font-weight: 750; letter-spacing: -.01em;
+}
+.rw-app .sample-tutorial-copy p {
+  margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.5;
+}
+.rw-app .sample-tutorial-command {
+  display: block; margin-block-start: var(--sp-s);
+  color: var(--thread-text); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+}
+.rw-app .sample-tutorial-actions {
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
+}
+.rw-app .sample-tutorial-actions .btn { white-space: nowrap; }
+@keyframes sample-tutorial-alert {
+  0%, 64% { outline-color: var(--fault); box-shadow: 0 0 0 8px color-mix(in oklab, var(--fault) 20%, transparent); }
+  65%, 100% { outline-color: var(--thread-hi); box-shadow: 0 0 0 3px color-mix(in oklab, var(--thread) 28%, transparent); }
+}
+@keyframes sample-tutorial-beacon {
+  0%, 64% { opacity: 1; }
+  65%, 100% { opacity: .48; }
+}
+@keyframes sample-tutorial-dialog-in {
+  from { opacity: 0; translate: 0 12px; }
+}
+@keyframes sample-tutorial-copy-in {
+  from { opacity: 0; translate: 8px 0; }
+}
+@media (max-width: 640px) {
+  .rw-app .sample-tutorial-dialog {
+    grid-template-columns: 38px minmax(0, 1fr); gap: var(--sp-m);
+    width: calc(100vw - 20px); max-height: min(360px, calc(100dvh - 20px));
+    inset-inline: 10px; bottom: max(10px, env(safe-area-inset-bottom)); padding: var(--sp-m);
+  }
+  .rw-app .sample-tutorial-dialog[data-placement="top"] {
+    top: max(10px, env(safe-area-inset-top));
+    bottom: auto;
+  }
+  .rw-app .sample-tutorial-beacon { width: 38px; height: 38px; font-size: 1rem; }
+  .rw-app .sample-tutorial-actions {
+    grid-column: 1 / -1; flex-direction: row-reverse; justify-content: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-start-beacon,
+  .rw-app .sample-tutorial-target,
+  .rw-app .sample-tutorial-target::after,
+  .rw-app .sample-tutorial-dialog,
+  .rw-app .sample-tutorial-beacon,
+  .rw-app .sample-tutorial-copy {
+    animation: none;
+  }
+}
 
 /* secondary input sections (patches, modified), when empty, don't offer their
    own drop target - they point the user UP to the 0x01 hero. they share the

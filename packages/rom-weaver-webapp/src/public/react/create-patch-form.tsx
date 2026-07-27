@@ -15,6 +15,7 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
+import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
@@ -56,6 +57,36 @@ const CREATE_SAMPLE_ASSETS = [
   ["/hello-world.nes", "hello-world.nes"],
   ["/modified-world.nes", "modified-world.nes"],
 ] as const;
+const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    body: "Open Checks on Original. These fingerprints identify the untouched starting ROM.",
+    target: "#patch-builder-row-original .cks-head",
+    title: "Check the original",
+  },
+  {
+    body: "The original is the clean starting point. A patch must know exactly which file it expects.",
+    title: "Starting point locked",
+  },
+  {
+    body: "Open Checks on Modified. Its different fingerprints identify the edited version.",
+    target: "#patch-builder-row-modified .cks-head",
+    title: "Check the modified ROM",
+  },
+  {
+    body: "RomWeaver now has the before and after files. It can compare them without uploading either one.",
+    title: "Both versions found",
+  },
+  {
+    body: "Press Create & Download Patch. RomWeaver will save the differences, not another copy of the ROM.",
+    placement: "top",
+    target: "#patch-builder-button-create",
+    title: "Create the patch",
+  },
+  {
+    body: "RomWeaver is comparing both ROMs and packaging only the changes. When it finishes, the patch downloads.",
+    title: "Patch forge started",
+  },
+];
 import {
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
@@ -124,6 +155,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     useState<CreatePatchFormatCandidateState | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
+  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
@@ -411,6 +443,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       );
       handleUnifiedDrop(files);
     } catch {
+      setSampleTutorialActive(false);
       setSampleError("Could not load the sample. Try again.");
     } finally {
       setSampleLoading(false);
@@ -822,28 +855,37 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesActuallyEmpty = !(original || modified || createPreparationPending);
   const createSourcesEmpty = useFlatTransitionFlag(createSourcesActuallyEmpty);
+  const sampleTutorialReady = createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
   const createModel = (): CreatePatchFormViewModel => ({
-    dialog: candidateSelectionDialog,
+    dialog: (
+      <>
+        {candidateSelectionDialog}
+        {sampleTutorialActive ? (
+          <SampleTutorial
+            loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
+            onClose={() => setSampleTutorialActive(false)}
+            ready={sampleTutorialReady}
+            steps={CREATE_SAMPLE_TUTORIAL_STEPS}
+          />
+        ) : null}
+      </>
+    ),
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: "Add or replace a ROM",
       afterDropZone: createSourcesActuallyEmpty ? (
-        <div className="first-weave-demo">
-          <span>New here?</span>
-          <button
-            aria-busy={sampleLoading}
-            className="btn ghost slim"
-            disabled={sampleLoading}
-            onClick={() => void loadCreateSample()}
-            type="button"
-          >
-            {sampleLoading ? "Loading sample…" : "Start with sample assets"}
-          </button>
-          {sampleError ? <span role="status">{sampleError}</span> : null}
-        </div>
+        <SampleTutorialStart
+          error={sampleError}
+          label="Start guided Create"
+          loading={sampleLoading}
+          onStart={() => {
+            setSampleTutorialActive(true);
+            void loadCreateSample();
+          }}
+        />
       ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
