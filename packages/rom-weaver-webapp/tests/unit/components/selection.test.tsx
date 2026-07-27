@@ -17,12 +17,16 @@ const countChecked = (checkboxes: HTMLElement[]) =>
 const submitLabel = (count: number) => `Add ${count} patches`;
 
 describe("SelectionCheckList", () => {
-  it("selects all patches by default and can clear or restore them", () => {
+  it("starts with no patches selected and can select or clear all", () => {
     const onSubmit = vi.fn();
     const { getAllByRole, getByRole } = render(
       <SelectionCheckList items={items} onSubmit={onSubmit} submitLabel={submitLabel} />,
     );
 
+    expect(getAllByRole("checkbox").every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+    expect((getByRole("button", { name: "Add 0 patches" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(getByRole("button", { name: "Select all" }));
     expect(getAllByRole("checkbox").every((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
     fireEvent.click(getByRole("button", { name: "Clear all" }));
     expect(getAllByRole("checkbox").every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
@@ -46,16 +50,15 @@ describe("SelectionCheckList", () => {
       rerender(<SelectionCheckList items={sameItems()} onSubmit={onSubmit} submitLabel={submitLabel} />);
     }
 
-    expect((getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(false);
+    expect((getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
     expect(countChecked(getAllByRole("checkbox"))).toBe(1);
     fireEvent.click(getByRole("button", { name: "Add 1 patches" }));
-    expect(onSubmit).toHaveBeenCalledWith(["patch-b"]);
+    expect(onSubmit).toHaveBeenCalledWith(["patch-a"]);
   });
 
   it("re-seeds the selection when the candidate set itself changes", () => {
-    const onSubmit = vi.fn();
     const { getAllByRole, rerender } = render(
-      <SelectionCheckList items={sameItems()} onSubmit={onSubmit} submitLabel={submitLabel} />,
+      <SelectionCheckList items={sameItems()} onSubmit={vi.fn()} submitLabel={submitLabel} />,
     );
 
     fireEvent.click(getAllByRole("checkbox")[0] as HTMLElement);
@@ -64,11 +67,27 @@ describe("SelectionCheckList", () => {
     rerender(
       <SelectionCheckList
         items={[...sameItems(), { id: "patch-c", name: "patch-c.ips", selectable: true }]}
+        onSubmit={vi.fn()}
+        submitLabel={submitLabel}
+      />,
+    );
+
+    expect(countChecked(getAllByRole("checkbox"))).toBe(0);
+  });
+
+  it("keeps an explicit default selection", () => {
+    const onSubmit = vi.fn();
+    const { getAllByRole, getByRole } = render(
+      <SelectionCheckList
+        items={[items[0] as SelectionItem, { ...(items[1] as SelectionItem), defaultSelected: true }]}
         onSubmit={onSubmit}
         submitLabel={submitLabel}
       />,
     );
 
-    expect(countChecked(getAllByRole("checkbox"))).toBe(3);
+    expect((getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(false);
+    expect((getAllByRole("checkbox")[1] as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(getByRole("button", { name: "Add 1 patches" }));
+    expect(onSubmit).toHaveBeenCalledWith(["patch-b"]);
   });
 });
