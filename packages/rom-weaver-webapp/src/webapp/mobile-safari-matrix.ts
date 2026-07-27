@@ -254,10 +254,17 @@ const runProfile = async (
   profile: MobileSafariMatrixProfile,
   callbacks: MobileSafariMatrixCallbacks,
 ): Promise<BrowserFormatMatrixSummary> => {
-  if (profile === "stress") return runBrowserArchiveStress(callbacks);
+  if (profile === "stress") return runBrowserArchiveStress({ ...callbacks, caseIds: readStressCaseIdsFromLocation() });
   if (profile === "threads") return runBrowserThreadSweep(callbacks);
   return runBrowserFullFormatMatrix({ ...callbacks, prefix: "rom-weaver-ios-safari-matrix-", profile });
 };
+
+/** `?cases=many-entries,budget-200` narrows the stress profile to specific corpus cases. */
+const readStressCaseIdsFromLocation = (): string[] =>
+  (new URLSearchParams(location.search).get("cases") || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 
 const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
   state.profile = profile;

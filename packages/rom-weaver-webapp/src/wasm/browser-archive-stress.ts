@@ -24,6 +24,8 @@ type ArchiveStressCase = {
 };
 type ArchiveStressManifest = { cases: ArchiveStressCase[]; generatedAt: string; version: number };
 type ArchiveStressOptions = {
+  /** Restrict the run to these manifest case ids. Empty/omitted runs the whole corpus. */
+  caseIds?: readonly string[];
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onStep?: (step: BrowserFormatMatrixStep) => void;
 };
@@ -113,11 +115,20 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
     throw new Error(`Previous archive case ${interrupted.id} was interrupted after ${interrupted.startedAt}`);
   }
   const manifest = await loadManifest();
+  // Narrowing to one case is how a single suspect (e.g. many-entries) gets re-run on a device
+  // without paying for the multi-GiB memory cases first.
+  const selected =
+    options.caseIds && options.caseIds.length > 0
+      ? manifest.cases.filter((entry) => options.caseIds?.includes(entry.id))
+      : manifest.cases;
+  if (selected.length === 0) {
+    throw new Error(`No archive corpus cases matched ${JSON.stringify(options.caseIds ?? [])}`);
+  }
   const root = await navigator.storage.getDirectory();
   const steps: BrowserFormatMatrixStep[] = [];
   const startedAt = performance.now();
 
-  for (const testCase of manifest.cases) {
+  for (const testCase of selected) {
     const caseStartedAt = performance.now();
     const running: BrowserFormatMatrixStep = {
       command: "extract",
