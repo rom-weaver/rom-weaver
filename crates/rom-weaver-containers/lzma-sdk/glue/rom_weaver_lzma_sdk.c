@@ -344,6 +344,8 @@ rw_lzma2_enc_free(rw_lzma2_enc *enc)
 	if (enc == NULL)
 		return;
 	if (enc->thread_started) {
+		uint8_t sink[1 << 16];
+
 		/* Unblock a reader still waiting on input so the encoder can
 		 * finish; an abandoned encode ends at the first short read. */
 		rw_lock(&enc->mutex);
@@ -354,7 +356,6 @@ rw_lzma2_enc_free(rw_lzma2_enc *enc)
 		/* A writer may still be parked on a full output window; give it
 		 * a scratch sink so it can drain and the thread can exit. */
 		for (;;) {
-			static uint8_t sink[1 << 16];
 			int done;
 
 			rw_lock(&enc->mutex);
