@@ -184,11 +184,17 @@ function renderNotice(rows) {
   lines.push("License texts or SPDX metadata are stored under");
   lines.push("third_party/licenses/<name>-<version>/.");
   lines.push("");
-  lines.push("Crate | Version | License expression | Source");
-  lines.push("----- | ------- | ------------------ | ------");
-  for (const row of rows) {
-    const license = row.license ?? "UNKNOWN";
-    lines.push(`${row.name} | ${row.version} | ${license} | ${row.source}`);
+  const tableRows = [
+    ["Crate", "Version", "License expression", "Source"],
+    ...rows.map((row) => [row.name, row.version, row.license ?? "UNKNOWN", row.source]),
+  ];
+  const widths = tableRows[0].map((_, column) =>
+    Math.max(...tableRows.map((row) => row[column].length)),
+  );
+  lines.push(`| ${tableRows[0].map((cell, column) => cell.padEnd(widths[column])).join(" | ")} |`);
+  lines.push(`| ${widths.map((width) => "-".repeat(width)).join(" | ")} |`);
+  for (const row of tableRows.slice(1)) {
+    lines.push(`| ${row.map((cell, column) => cell.padEnd(widths[column])).join(" | ")} |`);
   }
   lines.push("");
   return lines.join("\n");
