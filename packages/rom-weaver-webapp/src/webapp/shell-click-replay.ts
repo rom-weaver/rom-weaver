@@ -11,8 +11,8 @@ import { createLogger } from "../lib/logging.ts";
  *
  * So a tiny inline script in index.html (the earliest hook there is - the bundle
  * is a module and only runs after the HTML is parsed) buffers those clicks, and
- * this module drains the buffer just before createRoot wipes the shell, then
- * re-issues each one against the mounted tree. Capture stops at that drain, so
+ * this module drains the buffer just before hydration, then re-issues each one
+ * against the interactive tree. Capture stops at that drain, so
  * a real post-mount click is never double-fired. Targets are re-found by id, or
  * by tag + role + accessible name, and anything that does not resolve to exactly
  * one mounted node is dropped - a wrong replay is far worse than a missed one.
@@ -104,7 +104,7 @@ const resolveTarget = (appRootElement: HTMLElement, target: ShellClickTarget): H
 
 /**
  * Drains the inline buffer into resolvable descriptors and stops capturing.
- * Call once, immediately before the first render replaces the shell.
+ * Call once, immediately before hydration begins.
  */
 const captureShellClicks = () => {
   const buffer = (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;

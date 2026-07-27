@@ -13,8 +13,8 @@ import { preloadWorkflowRoute } from "./workflow-routes.tsx";
  * first committed render produces (startup ready, requested public tab, no session),
  * rendered through react-dom/server so index.html can ship it inside
  * #webapp-root and the browser can paint the real shell before the bundle
- * executes. The client keeps createRoot (replace, not hydrate); see
- * renderWebappRoot in webapp.ts.
+ * executes. The client hydrates this markup in place; see renderWebappRoot in
+ * webapp.ts.
  *
  * Workflow forms are lazy route chunks, so the requested tab's module is
  * resolved first - renderToString cannot suspend, and a preloaded route renders

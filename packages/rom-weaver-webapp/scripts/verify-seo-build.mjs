@@ -61,6 +61,9 @@ assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator
 assertIncludes(weaveHtml, 'class="build-version-label"', "preloaded build version");
 assertIncludes(weaveHtml, 'class="masthead-threads-full"', "preloaded full thread label");
 assertIncludes(weaveHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
+assertIncludes(weaveHtml, 'class="masthead-runtime"', "preloaded runtime status slot");
+assertIncludes(weaveHtml, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", "parser-time runtime status resolver");
+assertIncludes(weaveHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 assertIncludes(
   read("create/index.html"),
   'aria-selected="true" class="mode" data-mode="creator"',

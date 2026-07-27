@@ -104,6 +104,7 @@ const toggleTheme = () => {
 };
 
 const getTheme = (): Theme => current;
+const getServerTheme = (): Theme => "dark";
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -117,7 +118,7 @@ const subscribe = (listener: () => void) => {
 initTheme();
 
 const useTheme = (): { theme: Theme; toggleTheme: () => void } => {
-  const theme = useSyncExternalStore(subscribe, getTheme, getTheme);
+  const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
   return { theme, toggleTheme };
 };
 

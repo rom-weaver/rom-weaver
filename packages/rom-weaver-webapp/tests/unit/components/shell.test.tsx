@@ -71,6 +71,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("");
     expect(getByRole("link", { name: "Tip" }).getAttribute("href")).toBe("https://example.com/donate");
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);

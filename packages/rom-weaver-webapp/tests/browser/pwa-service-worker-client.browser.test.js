@@ -113,6 +113,7 @@ test("initializes in controlled isolated mode without reloading", async () => {
   const harness = createHarness({ controller, crossOriginIsolated: true });
 
   harness.client.initialize();
+  expect(harness.client.getState().serviceWorkerStatus).toBe("active");
   await flushAsync();
 
   expect(harness.location.reload).not.toHaveBeenCalled();
