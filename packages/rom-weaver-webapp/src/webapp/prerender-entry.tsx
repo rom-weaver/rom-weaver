@@ -52,8 +52,9 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
 
 const renderLandingShellHtml = async (
   currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator"> = "patcher",
+  notFound = false,
 ): Promise<string> => {
-  await preloadWorkflowRoute(currentView);
+  if (!notFound) await preloadWorkflowRoute(currentView);
   const controller = createWebappRootController({
     onApplySettings: noop,
     onCreatorViewRequested: () => true,
@@ -72,6 +73,7 @@ const renderLandingShellHtml = async (
     createElement(WebappRoot, {
       actions: createPrerenderActions(),
       confirmationDialog: createEmptyConfirmationDialogState(),
+      notFound,
       pageUpdate: getPageUpdateState({
         serviceWorkerCache: { updateReady: false },
         vite: createEmptyVitePageUpdateState(),

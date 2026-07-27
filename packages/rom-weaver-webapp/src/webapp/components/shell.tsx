@@ -34,10 +34,12 @@ const ModeRail = ({
   tabs,
   current,
   onSelect,
+  controlsPanels = true,
 }: {
   tabs: WorkflowTab[];
   current: string;
   onSelect: (id: string) => void;
+  controlsPanels?: boolean;
 }) => {
   const railRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLSpanElement | null>(null);
@@ -92,7 +94,7 @@ const ModeRail = ({
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
         {tabs.map((tab) => (
           <a
-            aria-controls={`panel-${tab.id}`}
+            aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
             className="mode"
             data-mode={tab.id}
@@ -163,6 +165,7 @@ const Masthead = ({
   onOpenLog,
   onOpenSettings,
   onReset,
+  tabsControlPanels = true,
   confirmExternalNavigation,
   githubHref,
   donateHref,
@@ -179,6 +182,7 @@ const Masthead = ({
   onOpenLog: () => void;
   onOpenSettings: () => void;
   onReset: () => void;
+  tabsControlPanels?: boolean;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubHref?: string;
   donateHref?: string;
@@ -222,7 +226,7 @@ const Masthead = ({
           ) : null}
         </span>
       </span>
-      <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+      <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
         {githubHref ? (
           <a

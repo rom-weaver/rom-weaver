@@ -29,7 +29,6 @@ const channelAssetPath = (channel, name) => {
 };
 
 const rootStaticAssetSourcesForChannel = (channel) => ({
-  "/404.html": path.join(rootAssetDir, "404.html"),
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": channelAssetPath(channel, "apple-touch-icon.png"),
   "/create-modified.bin": path.join(rootAssetDir, "create-modified.bin"),
@@ -250,6 +249,27 @@ const makeBetaRouteNoindex = (html, slug) =>
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
 
+const createNotFoundHtml = (html, channel, channelLabel) => {
+  const title = `Page not found — ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
+  const description = "The requested rom-weaver page could not be found.";
+  let notFoundHtml = html
+    .replace("<html ", '<html data-page="not-found" ')
+    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+    .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
+    .replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/, "");
+  for (const [attribute, name, content] of [
+    ["name", "description", description],
+    ["property", "og:title", title],
+    ["property", "og:description", description],
+    ["property", "og:url", "https://rom-weaver.com/"],
+    ["name", "twitter:title", title],
+    ["name", "twitter:description", description],
+  ]) {
+    notFoundHtml = replaceMetaContent(notFoundHtml, attribute, name, content);
+  }
+  return notFoundHtml;
+};
+
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/weave</loc></url>
@@ -306,6 +326,14 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
       fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
       fs.writeFileSync(path.join(distDir, "weave.html"), weaveHtml);
+      fs.writeFileSync(
+        path.join(distDir, "404.html"),
+        createNotFoundHtml(
+          indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("notFound"))),
+          channel,
+          channelLabel,
+        ),
+      );
       const creatorHtml = withRoutePreloadLinks(
         indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator"))),
         routePreloadLinks.get("creator"),
@@ -557,8 +585,10 @@ const prerenderWebappShell = (prerenderedShells) => ({
       }
       const patcherShell = await prerender.renderLandingShell("patcher");
       const creatorShell = await prerender.renderLandingShell("creator");
+      const notFoundShell = await prerender.renderLandingShell("patcher", true);
       prerenderedShells.set("patcher", patcherShell);
       prerenderedShells.set("creator", creatorShell);
+      prerenderedShells.set("notFound", notFoundShell);
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
     },
     order: "post",

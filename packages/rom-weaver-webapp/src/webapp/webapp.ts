@@ -158,7 +158,9 @@ const applySettingsToRuntime = (settings: SettingsState) => {
   });
 };
 
+const isNotFoundPage = document.documentElement.dataset.page === "not-found";
 const webappController = createWebappRootController({
+  initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
   onCreatorViewRequested: () => true,
   onFocusField: (fieldId) => {
@@ -176,7 +178,9 @@ logger.info("Browser environment", collectBrowserInfo());
 // shell paint; the first mount then renders the real form synchronously instead
 // of committing a Suspense fallback over the shell the browser just painted.
 // A failed load resolves anyway - the route's Suspense boundary owns the error.
-const initialWorkflowRoute = preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
+const initialWorkflowRoute = isNotFoundPage
+  ? Promise.resolve()
+  : preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
@@ -440,6 +444,7 @@ const renderWebappRoot = (): undefined => {
           onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
         },
         confirmationDialog: confirmationDialogState,
+        notFound: isNotFoundPage,
         pageUpdate: getPageUpdateState({
           serviceWorkerCache,
           vite: vitePageUpdateState,
@@ -464,15 +469,16 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  window.addEventListener("popstate", () => {
-    const view = readWorkflowViewFromPath();
-    if (view && view !== webappController.getState().currentView) {
-      selectViewWithTransition(() => {
-        const selectedView = webappController.selectView(view, { historyMode: "none" });
-        if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
-      });
-    }
-  });
+  if (!isNotFoundPage)
+    window.addEventListener("popstate", () => {
+      const view = readWorkflowViewFromPath();
+      if (view && view !== webappController.getState().currentView) {
+        selectViewWithTransition(() => {
+          const selectedView = webappController.selectView(view, { historyMode: "none" });
+          if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
+        });
+      }
+    });
 }
 
 const initializeWebapp = () => {
@@ -496,7 +502,10 @@ const initializeWebapp = () => {
   // A URL session always lands on the apply tab, whatever the route says.
   const initialMode = urlSessionParse.request ? "patcher" : readWorkflowViewFromPath() || "patcher";
   webappController.setStartupState("ready");
-  webappController.activateInitialView(initialMode, { fallbackOnError: true });
+  webappController.activateInitialView(initialMode, {
+    fallbackOnError: true,
+    historyMode: isNotFoundPage ? "none" : undefined,
+  });
 };
 
 const bootWebapp = () => {
