@@ -1151,6 +1151,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      statuses: write
     if: needs.deploy-plan.outputs.preview_branch != ''
     # A cache miss still opens a deployment record with no URL. The fallback in
     # `deploy` runs later and supersedes it, so the PR ends up pointing at the
@@ -1167,6 +1168,16 @@ jobs:
         with:
           fetch-depth: 60
           fetch-tags: true
+
+      - name: Mark preview deployment pending
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: preview
+          DEPLOYMENT_STATE: pending
+          STATUS_CONTEXT: Webapp Deploy / preview
+        run: node scripts/ci/deployment-status.mjs
 
       - name: Restore built wasm module
         id: wasm-cache
@@ -1195,6 +1206,17 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Publish preview deployment status
+        if: always() && steps.wasm-cache.outputs.cache-hit == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: preview
+          DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          STATUS_CONTEXT: Webapp Deploy / preview
+        run: node scripts/ci/deployment-status.mjs
+
   # Build and publish one channel per matrix leg, to isolated Cloudflare origins
   # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
   # per-PR previews). `deploy-plan` above decides which legs exist.
@@ -1217,6 +1239,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      statuses: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
     # main, and a skipped dependency would otherwise skip this job with it. That
     # weakens the implicit "only after a good wasm build" gate, so state it.
@@ -1255,6 +1278,16 @@ jobs:
           fetch-depth: 60
           fetch-tags: true
 
+      - name: Mark deployment pending
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: ${{ matrix.target.channel }}
+          DEPLOYMENT_STATE: pending
+          STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
+        run: node scripts/ci/deployment-status.mjs
+
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
@@ -1271,6 +1304,17 @@ jobs:
           branch: ${{ matrix.target.branch }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Publish deployment status
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: ${{ matrix.target.channel }}
+          DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
+        run: node scripts/ci/deployment-status.mjs
 
       # Every sidecar-backed /assets/* request invokes the Pages Function, so
       # a zone Cache Rule makes the edge cache those responses and the
