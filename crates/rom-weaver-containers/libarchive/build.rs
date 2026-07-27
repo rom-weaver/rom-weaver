@@ -269,7 +269,9 @@ fn lzma_sdk_threads_enabled() -> bool {
 }
 
 fn lzma_sdk_arm64_asm_enabled() -> bool {
-    !is_wasm32_target() && env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("aarch64")
+    !is_wasm32_target()
+        && env::var("CARGO_CFG_TARGET_OS").ok().as_deref() != Some("windows")
+        && env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("aarch64")
 }
 
 fn is_x86_64_target() -> bool {

@@ -33,9 +33,11 @@ workdir="$(mktemp -d)"
 # The checkout is throwaway; the only artifact that outlives it is the binary.
 trap 'rm -rf "$workdir"' EXIT
 
-git clone --quiet --depth 1 --branch "$JWASM_REF" "$JWASM_REPO" "$workdir/jwasm"
-make -C "$workdir/jwasm" -f GccUnix.mak -j"$(nproc 2>/dev/null || echo 2)" >/dev/null
-
-mkdir -p "$prefix"
-install -m 0755 "$workdir/jwasm/build/GccUnixR/jwasm" "$prefix/jwasm"
-echo "install-jwasm: installed $JWASM_REF to $prefix/jwasm"
+if git clone --quiet --depth 1 --branch "$JWASM_REF" "$JWASM_REPO" "$workdir/jwasm" \
+    && make -C "$workdir/jwasm" -f GccUnix.mak -j"$(nproc 2>/dev/null || echo 2)" >/dev/null \
+    && mkdir -p "$prefix" \
+    && install -m 0755 "$workdir/jwasm/build/GccUnixR/jwasm" "$prefix/jwasm"; then
+  echo "install-jwasm: installed $JWASM_REF to $prefix/jwasm"
+else
+  echo "install-jwasm: warning: install failed; continuing with the portable C decoder" >&2
+fi
