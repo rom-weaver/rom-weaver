@@ -41,9 +41,10 @@ const WORKFLOW_TABS = [
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
-// The trace inspector is the single largest dialog in the bundle and opens from
-// a masthead button, so it only downloads once someone asks for it.
-const LogDialog = lazy(() => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog })));
+// Keep the trace inspector out of the initial bundle, but share its loader so
+// the masthead and idle post-boot preload can fetch the same promise.
+const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
+const LogDialog = lazy(loadLogDialog);
 
 const logger = createLogger("webapp-root");
 
@@ -210,9 +211,27 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   const threads = state.settings.threads;
   useEffect(() => {
     if (notFound) return;
-    void preloadBrowserRuntime({ threads });
+    let cancelled = false;
+    const preloadLogWhenIdle = () => {
+      if (cancelled) return;
+      void loadLogDialog().catch(() => undefined);
+    };
+    void preloadBrowserRuntime({ threads }).then(() => {
+      if (cancelled) return;
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(preloadLogWhenIdle, { timeout: 2000 });
+      } else {
+        window.setTimeout(preloadLogWhenIdle, 0);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [notFound, threads]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
+  const preloadLogDialog = useCallback(() => {
+    void loadLogDialog().catch(() => undefined);
+  }, []);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -354,6 +373,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
             onOpenLog={() => setLogOpen(true)}
+            onPreloadLog={preloadLogDialog}
             onOpenSettings={actions.onOpenSettings}
             onReset={actions.onReset}
             onSelectTab={(id) => {

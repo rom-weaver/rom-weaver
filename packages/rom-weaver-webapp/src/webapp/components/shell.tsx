@@ -163,6 +163,7 @@ const Masthead = ({
   currentTab,
   onSelectTab,
   onOpenLog,
+  onPreloadLog,
   onOpenSettings,
   onReset,
   tabsControlPanels = true,
@@ -180,6 +181,7 @@ const Masthead = ({
   currentTab: string;
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
+  onPreloadLog?: () => void;
   onOpenSettings: () => void;
   onReset: () => void;
   tabsControlPanels?: boolean;
@@ -279,6 +281,9 @@ const Masthead = ({
           aria-label={logLabel}
           className="tool"
           onClick={onOpenLog}
+          onFocus={onPreloadLog}
+          onPointerDown={onPreloadLog}
+          onPointerEnter={onPreloadLog}
           title={logLabel}
           type="button"
         >

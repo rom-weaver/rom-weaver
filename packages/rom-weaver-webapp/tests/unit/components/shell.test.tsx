@@ -78,6 +78,15 @@ describe("Masthead", () => {
     expect(container.querySelector(".console-copy-toggle")).toBeNull();
     expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();
   });
+  it("preloads the Log dialog before interaction completes", () => {
+    const onPreloadLog = vi.fn();
+    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
+    const log = getByRole("button", { name: "Log" });
+    fireEvent.pointerEnter(log);
+    fireEvent.focus(log);
+    fireEvent.pointerDown(log);
+    expect(onPreloadLog).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("Reveal", () => {
