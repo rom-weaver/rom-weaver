@@ -1,0 +1,12 @@
+# rom-weaver
+
+> A local-first browser tool for applying and creating ROM patches. Files are processed on-device without uploads or accounts.
+
+## Web app
+
+- [Apply ROM patches](https://rom-weaver.com/weave): Apply patches with format detection, checksum validation, and ordered patch chains.
+- [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
+
+## Project
+
+- [Source code and documentation](https://github.com/rom-weaver/rom-weaver): Installation, supported formats, documentation, and releases.

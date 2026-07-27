@@ -1357,7 +1357,7 @@ function ApplyWorkflowFormView({
     return (
       <section className="panel" id="rom-weaver-container">
         <div className="step-body">
-          <Notice level="error">{startup.message || "RomWeaver failed to load."}</Notice>
+          <Notice level="error">{startup.message || "rom-weaver failed to load."}</Notice>
         </div>
       </section>
     );

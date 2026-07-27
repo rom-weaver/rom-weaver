@@ -164,7 +164,7 @@ const diagnosticsApi: BrowserRuntimeDiagnosticsApi = {
   },
   log: async () => {
     const diagnostics = await collectBrowserRuntimeDiagnostics();
-    console.info("RomWeaver browser runtime diagnostics", diagnostics);
+    console.info("rom-weaver browser runtime diagnostics", diagnostics);
     return diagnostics;
   },
 };
