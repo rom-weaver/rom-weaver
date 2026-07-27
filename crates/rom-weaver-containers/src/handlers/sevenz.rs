@@ -179,6 +179,41 @@ fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
         .max(1)
 }
 
+fn lzma2_mt_peak_bytes(total_bytes: u64, level: u32, threads: usize) -> u64 {
+    let dict = lzma2_effective_dict_bytes(total_bytes, level);
+    let threads = u64::try_from(threads).unwrap_or(u64::MAX).max(1);
+    let cap = dict.saturating_mul(2);
+    let mut block = total_bytes.div_ceil(threads);
+    if block > cap {
+        let blocks = total_bytes
+            .div_ceil(cap)
+            .div_ceil(threads)
+            .saturating_mul(threads);
+        block = total_bytes.div_ceil(blocks);
+    }
+    block = block.max(LZMA2_MT_MIN_CHUNK_BYTES);
+
+    let blocks = total_bytes.div_ceil(block);
+    let active = blocks.min(threads);
+    let seeds = if blocks <= threads {
+        (0..active).fold(0u64, |total, index| {
+            total.saturating_add(index.saturating_mul(block).min(dict))
+        })
+    } else {
+        active.saturating_mul(dict)
+    };
+    let inputs = active.saturating_mul(block).saturating_add(seeds);
+    let output = block.saturating_add(block / 16).saturating_add(1024);
+    let parked = blocks.saturating_sub(active).min(threads);
+
+    active
+        .saturating_mul(dict.saturating_mul(12))
+        .saturating_add(inputs)
+        .saturating_add(active.saturating_add(parked).saturating_mul(output))
+        .saturating_add(block)
+        .saturating_add(dict)
+}
+
 pub(crate) fn lzma2_threads_for_budget_with_limits(
     total_bytes: u64,
     level: u32,
@@ -187,16 +222,23 @@ pub(crate) fn lzma2_threads_for_budget_with_limits(
 ) -> usize {
     let per_worker = lzma2_worker_budget_bytes(total_bytes, level);
     let budget_threads = usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX);
-    max_threads
+    let mut threads = max_threads
         .map(|limit| budget_threads.min(limit.max(1)))
-        .unwrap_or(budget_threads)
+        .unwrap_or(budget_threads);
+    if total_bytes > LZMA2_MT_SPLIT_THRESHOLD_BYTES {
+        threads = threads.min(lzma2_achievable_blocks(total_bytes));
+        while threads > 1 && lzma2_mt_peak_bytes(total_bytes, level, threads) > budget_bytes {
+            threads -= 1;
+        }
+    }
+    threads
 }
 
 /// Cap the worker count so peak memory fits a fraction of system RAM. Each seeded
-/// block runs its own full-dictionary encoder (~20x the dictionary including the
-/// seed copy and buffers), so on a memory-constrained host this collapses toward
-/// a single encoder (close to single-thread 7-Zip), while a large host keeps more
-/// workers.
+/// block runs its own full-dictionary encoder; the final peak check also includes
+/// the actual block/seed buffers, shared history, and parked compressed results.
+/// On a memory-constrained host this collapses toward a single encoder (close to
+/// single-thread 7-Zip), while a large host keeps more workers.
 pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_bytes: u64) -> usize {
     lzma2_threads_for_budget_with_limits(
         total_bytes,
@@ -207,10 +249,9 @@ pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_byte
 }
 
 fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
-    // On wasm the budget is a slice of the linear-memory ceiling (~4 GiB, never
-    // shrinks). Workers plus the base heap, thread stacks, and input must stay
-    // under that ceiling, so cap workers at 1 GiB; native falls back here only
-    // when RAM can't be queried.
+    // wasm's reported "physical memory" is already the conservative shared
+    // instance budget; native hosts reserve half their RAM for the rest of the
+    // process and the OS.
     #[cfg(target_family = "wasm")]
     const FALLBACK_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
     #[cfg(not(target_family = "wasm"))]
@@ -221,7 +262,15 @@ fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .map(|mb| mb.saturating_mul(1024 * 1024))
-        .or_else(|| physical_memory_bytes().map(|ram| ram / 2))
+        .or_else(|| {
+            physical_memory_bytes().map(|ram| {
+                if cfg!(target_family = "wasm") {
+                    ram
+                } else {
+                    ram / 2
+                }
+            })
+        })
         .unwrap_or(FALLBACK_BUDGET_BYTES);
     lzma2_threads_for_budget(total_bytes, level, budget)
 }

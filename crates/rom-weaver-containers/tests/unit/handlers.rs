@@ -2573,6 +2573,21 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_wasm_budget_keeps_level5_parallel_without_oversubscribing_large_inputs() {
+        let gib = 1024 * 1024 * 1024;
+        let wasm_max_threads = Some(2);
+
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(32 * 1024 * 1024, 5, gib, wasm_max_threads),
+            2
+        );
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(128 * 1024 * 1024, 5, gib, wasm_max_threads),
+            1
+        );
+    }
+
+    #[test]
     fn zip_zstd_memory_budget_scales_thread_cap() {
         let total = 256 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
