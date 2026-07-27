@@ -6,6 +6,7 @@ import { classifyChanges } from "./classify-changes.mjs";
 const classify = (...paths) => Object.fromEntries(Object.entries(classifyChanges(paths)).map(([key, value]) => [key, String(value)]));
 
 test("documentation changes skip compiled stacks", () => assert.deepEqual(classify("README.md", "docs/ci.md"), { rust: "false", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "true", full: "false" }));
+test("usage guide changes build the webapp", () => assert.equal(classify("docs/guides/apply-rom-patches.md").webapp, "true"));
 test("webapp changes reuse wasm and skip Rust", () => assert.equal(classify("packages/rom-weaver-webapp/src/index.tsx").webapp, "true"));
 test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
