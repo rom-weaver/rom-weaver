@@ -153,6 +153,13 @@ Build wiring lives in `libarchive/build.rs`:
   semaphores, so no shim is needed.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
+- On `aarch64` the SDK's hand-written decode loop
+  (`vendor/Asm/arm64/LzmaDecOpt.S`, selected with `Z7_LZMA_DEC_OPT`) replaces
+  `LzmaDec.c`'s C loop. It is the same bitstream and is what `7zz` itself runs;
+  it is worth ~26% of a 1 GiB LZMA1 extract, and without it the C decoder is no
+  faster than liblzma's. The x86-64 equivalent is MASM-syntax `.asm` that needs
+  an assembler this repo does not carry, so x86-64 keeps the C loop and does not
+  get that win.
 - The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
   directory, so the 7z sources can gate every SDK code path behind one define
   and still build on liblzma alone if the vendor drop is absent.

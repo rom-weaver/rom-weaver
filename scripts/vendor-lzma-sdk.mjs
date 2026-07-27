@@ -55,6 +55,12 @@ export const VENDORED_FILES = [
   "Threads.h",
 ];
 
+// The ARM64 hand-written LZMA decoder inner loop. Same bitstream, ~35% faster
+// than the C fallback, and it is what 7zz itself runs on arm64. GNU-as syntax,
+// so clang assembles it directly. (The x86-64 equivalent is MASM-syntax .asm
+// and needs an assembler we do not carry, so x86-64 stays on the C path.)
+export const VENDORED_ASM_FILES = ["arm64/7zAsm.S", "arm64/LzmaDecOpt.S"];
+
 const LICENSE_FILES = ["lzma-sdk.txt"];
 
 const sdkUrl = (version) => `https://www.7-zip.org/a/lzma${version.replace(".", "")}.7z`;
@@ -88,12 +94,18 @@ export async function vendorLzmaSdk(version = PINNED_VERSION, root = repoRoot())
     if (extract.status !== 0) throw new Error(`vendor-lzma-sdk: extraction failed with status ${extract.status}`);
 
     const sourceDir = join(extracted, "C");
-    const missing = VENDORED_FILES.filter((file) => !existsSync(join(sourceDir, file)));
+    const asmDir = join(extracted, "Asm");
+    const missing = [
+      ...VENDORED_FILES.filter((file) => !existsSync(join(sourceDir, file))),
+      ...VENDORED_ASM_FILES.filter((file) => !existsSync(join(asmDir, file))),
+    ];
     if (missing.length > 0) throw new Error(`vendor-lzma-sdk: SDK ${version} is missing ${missing.join(", ")}`);
 
     const stagedVendor = join(staging, "vendor");
     mkdirSync(join(stagedVendor, "C"), { recursive: true });
+    mkdirSync(join(stagedVendor, "Asm/arm64"), { recursive: true });
     for (const file of VENDORED_FILES) cpSync(join(sourceDir, file), join(stagedVendor, "C", file));
+    for (const file of VENDORED_ASM_FILES) cpSync(join(asmDir, file), join(stagedVendor, "Asm", file));
     for (const file of LICENSE_FILES) {
       const licensePath = join(extracted, "DOC", file);
       if (existsSync(licensePath)) cpSync(licensePath, join(stagedVendor, file));
@@ -109,6 +121,7 @@ export async function vendorLzmaSdk(version = PINNED_VERSION, root = repoRoot())
         `version: ${version}`,
         `sha256: ${digest}`,
         `files: ${VENDORED_FILES.join(" ")}`,
+        `asm: ${VENDORED_ASM_FILES.join(" ")}`,
         "license: public domain (see vendor/lzma-sdk.txt)",
         "refreshed-by: scripts/vendor-lzma-sdk.mjs",
         "",

@@ -6,6 +6,11 @@ use std::path::{Path, PathBuf};
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
+// rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
+// IByteIn/IByteOut typedefs (archive_ppmd_private.h), so the SDK headers can
+// never be included from libarchive itself - only this glue sees them.
+const LZMA_SDK_GLUE: &str = "lzma-sdk/glue";
+const LZMA_SDK_GLUE_SOURCES: &[&str] = &["rom_weaver_lzma_sdk.c"];
 const WRAPPER_HEADER: &str = "libarchive/wrapper.h";
 
 // 7-Zip's own LZMA SDK, compiled into the 7z read/write paths so they match
@@ -21,6 +26,12 @@ const LZMA_SDK_CORE_SOURCES: &[&str] = &[
     "LzmaEnc.c",
 ];
 const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c", "Threads.c"];
+// The hand-written LZMA decode loop. Same bitstream as the C fallback and what
+// 7zz itself runs on arm64; measured ~26% off a 1 GiB LZMA1 extract. Only the
+// arm64 port is GNU-as syntax - the x86-64 one is MASM and needs an assembler
+// this repo does not carry, so x86-64 stays on LzmaDec.c's C loop.
+const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
+const LZMA_SDK_ARM64_ASM_SOURCES: &[&str] = &["arm64/LzmaDecOpt.S"];
 // Every directory whose CMakeLists.txt adds a `test` subdirectory that
 // scripts/vendor-libarchive.mjs prunes.
 const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
@@ -206,13 +217,16 @@ pub fn build() {
     let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
     let target_sysroot = target_compiler_sysroot();
     let lzma_sdk_dir = manifest_dir.join(VENDORED_LZMA_SDK);
+    let lzma_glue_dir = manifest_dir.join(LZMA_SDK_GLUE);
+    let lzma_asm_dir = manifest_dir.join(VENDORED_LZMA_SDK_ASM);
     println!("cargo:rerun-if-changed={}", lzma_sdk_dir.display());
+    println!("cargo:rerun-if-changed={}", lzma_glue_dir.display());
 
-    build_libarchive(&source_dir, &lzma_sdk_dir, target_sysroot.as_deref());
+    build_libarchive(&source_dir, &lzma_glue_dir, target_sysroot.as_deref());
     // After libarchive: the 7z reader/writer objects inside libarchive.a
     // reference these symbols, and single-pass static linkers only resolve
     // backwards through the link line.
-    build_lzma_sdk(&lzma_sdk_dir);
+    build_lzma_sdk(&lzma_sdk_dir, &lzma_glue_dir, &lzma_asm_dir);
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
@@ -220,10 +234,15 @@ fn lzma_sdk_threads_enabled() -> bool {
     !is_wasm32_target() || is_wasm_threads_target()
 }
 
-fn build_lzma_sdk(source_dir: &Path) {
+fn lzma_sdk_arm64_asm_enabled() -> bool {
+    !is_wasm32_target() && env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("aarch64")
+}
+
+fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
     let mut build = cc::Build::new();
     build
         .include(source_dir)
+        .include(glue_dir)
         // Vendored third-party coders that are never stepped through, and the
         // whole point of the swap is coder throughput - a debug-profile build
         // of these makes the test suite unusably slow.
@@ -233,6 +252,9 @@ fn build_lzma_sdk(source_dir: &Path) {
 
     for source in LZMA_SDK_CORE_SOURCES {
         build.file(source_dir.join(source));
+    }
+    for source in LZMA_SDK_GLUE_SOURCES {
+        build.file(glue_dir.join(source));
     }
 
     if lzma_sdk_threads_enabled() {
@@ -249,6 +271,14 @@ fn build_lzma_sdk(source_dir: &Path) {
         // wasi-libc has no sched_setaffinity, and the SDK's CPU probe reaches
         // for <cpuid.h>/<sys/auxv.h> that the sysroot does not ship.
         build.define("Z7_AFFINITY_DISABLE", None);
+    }
+
+    if lzma_sdk_arm64_asm_enabled() {
+        build.define("Z7_LZMA_DEC_OPT", None);
+        build.include(asm_dir.join("arm64"));
+        for source in LZMA_SDK_ARM64_ASM_SOURCES {
+            build.file(asm_dir.join(source));
+        }
     }
 
     build.compile("lzma_sdk");
@@ -586,15 +616,15 @@ fn should_drop_cmakelists_line(trimmed: &str, drop_entries: &HashSet<String>) ->
         && drop_entries.iter().any(|entry| trimmed.contains(entry))
 }
 
-fn build_libarchive(libarchive_dir: &Path, lzma_sdk_dir: &Path, target_sysroot: Option<&Path>) {
-    // The 7z reader/writer compile against the vendored SDK headers and gate
-    // every SDK code path on this define, so a source tree without the vendor
-    // drop still builds on liblzma alone.
+fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot: Option<&Path>) {
+    // The 7z reader/writer compile against the glue header only - never the SDK
+    // headers - and gate every SDK code path on this define, so a source tree
+    // without the vendor drop still builds on liblzma alone.
     // Z7_ST never reaches here: it changes no public SDK header, only which
     // translation units build_lzma_sdk compiles.
     let mut sdk_flags = vec![
         "-DROM_WEAVER_LZMA_SDK=1".to_string(),
-        format!("-I{}", lzma_sdk_dir.display()),
+        format!("-I{}", lzma_glue_dir.display()),
     ];
     if lzma_sdk_threads_enabled() {
         sdk_flags.push("-DROM_WEAVER_LZMA_SDK_MT=1".to_string());
