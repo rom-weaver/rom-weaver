@@ -48,6 +48,51 @@ void rw_lzma_dec_free(rw_lzma_dec *dec);
 int rw_lzma_dec_run(rw_lzma_dec *dec, uint8_t *dest, size_t *dest_len,
     const uint8_t *src, size_t *src_len, int *finished);
 
+/* --- Encode ---------------------------------------------------------- */
+
+/*
+ * Only present when the SDK was built with its thread layer; the encoder shim
+ * runs the SDK's blocking coder on a thread of its own. libarchive gates its
+ * calls on ROM_WEAVER_LZMA_SDK_MT, which build.rs defines under the same
+ * condition.
+ */
+
+typedef struct rw_lzma2_enc rw_lzma2_enc;
+
+/*
+ * LZMA2 encoder with the SDK's own block multithreading - the same coder and
+ * the same thread split 7zz runs.
+ *
+ * level     1..9.
+ * threads   total encoder threads; the SDK splits them into block threads x
+ *           per-block match-finder threads exactly as 7zz does.
+ * dict_size 0 to take the SDK's per-level default, otherwise an explicit
+ *           dictionary size (the wasm dictionary cap uses this).
+ * size_hint uncompressed size when known, 0 when not; the SDK reduces the
+ *           dictionary and the block count to fit it.
+ *
+ * The encoder runs on its own thread; rw_lzma2_enc_code is a push/pull shim
+ * over the SDK's blocking stream-callback API. Returns NULL on failure.
+ */
+rw_lzma2_enc *rw_lzma2_enc_new(int level, int threads, uint32_t dict_size,
+    uint64_t size_hint);
+void rw_lzma2_enc_free(rw_lzma2_enc *enc);
+
+/* The single LZMA2 properties byte for the 7z coder record. */
+uint8_t rw_lzma2_enc_props(const rw_lzma2_enc *enc);
+
+/*
+ * Streaming push encode, shaped like libarchive's la_zstream contract:
+ * consumes from in, writes to out, and sets *done once the complete stream -
+ * end marker included - has been written. finish != 0 means no more input
+ * follows what this call supplies.
+ */
+int rw_lzma2_enc_code(rw_lzma2_enc *enc, const uint8_t *in, size_t *in_len,
+    uint8_t *out, size_t *out_len, int finish, int *done);
+
+/* Input bytes the encoder has consumed so far, for progress reporting. */
+uint64_t rw_lzma2_enc_consumed(rw_lzma2_enc *enc);
+
 #ifdef __cplusplus
 }
 #endif

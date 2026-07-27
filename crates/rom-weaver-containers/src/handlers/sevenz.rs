@@ -96,29 +96,51 @@ impl SevenZContainerHandler {
     }
 }
 
-/// Files at or below this stay single-threaded (threading overhead not worth
-/// it); larger files parallelise. Mirrors `LZMA2_MT_SPLIT_THRESHOLD` in the C
-/// writer. Seeded blocks keep cross-block matches, so real ROM data stays at
-/// size parity even when parallelised.
-const LZMA2_MT_SPLIT_THRESHOLD_BYTES: u64 = 4 << 20;
-/// Smallest parallel block; mirrors `LZMA2_MT_MIN_CHUNK_SIZE` in the C writer.
-const LZMA2_MT_MIN_CHUNK_BYTES: u64 = 1 << 20;
+/// Match-finder threads the SDK encoder pairs with every LZMA2 block, from
+/// `LzmaEncProps_Normalize`'s `numThreads = 2` default. The thread budget the
+/// writer is handed is a *total*, which `Lzma2EncProps_Normalize` then divides
+/// into `total / 2` block encoders.
+const LZMA2_SDK_THREADS_PER_BLOCK: usize = 2;
+/// Inputs at or below this stay single-threaded: one SDK block, and its
+/// match-finder threads cannot pay for themselves on data this small.
+const LZMA2_SINGLE_THREAD_THRESHOLD_BYTES: u64 = 4 << 20;
+/// Block-size floor and ceiling from `Lzma2EncProps_Normalize`'s auto sizing.
+const LZMA2_BLOCK_SIZE_MIN_BYTES: u64 = 1 << 20;
+const LZMA2_BLOCK_SIZE_MAX_BYTES: u64 = 1 << 28;
 /// Browser liblzma's raw encoder vtables become unstable with higher concurrent
 /// level-9 jobs under WASI threads; keep real parallelism without entering the
 /// trap-prone range.
 #[cfg(target_family = "wasm")]
 const LZMA2_MT_WASM_MAX_THREADS: usize = 2;
 
-/// Estimate how many LZMA2 worker blocks the 7z encoder will actually run - the
-/// real parallelism ceiling. Files at or below the split threshold run as a
-/// single block; larger files split into `ceil(total / min_chunk)` blocks,
-/// capped further by the core and memory budgets. Keeps the reported
-/// `effective_threads` honest. Mirrors the block split in the C writer.
-fn lzma2_achievable_blocks(total_bytes: u64) -> usize {
-    if total_bytes <= LZMA2_MT_SPLIT_THRESHOLD_BYTES {
+/// Block size the SDK encoder picks for an auto `blockSize`: four dictionaries,
+/// clamped to \[1 MiB, 256 MiB\] and rounded up to a whole MiB. Mirrors
+/// `Lzma2EncProps_Normalize`.
+fn lzma2_block_size_bytes(total_bytes: u64, level: u32) -> u64 {
+    let dict = lzma2_effective_dict_bytes(total_bytes, level);
+    let block = dict
+        .saturating_mul(4)
+        .clamp(LZMA2_BLOCK_SIZE_MIN_BYTES, LZMA2_BLOCK_SIZE_MAX_BYTES)
+        .max(dict);
+    block
+        .div_ceil(LZMA2_BLOCK_SIZE_MIN_BYTES)
+        .saturating_mul(LZMA2_BLOCK_SIZE_MIN_BYTES)
+}
+
+/// Threads the 7z encoder can actually keep busy - the real parallelism ceiling.
+/// The SDK splits the input into `ceil(total / blockSize)` blocks and drives
+/// each with `LZMA2_SDK_THREADS_PER_BLOCK` threads; anything past that is idle.
+/// Keeps the reported `effective_threads` honest.
+fn lzma2_achievable_threads(total_bytes: u64, level: u32) -> usize {
+    if total_bytes <= LZMA2_SINGLE_THREAD_THRESHOLD_BYTES {
         return 1;
     }
-    usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_CHUNK_BYTES).max(1)).unwrap_or(usize::MAX)
+    let blocks = total_bytes
+        .div_ceil(lzma2_block_size_bytes(total_bytes, level))
+        .max(1);
+    usize::try_from(blocks)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(LZMA2_SDK_THREADS_PER_BLOCK)
 }
 
 /// Half the target's pointer width in bytes - `sizeof(size_t) / 2` as the C
@@ -172,12 +194,20 @@ fn lzma2_budget_max_threads() -> Option<usize> {
     None
 }
 
+/// Peak bytes one SDK block encoder costs: ~11.5x the dictionary for its bt4
+/// match finder, plus `MtCoder`'s block-sized input buffer and the matching
+/// output buffer - both 4x the dictionary at the auto block size
+/// (`lzma2_block_size_bytes`) - so ~20x. The budget is spent in whole block
+/// encoders; each one is then driven by `LZMA2_SDK_THREADS_PER_BLOCK` threads.
+///
+/// This sizes the *default* SDK backend. The `ROM_WEAVER_7Z_ENCODER=liblzma`
+/// fallback peaks lower - ~16x (match finder 11.5x, seed 1x, chunk 2x, output
+/// ~2x), because it streams one chunk rather than holding a whole `MtCoder`
+/// block in and out - so the same bound covers it with room to spare. Sizing
+/// for the cheaper of the two would under-count the encoder that actually runs.
 fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
-    // Encoder match finder ~11.5x the dictionary, the seed prefix (1x), the
-    // input chunk (up to 2x - the C writer's split cap), and the output
-    // buffer (~2x): ~16x the dictionary per worker at the block-size cap.
     lzma2_effective_dict_bytes(total_bytes, level)
-        .saturating_mul(16)
+        .saturating_mul(20)
         .max(1)
 }
 
@@ -222,8 +252,9 @@ pub(crate) fn lzma2_threads_for_budget_with_limits(
     budget_bytes: u64,
     max_threads: Option<usize>,
 ) -> usize {
-    let per_worker = lzma2_worker_budget_bytes(total_bytes, level);
-    let budget_threads = usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX);
+    let per_block = lzma2_worker_budget_bytes(total_bytes, level);
+    let blocks = usize::try_from((budget_bytes / per_block).max(1)).unwrap_or(usize::MAX);
+    let budget_threads = blocks.saturating_mul(LZMA2_SDK_THREADS_PER_BLOCK);
     let mut threads = max_threads
         .map(|limit| budget_threads.min(limit.max(1)))
         .unwrap_or(budget_threads);
@@ -236,11 +267,11 @@ pub(crate) fn lzma2_threads_for_budget_with_limits(
     threads
 }
 
-/// Cap the worker count so peak memory fits a fraction of system RAM. Each seeded
-/// block runs its own full-dictionary encoder; the final peak check also includes
-/// the actual block/seed buffers, shared history, and parked compressed results.
-/// On a memory-constrained host this collapses toward a single encoder (close to
-/// single-thread 7-Zip), while a large host keeps more workers.
+/// Cap the thread count so peak memory fits a fraction of system RAM. Each SDK
+/// block runs its own full-dictionary encoder (~20x the dictionary including
+/// its input and output block buffers), so on a memory-constrained host this
+/// collapses toward a single encoder (close to single-thread 7-Zip), while a
+/// large host keeps more workers.
 pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_bytes: u64) -> usize {
     lzma2_threads_for_budget_with_limits(
         total_bytes,
@@ -350,7 +381,7 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         // what fits the system memory budget, so the reported parallelism is real
         // and peak RAM scales down on smaller machines.
         let total_bytes = sum_input_file_bytes(&entries);
-        let achievable = lzma2_achievable_blocks(total_bytes)
+        let achievable = lzma2_achievable_threads(total_bytes, settings.level)
             .min(lzma2_memory_thread_cap(total_bytes, settings.level))
             .max(1);
         let execution = context.plan_threads(ThreadCapability::parallel(Some(achievable)));
@@ -360,7 +391,7 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
             level = settings.level,
             entries = entries.len(),
             total_bytes,
-            achievable_blocks = achievable,
+            achievable_threads = achievable,
             effective_threads = execution.effective_threads,
             "7z create start"
         );

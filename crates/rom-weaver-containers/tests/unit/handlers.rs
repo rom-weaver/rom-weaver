@@ -2559,16 +2559,17 @@ mod tests {
     #[test]
     fn seven_z_memory_budget_scales_thread_cap() {
         // 64 MiB at level 9 reduces the dictionary to 64 MiB (input-limited),
-        // ~1 GiB per seeded worker, so the worker count tracks the budget: a
-        // 1 GiB host collapses to a single encoder (7-Zip-like footprint),
-        // larger budgets allow more.
+        // ~1.25 GiB per SDK block encoder, so the block count tracks the
+        // budget: a 1 GiB host collapses to a single encoder (7-Zip-like
+        // footprint), larger budgets allow more. The numbers are threads, and
+        // the SDK drives each block encoder with two of them.
         let total = 64 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
-        assert_eq!(lzma2_threads_for_budget(total, 9, gib), 1);
+        assert_eq!(lzma2_threads_for_budget(total, 9, gib), 2);
         assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 2);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 4);
-        // Never zero, even with no budget.
-        assert_eq!(lzma2_threads_for_budget(total, 9, 0), 1);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 6);
+        // Never zero, even with no budget: one block encoder is the floor.
+        assert_eq!(lzma2_threads_for_budget(total, 9, 0), 2);
         // A tiny input reduces the dictionary, so the same budget allows many
         // more workers (cheap per-worker memory).
         assert!(lzma2_threads_for_budget(1024 * 1024, 9, gib) > 10);
@@ -2581,9 +2582,21 @@ mod tests {
         let gib = 1024 * 1024 * 1024;
         let wasm_max_threads = Some(2);
 
+        // Uncapped: a large input keeps the full dictionary and only affords a
+        // single block encoder, while a smaller one reduces the dictionary and
+        // fits several under the same budget.
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(large_total, 9, gib, None),
+            2
+        );
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, gib, None),
+            6
+        );
+        // The wasm ceiling binds in both cases.
         assert_eq!(
             lzma2_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
-            1
+            2
         );
         assert_eq!(
             lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, gib, wasm_max_threads),
