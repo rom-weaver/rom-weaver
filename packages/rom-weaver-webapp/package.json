@@ -123,6 +123,7 @@
     "jscpd": "5.0.12",
     "knip": "6.29.0",
     "lighthouse": "13.4.1",
+    "marked": "18.0.7",
     "npm-run-all2": "9.0.2",
     "oxfmt": "0.60.0",
     "oxlint": "1.75.0",

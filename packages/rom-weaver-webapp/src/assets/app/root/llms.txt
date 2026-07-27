@@ -6,6 +6,7 @@
 
 - [Apply ROM patches](https://rom-weaver.com/weave): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
+- [Usage documentation](https://rom-weaver.com/docs): Step-by-step browser and CLI guides for applying, creating, choosing, and troubleshooting patches.
 
 ## Project
 

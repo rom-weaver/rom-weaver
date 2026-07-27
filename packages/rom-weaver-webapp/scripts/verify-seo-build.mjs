@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
@@ -16,6 +17,12 @@ const assertCount = (source, expected, count, label) => {
   if (actual !== count)
     throw new Error(`${label} contains ${actual} copies of ${JSON.stringify(expected)}; expected ${count}`);
 };
+const countVisibleWords = (source) =>
+  source
+    .replace(/<style>[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .trim()
+    .split(/\s+/).length;
 
 const weaveHtml = read("index.html");
 const notFoundHtml = read("404.html");
@@ -42,6 +49,7 @@ assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
   "https://rom-weaver.com/weave",
   "https://rom-weaver.com/create",
+  "https://rom-weaver.com/docs",
   "https://github.com/rom-weaver/rom-weaver",
 ]) {
   assertIncludes(llmsTxt, `](${url})`, "llms.txt links");
@@ -94,6 +102,8 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "weave robots metadata",
 );
+assertIncludes(weaveHtml, 'href="docs"', "weave docs navigation");
+assertIncludes(createHtml, 'href="docs"', "create docs navigation");
 
 assertIncludes(weaveHtml, '"@type":"SoftwareApplication"', "weave SoftwareApplication JSON-LD");
 assertIncludes(weaveHtml, '"@type":"WebSite"', "weave WebSite JSON-LD");
@@ -102,6 +112,28 @@ assertIncludes(weaveHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
 assertIncludes(createHtml, '"url":"https://rom-weaver.com/create"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
+
+for (const route of DOC_ROUTES) {
+  const docsHtml = read(`${route.slug}.html`);
+  const directoryHtml = read(`${route.slug}/index.html`);
+  const canonical = `href="https://rom-weaver.com/${route.slug}"`;
+  const robotsDirective = `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`;
+  assertIncludes(docsHtml, canonical, `${route.slug} canonical`);
+  assertIncludes(directoryHtml, canonical, `${route.slug} directory canonical`);
+  assertIncludes(docsHtml, route.description, `${route.slug} description`);
+  assertIncludes(docsHtml, robotsDirective, `${route.slug} robots metadata`);
+  assertIncludes(docsHtml, '<h1 id="', `${route.slug} heading`);
+  assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
+  assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
+  assertIncludes(docsHtml, '"@type":"TechArticle"', `${route.slug} structured data`);
+  assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
+  assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);
+  const minimumWords = route.slug === "docs" ? 250 : 500;
+  const wordCount = countVisibleWords(docsHtml);
+  if (wordCount < minimumWords) {
+    throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);
+  }
+}
 
 for (const beta of ["trim", "tools"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
@@ -117,6 +149,9 @@ if (production) {
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create", "sitemap");
+  for (const route of DOC_ROUTES) {
+    assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);
+  }
   if (headers.includes("X-Robots-Tag")) throw new Error("production headers must not block indexing");
 } else {
   const expectedAccent = {

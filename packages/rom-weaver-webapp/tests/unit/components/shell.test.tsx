@@ -23,6 +23,7 @@ const TABS = [
 
 const mastheadProps = {
   donateHref: "https://example.com/donate",
+  docsHref: "docs",
   githubHref: "https://example.com/repo",
   currentTab: "patcher",
   onOpenLog: () => undefined,
@@ -51,14 +52,17 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // the external links (GitHub then Tip) lead the row; a separator fences
-    // them off from the app tools (Reset, Theme, Log, Settings) that trail
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    // the help/external links (Docs, GitHub, Tip) lead the row; a separator
+    // fences them off from the app tools (Reset, Theme, Log, Settings) that trail
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
     expect(container.querySelector(".language-tool")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    const docs = getByRole("link", { name: "Documentation" });
+    expect(docs.getAttribute("href")).toBe("docs");
+    expect(container.querySelector(".masthead-tools > .tool")).toBe(docs);
     const github = getByRole("link", { name: "GitHub" });
     expect(github.getAttribute("href")).toBe("https://example.com/repo");
-    expect(container.querySelector(".masthead-tools > .tool")).toBe(github);
+    expect(docs.nextElementSibling).toBe(github);
     const donate = getByRole("link", { name: "Tip" });
     expect(container.querySelector(".masthead-tools > .tools-sep")?.previousElementSibling).toBe(donate);
     const settings = getByRole("button", { name: "Settings" });

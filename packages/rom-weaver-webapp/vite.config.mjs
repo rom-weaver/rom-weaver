@@ -9,6 +9,7 @@ import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { DOC_ROUTES, renderDocsPages } from "./src/webapp/docs-pages.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -293,6 +294,7 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/weave</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
+${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
 `;
 
@@ -376,6 +378,14 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      for (const [slug, html] of renderDocsPages({ channel, channelLabel })) {
+        const extensionlessPath = path.join(distDir, `${slug}.html`);
+        const directoryIndexPath = path.join(distDir, slug, "index.html");
+        fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
+        fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
+        fs.writeFileSync(extensionlessPath, html);
+        fs.writeFileSync(directoryIndexPath, html);
+      }
       for (const [slug, html] of [
         ["weave", weaveHtml],
         ["create", createHtml],

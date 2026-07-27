@@ -397,6 +397,7 @@ function WebappRoot({
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={state.currentView}
             donateHref={DONATE_URL}
+            docsHref="docs"
             githubHref={GITHUB_URL}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}

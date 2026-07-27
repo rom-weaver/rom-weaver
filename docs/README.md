@@ -14,6 +14,8 @@ Choose the guide that matches what you are trying to do.
 
 ## Use rom-weaver
 
+- [Usage guides](guides/README.md): apply and create patches, choose a format,
+  and troubleshoot checksum errors in the webapp or CLI.
 - [CLI guide](cli.md): installation, common workflows, command reference,
   supported formats, compression, checksums, trimming, and JSON output.
 - [Man pages](cli.md#man-pages): generate `rom-weaver(1)` and one page per
