@@ -241,6 +241,12 @@ function WebappRoot({
   const preloadSettingsPanel = useCallback(() => {
     void loadSettingsPanel().catch(() => undefined);
   }, []);
+  const openSettings = useCallback(() => {
+    void loadSettingsPanel().then(
+      () => actions.onOpenSettings(),
+      () => actions.onOpenSettings(),
+    );
+  }, [actions.onOpenSettings]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
@@ -387,7 +393,7 @@ function WebappRoot({
             githubHref={GITHUB_URL}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
-            onOpenSettings={actions.onOpenSettings}
+            onOpenSettings={openSettings}
             onPreloadSettings={preloadSettingsPanel}
             onReset={actions.onReset}
             onSelectTab={(id) => {
