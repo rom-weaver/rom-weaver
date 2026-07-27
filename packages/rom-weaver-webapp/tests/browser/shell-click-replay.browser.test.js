@@ -14,7 +14,7 @@ const SHELL_MARKUP = `
     <button aria-label="Settings" class="tool" type="button"><span class="tool-text">Settings</span></button>
     <button class="mode" data-mode="creator" role="tab" type="button">Create</button>
     <button class="tool" disabled type="button">Weave</button>
-    <span class="masthead-threads">· 8 threads</span>
+    <span class="masthead-threads">· 8T</span>
   </header>
   <section class="step is-input">
     <label class="drop hero bare"><input id="rom-weaver-input-file-unified" type="file" /></label>

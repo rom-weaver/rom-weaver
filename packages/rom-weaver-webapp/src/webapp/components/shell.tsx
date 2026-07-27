@@ -212,7 +212,9 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const runtimeStatus = serviceWorkerStatus ? `· ${isPwa ? "pwa" : "web"} · sw ${serviceWorkerStatus}` : null;
+  const serviceWorkerLabel =
+    serviceWorkerStatus === "active" ? "sw" : serviceWorkerStatus ? `sw ${serviceWorkerStatus}` : null;
+  const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
   const runtimeStatusTitle =
     serviceWorkerStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
@@ -245,8 +247,12 @@ const Masthead = ({
               <span className="build-version-label" title={versionTitle}>
                 {version}
               </span>
-              <span className="masthead-threads" data-thread-label={threadsLabel}>
-                {threads ? `· ${threads} ${threadsLabel}` : null}
+              <span
+                className="masthead-threads"
+                data-thread-label={threadsLabel}
+                title={threads ? `${threads} ${threadsLabel}` : undefined}
+              >
+                {threads ? `· ${threads}T` : null}
               </span>
               {runtimeStatus ? (
                 <span className="masthead-runtime" title={runtimeStatusTitle}>

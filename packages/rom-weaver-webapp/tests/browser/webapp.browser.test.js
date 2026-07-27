@@ -189,7 +189,7 @@ test("WebappRoot reports the configured thread count in the masthead, not the co
   // navigator.hardwareConcurrency and a user who dialled threads down to 1
   // still read the host core count in the header.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 threads");
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1T");
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
@@ -204,9 +204,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
     const expected = getDefaultBrowserThreadCount();
     expect(expected).not.toBe(2);
     mountWebappRoot({ settings: { ...getDefaultSettings(), threads: "auto" } });
-    await expect
-      .poll(() => document.querySelector(".masthead-threads")?.textContent || "")
-      .toContain(`${expected} threads`);
+    await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain(`${expected}T`);
   } finally {
     Reflect.deleteProperty(navigator, "hardwareConcurrency");
     if (hardwareConcurrency) Object.defineProperty(Navigator.prototype, "hardwareConcurrency", hardwareConcurrency);

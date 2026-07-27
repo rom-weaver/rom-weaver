@@ -64,7 +64,8 @@ describe("Masthead", () => {
     const settings = getByRole("button", { name: "Settings" });
     expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
     const reset = getByRole("button", { name: "Reset" });
-    expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3 · main* · a1b2c3d· 8 threads");
+    expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3 · main* · a1b2c3d· 8T");
+    expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
@@ -91,7 +92,7 @@ describe("Masthead", () => {
   it("shows the launch surface and service worker status beside the version", () => {
     const { container, rerender } = render(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" />));
     const runtimeStatus = container.querySelector(".masthead-runtime");
-    expect(runtimeStatus?.textContent).toBe("· web · sw active");
+    expect(runtimeStatus?.textContent).toBe("· web · sw");
     expect(runtimeStatus?.closest(".masthead-version")).toBeTruthy();
     expect(runtimeStatus?.getAttribute("title")).toBe(
       "This page is controlled by the service worker and its offline cache is available.",
