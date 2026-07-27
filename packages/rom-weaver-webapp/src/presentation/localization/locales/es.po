@@ -450,6 +450,11 @@ msgstr "Falló la descarga de la sesión compartida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.skipToMain"
+msgstr "Saltar al contenido principal"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "El almacenamiento no está disponible."
 

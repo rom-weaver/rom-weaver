@@ -450,6 +450,11 @@ msgstr "Shared session download failed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.skipToMain"
+msgstr "Skip to main content"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
 

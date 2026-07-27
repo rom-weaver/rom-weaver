@@ -3,6 +3,26 @@ import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { join } from "./cx.ts";
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "iframe",
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
+  Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
+    if (element.tabIndex === -1 || element.matches(":disabled") || element.closest('[aria-hidden="true"]'))
+      return false;
+    if (element.hidden || element.closest("[hidden]")) return false;
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+
 /**
  * Design-system modal primitives. A generic overlay (header + scrollable body)
  * and a confirmation dialog. Both portal into the `.rw-app` root (falling back to
@@ -47,9 +67,50 @@ const ModalShell = ({
   useEffect(() => {
     if (!open) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const previousInert = new Map<HTMLElement, boolean>();
+    for (const sibling of Array.from(dialog.parentElement?.children ?? [])) {
+      if (sibling === dialog || !(sibling instanceof HTMLElement)) continue;
+      previousInert.set(sibling, sibling.inert);
+      sibling.inert = true;
+    }
+    const keepFocusInside = (event: FocusEvent) => {
+      if (event.target instanceof Node && dialog.contains(event.target)) return;
+      dialog.focus();
+    };
+    const wrapTabFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = getFocusableElements(dialog);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const active = document.activeElement;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (first === undefined) return;
+      if (last === undefined) return;
+      if (!dialog.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || active === dialog)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("focusin", keepFocusInside);
+    document.addEventListener("keydown", wrapTabFocus);
     const frame = requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("focusin", keepFocusInside);
+      document.removeEventListener("keydown", wrapTabFocus);
+      for (const [sibling, inert] of previousInert) sibling.inert = inert;
       previousFocus?.focus();
     };
   }, [open]);

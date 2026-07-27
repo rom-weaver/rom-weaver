@@ -429,7 +429,7 @@ function WebappRoot({
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
-          <main className={notFound ? "workbench is-not-found" : "workbench"}>
+          <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
               <section aria-labelledby="not-found-title" className="not-found-page">
                 <div className="not-found-content">
