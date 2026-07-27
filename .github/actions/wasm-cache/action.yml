@@ -62,8 +62,8 @@ runs:
           # A dev build runs neither wasm-opt nor brotli and writes no prod
           # checksum, so it has three of the five files.
           case "$VARIANT" in
-            prod) names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE third_party) ;;
-            dev) names=(rom-weaver-app.wasm NOTICE third_party) ;;
+            prod) names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE WEBAPP_NOTICE third_party) ;;
+            dev) names=(rom-weaver-app.wasm NOTICE WEBAPP_NOTICE third_party) ;;
             *) echo "::error::unknown wasm variant '$VARIANT'"; exit 1 ;;
           esac
           paths=$(printf '%s\n' "${names[@]/#/$wasm_dir/}")
@@ -90,7 +90,7 @@ runs:
         basis=$(
           {
             git ls-tree -r HEAD -- \
-              Cargo.lock Cargo.toml .cargo scripts/wasm \
+              Cargo.lock Cargo.toml .cargo packages/rom-weaver-webapp/package-lock.json scripts/wasm \
               scripts/gen-third-party-licenses.mjs \
               .github/actions/setup-build-env
             printf 'mise-wasm-config\n'

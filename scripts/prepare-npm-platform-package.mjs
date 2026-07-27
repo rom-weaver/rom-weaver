@@ -23,7 +23,7 @@ copyFileSync(binaryPath, binaryTarget);
 copyFileSync(resolve(repoRoot, "LICENSE"), resolve(packageRoot, "LICENSE"));
 execFileSync(
   process.execPath,
-  [resolve(repoRoot, "scripts/gen-third-party-licenses.mjs"), packageRoot],
+  [resolve(repoRoot, "scripts/gen-third-party-licenses.mjs"), packageRoot, "--target", "cli"],
   {
     cwd: repoRoot,
     stdio: "inherit",
