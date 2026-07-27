@@ -380,7 +380,6 @@ function WebappRoot({
             currentTab={state.currentView}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
-            offlineReady={serviceWorkerCache.offlineReady}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={actions.onOpenSettings}
@@ -396,7 +395,7 @@ function WebappRoot({
             settingsOpen={state.settingsDialogOpen}
             tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
             tabsControlPanels={!notFound}
-            serviceWorkerControlled={serviceWorkerCache.serviceWorkerControlled}
+            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             threads={resolveThreads(threads)}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}

@@ -88,18 +88,21 @@ describe("Masthead", () => {
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 
-  it("shows the runtime and offline capability", () => {
-    const { container, rerender } = render(
-      withSettings(<Masthead {...mastheadProps} offlineReady serviceWorkerControlled />),
+  it("shows the launch surface and service worker status beside the version", () => {
+    const { container, rerender } = render(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" />));
+    const runtimeStatus = container.querySelector(".masthead-runtime");
+    expect(runtimeStatus?.textContent).toBe("· web · sw active");
+    expect(runtimeStatus?.closest(".masthead-version")).toBeTruthy();
+    expect(runtimeStatus?.getAttribute("title")).toBe(
+      "This page is controlled by the service worker and its offline cache is available.",
     );
-    expect(container.querySelector(".runtime-badge")?.textContent).toBe("· sw · ready");
-    expect(container.querySelector(".runtime-badge")?.getAttribute("title")).toBe(
-      "The app can run fully offline or online.",
-    );
-    rerender(withSettings(<Masthead {...mastheadProps} offlineReady={false} serviceWorkerControlled={false} />));
-    expect(container.querySelector(".runtime-badge")?.textContent).toBe("· web · online");
-    expect(container.querySelector(".runtime-badge")?.getAttribute("title")).toBe(
-      "This page requires an online connection.",
+    expect(container.querySelector(".runtime-badge")).toBeNull();
+    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="ready" />));
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw ready");
+    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw off");
+    expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(
+      "Service-worker offline support is unavailable.",
     );
   });
 });

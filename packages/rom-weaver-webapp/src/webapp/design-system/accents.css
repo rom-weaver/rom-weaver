@@ -74,7 +74,6 @@
   text-transform: uppercase;
   line-height: 1.5;
 }
-.rw-app .runtime-badge { text-transform: none; }
 
 /* Wraps rather than overflows: the phone masthead gives the brand a 112px
    floor, which the word plus a long label (`pr-1234`) can exceed. */

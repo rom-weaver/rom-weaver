@@ -1,4 +1,5 @@
 import type { PageUpdateState } from "./page-update-state.ts";
+import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
 import type { UrlSessionParseResult } from "./url-session/url-session-request.ts";
 import type {
   CreatorSessionState,
@@ -46,8 +47,7 @@ type WebappRootProps = {
   };
   serviceWorkerCache: {
     label: string;
-    offlineReady: boolean | null;
-    serviceWorkerControlled: boolean | null;
+    serviceWorkerStatus: ServiceWorkerStatus | null;
     title: string;
     updateLabel: string;
     updateReady: boolean;
