@@ -189,6 +189,20 @@ WASI thread so they share the one proxy; the mount
 (`packages/rom-weaver-webapp/src/wasm/browser-opfs-mount.ts`) builds proxy vs virtual inodes and caches inode
 trees across runs.
 
+**Bounding the fan-out** - an extract emits one output file per archive entry, so
+anything held per entry scales without limit (a 2048-entry zip killed the tab on
+iOS). Created output inodes therefore use `closeOnLastFdClose`, and the mount owns
+a small LRU of idle files
+(`packages/rom-weaver-webapp/src/wasm/browser-opfs-idle-file-pool.ts`): a file's
+handle and its coalescing buffers are released once it falls out of the window,
+so live handles are bounded by *concurrency*, never by entry count.
+`BrowserProxyRandomAccessFile.reopen()` re-arms an evicted adapter, so a later
+checksum pass or workflow chaining re-opens the path transparently. The proxy
+publishes a live/peak handle gauge in its SAB control region; the runner emits it
+at teardown as `[perf] opfs proxy handles live=… peak=… opened=…
+adapterBufferBytes=…`, which is the first thing to check for a many-small-files
+regression.
+
 **Native (CLI)** - plain `std::fs::File` + `BufReader`/`BufWriter`,
 `SplitFileReader` for split inputs, `create_extract_output_file` for outputs
 (`rom-weaver-core`). Container decode uses the same **per-worker** reader shape

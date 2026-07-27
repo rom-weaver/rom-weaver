@@ -3,6 +3,7 @@ import {
   OPFS_SEQUENTIAL_DIRECT_WRITE_MIN_BYTES,
   OPFS_SEQUENTIAL_WRITE_BUFFER_BYTES,
 } from "./browser-opfs-constants.ts";
+import type { IdleFilePool, IdleFilePoolEntry } from "./browser-opfs-idle-file-pool.ts";
 import { requestsWriteRights } from "./browser-opfs-wasi-paths.ts";
 
 /**
@@ -26,16 +27,21 @@ export interface RandomAccessFileLike {
 
 interface WasiRandomAccessFileInodeOptions {
   closeOnLastFdClose?: boolean;
+  /** Parks this inode's file when its last fd closes instead of closing it immediately. */
+  idlePool?: IdleFilePool;
   readonly?: boolean;
   scratchBacked?: boolean;
 }
 
-export class WasiRandomAccessFileInode extends wasiShim.Inode {
+export class WasiRandomAccessFileInode extends wasiShim.Inode implements IdleFilePoolEntry {
   closeOnLastFdClose: boolean;
   file: RandomAccessFileLike;
+  idlePool: IdleFilePool | null;
   openRefCount: number;
   readonly: boolean;
   scratchBacked: boolean;
+  /** True once the backing file has been closed and needs `reopen()` before the next access. */
+  private fileClosed: boolean;
 
   constructor(file: RandomAccessFileLike, options: WasiRandomAccessFileInodeOptions = {}) {
     super();
@@ -43,7 +49,9 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode {
     this.readonly = Boolean(options.readonly);
     this.scratchBacked = Boolean(options.scratchBacked);
     this.closeOnLastFdClose = Boolean(options.closeOnLastFdClose);
+    this.idlePool = options.idlePool ?? null;
     this.openRefCount = 0;
+    this.fileClosed = false;
   }
 
   path_open(oflags: number, fsRightsBase: bigint, fdFlags: number) {
@@ -65,8 +73,13 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode {
   }
 
   prepareOpenFile() {
-    if (this.closeOnLastFdClose && this.openRefCount === 0 && typeof this.file?.reopen === "function") {
+    if (!this.closeOnLastFdClose || this.openRefCount !== 0) return wasiShim.wasi.ERRNO_SUCCESS;
+    // Taking it out of the idle set first keeps the pool's LRU honest even when the file is still
+    // open (the common case: a parked adapter reopened before it was ever evicted).
+    this.idlePool?.remove(this);
+    if (this.fileClosed && typeof this.file?.reopen === "function") {
       this.file.reopen();
+      this.fileClosed = false;
     }
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
@@ -79,16 +92,48 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode {
     if (this.openRefCount > 0) this.openRefCount -= 1;
     if (this.openRefCount !== 0 || !this.closeOnLastFdClose) return wasiShim.wasi.ERRNO_SUCCESS;
     if (typeof this.file?.close !== "function") return wasiShim.wasi.ERRNO_SUCCESS;
+    // With a pool, park instead of closing: the file stays open only while it is among the few most
+    // recently used, so handles stay bounded without paying an OPFS reopen on every re-access.
+    if (this.idlePool) {
+      this.idlePool.retain(this);
+      return wasiShim.wasi.ERRNO_SUCCESS;
+    }
     try {
-      this.file.close();
+      this.closeIdleFile();
       return wasiShim.wasi.ERRNO_SUCCESS;
     } catch {
       return wasiShim.wasi.ERRNO_IO;
     }
   }
 
+  /** Close the backing file now (pool eviction / teardown). Idempotent. */
+  closeIdleFile(): void {
+    if (this.fileClosed || typeof this.file?.close !== "function") return;
+    this.fileClosed = true;
+    this.file.close();
+  }
+
+  /**
+   * Metadata on an fd-less `closeOnLastFdClose` file. Routed through the same open/park path as a
+   * real fd so a `stat` per entry cannot reintroduce the unbounded handle growth through the back
+   * door - a bare `file.size()` would open a handle that nothing ever closes.
+   */
+  private withPooledOpen<T>(read: () => T): T {
+    if (!this.closeOnLastFdClose || this.openRefCount > 0) return read();
+    this.prepareOpenFile();
+    try {
+      return read();
+    } finally {
+      if (this.idlePool) {
+        this.idlePool.retain(this);
+      } else {
+        this.closeIdleFile();
+      }
+    }
+  }
+
   get size() {
-    return BigInt(this.file.size());
+    return BigInt(this.withPooledOpen(() => this.file.size()));
   }
 
   stat() {

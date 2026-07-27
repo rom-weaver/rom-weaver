@@ -307,7 +307,15 @@ function createInMemoryEntry(
     writable: true,
   });
   mount.trackOwnedFile(proxyFile);
-  parent.entries.set(parent.name, new WasiRandomAccessFileInode(proxyFile));
+  // Release the OPFS handle (and the adapter's coalescing buffers) as soon as the guest closes the
+  // fd. Extracting a many-entry archive creates one of these per entry; holding them until finishRun
+  // made both live handles and retained buffers scale with the entry count, which exhausts the proxy
+  // handle table and kills the tab on iOS. BrowserProxyRandomAccessFile.reopen() re-arms the adapter,
+  // so a later checksum pass or workflow chaining re-opens the path transparently.
+  parent.entries.set(
+    parent.name,
+    new WasiRandomAccessFileInode(proxyFile, { closeOnLastFdClose: true, idlePool: mount.idleFilePool }),
+  );
   return wasiShim.wasi.ERRNO_SUCCESS;
 }
 

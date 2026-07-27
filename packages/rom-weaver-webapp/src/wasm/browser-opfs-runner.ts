@@ -9,6 +9,7 @@ import {
   normalizeVirtualFiles,
   normalizeWritableRoots,
 } from "./browser-opfs-mounts.ts";
+import { browserProxyAdapterBufferBytes } from "./browser-opfs-proxy-file.ts";
 import { startOpfsProxyRuntime } from "./browser-opfs-proxy-runtime.ts";
 import type { OpfsProxyMountBootstrap } from "./browser-opfs-proxy-server.ts";
 import {
@@ -433,6 +434,15 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           stdout,
         };
       } finally {
+        // Sampled before teardown so it reports what the run actually held, not what cleanup left.
+        // `live` tracking an archive's entry count is the many-small-files fan-out regression that
+        // kills iOS tabs (one SyncAccessHandle + its coalescing buffers per entry); it must stay
+        // bounded by concurrency instead.
+        const handleStats = opfsProxy.client.handleStats();
+        trace(
+          `[perf] opfs proxy handles live=${handleStats.live} peak=${handleStats.peak} opened=${handleStats.opened}` +
+            ` adapterBufferBytes=${browserProxyAdapterBufferBytes()}`,
+        );
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
         // pool workers release their OPFS handles before the mount handles are closed.

@@ -13,6 +13,16 @@ export const OPFS_PROXY_GLOBAL_DOORBELL_INDEX = 0;
 export const OPFS_PROXY_GLOBAL_POISONED_INDEX = 1;
 /** Handle-id allocator. The proxy increments this on each successful open to mint a fresh handle id. */
 export const OPFS_PROXY_GLOBAL_HANDLE_ALLOC_INDEX = 2;
+/**
+ * Live open-handle count. Maintained by the proxy server; every consumer can read it without a
+ * round-trip. It is the resource iOS WebKit is least forgiving about (one SyncAccessHandle per file,
+ * with a hard process-wide budget), so a fan-out that scales it with entry count kills the tab.
+ */
+export const OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX = 3;
+/** High-water mark of OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX. Never reset; read at run teardown. */
+export const OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX = 4;
+/** Total successful opens (including reattaches). Distinguishes "opened a lot" from "held a lot". */
+export const OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX = 5;
 /** First index of the per-handle version-counter block (bumped on every write/truncate). */
 const OPFS_PROXY_GLOBAL_VERSION_BASE_INDEX = 8;
 /**

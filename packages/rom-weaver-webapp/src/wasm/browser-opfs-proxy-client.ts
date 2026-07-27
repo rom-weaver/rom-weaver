@@ -5,7 +5,10 @@
 
 import {
   OPFS_PROXY_GLOBAL_DOORBELL_INDEX,
+  OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX,
+  OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX,
   OPFS_PROXY_GLOBAL_POISONED_INDEX,
+  OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX,
   type OpfsProxyChannel,
   type OpfsProxyChannelSlot,
   opfsProxyVersionIndex,
@@ -83,6 +86,18 @@ export class OpfsProxyClient {
   /** True once the proxy has marked itself dead; every further op fails fast with EIO. */
   isPoisoned(): boolean {
     return Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX) !== 0;
+  }
+
+  /**
+   * Live/peak OPFS handle counts published by the proxy server. `peak` is the number that matters on
+   * iOS: it must stay bounded by concurrency, never track the archive's entry count.
+   */
+  handleStats(): { live: number; opened: number; peak: number } {
+    return {
+      live: Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX),
+      opened: Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX),
+      peak: Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX),
+    };
   }
 
   /** Current per-handle version stamp (bumped by the proxy on every write/truncate). */

@@ -14,7 +14,10 @@ import {
 import {
   OPFS_PROXY_GLOBAL_DOORBELL_INDEX,
   OPFS_PROXY_GLOBAL_HANDLE_ALLOC_INDEX,
+  OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX,
+  OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX,
   OPFS_PROXY_GLOBAL_POISONED_INDEX,
+  OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX,
   OPFS_PROXY_MAX_HANDLES,
   type OpfsProxyChannel,
   type OpfsProxyChannelSlot,
@@ -291,7 +294,10 @@ class OpfsProxyServer {
     const create = (auxLow & CREATE_FLAG) !== 0;
     const writableRequested = (auxLow & WRITABLE_FLAG) !== 0;
     const reattached = this.reattachOpenHandle(guestPath, { create, writableRequested });
-    if (reattached !== undefined) return reattached;
+    if (reattached !== undefined) {
+      Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX, 1);
+      return reattached;
+    }
     // A registered Blob input is served as a read-only handle: no OPFS namespace lookup, no
     // SyncAccessHandle. Reads slice the Blob on this (dedicated, free) worker (see opRead).
     const blob = this.blobSources.get(guestPath);
@@ -308,6 +314,7 @@ class OpfsProxyServer {
       };
       this.byId.set(id, entry);
       this.byPath.set(guestPath, id);
+      this.noteHandleOpened();
       return id;
     }
     const location = this.locate(guestPath);
@@ -319,7 +326,25 @@ class OpfsProxyServer {
     const entry: HandleEntry = { blob: null, handle, id, path: guestPath, pendingRemoval: null, refcount: 1, writable };
     this.byId.set(id, entry);
     this.byPath.set(guestPath, id);
+    this.noteHandleOpened();
     return id;
+  }
+
+  /**
+   * Republish the live-handle gauge (and its high-water mark) into the shared control region so any
+   * consumer - and the run's teardown trace - can see whether a fan-out is holding handles open. A
+   * count that tracks entry count is the iOS tab-kill signature.
+   */
+  private noteHandleOpened(): void {
+    Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX, 1);
+    this.publishHandleGauge();
+  }
+
+  private publishHandleGauge(): void {
+    const live = this.byId.size;
+    Atomics.store(this.channel.global, OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX, live);
+    const peak = Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX);
+    if (live > peak) Atomics.store(this.channel.global, OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX, live);
   }
 
   private opRead(slot: OpfsProxyChannelSlot): number | Promise<number> {
@@ -514,6 +539,7 @@ class OpfsProxyServer {
       this.trace?.(`[browser-opfs] proxy handle close failed id=${handleId} ${String(error)}`);
     }
     this.byId.delete(handleId);
+    this.publishHandleGauge();
     if (this.byPath.get(entry.path) === handleId) this.byPath.delete(entry.path);
     if (this.pendingByPath.get(entry.path) === handleId) this.pendingByPath.delete(entry.path);
     this.freeIds.push(handleId);
@@ -551,6 +577,7 @@ class OpfsProxyServer {
     this.byId.clear();
     this.byPath.clear();
     this.pendingByPath.clear();
+    this.publishHandleGauge();
   }
 }
 
