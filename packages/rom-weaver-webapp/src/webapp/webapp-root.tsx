@@ -25,10 +25,11 @@ import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
-import type { SettingsDraftState } from "./settings/settings-state.ts";
+import { getSettingsUiState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
+import { SettingsPanel } from "./webapp-settings.tsx";
 import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
@@ -43,11 +44,6 @@ const WORKFLOW_TABS = [
 // The trace inspector is the single largest dialog in the bundle and opens from
 // a masthead button, so it only downloads once someone asks for it.
 const LogDialog = lazy(() => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog })));
-
-// The settings panel drags in the whole settings-metadata graph (field metadata,
-// codec combobox, compression profile copy) that nothing on the workflow surface
-// needs, so it only loads when someone opens it.
-const SettingsPanel = lazy(() => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel })));
 
 const logger = createLogger("webapp-root");
 
@@ -446,16 +442,15 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
           title="Settings"
           variant="settings-modal"
         >
-          <Suspense fallback={null}>
-            <SettingsPanel
-              draftSettings={state.draftSettings as SettingsDraftState}
-              onClose={actions.onCloseSettings}
-              onDraftChange={actions.onDraftChange}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
-              validation={state.validation}
-            />
-          </Suspense>
+          <SettingsPanel
+            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+            onClose={actions.onCloseSettings}
+            onDraftChange={actions.onDraftChange}
+            onRestoreDefaults={actions.onRestoreDefaults}
+            onSaveClose={actions.onSaveClose}
+            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+            validation={state.validation}
+          />
         </Modal>
         <ConfirmDialog
           body={confirmationDialog.message}
