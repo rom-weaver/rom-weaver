@@ -177,6 +177,7 @@ const Masthead = ({
   onOpenLog,
   onPreloadLog,
   onOpenSettings,
+  onPreloadSettings,
   onReset,
   tabsControlPanels = true,
   serviceWorkerStatus,
@@ -196,6 +197,7 @@ const Masthead = ({
   onOpenLog: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
+  onPreloadSettings?: () => void;
   onReset: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
@@ -351,6 +353,9 @@ const Masthead = ({
           aria-label={settingsLabel}
           className="tool"
           onClick={onOpenSettings}
+          onFocus={onPreloadSettings}
+          onPointerDown={onPreloadSettings}
+          onPointerEnter={onPreloadSettings}
           title={settingsLabel}
           type="button"
         >
