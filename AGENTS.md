@@ -20,7 +20,7 @@ The helper refuses to remove a worktree with tracked or untracked changes.
 
 ---
 
-# rom-weaver
+## rom-weaver
 
 ROM workflow CLI (native + WASM) with a React webapp. Read
 `docs/ARCHITECTURE.md` first - it covers the crate graph, registry traits,
@@ -138,7 +138,7 @@ instructions do **not** apply here.
   `scripts/vendor-libarchive.mjs`), the nod and xdvdfs Rust sources under
   `src/nod` and `src/xdvdfs`. There are no git submodules.
 
-## Worktrees
+## Worktree setup
 
 Fresh worktrees need `scripts/setup-worktree.mjs` (real `npm ci` installs +
 wasm artifact copy - symlink-mirrored node_modules silently stall vitest's

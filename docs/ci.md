@@ -244,7 +244,7 @@ from source (~6.5 min). Merging the release pull request is what sets
 
 ## `ci.yml` - the required gate
 
-```
+```text
 changes ── changed paths -> rust / webapp / security / repo_lint / docker legs
 
              ┌── rust-host ─────┐
@@ -283,18 +283,20 @@ security ── advisories (warn only, always green)
   alone because they enter neither the WASM module nor the release binary;
   webapp-only changes select the webapp while restoring the exact cached WASM
   module; dependency manifests select the advisory scanners; workflows, composite
-  actions, shell scripts, and Dockerfiles select the plumbing lint. Documentation
-  changes select none of those expensive stacks. Manual runs and changes to
+  actions, shell scripts, Dockerfiles, and Markdown select the plumbing lint.
+  Documentation changes select only that lint stack, not the expensive compiled
+  stacks. Manual runs and changes to
   CI, coverage, the toolchain, or the classifier run everything. It also plans
   the `docker` matrix, because a matrix can only be fed by an upstream job's
   output.
 - **`repo-lint`** lints the repository's own plumbing: `actionlint` over the
-  workflows and composite actions, `shellcheck` over every tracked `.sh`, and
-  `hadolint` over the Dockerfiles. It lints every tracked file of those kinds
-  rather than the diff, so it is selected by whether anything of those kinds
-  changed at all - workflows, composite actions, `.github` YAML at any depth,
-  any `*.sh`, any `*.mjs`, any Dockerfile, `.config/hadolint.yaml` - not per
-  file. It installs no language toolchain and
+  workflows and composite actions, `shellcheck` over every tracked `.sh`,
+  `hadolint` over the Dockerfiles, and `markdownlint-cli2` over owned Markdown.
+  It lints every tracked file of those kinds rather than the diff, so it is
+  selected by whether anything of those kinds changed at all - workflows,
+  composite actions, `.github` YAML at any depth, any `*.md`, any `*.sh`, any
+  `*.mjs`, any Dockerfile, `.config/hadolint.yaml` - not per file. It installs
+  the pinned Node dependencies, no other language toolchain, and
   compiles nothing, so it reports in well under a minute instead of hiding
   behind a build job. `actionlint` shells out to `shellcheck` for `run:`
   blocks, which is why both are in its `tools:` list.
@@ -976,7 +978,7 @@ which semver treats as breaking.
 
 `latest`/`beta`/`nightly` are the image-side names for the webapp's
 prod/beta/nightly channels, and they cascade exactly like the
-[deploy ladder](#webapp-deploy-channels): a publish refreshes its own channel
+[deploy ladder](#deploy-channels): a publish refreshes its own channel
 plus every less-stable one below it, so `beta` and `nightly` can never serve
 code older than `latest`. The three tags therefore line up one-to-one with the
 three hostnames in [Deploy channels](#deploy-channels):
@@ -1135,7 +1137,7 @@ individual commands below when narrowing a failure or matching a specific job.
 ```bash
 mise run ci                                                  # broad local gate
 
-mise run actionlint ::: shellcheck ::: hadolint              # repo-lint
+mise run actionlint ::: docs-lint ::: shellcheck ::: hadolint # repo-lint
 node --test scripts/ci/classify-changes.test.mjs             # change boundaries
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
 mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
@@ -1143,6 +1145,7 @@ cargo publish --workspace --locked --dry-run --no-verify     # rust-host
 mise run wasm-check                                          # local threaded-target check
 mise run build-wasm-prod                                     # wasm
 npm test                                                     # repository tooling tests
+npm run docs:lint                                            # owned Markdown
 npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
 npm --prefix packages/rom-weaver-webapp run icons:channels:check
 npm --prefix packages/rom-weaver-webapp run test:unit

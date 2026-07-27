@@ -117,6 +117,9 @@ pre-commit:
       files: git diff --name-only --cached --diff-filter=ACMR -- README.md CONTRIBUTING.md CLA.md docs .github/CODE_OF_CONDUCT.md .github/RELEASING.md .github/SECURITY.md packages/rom-weaver-webapp/design/icon-masters/README.md packages/rom-weaver-webapp/src/wasm/README.md scripts/wasm/README.md
       run: node scripts/update-markdown-toc.mjs {files}
       stage_fixed: true
+    markdownlint:
+      files: git diff --name-only --cached --diff-filter=ACMR -- '*.md'
+      run: npm run docs:lint -- {files}
     whitespace:
       # Same task CI runs, so an exclusion can never apply to one and not the
       # other. Vendored trees are skipped: they are verbatim upstream snapshots,

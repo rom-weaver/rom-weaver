@@ -74,6 +74,7 @@
     "@rom-weaver/win32-x64-msvc": "0.9.0"
   },
   "scripts": {
+    "docs:lint": "markdownlint-cli2",
     "docs:toc": "node scripts/update-markdown-toc.mjs",
     "dev": "mise run dev",
     "preview": "mise run preview",
@@ -92,6 +93,7 @@
     "@commitlint/config-conventional": "21.2.0",
     "cross-spawn": "7.0.6",
     "doctoc": "2.5.0",
-    "lefthook": "2.1.10"
+    "lefthook": "2.1.10",
+    "markdownlint-cli2": "0.23.2"
   }
 }

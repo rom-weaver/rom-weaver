@@ -221,6 +221,10 @@ description = "Lint GitHub Actions workflows and composite actions"
 # pre-commit hook.
 run = "actionlint"
 
+[tasks.docs-lint]
+description = "Lint owned Markdown documentation"
+run = "npm run docs:lint"
+
 [tasks.shellcheck]
 description = "Lint shell scripts"
 # The Node.js tooling is covered by `npm test`; the handful of scripts that
@@ -265,7 +269,7 @@ run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
-depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "docs-lint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
 run = "node {{ config_root }}/scripts/run-ci.mjs"
 
 # Benchmarks are not part of `ci`: they need a corpus of real disc images, which
