@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
+import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -28,6 +29,22 @@ const VIRTUAL_PWA_REGISTER_STUB = fileURLToPath(
 const BROWSER_INSTANCES_BY_NAME = {
   chromium: { browser: "chromium" },
   webkit: { browser: "webkit" },
+};
+const firstSampleAssetFiles = createFirstSampleAssetFiles();
+const serveFirstSampleAssets = {
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      const requestPath = request.url?.split("?")[0] ?? "";
+      const source = firstSampleAssetFiles.get(requestPath.slice(1));
+      if (!source) {
+        next();
+        return;
+      }
+      response.setHeader("Content-Type", requestPath.endsWith(".zip") ? "application/zip" : "application/octet-stream");
+      response.end(source);
+    });
+  },
+  name: "rom-weaver-first-sample-assets",
 };
 
 const createBrowserInstances = () => {
@@ -78,6 +95,7 @@ export default mergeConfig(baseConfig, {
   optimizeDeps: {
     include: ["@bjorn3/browser_wasi_shim"],
   },
+  plugins: [serveFirstSampleAssets],
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),
   resolve: {
     alias: {

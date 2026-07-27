@@ -294,15 +294,19 @@ const createFirstSampleAssets = () => {
   };
 };
 
-const writeFirstSampleAssets = (outputDirectory = path.resolve("dist")) => {
+const createFirstSampleAssetFiles = () => {
   const assets = createFirstSampleAssets();
-  fs.mkdirSync(outputDirectory, { recursive: true });
-  for (const [name, source] of [
+  return new Map([
     ["first-create.zip", assets.firstCreateZip],
     ["first-weave.zip", assets.firstWeaveZip],
     ["hello-world.nes", assets.originalRom],
     ["modified-world.nes", assets.modifiedRom],
-  ]) {
+  ]);
+};
+
+const writeFirstSampleAssets = (outputDirectory = path.resolve("dist")) => {
+  fs.mkdirSync(outputDirectory, { recursive: true });
+  for (const [name, source] of createFirstSampleAssetFiles()) {
     fs.writeFileSync(path.join(outputDirectory, name), source);
   }
 };
@@ -311,4 +315,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   writeFirstSampleAssets(path.resolve(process.argv[2] ?? "dist"));
 }
 
-export { createFirstSampleAssets, writeFirstSampleAssets };
+export { createFirstSampleAssetFiles, createFirstSampleAssets, writeFirstSampleAssets };

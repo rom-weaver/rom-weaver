@@ -7,7 +7,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
-import { createFirstSampleAssets } from "./scripts/first-sample-assets.mjs";
+import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
@@ -50,13 +50,8 @@ const generatedSampleAssetPaths = new Set([
 let generatedSampleAssets;
 const getGeneratedSampleAsset = (requestPath) => {
   if (!generatedSampleAssetPaths.has(requestPath)) return null;
-  generatedSampleAssets ||= createFirstSampleAssets();
-  return {
-    "/first-create.zip": generatedSampleAssets.firstCreateZip,
-    "/first-weave.zip": generatedSampleAssets.firstWeaveZip,
-    "/hello-world.nes": generatedSampleAssets.originalRom,
-    "/modified-world.nes": generatedSampleAssets.modifiedRom,
-  }[requestPath];
+  generatedSampleAssets ||= createFirstSampleAssetFiles();
+  return generatedSampleAssets.get(requestPath.slice(1));
 };
 const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
