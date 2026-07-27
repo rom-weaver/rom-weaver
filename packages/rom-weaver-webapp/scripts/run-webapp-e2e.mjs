@@ -5,10 +5,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import https from "node:https";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium, webkit } from "playwright";
+import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
@@ -16,6 +18,9 @@ const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 const DOWNLOAD_TIMEOUT_MS = 60_000;
+const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
+const MANY_ENTRIES_COUNT = 2048;
+const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
 const A11Y_ONLY = process.argv.includes("--a11y");
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
@@ -145,6 +150,37 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
+const createWorkerReuseCorpus = () => {
+  const corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-worker-reuse-"));
+  const filesDir = path.join(corpusDir, "files");
+  fs.mkdirSync(filesDir);
+  const archive = buildStoredZip(MANY_ENTRIES_COUNT, MANY_ENTRY_SIZE);
+  const archivePath = path.join(filesDir, "many-entries.zip");
+  fs.writeFileSync(archivePath, archive);
+  const payload = Uint8Array.from({ length: MANY_ENTRY_SIZE }, (_, index) => index & 0xff);
+  fs.writeFileSync(
+    path.join(corpusDir, "manifest.json"),
+    `${JSON.stringify({
+      cases: [
+        {
+          compressedBytes: archive.byteLength,
+          entryCount: MANY_ENTRIES_COUNT,
+          expectedSha256: sha256(payload),
+          fileName: "many-entries.zip",
+          id: "many-entries",
+          kind: "generated",
+          sha256: sha256(archive),
+          uncompressedBytes: MANY_ENTRIES_COUNT * MANY_ENTRY_SIZE,
+          url: "/__rom_weaver_corpus__/files/many-entries.zip",
+        },
+      ],
+      generatedAt: new Date().toISOString(),
+      version: 1,
+    })}\n`,
+  );
+  return corpusDir;
+};
+
 const configureUncompressedOutput = async (page) => {
   await page.getByRole("button", { name: "Settings" }).click();
   await page.locator("#settings-default-compression").selectOption("none");
@@ -218,16 +254,32 @@ const runArchiveStressSmoke = async (createContext, baseUrl) => {
   });
   const page = await context.newPage();
   try {
-    await page.goto(`${baseUrl}mobile-safari-matrix.html?profile=stress`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}mobile-safari-matrix.html?profile=stress&cases=many-entries`, {
+      waitUntil: "domcontentloaded",
+    });
     await page.waitForFunction(() => typeof window.ROM_WEAVER_IOS_SAFARI_MATRIX?.run === "function");
-    await page.evaluate(() => window.ROM_WEAVER_IOS_SAFARI_MATRIX?.run("stress"));
+    await page.evaluate(() => {
+      void window.ROM_WEAVER_IOS_SAFARI_MATRIX?.run("stress");
+    });
+    await page.waitForFunction(
+      () => {
+        const status = window.ROM_WEAVER_IOS_SAFARI_MATRIX?.getReport()?.status;
+        return status === "passed" || status === "failed";
+      },
+      undefined,
+      { timeout: ARCHIVE_STRESS_TIMEOUT_MS },
+    );
     const report = await page.evaluate(() => window.ROM_WEAVER_IOS_SAFARI_MATRIX?.getReport());
     if (report?.status !== "passed") throw new Error(`archive stress smoke failed: ${JSON.stringify(report)}`);
+    const succeeded = report.result?.steps?.filter((step) => step.status === "succeeded") || [];
+    if (succeeded.length !== 1 || succeeded[0]?.name !== "many-entries") {
+      throw new Error(`archive stress smoke ran the wrong cases: ${JSON.stringify(succeeded)}`);
+    }
     const wakeLockCalls = await page.evaluate(() => window.__romWeaverWakeLockTest);
     if (wakeLockCalls?.requests !== 1 || wakeLockCalls?.releases !== 1) {
       throw new Error(`archive stress wake lock lifecycle failed: ${JSON.stringify(wakeLockCalls)}`);
     }
-    process.stdout.write(`PASS archive stress smoke (${report.result?.passedSteps || 0} cases)\n`);
+    process.stdout.write(`PASS archive worker reuse (${report.result?.durationMs || 0}ms)\n`);
   } finally {
     await context.close();
   }
@@ -253,9 +305,12 @@ const createBrowserContextFactory = async (browserType, browserName) => {
 const main = async () => {
   const port = await reservePort();
   const baseUrl = `https://${browserName === "webkit" ? "localhost" : "127.0.0.1"}:${port}/`;
+  const temporaryCorpusDir =
+    browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR ? createWorkerReuseCorpus() : null;
+  const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
   const server = childProcess.spawn(process.execPath, ["scripts/dev-server.mjs", "--port", String(port)], {
     cwd: PACKAGE_DIR,
-    env: process.env,
+    env: { ...process.env, ...(corpusDir ? { ROM_WEAVER_E2E_CORPUS_DIR: corpusDir } : {}) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverOutput = "";
@@ -268,7 +323,7 @@ const main = async () => {
 
   try {
     await waitForServer(baseUrl);
-    if (process.env.ROM_WEAVER_E2E_CORPUS_DIR) {
+    if (corpusDir) {
       const traversalStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/%2e%2e%2fmanifest.json`);
       if (traversalStatus !== 403) throw new Error(`corpus traversal returned ${traversalStatus}, expected 403`);
       const unlistedStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
@@ -289,7 +344,7 @@ const main = async () => {
         "archives/one-rom.zip",
         "archives/one-patch.7z",
       ]);
-      if (process.env.ROM_WEAVER_E2E_CORPUS_DIR) await runArchiveStressSmoke(createContext, baseUrl);
+      if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, baseUrl);
     } finally {
       await browser?.close();
       for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
@@ -299,6 +354,7 @@ const main = async () => {
     throw error;
   } finally {
     server.kill("SIGTERM");
+    if (temporaryCorpusDir) fs.rmSync(temporaryCorpusDir, { force: true, recursive: true });
   }
 };
 

@@ -1,18 +1,17 @@
 import {
-  __disposeRomWeaverBrowserThreadMountCache,
+  __disposeRomWeaverBrowserNestedThreadWorkers,
+  __disposeRomWeaverBrowserThreadRuntime,
   __primeRomWeaverBrowserThreadRuntime,
   __runRomWeaverBrowserWasiThread,
 } from "../browser-opfs-wasi-thread-runtime.ts";
 import type {
   SerializedThreadWorkerError,
   ThreadWorkerCommandDoneReply,
-  ThreadWorkerDoneReply,
   ThreadWorkerErrorReply,
   ThreadWorkerMessage,
   ThreadWorkerPoolCommandMessage,
   ThreadWorkerReadyReply,
   ThreadWorkerShellReadyReply,
-  ThreadWorkerThreadStartMessage,
 } from "../browser-wasi-thread-pool.ts";
 import { formatErrorForTrace } from "./worker-trace-format.ts";
 
@@ -78,35 +77,20 @@ self.addEventListener("message", (event) => {
     return;
   }
   if (payload.mode === "shutdown") {
-    void __disposeRomWeaverBrowserThreadMountCache()
+    void __disposeRomWeaverBrowserThreadRuntime()
       .catch(() => undefined)
       .finally(() => {
         self.close();
       });
     return;
   }
-  if (payload.mode !== "thread") {
-    self.postMessage({
-      error: serializeError(
-        new Error(`unsupported browser wasi thread worker mode: ${String(payloadMode ?? "unknown")}`),
-      ),
-      tid: null,
-      type: "error",
-    } satisfies ThreadWorkerErrorReply);
-    return;
-  }
-  void runSingleThread(payload).catch((error) => {
-    self.postMessage({
-      error: serializeError(error),
-      tid: payload?.tid ?? null,
-      type: "error",
-    } satisfies ThreadWorkerErrorReply);
-    void __disposeRomWeaverBrowserThreadMountCache()
-      .catch(() => undefined)
-      .finally(() => {
-        self.close();
-      });
-  });
+  self.postMessage({
+    error: serializeError(
+      new Error(`unsupported browser wasi thread worker mode: ${String(payloadMode ?? "unknown")}`),
+    ),
+    tid: null,
+    type: "error",
+  } satisfies ThreadWorkerErrorReply);
 });
 
 const THREAD_SLOT_STATE_INDEX = 0;
@@ -121,61 +105,15 @@ const THREAD_SLOT_STATE_FAILED = 5;
 const THREAD_SLOT_STATE_SHUTDOWN = 6;
 const ATOMICS_WAIT_SLICE_MS = 100;
 
-async function runSingleThread(payload: ThreadWorkerThreadStartMessage) {
-  const tid = payload?.tid ?? null;
-  const stream = createStreamPublisher(payload, tid);
-  const startControl = threadStartControlFromBuffer(payload?.startControlBuffer);
-  stream?.traceLine(`[wasi-thread-worker] single thread start tid=${tid ?? "unknown"}`);
-  try {
-    await __runRomWeaverBrowserWasiThread(
-      stream
-        ? {
-            ...payload,
-            stderrLineHandler: stream.stderrLine,
-            stdoutLineHandler: stream.stdoutLine,
-          }
-        : payload,
-    );
-    stream?.traceLine(`[wasi-thread-worker] single thread done tid=${tid ?? "unknown"}`);
-    if (startControl) {
-      Atomics.store(startControl, THREAD_SLOT_ERROR_INDEX, 0);
-      signalThreadState(startControl, THREAD_SLOT_STATE_IDLE);
-    }
-    self.postMessage({ tid, type: "done" } satisfies ThreadWorkerDoneReply);
-  } catch (error) {
-    stream?.traceLine(
-      `[wasi-thread-worker] single thread failed tid=${tid ?? "unknown"} ${formatErrorForTrace(error)}`,
-    );
-    if (startControl) {
-      Atomics.store(startControl, THREAD_SLOT_ERROR_INDEX, 1);
-      signalThreadState(startControl, THREAD_SLOT_STATE_FAILED);
-    }
-    self.postMessage({
-      error: serializeError(error),
-      tid,
-      type: "error",
-    } satisfies ThreadWorkerErrorReply);
-  } finally {
-    stream?.close();
-    await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
-    self.close();
-  }
-}
-
-function threadStartControlFromBuffer(controlBuffer: unknown): Int32Array<SharedArrayBuffer> | null {
-  if (!(controlBuffer instanceof SharedArrayBuffer)) return null;
-  const control = new Int32Array(controlBuffer);
-  if (control.length < THREAD_SLOT_LENGTH) return null;
-  return control;
-}
-
 async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
   const control = new Int32Array(payload.controlBuffer);
   if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
     throw new Error("browser wasi thread pool worker missing shared control buffer");
   }
   const poolStream = createStreamPublisher(payload, null);
-  await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
+  if (payload.prewarmRuntime !== false) {
+    await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
+  }
   self.postMessage({
     commandId: payload.commandId,
     type: "ready",
@@ -237,6 +175,7 @@ async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
     }
   } finally {
     poolStream?.close();
+    await __disposeRomWeaverBrowserNestedThreadWorkers().catch(() => undefined);
   }
 }
 

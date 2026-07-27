@@ -25,7 +25,7 @@ export interface SerializedThreadWorkerError {
   stack?: string;
 }
 
-/** Shared fields posted with both pool-command and standalone thread messages. */
+/** Shared fields carried by a pool-command message. */
 interface ThreadWorkerCommandMessageBase {
   __streamBroadcastChannelName?: string;
   __streamRequestId?: number;
@@ -54,22 +54,19 @@ export interface ThreadWorkerPoolCommandMessage extends ThreadWorkerCommandMessa
   commandId: number;
   controlBuffer: SharedArrayBuffer;
   mode: "pool-command";
-}
-
-/** Posted to a standalone (non-pooled) worker to run a single wasi thread. */
-export interface ThreadWorkerThreadStartMessage extends ThreadWorkerCommandMessageBase {
-  mode: "thread";
-  startArg: number;
-  startControlBuffer: SharedArrayBuffer;
-  tid: number;
+  /**
+   * Top-level pool shells can prewarm before their asynchronous command-ready barrier resolves.
+   * Nested spawners are synchronous and must enter the thread-start barrier first; their real
+   * thread run resolves the same mounts after publishing STARTING.
+   */
+  prewarmRuntime?: boolean;
 }
 
 /** Every message the pool posts to a thread worker. */
 export type ThreadWorkerMessage =
   | ThreadWorkerPoolCommandMessage
   | ThreadWorkerPoolShellMessage
-  | ThreadWorkerShutdownMessage
-  | ThreadWorkerThreadStartMessage;
+  | ThreadWorkerShutdownMessage;
 
 /** Worker shell finished booting and can accept pool commands. */
 export interface ThreadWorkerShellReadyReply {
@@ -86,12 +83,6 @@ export interface ThreadWorkerReadyReply {
 export interface ThreadWorkerCommandDoneReply {
   commandId: number;
   type: "command-done";
-}
-
-/** Standalone worker finished its single wasi thread. */
-export interface ThreadWorkerDoneReply {
-  tid: number | null;
-  type: "done";
 }
 
 /** A thread (or the shell itself) failed; `tid` is null for shell-level failures. */

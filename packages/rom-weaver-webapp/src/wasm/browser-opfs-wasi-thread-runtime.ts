@@ -29,6 +29,8 @@ import {
   traceRandomAccessFileIoStats,
 } from "./browser-opfs-stdio-events.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
+import { disposeNestedThreadWorkerLists } from "./browser-wasi-nested-thread-workers.ts";
+import { attachThreadWorkerCensus } from "./browser-wasi-thread-census.ts";
 import {
   createBrowserWasiThreadSpawner,
   needsWasiThreadSpawnImport,
@@ -46,9 +48,9 @@ import { createWasmEnvImports } from "./rom-weaver-runtime-utils.ts";
 const THREAD_WORKER_MOUNT_CACHE = createBrowserOpfsMountCache();
 
 /**
- * Message payload accepted by the thread runtime entry point. Mirrors the fields posted with
- * `mode: 'thread'` / `mode: 'pool-command'` worker messages (see browser-wasi-thread-pool.ts),
- * plus the per-thread line handlers the worker shell injects before delegating here.
+ * Message payload accepted by the thread runtime entry point. Mirrors the fields posted with a
+ * `mode: 'pool-command'` worker message (see browser-wasi-thread-pool.ts), plus the per-thread
+ * fields (tid/startArg/control) and line handlers the worker shell injects before delegating here.
  */
 export interface BrowserWasiThreadRunPayload {
   __streamBroadcastChannelName?: string;
@@ -100,6 +102,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     throw new Error("browser wasi thread payload memory is not shared");
   }
 
+  attachThreadWorkerCensus(runtime?.opfsProxyTransfer);
   const trace = createLineTrace(stderrLineHandler);
   trace(
     `[browser-opfs-thread] start tid=${tid ?? "unknown"} startArg=${startArg ?? "unknown"} args=${formatArgsForTrace(Array.isArray(wasiArgs) ? wasiArgs : [])} virtualFiles=${summarizeRawVirtualFiles(runtime?.virtualFiles)}`,
@@ -217,7 +220,17 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   }
 }
 
-export async function __disposeRomWeaverBrowserThreadMountCache() {
+/**
+ * Releases the nested Workers kept for reuse within one command. The shell's mount cache deliberately
+ * survives because a pooled shell can accept another command.
+ */
+export async function __disposeRomWeaverBrowserNestedThreadWorkers() {
+  await disposeNestedThreadWorkerLists();
+}
+
+/** Tears down everything owned by this Worker realm when its pooled shell shuts down. */
+export async function __disposeRomWeaverBrowserThreadRuntime() {
+  await __disposeRomWeaverBrowserNestedThreadWorkers();
   await THREAD_WORKER_MOUNT_CACHE.dispose();
 }
 
@@ -226,6 +239,7 @@ export async function __primeRomWeaverBrowserThreadRuntime(
   onTraceNonJsonLine?: LineHandler,
 ) {
   assertDedicatedWorkerRuntime();
+  attachThreadWorkerCensus(runtime?.opfsProxyTransfer);
   const trace = createLineTrace(onTraceNonJsonLine);
   const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
   if (!normalizedRuntimeMounts.length) return;

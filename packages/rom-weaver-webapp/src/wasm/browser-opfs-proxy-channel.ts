@@ -23,6 +23,14 @@ export const OPFS_PROXY_GLOBAL_OPEN_HANDLES_INDEX = 3;
 export const OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX = 4;
 /** Total successful opens (including reattaches). Distinguishes "opened a lot" from "held a lot". */
 export const OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX = 5;
+/**
+ * Dedicated Workers created to host WASI threads, counted across every realm that spawns one (the
+ * runner's pool shells plus each spawned thread's own nested workers). It rides in this region only
+ * because the region is already shared with every realm that can create such a worker. Each creation
+ * costs a full ~7 MB wasm instantiation plus an OPFS mount rebuild, so this number scaling with the
+ * workload (rather than with concurrency) is the regression this gauge exists to catch.
+ */
+export const OPFS_PROXY_GLOBAL_THREAD_WORKERS_CREATED_INDEX = 6;
 /** First index of the per-handle version-counter block (bumped on every write/truncate). */
 const OPFS_PROXY_GLOBAL_VERSION_BASE_INDEX = 8;
 /**

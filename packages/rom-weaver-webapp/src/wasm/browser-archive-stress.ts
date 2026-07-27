@@ -95,7 +95,7 @@ const verifyEmittedFiles = (testCase: ArchiveStressCase, event: RomWeaverRunJson
       .map((entry) => entry.checksums)
       .filter((checksums) => checksums && typeof checksums === "object")
       .map((checksums) => String((checksums as Record<string, unknown>).sha256 || ""));
-    if (!hashes.includes(testCase.expectedSha256)) {
+    if (hashes.length !== emitted.length || hashes.some((hash) => hash !== testCase.expectedSha256)) {
       throw new Error(`${testCase.id}: extracted sha256 did not match ${testCase.expectedSha256}`);
     }
   }

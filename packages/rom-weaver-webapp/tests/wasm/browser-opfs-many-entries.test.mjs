@@ -6,85 +6,8 @@
 // it stays bounded by concurrency instead of tracking the entry count.
 
 import { describe, expect, it } from "vitest";
+import { buildStoredZip } from "./stored-zip-fixture.mjs";
 import { assertRunJsonSucceeded, joinGuestPath, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
-
-const CRC32_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < 256; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    table[index] = value >>> 0;
-  }
-  return table;
-})();
-
-const crc32 = (bytes) => {
-  let crc = 0xffffffff;
-  for (const byte of bytes) crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
-};
-
-/**
- * Minimal STORE-only zip writer. Building the fixture in-test (instead of shelling out to the CLI)
- * keeps the entry count a free parameter, which is the whole point of the measurement.
- */
-function buildStoredZip(entryCount, entrySize) {
-  const encoder = new TextEncoder();
-  const payload = new Uint8Array(entrySize);
-  for (let index = 0; index < entrySize; index += 1) payload[index] = index & 0xff;
-  const payloadCrc = crc32(payload);
-
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-  for (let index = 0; index < entryCount; index += 1) {
-    const name = encoder.encode(`entry-${String(index).padStart(5, "0")}.bin`);
-    const local = new Uint8Array(30 + name.byteLength + entrySize);
-    const localView = new DataView(local.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint32(14, payloadCrc, true);
-    localView.setUint32(18, entrySize, true);
-    localView.setUint32(22, entrySize, true);
-    localView.setUint16(26, name.byteLength, true);
-    local.set(name, 30);
-    local.set(payload, 30 + name.byteLength);
-    locals.push(local);
-
-    const central = new Uint8Array(46 + name.byteLength);
-    const centralView = new DataView(central.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint32(16, payloadCrc, true);
-    centralView.setUint32(20, entrySize, true);
-    centralView.setUint32(24, entrySize, true);
-    centralView.setUint16(28, name.byteLength, true);
-    centralView.setUint32(42, offset, true);
-    central.set(name, 46);
-    centrals.push(central);
-
-    offset += local.byteLength;
-  }
-
-  const centralSize = centrals.reduce((sum, entry) => sum + entry.byteLength, 0);
-  const end = new Uint8Array(22);
-  const endView = new DataView(end.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(8, entryCount, true);
-  endView.setUint16(10, entryCount, true);
-  endView.setUint32(12, centralSize, true);
-  endView.setUint32(16, offset, true);
-
-  const total = offset + centralSize + end.byteLength;
-  const zip = new Uint8Array(total);
-  let cursor = 0;
-  for (const chunk of [...locals, ...centrals, end]) {
-    zip.set(chunk, cursor);
-    cursor += chunk.byteLength;
-  }
-  return zip;
-}
 
 const parseHandleStats = (traceLines) => {
   const line = traceLines.findLast((entry) => entry.includes("[perf] opfs proxy handles"));
@@ -99,6 +22,14 @@ const parseHandleStats = (traceLines) => {
   };
 };
 
+const parseThreadWorkerStats = (traceLines) => {
+  const line = traceLines.findLast((entry) => entry.includes("[perf] thread workers"));
+  if (!line) throw new Error(`no thread worker gauge in trace (${traceLines.length} lines)`);
+  const matched = /created=(\d+) total=(\d+)/.exec(line);
+  if (!matched) throw new Error(`unparseable thread worker gauge: ${line}`);
+  return { threadWorkersCreated: Number(matched[1]), threadWorkersTotal: Number(matched[2]) };
+};
+
 const listDirectoryEntries = async (rootHandle, relativePath) => {
   let directory = rootHandle;
   for (const part of relativePath.split("/").filter(Boolean)) {
@@ -109,7 +40,7 @@ const listDirectoryEntries = async (rootHandle, relativePath) => {
   return names;
 };
 
-async function measureManyEntryExtract({ entryCount, entrySize }) {
+async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }) {
   let measurement = null;
   await withTempFixture(
     async ({ worker, opfsHandle, dir }) => {
@@ -118,15 +49,19 @@ async function measureManyEntryExtract({ entryCount, entrySize }) {
       await writeGuestFile(opfsHandle, archivePath, buildStoredZip(entryCount, entrySize));
 
       const traceLines = [];
-      const result = await worker.runJson(["extract", "--input", archivePath, "--out-dir", outDir], {
+      const startedAtMs = performance.now();
+      const result = await worker.runJson(["extract", "--input", archivePath, "--out-dir", outDir, ...extraArgs], {
         onTraceNonJsonLine: (line) => traceLines.push(line),
       });
+      const durationMs = performance.now() - startedAtMs;
       assertRunJsonSucceeded(result);
       const names = await listDirectoryEntries(opfsHandle, "out");
       // The extract transaction leaves its empty `.rom-weaver-extract-*` staging directory behind,
       // so count the real outputs rather than every directory entry.
       measurement = {
         ...parseHandleStats(traceLines),
+        ...parseThreadWorkerStats(traceLines),
+        durationMs,
         extractedFiles: names.filter((name) => /^entry-\d+\.bin$/.test(name)).length,
       };
     },
@@ -138,6 +73,10 @@ async function measureManyEntryExtract({ entryCount, entrySize }) {
 // Live handles are bounded by concurrency, not entry count: each participating realm keeps at most
 // IdleFilePool's capacity (8) parked plus its in-flight fds. Well under the proxy's 1024-handle table.
 const MAX_EXPECTED_PEAK_HANDLES = 64;
+
+// Worker creations are bounded by concurrency too: the runner's pool (<= 20 shells) plus, for each
+// pooled parent thread, its own small nested free-list. Never by the entry count.
+const MAX_EXPECTED_THREAD_WORKERS = 25;
 
 describe("many-entry archive extract", () => {
   it("keeps peak OPFS handles bounded as entry count grows", async () => {
@@ -162,16 +101,21 @@ describe("many-entry archive extract", () => {
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
   });
 
-  // The iOS stress corpus shape. Above roughly a thousand entries the extract fans out to spawned
-  // WASI threads, which build their own mounts - the path that used to resolve to the wrong OPFS
-  // directory and fail the whole run with "zip archive is invalid: Failed to open".
-  it("validates and extracts a stress-size 2048-entry archive", async () => {
-    const measured = await measureManyEntryExtract({ entryCount: 2048, entrySize: 4096 });
+  // The iOS stress corpus's real command shape: threaded fan-out with per-entry checksums. Spawned
+  // WASI threads build their own mounts, and each entry used to get a brand-new dedicated Worker
+  // (a ~7 MB wasm instantiation plus an OPFS mount rebuild apiece). Verify the full output while
+  // bounding both resources in the same run.
+  it("validates a threaded 2048-entry extract with bounded resources", async () => {
+    const measured = await measureManyEntryExtract({
+      entryCount: 2048,
+      entrySize: 4096,
+      extraArgs: ["--threads", "auto", "--checksum", "sha256"],
+    });
 
-    console.debug("[rom-weaver test] stress-size handle gauge", measured);
+    console.debug("[rom-weaver test] threaded stress-size gauges", measured);
 
     expect(measured.extractedFiles).toBe(2048);
-
+    expect(measured.threadWorkersTotal).toBeLessThanOrEqual(MAX_EXPECTED_THREAD_WORKERS);
     expect(measured.peak).toBeLessThanOrEqual(MAX_EXPECTED_PEAK_HANDLES);
     expect(measured.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
   });
