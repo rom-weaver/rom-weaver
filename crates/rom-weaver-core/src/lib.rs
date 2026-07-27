@@ -69,7 +69,7 @@ pub use registry::{
 };
 pub use report_details::{
     attach_emitted_file_paths, attach_extraction_details, build_emitted_file_detail,
-    insert_thread_execution_details, operation_report_details,
+    build_known_emitted_file_detail, insert_thread_execution_details, operation_report_details,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use threads::{

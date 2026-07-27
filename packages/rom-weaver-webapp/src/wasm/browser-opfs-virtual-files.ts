@@ -128,9 +128,10 @@ function addVirtualFileEntry(
       : { entries, hadExisting: true, name, value: existingValue },
   );
   // The proxy file must survive fd churn within a run: nod opens the disc to probe, drops it, then
-  // re-opens to list/extract. closeOnLastFdClose would permanently close the BrowserProxyRandomAccessFile
-  // (no reopen) on the first drop, so the next path_open throws EBADF. restoreVirtualFiles closes it at
-  // run end instead (matching staged-OPFS inodes). The virtual-Blob path keeps closeOnLastFdClose since
+  // re-opens to list/extract. This is one input file per run, so it is held open for the run rather
+  // than cycled - unlike the per-entry extract outputs, whose count is unbounded and which therefore
+  // do use closeOnLastFdClose plus the mount's idle pool. restoreVirtualFiles closes it at run end
+  // (matching staged-OPFS inodes). The virtual-Blob path keeps closeOnLastFdClose since
   // BrowserVirtualRandomAccessFile.reopen() recreates its reader on demand.
   const inodeOptions = proxyOptions.useProxyHandle ? { readonly: true } : { closeOnLastFdClose: true, readonly: true };
   entries.set(name, new WasiRandomAccessFileInode(file, inodeOptions));

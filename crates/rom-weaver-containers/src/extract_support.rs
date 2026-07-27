@@ -13,7 +13,7 @@ use rom_weaver_checksum::{
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
-    ThreadExecution, bounded_items_for_threads, build_emitted_file_detail,
+    ThreadExecution, bounded_items_for_threads, build_known_emitted_file_detail,
     create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
     is_rom_filter_candidate_name, maybe_emit_container_byte_progress, operation_report_details,
     ordered_streaming_compress,
@@ -235,6 +235,7 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
 #[derive(Clone, Debug)]
 pub(crate) struct ExtractedFileChecksum {
     pub(crate) path: PathBuf,
+    pub(crate) size_bytes: u64,
     pub(crate) values: BTreeMap<String, String>,
     /// Checksum variants (raw, remove-header, fix-header, n64 byte order) when
     /// computed inline during extract; empty for disc-image / unknown-size paths.
@@ -293,12 +294,14 @@ pub(crate) enum ExtractHasher {
         checksum: StreamingChecksum,
         identity: IdentityPrefix,
         identity_emitted: bool,
+        size_bytes: u64,
     },
     Variants {
         engine: StreamingVariantChecksums,
         algorithms: Vec<String>,
         identity: IdentityPrefix,
         identity_emitted: bool,
+        size_bytes: u64,
     },
 }
 
@@ -336,6 +339,7 @@ impl ExtractHasher {
                     checksum,
                     identity: IdentityPrefix::new(),
                     identity_emitted: false,
+                    size_bytes: 0,
                 },
                 None => Self::None,
             });
@@ -360,6 +364,7 @@ impl ExtractHasher {
             algorithms: algorithms.to_vec(),
             identity: IdentityPrefix::new(),
             identity_emitted: false,
+            size_bytes: 0,
         })
     }
 
@@ -402,16 +407,26 @@ impl ExtractHasher {
         match self {
             Self::None => Ok(()),
             Self::Plain {
-                checksum, identity, ..
+                checksum,
+                identity,
+                size_bytes,
+                ..
             } => {
                 identity.push(bytes);
-                checksum.update(bytes)
+                checksum.update(bytes)?;
+                *size_bytes = size_bytes.saturating_add(bytes.len() as u64);
+                Ok(())
             }
             Self::Variants {
-                engine, identity, ..
+                engine,
+                identity,
+                size_bytes,
+                ..
             } => {
                 identity.push(bytes);
-                engine.update(bytes)
+                engine.update(bytes)?;
+                *size_bytes = size_bytes.saturating_add(bytes.len() as u64);
+                Ok(())
             }
         }
     }
@@ -433,13 +448,17 @@ impl ExtractHasher {
         match self {
             Self::None => Ok((None, ExtractChecksumTiming::default())),
             Self::Plain {
-                checksum, identity, ..
+                checksum,
+                identity,
+                size_bytes,
+                ..
             } => {
                 let rom_identity = detect_emitted_identity(&identity, output_path);
                 let (values, timing) = checksum.finalize_timed()?;
                 Ok((
                     Some(ExtractedFileChecksum {
                         path: output_path.to_path_buf(),
+                        size_bytes,
                         values,
                         variants: Vec::new(),
                         timing: None,
@@ -456,6 +475,7 @@ impl ExtractHasher {
                 engine,
                 algorithms,
                 identity,
+                size_bytes,
                 ..
             } => {
                 let rom_identity = detect_emitted_identity(&identity, output_path);
@@ -478,6 +498,7 @@ impl ExtractHasher {
                 Ok((
                     Some(ExtractedFileChecksum {
                         path: output_path.to_path_buf(),
+                        size_bytes,
                         values,
                         variants: rows,
                         timing: None,
@@ -508,6 +529,7 @@ pub(crate) fn attach_extract_checksum_details(
         .filter_map(|entry| {
             build_extract_checksum_emitted_file_detail(
                 &entry.path,
+                entry.size_bytes,
                 entry.values,
                 entry.variants,
                 entry.timing,
@@ -524,6 +546,7 @@ pub(crate) fn attach_extract_checksum_details(
 
 fn build_extract_checksum_emitted_file_detail(
     path: &Path,
+    size_bytes: u64,
     checksums: BTreeMap<String, String>,
     variants: Vec<VariantRow>,
     timing: Option<ExtractTiming>,
@@ -532,7 +555,7 @@ fn build_extract_checksum_emitted_file_detail(
     if checksums.is_empty() {
         return None;
     }
-    let mut entry = build_emitted_file_detail(path)?;
+    let mut entry = build_known_emitted_file_detail(path, size_bytes)?;
     entry.insert("checksums".to_string(), json!(checksums));
     // Identity detected from the streamed output by the producing path - no extra read here.
     rom_identity.write_into(&mut entry);
@@ -715,6 +738,7 @@ impl<'a> ExtractChunkWriter<'a> {
             let rom_identity = detect_emitted_identity(&self.identity, output_path);
             checksums.push(ExtractedFileChecksum {
                 path: output_path.to_path_buf(),
+                size_bytes: self.total_bytes,
                 values: checksum.finalize()?,
                 variants: Vec::new(),
                 timing: None,

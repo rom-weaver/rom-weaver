@@ -12,6 +12,7 @@ the source of truth.
 ## Table of contents
 
 - [WASI thread-start barrier](#wasi-thread-start-barrier)
+  - [Nested spawns](#nested-spawns)
 - [OPFS proxy channel](#opfs-proxy-channel)
   - [Control words](#control-words)
   - [States](#states)
@@ -56,8 +57,46 @@ The state values are:
 The caller writes the thread ID and argument, stores `REQUESTED`, and wakes the
 worker. It then blocks in 100 ms slices until the state changes to `RUNNING`,
 `IDLE`, or `FAILED`. Startup acknowledgement times out after 8 seconds. A worker
-shell has 5 seconds to report that it is ready. Waiting for a free pooled worker
-uses a 25 ms retry interval and a 30 second limit.
+shell has 5 seconds to report that it is ready. A synchronous spawn waits up to
+250 ms for a free pooled worker before returning `EAGAIN` so the guest can
+retry; asynchronous pool selection and command teardown retain a 30 second
+limit.
+
+### Nested spawns
+
+A spawned WASI thread can spawn threads of its own. Those nested spawns never
+draw from the runner's bounded pool: a parent blocks in `Atomics.wait` on its
+children, so queueing a child behind a pool slot that a blocked parent holds
+deadlocks the run. `browser-wasi-nested-thread-workers.ts` therefore gives every
+worker realm its own unbounded free list of thread workers.
+
+The free list is deadlock-safe by construction:
+
+- `acquire` never blocks and never runs out. It takes a parked worker or creates
+  one, so it is not a contended resource and cannot appear in a wait-for cycle.
+- One realm - one JavaScript thread - owns the list, so there is no mutual
+  exclusion between realms to deadlock over.
+- A worker is parked only after its thread reached `IDLE`, so the peak worker
+  count equals the realm's peak simultaneous children.
+
+The list is realm-scoped, not spawner-scoped: the many-entries extract fan-out
+runs one short-lived parent thread per archive entry, and a per-parent list would
+still pay a fresh worker (a full WASM instantiation plus an OPFS mount rebuild)
+per entry. It is keyed by the identity of the command payload - module, memory,
+thread-ID counter, runtime, stream routing - and drained when that key changes,
+when the realm's command loop exits, and on shutdown, so a parked worker is never
+handed a stale run.
+
+Reused workers run the same `pool-command` loop as pooled shells, so a nested
+worker is indistinguishable from a fresh one to the guest: each thread gets its
+own WASI instance and fds, and acquires/releases its mounts through the existing
+per-realm mount cache.
+
+`OPFS_PROXY_GLOBAL_THREAD_WORKERS_CREATED_INDEX` in the proxy channel's global
+control region counts every thread worker created across all realms; the runner
+reports it as `[perf] thread workers created=N total=N` at the end of each run.
+That number scaling with the workload rather than with concurrency is the
+regression the gauge exists to catch.
 
 ## OPFS proxy channel
 

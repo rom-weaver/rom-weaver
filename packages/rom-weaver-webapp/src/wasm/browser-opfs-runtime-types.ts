@@ -39,6 +39,13 @@ export type BrowserOpfsRuntime = Partial<BrowserOpfsRunOptions> & {
   invalidateMountCacheBeforeRun?: boolean;
   knownInputPaths?: string[];
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
+  /**
+   * Per-mount path from the OPFS root to that mount's directory, as `root.resolve(handle)` returns
+   * it. Directory handles cannot be structured-cloned to a nested worker (Safari), so spawned WASI
+   * threads re-derive their handles by walking these parts - exactly like the OPFS proxy worker.
+   * An empty array means the mount *is* the OPFS root.
+   */
+  mountRootRelativeParts?: Record<string, string[]>;
   /** Forwarded to spawned WASI threads so they share the runner's OPFS proxy. */
   opfsProxyTransfer?: OpfsProxyChannelTransfer;
   request?: RomWeaverRunRequest;

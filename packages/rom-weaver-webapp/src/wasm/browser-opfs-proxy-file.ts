@@ -21,6 +21,18 @@ const PROXY_READ_CACHE_MAX_REQUEST_BYTES = 256 * 1024;
  */
 const PROXY_WRITE_BUFFER_BYTES = 4 * 1024 * 1024;
 
+/**
+ * Live total of the read/write buffers held by open adapters in this realm. Each adapter can retain
+ * 8 MiB, so a fan-out that keeps one adapter per archive entry alive is an out-of-memory tab kill on
+ * iOS well before it is a correctness bug. Traced at run teardown; realm-local by design (the runner
+ * owns the output adapters).
+ */
+let liveAdapterBufferBytes = 0;
+
+export function browserProxyAdapterBufferBytes(): number {
+  return liveAdapterBufferBytes;
+}
+
 export interface BrowserProxyRandomAccessFileOptions {
   /** Create the file if it does not exist (output files). */
   create?: boolean;
@@ -91,7 +103,10 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       dst.set(this.cacheBuf.subarray(start - this.cacheStart, start - this.cacheStart + dst.byteLength));
       return dst.byteLength;
     }
-    if (!this.cacheBuf) this.cacheBuf = new Uint8Array(PROXY_READ_CACHE_BLOCK_BYTES);
+    if (!this.cacheBuf) {
+      this.cacheBuf = new Uint8Array(PROXY_READ_CACHE_BLOCK_BYTES);
+      liveAdapterBufferBytes += PROXY_READ_CACHE_BLOCK_BYTES;
+    }
     const blockStart = Math.floor(start / PROXY_READ_CACHE_BLOCK_BYTES) * PROXY_READ_CACHE_BLOCK_BYTES;
     const filled = this.client.readInto(handleId, blockStart, this.cacheBuf);
     this.cacheStart = blockStart;
@@ -120,7 +135,10 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       this.flushWriteBuffer();
       return this.client.write(handleId, start, data);
     }
-    if (!this.wbuf) this.wbuf = new Uint8Array(PROXY_WRITE_BUFFER_BYTES);
+    if (!this.wbuf) {
+      this.wbuf = new Uint8Array(PROXY_WRITE_BUFFER_BYTES);
+      liveAdapterBufferBytes += PROXY_WRITE_BUFFER_BYTES;
+    }
     const contiguous = this.wbufLen > 0 && start === this.wbufStart + this.wbufLen;
     if (!contiguous || this.wbufLen + data.byteLength > this.wbuf.byteLength) {
       this.flushWriteBuffer();
@@ -150,12 +168,43 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   close(): void {
     if (this.handleId === null || this.closed) {
       this.closed = true;
+      this.releaseBuffers();
       return;
     }
     this.flushWriteBuffer();
     this.client.close(this.handleId);
     this.handleId = null;
     this.closed = true;
+    this.releaseBuffers();
+  }
+
+  /**
+   * Re-arm a closed adapter so its inode can serve another `path_open`.
+   *
+   * Without this, `closeOnLastFdClose` could not be used on proxy-backed files at all: the first
+   * `fd_close` would permanently poison the adapter and the next open would fail with EBADF. With it,
+   * a per-entry output file releases its OPFS handle (and its 8 MiB of coalescing buffers) the moment
+   * the guest closes the fd, and a later re-open - checksum pass, workflow chaining - just works.
+   */
+  reopen(): void {
+    this.closed = false;
+  }
+
+  /** Drop the read/write buffers so a closed adapter retains nothing but its path. */
+  private releaseBuffers(): void {
+    if (this.cacheBuf) {
+      liveAdapterBufferBytes -= this.cacheBuf.byteLength;
+      this.cacheBuf = null;
+    }
+    this.cacheStart = -1;
+    this.cacheLen = 0;
+    this.cacheVersion = -1;
+    if (this.wbuf) {
+      liveAdapterBufferBytes -= this.wbuf.byteLength;
+      this.wbuf = null;
+    }
+    this.wbufLen = 0;
+    this.wbufStart = 0;
   }
 
   /** Commit any buffered sequential writes to the proxy in one (slot-chunked) call. */

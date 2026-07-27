@@ -9,6 +9,7 @@ import {
   normalizeVirtualFiles,
   normalizeWritableRoots,
 } from "./browser-opfs-mounts.ts";
+import { browserProxyAdapterBufferBytes } from "./browser-opfs-proxy-file.ts";
 import { startOpfsProxyRuntime } from "./browser-opfs-proxy-runtime.ts";
 import type { OpfsProxyMountBootstrap } from "./browser-opfs-proxy-server.ts";
 import {
@@ -46,6 +47,7 @@ import {
 } from "./browser-opfs-stdio-events.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
 import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
+import { attachThreadWorkerCensus, readThreadWorkerCensus } from "./browser-wasi-thread-census.ts";
 import {
   browserThreadRequestOptions,
   createBrowserWasiThreadSpawner,
@@ -192,13 +194,6 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
     writableDirectories: options.writableDirectories,
   });
   const baseDefaultThreads = resolveConfiguredDefaultThreads(options, resolveBrowserDefaultThreads());
-  const threadWorkerPool =
-    threaded && importsWasiThreadSpawn
-      ? createBrowserWasiThreadWorkerPool({
-          initialSize: resolveBrowserThreadPoolSizeFromCount(baseDefaultThreads ?? resolveBrowserDefaultThreads()),
-          threadWorkerUrl: options.threadWorkerUrl,
-        })
-      : null;
   const mountCache = createBrowserOpfsMountCache();
   const baseSyncAccessMode = resolveRunSyncAccessMode({ baseMode: options.syncAccessMode, threaded });
   // One lifetime proxy owns every OPFS handle for runner and compute threads,
@@ -206,11 +201,16 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   // nested worker, so send root-relative mount paths for the proxy to resolve.
   const opfsRootForResolve = await navigator.storage.getDirectory();
   const proxyMounts: OpfsProxyMountBootstrap[] = [];
+  // Spawned WASI threads cannot receive the directory handles either, so they re-derive them from
+  // the same root-relative paths. Without this a mount that is not the OPFS root silently resolves
+  // to the root inside every thread, and the guest sees ENOENT for files that plainly exist.
+  const mountRootRelativeParts: Record<string, string[]> = {};
   for (const mountPath of runtimeMounts) {
     const directoryHandle = baseMountHandles[mountPath];
     if (!directoryHandle) continue;
     const rootRelativeParts = (await opfsRootForResolve.resolve(directoryHandle as unknown as FileSystemHandle)) ?? [];
     proxyMounts.push({ mountPath, rootRelativeParts, writableRoots: baseWritableRoots });
+    mountRootRelativeParts[mountPath] = rootRelativeParts;
   }
   const opfsProxy = await startOpfsProxyRuntime({
     mounts: proxyMounts,
@@ -218,6 +218,16 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
     syncAccessMode: baseSyncAccessMode,
     workerUrl: options.opfsProxyWorkerUrl,
   });
+  // Attach the thread-worker census before anything can create a thread worker: the pool starts
+  // pre-warming the moment it is constructed, so its shells would otherwise go uncounted.
+  attachThreadWorkerCensus(opfsProxy.transfer);
+  const threadWorkerPool =
+    threaded && importsWasiThreadSpawn
+      ? createBrowserWasiThreadWorkerPool({
+          initialSize: resolveBrowserThreadPoolSizeFromCount(baseDefaultThreads ?? resolveBrowserDefaultThreads()),
+          threadWorkerUrl: options.threadWorkerUrl,
+        })
+      : null;
   // The wasi thread pool pre-warms itself to `initialSize` after a short idle delay (see
   // browser-wasi-thread-pool.ts). Runner init does not wait on it: warmup and small non-threaded ops
   // never need the shells, and threaded runs grow the pool on demand.
@@ -285,6 +295,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       // drain/flush/cleanup after it returns ("after finish"). performance.now() is available in workers.
       const nowMs = (): number => (typeof performance === "undefined" ? 0 : performance.now());
       const runStartedAtMs = nowMs();
+      const threadWorkersAtRunStart = readThreadWorkerCensus() ?? 0;
       let setupDoneAtMs: number | null = null;
       let computeDoneAtMs: number | null = null;
       let exitCode: number | null = null;
@@ -317,6 +328,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           knownInputPaths,
           mountHandles,
+          mountRootRelativeParts,
           opfsProxyTransfer: opfsProxy.transfer,
           request,
           runtimeMounts,
@@ -433,6 +445,24 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           stdout,
         };
       } finally {
+        // Sampled before teardown so it reports what the run actually held, not what cleanup left.
+        // `live` tracking an archive's entry count is the many-small-files fan-out regression that
+        // kills iOS tabs (one SyncAccessHandle + its coalescing buffers per entry); it must stay
+        // bounded by concurrency instead.
+        const handleStats = opfsProxy.client.handleStats();
+        trace(
+          `[perf] opfs proxy handles live=${handleStats.live} peak=${handleStats.peak} opened=${handleStats.opened}` +
+            ` adapterBufferBytes=${browserProxyAdapterBufferBytes()}`,
+        );
+        // Companion gauge to the handle one: a dedicated Worker per unit of work (rather than per
+        // unit of concurrency) is a ~7 MB wasm instantiation each time and is what made the
+        // many-entries fan-out unusable on mobile. `total` spans the runner's whole lifetime,
+        // `created` only this run.
+        const threadWorkersTotal = readThreadWorkerCensus();
+        trace(
+          `[perf] thread workers created=${threadWorkersTotal === null ? "n/a" : threadWorkersTotal - threadWorkersAtRunStart}` +
+            ` total=${threadWorkersTotal ?? "n/a"}`,
+        );
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
         // pool workers release their OPFS handles before the mount handles are closed.

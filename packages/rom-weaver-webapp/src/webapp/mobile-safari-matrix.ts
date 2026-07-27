@@ -99,7 +99,10 @@ const appendLog = (line: string) => {
   // narrow phone viewport is better spent on the step detail.
   logLines.push(line);
   while (logLines.length > MAX_LOG_LINES) logLines.shift();
-  if (logElement) logElement.textContent = logLines.join("\n");
+  if (logElement) {
+    logElement.textContent = logLines.join("\n");
+    if (state.startedAt && !state.finishedAt) logElement.scrollTop = logElement.scrollHeight;
+  }
 };
 
 const formatDuration = (milliseconds?: number | null) => {
@@ -254,10 +257,17 @@ const runProfile = async (
   profile: MobileSafariMatrixProfile,
   callbacks: MobileSafariMatrixCallbacks,
 ): Promise<BrowserFormatMatrixSummary> => {
-  if (profile === "stress") return runBrowserArchiveStress(callbacks);
+  if (profile === "stress") return runBrowserArchiveStress({ ...callbacks, caseIds: readStressCaseIdsFromLocation() });
   if (profile === "threads") return runBrowserThreadSweep(callbacks);
   return runBrowserFullFormatMatrix({ ...callbacks, prefix: "rom-weaver-ios-safari-matrix-", profile });
 };
+
+/** `?cases=many-entries,budget-200` narrows the stress profile to specific corpus cases. */
+const readStressCaseIdsFromLocation = (): string[] =>
+  (new URLSearchParams(location.search).get("cases") || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 
 const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
   state.profile = profile;

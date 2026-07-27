@@ -6,6 +6,7 @@ import {
   deserializeThreadWorkerError,
   toThreadWorkerError,
 } from "./browser-wasi-thread-errors.ts";
+import { countThreadWorkerCreated } from "./browser-wasi-thread-census.ts";
 import { probeThreadWorkerLoadFailure } from "./browser-wasi-thread-load-probe.ts";
 import {
   createThreadWorkerRuntimePayload,
@@ -47,13 +48,11 @@ export type {
   SerializedThreadWorkerError,
   ThreadSpawnerRuntime,
   ThreadWorkerCommandDoneReply,
-  ThreadWorkerDoneReply,
   ThreadWorkerErrorReply,
   ThreadWorkerMessage,
   ThreadWorkerPoolCommandMessage,
   ThreadWorkerReadyReply,
   ThreadWorkerShellReadyReply,
-  ThreadWorkerThreadStartMessage,
 } from "./browser-wasi-thread-pool-protocol.ts";
 export {
   browserThreadRequestOptions,
@@ -244,6 +243,8 @@ export function createBrowserWasiThreadWorkerPool({
     }, THREAD_WORKER_READY_TIMEOUT_MS);
 
     const worker = new Worker(resolvedThreadWorkerUrl, { type: "module" });
+    const totalCreated = countThreadWorkerCreated();
+    trace?.(`[browser-opfs] thread worker created kind=pool-shell index=${index} total=${totalCreated}`);
     slot.worker = worker;
     worker.addEventListener("message", (event: MessageEvent<ThreadWorkerReplyView>) => {
       handleShellMessage(slot, event.data ?? {});

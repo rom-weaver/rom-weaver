@@ -189,6 +189,31 @@ WASI thread so they share the one proxy; the mount
 (`packages/rom-weaver-webapp/src/wasm/browser-opfs-mount.ts`) builds proxy vs virtual inodes and caches inode
 trees across runs.
 
+**Bounding the fan-out** - an extract emits one output file per archive entry, so
+anything held per entry scales without limit (a 2048-entry zip killed the tab on
+iOS). Created output inodes therefore use `closeOnLastFdClose`, and the mount owns
+a small LRU of idle files
+(`packages/rom-weaver-webapp/src/wasm/browser-opfs-idle-file-pool.ts`): a file's
+handle and its coalescing buffers are released once it falls out of the window,
+so live handles are bounded by *concurrency*, never by entry count.
+`BrowserProxyRandomAccessFile.reopen()` re-arms an evicted adapter, so a later
+checksum pass or workflow chaining re-opens the path transparently. The proxy
+publishes a live/peak handle gauge in its SAB control region; the runner emits it
+at teardown as `[perf] opfs proxy handles live=… peak=… opened=…
+adapterBufferBytes=…`, which is the first thing to check for a many-small-files
+regression.
+
+**Mount handles inside spawned threads** - Safari cannot structured-clone a
+`FileSystemDirectoryHandle` into a nested worker, so the runner sends every
+consumer the mount's *root-relative path* (`root.resolve(handle)`) and each
+re-walks it from `navigator.storage.getDirectory()`. Both the OPFS proxy worker
+and the WASI thread runtime do this (`mountRootRelativeParts` on the thread
+runtime payload). A thread that assumes the mount *is* the OPFS root fails
+silently and confusingly: its mount builds empty, input hydration finds nothing,
+and the guest gets `ENOENT` for a file that plainly exists - surfacing as
+"archive is invalid". Only threaded work hits it, so it looks like a
+size/entry-count threshold rather than a mount bug.
+
 **Native (CLI)** - plain `std::fs::File` + `BufReader`/`BufWriter`,
 `SplitFileReader` for split inputs, `create_extract_output_file` for outputs
 (`rom-weaver-core`). Container decode uses the same **per-worker** reader shape

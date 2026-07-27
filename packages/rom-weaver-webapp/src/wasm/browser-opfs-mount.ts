@@ -1,5 +1,6 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { isGuestPathWithinRoots, joinGuestPath } from "./browser-opfs-guest-paths.ts";
+import { IdleFilePool } from "./browser-opfs-idle-file-pool.ts";
 import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
@@ -39,6 +40,8 @@ interface BrowserOpfsMountConstructorOptions {
 export class BrowserOpfsMount {
   contents: WasiDirectoryContents;
   directoryHandle: FileSystemDirectoryHandleLike;
+  /** Bounds how many fd-less per-entry output files stay open at once. See IdleFilePool. */
+  idleFilePool: IdleFilePool;
   mountPath: string;
   ownedFiles: RandomAccessFileLike[];
   /** Count of ownedFiles built at mount creation (the persistent input set). Everything appended past
@@ -94,6 +97,8 @@ export class BrowserOpfsMount {
   }: BrowserOpfsMountConstructorOptions) {
     this.contents = contents;
     this.directoryHandle = directoryHandle;
+    // Trace is resolved lazily: startRun installs the active run's sink long after construction.
+    this.idleFilePool = new IdleFilePool({ trace: (line) => this.trace?.(line) });
     this.mountPath = mountPath;
     this.ownedFiles = ownedFiles;
     this.persistentOwnedFileCount = ownedFiles.length;
@@ -144,6 +149,8 @@ export class BrowserOpfsMount {
       restoreVirtualFiles(this.virtualRestores);
     }
     this.virtualRestores = null;
+    // Drain before pruning: the pool holds inodes whose adapters are about to be closed and evicted.
+    this.idleFilePool.closeAll();
     this.pruneRunOwnedFiles();
     this.trace = null;
   }
