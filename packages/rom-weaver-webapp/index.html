@@ -159,7 +159,19 @@
           // Fall back to the browser default; the app does the same for bad storage.
         }
 
-        if (threads) slot.textContent = `· ${threads} ${slot.dataset.threadLabel}`;
+        if (!threads) return;
+        const label = slot.dataset.threadLabel || "threads";
+        const full = slot.querySelector(".masthead-threads-full");
+        const short = slot.querySelector(".masthead-threads-short");
+        const accessible = slot.querySelector(".sr-only");
+        if (full && short && accessible) {
+          full.textContent = `· ${threads} ${label}`;
+          short.textContent = `· ${threads}T`;
+          accessible.textContent = `${threads} ${label}`;
+        } else {
+          slot.textContent = `· ${threads} ${label}`;
+        }
+        slot.title = `${threads} ${label}`;
       })();
     </script>
   </body>
