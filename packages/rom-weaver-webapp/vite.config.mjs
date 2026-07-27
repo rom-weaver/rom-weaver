@@ -29,6 +29,7 @@ const channelAssetPath = (channel, name) => {
 };
 
 const rootStaticAssetSourcesForChannel = (channel) => ({
+  "/404.html": path.join(rootAssetDir, "404.html"),
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": channelAssetPath(channel, "apple-touch-icon.png"),
   "/create-modified.bin": path.join(rootAssetDir, "create-modified.bin"),
@@ -86,7 +87,8 @@ const deferDevHotUpdates = () => ({
 });
 
 const setRootStaticAssetContentType = (requestPath, res) => {
-  if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
+  if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
+  else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");

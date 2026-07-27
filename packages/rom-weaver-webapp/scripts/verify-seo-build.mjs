@@ -13,6 +13,7 @@ const assertIncludes = (source, expected, label) => {
 };
 
 const weaveHtml = read("index.html");
+const notFoundHtml = read("404.html");
 const createHtml = read("create.html");
 const headers = read("_headers");
 const llmsTxt = read("llms.txt");
@@ -27,6 +28,11 @@ assertIncludes(
   "fingerprinted asset cache headers",
 );
 assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
+assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
+assertIncludes(notFoundHtml, '<h1 aria-label="404: Page not found">404</h1>', "404 heading");
+assertIncludes(notFoundHtml, '<nav aria-label="Workflow mode" class="modes">', "404 masthead navigation");
+assertIncludes(notFoundHtml, '<a class="return" href="/weave">Go to Weave</a>', "404 home action");
+assertIncludes(notFoundHtml, 'href="/weave"', "404 home link");
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
   "https://rom-weaver.com/weave",

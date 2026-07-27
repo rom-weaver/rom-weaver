@@ -10,8 +10,8 @@
 
 const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;
 
-// A request Pages cannot resolve surfaces as the SPA fallback (200 text/html),
-// not a 404, so content-type is the reliable missing-asset signal.
+// Missing assets are errors now that the build publishes a top-level 404.html;
+// keep the HTML check for hosts that still apply an SPA fallback.
 const isSpaFallback = (response) => !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
 export const onRequestGet = async ({ request, env, next }) => {
