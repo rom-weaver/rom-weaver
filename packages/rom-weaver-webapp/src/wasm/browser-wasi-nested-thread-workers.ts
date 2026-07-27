@@ -340,7 +340,17 @@ function createNestedThreadWorkerList({
       slot.tid = null;
       if (!allSlots.has(slot)) return;
       trace?.(`[browser-opfs] nested thread worker retired index=${slot.index}`);
-      shutdownSlot(slot);
+      allSlots.delete(slot);
+      // A sibling can still be inside wasi_thread_start when another thread fails. A graceful
+      // shutdown message cannot run until that call returns, and the command loop would then write
+      // IDLE over SHUTDOWN and park forever. Stop failed/abandoned workers immediately instead.
+      signalThreadStartState(slot.control, THREAD_SLOT_STATE_SHUTDOWN);
+      try {
+        slot.worker?.terminate();
+      } catch {
+        // ignored
+      }
+      slot.resolveDone();
     },
   };
 }

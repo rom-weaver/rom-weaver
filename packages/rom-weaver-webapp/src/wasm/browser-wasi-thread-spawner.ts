@@ -116,7 +116,9 @@ export function createBrowserWasiThreadSpawner({
   // Nested spawns take their workers from the realm-scoped free list rather than the runner's bounded
   // pool. See browser-wasi-nested-thread-workers.ts for why that is the only deadlock-safe option
   // (a parent blocks on its children, so it must never queue behind a pool slot a parent is holding)
-  // and why reuse does not raise the peak worker count.
+  // and why reuse does not raise the peak worker count. A top-level runner can also reach this path
+  // when a per-run worker URL bypasses its pool; that caller owns and drains the list after the run.
+  const drainWorkersAfterWait = allowWorkerPool;
   const nestedWorkers = acquireNestedThreadWorkerList({
     debugWasi: Boolean(runtime?.debugWasi ?? false),
     envList,
@@ -194,34 +196,37 @@ export function createBrowserWasiThreadSpawner({
     return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   };
 
-  // Parks finished workers instead of draining the list: the list outlives this spawner so the next
-  // parent WASI thread in this realm reuses the same workers. It is drained when the realm's command
-  // ends (see disposeNestedThreadWorkerLists).
+  // True nested spawners park finished workers so the next parent thread in this realm can reuse
+  // them. A top-level no-pool fallback owns its list and drains it here instead.
   const waitForWorkers = async () => {
-    trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size}`);
-    while (activeWorkers.size > 0) {
-      for (const [tid, slot] of activeWorkers.entries()) {
-        while (true) {
-          const state = loadThreadSlotState(slot.control);
-          if (state === THREAD_SLOT_STATE_IDLE) {
-            activeWorkers.delete(tid);
-            nestedWorkers.release(slot);
-            trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index}`);
-            break;
+    try {
+      trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size}`);
+      while (activeWorkers.size > 0) {
+        for (const [tid, slot] of activeWorkers.entries()) {
+          while (true) {
+            const state = loadThreadSlotState(slot.control);
+            if (state === THREAD_SLOT_STATE_IDLE) {
+              activeWorkers.delete(tid);
+              nestedWorkers.release(slot);
+              trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index}`);
+              break;
+            }
+            if (state === THREAD_SLOT_STATE_FAILED) {
+              const failure = slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`);
+              activeWorkers.delete(tid);
+              nestedWorkers.retire(slot);
+              recordFailure(tid, failure);
+              break;
+            }
+            waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
           }
-          if (state === THREAD_SLOT_STATE_FAILED) {
-            const failure = slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`);
-            activeWorkers.delete(tid);
-            nestedWorkers.retire(slot);
-            recordFailure(tid, failure);
-            break;
-          }
-          waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
         }
       }
+      if (firstThreadFailure) throw firstThreadFailure;
+      trace?.("[browser-opfs] thread wait done");
+    } finally {
+      if (drainWorkersAfterWait) await nestedWorkers.drain();
     }
-    if (firstThreadFailure) throw firstThreadFailure;
-    trace?.("[browser-opfs] thread wait done");
   };
 
   return { ready: Promise.resolve(), spawn, waitForWorkers };
