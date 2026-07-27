@@ -2,12 +2,13 @@
 
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 export const CACHE_RULE_DESCRIPTION = "rom-weaver: cache immutable /assets (managed by ci.yml)";
 export const CACHE_RULE_EXPRESSION = '(http.host in {"rom-weaver.com" "beta.rom-weaver.com" "nightly.rom-weaver.com"}) and starts_with(http.request.uri.path, "/assets/")';
 
 export function cacheRule() {
-  return { description: CACHE_RULE_DESCRIPTION, expression: CACHE_RULE_EXPRESSION, action: "set_cache_settings", action_parameters: { cache: true, edge_ttl: { mode: "respect_origin" } }, enabled: true };
+  return { description: CACHE_RULE_DESCRIPTION, expression: CACHE_RULE_EXPRESSION, action: "set_cache_settings", action_parameters: { cache: true, edge_ttl: { mode: "respect_origin", status_code_ttl: [{ status_code_range: { from: 300, to: 599 }, value: -1 }] } }, enabled: true };
 }
 
 export async function ensureCacheRule({ zoneId, token, fetchImpl = globalThis.fetch }) {
@@ -20,7 +21,14 @@ export async function ensureCacheRule({ zoneId, token, fetchImpl = globalThis.fe
   if (read.status !== 200) throw new Error(`Cloudflare cache ruleset read returned HTTP ${read.status}\n${JSON.stringify(body, null, 2)}`);
   if (!body.success) throw new Error(`Cloudflare cache ruleset read was not successful\n${JSON.stringify(body, null, 2)}`);
   const rules = body.result?.rules || [];
-  if (rules.some((rule) => rule.description === CACHE_RULE_DESCRIPTION && rule.expression === CACHE_RULE_EXPRESSION)) return "exists";
+  const desired = cacheRule();
+  if (rules.some((rule) =>
+    rule.description === desired.description &&
+    rule.expression === desired.expression &&
+    rule.action === desired.action &&
+    rule.enabled === desired.enabled &&
+    isDeepStrictEqual(rule.action_parameters, desired.action_parameters)
+  )) return "exists";
   return installRule(api, headers, rules, fetchImpl);
 }
 
