@@ -1,0 +1,215 @@
+html:has(.docs-workbench) { scroll-behavior: smooth; }
+
+.rw-app .docs-workbench {
+  padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
+}
+.rw-app .docs-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-s);
+  margin: 0 0 var(--sp-m);
+  color: var(--ink-3);
+  font-size: .7rem;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.rw-app .docs-breadcrumbs a { color: var(--ink-3); }
+.rw-app .docs-layout {
+  display: grid;
+  grid-template-columns: 11.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-l);
+}
+.rw-app .guide-nav {
+  position: sticky;
+  top: var(--sp-l);
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate);
+}
+.rw-app .guide-nav-title {
+  display: block;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--seam-soft);
+  color: var(--ink-3);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.rw-app .guide-nav-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+}
+.rw-app .guide-nav-list li { margin: 0; }
+.rw-app .guide-nav-list a {
+  display: block;
+  padding: 8px 9px;
+  border-radius: var(--r-s);
+  color: var(--ink-2);
+  font-size: .76rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.rw-app .guide-nav-list a[aria-current="page"] {
+  background:
+    var(--warp-lines),
+    color-mix(in oklab, var(--thread) 10%, var(--well));
+  color: var(--thread-text);
+}
+.rw-app .docs-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+  background: var(--plate);
+  box-shadow: 0 18px 50px -38px rgb(0 0 0 / .7);
+}
+.rw-app .docs-article { padding: clamp(22px, 5vw, 44px); }
+.rw-app .docs-article h1,
+.rw-app .docs-article h2,
+.rw-app .docs-article h3 {
+  color: var(--ink);
+  font-stretch: 96%;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.rw-app .docs-article h1 {
+  max-width: 20ch;
+  margin: 0 0 var(--sp-m);
+  font-size: clamp(1.9rem, 1.35rem + 2.4vw, 2.75rem);
+  font-weight: 750;
+}
+.rw-app .docs-article h1::before {
+  display: block;
+  width: 3.5rem;
+  height: 4px;
+  margin-bottom: var(--sp-m);
+  border-radius: 999px;
+  background: var(--thread);
+  content: "";
+}
+.rw-app .docs-article h2 {
+  margin: clamp(34px, 7vw, 52px) 0 var(--sp-m);
+  padding-top: var(--sp-xl);
+  border-top: 1px solid var(--seam-soft);
+  font-size: clamp(1.3rem, 1.08rem + .9vw, 1.65rem);
+  font-weight: 700;
+}
+.rw-app .docs-article h3 {
+  margin: var(--sp-xl) 0 var(--sp-s);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.rw-app .docs-article h1 + p {
+  margin: 0 0 var(--sp-xl);
+  color: var(--ink-2);
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+.rw-app .docs-article p,
+.rw-app .docs-article li {
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+.rw-app .docs-article p { margin-block: var(--sp-m); }
+.rw-app .docs-article ul,
+.rw-app .docs-article ol { padding-inline-start: 1.35rem; }
+.rw-app .docs-article li { margin-block: var(--sp-s); padding-inline-start: .25rem; }
+.rw-app .docs-article strong { color: var(--ink); font-weight: 700; }
+.rw-app .docs-article a {
+  color: var(--thread-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
+  text-underline-offset: .18em;
+}
+.rw-app .docs-article h2:first-of-type + ul {
+  columns: 2 13rem;
+  column-gap: var(--sp-xl);
+  margin: 0 0 var(--sp-xl);
+  padding: var(--sp-m) var(--sp-l) var(--sp-m) 2rem;
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-article code {
+  padding: .1rem .3rem;
+  border: 1px solid var(--seam-soft);
+  border-radius: 4px;
+  background: var(--well);
+  color: var(--weft);
+  font: .87em/1.5 var(--mono);
+}
+.rw-app .docs-article :not(pre) > code { overflow-wrap: anywhere; }
+.rw-app .docs-article pre {
+  overflow-x: auto;
+  margin-block: var(--sp-l);
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-article pre code { padding: 0; border: 0; background: transparent; color: var(--ink-2); }
+.rw-app .docs-article blockquote {
+  margin: var(--sp-l) 0;
+  padding: var(--sp-m) var(--sp-l);
+  border: 1px solid var(--seam-soft);
+  border-left: 3px solid var(--thread);
+  border-radius: 0 var(--r-s) var(--r-s) 0;
+  background: var(--plate-2);
+}
+.rw-app .docs-article blockquote > :first-child { margin-top: 0; }
+.rw-app .docs-article blockquote > :last-child { margin-bottom: 0; }
+.rw-app .docs-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-l);
+  padding: var(--sp-l) clamp(22px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+  background:
+    var(--warp-lines),
+    color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+}
+.rw-app .docs-cta h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-cta p { margin: 3px 0 0; color: var(--ink-3); font-size: .78rem; }
+.rw-app .docs-cta-actions { display: flex; flex: none; gap: var(--sp-s); }
+.rw-app .docs-cta .btn { text-decoration: none; }
+
+@media (max-width: 720px) {
+  .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
+  .rw-app .guide-nav { position: static; }
+  .rw-app .guide-nav-list {
+    display: flex;
+    overflow-x: auto;
+    padding: 5px;
+    scrollbar-width: thin;
+  }
+  .rw-app .guide-nav-list li { flex: none; }
+  .rw-app .guide-nav-list a { white-space: nowrap; }
+}
+
+@media (max-width: 520px) {
+  .rw-app .docs-article { padding: 22px 18px 28px; }
+  .rw-app .docs-article h2:first-of-type + ul { columns: auto; }
+  .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
+  .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.docs-workbench) { scroll-behavior: auto; }
+}

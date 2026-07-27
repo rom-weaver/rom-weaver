@@ -8,6 +8,7 @@ import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -420,6 +421,7 @@ const renderWebappRoot = (): undefined => {
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
     },
     confirmationDialog: confirmationDialogState,
+    docsSlug: readDocsSlugFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({

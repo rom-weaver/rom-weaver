@@ -27,25 +27,25 @@ import {
   type ToolsSessionState,
   type TrimSessionState,
   type ValidationState,
-  type WorkflowView,
+  type WebappView,
 } from "./webapp-state-types.ts";
 
-const DEFAULT_WORKFLOW_VIEW: WorkflowView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WorkflowView[] = ["patcher", "creator", "trim", "tools"];
+const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
+const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools"];
 const ACTIVE_VIEW_STORAGE_KEY = "rom-weaver-active-view";
 
-const normalizeWorkflowView = (value: unknown): WorkflowView | null => {
+const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return VALID_WORKFLOW_VIEWS.includes(normalized as WorkflowView) ? (normalized as WorkflowView) : null;
+  return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WorkflowView): boolean => view === "trim" || view === "tools";
+const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || view === "tools";
 
-const normalizeWorkflowViewForSettings = (view: WorkflowView, settings: SettingsState): WorkflowView =>
+const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 /** Restore the last-used workflow tab so a reload returns to the same tab. */
-const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WorkflowView => {
+const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WebappView => {
   try {
     const stored = storage && typeof storage.getItem === "function" ? storage.getItem(ACTIVE_VIEW_STORAGE_KEY) : null;
     return normalizeWorkflowView(stored) || DEFAULT_WORKFLOW_VIEW;
@@ -54,7 +54,7 @@ const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): Work
   }
 };
 
-const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, view: WorkflowView): void => {
+const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, view: WebappView): void => {
   try {
     if (storage && typeof storage.setItem === "function") storage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
   } catch {
@@ -62,15 +62,18 @@ const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, 
   }
 };
 
-const VIEW_TO_ROUTE_SLUG: Record<WorkflowView, string> = {
+const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
+  docs: "docs",
   patcher: "weave",
   tools: "tools",
   trim: "trim",
 };
-const ROUTE_SLUG_TO_VIEW: Record<string, WorkflowView> = {
+const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   create: "creator",
   "create.html": "creator",
+  docs: "docs",
+  "docs.html": "docs",
   tools: "tools",
   trim: "trim",
   weave: "patcher",
@@ -83,8 +86,9 @@ const readRouteSegments = (): string[] => {
   return segments;
 };
 
-const readWorkflowViewFromPath = (): WorkflowView | null => {
+const readWorkflowViewFromPath = (): WebappView | null => {
   const segments = readRouteSegments();
+  if (segments.includes("docs")) return "docs";
   const slug = segments.at(-1) || "";
   return ROUTE_SLUG_TO_VIEW[slug] || null;
 };
@@ -102,8 +106,12 @@ const readAppBaseUrl = (): string => {
   const pathSegments = baseUrl.pathname.split("/");
   while (pathSegments.at(-1) === "") pathSegments.pop();
   if (pathSegments.at(-1) === "index.html") pathSegments.pop();
-  const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
-  if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
+  const docsIndex = pathSegments.lastIndexOf("docs");
+  if (docsIndex >= 0) pathSegments.splice(docsIndex);
+  else {
+    const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
+    if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
+  }
   baseUrl.pathname = `${pathSegments.join("/")}/`;
   baseUrl.hash = "";
   baseUrl.search = "";
@@ -112,9 +120,10 @@ const readAppBaseUrl = (): string => {
 
 type RouteHistoryMode = "none" | "push" | "replace";
 
-const writeWorkflowViewToPath = (view: WorkflowView, historyMode: RouteHistoryMode): void => {
+const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode): void => {
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
+  if (view === "docs" && readRouteSegments().includes("docs")) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
   if (nextUrl.href === window.location.href) return;
@@ -123,7 +132,7 @@ const writeWorkflowViewToPath = (view: WorkflowView, historyMode: RouteHistoryMo
 
 type WebappState = {
   creatorSession: CreatorSessionState;
-  currentView: WorkflowView;
+  currentView: WebappView;
   patcherSession: PatcherSessionState;
   toolsSession: ToolsSessionState;
   trimSession: TrimSessionState;
@@ -140,7 +149,7 @@ type ControllerOptions = {
   onLocalizationChange: (language: string) => void;
   onFocusField: (fieldId: string) => void;
   onCreatorViewRequested: (options?: { fallbackOnError?: boolean }) => boolean;
-  onConfirmViewLeave?: (context: { currentView: WorkflowView; nextView: WorkflowView }) => boolean;
+  onConfirmViewLeave?: (context: { currentView: WebappView; nextView: WebappView }) => boolean;
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 };
 
@@ -275,7 +284,7 @@ const createWebappRootController = (options: ControllerOptions) => {
     options.onLocalizationChange(nextSettings.language);
   };
 
-  const commitMode = (mode: WorkflowView, historyMode: RouteHistoryMode = "push") => {
+  const commitMode = (mode: WebappView, historyMode: RouteHistoryMode = "push") => {
     setState({ currentView: mode });
     persistWorkflowView(options.storage, mode);
     writeWorkflowViewToPath(mode, historyMode);

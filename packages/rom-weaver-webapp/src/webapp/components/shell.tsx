@@ -210,6 +210,7 @@ const Masthead = ({
   versionTitle?: string;
 }) => {
   const localizer = useUiLocalizer();
+  const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
@@ -241,10 +242,10 @@ const Masthead = ({
           <BrandMark />
           <span className="brand-copy">
             <span className="brand-line">
-              <h1 className="brand-word">
+              <BrandHeading className="brand-word">
                 rom<span className="brand-hy">-</span>
                 <b>weaver</b>
-              </h1>
+              </BrandHeading>
               {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
             </span>
             {version ? (

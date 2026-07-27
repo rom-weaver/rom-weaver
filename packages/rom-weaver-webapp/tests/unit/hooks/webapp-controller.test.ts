@@ -99,6 +99,17 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/rom-weaver/weave");
   });
 
+  it("keeps nested docs routes and returns to the app root", () => {
+    window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("docs");
+    expect(readWorkflowViewFromPath()).toBe("docs");
+    expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
+
+    controller.selectView("creator");
+    expect(window.location.pathname).toBe("/rom-weaver/create");
+  });
+
   it("preserves URL session parameters without emitting hash routes", () => {
     window.history.replaceState({}, "", "/weave?bundle=first-weave.zip");
     const controller = createController();

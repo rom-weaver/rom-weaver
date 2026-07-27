@@ -2,7 +2,7 @@ import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
-import type { WorkflowView } from "./webapp-state-types.ts";
+import type { WebappView } from "./webapp-state-types.ts";
 
 /**
  * Workflow forms are the bulk of the route-exclusive bundle weight, and a
@@ -22,19 +22,20 @@ const logger = createLogger("workflow-routes");
 
 type WorkflowRouteProps = {
   creator: CreatePatchFormProps;
+  docs: { slug: string };
   patcher: ApplyPatchFormProps;
   tools: ToolsFormProps;
   trim: TrimPatchFormProps;
 };
 
-type WorkflowRouteComponent<View extends WorkflowView> = ComponentType<WorkflowRouteProps[View]>;
+type WorkflowRouteComponent<View extends WebappView> = ComponentType<WorkflowRouteProps[View]>;
 
-type WorkflowRoute<View extends WorkflowView> = {
+type WorkflowRoute<View extends WebappView> = {
   Component: WorkflowRouteComponent<View>;
   preload: () => Promise<unknown>;
 };
 
-const createWorkflowRoute = <View extends WorkflowView>(
+const createWorkflowRoute = <View extends WebappView>(
   view: View,
   load: () => Promise<{ default: WorkflowRouteComponent<View> }>,
 ): WorkflowRoute<View> => {
@@ -76,6 +77,9 @@ const createWorkflowRoute = <View extends WorkflowView>(
 const CreatorRoute = createWorkflowRoute("creator", () =>
   import("../public/react/create-patch-form.tsx").then((module) => ({ default: module.CreatePatchForm })),
 );
+const DocsRoute = createWorkflowRoute("docs", () =>
+  import("./docs-page.tsx").then((module) => ({ default: module.DocsPage })),
+);
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
@@ -88,17 +92,19 @@ const TrimRoute = createWorkflowRoute("trim", () =>
 
 const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
+  docs: DocsRoute,
   patcher: PatcherRoute,
   tools: ToolsRoute,
   trim: TrimRoute,
 } as const;
 
 const CreatePatchRoute = CreatorRoute.Component;
+const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const ToolsRouteForm = ToolsRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 
 /** Resolve one route's chunk. Awaited before the first mount so the landing tab never suspends. */
-const preloadWorkflowRoute = (view: WorkflowView): Promise<unknown> => WORKFLOW_ROUTES[view].preload();
+const preloadWorkflowRoute = (view: WebappView): Promise<unknown> => WORKFLOW_ROUTES[view].preload();
 
-export { ApplyPatchRoute, CreatePatchRoute, preloadWorkflowRoute, ToolsRouteForm, TrimPatchRoute };
+export { ApplyPatchRoute, CreatePatchRoute, DocsPageRoute, preloadWorkflowRoute, ToolsRouteForm, TrimPatchRoute };

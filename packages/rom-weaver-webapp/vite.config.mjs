@@ -9,7 +9,8 @@ import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
-import { DOC_ROUTES, renderDocsPages } from "./src/webapp/docs-pages.mjs";
+import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
+import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -356,8 +357,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
-      const stylesheetAsset = indexHtml.match(/<link rel="stylesheet"[^>]+href="\.\/([^"]+\.css)"/)?.[1];
-      if (!stylesheetAsset) throw new Error("rom-weaver-static-assets: app stylesheet not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
       // structured data the /weave route gets.
       const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
@@ -380,19 +379,20 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
-      for (const [slug, html] of renderDocsPages({
-        accent: CHANNEL_DEFAULT_ACCENTS[channel],
-        channel,
-        channelLabel,
-        reactShell: prerenderedShells.get("patcher"),
-        stylesheetHref: `/${stylesheetAsset}`,
-      })) {
-        const extensionlessPath = path.join(distDir, `${slug}.html`);
-        const directoryIndexPath = path.join(distDir, slug, "index.html");
+      for (const route of DOC_ROUTES) {
+        const docsShell = prerenderedShells.get(route.slug);
+        if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
+        const routeShellHtml = withRoutePreloadLinks(
+          indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
+          routePreloadLinks.get("docs"),
+        );
+        const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
+        const extensionlessPath = path.join(distDir, `${route.slug}.html`);
+        const directoryIndexPath = path.join(distDir, route.slug, "index.html");
         fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
         fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
-        fs.writeFileSync(extensionlessPath, html);
-        fs.writeFileSync(directoryIndexPath, html);
+        fs.writeFileSync(extensionlessPath, docsHtml);
+        fs.writeFileSync(directoryIndexPath, docsHtml);
       }
       for (const [slug, html] of [
         ["weave", weaveHtml],
@@ -569,20 +569,17 @@ const writeChangelogAsset = () => {
 // to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
-// Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
-// in webapp-controller.ts: the last path segment picks the workflow. Only the
-// creator has a shell of its own (the build emits create.html and
-// create/index.html from it); trim and tools inherit the patcher markup, exactly
-// as writeWebappStaticAssets emits them.
-const devPrerenderView = (url) => {
-  const segments = String(url || "")
-    .split(/[?#]/)[0]
-    .toLowerCase()
-    .split("/")
-    .filter(Boolean);
+// Which prerendered variant a dev request gets, mirroring the app router.
+const devPrerenderRoute = (url) => {
+  const pathname = String(url || "").split(/[?#]/)[0];
+  const segments = pathname.toLowerCase().split("/").filter(Boolean);
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
-  return slug === "create" || slug === "create.html" ? "creator" : "patcher";
+  if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  return {
+    docsSlug: "docs",
+    view: slug === "create" || slug === "create.html" ? "creator" : "patcher",
+  };
 };
 
 const prerenderWebappShell = (prerenderedShells) => ({
@@ -603,8 +600,9 @@ const prerenderWebappShell = (prerenderedShells) => ({
       // production locally. Build renders the creator variant too, which
       // writeWebappStaticAssets emits as a second static entry point.
       if (ctx.server) {
-        const view = devPrerenderView(ctx.originalUrl ?? ctx.path);
-        const shell = await prerender.renderLandingShellWithServer(ctx.server, view);
+        const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
+        const shell = await prerender.renderLandingShellWithServer(ctx.server, route.view, false, route.docsSlug);
+        const routeHtml = route.view === "docs" ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
         // Production ships the bundled CSS as a render-blocking <link>, so its
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell
@@ -614,7 +612,7 @@ const prerenderWebappShell = (prerenderedShells) => ({
         // them on a full reload; until then the HMR'd <style> (appended after
         // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
-          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
+          html: routeHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
           tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
             attrs: { href: `${href}?direct`, rel: "stylesheet" },
             injectTo: "head",
@@ -628,6 +626,9 @@ const prerenderWebappShell = (prerenderedShells) => ({
       prerenderedShells.set("patcher", patcherShell);
       prerenderedShells.set("creator", creatorShell);
       prerenderedShells.set("notFound", notFoundShell);
+      for (const route of DOC_ROUTES) {
+        prerenderedShells.set(route.slug, await prerender.renderLandingShell("docs", false, route.slug));
+      }
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
     },
     order: "post",
@@ -649,6 +650,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
+  docs: "src/webapp/docs-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   tools: "src/webapp/components/tools-form.tsx",
   trim: "src/public/react/trim-form.tsx",

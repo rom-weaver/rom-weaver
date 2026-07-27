@@ -15,18 +15,18 @@ const forceDeterministicNavigator = () => {
 // Render the shell through an already-running Vite server's SSR loader. The dev
 // server reuses this so the prerendered shell matches production without
 // standing up a second Vite server per index.html request.
-const renderLandingShellWithServer = async (server, view = "patcher", notFound = false) => {
+const renderLandingShellWithServer = async (server, view = "patcher", notFound = false, docsSlug = "docs") => {
   forceDeterministicNavigator();
   const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
   // renderLandingShellHtml resolves the requested tab's lazy route chunk before
   // rendering, so it is async - renderToString cannot suspend.
-  return await entry.renderLandingShellHtml(view, notFound);
+  return await entry.renderLandingShellHtml(view, notFound, docsSlug);
 };
 
 // Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
 // SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
 // Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
-const renderLandingShell = async (view = "patcher", notFound = false) => {
+const renderLandingShell = async (view = "patcher", notFound = false, docsSlug = "docs") => {
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),
@@ -35,7 +35,7 @@ const renderLandingShell = async (view = "patcher", notFound = false) => {
     server: { hmr: false, middlewareMode: true, watch: null },
   });
   try {
-    return await renderLandingShellWithServer(server, view, notFound);
+    return await renderLandingShellWithServer(server, view, notFound, docsSlug);
   } finally {
     await server.close();
   }

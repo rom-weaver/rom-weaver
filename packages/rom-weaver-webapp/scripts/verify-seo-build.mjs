@@ -124,12 +124,20 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, robotsDirective, `${route.slug} robots metadata`);
   assertIncludes(docsHtml, '<h1 id="', `${route.slug} heading`);
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
+  if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'data-react-shell="masthead"', `${route.slug} React masthead`);
-  assertIncludes(docsHtml, 'rel="stylesheet" href="/assets/', `${route.slug} app stylesheet`);
+  assertIncludes(docsHtml, 'aria-selected="true" class="mode" data-mode="docs"', `${route.slug} React docs route`);
+  assertIncludes(
+    docsHtml,
+    '<button aria-label="Switch to light theme" class="tool"',
+    `${route.slug} React theme control`,
+  );
+  assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
+  assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   assertIncludes(docsHtml, '"@type":"TechArticle"', `${route.slug} structured data`);
   assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
   assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);
+  assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
   const minimumWords = route.slug === "docs" ? 250 : 500;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
