@@ -46,7 +46,7 @@
 #if HAVE_LZMA_H
 #include <lzma.h>
 #endif
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
 /* 7-Zip's own LZMA2 encoder (public domain LZMA SDK, vendored at
  * crates/rom-weaver-containers/lzma-sdk), behind an opaque header because
  * libarchive's archive_ppmd_private.h collides with the SDK's 7zTypes.h. */
@@ -2857,7 +2857,7 @@ compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
 }
 #endif
 
-#if ROM_WEAVER_LZMA_SDK_MT
+#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
 /*
  * LZMA2 through 7-Zip's own encoder, with the SDK's native block
  * multithreading. This is the default backend: it is the same coder and the
@@ -2967,7 +2967,7 @@ lzma2_sdk_encoder_enabled(void)
 
 	return (choice == NULL || strcmp(choice, "liblzma") != 0);
 }
-#endif /* ROM_WEAVER_LZMA_SDK_MT */
+#endif /* ROM_WEAVER_7Z_SDK_LZMA2_ENCODER */
 
 /*
  * Round an uncompressed-size hint up to the smallest LZMA2-representable
@@ -3043,7 +3043,7 @@ compression_init_encoder_lzma(struct archive *a,
 	if (size_hint > 0 && size_hint < (uint64_t)lzma_opt.dict_size)
 		lzma_opt.dict_size =
 		    lzma_reduce_dict_size(size_hint, lzma_opt.dict_size);
-#if ROM_WEAVER_LZMA_SDK_MT
+#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
 	/* The dictionary is already 7-Zip's per-level value, wasm-capped and
 	 * reduced to the input; hand it over verbatim so the SDK stores the
 	 * same properties byte liblzma would have.
