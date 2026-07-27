@@ -2,6 +2,10 @@
 
 ## Worktrees
 
+When starting work, always create and use a new linked worktree. Do not make
+changes directly in the primary checkout; use `.worktrees/<name>` for the
+working tree.
+
 This repository has no Git submodules; every vendored source is committed
 in-tree, so a linked worktree is complete as soon as it is created.
 
