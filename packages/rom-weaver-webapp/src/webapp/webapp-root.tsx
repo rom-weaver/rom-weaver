@@ -29,13 +29,7 @@ import type { SettingsDraftState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import {
-  ApplyPatchRoute,
-  CreatePatchRoute,
-  preloadIdleWorkflowRoutes,
-  ToolsRouteForm,
-  TrimPatchRoute,
-} from "./workflow-routes.tsx";
+import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
 import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
@@ -52,26 +46,8 @@ const LogDialog = lazy(() => import("./components/log-dialog.tsx").then((module)
 
 // The settings panel drags in the whole settings-metadata graph (field metadata,
 // codec combobox, compression profile copy) that nothing on the workflow surface
-// needs, so it loads on demand and is warmed at idle to keep first open instant.
-const loadSettingsPanel = () => import("./webapp-settings.tsx");
-const SettingsPanel = lazy(() => loadSettingsPanel().then((module) => ({ default: module.SettingsPanel })));
-
-const warmSettingsPanel = (): (() => void) => {
-  const warm = () => {
-    void loadSettingsPanel().catch((error: unknown) => {
-      // The lazy wrapper still owns the user-visible failure on a real open.
-      logger.warn("Settings panel preload failed", {
-        message: error instanceof Error ? error.message : String(error || ""),
-      });
-    });
-  };
-  if (typeof requestIdleCallback !== "function") {
-    const timer = setTimeout(warm, 1000);
-    return () => clearTimeout(timer);
-  }
-  const handle = requestIdleCallback(warm, { timeout: 5000 });
-  return () => cancelIdleCallback(handle);
-};
+// needs, so it only loads when someone opens it.
+const SettingsPanel = lazy(() => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel })));
 
 const logger = createLogger("webapp-root");
 
@@ -237,12 +213,6 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   useEffect(() => {
     void preloadBrowserRuntime({ threads });
   }, [threads]);
-  // Warm the tabs the visitor did not land on once the main thread is idle, so
-  // a tab switch never waits on a chunk request.
-  useEffect(() => preloadIdleWorkflowRoutes(state.currentView), [state.currentView]);
-  // Same idea for the settings panel: off the critical path, but resolved well
-  // before the masthead button can realistically be pressed.
-  useEffect(() => warmSettingsPanel(), []);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a

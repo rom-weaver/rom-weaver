@@ -101,26 +101,4 @@ const TrimPatchRoute = TrimRoute.Component;
 /** Resolve one route's chunk. Awaited before the first mount so the landing tab never suspends. */
 const preloadWorkflowRoute = (view: WorkflowView): Promise<unknown> => WORKFLOW_ROUTES[view].preload();
 
-/** Warm the tabs the visitor did not land on, so switching tabs never waits on a network round trip. */
-const preloadIdleWorkflowRoutes = (activeView: WorkflowView): (() => void) => {
-  const warm = () => {
-    for (const view of Object.keys(WORKFLOW_ROUTES) as WorkflowView[]) {
-      if (view !== activeView) void WORKFLOW_ROUTES[view].preload();
-    }
-  };
-  if (typeof requestIdleCallback !== "function") {
-    const timer = setTimeout(warm, 1000);
-    return () => clearTimeout(timer);
-  }
-  const handle = requestIdleCallback(warm, { timeout: 5000 });
-  return () => cancelIdleCallback(handle);
-};
-
-export {
-  ApplyPatchRoute,
-  CreatePatchRoute,
-  preloadIdleWorkflowRoutes,
-  preloadWorkflowRoute,
-  ToolsRouteForm,
-  TrimPatchRoute,
-};
+export { ApplyPatchRoute, CreatePatchRoute, preloadWorkflowRoute, ToolsRouteForm, TrimPatchRoute };
