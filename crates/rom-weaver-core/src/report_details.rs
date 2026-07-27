@@ -5,7 +5,7 @@
 //! these helpers are the single source so the JSON stays consistent across
 //! crates.
 
-use std::{fs, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 
 use serde_json::{Map, Value, json};
 
@@ -72,9 +72,14 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         })
-        .collect::<Vec<_>>();
+        .collect::<HashSet<_>>();
     for path in paths {
-        let Some(entry) = build_emitted_file_detail(path.as_ref()) else {
+        let path = path.as_ref();
+        let direct_key = path.to_string_lossy().replace('\\', "/");
+        if seen.contains(&direct_key) {
+            continue;
+        }
+        let Some(entry) = build_emitted_file_detail(path) else {
             continue;
         };
         let key = entry
@@ -82,11 +87,9 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
             .and_then(Value::as_str)
             .map(str::to_owned)
             .unwrap_or_default();
-        if seen.contains(&key) {
-            continue;
+        if seen.insert(key) {
+            emitted.push(Value::Object(entry));
         }
-        seen.push(key);
-        emitted.push(Value::Object(entry));
     }
     if !emitted.is_empty() {
         details.insert("emitted_files".to_string(), Value::Array(emitted));
