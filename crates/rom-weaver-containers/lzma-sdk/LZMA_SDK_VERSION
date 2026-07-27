@@ -2,6 +2,6 @@ source: https://www.7-zip.org/a/lzma2602.7z
 version: 26.02
 sha256: 2878c85f5f43a4a4e0952b1fd4e5fe097c1c143997a8047c7e1e788892aa9357
 files: 7zStream.c 7zTypes.h 7zWindows.h Compiler.h CpuArch.c CpuArch.h LzFind.c LzFind.h LzFindMt.c LzFindMt.h LzFindOpt.c LzHash.h Lzma2Dec.c Lzma2Dec.h Lzma2Enc.c Lzma2Enc.h LzmaDec.c LzmaDec.h LzmaEnc.c LzmaEnc.h MtCoder.c MtCoder.h MtDec.c MtDec.h Precomp.h RotateDefs.h Threads.c Threads.h
-asm: arm64/7zAsm.S arm64/LzmaDecOpt.S
+asm: arm64/7zAsm.S arm64/LzmaDecOpt.S x86/7zAsm.asm x86/LzmaDecOpt.asm
 license: public domain (see vendor/lzma-sdk.txt)
 refreshed-by: scripts/vendor-lzma-sdk.mjs

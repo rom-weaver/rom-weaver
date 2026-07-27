@@ -25,6 +25,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+
+# The vendored LZMA SDK's x86-64 decode loop is MASM assembly, and no Debian
+# package assembles it. Building JWasm here is what makes the amd64 image's 7z
+# extract match 7zz instead of falling back to the portable C loop (~30% slower).
+# arm64 needs nothing: its loop is GNU-as syntax that clang already assembles.
+# The build succeeds either way, so this never gates the image.
+RUN if [ "${TARGETARCH}" = "amd64" ]; then scripts/install-jwasm.sh; fi
 # Cache mounts carry the registry and compiled dependencies across local
 # rebuilds; `COPY . .` above still invalidates this layer on any source change,
 # but cargo then rebuilds only the workspace crates (measured 1m55s -> 1m08s).
