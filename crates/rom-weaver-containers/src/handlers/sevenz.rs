@@ -96,90 +96,71 @@ impl SevenZContainerHandler {
     }
 }
 
-// Two encoder backends ship, and they parallelise differently, so the planner
-// models whichever one this target actually builds (see
-// `lzma_sdk_threads_enabled` in libarchive/build.rs):
-//
-//   native - 7-Zip's SDK encoder. Splits into `ceil(total / blockSize)` blocks
-//            and drives each with two threads.
-//   wasm   - liblzma's seeded parallel blocks. The SDK encoder needs nested
-//            thread spawns that the browser's WASI thread pool refuses, so it
-//            is not compiled into the wasm module at all.
-//
-// `ROM_WEAVER_7Z_ENCODER=liblzma` switches a *native* build back to liblzma at
-// runtime, which the planner does not see. That direction is safe: the SDK
-// model costs more per worker, so it plans no more parallelism than liblzma can
-// afford, never less memory than it needs.
-
-/// Match-finder threads the SDK encoder pairs with every LZMA2 block, from
-/// `LzmaEncProps_Normalize`'s `numThreads = 2` default. The thread budget the
-/// writer is handed is a *total*, which `Lzma2EncProps_Normalize` then divides
-/// into `total / 2` block encoders.
-#[cfg(not(target_family = "wasm"))]
-const LZMA2_THREADS_PER_BLOCK: usize = 2;
-/// liblzma's seeded path runs one thread per block, not two.
-#[cfg(target_family = "wasm")]
-const LZMA2_THREADS_PER_BLOCK: usize = 1;
-/// Inputs at or below this stay single-threaded. Mirrors
-/// `LZMA2_MT_SPLIT_THRESHOLD` in the C writer; below it neither backend's
-/// worker threads pay for themselves.
-const LZMA2_SINGLE_THREAD_THRESHOLD_BYTES: u64 = 4 << 20;
-/// Block-size floor and ceiling from `Lzma2EncProps_Normalize`'s auto sizing.
-#[cfg(not(target_family = "wasm"))]
-const LZMA2_BLOCK_SIZE_MIN_BYTES: u64 = 1 << 20;
-#[cfg(not(target_family = "wasm"))]
-const LZMA2_BLOCK_SIZE_MAX_BYTES: u64 = 1 << 28;
-/// Smallest parallel block liblzma's seeded path will cut; mirrors
-/// `LZMA2_MT_MIN_CHUNK_SIZE` in the C writer.
-#[cfg(target_family = "wasm")]
+// Native builds default to 7-Zip's SDK encoder and can opt back into the seeded
+// liblzma encoder. WASM always uses liblzma because the SDK's nested threads
+// cannot run in the browser's WASI pool.
+const LZMA2_MT_SPLIT_THRESHOLD_BYTES: u64 = 4 << 20;
 const LZMA2_MT_MIN_CHUNK_BYTES: u64 = 1 << 20;
-/// Browser liblzma's raw encoder vtables become unstable with higher concurrent
-/// level-9 jobs under WASI threads; keep real parallelism without entering the
-/// trap-prone range.
+#[cfg(not(target_family = "wasm"))]
+const LZMA2_SDK_BLOCK_SIZE_MAX_BYTES: u64 = 1 << 28;
 #[cfg(target_family = "wasm")]
 const LZMA2_MT_WASM_MAX_THREADS: usize = 2;
 
-/// Block size the SDK encoder picks for an auto `blockSize`: four dictionaries,
-/// clamped to \[1 MiB, 256 MiB\] and rounded up to a whole MiB. Mirrors
-/// `Lzma2EncProps_Normalize`.
 #[cfg(not(target_family = "wasm"))]
-fn lzma2_block_size_bytes(total_bytes: u64, level: u32) -> u64 {
-    let dict = lzma2_effective_dict_bytes(total_bytes, level);
-    let block = dict
-        .saturating_mul(4)
-        .clamp(LZMA2_BLOCK_SIZE_MIN_BYTES, LZMA2_BLOCK_SIZE_MAX_BYTES)
-        .max(dict);
-    block
-        .div_ceil(LZMA2_BLOCK_SIZE_MIN_BYTES)
-        .saturating_mul(LZMA2_BLOCK_SIZE_MIN_BYTES)
+fn lzma2_sdk_encoder_enabled() -> bool {
+    std::env::var("ROM_WEAVER_7Z_ENCODER").ok().as_deref() != Some("liblzma")
 }
 
-/// Threads the 7z encoder can actually keep busy - the real parallelism ceiling,
-/// which is what keeps the reported `effective_threads` honest.
-///
-/// The SDK splits the input into `ceil(total / blockSize)` blocks and drives
-/// each with `LZMA2_THREADS_PER_BLOCK` threads; anything past that is idle.
+/// `LzmaEncProps_Normalize` uses one HC match-finder thread below level 5 and
+/// two BT match-finder threads at level 5 and above.
 #[cfg(not(target_family = "wasm"))]
-fn lzma2_achievable_threads(total_bytes: u64, level: u32) -> usize {
-    if total_bytes <= LZMA2_SINGLE_THREAD_THRESHOLD_BYTES {
+fn lzma2_sdk_threads_per_block(level: u32) -> usize {
+    if level < 5 { 1 } else { 2 }
+}
+
+/// Block size selected by `Lzma2EncProps_Normalize` for an automatic block.
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_sdk_block_size_bytes(total_bytes: u64, level: u32) -> u64 {
+    let block = lzma2_effective_dict_bytes(total_bytes, level)
+        .saturating_mul(4)
+        .clamp(LZMA2_MT_MIN_CHUNK_BYTES, LZMA2_SDK_BLOCK_SIZE_MAX_BYTES);
+    block
+        .div_ceil(LZMA2_MT_MIN_CHUNK_BYTES)
+        .saturating_mul(LZMA2_MT_MIN_CHUNK_BYTES)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_sdk_achievable_threads(total_bytes: u64, level: u32) -> usize {
+    if total_bytes <= LZMA2_MT_SPLIT_THRESHOLD_BYTES {
         return 1;
     }
     let blocks = total_bytes
-        .div_ceil(lzma2_block_size_bytes(total_bytes, level))
+        .div_ceil(lzma2_sdk_block_size_bytes(total_bytes, level))
         .max(1);
     usize::try_from(blocks)
         .unwrap_or(usize::MAX)
-        .saturating_mul(LZMA2_THREADS_PER_BLOCK)
+        .saturating_mul(lzma2_sdk_threads_per_block(level))
 }
 
-/// liblzma's seeded path cuts one block per worker, floored at
-/// `LZMA2_MT_MIN_CHUNK_BYTES`, and each block is one thread.
-#[cfg(target_family = "wasm")]
-fn lzma2_achievable_threads(total_bytes: u64, _level: u32) -> usize {
-    if total_bytes <= LZMA2_SINGLE_THREAD_THRESHOLD_BYTES {
+fn lzma2_liblzma_achievable_threads(total_bytes: u64) -> usize {
+    if total_bytes <= LZMA2_MT_SPLIT_THRESHOLD_BYTES {
         return 1;
     }
     usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_CHUNK_BYTES).max(1)).unwrap_or(usize::MAX)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_achievable_threads(total_bytes: u64, level: u32) -> usize {
+    if lzma2_sdk_encoder_enabled() {
+        lzma2_sdk_achievable_threads(total_bytes, level)
+    } else {
+        lzma2_liblzma_achievable_threads(total_bytes)
+    }
+}
+
+#[cfg(target_family = "wasm")]
+fn lzma2_achievable_threads(total_bytes: u64, _level: u32) -> usize {
+    lzma2_liblzma_achievable_threads(total_bytes)
 }
 
 /// Per-level LZMA2 dictionary size, mirroring the 7-Zip table the C writer
@@ -221,39 +202,13 @@ fn lzma2_effective_dict_bytes(total_bytes: u64, level: u32) -> u64 {
     lzma2_round_up_dict(total_bytes.min(preset), preset)
 }
 
-#[cfg(target_family = "wasm")]
-fn lzma2_budget_max_threads() -> Option<usize> {
-    Some(LZMA2_MT_WASM_MAX_THREADS)
-}
-
-#[cfg(not(target_family = "wasm"))]
-fn lzma2_budget_max_threads() -> Option<usize> {
-    None
-}
-
-/// Peak bytes one worker costs, as a multiple of the dictionary.
-///
-/// SDK block encoder (native): ~11.5x for its bt4 match finder, plus
-/// `MtCoder`'s block-sized input buffer and the matching output buffer - both
-/// 4x the dictionary at the auto block size (`lzma2_block_size_bytes`) - so
-/// ~20x. The budget is spent in whole block encoders, each then driven by
-/// `LZMA2_THREADS_PER_BLOCK` threads.
-///
-/// liblzma seeded worker (wasm): ~11.5x match finder, seed prefix 1x, input
-/// chunk up to 2x (the C writer's split cap) and output ~2x, so ~16x - it
-/// streams a chunk instead of holding a whole `MtCoder` block in and out.
-#[cfg(not(target_family = "wasm"))]
-const LZMA2_WORKER_DICT_MULTIPLE: u64 = 20;
-#[cfg(target_family = "wasm")]
-const LZMA2_WORKER_DICT_MULTIPLE: u64 = 16;
-
-fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
+fn lzma2_liblzma_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
     lzma2_effective_dict_bytes(total_bytes, level)
-        .saturating_mul(LZMA2_WORKER_DICT_MULTIPLE)
+        .saturating_mul(16)
         .max(1)
 }
 
-fn lzma2_mt_peak_bytes(total_bytes: u64, level: u32, threads: usize) -> u64 {
+fn lzma2_liblzma_peak_bytes(total_bytes: u64, level: u32, threads: usize) -> u64 {
     let dict = lzma2_effective_dict_bytes(total_bytes, level);
     let threads = u64::try_from(threads).unwrap_or(u64::MAX).max(1);
     let cap = dict.saturating_mul(2);
@@ -288,39 +243,104 @@ fn lzma2_mt_peak_bytes(total_bytes: u64, level: u32, threads: usize) -> u64 {
         .saturating_add(dict)
 }
 
-pub(crate) fn lzma2_threads_for_budget_with_limits(
+pub(crate) fn lzma2_liblzma_threads_for_budget_with_limits(
     total_bytes: u64,
     level: u32,
     budget_bytes: u64,
     max_threads: Option<usize>,
 ) -> usize {
-    let per_block = lzma2_worker_budget_bytes(total_bytes, level);
-    let blocks = usize::try_from((budget_bytes / per_block).max(1)).unwrap_or(usize::MAX);
-    let budget_threads = blocks.saturating_mul(LZMA2_THREADS_PER_BLOCK);
+    let per_worker = lzma2_liblzma_worker_budget_bytes(total_bytes, level);
+    let budget_threads = usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX);
     let mut threads = max_threads
         .map(|limit| budget_threads.min(limit.max(1)))
         .unwrap_or(budget_threads);
     if total_bytes > LZMA2_MT_SPLIT_THRESHOLD_BYTES {
-        threads = threads.min(lzma2_achievable_blocks(total_bytes));
-        while threads > 1 && lzma2_mt_peak_bytes(total_bytes, level, threads) > budget_bytes {
+        threads = threads.min(lzma2_liblzma_achievable_threads(total_bytes));
+        while threads > 1 && lzma2_liblzma_peak_bytes(total_bytes, level, threads) > budget_bytes {
             threads -= 1;
         }
     }
     threads
 }
 
-/// Cap the thread count so peak memory fits a fraction of system RAM. Each
-/// worker runs its own full-dictionary encoder
-/// (`LZMA2_WORKER_DICT_MULTIPLE` times the dictionary), so on a
-/// memory-constrained host this collapses toward a single encoder (close to
-/// single-thread 7-Zip), while a large host keeps more workers.
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_sdk_block_budget_bytes(total_bytes: u64, level: u32) -> u64 {
+    let dict = lzma2_effective_dict_bytes(total_bytes, level);
+    let block = lzma2_sdk_block_size_bytes(total_bytes, level);
+    dict.saturating_mul(12)
+        .saturating_add(block)
+        .saturating_add(block)
+        .saturating_add(block >> 10)
+        .saturating_add(16)
+        .max(1)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_normalize_sdk_threads(level: u32, threads: usize) -> usize {
+    let threads = threads.max(1);
+    let per_block = lzma2_sdk_threads_per_block(level);
+    if threads == 1 {
+        1
+    } else {
+        (threads / per_block).max(1).saturating_mul(per_block)
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn lzma2_sdk_threads_for_budget_with_limits(
+    total_bytes: u64,
+    level: u32,
+    budget_bytes: u64,
+    max_threads: Option<usize>,
+) -> usize {
+    let per_block = lzma2_sdk_block_budget_bytes(total_bytes, level);
+    let blocks = usize::try_from((budget_bytes / per_block).max(1)).unwrap_or(usize::MAX);
+    let sdk_threads = blocks.saturating_mul(lzma2_sdk_threads_per_block(level));
+    let sdk_threads = max_threads
+        .map(|limit| sdk_threads.min(limit.max(1)))
+        .unwrap_or(sdk_threads);
+    // The C bridge falls back to liblzma if its SDK driver thread cannot start,
+    // so the same count must fit both encoders.
+    let fallback_threads =
+        lzma2_liblzma_threads_for_budget_with_limits(total_bytes, level, budget_bytes, max_threads);
+    lzma2_normalize_sdk_threads(level, sdk_threads.min(fallback_threads))
+}
+
+pub(crate) fn lzma2_threads_for_budget_with_limits(
+    total_bytes: u64,
+    level: u32,
+    budget_bytes: u64,
+    max_threads: Option<usize>,
+) -> usize {
+    #[cfg(not(target_family = "wasm"))]
+    if lzma2_sdk_encoder_enabled() {
+        return lzma2_sdk_threads_for_budget_with_limits(
+            total_bytes,
+            level,
+            budget_bytes,
+            max_threads,
+        );
+    }
+
+    lzma2_liblzma_threads_for_budget_with_limits(total_bytes, level, budget_bytes, max_threads)
+}
+
 pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_bytes: u64) -> usize {
-    lzma2_threads_for_budget_with_limits(
-        total_bytes,
-        level,
-        budget_bytes,
-        lzma2_budget_max_threads(),
-    )
+    #[cfg(target_family = "wasm")]
+    let max_threads = Some(LZMA2_MT_WASM_MAX_THREADS);
+    #[cfg(not(target_family = "wasm"))]
+    let max_threads = None;
+    lzma2_threads_for_budget_with_limits(total_bytes, level, budget_bytes, max_threads)
+}
+
+fn lzma2_normalize_threads(level: u32, threads: usize) -> usize {
+    #[cfg(not(target_family = "wasm"))]
+    if lzma2_sdk_encoder_enabled() {
+        return lzma2_normalize_sdk_threads(level, threads);
+    }
+
+    let _ = level;
+    threads.max(1)
 }
 
 fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
@@ -426,7 +446,10 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         let achievable = lzma2_achievable_threads(total_bytes, settings.level)
             .min(lzma2_memory_thread_cap(total_bytes, settings.level))
             .max(1);
-        let execution = context.plan_threads(ThreadCapability::parallel(Some(achievable)));
+        let mut execution = context.plan_threads(ThreadCapability::parallel(Some(achievable)));
+        execution.effective_threads =
+            lzma2_normalize_threads(settings.level, execution.effective_threads);
+        execution.used_parallelism = execution.effective_threads > 1;
         debug!(
             format = self.descriptor.name,
             method = Self::method_name(settings.method),
