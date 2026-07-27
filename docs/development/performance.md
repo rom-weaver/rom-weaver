@@ -144,15 +144,16 @@ sizes, so the size columns are exact even though they and the time columns come
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
-The **7z tables** were re-measured in full a second time, on the branch that
-moves both 7z paths off liblzma and onto 7-Zip's own LZMA SDK - the same coders
-`7zz` runs. Both tables changed enough that nothing from the earlier sittings
-survives in them. The first re-measure covered the seeded parallel blocks,
-7-Zip's per-level dictionary sizes, and the single-member extract pipeline,
-which together bought output smaller than 7zz's at the cost of compress time;
-the SDK swap gives that fraction of a percent of size back and takes the time.
-The extract rows move with the pipeline and the decoder, the compress rows with
-the encoder.
+The **7z tables** were re-measured in full a second time, on the change that
+moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own LZMA
+SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and WebAssembly
+writes stay on liblzma. Both tables changed enough that nothing from the earlier
+sittings survives in them. The first re-measure covered the seeded parallel
+blocks, 7-Zip's per-level dictionary sizes, and the single-member extract
+pipeline, which together bought output smaller than 7zz's at the cost of
+compress time; the SDK swap gives that fraction of a percent of size back and
+takes the time. The extract rows move with the pipeline and the decoder, the
+compress rows with the encoder.
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished
@@ -262,8 +263,10 @@ archive in this set — eight track files, which rom-weaver decodes in parallel 
 coder-speed comparison.
 
 The single-member rows were +29% to +36% before the SDK swap. Nearly all of that
-gap was the decode loop itself: the SDK's C decoder is no faster than liblzma's,
-but its hand-written loop — which is what `7zz` runs — is.
+gap was the decode loop itself: on this corpus the SDK's portable C decoder
+lands around liblzma, while its hand-written loop — which is what `7zz` runs —
+wins. The portable decoder does separately optimize repeated-byte matches; see
+the targeted measurements in [`vendor-code.md`](vendor-code.md).
 
 These numbers are arm64, where that loop needs no extra tooling. On x86-64 it is
 MASM assembly and the build only uses it when a MASM-compatible assembler is on
