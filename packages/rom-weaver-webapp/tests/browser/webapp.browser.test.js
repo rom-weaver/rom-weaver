@@ -90,6 +90,8 @@ const createNoopActions = () => ({
 
 const createServiceWorkerCacheState = () => ({
   label: "Offline cache unavailable",
+  offlineReady: null,
+  serviceWorkerControlled: null,
   title: "",
   updateLabel: "Reload to update",
   updateReady: false,

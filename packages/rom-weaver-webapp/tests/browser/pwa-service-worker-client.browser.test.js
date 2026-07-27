@@ -116,6 +116,8 @@ test("initializes in controlled isolated mode without reloading", async () => {
   await flushAsync();
 
   expect(harness.location.reload).not.toHaveBeenCalled();
+  expect(harness.client.getState().offlineReady).toBe(true);
+  expect(harness.client.getState().serviceWorkerControlled).toBe(true);
   expect(harness.controller.postMessage).toHaveBeenCalledWith({
     action: COI_COEP_CREDENTIALLESS_ACTION,
     value: true,

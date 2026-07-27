@@ -1,7 +1,7 @@
 import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
@@ -20,6 +20,20 @@ const Github = createLucideIcon("github", [
 ] satisfies IconNode);
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
+
+const readOnlineState = () =>
+  typeof navigator === "undefined" || typeof navigator.onLine !== "boolean" ? true : navigator.onLine;
+
+const readPwaState = () => {
+  const displayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+  const displayModeMatches =
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? displayModes.some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches)
+      : false;
+  const iosStandalone =
+    typeof navigator !== "undefined" && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return displayModeMatches || iosStandalone;
+};
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const supportsAnchoredThumb = () =>
@@ -167,6 +181,8 @@ const Masthead = ({
   onOpenSettings,
   onReset,
   tabsControlPanels = true,
+  offlineReady,
+  serviceWorkerControlled,
   confirmExternalNavigation,
   githubHref,
   donateHref,
@@ -185,6 +201,8 @@ const Masthead = ({
   onOpenSettings: () => void;
   onReset: () => void;
   tabsControlPanels?: boolean;
+  offlineReady?: boolean | null;
+  serviceWorkerControlled?: boolean | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubHref?: string;
   donateHref?: string;
@@ -197,6 +215,35 @@ const Masthead = ({
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
+  const [isOnline, setIsOnline] = useState(readOnlineState);
+  const isPwa = readPwaState();
+  useEffect(() => {
+    const updateOnlineState = () => setIsOnline(readOnlineState());
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
+  const runtimeStatus =
+    offlineReady !== null &&
+    offlineReady !== undefined &&
+    serviceWorkerControlled !== null &&
+    serviceWorkerControlled !== undefined
+      ? {
+          availability: offlineReady ? (isOnline ? "ready" : "cache") : "online",
+          mode: isPwa ? "pwa" : serviceWorkerControlled ? "sw" : "web",
+        }
+      : null;
+  const runtimeStatusTitle =
+    runtimeStatus?.availability === "cache"
+      ? "The service-worker cache is serving this page."
+      : runtimeStatus?.availability === "ready"
+        ? "The app can run fully offline or online."
+        : runtimeStatus?.availability === "online"
+          ? "This page requires an online connection."
+          : undefined;
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
     event.preventDefault();
@@ -215,6 +262,11 @@ const Masthead = ({
               <b>weaver</b>
             </h1>
             {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
+            {runtimeStatus ? (
+              <span className="channel-badge runtime-badge" title={runtimeStatusTitle}>
+                · {runtimeStatus.mode} · {runtimeStatus.availability}
+              </span>
+            ) : null}
           </span>
           {version ? (
             <span className="masthead-version mono">

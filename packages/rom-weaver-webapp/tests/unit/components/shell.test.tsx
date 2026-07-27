@@ -87,6 +87,21 @@ describe("Masthead", () => {
     fireEvent.pointerDown(log);
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
+
+  it("shows the runtime and offline capability", () => {
+    const { container, rerender } = render(
+      withSettings(<Masthead {...mastheadProps} offlineReady serviceWorkerControlled />),
+    );
+    expect(container.querySelector(".runtime-badge")?.textContent).toBe("· sw · ready");
+    expect(container.querySelector(".runtime-badge")?.getAttribute("title")).toBe(
+      "The app can run fully offline or online.",
+    );
+    rerender(withSettings(<Masthead {...mastheadProps} offlineReady={false} serviceWorkerControlled={false} />));
+    expect(container.querySelector(".runtime-badge")?.textContent).toBe("· web · online");
+    expect(container.querySelector(".runtime-badge")?.getAttribute("title")).toBe(
+      "This page requires an online connection.",
+    );
+  });
 });
 
 describe("Reveal", () => {

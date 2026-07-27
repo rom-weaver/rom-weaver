@@ -305,9 +305,14 @@ const createPwaServiceWorkerClient = ({
   const emitState = () => {
     onStateChange(state);
   };
-  const setVersion = (version: string, title?: string) => {
+  const setVersion = (
+    version: string,
+    title?: string,
+    offlineReady = false,
+    serviceWorkerControlled = state.serviceWorkerControlled,
+  ) => {
     controllerVersion = version;
-    state = setServiceWorkerCacheVersion(state, version, title);
+    state = setServiceWorkerCacheVersion(state, version, title, offlineReady, serviceWorkerControlled);
     emitState();
   };
   const markUpdateReady = () => {
@@ -322,24 +327,24 @@ const createPwaServiceWorkerClient = ({
   const refreshCacheVersion = () => {
     if (!enabled) {
       logServiceWorkerClient("cache version refresh skipped; service worker cache is disabled");
-      setVersion("off", "Service worker cache is disabled");
+      setVersion("off", "Service worker cache is disabled", false, false);
       return;
     }
     const serviceWorker = navigator?.serviceWorker;
     if (!serviceWorker) {
       logServiceWorkerClient("cache version refresh skipped; service worker is unavailable");
-      setVersion("off", "Service worker is not available in this browser");
+      setVersion("off", "Service worker is not available in this browser", false, false);
       return;
     }
     const controller = serviceWorker.controller;
     if (!controller) {
       logServiceWorkerClient("cache version refresh skipped; page is uncontrolled");
-      setVersion("network", "This page is not controlled by a service worker");
+      setVersion("network", "This page is not controlled by a service worker", false, false);
       return;
     }
     if (typeof MessageChannel !== "function") {
       logServiceWorkerClient("cache version refresh skipped; MessageChannel is unavailable");
-      setVersion("unknown", "This browser cannot query the loaded service worker cache version");
+      setVersion("unknown", "This browser cannot query the loaded service worker cache version", false, true);
       return;
     }
 
@@ -361,7 +366,7 @@ const createPwaServiceWorkerClient = ({
       } catch {
         // best-effort cleanup
       }
-      setVersion(version || "unknown", title);
+      setVersion(version || "unknown", title, Boolean(version), true);
     };
     const timeout = setTimeout(() => {
       logServiceWorkerClient("cache version refresh timed out");
@@ -433,7 +438,7 @@ const createPwaServiceWorkerClient = ({
 
   const disableServiceWorkerCache = () => {
     logServiceWorkerClient("disabling service worker cache");
-    setVersion("off", "Service worker cache is disabled");
+    setVersion("off", "Service worker cache is disabled", false, false);
     const serviceWorker = navigator?.serviceWorker;
     if (!(serviceWorker && window?.location)) {
       void deleteServiceWorkerCaches().catch(() => undefined);
@@ -453,13 +458,13 @@ const createPwaServiceWorkerClient = ({
       .then(deleteServiceWorkerCaches)
       .then(() => {
         logServiceWorkerClient("service worker cache disabled");
-        setVersion("off", "Service worker cache is disabled");
+        setVersion("off", "Service worker cache is disabled", false, false);
       })
       .catch((err) => {
         logServiceWorkerClient("service worker cache disable failed", {
           error: formatError(err),
         });
-        setVersion("off", "Service worker cache is disabled");
+        setVersion("off", "Service worker cache is disabled", false, false);
       });
   };
   const reloadPendingUpdate = async (): Promise<boolean> => {

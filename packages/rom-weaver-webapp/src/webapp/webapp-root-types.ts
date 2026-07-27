@@ -46,6 +46,8 @@ type WebappRootProps = {
   };
   serviceWorkerCache: {
     label: string;
+    offlineReady: boolean | null;
+    serviceWorkerControlled: boolean | null;
     title: string;
     updateLabel: string;
     updateReady: boolean;
