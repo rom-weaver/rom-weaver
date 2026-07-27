@@ -17,8 +17,7 @@ type SelectionItem = {
   /** Full source archive the entry came from, rendered as a sub-heading under the name. */
   subheading?: string;
   matches?: boolean;
-  /** Checked when the multi-select picker first opens. When at least one item sets it, only the
-   * flagged items start selected; otherwise every selectable item does. */
+  /** Checked when the multi-select picker first opens. */
   defaultSelected?: boolean;
   selectable: boolean;
 };
@@ -83,9 +82,7 @@ const SelectionCheckList = ({
   const selectableItems = items.filter((item) => item.selectable);
   const selectableIds = selectableItems.map((item) => item.id);
   const defaultIds = selectableItems.filter((item) => item.defaultSelected).map((item) => item.id);
-  // A picker may nominate default picks (the same-named leaf for a "replace from archive"); when it
-  // does, only those start selected. Otherwise every selectable entry starts selected (add-all).
-  const initialSelectedIds = defaultIds.length ? defaultIds : selectableIds;
+  const initialSelectedIds = defaultIds;
   // `items` is a fresh array on every parent render, and the hosting form re-renders on every
   // background progress tick, so keying the reset on identity wiped the user's unchecks the instant
   // anything else moved. The candidate set's CONTENT is what decides whether this is a new picker.

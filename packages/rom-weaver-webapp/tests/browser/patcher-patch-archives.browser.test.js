@@ -258,6 +258,11 @@ test("replacing a patch from an archive with no same-named entry shows the picke
   // (confirm button present) shows, and nothing is tagged as matching.
   expect(document.querySelector(".rw-modal.select-modal .selconfirm")).not.toBeNull();
   expect(document.querySelector(".rw-modal.select-modal")?.textContent || "").not.toContain("matches patch");
+  expect(
+    Array.from(document.querySelectorAll(".rw-modal.select-modal input[type='checkbox']")).every(
+      (checkbox) => !checkbox.checked,
+    ),
+  ).toBe(true);
 
   // The user picks alternate.ips; it replaces the slot in place - one row, not two.
   await selectPatchCandidates(["alternate.ips"]);
