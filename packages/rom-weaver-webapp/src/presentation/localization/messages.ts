@@ -84,6 +84,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.common.copy": msg({ id: "ui.common.copy", message: "Copy" }),
   "ui.common.dismiss": msg({ id: "ui.common.dismiss", message: "Dismiss" }),
   "ui.common.retry": msg({ id: "ui.common.retry", message: "Retry" }),
+  "ui.common.skipToMain": msg({ id: "ui.common.skipToMain", message: "Skip to main content" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),

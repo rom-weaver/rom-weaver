@@ -413,7 +413,7 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         }),
         createElement(
           "main",
-          { className: "workbench" },
+          { className: "workbench", id: "main-content", tabIndex: -1 },
           createElement(
             "section",
             {
@@ -887,10 +887,20 @@ describe("webapp keyboard navigation", () => {
             onSelectTab,
             tabs: PAGE_TABS,
           }),
+          createElement("main", { id: "main-content" }),
         ),
       ),
       "light",
     );
+
+  test("skip link targets the main workflow", async () => {
+    await renderMasthead(noop);
+    const skipLink = host.querySelector(".skip-link");
+    expect(skipLink?.getAttribute("href")).toBe("#main-content");
+    expect(host.querySelector(".skip-link + .masthead")).toBeTruthy();
+    skipLink.focus();
+    expect(document.activeElement).toBe(skipLink);
+  });
 
   test("mode rail: arrow / Home / End move roving focus and select the tab", async () => {
     const selected = [];
@@ -917,6 +927,57 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement).toBe(tabAt("trim"));
 
     expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
+  });
+
+  test("modal wraps Tab focus, restores the opener, and isolates the page", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open settings";
+    document.body.append(opener);
+    opener.focus();
+
+    await renderNode(
+      ModalHost(
+        createElement(
+          "div",
+          null,
+          createElement("button", { id: "background-action", type: "button" }, "Background action"),
+          createElement(
+            Modal,
+            { onClose: noop, open: true, title: "Settings" },
+            createElement("button", { type: "button" }, "First action"),
+            createElement("button", { type: "button" }, "Last action"),
+          ),
+        ),
+      ),
+      "light",
+    );
+    await settle();
+
+    const dialog = document.body.querySelector('[role="dialog"]');
+    const first = dialog?.querySelector("button.dlg-x");
+    const last = Array.from(document.body.querySelectorAll(".rw-modal button")).at(-1);
+    expect(dialog).toBeTruthy();
+    expect(dialog?.getAttribute("aria-modal")).toBe("true");
+    expect(host.querySelector("#background-action")?.closest("[inert]")).toBeTruthy();
+
+    last.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" }));
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab", shiftKey: true }),
+    );
+    expect(document.activeElement).toBe(last);
+
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    expect(document.activeElement).toBe(dialog);
+
+    mountedRoot.unmount();
+    expect(document.activeElement).toBe(opener);
+    outside.remove();
+    opener.remove();
   });
 });
 
