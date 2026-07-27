@@ -208,6 +208,31 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     });
   });
 
+  it("starts only one workflow for concurrent run requests", async () => {
+    let finishApply = (_result: ApplyWorkflowResult) => undefined;
+    const applyPatches = vi.fn(
+      () =>
+        new Promise<ApplyWorkflowResult>((resolve) => {
+          finishApply = resolve;
+        }),
+    );
+    const { result } = renderSession({ applyPatches });
+    let runs: Array<Promise<void>> = [];
+
+    act(() => {
+      runs = [
+        result.current.localOutputController.runPrimaryAction(),
+        result.current.localOutputController.runPrimaryAction(),
+      ];
+    });
+    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      finishApply(applyResult());
+      await Promise.all(runs);
+    });
+  });
+
   it("does not start a run when the form is not ready", async () => {
     const { result, applyPatches } = renderSession({ applyReady: false });
     await act(async () => {

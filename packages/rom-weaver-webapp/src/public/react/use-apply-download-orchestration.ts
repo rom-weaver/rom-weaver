@@ -383,6 +383,9 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           })
         )
           return;
+        // React state does not turn the button busy synchronously. Use the run's existing controller
+        // as the immediate lock so a queued effect or rapid second click cannot start another apply.
+        if (activeAbortControllerRef.current) return;
         setApplyQueued(false);
         const useChecksumOverride = hasStrictInputChecksumMismatch && checksumOverrideChecked;
         if (useChecksumOverride) setChecksumOverrideChecked(false);
