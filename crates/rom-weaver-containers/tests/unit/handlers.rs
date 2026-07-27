@@ -2557,14 +2557,14 @@ mod tests {
     #[test]
     fn seven_z_memory_budget_scales_thread_cap() {
         // 64 MiB at level 9 reduces the dictionary to 64 MiB (input-limited),
-        // ~1.25 GiB per seeded worker, so the worker count tracks the budget: a
+        // ~1 GiB per seeded worker, so the worker count tracks the budget: a
         // 1 GiB host collapses to a single encoder (7-Zip-like footprint),
         // larger budgets allow more.
         let total = 64 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
         assert_eq!(lzma2_threads_for_budget(total, 9, gib), 1);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 1);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 3);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 2);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 4);
         // Never zero, even with no budget.
         assert_eq!(lzma2_threads_for_budget(total, 9, 0), 1);
         // A tiny input reduces the dictionary, so the same budget allows many
