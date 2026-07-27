@@ -125,6 +125,8 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, '<h1 id="', `${route.slug} heading`);
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
+  assertIncludes(docsHtml, 'data-react-shell="masthead"', `${route.slug} React masthead`);
+  assertIncludes(docsHtml, 'rel="stylesheet" href="/assets/', `${route.slug} app stylesheet`);
   assertIncludes(docsHtml, '"@type":"TechArticle"', `${route.slug} structured data`);
   assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
   assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);

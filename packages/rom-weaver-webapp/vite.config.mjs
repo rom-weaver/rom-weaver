@@ -356,6 +356,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
+      const stylesheetAsset = indexHtml.match(/<link rel="stylesheet"[^>]+href="\.\/([^"]+\.css)"/)?.[1];
+      if (!stylesheetAsset) throw new Error("rom-weaver-static-assets: app stylesheet not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
       // structured data the /weave route gets.
       const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
@@ -378,7 +380,13 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
-      for (const [slug, html] of renderDocsPages({ channel, channelLabel })) {
+      for (const [slug, html] of renderDocsPages({
+        accent: CHANNEL_DEFAULT_ACCENTS[channel],
+        channel,
+        channelLabel,
+        reactShell: prerenderedShells.get("patcher"),
+        stylesheetHref: `/${stylesheetAsset}`,
+      })) {
         const extensionlessPath = path.join(distDir, `${slug}.html`);
         const directoryIndexPath = path.join(distDir, slug, "index.html");
         fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
