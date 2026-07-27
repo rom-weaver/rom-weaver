@@ -18,7 +18,8 @@ Choose the guide that matches what you are trying to do.
   supported formats, compression, checksums, trimming, and JSON output.
 - [Man pages](cli.md#man-pages): generate `rom-weaver(1)` and one page per
   visible CLI command directly from Clap.
-- [Screenshots](screenshots.md): desktop and mobile views of the main workflows.
+- [Screenshots](screenshots.md): desktop and mobile workflows plus the runnable
+  sample ROMs before and after patching.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): machine-readable
   schema for distributable patch workflows.
 

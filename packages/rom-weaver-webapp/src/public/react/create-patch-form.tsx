@@ -53,8 +53,8 @@ const finishCreateRoleStaging = (
 };
 
 const CREATE_SAMPLE_ASSETS = [
-  ["/create-original.bin", "original.bin"],
-  ["/create-modified.bin", "modified.bin"],
+  ["/hello-world.nes", "hello-world.nes"],
+  ["/modified-world.nes", "modified-world.nes"],
 ] as const;
 import {
   getCreateSettingsOutputName,

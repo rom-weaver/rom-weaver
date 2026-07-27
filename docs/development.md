@@ -203,6 +203,14 @@ those definitions (they are generated artifacts, not checked in):
 mise run manpages
 ```
 
+The webapp's sample NES ROMs, IPS patch, and ZIP bundles are reproducible from
+source. Generate the four public sample files in
+`packages/rom-weaver-webapp/dist/` with:
+
+```bash
+npm --prefix packages/rom-weaver-webapp run samples:generate
+```
+
 Do not edit files under
 `packages/rom-weaver-webapp/src/wasm/generated/` or `docs/man/` manually.
 

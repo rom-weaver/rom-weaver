@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
@@ -31,10 +32,7 @@ const channelAssetPath = (channel, name) => {
 const rootStaticAssetSourcesForChannel = (channel) => ({
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": channelAssetPath(channel, "apple-touch-icon.png"),
-  "/create-modified.bin": path.join(rootAssetDir, "create-modified.bin"),
-  "/create-original.bin": path.join(rootAssetDir, "create-original.bin"),
   "/favicon.ico": channelAssetPath(channel, "favicon.ico"),
-  "/first-weave.zip": path.join(rootAssetDir, "first-weave.zip"),
   "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
@@ -42,6 +40,18 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/manifest.json": rootManifestSourcePath,
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
 });
+const generatedSampleAssetPaths = new Set([
+  "/first-create.zip",
+  "/first-weave.zip",
+  "/hello-world.nes",
+  "/modified-world.nes",
+]);
+let generatedSampleAssets;
+const getGeneratedSampleAsset = (requestPath) => {
+  if (!generatedSampleAssetPaths.has(requestPath)) return null;
+  generatedSampleAssets ||= createFirstSampleAssetFiles();
+  return generatedSampleAssets.get(requestPath.slice(1));
+};
 const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
 };
@@ -103,9 +113,17 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
   const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
+    const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
     const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
-    if (!sourcePath) {
+    if (!(generatedSampleAsset || sourcePath)) {
       next();
+      return;
+    }
+    if (generatedSampleAsset) {
+      res.statusCode = 200;
+      setRootStaticAssetContentType(requestPath, res);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(generatedSampleAsset);
       return;
     }
     if (requestPath === "/manifest.json") {
@@ -313,6 +331,11 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
           continue;
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
+      }
+      for (const assetPath of generatedSampleAssetPaths) {
+        const outputPath = path.join(distDir, assetPath);
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(outputPath, getGeneratedSampleAsset(assetPath));
       }
       for (const [assetPath, sourcePath] of Object.entries(generatedLicenseAssetSources)) {
         copyFile(sourcePath, path.join(distDir, assetPath));
@@ -800,11 +823,12 @@ export default defineConfig(({ command }) => {
             "index.html",
             "manifest.json",
             "logo.svg",
+            "first-create.zip",
             "first-weave.zip",
             "favicon.ico",
             "apple-touch-icon.png",
-            "create-modified.bin",
-            "create-original.bin",
+            "hello-world.nes",
+            "modified-world.nes",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
