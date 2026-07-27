@@ -99,7 +99,10 @@ const appendLog = (line: string) => {
   // narrow phone viewport is better spent on the step detail.
   logLines.push(line);
   while (logLines.length > MAX_LOG_LINES) logLines.shift();
-  if (logElement) logElement.textContent = logLines.join("\n");
+  if (logElement) {
+    logElement.textContent = logLines.join("\n");
+    if (state.startedAt && !state.finishedAt) logElement.scrollTop = logElement.scrollHeight;
+  }
 };
 
 const formatDuration = (milliseconds?: number | null) => {
