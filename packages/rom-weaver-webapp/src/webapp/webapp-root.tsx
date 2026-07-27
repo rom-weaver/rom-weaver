@@ -1,4 +1,4 @@
-import { GitCompare, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
+import { GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -188,16 +188,18 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
-function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession }: WebappRootProps) {
+function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession, notFound = false }: WebappRootProps) {
   useEntryAnimationLock();
   useEffect(() => {
+    if (notFound) return;
     syncWorkflowSeoMetadata(state.currentView);
-  }, [state.currentView]);
+  }, [notFound, state.currentView]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
+    if (notFound) return;
     setActiveSelectionForm(state.currentView);
-  }, [state.currentView]);
+  }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
@@ -211,8 +213,9 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
   useEffect(() => {
+    if (notFound) return;
     void preloadBrowserRuntime({ threads });
-  }, [threads]);
+  }, [notFound, threads]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -243,7 +246,11 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   // The `?bundle=` boot's decorated session (enablement seed + output defaults + patch metadata);
   // the apply form consumes it once its patch list matches the bundle's delivery.
   const [bundleSession, setBundleSession] = useState<BundleApplySession | null>(null);
-  const urlSessionBoot = useUrlSessionBoot(urlSession?.request ?? null, deliverUrlSessionFiles, setBundleSession);
+  const urlSessionBoot = useUrlSessionBoot(
+    notFound ? null : (urlSession?.request ?? null),
+    deliverUrlSessionFiles,
+    setBundleSession,
+  );
 
   useEffect(() => {
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
@@ -254,6 +261,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
+    if (notFound) return;
     let clearTimer: ReturnType<typeof setTimeout> | undefined;
     const onDragOver = (event: DragEvent) => {
       if (!isFileDragTransfer(event.dataTransfer)) return;
@@ -272,11 +280,12 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", stop);
     };
-  }, []);
+  }, [notFound]);
 
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
+    if (notFound) return;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -317,7 +326,7 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
       document.removeEventListener("dragover", handlePageDragOver);
       document.removeEventListener("drop", handlePageDrop);
     };
-  }, [confirmationDialog.open, state.currentView, state.settingsDialogOpen]);
+  }, [confirmationDialog.open, notFound, state.currentView, state.settingsDialogOpen]);
 
   const workflowPanel = (view: WorkflowView, form: React.ReactNode) =>
     isViewMounted(view) ? (
@@ -334,6 +343,9 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
         </div>
       </section>
     ) : null;
+  const visibleTabs = state.settings.betaToolsEnabled
+    ? WORKFLOW_TABS
+    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator");
 
   return (
     <RomWeaverSettingsProvider settings={state.settings}>
@@ -348,15 +360,17 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
             onReset={actions.onReset}
-            onSelectTab={(id) =>
-              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
-            }
+            onSelectTab={(id) => {
+              if (notFound) {
+                const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
+                if (href) window.location.assign(`/${href}`);
+                return;
+              }
+              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
+            }}
             settingsOpen={state.settingsDialogOpen}
-            tabs={
-              state.settings.betaToolsEnabled
-                ? WORKFLOW_TABS
-                : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator")
-            }
+            tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
+            tabsControlPanels={!notFound}
             threads={resolveThreads(threads)}
             version={APP_DISPLAY_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
@@ -378,43 +392,64 @@ function WebappRoot({ state, pageUpdate, confirmationDialog, actions, urlSession
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
-          <main className="workbench">
-            {workflowPanel(
-              "patcher",
-              <ApplyPatchRoute
-                bundleSession={bundleSession}
-                onBundlePackageChange={actions.onPatcherBundlePackageChange}
-                onInputsChange={actions.onPatcherInputsChange}
-                onPatchesChange={actions.onPatcherPatchesChange}
-                onSettingsChange={actions.onPatcherSettingsChange}
-                pageDrop={activePageDrop}
-                startup={state.startup}
-              />,
+          <main className={notFound ? "workbench is-not-found" : "workbench"}>
+            {notFound ? (
+              <section aria-labelledby="not-found-title" className="not-found-page">
+                <div className="not-found-content">
+                  <h1 aria-label="404: Page not found" className="not-found-title" id="not-found-title">
+                    <span aria-hidden="true" className="not-found-code">
+                      404
+                    </span>
+                    <span aria-hidden="true" className="not-found-label">
+                      Page not found
+                    </span>
+                  </h1>
+                  <a className="btn primary not-found-home" href="/weave">
+                    <House aria-hidden="true" />
+                    Return to Weave
+                  </a>
+                </div>
+              </section>
+            ) : (
+              <>
+                {workflowPanel(
+                  "patcher",
+                  <ApplyPatchRoute
+                    bundleSession={bundleSession}
+                    onBundlePackageChange={actions.onPatcherBundlePackageChange}
+                    onInputsChange={actions.onPatcherInputsChange}
+                    onPatchesChange={actions.onPatcherPatchesChange}
+                    onSettingsChange={actions.onPatcherSettingsChange}
+                    pageDrop={activePageDrop}
+                    startup={state.startup}
+                  />,
+                )}
+                {workflowPanel(
+                  "creator",
+                  <CreatePatchRoute
+                    onModifiedChange={actions.onCreatorModifiedChange}
+                    onOriginalChange={actions.onCreatorOriginalChange}
+                    onPatchTypeChange={actions.onCreatorPatchTypeChange}
+                    onSettingsChange={actions.onCreatorSettingsChange}
+                    pageDrop={activePageDrop}
+                  />,
+                )}
+                {workflowPanel(
+                  "trim",
+                  <TrimPatchRoute
+                    onOutputFormatChange={actions.onTrimOutputFormatChange}
+                    onSettingsChange={actions.onTrimSettingsChange}
+                    onSourceChange={actions.onTrimSourceChange}
+                    pageDrop={activePageDrop}
+                  />,
+                )}
+                {workflowPanel(
+                  "tools",
+                  <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
+                )}
+                <DropVeil />
+              </>
             )}
-            {workflowPanel(
-              "creator",
-              <CreatePatchRoute
-                onModifiedChange={actions.onCreatorModifiedChange}
-                onOriginalChange={actions.onCreatorOriginalChange}
-                onPatchTypeChange={actions.onCreatorPatchTypeChange}
-                onSettingsChange={actions.onCreatorSettingsChange}
-                pageDrop={activePageDrop}
-              />,
-            )}
-            {workflowPanel(
-              "trim",
-              <TrimPatchRoute
-                onOutputFormatChange={actions.onTrimOutputFormatChange}
-                onSettingsChange={actions.onTrimSettingsChange}
-                onSourceChange={actions.onTrimSourceChange}
-                pageDrop={activePageDrop}
-              />,
-            )}
-            {workflowPanel(
-              "tools",
-              <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
-            )}
-            <DropVeil />
           </main>
         </div>
         <ActivityFinishMarker />

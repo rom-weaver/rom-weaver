@@ -1,0 +1,67 @@
+/* The 404 is the normal app with its workbench replaced. Its waiting surface
+   uses the same warp, fill, seams, type, and controls as an empty workflow. */
+.rw-app .workbench.is-not-found {
+  align-content: stretch;
+  padding-block: clamp(12px, 2.5vw, 22px);
+}
+
+.rw-app .not-found-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(30px, 8vw, 72px) var(--pad);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+  background: var(--warp-lines) var(--empty-fill);
+  text-align: center;
+}
+
+.rw-app .not-found-content {
+  display: grid;
+  justify-items: center;
+  gap: clamp(24px, 4vw, 34px);
+}
+
+.rw-app .not-found-title {
+  display: grid;
+  justify-items: center;
+  gap: clamp(8px, 2vw, 16px);
+  margin: 0;
+}
+
+.rw-app .not-found-code {
+  background:
+    linear-gradient(color-mix(in oklab, var(--thread-text) 75%, transparent), color-mix(in oklab, var(--thread-text) 75%, transparent)),
+    var(--weave-mask) 0 0 / 20px 20px,
+    var(--thread-text);
+  background-blend-mode: normal, soft-light;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: clamp(7rem, 29vw, 15rem);
+  font-weight: 800;
+  font-stretch: 82%;
+  letter-spacing: -.09em;
+  line-height: .74;
+}
+
+@media (forced-colors: active) {
+  .rw-app .not-found-code {
+    background: none;
+    color: CanvasText;
+  }
+}
+
+.rw-app .not-found-label {
+  color: var(--ink);
+  font-size: clamp(1.35rem, 2.2vw + .8rem, 2.35rem);
+  font-weight: 760;
+  letter-spacing: -.018em;
+  line-height: 1.1;
+}
+
+.rw-app .not-found-home {
+  min-width: 148px;
+  text-decoration: none;
+}

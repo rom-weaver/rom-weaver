@@ -39,6 +39,20 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/weave");
   });
 
+  it("can preserve a non-workflow path for an alternate app shell", () => {
+    window.history.replaceState({}, "", "/missing");
+    const controller = createWebappRootController({
+      initialHistoryMode: "none",
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage: createStorage(),
+    });
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/missing");
+  });
+
   it("hides beta workflow views until enabled", () => {
     const controller = createController();
     expect(controller.selectView("trim")).toBe("patcher");

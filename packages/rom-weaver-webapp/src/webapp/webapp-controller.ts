@@ -121,6 +121,7 @@ type WebappState = {
 };
 
 type ControllerOptions = {
+  initialHistoryMode?: RouteHistoryMode;
   onApplySettings: (settings: ReturnType<typeof loadSettings>) => void;
   onLocalizationChange: (language: string) => void;
   onFocusField: (fieldId: string) => void;
@@ -193,7 +194,7 @@ const createWebappRootController = (options: ControllerOptions) => {
     readWorkflowViewFromPath() || loadPersistedWorkflowView(options.storage),
     settings,
   );
-  writeWorkflowViewToPath(initialView, "replace");
+  writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
     currentView: initialView,

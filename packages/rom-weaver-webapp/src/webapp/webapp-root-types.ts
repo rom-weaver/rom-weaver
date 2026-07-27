@@ -28,6 +28,8 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 });
 
 type WebappRootProps = {
+  /** Render the normal app chrome with a not-found workbench. */
+  notFound?: boolean;
   state: {
     creatorSession: CreatorSessionState;
     currentView: WorkflowView;
