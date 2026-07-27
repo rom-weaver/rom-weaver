@@ -123,12 +123,43 @@
   <body>
     <div id="webapp-root" aria-busy="true"></div>
     <script>
-      // Fill the prerendered environment slot before first paint. React reads
-      // the same browser value, so replacing the shell cannot move the masthead.
+      // Fill the prerendered environment slot with the same resolved value as
+      // WebappRoot before first paint. The shell is replaced, not hydrated, so
+      // a mismatch here is visible as a fast thread-count change.
       (function () {
         const slot = document.querySelector(".masthead-threads");
-        const threads = navigator.hardwareConcurrency;
-        if (slot && threads) slot.textContent = `· ${threads} ${slot.dataset.threadLabel}`;
+        if (!slot) return;
+
+        const hardwareConcurrency = navigator.hardwareConcurrency;
+        const hardwareThreads =
+          typeof hardwareConcurrency === "number" && Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0
+            ? Math.floor(hardwareConcurrency)
+            : 4;
+        let threads =
+          typeof SharedArrayBuffer === "function" && window.crossOriginIsolated
+            ? Math.min(64, Math.max(4, hardwareThreads))
+            : 1;
+
+        try {
+          const stored = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
+          const applyCompression = stored?.apply?.compression;
+          const createCompression = stored?.create?.compression;
+          if (stored?.version === 5 && (applyCompression || createCompression)) {
+            const configured =
+              applyCompression?.threads ??
+              applyCompression?.workerThreads ??
+              createCompression?.threads ??
+              createCompression?.workerThreads;
+            const parsed = Number.parseInt(String(configured ?? ""), 10);
+            if (Number.isFinite(parsed) && parsed >= 1)
+              threads =
+                typeof SharedArrayBuffer === "function" && window.crossOriginIsolated ? Math.min(64, parsed) : 1;
+          }
+        } catch {
+          // Fall back to the browser default; the app does the same for bad storage.
+        }
+
+        if (threads) slot.textContent = `· ${threads} ${slot.dataset.threadLabel}`;
       })();
     </script>
   </body>
