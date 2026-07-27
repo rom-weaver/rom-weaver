@@ -247,8 +247,24 @@ pub fn build() {
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
+/// Whether the SDK's thread layer - and with it the multithreaded LZMA2
+/// *encoder* - is compiled in at all.
+///
+/// Off for every wasm target, which is why `rom-weaver-app.wasm` encodes 7z
+/// with liblzma. The SDK encoder is a blocking one-shot, so the glue drives it
+/// from a thread of its own, and the SDK then spawns its match-finder and block
+/// threads *from that thread*. Those nested spawns do not survive the browser's
+/// WASI thread pool: a run that asked for one thread gets a zero-sized pool and
+/// every spawn is EAGAIN, and even with a large pool the nested spawn's start
+/// ack times out (measured: `SZ_ERROR_THREAD` carrying errno 6). liblzma's
+/// encoder spawns its workers from the main thread instead, so it keeps
+/// working, and it is genuinely parallel there - which the SDK encoder would
+/// not be if it were forced single-threaded to fit.
+///
+/// The *decoder* is unaffected and stays on the SDK everywhere: LzmaDec and
+/// Lzma2Dec have no threads.
 fn lzma_sdk_threads_enabled() -> bool {
-    !is_wasm32_target() || is_wasm_threads_target()
+    !is_wasm32_target()
 }
 
 fn lzma_sdk_arm64_asm_enabled() -> bool {
@@ -419,8 +435,10 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
             build.file(source_dir.join(source));
         }
     } else {
-        // wasm32-wasip1 has no threads at all; Z7_ST compiles the SDK's whole
-        // mt layer (and its pthread dependency) out of LzmaEnc/Lzma2Enc.
+        // Z7_ST compiles the SDK's whole mt layer - and the glue's encoder
+        // bridge with it - out of the build. wasm32-wasip1 has no threads at
+        // all, and wasm32-wasip1-threads cannot nest them (see
+        // lzma_sdk_threads_enabled).
         build.define("Z7_ST", None);
     }
 

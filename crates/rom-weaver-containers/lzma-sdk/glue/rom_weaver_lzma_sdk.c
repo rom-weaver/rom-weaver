@@ -327,6 +327,9 @@ rw_lzma2_enc_new(int level, int threads, uint32_t dict_size, uint64_t size_hint)
 	enc->in_vt.Read = rw_enc_read;
 	enc->out_vt.Write = rw_enc_write;
 
+	/* The single most likely failure, and the reason the caller treats a
+	 * NULL return as "use the other encoder" rather than as an error: a
+	 * host can simply be out of threads. */
 	if (Thread_Create(&enc->thread, rw_enc_thread, enc) != 0) {
 		rw_lzma2_enc_free(enc);
 		return NULL;
@@ -438,8 +441,16 @@ rw_lzma2_enc_code(rw_lzma2_enc *enc, const uint8_t *in, size_t *in_len,
 	enc->out_left = 0;
 	rw_unlock(&enc->mutex);
 
-	if (*done && res != SZ_OK)
-		return res == SZ_ERROR_MEM ? RW_LZMA_ERR_MEM : RW_LZMA_ERR_DATA;
+	if (*done && res != SZ_OK) {
+		if (res == SZ_ERROR_MEM)
+			return RW_LZMA_ERR_MEM;
+		if (res == SZ_ERROR_THREAD)
+			return RW_LZMA_ERR_THREAD;
+		/* Keep the SDK's own SRes visible rather than collapsing every
+		 * remaining failure into one code - they are far apart
+		 * (SZ_ERROR_PARAM, SZ_ERROR_WRITE, SZ_ERROR_OUTPUT_EOF ...). */
+		return RW_LZMA_ERR_SRES_BASE + (int)res;
+	}
 	return RW_LZMA_OK;
 }
 
