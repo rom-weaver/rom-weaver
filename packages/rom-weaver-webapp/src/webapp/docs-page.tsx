@@ -47,12 +47,13 @@ const findDocsRoute = (slug: string) => {
   return route;
 };
 
-const DocsPage = ({ slug }: { slug: string }) => {
+const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const route = findDocsRoute(slug);
   const hub = route.slug === "docs";
   useEffect(() => {
+    if (!active) return;
     syncDocsSeoMetadata(route);
-  }, [route]);
+  }, [active, route]);
   return (
     <div className="docs-workbench" id="main">
       <nav aria-label="Breadcrumb" className="docs-breadcrumbs">

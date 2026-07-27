@@ -22,7 +22,7 @@ const logger = createLogger("workflow-routes");
 
 type WorkflowRouteProps = {
   creator: CreatePatchFormProps;
-  docs: { slug: string };
+  docs: { active: boolean; slug: string };
   patcher: ApplyPatchFormProps;
   tools: ToolsFormProps;
   trim: TrimPatchFormProps;

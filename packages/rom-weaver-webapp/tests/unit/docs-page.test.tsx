@@ -1,0 +1,47 @@
+// @vitest-environment happy-dom
+import { render } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { DocsPage } from "../../src/webapp/docs-page.tsx";
+
+const setSeoMetadata = (title: string, description: string, canonicalUrl: string) => {
+  document.title = title;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:type"]')?.setAttribute("content", "website");
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
+};
+
+describe("DocsPage", () => {
+  beforeEach(() => {
+    document.head.innerHTML = `
+      <meta name="description" content="">
+      <meta property="og:title" content="">
+      <meta property="og:description" content="">
+      <meta property="og:type" content="website">
+      <meta property="og:url" content="">
+      <meta name="twitter:title" content="">
+      <meta name="twitter:description" content="">
+      <link rel="canonical" href="">
+    `;
+  });
+
+  it("restores docs metadata when its kept-alive panel becomes active again", () => {
+    const { rerender } = render(<DocsPage active slug="docs" />);
+    const docsTitle = document.title;
+    const docsDescription = document.querySelector('meta[name="description"]')?.getAttribute("content");
+    expect(docsTitle).toMatch(/^Use rom-weaver \| rom-weaver/);
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
+
+    rerender(<DocsPage active={false} slug="docs" />);
+    setSeoMetadata(
+      "rom-weaver — Create ROM patches online",
+      "Create ROM patches locally in your browser.",
+      "https://rom-weaver.com/create",
+    );
+    rerender(<DocsPage active slug="docs" />);
+
+    expect(document.title).toBe(docsTitle);
+    expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toBe(docsDescription);
+    expect(document.querySelector('meta[property="og:type"]')?.getAttribute("content")).toBe("article");
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
+  });
+});

@@ -76,6 +76,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   document
     .querySelector<HTMLMetaElement>('meta[property="og:description"]')
     ?.setAttribute("content", route.description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:type"]')?.setAttribute("content", "website");
   document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
   document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute("content", title);
   document
@@ -496,7 +497,7 @@ function WebappRoot({
                     pageDrop={activePageDrop}
                   />,
                 )}
-                {workflowPanel("docs", <DocsPageRoute slug={docsSlug} />)}
+                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute

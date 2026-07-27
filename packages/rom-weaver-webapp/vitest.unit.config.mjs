@@ -2,11 +2,16 @@ import { fileURLToPath } from "node:url";
 import { mergeConfig } from "vitest/config";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
 // Node-environment unit tests for the patcher state layer (pure reducers, view-model
 // projections, normalizers, and store/state-machine helpers). These run without a
 // browser so the state machines can be refactored under a fast, deterministic safety
 // net; the browser suite (vitest.browser.config.mjs) still covers end-to-end behavior.
 export default mergeConfig(baseConfig, {
+  server: {
+    fs: { allow: [REPO_ROOT] },
+  },
   test: {
     coverage: {
       ...coverageBase,
