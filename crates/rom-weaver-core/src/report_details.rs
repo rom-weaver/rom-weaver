@@ -105,6 +105,12 @@ pub fn build_emitted_file_detail(path: &Path) -> Option<Map<String, Value>> {
     if !metadata.is_file() {
         return None;
     }
+    build_known_emitted_file_detail(path, metadata.len())
+}
+
+/// Build emitted-file details when the successful producer already knows the
+/// output size, avoiding a redundant metadata read.
+pub fn build_known_emitted_file_detail(path: &Path, size_bytes: u64) -> Option<Map<String, Value>> {
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let file_name = canonical.file_name()?.to_string_lossy().into_owned();
     let mut entry = Map::new();
@@ -113,7 +119,7 @@ pub fn build_emitted_file_detail(path: &Path) -> Option<Map<String, Value>> {
         json!(canonical.to_string_lossy().replace('\\', "/")),
     );
     entry.insert("file_name".to_string(), json!(file_name));
-    entry.insert("size_bytes".to_string(), json!(metadata.len()));
+    entry.insert("size_bytes".to_string(), json!(size_bytes));
     Some(entry)
 }
 
@@ -160,5 +166,20 @@ mod tests {
                 .is_some_and(|path| path.ends_with("/output.bin"))
         );
         assert!(build_emitted_file_detail(temp.path()).is_none());
+    }
+
+    #[test]
+    fn known_emitted_file_detail_needs_no_metadata_read() {
+        let temp = TempDir::new().expect("temp dir");
+        let missing = temp.child("already-produced.bin");
+
+        let detail =
+            build_known_emitted_file_detail(missing.path(), 42).expect("known file detail");
+
+        assert_eq!(
+            detail.get("file_name"),
+            Some(&json!("already-produced.bin"))
+        );
+        assert_eq!(detail.get("size_bytes"), Some(&json!(42)));
     }
 }
