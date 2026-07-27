@@ -2937,17 +2937,28 @@ compression_init_encoder_lzma2_sdk(struct archive *a,
 {
 	rw_lzma2_enc *enc;
 
+	(void)a;/* UNUSED: every failure here defers to the caller's fallback */
+
 	enc = rw_lzma2_enc_new(level, threads, dict_size, size_hint);
 	if (enc == NULL) {
-		archive_set_error(a, ENOMEM,
-		    "Couldn't initialize the LZMA2 encoder");
-		return (ARCHIVE_FATAL);
+		/*
+		 * Deliberately silent, and deliberately not fatal. The SDK
+		 * encoder is a blocking one-shot that has to be driven from a
+		 * thread of its own, and there are hosts where that thread
+		 * cannot exist - a browser run that asked for a single thread
+		 * gets a zero-sized WASI thread pool, so every spawn returns
+		 * EAGAIN. liblzma's encoder is a real streaming push encoder
+		 * that needs no thread, so the caller falls back to it and the
+		 * archive still gets written. Setting an archive error here
+		 * would poison a run that is about to succeed.
+		 */
+		return (ARCHIVE_FAILED);
 	}
 	lastrm->props = malloc(1);
 	if (lastrm->props == NULL) {
+		/* Same fallback as above; liblzma needs far less memory. */
 		rw_lzma2_enc_free(enc);
-		archive_set_error(a, ENOMEM, "Cannot allocate memory");
-		return (ARCHIVE_FATAL);
+		return (ARCHIVE_FAILED);
 	}
 	lastrm->props[0] = rw_lzma2_enc_props(enc);
 	lastrm->prop_size = 1;
@@ -3047,11 +3058,17 @@ compression_init_encoder_lzma(struct archive *a,
 #if ROM_WEAVER_LZMA_SDK_MT
 	/* The dictionary is already 7-Zip's per-level value, wasm-capped and
 	 * reduced to the input; hand it over verbatim so the SDK stores the
-	 * same properties byte liblzma would have. */
-	if (filter_id == LZMA_FILTER_LZMA2 && lzma2_sdk_encoder_enabled())
-		return (compression_init_encoder_lzma2_sdk(a, lastrm, level,
+	 * same properties byte liblzma would have.
+	 *
+	 * A failure here is a fallback, not an error: the SDK encoder needs a
+	 * thread it cannot always get (see compression_init_encoder_lzma2_sdk),
+	 * and liblzma below encodes the same format without one. It leaves
+	 * lastrm untouched on failure, so the liblzma path starts clean. */
+	if (filter_id == LZMA_FILTER_LZMA2 && lzma2_sdk_encoder_enabled()
+	    && compression_init_encoder_lzma2_sdk(a, lastrm, level,
 		    lzma_opt.dict_size, threads, size_hint, progress_callback,
-		    progress_callback_data));
+		    progress_callback_data) == ARCHIVE_OK)
+		return (ARCHIVE_OK);
 #endif
 
 	lzmafilters[0].id = filter_id;

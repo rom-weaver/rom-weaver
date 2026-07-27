@@ -27,6 +27,10 @@ extern "C" {
 #define RW_LZMA_ERR_PROPS	2
 #define RW_LZMA_ERR_DATA	3
 #define RW_LZMA_ERR_PARAM	4
+#define RW_LZMA_ERR_THREAD	5
+/* Anything at or above this is the SDK's own SRes plus this base, so an
+ * unexpected coder failure keeps its own identity in the error message. */
+#define RW_LZMA_ERR_SRES_BASE	100
 
 /* --- Decode ---------------------------------------------------------- */
 
@@ -72,7 +76,9 @@ typedef struct rw_lzma2_enc rw_lzma2_enc;
  *           dictionary and the block count to fit it.
  *
  * The encoder runs on its own thread; rw_lzma2_enc_code is a push/pull shim
- * over the SDK's blocking stream-callback API. Returns NULL on failure.
+ * over the SDK's blocking stream-callback API. Returns NULL when it cannot
+ * start - most often because the host has no thread to spare - which the caller
+ * is expected to treat as "use the other encoder", not as an error.
  */
 rw_lzma2_enc *rw_lzma2_enc_new(int level, int threads, uint32_t dict_size,
     uint64_t size_hint);

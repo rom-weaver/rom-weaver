@@ -14,6 +14,7 @@ why, and the exact steps to go back to upstream.
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
 - [LZMA SDK, inlined into `rom-weaver-containers`](#lzma-sdk-inlined-into-rom-weaver-containers)
+  - [The SDK encoder is native-only](#the-sdk-encoder-is-native-only)
   - [Which platforms get the assembly decode loop](#which-platforms-get-the-assembly-decode-loop)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
@@ -148,10 +149,11 @@ Build wiring lives in `libarchive/build.rs`:
   profile. They are third-party coders nobody steps through, and a debug-profile
   build of them makes the test suite unusably slow.
 - The threaded units (`LzFindMt`, `MtCoder`, `MtDec`, `Threads`) are dropped and
-  `Z7_ST` is defined on `wasm32-wasip1`, which has no threads.
-  `wasm32-wasip1-threads` builds them against wasi-threads' pthreads; the SDK's
-  POSIX backend uses only `pthread_create`/`join`/mutex/cond, no POSIX
-  semaphores, so no shim is needed.
+  `Z7_ST` is defined on **every** wasm target, which also drops the glue's
+  encoder bridge and leaves `rom-weaver-app.wasm` encoding 7z with liblzma. See
+  [The SDK encoder is native-only](#the-sdk-encoder-is-native-only) for why. The
+  *decoder* is unaffected and stays on the SDK everywhere - `LzmaDec` and
+  `Lzma2Dec` have no threads.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
@@ -160,6 +162,36 @@ Build wiring lives in `libarchive/build.rs`:
   ~26% of a 1 GiB LZMA1 extract, and **without it the SDK's C decoder is no
   faster than liblzma's** - the whole 7z extract win is this file. Which
   platforms get it is the matrix below.
+
+### The SDK encoder is native-only
+
+The SDK's LZMA2 encoder is a blocking one-shot over stream callbacks, so
+`glue/rom_weaver_lzma_sdk.c` drives it from a thread of its own and rendezvouses
+with libarchive's push-shaped `la_zstream`. The SDK then spawns its own
+match-finder and block threads **from that thread**, and those nested spawns do
+not survive the browser's WASI thread pool:
+
+- A run that asks for one thread gets a *zero-sized* pool
+  (`resolveBrowserThreadPoolSizeFromCount` returns 0 for `<= 1`), so even the
+  bridge thread fails with `EAGAIN` and no 7z archive can be written at all.
+- With a large pool the bridge thread starts, but the SDK's nested spawn from it
+  never gets its start ack and comes back `SZ_ERROR_THREAD` carrying errno 6.
+
+liblzma's encoder spawns its workers from the main thread, which the pool
+handles, and it is genuinely parallel there - so wasm keeps it. Forcing the SDK
+encoder single-threaded to fit would have made every `effective_threads > 1` the
+browser reports a lie.
+
+`lzma_sdk_threads_enabled()` in `libarchive/build.rs` is the single switch:
+false for wasm, which drops `Z7_ST`-guarded code from the SDK build and leaves
+`ROM_WEAVER_LZMA_SDK_MT` undefined so the writer never reaches for it. The
+planner in `handlers/sevenz.rs` mirrors the split with `cfg(target_family =
+"wasm")` so its worker-memory and parallelism model describes the backend that
+actually runs.
+
+Native builds keep a second safety net: if the bridge thread cannot start for
+any reason, `compression_init_encoder_lzma2_sdk` returns `ARCHIVE_FAILED`
+without setting an archive error and the writer falls through to liblzma.
 
 ### Which platforms get the assembly decode loop
 
