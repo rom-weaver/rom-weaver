@@ -95,6 +95,11 @@ export default mergeConfig(baseConfig, {
     },
   },
   test: {
+    expect: {
+      // Browser-worker state can take longer than Vitest's 1s poll default
+      // when the file runner has several Chrome processes active.
+      poll: { timeout: 30_000 },
+    },
     browser: {
       commands: {
         async clickAndReadDownload(context, selector, options) {

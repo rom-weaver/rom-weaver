@@ -149,13 +149,13 @@ const bgString = (selector) => getComputedStyle(host.querySelector(selector)).ba
 // Returns readable violation strings (contrast diagnostic inlined) to assert
 // against [] so failures show exactly what broke. `region` is only meaningful
 // for a full page - an isolated mount or lone modal has no landmarks.
-const scanViolations = async (context, { bestPractice = false, region = false } = {}) => {
+const scanViolations = async (context, { bestPractice = false, onlyRules = null, region = false } = {}) => {
   const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"];
   if (bestPractice) tags.push("best-practice");
   const results = await axe.run(context, {
     resultTypes: ["violations"],
     rules: region ? {} : { region: { enabled: false } },
-    runOnly: { type: "tag", values: tags },
+    runOnly: onlyRules ? { type: "rule", values: onlyRules } : { type: "tag", values: tags },
   });
   return results.violations.map((v) => {
     const sample = v.nodes[0]?.any?.[0]?.data ?? v.nodes[0]?.all?.[0]?.data;
@@ -471,12 +471,7 @@ const doneOutput = () => ({
   totalTiming: "1.2 s",
 });
 
-const stagedApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ips")]);
 const emptyApplyPage = () => applyPage(createEmptyPatcherUiState(), []);
-const verdictApplyPage = () =>
-  applyPage(stagedUi(), [badPatchItem("broken.ips"), stagedPatchItem("ok.ips")], {
-    patchEnablement: { disabledIds: new Set(["p1"]), getPatchIds: () => ["p0", "p1"], onToggle: noop },
-  });
 const doneApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ips")], { output: doneOutput() });
 
 // A single disc ROM row wired to surface EVERY drawer the apply card can render:
@@ -578,14 +573,9 @@ const densePatchItems = () => [
 
 const denseRom = () => ({ ...createEmptyPatcherUiState(), romInputs: [richRomRow("Final Fantasy VII (Disc 1).bin")] });
 
-const densePatchApplyPage = () => applyPage(denseRom(), densePatchItems());
-
-// Same dense page, but with the per-patch On/Off enable toggles present and the
-// middle patch toggled OFF. A disabled patch dims to `.card.is-disabled` (dashed
-// plate, --ink-3 text), drops its verdict + Checks drawer, and keeps only an
-// (editable) Options drawer - a distinct set of surfaces/targets: the switch
-// input itself, the dimmed name/meta, and the Options fields on the disabled
-// card background. openAllDrawers still expands every remaining drawer.
+// This one page subsumes the old staged, verdict, and all-enabled dense fixtures:
+// it has a staged ROM, enabled valid + invalid patches, and a disabled patch.
+// The per-patch On/Off controls also add a distinct dimmed card surface.
 const disabledPatchApplyPage = () =>
   applyPage(denseRom(), densePatchItems(), {
     patchEnablement: { disabledIds: new Set(["p1"]), getPatchIds: () => ["p0", "p1", "p2"], onToggle: noop },
@@ -712,37 +702,9 @@ const stagedTrimPage = () =>
     }),
   );
 
-describe("webapp page accessibility", () => {
-  const PAGES = [
-    { factory: stagedApplyPage, name: "staged apply" },
-    { factory: emptyApplyPage, name: "empty apply" },
-    { factory: verdictApplyPage, name: "apply (bad + disabled patch verdicts)" },
-    { factory: doneApplyPage, name: "apply (completed/download)" },
-    { factory: emptyCreatePage, name: "empty create" },
-    { factory: stagedCreatePage, name: "staged create" },
-    { factory: emptyTrimPage, name: "empty trim" },
-    { factory: stagedTrimPage, name: "staged trim" },
-  ];
-  for (const { factory, name } of PAGES) {
-    for (const theme of THEMES) {
-      for (const viewport of VIEWPORTS) {
-        test(`${name} page passes WCAG 2.1 A/AA + best-practice (${theme} theme, ${viewport.name})`, async () => {
-          await setViewport(viewport);
-          await renderPage(factory(), theme);
-          expect(await scanViolations(host, { bestPractice: true, region: true })).toEqual([]);
-        });
-      }
-    }
-  }
-});
-
 // ── Dense apply page: multiple patches + every drawer open ───────────────────
-// The staged/verdict apply scans leave the patch Options drawers (name,
-// description, input/output verification fields, header-strip checkbox) and the
-// ROM's cue/variant/extract drawers CLOSED - axe skips visibility:hidden
-// content, so those dense, control-heavy states were never audited. This mounts
-// the worst case (a disc ROM with every panel + three patches spanning every
-// verdict) and clicks every collapsed drawer OPEN before scanning.
+// Axe skips visibility:hidden content, so open every nested drawer before
+// scanning the dense fixture.
 const openAllDrawers = async (root) => {
   // nested drawers reveal more toggles once a parent opens, so loop until dry
   for (let pass = 0; pass < 8; pass += 1) {
@@ -752,29 +714,6 @@ const openAllDrawers = async (root) => {
     await settle();
   }
 };
-
-describe("webapp dense apply page accessibility", () => {
-  const DENSE_PAGES = [
-    { factory: densePatchApplyPage, name: "3 patches, all enabled" },
-    { factory: disabledPatchApplyPage, name: "3 patches, middle disabled + On/Off toggles" },
-  ];
-  for (const { factory, name } of DENSE_PAGES) {
-    for (const theme of THEMES) {
-      for (const viewport of VIEWPORTS) {
-        test(`dense apply (${name}, all drawers open) passes WCAG 2.1 A/AA + best-practice (${theme} theme, ${viewport.name})`, async () => {
-          await setViewport(viewport);
-          await renderPage(factory(), theme);
-          await openAllDrawers(host);
-          // sanity: nothing left collapsed (else axe silently skips it) and the
-          // page really is dense - many open drawers across the ROM + 3 patches
-          expect(host.querySelectorAll('button.cks-head[aria-expanded="false"]').length).toBe(0);
-          expect(host.querySelectorAll(".cks.is-open").length).toBeGreaterThanOrEqual(5);
-          expect(await scanViolations(host, { bestPractice: true, region: true })).toEqual([]);
-        });
-      }
-    }
-  }
-});
 
 // ── Banners ──────────────────────────────────────────────────────────────────
 const Banners = () =>
@@ -788,18 +727,6 @@ const Banners = () =>
       createElement(WakeLockBanner, { onDismiss: noop, open: true }, "Keeping the screen awake while this job runs."),
     ),
   );
-
-describe("webapp banner accessibility", () => {
-  for (const theme of THEMES) {
-    for (const viewport of VIEWPORTS) {
-      test(`update + wake-lock banners pass WCAG 2.1 A/AA + best-practice (${theme} theme, ${viewport.name})`, async () => {
-        await setViewport(viewport);
-        await renderNode(createElement(Banners), theme);
-        expect(await scanViolations(host, { bestPractice: true })).toEqual([]);
-      });
-    }
-  }
-});
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────
 // Modals portal into the first `.rw-app` (modal.tsx getModalPortalTarget), so a
@@ -886,16 +813,55 @@ const DIALOGS = {
 const ModalHost = (node) =>
   createElement(RomWeaverSettingsProvider, { settings: {} }, createElement("div", { className: "rw-app" }, node));
 
-describe("webapp modal accessibility", () => {
-  for (const [name, factory] of Object.entries(DIALOGS)) {
-    for (const theme of THEMES) {
-      for (const viewport of VIEWPORTS) {
-        test(`${name} dialog passes WCAG 2.1 A/AA + best-practice (${theme} theme, ${viewport.name})`, async () => {
-          await setViewport(viewport);
-          await renderNode(ModalHost(factory()), theme);
-          expect(await scanViolations(host, { bestPractice: true })).toEqual([]);
-        });
-      }
+// Reuse one React root and viewport for all production surfaces at a given
+// theme/width. This keeps every matrix point while avoiding a fresh browser-test
+// setup for each page. The dense apply fixture replaces three overlapping apply
+// states without losing their enabled, disabled, invalid, or staged controls.
+const WEBAPP_SURFACES = [
+  { factory: emptyApplyPage, name: "empty apply", page: true },
+  { factory: doneApplyPage, name: "apply completed/download", page: true },
+  { factory: emptyCreatePage, name: "empty create", page: true },
+  { factory: stagedCreatePage, name: "staged create", page: true },
+  { factory: emptyTrimPage, name: "empty trim", page: true },
+  { factory: stagedTrimPage, name: "staged trim", page: true },
+  {
+    dense: true,
+    factory: disabledPatchApplyPage,
+    name: "dense apply with enabled, disabled, and invalid patches",
+    page: true,
+  },
+  { factory: () => createElement(Banners), name: "update + wake-lock banners" },
+  ...Object.entries(DIALOGS).map(([name, factory]) => ({
+    factory: () => ModalHost(factory()),
+    name: `${name} dialog`,
+  })),
+];
+
+describe("webapp surface accessibility", () => {
+  for (const theme of THEMES) {
+    for (const viewport of VIEWPORTS) {
+      test(`pages and dialogs pass WCAG 2.1 A/AA + best-practice (${theme} theme, ${viewport.name})`, async () => {
+        await setViewport(viewport);
+        const violations = [];
+
+        for (const { dense, factory, name, page: isPage } of WEBAPP_SURFACES) {
+          if (isPage) await renderPage(factory(), theme);
+          else await renderNode(factory(), theme);
+
+          if (dense) {
+            await openAllDrawers(host);
+            // Sanity: nothing remains hidden and the fixture still contains
+            // drawers spanning the ROM and all three patch cards.
+            expect(host.querySelectorAll('button.cks-head[aria-expanded="false"]').length, name).toBe(0);
+            expect(host.querySelectorAll(".cks.is-open").length, name).toBeGreaterThanOrEqual(5);
+          }
+
+          const surfaceViolations = await scanViolations(host, { bestPractice: true, region: isPage });
+          violations.push(...surfaceViolations.map((violation) => `${name}: ${violation}`));
+        }
+
+        expect(violations).toEqual([]);
+      });
     }
   }
 });
@@ -987,32 +953,37 @@ const badgedMastheadPage = () =>
 // dialogs, banners, and masthead (incl. the badge).
 const ACCENT_SURFACES = [
   { factory: emptyApplyPage, name: "empty apply (hero + dropzone)", page: true },
-  { dense: true, factory: densePatchApplyPage, name: "dense apply (cards, drawers, verdicts)", page: true },
+  { dense: true, factory: disabledPatchApplyPage, name: "dense apply (cards, drawers, verdicts)", page: true },
   { factory: doneApplyPage, name: "apply completed (result + meter)", page: true },
   { factory: () => ModalHost(DIALOGS.settings()), name: "settings dialog" },
   { factory: () => ModalHost(DIALOGS.log()), name: "log dialog" },
-  { factory: Banners, name: "banners" },
+  { factory: () => createElement(Banners), name: "banners" },
   { badge: true, factory: badgedMastheadPage, name: "masthead + channel badge", page: true },
 ];
 
 describe("accent dye-lot accessibility", () => {
   for (const accent of ACCENTS) {
-    for (const { badge, dense, factory, name, page: isPage } of ACCENT_SURFACES) {
-      for (const theme of THEMES) {
-        for (const viewport of ACCENT_VIEWPORTS) {
-          test(`${name} passes WCAG 2.1 A/AA (${accent.value} accent, ${theme} theme, ${viewport.name})`, async () => {
-            await setViewport(viewport);
-            // The production application path, so a bug in applyAccent fails here too.
-            applyAccent(accent.value);
-            const node = isPage ? factory() : createElement(factory);
+    for (const theme of THEMES) {
+      for (const viewport of ACCENT_VIEWPORTS) {
+        test(`accent surfaces pass WCAG 2.1 contrast (${accent.value}, ${theme} theme, ${viewport.name})`, async () => {
+          await setViewport(viewport);
+          // The production application path, so a bug in applyAccent fails here too.
+          applyAccent(accent.value);
+          const expected = accent.value === "madder" ? null : accent.value;
+          expect(document.documentElement.getAttribute("data-accent")).toBe(expected);
+          const violations = [];
+
+          for (const { badge, dense, factory, name, page: isPage } of ACCENT_SURFACES) {
+            // Madder is the base palette already scanned above. Its badge is the
+            // only unique surface; the other accents re-dye every surface.
+            if (accent.value === "madder" && !badge) continue;
+
+            const node = factory();
             if (isPage) await renderPage(node, theme);
             else await renderNode(node, theme);
             if (dense) await openAllDrawers(host);
 
-            // sanity: the accent really is on the element the tokens key off
-            const expected = accent.value === "madder" ? null : accent.value;
-            expect(document.documentElement.getAttribute("data-accent")).toBe(expected);
-            // …and the badge surface really rendered a badge, so it isn't scanning nothing
+            // The badge surface must really render the re-dyed inline SVG.
             if (badge) {
               expect(host.querySelector(".channel-badge")?.textContent).toBe("nightly");
               // The logo is an <img> of an inlined, re-dyed SVG. If the ?raw import ever
@@ -1027,9 +998,12 @@ describe("accent dye-lot accessibility", () => {
               if (accent.value !== "madder") expect(markSrc).not.toContain(encodeURIComponent("#d9690f"));
             }
 
-            expect(await scanViolations(host, { bestPractice: true, region: isPage })).toEqual([]);
-          });
-        }
+            const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });
+            violations.push(...surfaceViolations.map((violation) => `${name}: ${violation}`));
+          }
+
+          expect(violations).toEqual([]);
+        });
       }
     }
   }

@@ -6,6 +6,10 @@ import { createMockApplyResult, installPatcherTestHooks, mount } from "./patcher
 
 installPatcherTestHooks();
 
+const waitForStagingProgress = async (role) => {
+  await expect.poll(() => document.querySelector(`[id^="rom-weaver-progress-${role}"]`)).not.toBeNull();
+};
+
 test("apply can queue and start without a patch", async () => {
   const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
   let resolveInputStaging = () => undefined;
@@ -42,6 +46,7 @@ test("apply can queue and start without a patch", async () => {
   try {
     mount(createElement(Harness));
 
+    await waitForStagingProgress("rom");
     await expect
       .poll(() => {
         const applyButton = document.getElementById("rom-weaver-button-apply");
@@ -98,6 +103,7 @@ test("apply queued default format follows unambiguous special compression input"
   try {
     mount(createElement(Harness));
 
+    await waitForStagingProgress("rom");
     await expect.poll(() => document.getElementById("rom-weaver-select-output-format")?.value || "").toBe("rvz");
     const applyButton = document.getElementById("rom-weaver-button-apply");
     expect(applyButton).toBeInstanceOf(HTMLButtonElement);
@@ -167,6 +173,7 @@ test("apply waits for a patch added before queued start", async () => {
   try {
     mount(createElement(Harness));
 
+    await waitForStagingProgress("rom");
     await expect
       .poll(() => {
         const applyButton = document.getElementById("rom-weaver-button-apply");
@@ -250,6 +257,7 @@ test("apply queued run cancels when staged patch validation fails", async () => 
   try {
     mount(createElement(Harness));
 
+    await waitForStagingProgress("patch");
     await expect
       .poll(() => {
         const applyButton = document.getElementById("rom-weaver-button-apply");
