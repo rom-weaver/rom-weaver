@@ -20,6 +20,8 @@ Choose the guide that matches what you are trying to do.
   visible CLI command directly from Clap.
 - [Screenshots](screenshots.md): desktop and mobile workflows plus the runnable
   sample ROMs before and after patching.
+- [Webapp masthead metadata](webapp-runtime-status.md): the version, SHA,
+  thread, PWA, and service-worker labels.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): machine-readable
   schema for distributable patch workflows.
 

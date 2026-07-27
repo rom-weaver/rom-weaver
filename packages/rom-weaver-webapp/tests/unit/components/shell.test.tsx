@@ -64,7 +64,9 @@ describe("Masthead", () => {
     const settings = getByRole("button", { name: "Settings" });
     expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
     const reset = getByRole("button", { name: "Reset" });
-    expect(container.querySelector(".masthead-version")?.textContent).toBe("v1.2.3 · main* · a1b2c3d· 8T");
+    expect(container.querySelector(".masthead-threads-full")?.textContent).toBe("· 8 threads");
+    expect(container.querySelector(".masthead-threads-short")?.textContent).toBe("· 8T");
+    expect(container.querySelector(".masthead-threads .sr-only")?.textContent).toBe("8 threads");
     expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");

@@ -258,7 +258,19 @@ const Masthead = ({
                 data-thread-label={threadsLabel}
                 title={threads ? `${threads} ${threadsLabel}` : undefined}
               >
-                {threads ? `· ${threads}T` : null}
+                {threads ? (
+                  <>
+                    <span aria-hidden="true" className="masthead-threads-full">
+                      · {threads} {threadsLabel}
+                    </span>
+                    <span aria-hidden="true" className="masthead-threads-short">
+                      · {threads}T
+                    </span>
+                    <span className="sr-only">
+                      {threads} {threadsLabel}
+                    </span>
+                  </>
+                ) : null}
               </span>
               {runtimeStatus ? (
                 <span className="masthead-runtime" title={runtimeStatusTitle}>
