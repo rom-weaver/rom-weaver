@@ -246,7 +246,7 @@ function WebappRoot({
       () => actions.onOpenSettings(),
       () => actions.onOpenSettings(),
     );
-  }, [actions.onOpenSettings]);
+  }, [actions]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
