@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Generate a build-time third-party attribution bundle from the resolved Cargo
-// dependency graph.
+// and npm dependency graphs.
 //
-// Scope: every non-workspace package reachable from the workspace members over
-// normal + build dependency edges (dev-only edges are excluded). This mirrors
-// `cargo tree --workspace --edges normal,build`.
+// CLI scope: every non-workspace Cargo package reachable from the workspace
+// members over normal + build dependency edges, plus the source trees that are
+// deliberately inlined into rom-weaver-containers.
+// Webapp scope: CLI scope plus the webapp package's production dependency graph.
 //
 // Uses ONLY Node built-ins + `cargo metadata`. No npm or cargo plugins, no
-// network. Output is fully deterministic (sorted, no timestamps).
+// network. npm's lockfile supplies the resolved webapp graph; npm install is
+// still required when license text files need to be copied. Output is fully
+// deterministic (sorted, no timestamps).
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -17,6 +20,10 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index";
+const WEBAPP_ROOT = path.join(REPO_ROOT, "packages", "rom-weaver-webapp");
+const WEBAPP_LOCKFILE = path.join(WEBAPP_ROOT, "package-lock.json");
+const TARGETS = new Set(["all", "cli", "webapp"]);
+const NOTICE_FILES = { combined: "NOTICE", cli: "CLI_NOTICE", webapp: "WEBAPP_NOTICE" };
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;
 const NO_ATTRIBUTION_FILE_RE = /(0bsd|cc0|mit[-_ ]?0|unlicense|wtfpl|public[-_ ]?domain)/i;
@@ -24,14 +31,79 @@ const NO_ATTRIBUTION_FILE_RE = /(0bsd|cc0|mit[-_ ]?0|unlicense|wtfpl|public[-_ ]
 // Expressions containing any other identifier are kept conservatively.
 const NO_ATTRIBUTION_LICENSES = new Set(["0BSD", "CC0-1.0", "MIT-0", "Unlicense", "WTFPL"]);
 
-const [outputDirInput] = process.argv.slice(2);
-if (!outputDirInput) {
-  throw new Error("usage: node scripts/gen-third-party-licenses.mjs <output-dir>");
+const [outputDirInput, targetArg, targetValue] = process.argv.slice(2);
+const target = targetArg === "--target" ? targetValue : (targetArg ?? "all");
+if (!outputDirInput || !TARGETS.has(target)) {
+  throw new Error(
+    "usage: node scripts/gen-third-party-licenses.mjs <output-dir> [--target cli|webapp|all]",
+  );
 }
 
 const OUTPUT_DIR = path.resolve(process.cwd(), outputDirInput);
-const NOTICE_FILE = path.join(OUTPUT_DIR, "NOTICE");
 const LICENSES_DIR = path.join(OUTPUT_DIR, "third_party", "licenses");
+
+const IN_SOURCE_DEPENDENCIES = [
+  {
+    name: "libarchive",
+    versionFile: path.join(
+      REPO_ROOT,
+      "crates",
+      "rom-weaver-containers",
+      "libarchive",
+      "vendor",
+      "LIBARCHIVE_VERSION",
+    ),
+    versionKey: "ref",
+    sourceKey: "source",
+    license: "Apache-2.0 and per-file terms",
+    licenseFiles: [
+      path.join(
+        REPO_ROOT,
+        "crates",
+        "rom-weaver-containers",
+        "libarchive",
+        "vendor",
+        "libarchive",
+        "COPYING",
+      ),
+    ],
+  },
+  {
+    name: "nod",
+    versionFile: path.join(
+      REPO_ROOT,
+      "crates",
+      "rom-weaver-containers",
+      "src",
+      "nod",
+      "NOD_VERSION",
+    ),
+    versionKey: "commit",
+    sourceKey: "source",
+    license: "MIT OR Apache-2.0",
+    licenseFiles: [
+      path.join(REPO_ROOT, "crates", "rom-weaver-containers", "src", "nod", "LICENSE-APACHE"),
+      path.join(REPO_ROOT, "crates", "rom-weaver-containers", "src", "nod", "LICENSE-MIT"),
+    ],
+  },
+  {
+    name: "xdvdfs",
+    versionFile: path.join(
+      REPO_ROOT,
+      "crates",
+      "rom-weaver-containers",
+      "src",
+      "xdvdfs",
+      "XDVDFS_VERSION",
+    ),
+    versionKey: "version",
+    sourceKey: "source",
+    license: "MIT",
+    licenseFiles: [
+      path.join(REPO_ROOT, "crates", "rom-weaver-containers", "src", "xdvdfs", "LICENSE"),
+    ],
+  },
+];
 
 /**
  * Run `cargo metadata` and parse the JSON document.
@@ -105,6 +177,25 @@ function sourceLabel(pkg) {
   return pkg.source;
 }
 
+function metadataValue(file, key) {
+  const line = fs
+    .readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .find((entry) => entry.startsWith(`${key}:`));
+  return line?.slice(key.length + 1).trim() ?? "unknown";
+}
+
+function inSourceRows() {
+  return IN_SOURCE_DEPENDENCIES.map((dependency) => ({
+    kind: "source",
+    name: dependency.name,
+    version: metadataValue(dependency.versionFile, dependency.versionKey),
+    license: dependency.license,
+    source: metadataValue(dependency.versionFile, dependency.sourceKey),
+    licenseFiles: dependency.licenseFiles,
+  }));
+}
+
 function licenseIds(expression) {
   return (expression ?? "UNKNOWN")
     .split(/\s+(?:OR|AND)\s+/)
@@ -116,7 +207,80 @@ function requiresAttribution(expression) {
   return licenseIds(expression).some((id) => !NO_ATTRIBUTION_LICENSES.has(id));
 }
 
-/** Candidate directories to scan for a package's license text files. */
+/** Build rows for resolved Cargo packages that require attribution. */
+function cargoRows(metadata) {
+  const packagesById = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
+  return [...resolveThirdPartyIds(metadata)]
+    .map((id) => packagesById.get(id))
+    .filter((pkg) => pkg !== undefined)
+    .map((pkg) => ({
+      kind: "crate",
+      name: pkg.name,
+      version: pkg.version,
+      license: pkg.license,
+      source: sourceLabel(pkg),
+      pkg,
+    }))
+    .filter((row) => requiresAttribution(row.license));
+}
+
+function packageLockKey(packageName, fromKey, packages) {
+  let parent = fromKey;
+  while (true) {
+    const candidate = path.posix.join(parent, "node_modules", packageName);
+    if (packages[candidate]) return candidate;
+    const marker = parent.lastIndexOf("/node_modules/");
+    parent = marker === -1 ? "" : parent.slice(0, marker);
+    if (!parent) {
+      const rootCandidate = path.posix.join("node_modules", packageName);
+      return packages[rootCandidate] ? rootCandidate : undefined;
+    }
+  }
+}
+
+function npmDependencyNames(pkg) {
+  const names = new Set([
+    ...Object.keys(pkg.dependencies ?? {}),
+    ...Object.keys(pkg.optionalDependencies ?? {}),
+  ]);
+  for (const name of Object.keys(pkg.peerDependencies ?? {})) {
+    if (pkg.peerDependenciesMeta?.[name]?.optional !== true) names.add(name);
+  }
+  return names;
+}
+
+function loadWebappRows() {
+  const lockfile = JSON.parse(fs.readFileSync(WEBAPP_LOCKFILE, "utf8"));
+  const packages = lockfile.packages ?? {};
+  const reached = new Set();
+  const queue = [{ key: "", pkg: packages[""] }];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const name of npmDependencyNames(current.pkg)) {
+      const key = packageLockKey(name, current.key, packages);
+      if (!key || reached.has(key)) continue;
+      reached.add(key);
+      queue.push({ key, pkg: packages[key] });
+    }
+  }
+
+  return [...reached]
+    .map((key) => ({ key, pkg: packages[key] }))
+    .filter(({ pkg }) => pkg?.version)
+    .map(({ key, pkg }) => ({
+      kind: "npm",
+      name: key.slice(key.lastIndexOf("node_modules/") + "node_modules/".length),
+      version: pkg.version,
+      license: pkg.license,
+      source: pkg.resolved?.startsWith("https://registry.npmjs.org/")
+        ? "npmjs.com"
+        : (pkg.resolved ?? "npm"),
+      licenseDirs: [path.join(WEBAPP_ROOT, ...key.split("/"))],
+    }))
+    .filter((row) => requiresAttribution(row.license));
+}
+
+/** Candidate directories to scan for a Cargo package's license text files. */
 function licenseSearchDirs(pkg) {
   const manifestDir = path.dirname(pkg.manifest_path);
   const dirs = [manifestDir];
@@ -132,10 +296,10 @@ function licenseSearchDirs(pkg) {
  * Find license text files for a package. Returns a sorted, de-duplicated list
  * of absolute file paths (first matching directory wins per file name).
  */
-function findLicenseFiles(pkg) {
+function findLicenseFiles(row) {
   const seenNames = new Set();
   const found = [];
-  for (const dir of licenseSearchDirs(pkg)) {
+  for (const dir of row.licenseDirs ?? licenseSearchDirs(row.pkg)) {
     let entries;
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -172,20 +336,20 @@ function removeDir(dir) {
 }
 
 /** Build one notice containing the project terms and third-party inventory. */
-function renderNotice(rows) {
+function renderNotice(rows, scope) {
   const lines = [fs.readFileSync(path.join(REPO_ROOT, "NOTICE"), "utf8").trimEnd()];
   lines.push("");
   lines.push("Third-party components");
   lines.push("");
-  lines.push("This build includes the following third-party Rust crates whose declared");
-  lines.push("licenses require retaining attribution or license notices.");
+  lines.push(`This ${scope} build includes third-party components whose declared licenses`);
+  lines.push("require retaining attribution or license notices.");
   lines.push("Public-domain and no-attribution-only expressions are omitted.");
   lines.push("");
   lines.push("License texts or SPDX metadata are stored under");
-  lines.push("third_party/licenses/<name>-<version>/.");
+  lines.push("third_party/licenses/.");
   lines.push("");
   const tableRows = [
-    ["Crate", "Version", "License expression", "Source"],
+    ["Component", "Version", "License expression", "Source"],
     ...rows.map((row) => [row.name, row.version, row.license ?? "UNKNOWN", row.source]),
   ];
   const widths = tableRows[0].map((_, column) =>
@@ -200,48 +364,51 @@ function renderNotice(rows) {
   return lines.join("\n");
 }
 
+function licenseDirName(row) {
+  const prefix = row.kind === "crate" ? "" : `${row.kind}-`;
+  return `${prefix}${row.name.replaceAll("/", "-")}-${row.version}`;
+}
+
 function main() {
   const metadata = loadCargoMetadata();
-  const packagesById = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
-  const thirdPartyIds = resolveThirdPartyIds(metadata);
-
-  const rows = [];
+  const cargo = cargoRows(metadata);
+  const source = inSourceRows();
+  const npm = target === "cli" ? [] : loadWebappRows();
+  const cliRows = [...cargo, ...source];
+  const rowsByScope = {
+    cli: cliRows,
+    webapp: npm,
+    combined: [...cliRows, ...npm],
+  };
+  const scopes =
+    target === "all"
+      ? ["cli", "webapp", "combined"]
+      : target === "webapp"
+        ? ["webapp", "combined"]
+        : ["cli"];
+  const rows = [
+    ...new Map(
+      scopes.flatMap((scope) => rowsByScope[scope]).map((row) => [licenseDirName(row), row]),
+    ).values(),
+  ];
   const expectedDirs = new Set();
   const missingLicense = [];
   let copiedDirCount = 0;
-  let omittedCount = 0;
-
-  for (const id of thirdPartyIds) {
-    const pkg = packagesById.get(id);
-    if (pkg === undefined) {
-      continue;
-    }
-    const row = {
-      name: pkg.name,
-      version: pkg.version,
-      license: pkg.license,
-      source: sourceLabel(pkg),
-      pkg,
-    };
-    if (requiresAttribution(row.license)) {
-      rows.push(row);
-    } else {
-      omittedCount += 1;
-    }
-  }
 
   rows.sort((a, b) => {
     const byName = a.name.localeCompare(b.name);
     return byName !== 0 ? byName : a.version.localeCompare(b.version);
   });
 
-  // Copy license files into deterministic per-crate directories.
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+  // Copy license files into deterministic per-component directories.
   for (const row of rows) {
-    const dirName = `${row.name}-${row.version}`;
+    const dirName = licenseDirName(row);
     const targetDir = path.join(LICENSES_DIR, dirName);
     expectedDirs.add(dirName);
 
-    const licenseFiles = findLicenseFiles(row.pkg);
+    const licenseFiles = row.licenseFiles ?? findLicenseFiles(row);
     if (licenseFiles.length === 0) {
       missingLicense.push(dirName);
       removeDir(targetDir);
@@ -294,8 +461,17 @@ function main() {
     fs.mkdirSync(LICENSES_DIR, { recursive: true });
   }
 
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  fs.writeFileSync(NOTICE_FILE, renderNotice(rows));
+  for (const scope of scopes) {
+    fs.writeFileSync(
+      path.join(OUTPUT_DIR, NOTICE_FILES[scope]),
+      renderNotice(rowsByScope[scope], scope),
+    );
+  }
+  for (const filename of Object.values(NOTICE_FILES)) {
+    if (!scopes.some((scope) => NOTICE_FILES[scope] === filename)) {
+      fs.rmSync(path.join(OUTPUT_DIR, filename), { force: true });
+    }
+  }
   fs.rmSync(path.join(OUTPUT_DIR, "THIRD_PARTY_LICENSES.md"), { force: true });
 
   // Deliberately NOT deduped here: this bundle also lands inside the npm
@@ -307,10 +483,11 @@ function main() {
   missingLicense.sort();
   process.stdout.write(
     [
-      `Inventory crates: ${rows.length}`,
-      `Omitted no-attribution crates: ${omittedCount}`,
+      `Inventory crates: ${cargo.length}`,
+      `Inventory in-source components: ${source.length}`,
+      target === "cli" ? "" : `Inventory webapp packages: ${npm.length}`,
       `License dirs written: ${copiedDirCount}`,
-      `Crates without a findable license file: ${missingLicense.length}`,
+      `Components without a findable license file: ${missingLicense.length}`,
       missingLicense.length > 0 ? `  ${missingLicense.join(", ")}` : "",
       `Pruned stale dirs: ${pruned.length}`,
       pruned.length > 0 ? `  ${pruned.join(", ")}` : "",

@@ -417,6 +417,6 @@ The public distribution is licensed under
 [AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL_LICENSE.md) is
 also available for first-party rom-weaver code. Bundled third-party components
 retain their own licenses. Release builds include a generated
-[attribution and license inventory](https://rom-weaver.com/NOTICE) and
+[combined attribution and license inventory](https://rom-weaver.com/NOTICE) and
 corresponding license texts. Those third-party terms continue to apply under
 every rom-weaver licensing option.

@@ -54,6 +54,7 @@ const getGeneratedSampleAsset = (requestPath) => {
 };
 const generatedLicenseAssetSources = {
   "/NOTICE": path.join(rootDir, "src", "wasm", "NOTICE"),
+  "/WEBAPP_NOTICE": path.join(rootDir, "src", "wasm", "WEBAPP_NOTICE"),
 };
 // SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
 // document and COEP on every dedicated-worker script, so these apply to every response. Also the
@@ -104,7 +105,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
-  else if (requestPath.endsWith("/NOTICE")) {
+  else if (requestPath.endsWith("NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }
 };
@@ -415,7 +416,7 @@ const writeCloudflareHeadersAsset = (channel) => {
       // download, which both skips its on-the-fly compression (2.1 MB of text
       // over the wire) and makes a browser download rather than display them.
       const licenseContentType =
-        "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
+        "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
         `/*\n${headerLines}\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,

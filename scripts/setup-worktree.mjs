@@ -51,7 +51,7 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
   const source = join(mainRoot, "packages/rom-weaver-webapp/src/wasm");
   const destination = join(root, "packages/rom-weaver-webapp/src/wasm");
   mkdirSync(destination, { recursive: true });
-  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "NOTICE"]) {
+  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "NOTICE", "WEBAPP_NOTICE"]) {
     if (!existsSync(join(source, artifact))) continue;
     cpSync(join(source, artifact), join(destination, artifact));
     process.stdout.write(`  copied ${artifact} from main checkout\n`);

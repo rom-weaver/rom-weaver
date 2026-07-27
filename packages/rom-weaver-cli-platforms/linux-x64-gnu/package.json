@@ -35,7 +35,7 @@
   "files": [
     "bin/rom-weaver",
     "LICENSE",
-    "NOTICE",
+    "CLI_NOTICE",
     "third_party/licenses/**"
   ],
   "publishConfig": {

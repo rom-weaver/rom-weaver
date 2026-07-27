@@ -105,7 +105,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     run(env.WASI_STRIP, [artifact]);
   }
 
-  run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir]);
+  run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
   if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
   process.stdout.write(mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1" ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
