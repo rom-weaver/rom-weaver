@@ -29,7 +29,6 @@ import { getSettingsUiState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import { SettingsPanel } from "./webapp-settings.tsx";
 import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
@@ -45,6 +44,8 @@ const WORKFLOW_TABS = [
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
 const LogDialog = lazy(loadLogDialog);
+const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
+const SettingsPanel = lazy(loadSettingsPanel);
 
 const logger = createLogger("webapp-root");
 
@@ -220,22 +221,26 @@ function WebappRoot({
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
-    const preloadLogWhenIdle = () => {
+    const preloadDialogsWhenIdle = () => {
       if (cancelled) return;
       void loadLogDialog().catch(() => undefined);
+      void loadSettingsPanel().catch(() => undefined);
     };
     void preloadBrowserRuntime({ threads }).then(() => {
       if (cancelled) return;
       if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(preloadLogWhenIdle, { timeout: 2000 });
+        requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
       } else {
-        window.setTimeout(preloadLogWhenIdle, 0);
+        window.setTimeout(preloadDialogsWhenIdle, 0);
       }
     });
     return () => {
       cancelled = true;
     };
   }, [notFound, threads]);
+  const preloadSettingsPanel = useCallback(() => {
+    void loadSettingsPanel().catch(() => undefined);
+  }, []);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
@@ -383,6 +388,7 @@ function WebappRoot({
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={actions.onOpenSettings}
+            onPreloadSettings={preloadSettingsPanel}
             onReset={actions.onReset}
             onSelectTab={(id) => {
               if (notFound) {
@@ -506,15 +512,17 @@ function WebappRoot({
           title="Settings"
           variant="settings-modal"
         >
-          <SettingsPanel
-            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-            onClose={actions.onCloseSettings}
-            onDraftChange={actions.onDraftChange}
-            onRestoreDefaults={actions.onRestoreDefaults}
-            onSaveClose={actions.onSaveClose}
-            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-            validation={state.validation}
-          />
+          <Suspense fallback={null}>
+            <SettingsPanel
+              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+              onClose={actions.onCloseSettings}
+              onDraftChange={actions.onDraftChange}
+              onRestoreDefaults={actions.onRestoreDefaults}
+              onSaveClose={actions.onSaveClose}
+              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+              validation={state.validation}
+            />
+          </Suspense>
         </Modal>
         <ConfirmDialog
           body={confirmationDialog.message}

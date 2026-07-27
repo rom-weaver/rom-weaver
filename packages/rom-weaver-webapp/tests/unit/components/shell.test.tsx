@@ -108,6 +108,16 @@ describe("Masthead", () => {
       "Service-worker offline support is unavailable.",
     );
   });
+
+  it("preloads Settings before interaction completes", () => {
+    const onPreloadSettings = vi.fn();
+    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
+    const settings = getByRole("button", { name: "Settings" });
+    fireEvent.pointerEnter(settings);
+    fireEvent.focus(settings);
+    fireEvent.pointerDown(settings);
+    expect(onPreloadSettings).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("Reveal", () => {
