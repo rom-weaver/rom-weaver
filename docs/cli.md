@@ -343,6 +343,10 @@ The original ROM displays `HELLO WORLD`; the IPS patch changes it to
 `f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`.
 Open the result in any NES emulator to run it.
 
+| Original ROM | Patched ROM |
+| :---: | :---: |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The patched sample ROM displaying MODIFIED WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
+
 ## Common workflows
 
 Find out what a file is. Archives are opened for you unless you pass

@@ -9,6 +9,7 @@
 - [Mobile](#mobile)
   - [Apply patches (Weave)](#apply-patches-weave-1)
   - [Create a patch](#create-a-patch-1)
+- [Sample ROMs](#sample-roms)
 
 <!-- END doctoc -->
 
@@ -47,3 +48,9 @@
     <img src="../packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile">
   </picture>
 </p>
+
+## Sample ROMs
+
+| Original ROM | Patched ROM |
+| :---: | :---: |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The patched sample ROM displaying MODIFIED WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
