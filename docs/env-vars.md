@@ -40,6 +40,7 @@ or `env` options. WASI argv0 is always `rom-weaver`. A command may still supply
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). Set to `0` to force the on-disk path for regression/parity runs. |
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
 | `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
+| `ROM_WEAVER_7Z_ENCODER` | `liblzma` | 7-Zip SDK encoder | `archive_write_set_format_7zip.c` (raw `getenv`) | Selects the seeded parallel-block liblzma LZMA2 encoder for 7z create instead of the default 7-Zip SDK one. Output is slightly smaller than 7zz's, at a large time cost on inputs bigger than the dictionary; any other value keeps the SDK encoder. Native builds only - the wasm build never compiles the SDK encoder in, so it always uses liblzma and ignores this. |
 
 ## Test / build-only knobs
 
@@ -50,6 +51,8 @@ Not for production use.
 | `ROM_WEAVER_TEST_THREAD_POOL_FAIL` | `crates/rom-weaver-core/src/threads.rs` | Forces a thread-pool build failure to exercise the single-thread fallback. |
 | `ROM_WEAVER_TEST_TMPDIR` | container test harness | Overrides the temp dir used by container tests. |
 | `ROM_WEAVER_WASI_THREADS` | crate `build.rs` scripts | Forces the `rom_weaver_wasi_threads` cfg on (otherwise gated on the `wasm32-wasip1-threads` target). |
+| `ROM_WEAVER_LZMA_ASM` | `crates/rom-weaver-containers/libarchive/build.rs` | Names the MASM-compatible assembler used for the x86-64 LZMA decode loop, replacing the `jwasm`/`asmc`/`asmc64`/`uasm`/`ml64` probe. Missing or failing assemblers fall back to the portable C loop with a build warning, never an error. Read only on x86-64 targets. |
+| `ROM_WEAVER_UASM` | `crates/rom-weaver-containers/libarchive/build.rs` | Alias for `ROM_WEAVER_LZMA_ASM`. Both are honoured; when both are set `ROM_WEAVER_LZMA_ASM` is tried first and `ROM_WEAVER_UASM` is the fallback candidate. |
 
 ## Browser / PWA runtime handles (`window.*` globals)
 
