@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const distDir = path.join(packageDir, "dist");
@@ -15,6 +15,7 @@ const assertIncludes = (source, expected, label) => {
 const weaveHtml = read("index.html");
 const createHtml = read("create.html");
 const headers = read("_headers");
+const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
 for (const route of ["weave", "create", "trim", "tools"]) {
@@ -26,12 +27,25 @@ assertIncludes(
   "fingerprinted asset cache headers",
 );
 assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
+assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
+for (const url of [
+  "https://rom-weaver.com/weave",
+  "https://rom-weaver.com/create",
+  "https://github.com/rom-weaver/rom-weaver",
+]) {
+  assertIncludes(llmsTxt, `](${url})`, "llms.txt links");
+}
 assertIncludes(
   headers,
   "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8",
   "attribution text content type",
 );
 assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "weave canonical");
+assertIncludes(
+  read("weave.html"),
+  `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`,
+  "slashless weave route",
+);
 assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.patcher.description, "weave description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
@@ -50,8 +64,12 @@ assertIncludes(
 );
 
 assertIncludes(weaveHtml, '"@type":"SoftwareApplication"', "weave SoftwareApplication JSON-LD");
+assertIncludes(weaveHtml, '"@type":"WebSite"', "weave WebSite JSON-LD");
+assertIncludes(weaveHtml, `"name":"${SITE_NAME}"`, "canonical site name");
+assertIncludes(weaveHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)}`, "site alternate names");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
 assertIncludes(createHtml, '"url":"https://rom-weaver.com/create"', "create JSON-LD canonical url");
+if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
 for (const beta of ["trim", "tools"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);

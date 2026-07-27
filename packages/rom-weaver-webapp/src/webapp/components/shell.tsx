@@ -205,7 +205,7 @@ const Masthead = ({
         <span className="brand-copy">
           <span className="brand-line">
             <h1 className="brand-word">
-              rom<span className="brand-hy">–</span>
+              rom<span className="brand-hy">-</span>
               <b>weaver</b>
             </h1>
             {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}

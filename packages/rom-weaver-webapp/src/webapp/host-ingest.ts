@@ -9,10 +9,10 @@ const pendingRequests: string[][] = [];
 let activeListener: HostIngestListener | null = null;
 
 const normalizeHostIngestPaths = (value: unknown): string[] => {
-  if (!Array.isArray(value) || value.length === 0) throw new Error("RomWeaver ingest requires at least one OPFS path");
+  if (!Array.isArray(value) || value.length === 0) throw new Error("rom-weaver ingest requires at least one OPFS path");
   return value.map((path) => {
     if (typeof path !== "string" || !path.startsWith(HOST_INGEST_PATH_PREFIX))
-      throw new Error(`RomWeaver ingest paths must start with ${HOST_INGEST_PATH_PREFIX}`);
+      throw new Error(`rom-weaver ingest paths must start with ${HOST_INGEST_PATH_PREFIX}`);
     return path;
   });
 };
@@ -38,7 +38,7 @@ const resolveHostIngestFiles = async (paths: readonly string[]): Promise<File[]>
   Promise.all(
     normalizeHostIngestPaths(paths).map(async (filePath) => {
       const handle = await getManagedOpfsFileHandle(filePath);
-      if (!handle) throw new Error(`RomWeaver ingest path does not exist: ${filePath}`);
+      if (!handle) throw new Error(`rom-weaver ingest path does not exist: ${filePath}`);
       return Object.assign(await handle.getFile(), { filePath });
     }),
   );

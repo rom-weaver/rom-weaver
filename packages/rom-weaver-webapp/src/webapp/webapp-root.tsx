@@ -30,7 +30,7 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
-import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
+import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
@@ -59,7 +59,7 @@ const syncWorkflowSeoMetadata = (view: WorkflowView) => {
     document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
     return;
   }
-  const title = CHANNEL_BADGE ? route.title.replace("RomWeaver", `RomWeaver ${CHANNEL_BADGE}`) : route.title;
+  const title = CHANNEL_BADGE ? route.title.replace(SITE_NAME, `${SITE_NAME} ${CHANNEL_BADGE}`) : route.title;
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
   document.title = title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", route.description);

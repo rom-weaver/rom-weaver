@@ -601,7 +601,7 @@ const startDevServer = async (options) => {
   }
   const stopWasmBuildWatcher = startWasmBuildWatcher(viteServer);
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], viteServer, stopWasmBuildWatcher);
-  printUrls("RomWeaver React Vite dev server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
+  printUrls("rom-weaver React Vite dev server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
   if (process.env.ROM_WEAVER_E2E_CORPUS_DIR) {
     for (const address of lanAddresses) {
       console.log(`  iOS stress: https://${address}:${options.port}/mobile-safari-matrix.html?profile=stress`);
@@ -751,7 +751,7 @@ const startPreviewServer = async (options) => {
   await listen(portMuxServer, options.port, BIND_HOST);
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], null);
   printUrls(
-    "RomWeaver React Vite preview server:",
+    "rom-weaver React Vite preview server:",
     options.port,
     lanAddresses,
     certificate.paths.cert,

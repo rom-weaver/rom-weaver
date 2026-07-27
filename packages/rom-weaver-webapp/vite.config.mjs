@@ -8,7 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
-import { WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
+import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
@@ -37,6 +37,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/first-weave.zip": path.join(rootAssetDir, "first-weave.zip"),
   "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
+  "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
@@ -86,6 +87,7 @@ const deferDevHotUpdates = () => ({
 
 const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
+  else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
@@ -187,7 +189,7 @@ const replaceMetaContent = (html, attribute, name, content) =>
   html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${content}$2`);
 
 const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
-  const title = channel === "prod" ? route.title : route.title.replace("RomWeaver", `RomWeaver ${channelLabel}`);
+  const title = channel === "prod" ? route.title : route.title.replace(SITE_NAME, `${SITE_NAME} ${channelLabel}`);
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
   let routeHtml = html
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
@@ -205,24 +207,37 @@ const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
   return routeHtml;
 };
 
-// SoftwareApplication structured data lets search engines render a rich result
-// for a free browser tool. Injected per indexable route with that route's
-// canonical URL and description; the price/offer marks it explicitly free.
-const createSoftwareApplicationLdJson = (route) => {
-  const data = {
-    "@context": "https://schema.org",
+// Describe both the site name and free browser tool in one graph. alternateName
+// keeps legacy spellings discoverable without making the visible brand inconsistent.
+const createStructuredDataLdJson = (route, includeWebsite) => {
+  const graph = [];
+  if (includeWebsite) {
+    graph.push({
+      "@type": "WebSite",
+      alternateName: SITE_ALTERNATE_NAMES,
+      name: SITE_NAME,
+      url: "https://rom-weaver.com/",
+    });
+  }
+  graph.push({
     "@type": "SoftwareApplication",
+    alternateName: SITE_ALTERNATE_NAMES,
     applicationCategory: "UtilitiesApplication",
     description: route.description,
-    name: "RomWeaver",
+    name: SITE_NAME,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     operatingSystem: "Web browser",
     url: `https://rom-weaver.com/${route.slug}`,
+  });
+  const data = {
+    "@context": "https://schema.org",
+    "@graph": graph,
   };
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 };
 
-const injectLdJson = (html, route) => html.replace("</head>", `  ${createSoftwareApplicationLdJson(route)}\n  </head>`);
+const injectLdJson = (html, route, includeWebsite = false) =>
+  html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
 // The Trim and Tools tabs are still beta - they navigate in production but must
 // not be indexed, and they inherit the Weave page's markup, so strip the shared
@@ -251,7 +266,7 @@ const stampChannelIdentity = (channel, channelLabel) => ({
       const stampedHtml = accent === "madder" ? html : html.replace("<html ", `<html data-accent="${accent}" `);
       if (channel === "prod") return stampedHtml;
       return stampedHtml
-        .replace("<title>RomWeaver", `<title>RomWeaver ${channelLabel}`)
+        .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${channelLabel}`)
         .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
         .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${channelLabel}$3`);
     },
@@ -285,9 +300,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
-      // SoftwareApplication markup the /weave route gets.
-      const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher);
+      // structured data the /weave route gets.
+      const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
       fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
+      fs.writeFileSync(path.join(distDir, "weave.html"), weaveHtml);
       const creatorHtml = withRoutePreloadLinks(
         indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator"))),
         routePreloadLinks.get("creator"),
