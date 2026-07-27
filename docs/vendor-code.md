@@ -140,8 +140,9 @@ whatever 7z reader is on `PATH`, and copies only the files the coders need
 (`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders,
 the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything
 else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the
-sample programs - stays out of the tree. The copy is **verbatim**: there are no
-local patches, and a refresh is a copy rather than a merge. Keep it that way.
+sample programs - stays out of the tree. The copy is **verbatim**: target
+patches live outside `vendor/` and apply only to staged sources under `OUT_DIR`,
+so a refresh stays a copy rather than a merge. Keep it that way.
 
 Build wiring lives in `libarchive/build.rs`:
 
@@ -156,6 +157,9 @@ Build wiring lives in `libarchive/build.rs`:
   `Lzma2Dec` have no threads.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
+- The wasm decoder stages `LzmaDec.c` and ports the assembly loop's distance-1
+  match fill to `memset`, which clang lowers to WebAssembly `memory.fill`.
+  Other matches and the serial range decoder stay on the upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
   assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
@@ -202,7 +206,7 @@ without setting an archive error and the writer falls through to liblzma.
 | `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
 | `x86_64-apple-darwin` | C loop, always | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
 | `i686-*`, other arches | C loop | The SDK ships no loop this build uses for them |
-| `wasm32-*` | C loop | No assembler |
+| `wasm32-*` | C loop with distance-1 `memory.fill` | No assembler; the staged wasm patch ports only the assembly loop's repeated-byte fill |
 
 `build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an
 explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an

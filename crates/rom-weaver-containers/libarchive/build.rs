@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
+const LZMA_SDK_WASM_PATCH_ROOT: &str = "lzma-sdk/patches/wasm";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
@@ -57,6 +58,10 @@ const WASM_PATCH_FILES: &[&str] = &[
     "archive_util_tempdir.original.txt",
     "archive_util_tempdir.replacement.txt",
     "cmakelists_drop_entries.txt",
+];
+const LZMA_SDK_WASM_PATCH_FILES: &[&str] = &[
+    "lzma-dec-copy-match.original.txt",
+    "lzma-dec-copy-match.replacement.txt",
 ];
 
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
@@ -243,7 +248,13 @@ pub fn build() {
     // After libarchive: the 7z reader/writer objects inside libarchive.a
     // reference these symbols, and single-pass static linkers only resolve
     // backwards through the link line.
-    build_lzma_sdk(&lzma_sdk_dir, &lzma_glue_dir, &lzma_asm_dir);
+    build_lzma_sdk(
+        &manifest_dir,
+        &lzma_sdk_dir,
+        &lzma_glue_dir,
+        &lzma_asm_dir,
+        &out_dir,
+    );
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
@@ -413,7 +424,37 @@ uses the portable C loop (slower than 7zz). Install jwasm or set ROM_WEAVER_LZMA
     None
 }
 
-fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
+fn lzma_sdk_wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir
+        .join(LZMA_SDK_WASM_PATCH_ROOT)
+        .join(relative_path)
+}
+
+fn prepare_lzma_sdk_wasm_decoder(
+    manifest_dir: &Path,
+    source_dir: &Path,
+    out_dir: &Path,
+) -> PathBuf {
+    let staged = out_dir.join("lzma-sdk-wasm-LzmaDec.c");
+    fs::copy(source_dir.join("LzmaDec.c"), &staged)
+        .expect("failed to stage the LZMA SDK decoder for wasm");
+    replace_file_fragment(
+        &staged,
+        &lzma_sdk_wasm_patch_path(manifest_dir, "lzma-dec-copy-match.original.txt"),
+        &lzma_sdk_wasm_patch_path(manifest_dir, "lzma-dec-copy-match.replacement.txt"),
+        "LZMA SDK wasm distance-1 match copy",
+    )
+    .expect("failed to patch the LZMA SDK decoder for wasm");
+    staged
+}
+
+fn build_lzma_sdk(
+    manifest_dir: &Path,
+    source_dir: &Path,
+    glue_dir: &Path,
+    asm_dir: &Path,
+    out_dir: &Path,
+) {
     let mut build = cc::Build::new();
     build
         .include(source_dir)
@@ -425,7 +466,18 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
         .warnings(false)
         .extra_warnings(false);
 
+    // The native assembly fills distance-1 matches a word at a time. The staged
+    // wasm source uses memset for the same case, which clang lowers to
+    // memory.fill; the vendored SDK snapshot stays byte-for-byte upstream.
+    let wasm_decoder = is_wasm32_target()
+        .then(|| prepare_lzma_sdk_wasm_decoder(manifest_dir, source_dir, out_dir));
     for source in LZMA_SDK_CORE_SOURCES {
+        if *source == "LzmaDec.c"
+            && let Some(path) = &wasm_decoder
+        {
+            build.file(path);
+            continue;
+        }
         build.file(source_dir.join(source));
     }
     for source in LZMA_SDK_GLUE_SOURCES {
@@ -552,6 +604,12 @@ fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
             wasm_patch_path(manifest_dir, patch_file).display()
         );
     }
+    for patch_file in LZMA_SDK_WASM_PATCH_FILES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            lzma_sdk_wasm_patch_path(manifest_dir, patch_file).display()
+        );
+    }
 }
 
 fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
@@ -642,8 +700,16 @@ fn replace_file_fragment(
     description: &str,
 ) -> std::io::Result<()> {
     let content = fs::read_to_string(target_path)?;
-    let original = fs::read_to_string(original_fragment_path)?;
-    let replacement = fs::read_to_string(replacement_fragment_path)?;
+    let normalize_line_endings = |fragment: String| {
+        let fragment = fragment.replace("\r\n", "\n");
+        if content.contains("\r\n") {
+            fragment.replace('\n', "\r\n")
+        } else {
+            fragment
+        }
+    };
+    let original = normalize_line_endings(fs::read_to_string(original_fragment_path)?);
+    let replacement = normalize_line_endings(fs::read_to_string(replacement_fragment_path)?);
 
     if content.contains(&replacement) {
         return Ok(());
