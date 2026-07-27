@@ -20,7 +20,7 @@ the one that has to parse.
 
 ## Format
 
-```
+```text
 type(scope): description
 ```
 
@@ -31,7 +31,7 @@ type(scope): description
 - The whole header is capped at 150 characters - raised from the usual 100 so
   grouped Dependabot titles fit.
 
-```
+```text
 fix(webapp): handle empty patch archives
 perf(ci): build multi-arch images on native runners instead of QEMU
 ```
@@ -72,7 +72,7 @@ synonym.
 
 Append `!` after the type and scope, and explain the break in the body:
 
-```
+```text
 feat(cli)!: rename --output to --out
 ```
 

@@ -104,14 +104,15 @@ export function classifyChanges(paths, all = false) {
     // so this selects the whole job, not individual files: whatever actionlint
     // reads (the workflows, the composite actions, `.github` YAML at any depth
     // - the shell `case` globs this replaced matched across `/`), any shell
-    // script, any Node.js script, any Dockerfile, and hadolint's config.
+    // script, any Node.js script, any Markdown file, any Dockerfile, and
+    // hadolint's config.
     if (
       /^\.github\/workflows\//.test(path) ||
       /^\.github\/actions\//.test(path) ||
       /^\.github\/.*\.(?:yml|yaml)$/.test(path) ||
       path === ".config/hadolint.yaml" ||
       /(?:Dockerfile(?:\.|$))/.test(path) ||
-      /\.(?:sh|mjs)$/.test(path)
+      /\.(?:md|sh|mjs)$/.test(path)
     ) result.repo_lint = true;
   }
 

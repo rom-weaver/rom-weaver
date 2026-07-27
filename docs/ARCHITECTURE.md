@@ -4,7 +4,7 @@ How rom-weaver is put together: one Rust command core shipped two ways (native
 CLI and a WASM build that runs in browser workers), with a React webapp driving
 the WASM build over a JSON event protocol.
 
-```
+```text
                  ┌──────────────────────────────┐
                  │ rom-weaver-cli Cargo package│
                  │  rom_weaver_app shared lib  │  command orchestration
@@ -133,7 +133,7 @@ more depth.
 Every wasm file read/write goes through one stack; only the bottom backend
 differs:
 
-```
+```text
 wasm (Rust std::fs)
   -> WASI import (fd_read / fd_pread / fd_write ...)
     -> WasiRandomAccessFileInode / OpenWasiRandomAccessFile   (wasm/browser-opfs-wasi-file-inode.ts)
@@ -430,7 +430,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
 
 ## Build graph
 
-```
+```text
 cargo build (workspace)                     # native CLI
 mise run typegen                            # regen TS types when Rust types change
 mise run build-wasm-prod                    # WASI SDK build → wasm-opt → brotli

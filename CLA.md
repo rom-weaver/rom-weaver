@@ -117,7 +117,7 @@ version and does not alter this Agreement unless you separately agree to it.
   asking for a signature; reply in a new comment on that pull request whose own
   line reads:
 
-  ```
+  ```text
   I have read and agree to the CLA
   ```
 

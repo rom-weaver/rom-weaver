@@ -849,7 +849,7 @@ honored instead of guessed at from mode bits.
 
 Denials name the path, the operation, and the identities involved:
 
-```
+```text
 error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```

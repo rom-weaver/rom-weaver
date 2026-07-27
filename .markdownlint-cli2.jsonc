@@ -1,0 +1,46 @@
+{
+  "globs": [
+    "*.md",
+    ".github/**/*.md",
+    "crates/**/README.md",
+    "docs/**/*.md",
+    "packages/**/README.md",
+    "scripts/wasm/README.md"
+  ],
+  "ignores": [
+    "CHANGELOG.md",
+    "crates/rom-weaver-containers/libarchive/vendor/**/*.md"
+  ],
+  "config": {
+    "default": true,
+    "MD012": false,
+    "MD013": false,
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD033": {
+      "allowed_elements": [
+        "a",
+        "br",
+        "code",
+        "details",
+        "h1",
+        "img",
+        "p",
+        "picture",
+        "source",
+        "summary",
+        "table",
+        "tbody",
+        "td",
+        "th",
+        "thead",
+        "tr"
+      ]
+    },
+    "MD041": false,
+    "MD038": false,
+    "MD051": false,
+    "MD060": false
+  }
+}

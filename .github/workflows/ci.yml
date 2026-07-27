@@ -78,11 +78,11 @@ jobs:
         run: node scripts/ci/docker-matrix.mjs
 
   # Static analysis of the repository's own plumbing - workflows, Node.js
-  # scripts, Dockerfiles. Compiles nothing and installs no language toolchain,
-  # so it finishes in well under a minute and reports independently of the
-  # build jobs instead of hiding behind them.
+  # scripts, Dockerfiles, and Markdown. Compiles nothing and installs no
+  # language toolchain, so it finishes in well under a minute and reports
+  # independently of the build jobs instead of hiding behind them.
   repo-lint:
-    name: Lint workflows + scripts + Dockerfiles
+    name: Lint workflows + scripts + Dockerfiles + Markdown
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: changes
@@ -99,8 +99,11 @@ jobs:
         with:
           # actionlint shells out to shellcheck for `run:` blocks, so the two
           # are wanted together even though only one of them is named a step.
-          tools: actionlint shellcheck hadolint
+          tools: actionlint shellcheck hadolint node
           cargo-cache: "false"
+
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
 
       - name: Workflows
         run: mise run actionlint
@@ -110,6 +113,9 @@ jobs:
 
       - name: Dockerfiles
         run: mise run hadolint
+
+      - name: Markdown
+        run: mise run docs-lint
 
   # Images were previously built only by the release fan-out, so a Dockerfile
   # that no longer builds surfaced at the moment it blocked a publish. hadolint
