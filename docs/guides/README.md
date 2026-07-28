@@ -50,10 +50,12 @@ Nothing to install, no account to make.
 [Weave](https://rom-weaver.com/weave) applies patches.
 [Create](https://rom-weaver.com/create) makes them.
 
-Want to watch it work before you touch your own files? Open the
-[practice run](https://rom-weaver.com/weave?bundle=first-weave.zip). It loads
-a tiny practice ROM and patch that ship with the project, so you can click
-through every step with nothing of yours at stake.
+Want to watch it work before you touch your own files? Open
+[Weave](https://rom-weaver.com/weave) and choose **Start guided Apply**. It
+loads a tiny practice ROM and two patches, then walks through the important
+controls with nothing of yours at stake. Create has its own guided practice
+run too. Both pages also let you download their sample files without starting
+the guide.
 
 You can also install the site as an app from your browser menu. Once it has
 saved its own files, it keeps working with no connection.
@@ -76,12 +78,12 @@ Then run the same practice files:
 ```bash
 curl --fail --location --output first-weave.zip \
   https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
-rom-weaver checksum --input woven.bin --algo sha256
+rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
+rom-weaver checksum --input modified-rom.nes --algo sha256
 ```
 
 The last command should print
-`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`. If it
+`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
 does, your install works.
 
 ## Before you use a real patch

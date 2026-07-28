@@ -14,9 +14,15 @@ const CASES = [
   {
     name: "weave",
     route: "/weave?bundle=first-weave.zip",
-    waitFor: "Changes the message displayed by the NES ROM.",
+    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
-  { name: "create", route: "/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
+  {
+    name: "create",
+    route: "/create",
+    waitFor: "Checksum from extract",
+    click: "Start guided Create",
+    dismissGuide: true,
+  },
 ];
 const VIEWPORTS = [
   { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 1, isMobile: false },
@@ -63,10 +69,11 @@ const capture = async () => {
           const page = await context.newPage();
           await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
           await page.locator("body").waitFor({ state: "visible" });
-          await assertNoDevBadge(page);
           if (captureCase.click) await page.getByRole("button", { name: captureCase.click, exact: true }).click();
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
+          if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
           await waitForStableContent(page);
+          await assertNoDevBadge(page);
           // Chromium's full-page compositor can paint this translated, visually
           // hidden fixed link in a later capture tile.
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));

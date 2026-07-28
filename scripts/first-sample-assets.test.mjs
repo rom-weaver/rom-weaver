@@ -14,7 +14,7 @@ import {
 // and print this digest as the proof their install works. It is only a
 // screenshot of whatever the generator happens to emit, so without this test a
 // change to the sample ROMs silently publishes a wrong value on three pages.
-const DOCUMENTED_WEAVE_SHA256 = "f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e";
+const DOCUMENTED_WEAVE_SHA256 = "e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e";
 const DOCS_PUBLISHING_THE_DIGEST = [
   "docs/cli.md",
   "docs/guides/README.md",
@@ -102,12 +102,10 @@ test("generated first-create and first-weave archives contain a runnable NES pat
 
 test("the sample digest the guides publish still matches the generated sample", () => {
   const assets = createFirstSampleAssets();
-  const weaveEntries = readZip(assets.firstWeaveZip);
   // What `rom-weaver weave --input first-weave.zip --no-compress` writes: the
-  // bundle's IPS applied to its ROM, which the round-trip test above pins to
-  // `modifiedRom`.
-  const woven = applyIps(assets.originalRom, weaveEntries.get("first-weave.ips"));
-  const digest = createHash("sha256").update(woven).digest("hex");
+  // bundle's two IPS patches applied in order, which the round-trip test above
+  // pins to `wovenRom`.
+  const digest = createHash("sha256").update(assets.wovenRom).digest("hex");
 
   assert.equal(digest, DOCUMENTED_WEAVE_SHA256);
 

@@ -20,23 +20,27 @@ the game into a new, patched file you can play.
 ## Practice on the sample first
 
 New to this? Do not start with a game you care about. Open the
-[practice run](https://rom-weaver.com/weave?bundle=first-weave.zip). It loads
-a tiny practice ROM and a patch for it, both shipped with the project, so you
-can walk through every step below without picking a single file of your own.
-The patched result prints `MODIFIED WORLD` where the original printed
-`HELLO WORLD`.
+[Weave page](https://rom-weaver.com/weave) and choose **Start guided Apply**.
+It loads a tiny practice ROM and two patches shipped with the project, then
+walks through the ROM, patch stack, file picker, and output controls. The first
+patch changes `HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
+
+Want the files without the guide? Choose **Download the bundle** on that page,
+or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip)
+directly. It contains the ROM, both patches, and the bundle recipe that puts
+them in order.
 
 The same practice run works in a terminal:
 
 ```bash
 curl --fail --location --output first-weave.zip \
   https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
-rom-weaver checksum --input woven.bin --algo sha256
+rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
+rom-weaver checksum --input modified-rom.nes --algo sha256
 ```
 
 That last command should print
-`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`. If it
+`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
 does, patching works on your machine and you can move on to the real thing.
 
 ## What you need
@@ -75,11 +79,11 @@ are not uploaded anywhere.
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
     <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-light.png">
-    <img src="/docs/screenshots/weave-desktop-light.png" alt="The Weave workflow filled with the first-weave sample ROM and patch" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/weave-desktop-light.png" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-dark.png">
-    <img src="/docs/screenshots/weave-desktop-dark.png" alt="The Weave workflow filled with the first-weave sample ROM and patch" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/weave-desktop-dark.png" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
   </picture>
   <figcaption>The docs build captures this filled workflow from the bundled <code>first-weave.zip</code> sample.</figcaption>
 </figure>

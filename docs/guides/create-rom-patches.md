@@ -31,15 +31,19 @@ insisting you write down which original you used.
 
 ## Practice on the sample first
 
-No pair of files handy? The project publishes the two tiny practice ROMs its
-own screenshots are built from. They differ only in the text they print, so
-the patch you get out is easy to reason about:
+No pair of files handy? Open the
+[Create page](https://rom-weaver.com/create) and choose **Start guided
+Create**. It loads two tiny practice ROMs, then walks through the original,
+modified, file picker, and output controls.
+
+Want the files without the guide? Choose **Download the sample ROMs** on that
+page, or [download `first-create.zip`](https://rom-weaver.com/first-create.zip)
+directly. Extract the pair before using the CLI:
 
 ```bash
-curl --fail --location --output hello-world.nes \
-  https://rom-weaver.com/hello-world.nes
-curl --fail --location --output modified-world.nes \
-  https://rom-weaver.com/modified-world.nes
+curl --fail --location --output first-create.zip \
+  https://rom-weaver.com/first-create.zip
+unzip first-create.zip
 rom-weaver patch create \
   --original hello-world.nes \
   --modified modified-world.nes \
@@ -59,11 +63,8 @@ cmp rebuilt.nes modified-world.nes && echo "identical"
 ```
 
 `cmp` prints nothing when two files match, so `identical` means your patch
-rebuilt the file byte for byte. On Windows, `fc /b rebuilt.nes
-modified-world.nes` does the same job.
-
-In the browser, drop those two files into the
-[Create page](https://rom-weaver.com/create) as **Original** and **Modified**.
+rebuilt the file byte for byte. On Windows, expand the archive and use
+`fc /b rebuilt.nes modified-world.nes` for the same check.
 
 ## Get your two files ready
 
