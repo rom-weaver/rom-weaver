@@ -164,11 +164,12 @@ for (const route of DOC_ROUTES) {
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
-  assertIncludes(docsHtml, '"@type":"TechArticle"', `${route.slug} structured data`);
+  const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
+  assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
   assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
   assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);
   assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
-  const minimumWords = route.slug === "docs" ? 250 : 500;
+  const minimumWords = route.slug === "docs" || legalPage ? 250 : 500;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);

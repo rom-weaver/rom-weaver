@@ -2,8 +2,10 @@ import { useEffect } from "react";
 import applyRomPatchesMarkdown from "../../../../docs/guides/apply-rom-patches.md?raw";
 import createRomPatchesMarkdown from "../../../../docs/guides/create-rom-patches.md?raw";
 import fixChecksumErrorsMarkdown from "../../../../docs/guides/fix-checksum-errors.md?raw";
+import noticesMarkdown from "../../../../docs/guides/notices.md?raw";
 import overviewMarkdown from "../../../../docs/guides/README.md?raw";
 import patchFormatsMarkdown from "../../../../docs/guides/patch-formats.md?raw";
+import privacyMarkdown from "../../../../docs/guides/privacy.md?raw";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { createDocRoute, DOC_SOURCES, renderMarkdown } from "./docs-content.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
@@ -13,7 +15,9 @@ const markdownByFile = new Map([
   ["apply-rom-patches.md", applyRomPatchesMarkdown],
   ["create-rom-patches.md", createRomPatchesMarkdown],
   ["fix-checksum-errors.md", fixChecksumErrorsMarkdown],
+  ["notices.md", noticesMarkdown],
   ["patch-formats.md", patchFormatsMarkdown],
+  ["privacy.md", privacyMarkdown],
 ]);
 
 const DOC_ROUTES = DOC_SOURCES.map((source) => {

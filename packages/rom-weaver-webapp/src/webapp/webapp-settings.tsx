@@ -6,7 +6,7 @@ import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options
 import { ACCENTS } from "./accent.ts";
 import { RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
-import { LICENSE_URL, NOTICE_URL } from "./project-links.ts";
+import { LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
   getDefaultThreads,
@@ -399,9 +399,16 @@ const AboutSection = () => (
     <div className="about-line">
       Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the{" "}
       <a href={NOTICE_URL} rel="noreferrer" target="_blank">
-        attribution and license inventory
+        notices and attribution
       </a>
       .
+    </div>
+    <div className="about-line">
+      Files are processed locally in your browser. Read the{" "}
+      <a href={PRIVACY_URL} rel="noreferrer" target="_blank">
+        privacy page
+      </a>{" "}
+      for storage and network details.
     </div>
   </div>
 );

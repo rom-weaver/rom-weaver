@@ -12,6 +12,7 @@ need; your ROMs and disc images stay on your device.
 - [Use the CLI](#use-the-cli)
 - [Before working with a real patch](#before-working-with-a-real-patch)
 - [Get more detail](#get-more-detail)
+- [Project information](#project-information)
 
 <!-- END doctoc -->
 
@@ -84,3 +85,10 @@ output. For scripting, archive selection, compression, bundles, JSON output,
 and the full command reference, continue to the
 [CLI guide](../cli.md). For deployment and integration, return to the
 [documentation index](../README.md).
+
+## Project information
+
+- [Notices](notices.md) explains the project license and links to the generated
+  attribution inventories included with each build.
+- [Privacy](privacy.md) describes local file processing, browser storage,
+  network requests, and the controls available to you.

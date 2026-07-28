@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
 
@@ -43,5 +43,17 @@ describe("DocsPage", () => {
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toBe(docsDescription);
     expect(document.querySelector('meta[property="og:type"]')?.getAttribute("content")).toBe("article");
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
+  });
+
+  it.each([
+    ["docs/notices", "Notices"],
+    ["docs/privacy", "Privacy"],
+  ])("renders the %s page in the shared docs route", (slug, title) => {
+    render(<DocsPage active slug={slug} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: title })).toBeTruthy();
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(
+      `https://rom-weaver.com/${slug}`,
+    );
   });
 });

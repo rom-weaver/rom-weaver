@@ -31,9 +31,10 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   const siteName = channel === "prod" ? SITE_NAME : `${SITE_NAME} ${channelLabel}`;
   const title = `${route.title} | ${siteName}`;
   const canonicalUrl = `${SITE_ORIGIN}/${route.slug}`;
+  const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
+    "@type": legalPage ? "WebPage" : "TechArticle",
     description: route.description,
     headline: route.title,
     publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
