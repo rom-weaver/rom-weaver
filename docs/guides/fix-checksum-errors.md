@@ -1,100 +1,126 @@
-# Fix ROM patch checksum errors
+# Fix a checksum error
 
-A checksum mismatch means the patch received different bytes from the ones its
-author expected. The filename may look right while the region, revision, header
-state, byte order, archive entry, or earlier patch is wrong.
+rom-weaver says your file is not the one the patch expects. That warning is
+almost always right, and this guide finds out why.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [What a checksum tells you](#what-a-checksum-tells-you)
-- [Diagnose the mismatch in order](#diagnose-the-mismatch-in-order)
-- [Common causes](#common-causes)
-  - [Wrong region or revision](#wrong-region-or-revision)
-  - [Copier header present or absent](#copier-header-present-or-absent)
-  - [Nintendo 64 byte order](#nintendo-64-byte-order)
-  - [Incorrect patch order](#incorrect-patch-order)
-- [Avoid forcing a bad source](#avoid-forcing-a-bad-source)
+- [What the warning actually means](#what-the-warning-actually-means)
+- [Work through it in this order](#work-through-it-in-this-order)
+- [Wrong region or wrong revision](#wrong-region-or-wrong-revision)
+- [The header problem](#the-header-problem)
+- [Nintendo 64 byte order](#nintendo-64-byte-order)
+- [Patches in the wrong order](#patches-in-the-wrong-order)
+- [Do not force it](#do-not-force-it)
 
 <!-- END doctoc -->
 
-## What a checksum tells you
+## What the warning actually means
 
-A checksum is a compact fingerprint calculated from a file's bytes. If your
-value differs from the release's expected value, at least one byte differs.
-Renaming the file does not change its checksum.
+A checksum is a short code worked out from every byte in a file. Change one
+byte anywhere and the code changes completely. Rename the file and the code
+stays the same, because the name is not part of the file's contents.
 
-BPS and UPS patches carry source and output checksums. Other releases may list
-CRC32, MD5, SHA-1, or SHA-256 values in their notes. Compare values made with
-the same algorithm.
+So when your checksum does not match the one the patch expects, your file
+differs from the author's by at least one byte. Not "probably". At least one.
 
-In the webapp, review the checksums shown after selecting a ROM. In the CLI,
-calculate one directly:
+BPS and UPS patches carry the expected checksums inside them, which is how
+rom-weaver can complain before it writes anything. Other formats carry
+nothing, so the author has to publish a CRC32, MD5, SHA-1, or SHA-256 value in
+their notes. Compare like with like: a CRC32 and a SHA-256 of the same file
+share no digits.
+
+In the browser, the checksums appear once you pick a ROM. In a terminal:
 
 ```bash
 rom-weaver checksum --input game.sfc --algo sha256
 ```
 
-rom-weaver supports CRC32, MD5, SHA-1, SHA-256, BLAKE3, CRC32C, CRC16, and
-Adler-32.
+Swap `sha256` for whichever one the author published. rom-weaver handles
+CRC32, MD5, SHA-1, SHA-256, BLAKE3, CRC32C, CRC16, and Adler-32.
 
-## Diagnose the mismatch in order
+## Work through it in this order
 
-1. Re-read the release instructions and record the exact region, revision,
-   header state, disc layout, patch order, and checksum.
-2. Return to a clean source that has not already been translated, trained,
-   trimmed, or patched.
-3. Calculate the checksum with the algorithm named by the release.
-4. Confirm that the selected file inside an archive is the intended ROM.
-5. Review copier-header detection and Nintendo 64 byte order.
-6. If several patches are involved, confirm which patch targets the clean
-   source and which targets an earlier patched result.
-7. Retry only after identifying the difference.
+Change one thing at a time. Changing three and retrying teaches you nothing.
 
-This order narrows the problem without changing several variables at once.
+1. Reread the author's notes. Write down the region, the revision, anything
+   about headers or disc layout, the patch order, and the checksum.
+2. Go back to a clean file. Not one that has already been translated,
+   trimmed, trained, or patched by something else.
+3. Work out its checksum with the algorithm the author named.
+4. If your file came out of an archive, confirm the entry you picked is the
+   ROM and not a readme, a save file, or a second dump.
+5. Check the header, and on Nintendo 64, the byte order. Both are covered
+   below.
+6. If several patches are involved, work out which one expects the clean file
+   and which expects the output of an earlier one.
+7. Try again only once you can name what was different.
 
-## Common causes
+Most mismatches are one of the four causes below.
 
-### Wrong region or revision
+## Wrong region or wrong revision
 
-USA, Japan, Europe, and other releases often have different code and data
-layouts. Rev 0, Rev 1, reprints, and bug-fix releases can behave identically in
-an emulator while differing at the byte offsets a patch changes.
+This is the common one.
 
-Use the exact release named by the patch author. A matching title screen is not
-evidence of a byte-for-byte match.
+USA, Japan, and European releases of the same game are different files. Text,
+code, and data all sit in different places. A patch built against one will not
+apply cleanly to another.
 
-### Copier header present or absent
+Revisions are sneakier. A Rev 1 is the same game with bugs fixed after launch.
+It boots the same, plays the same, and shows the same title screen, while
+differing at exactly the offsets a patch wants to change. You cannot tell them
+apart by looking. You can tell them apart by checksum.
 
-Some cartridge dumps contain an extra copier header, commonly 512 bytes. A
-patch may expect the headered or unheadered form.
+Use the exact release the author named.
 
-rom-weaver tests checksum variants and can automatically choose a compatible
-header state when the patch provides enough source information. In the CLI,
-`--patch-header auto|keep|strip` controls the bytes presented to each patch, and
-`--output-header auto|keep|strip` controls the finished file.
+## The header problem
 
-Do not strip a header blindly. First compare the raw and headerless checksums
-with the release notes.
+Some cartridge dumps carry a small block of extra bytes at the front, added by
+the copier hardware people used to dump them. It is usually 512 bytes. It is
+not part of the game.
 
-### Nintendo 64 byte order
+The trouble is that a patch was built against a file that either had that
+block or did not, and the two forms have different checksums. Same game,
+different bytes at the front, so every offset after it is shifted.
 
-Nintendo 64 dumps commonly use big-endian, little-endian, or byte-swapped
-layouts. They can represent the same game data while producing different raw
-checksums.
+rom-weaver checks both forms for you and picks whichever one the patch proves
+it wants, whenever the patch carries enough information to prove it. When it
+does not, you can decide:
 
-The CLI option
-`--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` controls the
-form supplied to the patch. `auto` can match a patch's source CRC32 and writes
-the result back in the input's original order.
+- `--patch-header auto|keep|strip` controls what each patch is handed.
+- `--output-header auto|keep|strip` controls what the finished file keeps.
 
-### Incorrect patch order
+`auto` is the default for both and is usually right. Do not strip a header on
+a hunch. Compare the checksums with and without it against the author's notes
+first, then you will know rather than guess.
 
-In a multi-patch release, a later patch may target the output of an earlier
-patch rather than the clean ROM. Repeat `--patch` in the documented order or
-arrange the cards in that order in the webapp.
+## Nintendo 64 byte order
 
-Validate a chain without writing an output:
+Nintendo 64 dumps circulate with their bytes arranged in three different
+orders, usually signaled by the extension: `.z64`, `.v64`, and `.n64`. All
+three hold the same game. All three have different checksums, because the
+bytes really are in a different sequence.
+
+A patch matches one of them. So:
+
+```text
+--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped
+```
+
+`auto` is the default. It works out which order the patch's own checksum
+names, rearranges the file to match, and writes the result back in the order
+your input arrived in. Leave it alone unless you have a reason.
+
+## Patches in the wrong order
+
+In a release with several patches, they run one after another, each on the
+result of the last. A later patch usually expects an earlier patch's output,
+not the clean game. Feed it the clean game and you get a checksum error that
+looks exactly like a wrong-region error.
+
+Repeat `--patch` in the documented order, or drag the cards into that order in
+the browser. You can test a chain without writing any file:
 
 ```bash
 rom-weaver patch validate \
@@ -103,19 +129,23 @@ rom-weaver patch validate \
   --patch fixes.ips
 ```
 
-By default, each patch is checked against the output of the one before it.
+Each patch is checked against the output of the one before it, which is what
+happens for real, so this tells you where the chain breaks.
 
-## Avoid forcing a bad source
+## Do not force it
 
-`--ignore-checksum-validation` exists for expert recovery and research
-workflows, but it does not make mismatched bytes correct. A forced patch can
-produce an output file successfully and still fail during startup or later
-gameplay.
+`--ignore-checksum-validation` exists, and it does not make the wrong file
+right. It skips the check. The bytes are still wrong.
 
-If the expected source cannot be identified, stop and ask the patch author or
-project community for the precise checksum and revision. Do not download
-copyrighted ROMs from an untrusted site to make the warning disappear.
+A forced patch usually writes a file. That file may boot. It may even play for
+a while. Then it crashes, or an item is missing, or the save corrupts twenty
+hours in, and by then nobody remembers the warning. The flag is there for
+research and recovery work, not for getting past a red message.
 
-Once the source matches, follow the
-[apply guide](apply-rom-patches.md) and keep the verified original unchanged for
-future releases.
+If you cannot work out which file you are supposed to have, ask. The patch
+author or the project's community can tell you the exact checksum and
+revision. Do not go hunting on a random download site to make the warning stop.
+
+Once the checksum matches, carry on with [Apply a patch](apply-rom-patches.md),
+and keep that verified original somewhere safe for next time. Back to the
+[guide index](README.md).

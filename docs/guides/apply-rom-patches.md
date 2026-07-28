@@ -1,31 +1,32 @@
-# Apply ROM patches with rom-weaver
+# Apply a ROM patch
 
-Use rom-weaver to combine a clean base ROM or disc image with one or more patch
-files. The browser app is the quickest interactive path; the CLI is useful for
-repeatable commands and automation.
+Somebody gave you a patch. This guide turns that patch and your own copy of
+the game into a new, patched file you can play.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Try it with the sample](#try-it-with-the-sample)
+- [Practice on the sample first](#practice-on-the-sample-first)
 - [What you need](#what-you-need)
-- [Apply a patch in the webapp](#apply-a-patch-in-the-webapp)
-- [Apply a patch with the CLI](#apply-a-patch-with-the-cli)
-- [Validate before writing an output](#validate-before-writing-an-output)
-- [Work with patch bundles](#work-with-patch-bundles)
-- [When the patch does not match](#when-the-patch-does-not-match)
+- [Apply a patch in the browser](#apply-a-patch-in-the-browser)
+- [Apply a patch in a terminal](#apply-a-patch-in-a-terminal)
+- [Check first, write after](#check-first-write-after)
+- [Apply several patches in order](#apply-several-patches-in-order)
+- [Open a bundle](#open-a-bundle)
+- [When rom-weaver says the file does not match](#when-rom-weaver-says-the-file-does-not-match)
 
 <!-- END doctoc -->
 
-## Try it with the sample
+## Practice on the sample first
 
-If you do not have a patch to hand, open the
-[sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip). It loads a
-tiny synthetic NES ROM and patch supplied by the project, so you can follow
-every step below without selecting a personal file. The patched result prints
-`MODIFIED WORLD` instead of `HELLO WORLD`.
+New to this? Do not start with a game you care about. Open the
+[practice run](https://rom-weaver.com/weave?bundle=first-weave.zip). It loads
+a tiny practice ROM and a patch for it, both shipped with the project, so you
+can walk through every step below without picking a single file of your own.
+The patched result prints `MODIFIED WORLD` where the original printed
+`HELLO WORLD`.
 
-The same sample runs from the command line:
+The same practice run works in a terminal:
 
 ```bash
 curl --fail --location --output first-weave.zip \
@@ -34,38 +35,42 @@ rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
 rom-weaver checksum --input woven.bin --algo sha256
 ```
 
-That SHA-256 should be
+That last command should print
 `f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`. If it
-matches, your installation applies patches correctly.
+does, patching works on your machine and you can move on to the real thing.
 
 ## What you need
 
-You need the patch file and the exact base file expected by its author. Keep
-the release notes nearby. They should identify the game region and revision,
-and may also specify a copier-header state, disc-image layout, or checksum.
+Two files: the patch, and the exact copy of the game its author built it from.
 
-Do not rely on the filename alone. A USA release and a Japanese release can
-share a similar name while containing different bytes. Even two files for the
-same region can be different revisions.
+Keep the author's notes open while you work. They should say which region the
+game is from (USA, Japan, Europe), which revision, and often a checksum. A
+checksum is a short code worked out from every byte of a file. If two files
+have the same checksum they are the same file, whatever they are named.
 
-Keep a clean original and write the patched result to a new file. That one
-habit makes updates, optional patches, and troubleshooting much easier.
+That last part is the one people get wrong. A filename is a guess. A USA
+release and a Japanese release can carry near-identical names and completely
+different bytes, and so can two revisions of the same release. The patch cares
+about bytes.
 
-## Apply a patch in the webapp
+One habit saves a lot of grief: keep a clean copy of the original and write
+every patched result to a new name. Updates, optional add-ons, and undoing a
+mistake all get easy once you can go back to a known-good file.
 
-1. Open the [rom-weaver Weave workflow](https://rom-weaver.com/weave).
-2. Add the clean ROM or disc image.
-3. Add the patch file. You can drop the files onto the page or use the file
-   pickers.
-4. Review the detected formats, checksums, header handling, and warnings.
-5. If you added several patches, arrange them in the order specified by the
-   release.
+## Apply a patch in the browser
+
+1. Open the [Weave page](https://rom-weaver.com/weave).
+2. Add your clean copy of the game.
+3. Add the patch. Drag both onto the page or use the file pickers.
+4. Look over what rom-weaver worked out: the formats it recognized, the
+   checksums, how it plans to handle headers, and any warnings.
+5. Got more than one patch? Put them in the order the author asked for.
 6. Run the weave.
-7. Download the result under a new name and test it in the intended emulator
-   or device workflow.
+7. Download the result under a new name and try it in your emulator or on
+   whatever hardware you use.
 
-Files are processed locally in the browser. rom-weaver does not upload the ROM,
-patches, or output to a server.
+Everything happens inside your browser. The game, the patch, and the result
+are not uploaded anywhere.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
@@ -79,14 +84,14 @@ patches, or output to a server.
   <figcaption>The docs build captures this filled workflow from the bundled <code>first-weave.zip</code> sample.</figcaption>
 </figure>
 
-Supported archives can be opened for you. If an archive contains several
-possible ROMs or patches, rom-weaver asks which entry to use. Selecting a file
-with a familiar name is still not a substitute for matching the expected
-checksum.
+If your download is a zip or another archive, hand rom-weaver the archive as
+it is. It looks inside. When an archive holds several files that could be the
+ROM or the patch, it asks which one you meant. Picking the file with the
+likeliest name is still a guess, so check the checksum afterwards.
 
-## Apply a patch with the CLI
+## Apply a patch in a terminal
 
-For one patch:
+One patch:
 
 ```bash
 rom-weaver weave \
@@ -96,11 +101,46 @@ rom-weaver weave \
   --no-compress
 ```
 
-`weave` is the short name for `patch apply`; both commands use the same
-workflow. The result is compressed by default when the output extension names
-a supported archive. Use `--no-compress` when you want a plain ROM.
+`--input` is your clean game, `--patch` is the patch, `--output` is the new
+file to write. `weave` is the short name for `patch apply`; the two run the
+same thing.
 
-Repeat `--patch` to apply several patches in order:
+If the output name ends in an archive extension such as `.zip`, rom-weaver
+compresses the result for you. `--no-compress` turns that off and writes a
+plain ROM.
+
+`rom-weaver weave --help` lists the rest: checksum options, header handling,
+byte order, which file to pull out of an archive, compression, and bundles.
+
+## Check first, write after
+
+You can ask rom-weaver to read a patch and run its checks without producing
+any file:
+
+```bash
+rom-weaver patch validate \
+  --input original.sfc \
+  --patch translation.bps
+```
+
+Some patch formats carry a checksum of the file they were built from, so this
+catches a wrong starting file on its own. Formats that carry nothing need you
+to supply the value the author published:
+
+```bash
+rom-weaver patch validate \
+  --input original.sfc \
+  --patch translation.bps \
+  --expect-in sha256=EXPECTED_HEX_VALUE
+```
+
+Use the same algorithm the author used. A CRC32 value and a SHA-256 value of
+the same file look nothing alike, so comparing across algorithms tells you
+nothing.
+
+## Apply several patches in order
+
+Repeat `--patch` once per patch:
 
 ```bash
 rom-weaver weave \
@@ -110,58 +150,41 @@ rom-weaver weave \
   --output patched.zip
 ```
 
-Each patch receives the output of the previous patch. A translation, bug-fix,
-restoration, and optional quality-of-life patch may all target different stages
-of the chain, so their order is part of the release.
+They run left to right, and each one works on the result of the one before.
+That is why order is part of the instructions: a translation, a bug fix, and
+an optional tweak may each expect a different starting point. Swapping two of
+them can fail outright or, worse, appear to succeed.
 
-Run `rom-weaver weave --help` for the full set of checksum, header, byte-order,
-archive-selection, compression, and bundle options.
+## Open a bundle
 
-## Validate before writing an output
-
-The CLI can parse a patch and verify the checks it carries without writing a
-result:
-
-```bash
-rom-weaver patch validate \
-  --input original.sfc \
-  --patch translation.bps
-```
-
-For formats or releases with a published checksum, add an explicit expectation:
-
-```bash
-rom-weaver patch validate \
-  --input original.sfc \
-  --patch translation.bps \
-  --expect-in sha256=EXPECTED_HEX_VALUE
-```
-
-Use the algorithm named by the release. A CRC32 value cannot be compared with
-SHA-1 or SHA-256.
-
-## Work with patch bundles
-
-A `rom-weaver-bundle.json` can describe the input, ordered patches, expected
-checksums, optional selections, and output name. A bundle records the workflow;
-it does not need to include the copyrighted base ROM.
-
-Apply a local or remote bundle with:
+A bundle is a small text file named `rom-weaver-bundle.json` that writes the
+whole job down: which game, which patches, in what order, which are optional,
+what the checksums should be, and what to call the output. It records the
+recipe, not the game, so an author can share it freely.
 
 ```bash
 rom-weaver weave --bundle rom-weaver-bundle.json
 ```
 
-In the webapp, open a bundle like any other supported input. Review optional
-patches before running it.
+In the browser, open a bundle the way you would open any other file. Check any
+optional patches before you run it.
 
-## When the patch does not match
+## When rom-weaver says the file does not match
 
-Stop at a source-checksum warning instead of repeatedly forcing the patch.
-Confirm the region, revision, header state, byte order, selected archive entry,
-and patch order. The [checksum troubleshooting guide](fix-checksum-errors.md)
-walks through those checks in a useful order.
+Stop. Do not keep forcing it.
 
-Ignoring validation can produce a file that downloads successfully but fails
-later in an emulator or during gameplay. A clean source and a documented patch
-chain are faster than trial and error.
+The warning means the bytes you handed over are not the bytes the author
+built against. Something is off: the region, the revision, the header, the
+byte order, which file got picked out of the archive, or the order of the
+patches. The [checksum guide](fix-checksum-errors.md) walks those checks in
+the order that finds the problem fastest.
+
+Forcing past the warning can still produce a file. It will download fine, and
+then crash on the title screen or corrupt itself six hours into the game.
+Finding the right starting file is quicker than that.
+
+Once a patch works, hang on to the clean original. The next release will want
+it.
+
+Ready to make your own? See [Create a patch](create-rom-patches.md). Back to
+the [guide index](README.md).

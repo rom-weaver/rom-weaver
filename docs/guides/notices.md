@@ -1,56 +1,56 @@
 # Notices
 
-rom-weaver is free and open-source software built with other open-source
-projects. This page explains where to find the project license and the complete
-attribution inventory for the webapp and command-line releases.
+rom-weaver is free and open-source, and it is built from other people's
+open-source work. This page says where to find the license for both.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Project license](#project-license)
-- [Third-party software](#third-party-software)
-- [Generated attribution inventories](#generated-attribution-inventories)
-- [Source and corrections](#source-and-corrections)
+- [The project license](#the-project-license)
+- [Other people's code](#other-peoples-code)
+- [The full lists](#the-full-lists)
+- [Something looks wrong](#something-looks-wrong)
 
 <!-- END doctoc -->
 
-## Project license
+## The project license
 
 rom-weaver is licensed under the
 [GNU Affero General Public License version 3 or later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
-The source code, contribution history, build configuration, and release
-artifacts are available in the
+The source code, the full history, the build setup, and the released files all
+live in the
 [rom-weaver repository](https://github.com/rom-weaver/rom-weaver).
 
-The license text governs your rights and obligations. This page is a convenient
-guide to the project’s notices; it does not replace or modify any license.
+The license text is what actually governs your rights and obligations. This
+page is a signpost to it and changes nothing about it.
 
-## Third-party software
+## Other people's code
 
-The browser app and CLI use open-source components including React, marked,
-nod, libarchive, chd-rs, compression libraries, and their transitive
-dependencies. Those components remain covered by their own licenses and
-copyright notices.
+The browser app and the command-line tool are built on open-source components:
+React, marked, nod, libarchive, chd-rs, several compression libraries, and
+everything those depend on in turn. Each of those keeps its own license and
+copyright notice.
 
-rom-weaver generates its attribution inventories from the dependencies that
-actually enter a build. This keeps the published notices aligned with the
-release instead of relying on a manually maintained list that can drift.
+Those notices are generated from the dependencies that actually go into a
+build, rather than typed up by hand. A hand-kept list drifts out of date the
+first time somebody adds a dependency and forgets. A generated one cannot.
 
-## Generated attribution inventories
+## The full lists
 
-The [webapp attribution inventory](/WEBAPP_NOTICE) lists the packages shipped
-with this browser build. The [combined attribution inventory](/NOTICE) also
-includes components used by the CLI and shared engine.
+The [webapp notice file](/WEBAPP_NOTICE) lists everything shipped in this
+browser build. The [combined notice file](/NOTICE) adds the components used by
+the command-line tool and the shared engine underneath both.
 
-Each inventory names the component, version, license identifier, project
-source, and the corresponding license or notice files where available. The raw
-text format is retained so release tooling, package consumers, and automated
-license checks can read the same data shown to people through this page.
+Each entry names the component, its version, its license, where the project
+lives, and the license or notice files that came with it. They are plain text,
+so release tooling, package managers, and automated license checks read
+exactly what you are reading.
 
-## Source and corrections
+## Something looks wrong
 
-The attribution generator and dependency policy are maintained in the public
-repository. If a component, copyright notice, source URL, or license appears
-incorrect, please
-[open an issue](https://github.com/rom-weaver/rom-weaver/issues) with the
-affected release version and inventory entry.
+The generator and the dependency policy are both in the public repository. If
+a component, a copyright line, a source link, or a license looks wrong, please
+[open an issue](https://github.com/rom-weaver/rom-weaver/issues) and say which
+release version and which entry.
+
+Back to the [guide index](README.md).

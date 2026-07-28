@@ -1,28 +1,39 @@
-# Create ROM patches with rom-weaver
+# Create a ROM patch
 
-Create a patch by comparing the exact original file with the finished modified
-file you want users to reproduce. rom-weaver can do this in the browser or from
-the command line without packaging the original ROM into the patch.
+You changed a game and want to share the change. This guide turns your before
+and after files into a patch other people can apply to their own copy.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Try it with the sample](#try-it-with-the-sample)
-- [Prepare the two inputs](#prepare-the-two-inputs)
-- [Create a patch in the webapp](#create-a-patch-in-the-webapp)
-- [Create a patch with the CLI](#create-a-patch-with-the-cli)
-- [Choose a format users can validate](#choose-a-format-users-can-validate)
-- [Test the artifact users will receive](#test-the-artifact-users-will-receive)
-- [Publish enough information](#publish-enough-information)
-- [Update an existing patch](#update-an-existing-patch)
+- [How making a patch works](#how-making-a-patch-works)
+- [Practice on the sample first](#practice-on-the-sample-first)
+- [Get your two files ready](#get-your-two-files-ready)
+- [Create a patch in the browser](#create-a-patch-in-the-browser)
+- [Create a patch in a terminal](#create-a-patch-in-a-terminal)
+- [Pick a format people can check](#pick-a-format-people-can-check)
+- [Test the patch, not your copy](#test-the-patch-not-your-copy)
+- [Tell people what they need](#tell-people-what-they-need)
+- [Releasing an update](#releasing-an-update)
 
 <!-- END doctoc -->
 
-## Try it with the sample
+## How making a patch works
 
-If you do not have a pair of files to hand, the project publishes the two
-synthetic NES ROMs its own screenshots are built from. They differ only in the
-text they display, so the patch you produce is easy to reason about:
+rom-weaver compares two files and writes down the differences. You supply the
+clean original and your finished version. It produces a small patch file
+holding only what changed.
+
+Because the patch holds differences and not the game, you can share it. Anyone
+with the same clean original can rebuild your exact file from it. Anyone with
+a different original cannot, which is why the rest of this guide keeps
+insisting you write down which original you used.
+
+## Practice on the sample first
+
+No pair of files handy? The project publishes the two tiny practice ROMs its
+own screenshots are built from. They differ only in the text they print, so
+the patch you get out is easy to reason about:
 
 ```bash
 curl --fail --location --output hello-world.nes \
@@ -35,39 +46,57 @@ rom-weaver patch create \
   --output first.bps
 ```
 
-Apply `first.bps` back onto `hello-world.nes` and the result should match
-`modified-world.nes` byte for byte. In the browser, drop the same two files
-into the [Create workflow](https://rom-weaver.com/create) as **Original** and
-**Modified**.
+Now prove the patch works by applying it to a fresh copy of the original and
+comparing the result with the file you started from:
 
-## Prepare the two inputs
+```bash
+rom-weaver weave \
+  --input hello-world.nes \
+  --patch first.bps \
+  --output rebuilt.nes \
+  --no-compress
+cmp rebuilt.nes modified-world.nes && echo "identical"
+```
 
-Keep two clearly named files:
+`cmp` prints nothing when two files match, so `identical` means your patch
+rebuilt the file byte for byte. On Windows, `fc /b rebuilt.nes
+modified-world.nes` does the same job.
 
-- **Original** is the clean region and revision your release will support.
-- **Modified** is the completed translation, restoration, bug fix, or other
-  change you intend to distribute.
+In the browser, drop those two files into the
+[Create page](https://rom-weaver.com/create) as **Original** and **Modified**.
 
-Launch and test the modified file before creating the patch. Remove temporary
-save data, debugging edits, or unrelated changes. Record checksums for both
-files so the release can be reproduced later.
+## Get your two files ready
 
-If the modified file is inside an archive, extract or select the intended entry.
-Do not compare two archives when you mean to compare the files inside them.
+Two clearly named files:
 
-## Create a patch in the webapp
+- **Original** is the clean, untouched game. Whatever region and revision you
+  put here is what your release will require, so choose deliberately.
+- **Modified** is your finished work: the translation, the restoration, the
+  bug fix, the hack.
 
-1. Open the [rom-weaver Create workflow](https://rom-weaver.com/create).
-2. Choose the clean file as **Original**.
-3. Choose the finished file as **Modified**.
-4. Review the detected systems, sizes, headers, and checksums.
-5. Choose a patch format supported for the selected inputs.
-6. Create and download the patch.
-7. Apply that downloaded patch to a fresh copy of the original and compare the
-   result with the modified file.
+Play the modified file and be happy with it before you make a patch. Strip out
+temporary save data, debug edits, and anything unrelated. Write down the
+checksum of both files so you can reproduce this release later.
 
-The original, modified file, and generated patch remain on your device. The
-browser app does not upload them.
+If either file lives inside a zip, pull it out first. Comparing two archives
+is not the same as comparing the files inside them, and it will produce a
+patch nobody can use.
+
+## Create a patch in the browser
+
+1. Open the [Create page](https://rom-weaver.com/create).
+2. Pick the clean file as **Original**.
+3. Pick your finished file as **Modified**.
+4. Look over what rom-weaver detected: system, file sizes, headers, checksums.
+5. Choose a patch format from the ones offered for your files.
+6. Create the patch and download it.
+7. Apply that downloaded patch to a fresh copy of the original and check the
+   result matches your modified file.
+
+Step 7 is not optional. See [Test the patch, not your
+copy](#test-the-patch-not-your-copy) below.
+
+Your original, your modified file, and the patch all stay on your device.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
@@ -81,9 +110,7 @@ browser app does not upload them.
   <figcaption>The docs build captures this filled workflow from the bundled <code>first-create.zip</code> sample.</figcaption>
 </figure>
 
-## Create a patch with the CLI
-
-The corresponding command is:
+## Create a patch in a terminal
 
 ```bash
 rom-weaver patch create \
@@ -93,8 +120,8 @@ rom-weaver patch create \
   --output release.bps
 ```
 
-The output extension can identify the format, so this shorter form is also
-clear:
+The output extension already names the format, so this shorter version does
+the same thing:
 
 ```bash
 rom-weaver patch create \
@@ -103,65 +130,73 @@ rom-weaver patch create \
   --output release.bps
 ```
 
-Run `rom-weaver patch create --help` to see format-specific metadata, planning,
+`rom-weaver patch create --help` lists the rest: per-format metadata, planning,
 compression, and validation options.
 
-## Choose a format users can validate
+## Pick a format people can check
 
-BPS is a practical choice for many modern cartridge-ROM releases because it
-stores CRC32 values for the source, target, and patch. That lets a patcher
-reject the wrong source and verify the result.
+BPS is a good default for cartridge games. It stores a checksum of the
+original, of the finished file, and of the patch itself, so a patcher can
+refuse the wrong starting file instead of quietly producing garbage. Your
+users get a clear error rather than a broken game.
 
-IPS remains useful when compatibility with older patchers is required, but
-classic IPS does not identify its source with an embedded checksum. Publish the
-expected source and output checksums beside an IPS patch.
+IPS is older and works with almost every patcher ever written, which is
+sometimes what you need. It stores no checksum of the original at all, so
+publish the expected checksums next to the download.
 
-xdelta/VCDIFF is common for larger files and disc-image projects. PPF is also
-established in disc workflows. Use the format expected by the platform's
-community when that compatibility matters. The
-[patch format guide](patch-formats.md) explains the trade-offs and links to the
-complete rom-weaver support matrix.
+xdelta and VCDIFF suit large files and disc images. PPF is long established
+for discs. If a game's community already expects one format, use that format;
+compatibility beats theory.
 
-## Test the artifact users will receive
+[Pick a patch format](patch-formats.md) compares them properly and links to
+the full table of what rom-weaver supports.
 
-Do not stop after confirming that the already-modified ROM launches. Test the
-new patch itself:
+## Test the patch, not your copy
 
-1. Make a fresh copy of the documented original.
-2. Apply the downloaded or written patch using the instructions you plan to
-   publish.
-3. Calculate the result's checksum.
-4. Confirm that it matches the modified file byte for byte.
-5. Launch the reproduced result in the intended emulator or hardware workflow.
-6. Repeat every optional multi-patch combination you claim to support.
+Your modified file working proves nothing about the patch. Test what people
+will actually download:
 
-A checksum match proves that the patch recreated your file. Runtime testing
-catches a different problem: the modified file itself may still have broken
-content or platform-specific behavior.
+1. Take a fresh copy of the original you documented.
+2. Apply the downloaded patch using the instructions you plan to publish.
+3. Work out the checksum of the result.
+4. Confirm it matches your modified file byte for byte.
+5. Launch that rebuilt file in the emulator or on the hardware you support.
+6. Repeat for every combination of optional patches you claim to support.
 
-## Publish enough information
+A matching checksum proves the patch rebuilt your file. Actually launching it
+proves something different: that your modified file was sound to begin with.
+Both are worth knowing, and they fail in different ways.
 
-Include these details with every release:
+## Tell people what they need
+
+Ship these details with every release:
 
 - patch name and version;
-- supported game title, region, and revision;
-- required copier-header state or disc-image layout;
-- original checksum and algorithm;
-- expected patched-file checksum and algorithm;
-- patch format and a link to a compatible patcher;
-- required patch order and optional-patch compatibility;
-- credits, changelog, and issue-reporting location.
+- game title, region, and revision;
+- whether the original needs its header, and for discs, the image layout;
+- checksum of the original, and which algorithm it is;
+- checksum of the finished file, and which algorithm it is;
+- patch format, and a link to a patcher that handles it;
+- what order to apply things in, and which optional patches work together;
+- credits, changelog, and where to report problems.
 
-For a release made from several patches, create a rom-weaver bundle to preserve
-their order, required or optional state, checksums, and output naming. The
-[CLI guide](../cli.md#bundles) documents bundle creation and the machine-readable
-schema.
+For a release made of several patches, ship a rom-weaver bundle. It records
+the order, which patches are optional, the checksums, and the output name, so
+your users do not have to get any of that right by hand. The
+[CLI guide](../cli.md#bundles) documents bundles and their file format.
 
-## Update an existing patch
+## Releasing an update
 
-Create each full release from the same documented clean original and the new
-finished output. Do not create version 2 by comparing version 1's patched ROM
-with version 2 unless you deliberately want an incremental patch that requires
-users to install version 1 first.
+Build every release from the same documented clean original and your new
+finished file. Do not build version 2 by comparing version 1's patched result
+against version 2.
 
-A full patch from the clean base is simpler to explain, validate, and reproduce.
+That produces an incremental patch: it only works for people who already
+installed version 1, in the right order, with nothing else applied. Sometimes
+that is what you want, and if so, say so loudly. Otherwise a full patch from
+the clean original is easier to explain, easier to check, and easier for
+someone to reproduce years from now.
+
+Not sure which format to publish in? Read
+[Pick a patch format](patch-formats.md). Back to the
+[guide index](README.md).
