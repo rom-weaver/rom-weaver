@@ -660,7 +660,14 @@ informational only - no protection rules or approvals, and `continue-on-error`
 still keeps a Cloudflare outage from reddening the build - but leave room to
 later add allowed branches/tags, approvals, wait timers, or environment-scoped
 secrets. That native deployment link replaced the old marker-backed preview PR
-comment, which duplicated it.
+comment, which duplicated it. After both preview paths settle, CI keeps the
+newest successful deployment and the newest failed deployment for the pull
+request branch, then deletes inactive objects and older failures. This
+preserves the current preview plus the latest failure for diagnosis while
+removing superseded "temporarily deployed" and failed timeline entries; cleanup
+failure is informational and cannot fail the build. The cleanup lives in
+`scripts/ci/cleanup-preview-deployments.sh` and is covered by the repository's
+shellcheck gate.
 
 The preview project is swept every six hours. The cleanup keeps the newest
 deployment for each open PR and gives superseded deployments a seven-day grace
