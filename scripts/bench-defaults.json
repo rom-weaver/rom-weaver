@@ -142,11 +142,64 @@
     ],
     "compress_codec_by_format": {},
     "codec_matrix_by_format": {
-      "zip": [["store", "store"], ["deflate", "deflate"], ["zstd", "zstd"]],
-      "7z": [["lzma2", "lzma2"]],
-      "chd": [["zstd", "zstd"], ["zlib", "zlib"], ["lzma", "lzma"], ["huffman", "huffman"], ["flac", "flac"], ["store", "store"]],
-      "rvz": [["zstd", "zstd"]],
-      "z3ds": [["zstd", "zstd"]]
+      "zip": [
+        [
+          "store",
+          "store"
+        ],
+        [
+          "deflate",
+          "deflate"
+        ],
+        [
+          "zstd",
+          "zstd"
+        ]
+      ],
+      "7z": [
+        [
+          "lzma2",
+          "lzma2"
+        ]
+      ],
+      "chd": [
+        [
+          "zstd",
+          "zstd"
+        ],
+        [
+          "zlib",
+          "zlib"
+        ],
+        [
+          "lzma",
+          "lzma"
+        ],
+        [
+          "huffman",
+          "huffman"
+        ],
+        [
+          "flac",
+          "flac"
+        ],
+        [
+          "store",
+          "store"
+        ]
+      ],
+      "rvz": [
+        [
+          "zstd",
+          "zstd"
+        ]
+      ],
+      "z3ds": [
+        [
+          "zstd",
+          "zstd"
+        ]
+      ]
     }
   },
   "checksum_threading": {
@@ -165,5 +218,12 @@
     "warmups": 1,
     "min_p50_gain": 1.1,
     "min_p90_gain": 1.05
+  },
+  "solid_extract": {
+    "entries": 4,
+    "entry_mib": 96,
+    "threads": "1,2,4,auto",
+    "repeat": 3,
+    "sevenzip": "7zz"
   }
 }
