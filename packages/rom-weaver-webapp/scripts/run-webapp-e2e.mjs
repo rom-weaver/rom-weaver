@@ -10,6 +10,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium, webkit } from "playwright";
+import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,6 +18,8 @@ const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
 const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.min.js");
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
+// Derived from the route table, so a new guide is audited without a second edit.
+const DOCS_ROUTES = DOC_SOURCES.map((source) => source.slug);
 const DOWNLOAD_TIMEOUT_MS = 60_000;
 const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
@@ -28,6 +31,7 @@ const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
+  common: { betaToolsEnabled: true },
   create: { compression: { threads: 3 } },
   version: 5,
 });
@@ -249,13 +253,20 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   };
 
   try {
+    // Both are per-document, so every navigation below has to re-arm them:
+    // axe to scan at all, and the freeze so a scan never samples a colour
+    // mid theme-transition and reports a phantom contrast failure.
+    const armPage = async () => {
+      await page.addScriptTag({ path: AXE_SCRIPT_PATH });
+      await page.addStyleTag({
+        content:
+          "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
+      });
+    };
+
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
-    await page.addScriptTag({ path: AXE_SCRIPT_PATH });
-    await page.addStyleTag({
-      content:
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
-    });
+    await armPage();
 
     for (const theme of ["light", "dark"]) {
       await setTheme(theme);
@@ -265,6 +276,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
     await scanLiveApp(page, "Settings (dark)");
+    const betaTools = page.locator("#settings-beta-tools-enabled");
+    if (!(await betaTools.isChecked())) await betaTools.check();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
     await setTheme("light");
     await page.getByRole("button", { name: "Settings" }).click();
@@ -278,6 +291,20 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
         await scanLiveApp(page, `${tab} (${theme})`);
+      }
+    }
+    // The guides are served as their own prerendered documents, so each one is
+    // loaded for real rather than switched to in-app: that is the only way a
+    // hydration mismatch against the served HTML shows up as a page error.
+    for (const slug of DOCS_ROUTES) {
+      await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
+      await page.locator(".docs-article h1").waitFor({ state: "visible" });
+      await armPage();
+      const headings = await page.locator("h1").count();
+      if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
+      for (const theme of ["light", "dark"]) {
+        await setTheme(theme);
+        await scanLiveApp(page, `${slug} (${theme})`);
       }
     }
     if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);

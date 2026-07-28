@@ -30,6 +30,7 @@ import {
   createEmptyConfirmationDialogState,
   type WebappRootProps,
 } from "./webapp-root-types.ts";
+import type { WebappView } from "./webapp-state-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -316,6 +317,12 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
+// Views the build emits a prerendered shell for. Hydration has to start from
+// the view the served HTML was rendered as, or React discards the whole shell.
+// Trim and Tools deliberately inherit the patcher's markup, so they hydrate as
+// "patcher" - that is what is actually in the document.
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
+
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
@@ -345,7 +352,7 @@ const renderWebappRoot = (): undefined => {
   const rootState: WebappRootProps["state"] = shouldHydrate
     ? {
         ...state,
-        currentView: state.currentView === "creator" ? "creator" : "patcher",
+        currentView: PRERENDERED_VIEWS.has(state.currentView) ? state.currentView : "patcher",
         draftSettings: { ...hydrationSettings },
         settings: hydrationSettings,
         startup: { message: "", status: "ready" as const },

@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
@@ -275,9 +276,11 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// Trim and Tools inherit the Weave page's markup, so keep the duplicate pages
-// out of search and point their canonical at themselves.
-const makeUtilityRouteNoindex = (html, slug) =>
+// The Trim and Tools tabs are still beta - they navigate in production but must
+// not be indexed, and they inherit the Weave page's markup, so strip the shared
+// index directive to noindex and point their canonical at themselves (rather
+// than leaking a /weave canonical that would fold them into the patcher page).
+const makeBetaRouteNoindex = (html, slug) =>
   html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
@@ -409,8 +412,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       for (const [slug, html] of [
         ["weave", weaveHtml],
         ["create", createHtml],
-        ["trim", withRoutePreloadLinks(makeUtilityRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
-        ["tools", withRoutePreloadLinks(makeUtilityRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
+        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
+        ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
@@ -632,15 +635,19 @@ const prerenderWebappShell = (prerenderedShells) => ({
           })),
         };
       }
-      const patcherShell = await prerender.renderLandingShell("patcher");
-      const creatorShell = await prerender.renderLandingShell("creator");
-      const notFoundShell = await prerender.renderLandingShell("patcher", true);
-      prerenderedShells.set("patcher", patcherShell);
-      prerenderedShells.set("creator", creatorShell);
-      prerenderedShells.set("notFound", notFoundShell);
-      for (const route of DOC_ROUTES) {
-        prerenderedShells.set(route.slug, await prerender.renderLandingShell("docs", false, route.slug));
-      }
+      // One SSR server renders every shell the build needs; spinning one up per
+      // shell would cost more than the rendering does.
+      const patcherShell = await prerender.withPrerenderServer(async (server) => {
+        const render = (view, notFound, docsSlug) =>
+          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
+        prerenderedShells.set("patcher", await render("patcher"));
+        prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("notFound", await render("patcher", true));
+        for (const route of DOC_ROUTES) {
+          prerenderedShells.set(route.slug, await render("docs", false, route.slug));
+        }
+        return prerenderedShells.get("patcher");
+      });
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
     },
     order: "post",
@@ -829,6 +836,7 @@ export default defineConfig(({ command }) => {
       ],
     },
     plugins: [
+      docsVirtualModule(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(),
       deferDevHotUpdates(),

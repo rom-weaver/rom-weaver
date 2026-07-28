@@ -180,6 +180,11 @@ msgstr "DVD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.betaToolsEnabled"
+msgstr "Enable beta tools (Trim and Tools)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.differentRom"
 msgstr "expected a different ROM"
 

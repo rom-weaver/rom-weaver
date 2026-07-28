@@ -147,7 +147,9 @@ beforeEach(() => {
 });
 
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
-  mountWebappRoot();
+  // The Trim and Tools tabs are beta-gated (see `betaToolsEnabled`), so the full-shell assertions
+  // below require the flag on - matching the pattern the sibling controller unit tests use.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
   const romInput = page.getByLabelText(/ROMs, patches, bundles, or archives/i);
@@ -158,7 +160,6 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tab", { name: /weave/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /docs/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /trim/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
@@ -184,11 +185,11 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot exposes every workflow by default", async () => {
+test("WebappRoot shows Docs by default while Trim and Tools stay behind the beta flag", async () => {
   mountWebappRoot();
   await expect
     .poll(() => [...document.querySelectorAll('.mode-rail [role="tab"]')].map((tab) => tab.textContent))
-    .toEqual(["Weave", "Create", "Docs", "Trim", "Tools"]);
+    .toEqual(["Weave", "Create", "Docs"]);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {

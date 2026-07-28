@@ -6,17 +6,29 @@ import { SITE_NAME } from "./workflow-seo.mjs";
 const SITE_ORIGIN = "https://rom-weaver.com";
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs/guides");
 
-const DOC_ROUTES = Object.freeze(
-  DOC_SOURCES.map((source) => createDocRoute(source, fs.readFileSync(path.join(docsDirectory, source.file), "utf8"))),
-);
+/** @param {{ file: string }} source */
+const docSourcePath = (source) => path.join(docsDirectory, source.file);
+
+/** Read and render every guide from disk. The dev plugin re-runs this on edit. */
+const readDocRoutes = () =>
+  Object.freeze(DOC_SOURCES.map((source) => createDocRoute(source, fs.readFileSync(docSourcePath(source), "utf8"))));
+
+const DOC_ROUTES = readDocRoutes();
 
 /** @param {unknown} value */
 const escapeHtml = (value) =>
   String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
+// Guide-derived text can contain `$`, which `String.replace` reads as a match
+// reference in a replacement *string* - every substitution here goes through a
+// replacer function so the content is inserted literally.
+/** @param {string} html @param {RegExp} pattern @param {string} content */
+const replaceBetween = (html, pattern, content) =>
+  html.replace(pattern, (_match, open, close) => `${open}${escapeHtml(content)}${close}`);
+
 /** @param {string} html @param {string} attribute @param {string} name @param {string} content */
 const replaceMetaContent = (html, attribute, name, content) =>
-  html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${escapeHtml(content)}$2`);
+  replaceBetween(html, new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), content);
 
 /**
  * Stamp route-specific metadata onto the same app document and React shell used
@@ -40,11 +52,10 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
     publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
     url: canonicalUrl,
   };
-  let routeHtml = html
-    .replace("<head>", '<head>\n    <base href="/" />')
-    .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(title)}</title>`)
-    .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1${canonicalUrl}$2`)
-    .replace(/(<meta\s+property="og:type"\s+content=")[^"]*(")/, "$1article$2");
+  let routeHtml = html.replace("<head>", '<head>\n    <base href="/" />');
+  routeHtml = replaceBetween(routeHtml, /(<title>)[^<]*(<\/title>)/, title);
+  routeHtml = replaceBetween(routeHtml, /(<link\s+rel="canonical"\s+href=")[^"]*(")/, canonicalUrl);
+  routeHtml = routeHtml.replace(/(<meta\s+property="og:type"\s+content=")[^"]*(")/, "$1article$2");
   /** @type {Array<[string, string, string]>} */
   const metadata = [
     ["name", "description", route.description],
@@ -63,4 +74,4 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   );
 };
 
-export { createDocsRouteHtml, DOC_ROUTES };
+export { createDocsRouteHtml, DOC_ROUTES, docsDirectory, readDocRoutes };

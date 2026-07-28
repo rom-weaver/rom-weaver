@@ -1,30 +1,8 @@
 import { useEffect } from "react";
-import applyRomPatchesMarkdown from "../../../../docs/guides/apply-rom-patches.md?raw";
-import createRomPatchesMarkdown from "../../../../docs/guides/create-rom-patches.md?raw";
-import fixChecksumErrorsMarkdown from "../../../../docs/guides/fix-checksum-errors.md?raw";
-import noticesMarkdown from "../../../../docs/guides/notices.md?raw";
-import overviewMarkdown from "../../../../docs/guides/README.md?raw";
-import patchFormatsMarkdown from "../../../../docs/guides/patch-formats.md?raw";
-import privacyMarkdown from "../../../../docs/guides/privacy.md?raw";
+import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
-import { createDocRoute, DOC_SOURCES, renderMarkdown } from "./docs-content.mjs";
+import { useActiveSection } from "./use-active-section.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
-
-const markdownByFile = new Map([
-  ["README.md", overviewMarkdown],
-  ["apply-rom-patches.md", applyRomPatchesMarkdown],
-  ["create-rom-patches.md", createRomPatchesMarkdown],
-  ["fix-checksum-errors.md", fixChecksumErrorsMarkdown],
-  ["notices.md", noticesMarkdown],
-  ["patch-formats.md", patchFormatsMarkdown],
-  ["privacy.md", privacyMarkdown],
-]);
-
-const DOC_ROUTES = DOC_SOURCES.map((source) => {
-  const markdown = markdownByFile.get(source.file);
-  if (markdown === undefined) throw new Error(`Missing Markdown source for ${source.file}`);
-  return { ...createDocRoute(source, markdown), label: source.label };
-});
 
 const syncDocsSeoMetadata = (route: (typeof DOC_ROUTES)[number]) => {
   const siteName = CHANNEL_BADGE ? `${SITE_NAME} ${CHANNEL_BADGE}` : SITE_NAME;
@@ -51,9 +29,34 @@ const findDocsRoute = (slug: string) => {
   return route;
 };
 
+/**
+ * The warp: the lengthwise threads a piece is woven on. A guide's section order
+ * is its own structural axis, so the rail carries the outline and marks the
+ * section being read with a weft pick crossing the warp line.
+ */
+const SectionRail = ({ activeId, route }: { activeId: string; route: (typeof DOC_ROUTES)[number] }) => (
+  <nav aria-label="On this page" className="warp-rail">
+    <span className="warp-rail-title">On this page</span>
+    <ol className="warp-rail-list">
+      {route.sections.map((section, index) => (
+        <li key={section.id}>
+          <a aria-current={section.id === activeId ? "true" : undefined} href={`/${route.slug}#${section.id}`}>
+            <span aria-hidden="true" className="warp-pick" />
+            <span aria-hidden="true" className="warp-index">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="warp-label">{section.label}</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </nav>
+);
+
 const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const route = findDocsRoute(slug);
   const hub = route.slug === "docs";
+  const activeId = useActiveSection(route.sections, active);
   useEffect(() => {
     if (!active) return;
     syncDocsSeoMetadata(route);
@@ -69,36 +72,39 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           <>
             <a href="/docs">Guides</a>
             <span aria-hidden="true">/</span>
-            <span aria-current="page">{route.title}</span>
+            <span aria-current="page">{route.label}</span>
           </>
         )}
       </nav>
       <div className="docs-layout">
-        <nav aria-label="Guides" className="guide-nav">
-          <span className="guide-nav-title">Guides</span>
-          <ul className="guide-nav-list">
-            {DOC_ROUTES.map((entry) => (
-              <li key={entry.slug}>
-                <a aria-current={entry.slug === route.slug ? "page" : undefined} href={`/${entry.slug}`}>
-                  {entry.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <div className="docs-rails">
+          <nav aria-label="Guides" className="guide-nav">
+            <span className="guide-nav-title">Guides</span>
+            <ul className="guide-nav-list">
+              {DOC_ROUTES.map((entry) => (
+                <li key={entry.slug}>
+                  <a aria-current={entry.slug === route.slug ? "page" : undefined} href={`/${entry.slug}`}>
+                    {entry.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          {route.sections.length > 0 ? <SectionRail activeId={activeId} route={route} /> : null}
+        </div>
         <section className="docs-panel">
           <article
             className="docs-article"
             data-markdown-source={route.source}
-            // The Markdown is committed project content, rendered by the same
-            // parser at build time and in the lazy client route.
+            // Committed repository Markdown, rendered to HTML at build time by
+            // the same parser that feeds the prerendered page.
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(route.markdown, route.slug) }}
+            dangerouslySetInnerHTML={{ __html: route.html }}
           />
           <aside className="docs-cta">
             <div>
-              <h2>Ready to work with a patch?</h2>
-              <p>Use the browser app without uploading your files.</p>
+              <h2>Try it in the browser</h2>
+              <p>Nothing uploads. rom-weaver reads and writes your files on this device.</p>
             </div>
             <div className="docs-cta-actions">
               <a className="btn primary" href="/weave">

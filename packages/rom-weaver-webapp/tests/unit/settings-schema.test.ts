@@ -52,6 +52,7 @@ describe("getDefaultSettings", () => {
     expect(settings.fixChecksum).toBe(false);
     expect(settings.bundlePackage).toBe("");
     expect(settings.requireInputChecksumMatch).toBe(true);
+    expect(settings.betaToolsEnabled).toBe(false);
     expect(settings.threads).toBe("auto");
   });
 
@@ -158,6 +159,14 @@ describe("serializeSettingsForStorage", () => {
     const json = serializeSettingsForStorage(settings);
     const parsed = JSON.parse(json as string);
     expect(parsed.common.language).toBe("fr");
+  });
+
+  it("serializes and loads the beta tools setting under common", () => {
+    const settings = { ...getDefaultSettings(), betaToolsEnabled: true };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.common.betaToolsEnabled).toBe(true);
+    expect(loadSettings(makeStorage(json)).betaToolsEnabled).toBe(true);
   });
 });
 

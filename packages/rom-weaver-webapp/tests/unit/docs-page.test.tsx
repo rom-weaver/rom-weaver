@@ -45,6 +45,30 @@ describe("DocsPage", () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
   });
 
+  it("builds the section rail from the guide's own headings and drops the generated outline", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const rail = screen.getByRole("navigation", { name: "On this page" });
+    const railLinks = [...rail.querySelectorAll("a")];
+    expect(railLinks.length).toBeGreaterThan(0);
+    for (const link of railLinks) {
+      const id = link.getAttribute("href")?.replace("/docs/apply-rom-patches#", "") ?? "";
+      expect(document.querySelector(`h2[id="${id}"]`)).toBeTruthy();
+    }
+    // doctoc's in-file table of contents is for GitHub; the rail replaces it here.
+    expect(screen.queryByRole("heading", { name: "Table of contents" })).toBeNull();
+  });
+
+  it("rewrites guide links to routes, including ones carrying an anchor", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const article = document.querySelector(".docs-article");
+    const unrewritten = [...(article?.querySelectorAll("a[href]") ?? [])]
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => !/^https?:/.test(href) && href.includes(".md"));
+    expect(unrewritten).toEqual([]);
+  });
+
   it.each([
     ["docs/notices", "Notices"],
     ["docs/privacy", "Privacy"],

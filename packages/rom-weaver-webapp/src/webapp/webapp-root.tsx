@@ -403,6 +403,10 @@ function WebappRoot({
         </div>
       </section>
     ) : null;
+  const visibleTabs = state.settings.betaToolsEnabled
+    ? WORKFLOW_TABS
+    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator" || tab.id === "docs");
+
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
@@ -427,7 +431,7 @@ function WebappRoot({
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
             }}
             settingsOpen={state.settingsDialogOpen}
-            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
+            tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
             tabsControlPanels={!notFound}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             threads={resolveThreads(threads)}

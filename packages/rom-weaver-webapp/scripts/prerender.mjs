@@ -23,10 +23,10 @@ const renderLandingShellWithServer = async (server, view = "patcher", notFound =
   return await entry.renderLandingShellHtml(view, notFound, docsSlug);
 };
 
-// Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
-// SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
-// Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
-const renderLandingShell = async (view = "patcher", notFound = false, docsSlug = "docs") => {
+// Runs `render` against one throwaway SSR server. Standing a server up costs
+// seconds, so every shell a build needs is rendered inside a single call rather
+// than one server per shell.
+const withPrerenderServer = async (render) => {
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),
@@ -35,11 +35,17 @@ const renderLandingShell = async (view = "patcher", notFound = false, docsSlug =
     server: { hmr: false, middlewareMode: true, watch: null },
   });
   try {
-    return await renderLandingShellWithServer(server, view, notFound, docsSlug);
+    return await render(server);
   } finally {
     await server.close();
   }
 };
+
+// Renders the landing shell (src/webapp/prerender-entry.tsx) through Vite's
+// SSR pipeline so the real config (defines, react/lingui babel plugin) applies.
+// Standalone usage prints the HTML for inspection: node scripts/prerender.mjs
+const renderLandingShell = async (view = "patcher", notFound = false, docsSlug = "docs") =>
+  await withPrerenderServer((server) => renderLandingShellWithServer(server, view, notFound, docsSlug));
 
 const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isDirectRun) {
@@ -54,4 +60,4 @@ if (isDirectRun) {
   );
 }
 
-export { renderLandingShell, renderLandingShellWithServer };
+export { renderLandingShellWithServer, withPrerenderServer };

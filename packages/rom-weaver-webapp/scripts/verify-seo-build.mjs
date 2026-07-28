@@ -169,11 +169,33 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
   assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);
   assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
+  assertIncludes(docsHtml, 'aria-label="On this page"', `${route.slug} section rail`);
+  for (const section of route.sections) {
+    assertIncludes(docsHtml, `href="/${route.slug}#${section.id}"`, `${route.slug} rail link for ${section.id}`);
+    assertIncludes(docsHtml, `<h2 id="${section.id}"`, `${route.slug} heading for rail entry ${section.id}`);
+  }
+  // Guide links are authored repository-relative; every one of them must have
+  // been rewritten to a route or an absolute repository URL.
+  const unrewritten = docsHtml.match(/href="(?!https?:)[^"]*\.md(?:#[^"]*)?"/g);
+  if (unrewritten) throw new Error(`${route.slug} has unrewritten Markdown links: ${unrewritten.join(", ")}`);
   const minimumWords = route.slug === "docs" || legalPage ? 250 : 500;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);
   }
+}
+
+// The guides are rendered to HTML at build time, so `marked` must stay a build
+// tool. A parser reaching the bundle would ship MIT-licensed code that the
+// attribution inventories - generated from the shipped dependency graph - do
+// not cover, on top of the wasted bytes.
+const bundledScripts = fs
+  .readdirSync(path.join(distDir, "assets"))
+  .filter((name) => name.endsWith(".js"))
+  .map((name) => path.join("assets", name));
+for (const script of bundledScripts) {
+  if (read(script).includes("markedjs/marked"))
+    throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
 for (const beta of ["trim", "tools"]) {
