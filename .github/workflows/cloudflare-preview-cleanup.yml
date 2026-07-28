@@ -58,8 +58,11 @@ jobs:
           deleted=0
 
           while IFS=$'\t' read -r id created branch; do
-            [[ "$branch" =~ ^pr-([0-9]+)$ ]] || continue
-            pr="${BASH_REMATCH[1]}"
+            # `pr-<n>` is the preview bundle; `lighthouse-pr-<n>` is the report
+            # index webapp-static publishes for the same PR. Both are disposable
+            # per-PR branches and both are reaped on the same terms.
+            [[ "$branch" =~ ^(lighthouse-)?pr-([0-9]+)$ ]] || continue
+            pr="${BASH_REMATCH[2]}"
 
             if [ -z "${pr_states[$pr]+set}" ]; then
               pr_states[$pr]=$(gh pr view "$pr" --repo "$GH_REPO" --json state --jq .state 2>/dev/null || echo UNKNOWN)
@@ -91,7 +94,7 @@ jobs:
             fi
           done < <(
             jq -sr '
-              map(select(.environment == "preview" and ((.deployment_trigger.metadata.branch // "") | test("^pr-[0-9]+$"))))
+              map(select(.environment == "preview" and ((.deployment_trigger.metadata.branch // "") | test("^(lighthouse-)?pr-[0-9]+$"))))
               | sort_by([.deployment_trigger.metadata.branch, .created_on])
               | reverse[]
               | [.id, .created_on, .deployment_trigger.metadata.branch]
