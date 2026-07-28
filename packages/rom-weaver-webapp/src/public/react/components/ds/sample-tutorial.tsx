@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 type SampleTutorialStep = {
   body: string;
+  openDrawers?: boolean;
   placement?: "bottom" | "top";
   target?: string;
   title: string;
@@ -72,6 +73,11 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
+      if (step.openDrawers) {
+        for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
+          drawer.click();
+        }
+      }
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
       return true;

@@ -176,13 +176,21 @@ const ApplyDropAfter = ({
 const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     body: "The ROM section keeps the file name, remove control, and computed checksums together. Add another ROM in 0x01 whenever you want to replace it.",
+    openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: "Start with the ROM",
   },
   {
-    body: "These two IPS patches run in order: Hello → Modified, then World → ROM. Each card lets you edit details, reorder the chain, review checksums, and replace or remove the file.",
-    target: "#rom-weaver-row-patch-stack",
-    title: "Shape the patch stack",
+    body: "The first IPS patch changes HELLO to MODIFIED. Use its number to reorder it, the actions menu to edit, replace, or remove it, and Checks to review its expected output.",
+    openDrawers: true,
+    target: "#rom-weaver-list-patch-stack > .card:nth-child(1)",
+    title: "Patch 1: HELLO → MODIFIED",
+  },
+  {
+    body: "The second IPS patch changes WORLD to ROM. Its input checks match patch 1's output, so the stack proves this patch belongs second before you weave.",
+    openDrawers: true,
+    target: "#rom-weaver-list-patch-stack > .card:nth-child(2)",
+    title: "Patch 2: WORLD → ROM",
   },
   {
     body: "The compact 0x01 row stays available after setup. Drop more files anywhere on the workbench, or click the row to browse.",
@@ -190,7 +198,8 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Add files at any time",
   },
   {
-    body: "Choose the output name and format, then open Options for compression, header, and bundle packaging controls. Weave when the setup looks right.",
+    body: "Choose the output name and format. Options is open so you can review compression, header, and bundle packaging controls before you weave.",
+    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
     title: "Finish at the loom",

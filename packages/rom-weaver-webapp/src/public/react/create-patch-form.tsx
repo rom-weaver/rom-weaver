@@ -60,11 +60,13 @@ const CREATE_SAMPLE_ASSETS = [
 const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     body: "The Original section keeps the starting file's name, remove control, and checksums together. Add another original in 0x01 to replace it.",
+    openDrawers: true,
     target: "#patch-builder-row-original",
     title: "Start with the original",
   },
   {
     body: "Modified is the version you want to reproduce. Its name, remove control, and checksums stay together here, and Swap fixes the order in one click.",
+    openDrawers: true,
     target: "#patch-builder-row-modified",
     title: "Compare the modified ROM",
   },
@@ -74,7 +76,8 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Replace files at any time",
   },
   {
-    body: "Choose the patch name and format, then open Options for archive and compression controls. Create when the setup looks right.",
+    body: "Choose the patch name and format. Options is open so you can review archive and compression controls before you create it.",
+    openDrawers: true,
     placement: "top",
     target: "#patch-builder-row-output",
     title: "Finish with the patch",

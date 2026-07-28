@@ -296,17 +296,23 @@
 .rw-app .sample-tutorial-layer { display: contents; }
 .rw-app .sample-tutorial-scrim {
   position: fixed; inset: 0; z-index: 1000; pointer-events: none;
-  background: color-mix(in oklab, var(--scrim) 72%, transparent);
+  background: color-mix(in oklab, var(--scrim) 78%, transparent);
 }
 .rw-app .sample-tutorial-stage {
   position: relative !important;
   z-index: 1001 !important;
   overflow: visible !important;
 }
+.rw-app .sample-tutorial-stage > .step-head {
+  background: linear-gradient(90deg, color-mix(in oklab, var(--thread) 18%, transparent), transparent 72%);
+  box-shadow: inset 4px 0 0 var(--thread);
+}
 .rw-app .sample-tutorial-target {
   position: relative !important; z-index: 1002 !important; overflow: visible !important;
-  outline: 2px solid color-mix(in oklab, var(--thread) 82%, var(--thread-hi)); outline-offset: 5px;
-  box-shadow: 0 0 0 9px color-mix(in oklab, var(--thread) 14%, transparent);
+  outline: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); outline-offset: 7px;
+  box-shadow:
+    0 0 0 13px color-mix(in oklab, var(--thread) 22%, transparent),
+    0 18px 46px color-mix(in oklab, var(--scrim) 48%, transparent);
   animation: sample-tutorial-target-in .24s var(--ease) both;
 }
 .rw-app .sample-tutorial-dialog {
