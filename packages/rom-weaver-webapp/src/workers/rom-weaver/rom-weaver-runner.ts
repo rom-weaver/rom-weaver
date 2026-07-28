@@ -5,6 +5,7 @@ import { toThreadBudget } from "../../lib/runtime/compression-thread-budget.ts";
 import {
   estimateOpWorkingSetBytes,
   estimateScheduledThreads,
+  isMobileRuntime,
   resolveAppleMobileSharedMemoryMaximumPages,
   resolveMemoryCeilingBytes,
 } from "../../lib/runtime/op-memory-estimate.ts";
@@ -93,11 +94,14 @@ type RunnerCreateOptions = { threads?: RuntimeValue };
 // by the thread budget (the scheduler's maxConcurrency below).
 const MAX_WARM_IDLE_RUNNERS = 8;
 const resolveWarmIdleRunners = (): number => {
-  // Apple mobile WebKit reserves each worker's full shared-memory `maximum` (~1 GiB on mobile) up front
-  // and does not promptly reclaim it, so every extra idle worker keeps ~1 GiB reserved and courts an
-  // out-of-memory tab reload. Keep at most one warm runner there - enough for a burst of back-to-back
-  // light ops to reuse a warm worker, evicted quickly once idle (see scheduleMobileIdleRunnerEviction).
-  if (resolveAppleMobileSharedMemoryMaximumPages()) return 1;
+  // Every idle runner holds a wasm heap that only ever grew, and no engine returns that memory to the
+  // OS, so on a phone each extra one is dead weight against a tight ceiling. Apple mobile WebKit is
+  // the worst case - it also reserves each worker's full shared-memory `maximum` (~1 GiB on mobile)
+  // up front - but Android is on the same budget and was previously treated as desktop, keeping up to
+  // 8 warm runners on a device with far less headroom than one. Keep at most one warm runner on any
+  // mobile runtime: enough for a burst of back-to-back light ops to reuse a warm worker, evicted
+  // quickly once idle (see scheduleMobileIdleRunnerEviction).
+  if (isMobileRuntime()) return 1;
   return Math.max(2, Math.min(MAX_WARM_IDLE_RUNNERS, Math.ceil(getDefaultBrowserThreadCount() / 2)));
 };
 
@@ -690,10 +694,10 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       throw error;
     } finally {
       removeAbortListener?.();
-      if (resolveAppleMobileSharedMemoryMaximumPages()) {
-        // WebKit does not promptly reclaim grown heaps or thread-pool memory.
-        // Terminate after heavy/threaded work; keep light runners for the burst,
-        // then let idle eviction release them.
+      if (isMobileRuntime()) {
+        // No engine reclaims a grown wasm heap or its thread-pool memory, and a phone has no headroom
+        // to carry one between operations. Terminate after heavy/threaded work; keep light runners for
+        // the burst, then let idle eviction release them.
         const mobileHeavyOp = operationBytes >= IDLE_RECYCLE_MIN_OP_BYTES || operationThreads > 1;
         if (mobileHeavyOp) {
           emitRunnerTraceLine(

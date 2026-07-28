@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   estimateOpWorkingSetBytes,
   estimateScheduledThreads,
+  isMobileRuntime,
   resolveAppleMobileSharedMemoryMaximumPages,
   resolveMemoryCeilingBytes,
 } from "../../src/lib/runtime/op-memory-estimate.ts";
@@ -94,6 +95,37 @@ describe("resolveAppleMobileSharedMemoryMaximumPages", () => {
     expect(
       resolveAppleMobileSharedMemoryMaximumPages({ navigator: { userAgent: "Mozilla/5.0 (Macintosh)" } }),
     ).toBeUndefined();
+  });
+});
+
+describe("isMobileRuntime", () => {
+  const iosSafari =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1";
+  const androidChrome = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";
+  const desktopChrome =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
+
+  it("covers Android as well as Apple mobile", () => {
+    expect(isMobileRuntime({ navigator: { userAgent: iosSafari } })).toBe(true);
+    // The regression this predicate exists for: Android is a phone budget, but the Apple-only
+    // shared-memory probe reports nothing for it, so runner lifecycle policy treated it as desktop.
+    expect(isMobileRuntime({ navigator: { userAgent: androidChrome } })).toBe(true);
+    expect(resolveAppleMobileSharedMemoryMaximumPages({ navigator: { userAgent: androidChrome } })).toBeUndefined();
+  });
+
+  it("leaves desktop runtimes alone", () => {
+    expect(isMobileRuntime({ navigator: { userAgent: desktopChrome } })).toBe(false);
+    expect(isMobileRuntime({ navigator: { userAgent: "Mozilla/5.0 (Macintosh)" } })).toBe(false);
+  });
+
+  it("detects iPadOS desktop mode, which reports MacIntel with touch", () => {
+    expect(isMobileRuntime({ navigator: { maxTouchPoints: 5, platform: "MacIntel" } })).toBe(true);
+    expect(isMobileRuntime({ navigator: { maxTouchPoints: 0, platform: "MacIntel" } })).toBe(false);
+  });
+
+  it("treats a missing navigator as desktop rather than throwing", () => {
+    expect(isMobileRuntime({})).toBe(false);
+    expect(isMobileRuntime(null)).toBe(false);
   });
 });
 
