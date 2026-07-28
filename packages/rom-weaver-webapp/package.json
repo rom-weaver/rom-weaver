@@ -41,9 +41,11 @@
   },
   "scripts": {
     "audit:deps": "npm audit --audit-level=high",
+    "audit:lighthouse": "node scripts/run-lighthouse.mjs",
     "audit:strings": "if grep -rI --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
     "build": "vite build && node scripts/verify-seo-build.mjs",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
+    "check:size": "node scripts/check-size-budget.mjs",
     "dev": "node scripts/ensure-wasm-build.mjs && node scripts/dev-server.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
@@ -87,6 +89,7 @@
     "test:e2e:nightly": "node scripts/run-e2e.mjs nightly",
     "test:e2e:webapp": "node scripts/run-webapp-e2e.mjs",
     "test:e2e:webapp:webkit": "ROM_WEAVER_BROWSER=webkit node scripts/run-webapp-e2e.mjs",
+    "test:performance": "run-s --continue-on-error check:size audit:lighthouse",
     "test:unit": "vitest --config ./vitest.unit.config.mjs run",
     "test:unit:coverage": "ROM_WEAVER_COVERAGE=1 vitest --config ./vitest.unit.config.mjs run --coverage",
     "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs"
@@ -119,6 +122,7 @@
     "happy-dom": "20.11.1",
     "jscpd": "5.0.12",
     "knip": "6.29.0",
+    "lighthouse": "13.4.1",
     "npm-run-all2": "9.0.2",
     "oxfmt": "0.60.0",
     "oxlint": "1.75.0",

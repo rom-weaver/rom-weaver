@@ -48,18 +48,12 @@ runs:
 
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never
-    # mistaken for production. Unset (any local build) resolves to "dev".
+    # mistaken for production.
     - name: Build webapp
       shell: bash
       env:
         ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
         ROM_WEAVER_CHANNEL_LABEL: ${{ inputs.label }}
-        # Stage q11 brotli sidecars for every asset where q11 beats
-        # Cloudflare's on-the-fly recompression (~640 KB on the wasm, ~50 KB
-        # on the main bundle) + a _routes.json so the Pages Function
-        # (functions/assets/[name].js) serves our bytes for exactly those
-        # URLs.
-        ROM_WEAVER_PAGES_BROTLI: "1"
       run: npm --prefix packages/rom-weaver-webapp run build
 
     # Idempotent, so the first run on a channel bootstraps its own project and

@@ -1,0 +1,94 @@
+{
+  "assetSizes": {
+    "brotliQuality": 6,
+    "budgets": [
+      {
+        "name": "HTML shell",
+        "path": "index.html",
+        "expectedRawBytes": 55400,
+        "maxRawBytes": 58200,
+        "expectedBrotliBytes": 10700,
+        "maxBrotliBytes": 11250
+      },
+      {
+        "name": "JavaScript",
+        "directory": "assets",
+        "extension": ".js",
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 1265000,
+        "maxRawBytes": 1330000,
+        "expectedBrotliBytes": 325000,
+        "maxBrotliBytes": 341500
+      },
+      {
+        "name": "CSS",
+        "directory": "assets",
+        "extension": ".css",
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 131500,
+        "maxRawBytes": 138000,
+        "expectedBrotliBytes": 20600,
+        "maxBrotliBytes": 21700
+      },
+      {
+        "name": "WASM",
+        "directory": "assets",
+        "extension": ".wasm",
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 6515000,
+        "maxRawBytes": 6841000,
+        "expectedBrotliBytes": 1728000,
+        "maxBrotliBytes": 1815000
+      }
+    ]
+  },
+  "lighthouse": {
+    "runs": 3,
+    "routes": [
+      {
+        "name": "Weave",
+        "path": "/"
+      },
+      {
+        "name": "Create",
+        "path": "/create/"
+      }
+    ],
+    "scores": {
+      "performance": {
+        "expected": 0.85,
+        "minimum": 0.75
+      },
+      "accessibility": {
+        "expected": 1,
+        "minimum": 0.95
+      },
+      "best-practices": {
+        "expected": 1,
+        "minimum": 0.9
+      },
+      "seo": {
+        "expected": 1,
+        "minimum": 0.95
+      }
+    },
+    "metrics": {
+      "largest-contentful-paint": {
+        "aggregation": "optimistic",
+        "expected": 3500,
+        "maximum": 5000,
+        "unit": "ms"
+      },
+      "total-blocking-time": {
+        "expected": 200,
+        "maximum": 600,
+        "unit": "ms"
+      },
+      "cumulative-layout-shift": {
+        "expected": 0.1,
+        "maximum": 0.25,
+        "unit": ""
+      }
+    }
+  }
+}

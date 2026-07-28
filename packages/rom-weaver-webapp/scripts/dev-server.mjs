@@ -4,6 +4,7 @@ import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
+import http2 from "node:http2";
 import https from "node:https";
 import net from "node:net";
 import os from "node:os";
@@ -166,6 +167,15 @@ const setSecurityHeaders = (res, options) => {
 
 const send = (res, status, headers, body, securityOptions) => {
   setSecurityHeaders(res, securityOptions);
+  // BASE_SECURITY_HEADERS busts caches for the dev server's mutable output. A
+  // response that states its own Cache-Control has opted out, and leaving the
+  // HTTP/1.0 pair behind would contradict it - `Expires: 0` in particular
+  // downgrades the immutable hashed assets the preview server is meant to
+  // serve exactly the way production does.
+  if (headers?.["Cache-Control"]) {
+    res.removeHeader("Expires");
+    res.removeHeader("Pragma");
+  }
   res.writeHead(status, headers || {});
   res.end(body);
 };
@@ -652,36 +662,56 @@ const readPreviewFile = (filePath, fallbackPath, allowFallback, callback) => {
   });
 };
 
-const readPreviewBrotliFile = (resolvedPath, sourceData, req, callback) => {
-  if (!acceptsBrotli(req) || resolvedPath.endsWith(".br")) {
-    callback(null, null);
+const readPreviewBrotliFile = (resolvedPath, sourceData, callback) => {
+  if (resolvedPath.endsWith(".br")) {
+    callback(null);
     return;
   }
-  const brotliPath = `${resolvedPath}.br`;
-  fs.readFile(brotliPath, (readError, brotliData) => {
+  fs.readFile(`${resolvedPath}.br`, (readError, brotliData) => {
     if (readError) {
       if (!canCompressBrotliOnTheFly(resolvedPath, sourceData)) {
-        callback(null, null);
+        callback(null);
         return;
       }
       zlib.brotliCompress(
         sourceData,
         { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } },
         (compressError, compressed) => {
-          if (compressError || compressed.byteLength >= sourceData.byteLength) {
-            callback(null, null);
-            return;
-          }
-          callback(null, { data: compressed, path: brotliPath });
+          callback(compressError || compressed.byteLength >= sourceData.byteLength ? null : compressed);
         },
       );
       return;
     }
-    callback(null, { data: brotliData, path: brotliPath });
+    callback(brotliData);
   });
 };
 
-const handlePreviewRequest = (distDir, req, res, securityOptions) => {
+// A preview session serves a `dist` that cannot change under it, so each asset
+// is resolved, read and brotli-encoded once and then held in memory. Disk I/O
+// on a 7 MB wasm otherwise lands in the response time the performance budgets
+// measure, which would make the gate a benchmark of this server rather than of
+// the bundle.
+const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback) => {
+  const cacheKey = `${allowFallback ? "1" : "0"}:${filePath}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    callback(null, cached);
+    return;
+  }
+  readPreviewFile(filePath, fallbackPath, allowFallback, (readError, resolvedPath, data) => {
+    if (readError) {
+      callback(readError);
+      return;
+    }
+    readPreviewBrotliFile(resolvedPath, data, (brotli) => {
+      const asset = { brotli, data, resolvedPath };
+      cache.set(cacheKey, asset);
+      callback(null, asset);
+    });
+  });
+};
+
+const handlePreviewRequest = (distDir, cache, req, res, securityOptions) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
     return;
@@ -703,26 +733,25 @@ const handlePreviewRequest = (distDir, req, res, securityOptions) => {
   const fallbackPath = path.join(distDir, "index.html");
   const acceptHeader = req.headers.accept || "";
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
-  readPreviewFile(filePath, fallbackPath, allowFallback, (readError, resolvedPath, data) => {
+  readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
     if (readError) {
       send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
       return;
     }
-    readPreviewBrotliFile(resolvedPath, data, req, (_brotliError, brotliFile) => {
-      const encoded = Boolean(brotliFile);
-      send(
-        res,
-        200,
-        {
-          "Cache-Control":
-            path.basename(resolvedPath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
-          "Content-Type": getContentType(resolvedPath),
-          ...(encoded ? { "Content-Encoding": "br", Vary: "Accept-Encoding" } : {}),
-        },
-        req.method === "HEAD" ? null : encoded ? brotliFile.data : data,
-        securityOptions,
-      );
-    });
+    const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
+    send(
+      res,
+      200,
+      {
+        "Cache-Control":
+          path.basename(asset.resolvedPath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
+        "Content-Type": getContentType(asset.resolvedPath),
+        ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
+        ...(encoded ? { "Content-Encoding": "br" } : {}),
+      },
+      req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
+      securityOptions,
+    );
   });
 };
 
@@ -734,13 +763,20 @@ const startPreviewServer = async (options) => {
   const lanAddresses = getLanAddresses();
   const certificate = ensureCertificate(lanAddresses);
   const securityOptions = { crossOriginIsolation: !options.noCoopCoep };
-  const httpsServer = https.createServer(
+  const cache = new Map();
+  // HTTP/2, because the bundle is many hashed chunks and HTTP/1.1 caps a client
+  // at ~6 connections per origin - the resulting head-of-line blocking is
+  // measured by Lighthouse and is not something production has. `allowHTTP1`
+  // keeps every HTTP/1.1 client (and the redirect leg's plain-text probes)
+  // working via ALPN negotiation.
+  const httpsServer = http2.createSecureServer(
     {
+      allowHTTP1: true,
       cert: certificate.cert,
       key: certificate.key,
     },
     (req, res) => {
-      handlePreviewRequest(distDir, req, res, securityOptions);
+      handlePreviewRequest(distDir, cache, req, res, securityOptions);
     },
   );
   const httpRedirectServer = http.createServer((req, res) => {

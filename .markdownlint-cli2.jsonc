@@ -8,6 +8,10 @@
     "scripts/wasm/README.md"
   ],
   "ignores": [
+    // `packages/**/README.md` otherwise matches every installed dependency's
+    // README, so the lefthook `markdownlint` job fails on vendored upstream
+    // markdown the moment a worktree has node_modules and any .md is staged.
+    "**/node_modules/**",
     "CHANGELOG.md",
     "crates/rom-weaver-containers/libarchive/vendor/**/*.md"
   ],
