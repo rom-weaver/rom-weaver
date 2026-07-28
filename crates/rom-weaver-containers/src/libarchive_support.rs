@@ -1988,11 +1988,15 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                 )?);
                                 // Up to `worker_count` leaves decode at once, each building its own
                                 // hasher, so they share the hash budget rather than each taking it.
+                                // Bounded by the file count too: a single-file archive plans two
+                                // threads to overlap decode with the writer, but still only ever
+                                // has one hasher live, and dividing by the worker count there
+                                // would halve its budget for nothing.
                                 let hasher = ExtractHasher::new(
                                     context,
                                     logical_bytes,
                                     &output_path,
-                                    worker_count,
+                                    worker_count.min(file_task_count),
                                 )?;
                                 e.insert(LibarchiveOpenExtractOutput {
                                     archive_name,
