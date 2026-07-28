@@ -1,6 +1,0 @@
-          if (rep0 == 1)
-            memset(dest, dic[pos], curLen);
-          else
-            do
-              *(dest) = (Byte)*(dest + src);
-            while (++dest != lim);

@@ -159,9 +159,10 @@ Build wiring lives in `libarchive/build.rs`:
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
 - Every portable-C decoder stages `LzmaDec.c` and ports the assembly loop's
-  distance-1 match fill to `memset`. Clang lowers it to WebAssembly
-  `memory.fill`; native compilers use their corresponding optimized fill.
-  Other matches and the serial range decoder stay on the upstream C loop.
+  short-distance match copies: distance 1 uses `memset`, while distance 2
+  caches and copies the repeated two-byte pattern. Clang lowers the fill to
+  WebAssembly `memory.fill`; native compilers use their corresponding optimized
+  fill. Other matches and the serial range decoder stay on the upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
   assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
@@ -173,8 +174,11 @@ than the assembly port. On an arm64 native build forced onto the C decoder, a
 (4.0x), while a 128 MiB literal-heavy stream stayed effectively flat
 (66.4 ms to 64.6 ms). In the browser-WASM runner the same change improved the
 repeated-byte case from 1.055 s to 0.853 s (19%) and left the literal-heavy case
-within 2%. These are targeted microbenchmarks, not a claim that every archive
-gets faster.
+within 2%. The distance-2 path reduced a 512 MiB alternating-byte stream from
+873 ms to 310 ms on the same portable native decoder (2.8x), and a 256 MiB
+browser-WASM extraction from 2.302 s to 2.105 s (8.5%). Periodic 4 KiB,
+repeated-byte, and random-data controls stayed within run-to-run variation.
+These are targeted microbenchmarks, not a claim that every archive gets faster.
 
 ### One 7z LZMA backend policy
 

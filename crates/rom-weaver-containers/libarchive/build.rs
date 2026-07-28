@@ -60,8 +60,8 @@ const WASM_PATCH_FILES: &[&str] = &[
     "cmakelists_drop_entries.txt",
 ];
 const LZMA_SDK_PORTABLE_PATCH_FILES: &[&str] = &[
-    "lzma-dec-distance-one-copy.original.txt",
-    "lzma-dec-distance-one-copy.replacement.txt",
+    "lzma-dec-short-distance-copy.original.txt",
+    "lzma-dec-short-distance-copy.replacement.txt",
 ];
 
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
@@ -440,9 +440,9 @@ fn prepare_lzma_sdk_portable_decoder(
         .expect("failed to stage the portable LZMA SDK decoder");
     replace_file_fragment(
         &staged,
-        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-distance-one-copy.original.txt"),
-        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-distance-one-copy.replacement.txt"),
-        "portable LZMA SDK distance-1 match copy",
+        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-short-distance-copy.original.txt"),
+        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-short-distance-copy.replacement.txt"),
+        "portable LZMA SDK short-distance match copy",
     )
     .expect("failed to patch the portable LZMA SDK decoder");
     staged
@@ -466,9 +466,9 @@ fn build_lzma_sdk(
         .warnings(false)
         .extra_warnings(false);
 
-    // The assembly fills distance-1 matches a word at a time. Give every
-    // portable C target the same memset fast path while keeping the vendored
-    // SDK snapshot byte-for-byte upstream.
+    // Give every portable C target the assembly loop's fast paths for repeated
+    // short-distance matches while keeping the vendored SDK snapshot
+    // byte-for-byte upstream.
     let portable_decoder = prepare_lzma_sdk_portable_decoder(manifest_dir, source_dir, out_dir);
     for source in LZMA_SDK_CORE_SOURCES {
         if *source == "LzmaDec.c" {
