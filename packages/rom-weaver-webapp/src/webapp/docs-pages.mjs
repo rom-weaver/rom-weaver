@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
+import { createDocsSeoMetadata, SITE_ORIGIN } from "./docs-routing.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
-const SITE_ORIGIN = "https://rom-weaver.com";
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs/guides");
 
 /** @param {{ file: string }} source */
@@ -40,9 +40,7 @@ const replaceMetaContent = (html, attribute, name, content) =>
  * @param {string} channelLabel
  */
 const createDocsRouteHtml = (html, route, channel, channelLabel) => {
-  const siteName = channel === "prod" ? SITE_NAME : `${SITE_NAME} ${channelLabel}`;
-  const title = `${route.title} | ${siteName}`;
-  const canonicalUrl = `${SITE_ORIGIN}/${route.slug}`;
+  const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, channel === "prod" ? "" : channelLabel);
   const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
   const structuredData = {
     "@context": "https://schema.org",
@@ -56,15 +54,6 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   routeHtml = replaceBetween(routeHtml, /(<title>)[^<]*(<\/title>)/, title);
   routeHtml = replaceBetween(routeHtml, /(<link\s+rel="canonical"\s+href=")[^"]*(")/, canonicalUrl);
   routeHtml = routeHtml.replace(/(<meta\s+property="og:type"\s+content=")[^"]*(")/, "$1article$2");
-  /** @type {Array<[string, string, string]>} */
-  const metadata = [
-    ["name", "description", route.description],
-    ["property", "og:title", title],
-    ["property", "og:description", route.description],
-    ["property", "og:url", canonicalUrl],
-    ["name", "twitter:title", title],
-    ["name", "twitter:description", route.description],
-  ];
   for (const [attribute, name, content] of metadata) {
     routeHtml = replaceMetaContent(routeHtml, attribute, name, content);
   }

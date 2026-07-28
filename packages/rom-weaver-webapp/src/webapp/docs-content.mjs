@@ -1,4 +1,4 @@
-import { marked } from "marked";
+import { Marked, Renderer } from "marked";
 import { DOC_SOURCES } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser bundle: the client
@@ -59,7 +59,7 @@ const decodeHeadingEntities = (value) =>
   });
 
 /** @param {string} value */
-const plainHeading = (value) => decodeHeadingEntities(value.replace(/<[^>]+>/g, ""));
+const plainHeading = (value) => stripMarkdown(decodeHeadingEntities(value.replace(/<[^>]+>/g, "")));
 
 /** @param {string} value */
 const headingSlug = (value) =>
@@ -70,41 +70,27 @@ const headingSlug = (value) =>
     .replace(/\s+/g, "-");
 
 /**
- * @param {string} html
- * @returns {{ html: string, sections: DocSection[] }}
- */
-const addHeadingIds = (html) => {
-  const seen = new Map();
-  /** @type {DocSection[]} */
-  const sections = [];
-  const withIds = html.replace(/<h([1-3])>([\s\S]*?)<\/h\1>/g, (_match, level, content) => {
-    const base = headingSlug(content);
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    const id = count === 0 ? base : `${base}-${count}`;
-    if (level === "2") sections.push({ id, label: stripMarkdown(plainHeading(content)) });
-    return `<h${level} id="${id}">${content}</h${level}>`;
-  });
-  return { html: withIds, sections };
-};
-
-/**
  * Guide links are authored as repository-relative paths so the Markdown also
  * reads correctly on GitHub; the published pages rewrite them to routes. The
- * file match deliberately omits the closing quote so `patch-formats.md#ips`
- * rewrites the same way a bare `patch-formats.md` does.
+ * parser supplies the href separately, so anchored links like
+ * `patch-formats.md#ips` follow the same path as a bare file link.
  *
- * @param {string} html @param {string} slug
+ * @param {string} href @param {string} slug
  */
-const rewriteDocLinks = (html, slug) => {
-  let rewritten = html;
+const rewriteDocHref = (href, slug) => {
   for (const route of DOC_SOURCES) {
-    rewritten = rewritten.replaceAll(`href="${route.file}`, `href="/${route.slug}`);
+    if (href === route.file || href.startsWith(`${route.file}#`)) {
+      return `/${route.slug}${href.slice(route.file.length)}`;
+    }
   }
-  return rewritten
-    .replaceAll('href="#', `href="/${slug}#`)
-    .replaceAll('href="../cli.md', `href="${REPOSITORY_DOCS_URL}/cli.md`)
-    .replaceAll('href="../README.md', `href="${REPOSITORY_DOCS_URL}/README.md`);
+  if (href.startsWith("#")) return `/${slug}${href}`;
+  if (href === "../cli.md" || href.startsWith("../cli.md#")) {
+    return `${REPOSITORY_DOCS_URL}/cli.md${href.slice("../cli.md".length)}`;
+  }
+  if (href === "../README.md" || href.startsWith("../README.md#")) {
+    return `${REPOSITORY_DOCS_URL}/README.md${href.slice("../README.md".length)}`;
+  }
+  return href;
 };
 
 /**
@@ -112,9 +98,30 @@ const rewriteDocLinks = (html, slug) => {
  * @returns {{ html: string, sections: DocSection[] }}
  */
 const renderMarkdown = (markdown, slug) => {
-  const { html, sections } = addHeadingIds(marked.parse(stripDoctoc(markdown), { async: false }));
-  // `<pre>` scrolls horizontally, so it has to be keyboard reachable.
-  return { html: rewriteDocLinks(html, slug).replaceAll("<pre>", '<pre tabindex="0">'), sections };
+  const seen = new Map();
+  /** @type {DocSection[]} */
+  const sections = [];
+  const defaultRenderer = new Renderer();
+  const parser = new Marked({
+    renderer: {
+      code(token) {
+        defaultRenderer.parser = this.parser;
+        return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+      },
+      heading({ depth, text, tokens }) {
+        const base = headingSlug(text);
+        const count = seen.get(base) ?? 0;
+        seen.set(base, count + 1);
+        const id = count === 0 ? base : `${base}-${count}`;
+        if (depth === 2) sections.push({ id, label: plainHeading(text) });
+        return `<h${depth} id="${id}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+      },
+    },
+    walkTokens(token) {
+      if (token.type === "link") token.href = rewriteDocHref(token.href, slug);
+    },
+  });
+  return { html: parser.parse(stripDoctoc(markdown), { async: false }), sections };
 };
 
 /**

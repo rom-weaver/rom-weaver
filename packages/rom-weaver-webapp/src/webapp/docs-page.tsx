@@ -1,25 +1,17 @@
 import { useEffect } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { createDocsSeoMetadata } from "./docs-routing.mjs";
 import { useActiveSection } from "./use-active-section.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const syncDocsSeoMetadata = (route: (typeof DOC_ROUTES)[number]) => {
-  const siteName = CHANNEL_BADGE ? `${SITE_NAME} ${CHANNEL_BADGE}` : SITE_NAME;
-  const title = `${route.title} | ${siteName}`;
-  const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
+  const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, CHANNEL_BADGE);
   document.title = title;
-  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", route.description);
-  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute("content", title);
-  document
-    .querySelector<HTMLMetaElement>('meta[property="og:description"]')
-    ?.setAttribute("content", route.description);
+  for (const [attribute, name, content] of metadata) {
+    document.querySelector<HTMLMetaElement>(`meta[${attribute}="${name}"]`)?.setAttribute("content", content);
+  }
   document.querySelector<HTMLMetaElement>('meta[property="og:type"]')?.setAttribute("content", "article");
-  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
-  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute("content", title);
-  document
-    .querySelector<HTMLMetaElement>('meta[name="twitter:description"]')
-    ?.setAttribute("content", route.description);
   document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
 };
 

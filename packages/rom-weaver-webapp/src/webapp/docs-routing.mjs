@@ -1,3 +1,7 @@
+import { SITE_NAME } from "./workflow-seo.mjs";
+
+const SITE_ORIGIN = "https://rom-weaver.com";
+
 /**
  * @typedef {{
  *   file: string,
@@ -17,6 +21,30 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
 
+/**
+ * @param {{ description: string, slug: string, title: string }} route
+ * @param {string} [channelLabel]
+ */
+const createDocsSeoMetadata = (route, channelLabel = "") => {
+  const siteName = channelLabel ? `${SITE_NAME} ${channelLabel}` : SITE_NAME;
+  const title = `${route.title} | ${siteName}`;
+  const canonicalUrl = `${SITE_ORIGIN}/${route.slug}`;
+  /** @type {Array<[string, string, string]>} */
+  const metadata = [
+    ["name", "description", route.description],
+    ["property", "og:title", title],
+    ["property", "og:description", route.description],
+    ["property", "og:url", canonicalUrl],
+    ["name", "twitter:title", title],
+    ["name", "twitter:description", route.description],
+  ];
+  return {
+    canonicalUrl,
+    metadata,
+    title,
+  };
+};
+
 /** @param {string} pathname */
 const readDocsSlugFromPathname = (pathname) => {
   const segments = String(pathname || "")
@@ -33,4 +61,4 @@ const readDocsSlugFromPathname = (pathname) => {
   return DOC_SOURCES.some((source) => source.slug === slug) ? slug : "docs";
 };
 
-export { DOC_SOURCES, readDocsSlugFromPathname };
+export { createDocsSeoMetadata, DOC_SOURCES, readDocsSlugFromPathname, SITE_ORIGIN };

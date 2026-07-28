@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
 
 const setSeoMetadata = (title: string, description: string, canonicalUrl: string) => {
@@ -67,6 +68,34 @@ describe("DocsPage", () => {
       .map((link) => link.getAttribute("href") ?? "")
       .filter((href) => !/^https?:/.test(href) && href.includes(".md"));
     expect(unrewritten).toEqual([]);
+  });
+
+  it("renders headings, links, and code through parser hooks", () => {
+    const route = createDocRoute(
+      { file: "fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## A &amp; \`B\`
+
+[Formats](patch-formats.md#ips) and [this section](#a-and-b).
+
+## A &amp; \`B\`
+
+\`\`\`sh
+echo hi
+\`\`\`
+`,
+    );
+
+    expect(route.sections).toEqual([
+      { id: "a-and-b", label: "A and B" },
+      { id: "a-and-b-1", label: "A and B" },
+    ]);
+    expect(route.html).toContain('href="/docs/patch-formats#ips"');
+    expect(route.html).toContain('href="/docs/fixture#a-and-b"');
+    expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
   });
 
   it.each([
