@@ -1,0 +1,14 @@
+; ---------- COPY MATCH FAST ----------
+        ; Byte *dest = dic + dicPos;
+        ; mov     r1, dic
+        ; ptrdiff_t src = (ptrdiff_t)pos - (ptrdiff_t)dicPos;
+        ; sub   t0_R, dicPos
+        ; dicPos += curLen;
+
+        ; const Byte *lim = dest + curLen;
+        add     t0_R, dic
+        movzx   sym, byte ptr[t0_R]
+        add     t0_R, cnt_R
+        neg     cnt_R
+        ; lea     r1, [dicPos - 1]
+copy_common:

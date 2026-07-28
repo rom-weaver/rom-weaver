@@ -1,0 +1,96 @@
+# ---------- COPY MATCH FAST ----------
+    # t0_R : src_pos
+        p2_add  t0_R, dic
+
+        .macro COPY_MATCH_PATTERN size:req
+        cmp     rep0, \size
+        bne     .Lcopy_pattern_next\@
+        mov     t1_R, dicPos
+        p2_sub  t1_R, cnt_R
+        mov     t2, cnt
+
+        .if \size == 2
+        ldrh    t3, [t0_R]
+        .elseif \size == 3
+        ldrh    t3, [t0_R]
+        ldrb    match, [t0_R, 2]
+        .elseif \size == 4
+        ldr     t3, [t0_R]
+        .elseif \size == 5
+        ldr     t3, [t0_R]
+        ldrb    match, [t0_R, 4]
+        .elseif \size == 6
+        ldr     t3, [t0_R]
+        ldrh    match, [t0_R, 4]
+        .elseif \size == 7
+        ldr     t3, [t0_R]
+        ldrh    match, [t0_R, 4]
+        ldrb    t4, [t0_R, 6]
+        .elseif \size == 8
+        ldr     r4, [t0_R]
+        .endif
+
+.Lcopy_pattern_loop\@:
+        .if \size == 2
+        strh    t3, [t1_R]
+        .elseif \size == 3
+        strh    t3, [t1_R]
+        strb    match, [t1_R, 2]
+        .elseif \size == 4
+        str     t3, [t1_R]
+        .elseif \size == 5
+        str     t3, [t1_R]
+        strb    match, [t1_R, 4]
+        .elseif \size == 6
+        str     t3, [t1_R]
+        strh    match, [t1_R, 4]
+        .elseif \size == 7
+        str     t3, [t1_R]
+        strh    match, [t1_R, 4]
+        strb    t4, [t1_R, 6]
+        .elseif \size == 8
+        str     r4, [t1_R]
+        .endif
+        p2_add  t1_R, \size
+        sub     t2, t2, \size
+        cmp     t2, \size
+        jae     .Lcopy_pattern_loop\@
+
+        cbz     t2, .Lcopy_pattern_done\@
+        mov     t4_R, t0_R
+.Lcopy_pattern_tail\@:
+        ldrb    sym, [t4_R], 1
+        strb    sym, [t1_R], 1
+        dec_s   t2
+        jnz     .Lcopy_pattern_tail\@
+.Lcopy_pattern_done\@:
+        b       copy_match_pattern_done
+.Lcopy_pattern_next\@:
+        .endm
+
+        cmp     rep0, 2
+        jb      copy_match_pattern_fallback
+        cmp     rep0, 8
+        ja      copy_match_pattern_fallback
+        cmp     cnt, rep0
+        jb      copy_match_pattern_fallback
+        COPY_MATCH_PATTERN 2
+        COPY_MATCH_PATTERN 3
+        COPY_MATCH_PATTERN 4
+        COPY_MATCH_PATTERN 5
+        COPY_MATCH_PATTERN 6
+        COPY_MATCH_PATTERN 7
+        COPY_MATCH_PATTERN 8
+
+copy_match_pattern_done:
+        IsMatchBranch_Pre
+        ldrb    sym, [dicPos, -1]!
+        b       copy_end
+
+copy_match_pattern_fallback:
+        .purgem COPY_MATCH_PATTERN
+        ldrb    sym, [t0_R]
+        p2_add  t0_R, cnt_R
+        p1_neg  cnt_R
+
+copy_common:

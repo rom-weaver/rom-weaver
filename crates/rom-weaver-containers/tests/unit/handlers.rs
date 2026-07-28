@@ -2464,6 +2464,65 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_short_period_matches_round_trip() {
+        run_with_large_stack("seven-z-short-period-matches", || {
+            let temp_dir = temp_dir_path("seven-z-short-period-matches");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let registry = ContainerRegistry::new();
+            let handler = registry.find_by_name("7z").expect("7z handler");
+
+            // These inputs make the LZMA2 encoder emit the overlapping match
+            // distances handled by the portable, ARM64, and x86 fast loops.
+            for period in 2usize..=8 {
+                let input_path = temp_dir.join(format!("period-{period}.bin"));
+                let archive_path = temp_dir.join(format!("period-{period}.7z"));
+                let output_dir = temp_dir.join(format!("out-{period}"));
+                let source_bytes = (0..(512 * 1024))
+                    .map(|index| b'A' + (index % period) as u8)
+                    .collect::<Vec<_>>();
+                fs::write(&input_path, &source_bytes).expect("fixture");
+
+                handler
+                    .create(
+                        &ContainerCreateRequest {
+                            inputs: vec![input_path.clone()],
+                            output: archive_path.clone(),
+                            format: "7z".to_string(),
+                            codec: Some("lzma2".to_string()),
+                            level: Some(6),
+                            parent: None,
+                        },
+                        &test_context(&temp_dir, 8),
+                    )
+                    .expect("create short-period seven-z");
+
+                handler
+                    .extract(
+                        &rom_weaver_core::ContainerExtractRequest {
+                            source: archive_path,
+                            out_dir: output_dir.clone(),
+                            selections: Vec::new(),
+                            kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                            containing_archive: None,
+                            split_bin: false,
+                            ignore_common_files: false,
+                            overwrite: true,
+                            parent: None,
+                        },
+                        &test_context(&temp_dir, 8),
+                    )
+                    .expect("extract short-period seven-z");
+
+                let extracted = fs::read(output_dir.join(format!("period-{period}.bin")))
+                    .expect("read extracted");
+                assert_eq!(extracted, source_bytes, "period {period}");
+            }
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
     fn seven_z_multi_block_seeded_create_round_trips() {
         run_with_large_stack("seven-z-multi-block", || {
             let temp_dir = temp_dir_path("seven-z-multi-block");
