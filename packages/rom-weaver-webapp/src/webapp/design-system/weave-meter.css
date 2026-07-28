@@ -50,6 +50,7 @@
 .rw-app .cancel:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
 .rw-app .cancel svg { width: 14px; height: 14px; }
 .rw-app .prog-panel {
+  --lab-lh: 1.2rem;
   position: relative; display: flex; align-items: stretch;
   padding: 16px 14px; min-height: 116px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate-2);
 }
@@ -57,7 +58,6 @@
 .rw-app .prog-panel .prog { flex: 1 1 auto; justify-content: space-between; gap: var(--sp-m); }
 /* Transform preserves panel height while optically centering the bar. */
 .rw-app .prog-panel .meter { height: 14px; transform: translateY(3px); }
-.rw-app .prog-panel { --lab-lh: 1.2rem; }
 .rw-app .prog-panel .prog-actions { position: absolute; top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2); inset-inline-end: 10px; display: flex; align-items: center; gap: var(--sp-s); }
 /* Derive label space from action size to prevent overlap. */
 .rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }

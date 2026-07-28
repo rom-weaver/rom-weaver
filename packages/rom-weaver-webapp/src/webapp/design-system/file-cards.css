@@ -5,6 +5,7 @@
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-s);
   padding: var(--sp-m); border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
   animation: card-in .35s var(--ease) backwards;
+  transition: gap .16s var(--ease), border-color .15s, background .15s;
 }
 .rw-app .card:nth-child(2) { animation-delay: .05s; } .rw-app .card:nth-child(3) { animation-delay: .1s; } .rw-app .card:nth-child(4) { animation-delay: .15s; }
 .rw-app .workflow-body.quiet .card { animation: none; }
@@ -15,7 +16,7 @@
 
 /* Keep actions aligned with the name when descriptions wrap. */
 .rw-app .card-top { display: flex; align-items: flex-start; gap: var(--sp-m); min-width: 0; }
-.rw-app .card-name { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-xs); min-width: 0; }
+.rw-app .card-name { display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; gap: var(--sp-xs); min-width: 0; }
 .rw-app .card-meta { display: inline-flex; align-items: center; gap: var(--sp-s); flex: none; margin-inline-start: 0; }
 .rw-app .card-actions {
   flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-s);
@@ -49,7 +50,6 @@
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
-.rw-app .card-name { flex: 1 1 auto; min-width: 0; }
 .rw-app .nmline { display: flex; align-items: center; gap: var(--sp-s); flex-wrap: wrap; width: 100%; min-width: 0; }
 .rw-app .nm-file { flex-basis: 100%; color: var(--ink-4); font-size: .7rem; overflow-wrap: anywhere; }
 .rw-app .nm {
@@ -133,7 +133,6 @@
 .rw-app .meta-author { text-transform: none; letter-spacing: normal; font-stretch: normal; }
 .rw-app .patch-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .16s var(--ease); }
 .rw-app .patch-body-inner { min-height: 0; overflow: clip; display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .card { transition: gap .16s var(--ease), border-color .15s, background .15s; }
 /* Keep disabled patches editable while visually de-emphasizing them. */
 .rw-app .card.is-disabled { background: color-mix(in oklab, var(--plate-2) 60%, var(--chassis)); border-style: dashed; border-color: var(--seam-strong); }
 /* Desaturate instead of reducing opacity to preserve text contrast. */
@@ -151,13 +150,14 @@
 .rw-app .patch-off-note.is-ok, :root[data-theme="light"] .patch-off-note.is-ok { color: var(--verified); }
 
 .rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
-.rw-app .verdict.ok { color: var(--verified); } .rw-app .verdict.bad { color: var(--fault); }
-.rw-app .verdict svg { width: 14px; height: 14px; }
-.rw-app .verdict.ok svg { animation: pop .35s var(--ease); }
 .rw-app .verdict.ok {
+  color: var(--verified);
   text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 60%, transparent);
   text-underline-offset: 4px;
 }
+.rw-app .verdict.bad { color: var(--fault); }
+.rw-app .verdict svg { width: 14px; height: 14px; }
+.rw-app .verdict.ok svg { animation: pop .35s var(--ease); }
 
 /* Extraction tree */
 .rw-app .tree { display: flex; flex-direction: column; gap: var(--sp-2xs); padding: 4px 0 2px; }

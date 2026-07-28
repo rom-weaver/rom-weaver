@@ -1,7 +1,9 @@
 /* Dialogs */
-.dlg { border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%; }
 /* Discrete transitions keep dialogs rendered through their exit animation. */
-.dlg { transition: display .26s allow-discrete, overlay .26s allow-discrete; }
+.dlg {
+  border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%;
+  transition: display .26s allow-discrete, overlay .26s allow-discrete;
+}
 .dlg .dlg-frame { opacity: 0; transform: translateY(10px) scale(.97); transition: opacity .22s ease, transform .26s var(--ease); }
 .dlg[open] .dlg-frame { opacity: 1; transform: none; }
 .dlg::backdrop {
@@ -68,8 +70,10 @@
   .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 }
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
-.rw-app .log-filter-bar { padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
-.rw-app .log-filter-bar { display: flex; align-items: center; gap: var(--sp-s); }
+.rw-app .log-filter-bar {
+  display: flex; align-items: center; gap: var(--sp-s); padding: var(--sp-s) var(--sp-l);
+  border-block-end: 1px solid var(--seam-soft); flex: none;
+}
 .rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
 .rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
 .rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: .76rem; padding-block: 0; }
@@ -86,7 +90,8 @@
 /* Archive candidate picker */
 .rw-app .picklist { display: flex; flex-direction: column; gap: var(--sp-xs); margin-block-start: var(--sp-s); }
 .rw-app .pick-row {
-  display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-xs) var(--sp-m); cursor: pointer;
+  display: flex; align-items: flex-start; gap: var(--sp-m); padding: var(--sp-xs) var(--sp-m); cursor: pointer;
+  position: relative;
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
   transition: border-color .15s, background .15s;
 }
@@ -97,7 +102,6 @@
 .rw-app .pick-row:active { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
 .rw-app .pick-row:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
 .rw-app .pick-row.skip { opacity: .55; cursor: not-allowed; }
-.rw-app .pick-row { align-items: flex-start; position: relative; }
 /* Visually clip inputs while preserving keyboard and screen-reader behavior. */
 .rw-app .pick-row .pick-input {
   position: absolute; width: 1px; height: 1px; margin: 0; border: 0;

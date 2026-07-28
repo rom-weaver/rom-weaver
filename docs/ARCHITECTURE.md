@@ -498,8 +498,13 @@ readouts, sage verification).
 | Browser | `packages/rom-weaver-webapp/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
 
 The live app's axe-core audit runs from `packages/rom-weaver-webapp/scripts/run-webapp-e2e.mjs`
-against the actual dev-server entrypoint and covers the workflow tabs and
-Settings in both themes.
+against the served production build and covers every workflow tab plus Settings,
+candidate selection, reset confirmation, patch editing and reordering, and every
+guided Apply/Create step in both themes at desktop and mobile sizes. The
+Chromium pass also unions CSS usage across those states and enforces the
+unused-byte budget in
+`packages/rom-weaver-webapp/performance-budgets.json`; WebKit runs the same
+accessibility states without Chromium-only CSS coverage.
 
 CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`,
 typegen drift check, wasm-target checks, the full Rust test suite, the wasm

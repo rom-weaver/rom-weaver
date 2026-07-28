@@ -50,11 +50,10 @@
     .rw-app .fname .outname { padding-block: 11px 7px; }
   }
   .rw-app .runprog { min-height: 60px; padding-block: 6px 4px; }
-  .rw-app .runprog .prog { gap: var(--sp-2xs); }
+  /* Reserve the action column so cancel cannot overlap the bar. */
+  .rw-app .runprog .prog { gap: var(--sp-2xs); padding-inline-end: calc(var(--ctrl-h) + var(--sp-s)); }
   .rw-app .runprog .meter { height: 8px; transform: none; }
   .rw-app .runprog .prog-actions { top: 6px; }
-  /* Reserve the action column so cancel cannot overlap the bar. */
-  .rw-app .runprog .prog { padding-inline-end: calc(var(--ctrl-h) + var(--sp-s)); }
   .rw-app .runprog .lab { padding-inline-end: 0; }
   .rw-app .cards > .prog-panel { border-radius: var(--r-s); }
   .rw-app .step.is-input.is-empty .drop.hero { padding-inline: 0; }
@@ -80,7 +79,10 @@
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   /* Reclaim enough space for a single-line SHA-1. */
   .rw-app .ckgrp { padding-inline-start: 0; }
-  .rw-app .ck { grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto; gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; }
+  .rw-app .ck {
+    grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;
+    gap: var(--sp-2xs) var(--sp-s); min-height: 24px; padding-inline: 6px; padding-block: 1px;
+  }
   .rw-app .ck .ck-k { font-size: .72rem; }
   /* Adjust the base clamp for smaller phone controls and padding. */
   .rw-app .ck .ck-v { line-height: 1.35; font-size: clamp(.46rem, calc((100cqi - 64px) / 25.2), .97rem); }
@@ -88,7 +90,6 @@
   .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
   .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
   .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
-  .rw-app .ck { min-height: 24px; padding-block: 1px; }
   .rw-app .ck.req { column-gap: var(--sp-s); }
   .rw-app .ck.req .ck-k { font-size: .72rem; }
   /* Keep editable and read-only check columns aligned. */

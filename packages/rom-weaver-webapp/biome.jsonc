@@ -39,6 +39,9 @@
       "correctness": {
         "useExhaustiveDependencies": "error",
       },
+      "nursery": {
+        "noDuplicateSelectors": "error",
+      },
       "style": {
         "noCommonJs": "error",
         "noNegationElse": "error",

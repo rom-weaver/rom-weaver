@@ -54,6 +54,11 @@
 }
 .rw-app {
   margin: 0; min-height: 100dvh;
+  /* a TRUE monospace stack (no new font dependency) for the checks rows: every
+     glyph is one cell, so a hash's width is exactly its character count and the
+     staging shimmer (sized by char count) matches the resolved value at any
+     viewport width. */
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
   /* the empty 0x01 hero fills the first screen at every width: 100svh minus
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */
@@ -83,11 +88,6 @@
 /* mono/checksum content rides Archivo's width axis a notch tighter than the
    UI text so long hashes pack more per line without changing the typeface */
 .rw-app .mono { font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; }
-/* a TRUE monospace stack (no new font dependency) for the checks rows: every
-   glyph is one cell, so a hash's width is exactly its character count and the
-   staging shimmer (sized by char count) matches the resolved value at any
-   viewport width. */
-.rw-app { --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace; }
 .rw-app .ck { font-family: var(--mono); }
 .rw-app .ck .ck-v { letter-spacing: 0; }
 

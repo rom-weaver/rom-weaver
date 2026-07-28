@@ -489,6 +489,18 @@ check. Sizes are bytes, Lighthouse scores are 0-1, timings are milliseconds.
 The two halves run with `run-s --continue-on-error`, so a size failure still
 reports the Lighthouse table rather than hiding it.
 
+The Chromium webapp E2E pass reuses its live axe-core crawl to collect CSS
+coverage from the served production bundle. It visits the not-found page,
+Settings, every workflow, candidate selection, reset confirmation, the log
+dialog, an info popover, a codec menu, patch editing and reordering, and every
+guided Apply/Create step in both themes at desktop and mobile sizes. It unions
+the observed rules and fails when unused external stylesheet bytes exceed the
+`cssCoverage` budget. The budget is a regression ceiling, not a claim that
+unobserved rules are dead: progress, result, error, pointer-drag, update, and
+other conditional states can legitimately remain outside that crawl.
+Duplicate declarations are covered by Biome's recommended CSS rules, and
+duplicate selectors are enabled explicitly.
+
 `check-size-budget.mjs` measures raw bytes plus the bundled `.br` sidecar where
 one exists. The hashed `/assets/*` entries all have one; the HTML shell does
 not - root files deliberately stay off the sidecar path - so its Brotli column
@@ -496,8 +508,10 @@ is an estimate compressed at `assetSizes.brotliQuality`, and moves with that
 setting rather than with anything shipped.
 
 Lighthouse always audits the local build through `scripts/dev-server.mjs
-preview`, on every event, including forks. That server speaks HTTP/2, serves the
-q11 sidecars, and holds each asset in memory after the first read, which is what
+preview`, using Lighthouse's default mobile emulation, on every event, including
+forks. A Lighthouse runtime collection error gets one fresh-browser retry;
+threshold failures are never retried. The server speaks HTTP/2, serves the q11
+sidecars, and holds each asset in memory after the first read, which is what
 makes it a fair stand-in for the edge - measured against the hosted Cloudflare
 bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the
 only thing that had made a local audit look slow. Auditing the deployed preview

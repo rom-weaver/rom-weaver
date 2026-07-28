@@ -81,7 +81,8 @@ function InfoToggle({
   }, [open, portalPanel, computePanelPosition]);
 
   const panel = (
-    <div
+    <section
+      aria-label={title}
       className={cx("info-pop", panelClassName)}
       id={panelId}
       ref={panelRef}
@@ -89,7 +90,7 @@ function InfoToggle({
       style={portalPanel ? { display: "block", position: "fixed", zIndex: 80, ...panelStyle } : { display: "block" }}
     >
       {children}
-    </div>
+    </section>
   );
   let renderedPanel: ReactNode = null;
   if (open) {
