@@ -351,40 +351,56 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
-  .rw-app .docs-rails { position: static; gap: var(--sp-m); }
+  .rw-app .docs-rails { position: static; gap: var(--sp-s); }
   /* Both rails become horizontal strips here, so the switcher drops its card
      chrome and the two read as one navigation zone rather than two widgets. */
   .rw-app .guide-nav { border: 0; border-radius: 0; background: none; }
-  .rw-app .guide-nav-title { padding: 0 0 var(--sp-s); border-bottom: 0; }
-  .rw-app .guide-nav-list {
-    display: flex;
-    overflow-x: auto;
-    padding: 5px;
-    scrollbar-width: thin;
-  }
-  .rw-app .guide-nav-list li { flex: none; }
-  .rw-app .guide-nav-list a { white-space: nowrap; }
-  .rw-app .guide-nav-list { gap: var(--sp-xs); padding-inline: 0; }
-  /* the warp turns with the cloth: the rail lies along the top edge instead */
-  .rw-app .warp-rail {
-    overflow: hidden;
-    padding: var(--sp-m) 0 0;
-    border-top: 1px solid var(--seam-soft);
-  }
-  .rw-app .warp-rail-title { padding-inline-start: 0; }
+  /* the breadcrumb sitting one line above already reads ". . . / Guides" */
+  .rw-app .guide-nav-title { display: none; }
+
+  /* Shared strip behaviour. A scrollbar under each strip stacked two grey bars
+     into the first screen, so the overflow is signalled by a fade at the edge
+     the content runs past instead - a clipped label reads as "keep going"
+     rather than as a rendering fault. The trailing padding is what the last
+     item scrolls into, so nothing sits permanently under the fade. */
+  .rw-app .guide-nav-list,
   .rw-app .warp-rail-list {
     display: flex;
     overflow-x: auto;
-    gap: var(--sp-l);
-    padding-bottom: var(--sp-xs);
-    scrollbar-width: thin;
+    padding-inline: 0 2.75rem;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2.75rem), transparent);
   }
+  .rw-app .guide-nav-list::-webkit-scrollbar,
+  .rw-app .warp-rail-list::-webkit-scrollbar { display: none; }
+  .rw-app .guide-nav-list li,
+  .rw-app .warp-rail-list li { flex: none; scroll-snap-align: start; }
+
+  .rw-app .guide-nav-list { gap: var(--sp-xs); padding-block: 0; }
+  .rw-app .guide-nav-list a { white-space: nowrap; }
+  /* the warp weave reads as cloth across a full-width row; at chip width it is
+     just noise, so the current guide takes a flat dye instead */
+  .rw-app .guide-nav-list a[aria-current="page"] {
+    background: color-mix(in oklab, var(--thread) 18%, var(--well));
+  }
+
+  /* The warp turns with the cloth: the threads lie along the top edge. The
+     numbering stays on - it is what keeps the outline legible as an outline
+     next to the chips above, which are the same words in the same direction. */
+  .rw-app .warp-rail {
+    overflow: hidden;
+    padding: var(--sp-s) 0 0;
+    border-top: 1px solid var(--seam-soft);
+  }
+  .rw-app .warp-rail-title { padding: 0 0 var(--sp-xs); }
+  .rw-app .warp-rail-list { gap: var(--sp-m); padding-bottom: .4rem; }
   .rw-app .warp-rail-list::before { inset: auto 0 2px; width: auto; height: 1px; }
-  .rw-app .warp-rail-list li { flex: none; max-width: 12rem; }
+  .rw-app .warp-rail-list li { max-width: 12rem; }
   .rw-app .warp-rail-list a {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding: 0 0 .45rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .4rem;
+    padding: 0 0 .5rem;
     white-space: nowrap;
   }
   .rw-app .warp-pick {
@@ -394,7 +410,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     width: 100%;
     height: 2px;
   }
-  .rw-app .warp-index { display: none; }
 }
 
 @media (max-width: 520px) {
@@ -402,6 +417,23 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-article { padding: 22px 18px 26px; }
   .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
   .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
+  /* Commands wrap rather than scroll at this width. Scrolled sideways they cut
+     off mid-flag with nothing to say so - and these guides exist to be copied,
+     so a command that looks complete but is not is the worst thing on the page.
+     Wrapping also keeps a sideways scroller out of the middle of a page the
+     reader is scrolling down. */
+  .rw-app .docs-article pre {
+    padding: var(--sp-m);
+    overflow-x: visible;
+  }
+  /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
+     to the block, not per line, so it shifts every real line of the command as
+     well and invents nesting that is not in the source. The trailing `\` is
+     what marks a continuation here. */
+  .rw-app .docs-article pre code {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
