@@ -2,11 +2,11 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fs::{self, DirBuilder, File, OpenOptions},
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Read, Result as IoResult, Write},
     ops::Range,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU8, AtomicU64, Ordering},
         mpsc,
     },
@@ -36,7 +36,10 @@ use tracing::{debug, trace};
 use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
     attach_emitted_file_paths, attach_extraction_details,
-    constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
+    constants::{
+        LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES,
+        PARALLEL_COORDINATOR_STACK_SIZE_BYTES,
+    },
     extract_support::{
         ContainerProgressContext, ExtractChecksumTiming, ExtractHasher, ExtractTiming,
         ExtractedFileChecksum, attach_extract_checksum_details, emit_container_step_progress,
@@ -1726,6 +1729,80 @@ impl ExtractChecksumTimingSample<'_> {
     }
 }
 
+/// Recycles the buffers that carry decoded bytes from the parallel extract workers to the writer
+/// thread. Each `FileData` message used to be a fresh `to_vec` of the worker's read buffer, so a
+/// long extract churned one buffer-sized allocation per chunk. That is merely wasteful on a native
+/// allocator; on wasm the linear memory only ever grows, so the churn fragments a heap that never
+/// hands pages back. The writer returns each buffer once it has written and hashed it, so steady
+/// state allocates nothing.
+#[derive(Debug)]
+struct ExtractIoBufferPool {
+    buffers: Mutex<Vec<Vec<u8>>>,
+    buffer_bytes: usize,
+    max_buffers: usize,
+}
+
+impl ExtractIoBufferPool {
+    fn new(buffer_bytes: usize, max_buffers: usize) -> Self {
+        Self {
+            buffers: Mutex::new(Vec::new()),
+            buffer_bytes: buffer_bytes.max(1),
+            max_buffers: max_buffers.max(1),
+        }
+    }
+
+    /// A buffer of exactly `buffer_bytes`, recycled when one is idle. Ownership is what keeps a
+    /// buffer from being handed out twice: `take` pops it off the free list and only `recycle`
+    /// (which consumes the `Vec`) can put it back, so a buffer in flight is unreachable here.
+    fn take(&self) -> Vec<u8> {
+        let mut buffer = match self.buffers.lock() {
+            Ok(mut buffers) => buffers.pop().unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        // Recycled buffers come back truncated to whatever the previous read produced; resizing
+        // restores the full read window and only zeroes the regrown tail.
+        buffer.resize(self.buffer_bytes, 0);
+        buffer
+    }
+
+    fn recycle(&self, buffer: Vec<u8>) {
+        if buffer.capacity() < self.buffer_bytes {
+            return;
+        }
+        if let Ok(mut buffers) = self.buffers.lock()
+            && buffers.len() < self.max_buffers
+        {
+            buffers.push(buffer);
+        }
+    }
+}
+
+/// Read one chunk into a pooled buffer, truncated to the bytes actually read.
+///
+/// The truncation is the load-bearing part: a recycled buffer still holds the previous chunk's
+/// bytes past the read length, and sending the full window would hand the writer stale data. An
+/// empty return means end of entry, and the buffer goes straight back to the pool.
+fn read_pooled_extract_chunk<R: Read + ?Sized>(
+    pool: &ExtractIoBufferPool,
+    reader: &mut R,
+) -> IoResult<Vec<u8>> {
+    let mut buffer = pool.take();
+    match reader.read(&mut buffer) {
+        Ok(read) => {
+            buffer.truncate(read);
+            if read == 0 {
+                pool.recycle(buffer);
+                return Ok(Vec::new());
+            }
+            Ok(buffer)
+        }
+        Err(error) => {
+            pool.recycle(buffer);
+            Err(error)
+        }
+    }
+}
+
 fn send_libarchive_extract_output(
     sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
     output: LibarchiveExtractOutput,
@@ -1741,6 +1818,7 @@ fn extract_libarchive_task_chunk_to_sender(
     chunk: &[LibarchiveExtractTask],
     format_name: &str,
     sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
+    buffer_pool: &ExtractIoBufferPool,
 ) -> Result<()> {
     if chunk.is_empty() {
         return Ok(());
@@ -1802,22 +1880,21 @@ fn extract_libarchive_task_chunk_to_sender(
                         },
                         format_name,
                     )?;
-                    let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
                     loop {
-                        let read = reader.read(&mut buffer).map_err(|error| {
+                        let bytes = read_pooled_extract_chunk(buffer_pool, reader).map_err(|error| {
                                 RomWeaverError::Validation(format!(
                                     "{format_name} extract failed while reading entry {} (`{}`): {error}",
                                     task.index, task.archive_name
                                 ))
                             })?;
-                        if read == 0 {
+                        if bytes.is_empty() {
                             break;
                         }
                         send_libarchive_extract_output(
                             sender,
                             LibarchiveExtractOutput::FileData {
                                 index: task.index,
-                                bytes: buffer[..read].to_vec(),
+                                bytes,
                             },
                             format_name,
                         )?;
@@ -1981,8 +2058,16 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                 chunks = task_chunks.len(),
                 "libarchive parallel extract chunk split"
             );
-            let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(
-                bounded_items_for_threads(execution.effective_threads),
+            let inflight_items = bounded_items_for_threads(execution.effective_threads);
+            let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(inflight_items);
+            // Buffers live in one of three places: a worker filling one, the channel, or the
+            // writer. Sizing the free list to that ceiling means recycling never drops a buffer
+            // and the steady state stops allocating entirely.
+            let buffer_pool = ExtractIoBufferPool::new(
+                LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES,
+                worker_count
+                    .saturating_add(inflight_items)
+                    .saturating_add(1),
             );
             let emitted_progress_bucket = AtomicU8::new(0);
             let mut copied_bytes = 0u64;
@@ -2007,6 +2092,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                             chunk,
                                             format_name,
                                             sender,
+                                            &buffer_pool,
                                         )
                                     },
                                 )
@@ -2113,6 +2199,10 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                             if let Some(plan) = output.hasher.take_ready_variant_plan() {
                                 emit_variant_plan(context, format_name, &output.output_path, &plan);
                             }
+                            // Hand the buffer back as soon as its bytes are written and hashed; a
+                            // worker that finds the pool empty allocates instead of waiting, so
+                            // returning it early is what keeps the steady state allocation-free.
+                            buffer_pool.recycle(bytes);
                             written_bytes = written_bytes.saturating_add(delta);
                             if let Some(total_bytes) = total_file_bytes {
                                 copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
@@ -2329,6 +2419,99 @@ mod tests {
             is_dir: false,
             logical_bytes: Some(3),
         }
+    }
+
+    /// Reader that hands back a scripted sequence of chunk lengths, filling each chunk with a
+    /// distinct byte so a stale tail from a recycled buffer is immediately visible.
+    struct ScriptedReader {
+        chunks: Vec<(u8, usize)>,
+        position: usize,
+    }
+
+    impl Read for ScriptedReader {
+        fn read(&mut self, buffer: &mut [u8]) -> IoResult<usize> {
+            let Some((fill, length)) = self.chunks.get(self.position).copied() else {
+                return Ok(0);
+            };
+            self.position += 1;
+            let length = length.min(buffer.len());
+            buffer[..length].fill(fill);
+            Ok(length)
+        }
+    }
+
+    #[test]
+    fn buffer_pool_hands_out_distinct_buffers_until_they_are_returned() {
+        let pool = ExtractIoBufferPool::new(64, 4);
+        let first = pool.take();
+        let second = pool.take();
+        assert_eq!(first.len(), 64);
+        assert_eq!(second.len(), 64);
+        assert_ne!(
+            first.as_ptr(),
+            second.as_ptr(),
+            "an outstanding buffer must never be handed out a second time"
+        );
+
+        let recycled = first.as_ptr();
+        pool.recycle(first);
+        let third = pool.take();
+        assert_eq!(
+            third.as_ptr(),
+            recycled,
+            "a returned buffer should be reused"
+        );
+        assert_ne!(third.as_ptr(), second.as_ptr());
+    }
+
+    #[test]
+    fn buffer_pool_stops_retaining_past_its_ceiling() {
+        let pool = ExtractIoBufferPool::new(32, 2);
+        for _ in 0..5 {
+            pool.recycle(vec![0u8; 32]);
+        }
+        assert_eq!(pool.buffers.lock().expect("pool lock").len(), 2);
+    }
+
+    #[test]
+    fn buffer_pool_rejects_undersized_buffers() {
+        let pool = ExtractIoBufferPool::new(32, 4);
+        pool.recycle(vec![0u8; 8]);
+        assert!(pool.buffers.lock().expect("pool lock").is_empty());
+        // A short buffer that was never sized for this pool must not become a read window that
+        // silently truncates a chunk.
+        assert_eq!(pool.take().len(), 32);
+    }
+
+    #[test]
+    fn pooled_chunks_never_expose_stale_bytes_after_a_short_read() {
+        let pool = ExtractIoBufferPool::new(16, 4);
+        let mut reader = ScriptedReader {
+            chunks: vec![(0xAA, 16), (0xBB, 4)],
+            position: 0,
+        };
+
+        let full = read_pooled_extract_chunk(&pool, &mut reader).expect("full chunk");
+        assert_eq!(full, vec![0xAA; 16]);
+        pool.recycle(full);
+
+        let short = read_pooled_extract_chunk(&pool, &mut reader).expect("short chunk");
+        assert_eq!(
+            short,
+            vec![0xBB; 4],
+            "a short read must not carry the previous chunk's bytes"
+        );
+
+        let end = read_pooled_extract_chunk(&pool, &mut reader).expect("end of entry");
+        assert!(
+            end.is_empty(),
+            "end of entry is signalled by an empty chunk"
+        );
+        assert_eq!(
+            pool.buffers.lock().expect("pool lock").len(),
+            1,
+            "the end-of-entry buffer goes straight back to the pool"
+        );
     }
 
     #[test]
