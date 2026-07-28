@@ -1,5 +1,5 @@
 import { Marked, Renderer } from "marked";
-import { DOC_SOURCES } from "./docs-routing.mjs";
+import { DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser bundle: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
@@ -75,6 +75,11 @@ const headingSlug = (value) =>
  * parser supplies the href separately, so anchored links like
  * `patch-formats.md#ips` follow the same path as a bare file link.
  *
+ * Links to the app are authored against the production origin for the same
+ * reason, and come out root-relative so a page served from beta, nightly, or a
+ * PR preview keeps the reader on that deployment instead of bouncing them to
+ * production.
+ *
  * @param {string} href @param {string} slug
  */
 const rewriteDocHref = (href, slug) => {
@@ -83,6 +88,7 @@ const rewriteDocHref = (href, slug) => {
       return `/${route.slug}${href.slice(route.file.length)}`;
     }
   }
+  if (href.startsWith(`${SITE_ORIGIN}/`)) return href.slice(SITE_ORIGIN.length);
   if (href.startsWith("#")) return `/${slug}${href}`;
   if (href === "../cli.md" || href.startsWith("../cli.md#")) {
     return `${REPOSITORY_DOCS_URL}/cli.md${href.slice("../cli.md".length)}`;

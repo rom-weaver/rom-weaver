@@ -179,6 +179,11 @@ for (const route of DOC_ROUTES) {
   // been rewritten to a route or an absolute repository URL.
   const unrewritten = docsHtml.match(/href="(?!https?:)[^"]*\.md(?:#[^"]*)?"/g);
   if (unrewritten) throw new Error(`${route.slug} has unrewritten Markdown links: ${unrewritten.join(", ")}`);
+  // Guide body links to the app must be root-relative, so beta, nightly, and PR
+  // previews keep the reader on the deployment they are already reading. Only
+  // the page metadata below may name the production origin.
+  const crossChannel = route.html.match(/href="https:\/\/rom-weaver\.com[^"]*"/g);
+  if (crossChannel) throw new Error(`${route.slug} links to production: ${crossChannel.join(", ")}`);
   const minimumWords = route.slug === "docs" || legalPage ? 250 : 500;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {

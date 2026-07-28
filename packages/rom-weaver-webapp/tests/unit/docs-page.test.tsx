@@ -1,8 +1,15 @@
 // @vitest-environment happy-dom
 import { render, screen } from "@testing-library/react";
+import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
+
+const routeFor = (slug: string) => {
+  const route = DOC_ROUTES.find((entry) => entry.slug === slug);
+  if (!route) throw new Error(`no docs route for ${slug}`);
+  return route;
+};
 
 const setSeoMetadata = (title: string, description: string, canonicalUrl: string) => {
   document.title = title;
@@ -29,7 +36,7 @@ describe("DocsPage", () => {
     const { rerender } = render(<DocsPage active slug="docs" />);
     const docsTitle = document.title;
     const docsDescription = document.querySelector('meta[name="description"]')?.getAttribute("content");
-    expect(docsTitle).toMatch(/^Use rom-weaver \| rom-weaver/);
+    expect(docsTitle).toMatch(new RegExp(`^${routeFor("docs").title} \\| rom-weaver`));
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
 
     rerender(<DocsPage active={false} slug="docs" />);
@@ -68,6 +75,19 @@ describe("DocsPage", () => {
       .map((link) => link.getAttribute("href") ?? "")
       .filter((href) => !/^https?:/.test(href) && href.includes(".md"));
     expect(unrewritten).toEqual([]);
+  });
+
+  // Guides name the production origin so the Markdown reads on GitHub. A page
+  // served from beta, nightly, or a PR preview must keep the reader on that
+  // deployment, so every in-app link has to come out root-relative.
+  it.each(DOC_ROUTES.map((route) => route.slug))("links within the deployment serving %s", (slug) => {
+    render(<DocsPage active slug={slug} />);
+
+    const article = document.querySelector(".docs-article");
+    const offsite = [...(article?.querySelectorAll("a[href]") ?? [])]
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => href.startsWith("https://rom-weaver.com"));
+    expect(offsite).toEqual([]);
   });
 
   it("renders headings, links, and code through parser hooks", () => {
