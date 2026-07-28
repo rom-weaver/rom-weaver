@@ -272,6 +272,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   };
   const scanVariants = async (label) => {
     const originalTheme = await page.locator("html").getAttribute("data-theme");
+    const originalViewport = page.viewportSize();
     try {
       for (const viewport of A11Y_VIEWPORTS) {
         await page.setViewportSize(viewport);
@@ -286,6 +287,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.locator("html").evaluate((html, theme) => {
         html.dataset.theme = theme;
       }, originalTheme);
+      if (originalViewport) await page.setViewportSize(originalViewport);
     }
   };
   const installAuditTools = async () => {
