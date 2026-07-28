@@ -143,12 +143,14 @@ sizes — so the size columns are exact even though they and the time columns co
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
-The **7z tables** were re-measured in full after
-[#215](https://github.com/rom-weaver/rom-weaver/pull/215), which fixed the seeded
-parallel blocks, adopted 7-Zip's per-level dictionary sizes, and pipelined
-single-member extraction. That work trades the compress-time wins the original
-sitting recorded for output that is now smaller than 7zz's at every input size;
-the trade is discussed under [7z vs 7zz](#7z-vs-7zz).
+The **7z tables** were re-measured in full once the seeded parallel blocks,
+7-Zip's per-level dictionary sizes, and the single-member extract pipeline had
+all landed - three separate changes, measured together on one binary. The
+compress rows move with the encoder work; the extract rows move with the
+pipeline, which is why they shift even though nothing about decoding changed.
+Together they trade the compress-time wins the original sitting recorded for
+output that is now smaller than 7zz's at every input size; the trade is
+discussed under [7z vs 7zz](#7z-vs-7zz).
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished
