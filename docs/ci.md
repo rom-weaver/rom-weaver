@@ -569,7 +569,9 @@ Each build also generates Cloudflare Pages `_headers`. All channels receive the
 cross-origin isolation headers required by threaded WASM. Content-hashed
 `/assets/*` responses use a one-year immutable browser cache, while
 `cache-service-worker.js` uses `no-cache` so a deployment is discovered
-promptly. Non-production channels add their `X-Robots-Tag` in the same file.
+promptly. The `Content-Signal` header permits agent input on every channel,
+permits search use only on production, and declines AI training. Non-production
+channels add their `X-Robots-Tag` in the same file.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse

@@ -7,6 +7,15 @@
 - [Apply ROM patches](https://rom-weaver.com/weave): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
 
+## Documentation
+
+- [Documentation index](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md): Choose the guide for using, integrating, deploying, or developing rom-weaver.
+- [CLI guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli.md): Installation, commands, supported formats, compression, checksums, trimming, and JSON output.
+- [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
+- [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
+- [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
+- [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
+
 ## Project
 
-- [Source code and documentation](https://github.com/rom-weaver/rom-weaver): Installation, supported formats, documentation, and releases.
+- [Source code](https://github.com/rom-weaver/rom-weaver): Source, issues, pull requests, and releases.
