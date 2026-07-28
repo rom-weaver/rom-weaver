@@ -43,6 +43,34 @@ afterEach(async () => {
   await resetRomWeaverRunner();
 });
 
+test("reuses an in-flight warmup runner for the first operation", async () => {
+  if (!canUseSharedMemory()) return;
+
+  const runnerDiagnostics = [];
+  const diagnosticChannel = new BroadcastChannel("rom-weaver-runtime-diagnostics");
+  diagnosticChannel.addEventListener("message", ({ data }) => {
+    if (data?.context === "rom-weaver browser runner") runnerDiagnostics.push(data);
+  });
+
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const input = await stageBin(`warmup-race-${runId}`, "rom-weaver warmup fixture\n".repeat(256));
+  const output = `${WORKER_OPFS_MOUNTPOINT}/warmup-race-${runId}.zip`;
+
+  try {
+    const [, result] = await Promise.all([
+      warmupRomWeaverRunner(),
+      runRomWeaverJson({ args: { format: "zip", input: [input], output, threads: 1 }, type: "compress" }),
+    ]);
+    expectRunSucceeded(result);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(runnerDiagnostics).toHaveLength(1);
+  } finally {
+    diagnosticChannel.close();
+    await browserRuntime.vfs.remove(input).catch(() => undefined);
+    await browserRuntime.vfs.remove(output).catch(() => undefined);
+  }
+});
+
 test("runs two compress operations concurrently on separate pooled runners", async () => {
   // Concurrency requires the threaded runtime; the single-threaded fallback serializes regardless.
   if (!canUseSharedMemory()) return;
