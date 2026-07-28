@@ -10,6 +10,7 @@ publishing, and retry procedures - see the [release guide](../.github/RELEASING.
 - [The workflows at a glance](#the-workflows-at-a-glance)
 - [`ci.yml` - the required gate](#ciyml---the-required-gate)
   - [Jobs](#jobs)
+  - [Performance budgets](#performance-budgets)
   - [Tag runs](#tag-runs)
   - [Deploy channels](#deploy-channels)
 - [Shared building blocks](#shared-building-blocks)
@@ -442,30 +443,8 @@ security ── advisories (warn only, always green)
   the prebuilt module and compile no Rust. The work is split three ways so the
   parallel browser suite - the single longest webapp step - is never
   serialized behind the rest: `webapp-static` is the node-only work (build
-  script tests, lint, unit tests, vite build; no Playwright install),
-  `webapp-static` also runs the production bundle through the checked-in
-  asset-size and Lighthouse budgets. Crossing an expected value emits a warning;
-  crossing the wider maximum/minimum fails the required `Webapp` check.
-  On same-repository pull requests Lighthouse audits the deployed
-  `pr-<number>.rom-weaver-preview.pages.dev` bundle, skipping only the
-  `is-crawlable` audit that the preview's intentional `noindex` would fail.
-  The rest of the SEO category remains enabled. Other events and fork pull
-  requests audit the locally served indexable production build.
-  Both tables land in the job summary, and all three runs per route are
-  downloadable as HTML and JSON in the 14-day `lighthouse-reports` artifact,
-  including on a gate failure. Same-repository pull requests also get a
-  `Lighthouse report` commit status that mirrors the gate result and links
-  to a no-index Cloudflare Pages index with the budget results and links to
-  every detailed HTML run. Fork pull requests still get an artifact link in
-  the job summary because their read-only token cannot deploy or publish commit
-  statuses. Change the soft expected values or hard maximum/minimum values in
-  `packages/rom-weaver-webapp/performance-budgets.json`; sizes are bytes and
-  Brotli values measure the bundled sidecars, Lighthouse scores are 0-1, and
-  timings are milliseconds. Reproduce the CI environment with a production
-  WASM artifact, rebuild, then run the gates:
-  `mise run build-wasm-prod`,
-  `npm --prefix packages/rom-weaver-webapp run build`, and
-  `npm --prefix packages/rom-weaver-webapp run test:performance`.
+  script tests, lint, unit tests, vite build, performance budgets; no
+  Playwright install),
   `webapp-browser` is the parallel browser suite alone and uses Chrome from the
   Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
   (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the
@@ -499,6 +478,47 @@ security ── advisories (warn only, always green)
   `deploy` skips whenever this job reports a URL. Both share
   `.github/actions/deploy-webapp-pages` so a preview has exactly one build-and-
   publish implementation.
+
+### Performance budgets
+
+`webapp-static` runs the freshly built production bundle through the checked-in
+budgets in `packages/rom-weaver-webapp/performance-budgets.json`
+(`npm run test:performance`). Crossing an `expected` value emits a warning
+annotation; crossing the wider `maximum`/`minimum` fails the required `Webapp`
+check. Sizes are bytes, Lighthouse scores are 0-1, timings are milliseconds.
+The two halves run with `run-s --continue-on-error`, so a size failure still
+reports the Lighthouse table rather than hiding it.
+
+`check-size-budget.mjs` measures raw bytes plus the bundled `.br` sidecar where
+one exists. The hashed `/assets/*` entries all have one; the HTML shell does
+not - root files deliberately stay off the sidecar path - so its Brotli column
+is an estimate compressed at `assetSizes.brotliQuality`, and moves with that
+setting rather than with anything shipped.
+
+Lighthouse always audits the local build through `scripts/dev-server.mjs
+preview`, on every event, including forks. That server speaks HTTP/2, serves the
+q11 sidecars, and holds each asset in memory after the first read, which is what
+makes it a fair stand-in for the edge - measured against the hosted Cloudflare
+bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the
+only thing that had made a local audit look slow. Auditing the deployed preview
+instead would gate a required check on `deploy-preview-fast`, which is
+`continue-on-error: true` precisely so a Cloudflare outage cannot redden a
+build, and which is not ordered ahead of this job anyway.
+
+Both tables land in the job summary, and all three runs per route are
+downloadable as HTML and JSON from the 14-day `lighthouse-reports` artifact,
+including on a gate failure. Same-repository pull requests additionally get a
+`Lighthouse report` commit status pointing at a no-index Cloudflare Pages index
+of those runs, published to the `lighthouse-pr-<number>` branch of the
+`rom-weaver-preview` project and reaped by `cloudflare-preview-cleanup.yml` on
+the same terms as the preview itself. Fork pull requests stop at the artifact
+link, because their read-only token can neither deploy nor publish a status.
+
+Reproduce a CI run with a production WASM artifact, a rebuild, then the gates:
+`mise run build-wasm-prod`,
+`npm --prefix packages/rom-weaver-webapp run build`, and
+`npm --prefix packages/rom-weaver-webapp run test:performance`. The audit picks
+a free port unless `PORT` is set.
 
 ### Tag runs
 
@@ -558,7 +578,18 @@ dedicated-worker scripts must carry on a cross-origin-isolated page. Only
 `cache-service-worker.js`, `changelog.json`) keep their no-cache semantics
 and never route through the function. Release archives, Docker images,
 Cloudflare deployments, and local production previews now consume the same
-hashed-asset sidecars.
+hashed-asset sidecars, which is also what lets the preview server stand in for
+the edge in the performance budgets above. Two consequences of staging them
+everywhere rather than on deploys only: the release tarball carries the `.br`
+siblings (~2 MB, and no longer asserts their absence), and every bundle ships a
+`_routes.json` that only Cloudflare reads - inert but public wherever the
+bundle is self-hosted.
+
+Quality 11 on the wasm costs ~15s, which every build would otherwise repay for
+an unchanged asset, so `scripts/wasm/brotli-compress.mjs` keys its output by
+input digest and brotli parameters under `node_modules/.cache/rom-weaver-brotli`
+and verifies a hit by decompressing it before reuse. Entries unused for 14 days
+are pruned; `ROM_WEAVER_BROTLI_CACHE=0` disables the cache.
 
 Cost model: sidecar-backed URLs invoke the function, everything else stays
 on the unmetered static path, and repeat visits are covered by the immutable

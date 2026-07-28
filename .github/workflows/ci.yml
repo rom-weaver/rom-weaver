@@ -878,30 +878,12 @@ jobs:
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      - name: Resolve Lighthouse preview
-        if: >-
-          ${{ github.event_name == 'pull_request'
-          && github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          LIGHTHOUSE_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          preview_url=""
-          for _ in {1..30}; do
-            preview_url=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${LIGHTHOUSE_SHA}/statuses" \
-              --jq '[.[] | select(.context == "Webapp Deploy / preview")][0] | select(.state == "success") | .target_url // empty')
-            if [[ -n "$preview_url" ]]; then
-              break
-            fi
-            sleep 2
-          done
-          if [[ -z "$preview_url" ]]; then
-            echo "::error::The preview deployment did not become ready for Lighthouse"
-            exit 1
-          fi
-          printf 'LIGHTHOUSE_BASE_URL=%s\nLIGHTHOUSE_IGNORE_NOINDEX=true\n' "$preview_url" >> "$GITHUB_ENV"
-          echo "Lighthouse target: $preview_url"
-
+      # Audits the bundle built above, served by the repository's own preview
+      # server (HTTP/2, brotli sidecars, production cache headers), never the
+      # Cloudflare preview deployment. Gating a required check on a deploy would
+      # invert the `continue-on-error` boundary the deploy jobs are built around
+      # - a Cloudflare outage must not turn this red - and the deploy is not
+      # ordered before this job in any case.
       - name: Performance gates
         id: performance
         run: npm --prefix packages/rom-weaver-webapp run test:performance
