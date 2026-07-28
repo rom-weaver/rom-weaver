@@ -37,6 +37,40 @@ import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
+import {
+  getCreateSettingsOutputName,
+  getDefaultCompressionArchive,
+  getDefaultCompressionMode,
+  toCreateWorkflowSettings,
+  useCreateSettings,
+  useRomWeaverAssetBaseUrl,
+} from "./settings-context.tsx";
+import { routeByOrder } from "./unified-drop-routing.ts";
+import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
+import {
+  markCompressionStart,
+  usePageDropForwarder,
+  useQueuedRunEffect,
+  useWorkbenchActivity,
+  useWorkflowResetActions,
+} from "./workflow-form-effects.ts";
+import {
+  createReactWorkflowId,
+  createSettingsDependencyKey,
+  formatElapsedMs,
+  hasSourceQueueWarning,
+  isDismissibleWorkflowError,
+  mergeSettingsWithOutput,
+} from "./workflow-form-utils.ts";
+import {
+  createIndeterminateWorkflowProgress,
+  createWaitingWorkflowProgress,
+  toWorkflowFileProgressProps,
+  useActiveAbortController,
+  useDisposableWorkflowOutput,
+  useWorkflowProgressState,
+} from "./workflow-run-hooks.ts";
+import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
 const finishCreateRoleStaging = (
   role: "modified" | "original",
@@ -102,40 +136,6 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Create the patch",
   },
 ];
-import {
-  getCreateSettingsOutputName,
-  getDefaultCompressionArchive,
-  getDefaultCompressionMode,
-  toCreateWorkflowSettings,
-  useCreateSettings,
-  useRomWeaverAssetBaseUrl,
-} from "./settings-context.tsx";
-import { routeByOrder } from "./unified-drop-routing.ts";
-import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
-import {
-  markCompressionStart,
-  usePageDropForwarder,
-  useQueuedRunEffect,
-  useWorkbenchActivity,
-  useWorkflowResetActions,
-} from "./workflow-form-effects.ts";
-import {
-  createReactWorkflowId,
-  createSettingsDependencyKey,
-  formatElapsedMs,
-  hasSourceQueueWarning,
-  isDismissibleWorkflowError,
-  mergeSettingsWithOutput,
-} from "./workflow-form-utils.ts";
-import {
-  createIndeterminateWorkflowProgress,
-  createWaitingWorkflowProgress,
-  toWorkflowFileProgressProps,
-  useActiveAbortController,
-  useDisposableWorkflowOutput,
-  useWorkflowProgressState,
-} from "./workflow-run-hooks.ts";
-import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
 type InternalCreatePatchFormProps = CreatePatchFormProps & {
   createWorkflow?: typeof CreateWorkflow;
