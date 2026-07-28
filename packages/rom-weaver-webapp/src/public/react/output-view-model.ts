@@ -138,7 +138,6 @@ const getGeneratedOutputName = (
 
   const sourceFileName = getGeneratedOutputSourceFileName(inputSource, "");
   if (!sourceFileName) return "";
-  if (!patchSources.length) return sourceFileName;
 
   return generatePatchedFileName(
     sourceFileName,

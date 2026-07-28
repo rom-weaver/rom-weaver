@@ -53,6 +53,10 @@ test("browser output generation appends the patch bracket label to the rom name"
   ).toBe("Crash [big jump by foo v1.0]");
 });
 
+test("browser output generation strips an input archive extension without patches", () => {
+  expect(getGeneratedOutputName({ fileName: "Crash.zip" }, [], {})).toBe("Crash");
+});
+
 test("browser output generation prefers provided patch filenames over generated labels", () => {
   expect(
     getGeneratedOutputName(
