@@ -351,7 +351,7 @@ const createPwaServiceWorkerClient = ({
     }
 
     logServiceWorkerClient("requesting loaded service worker cache version");
-    setVersion(controllerVersion || "unknown", "Service worker is active; checking its offline cache", "ready");
+    setVersion(controllerVersion || "unknown", "Service worker is active; checking its offline cache", "active");
     const channel = new MessageChannel();
     let complete = false;
     const finish = (version?: string, title?: string) => {

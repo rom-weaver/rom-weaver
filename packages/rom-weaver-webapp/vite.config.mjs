@@ -299,12 +299,14 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 // The tab title and the iOS home-screen label are the two places the channel has
 // to show up before the bundle has even booted. Non-production deployments also
 // opt out of indexing here; the deployed response repeats the policy as a header.
-const stampChannelIdentity = (channel, channelLabel) => ({
+const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html) {
       const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
-      const stampedHtml = accent === "madder" ? html : html.replace("<html ", `<html data-accent="${accent}" `);
+      const serviceWorkerHtml = html.replace("<html ", `<html data-service-worker-enabled="${serviceWorkerEnabled}" `);
+      const stampedHtml =
+        accent === "madder" ? serviceWorkerHtml : serviceWorkerHtml.replace("<html ", `<html data-accent="${accent}" `);
       if (channel === "prod") return stampedHtml;
       return stampedHtml
         .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${channelLabel}`)
@@ -315,7 +317,14 @@ const stampChannelIdentity = (channel, channelLabel) => ({
   },
 });
 
-const PRERENDER_ROOT = (shell) => `<div id="webapp-root" aria-busy="true">${shell}</div>`;
+const PRERENDER_RUNTIME_SLOT = '<span class="masthead-runtime">· web · sw</span>';
+const PRERENDER_RUNTIME_RESOLVER =
+  "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+const PRERENDER_ROOT = (shell) =>
+  `<div id="webapp-root" aria-busy="true">${shell.replace(
+    PRERENDER_RUNTIME_SLOT,
+    `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`,
+  )}</div>`;
 
 const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
   let outDir = "dist";
@@ -551,7 +560,7 @@ const writeChangelogAsset = () => {
 // paint it as soon as the stylesheet arrives, instead of a blank page until the
 // bundle executes and React mounts. Rendered from the actual components via
 // react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
-// to drift. The client keeps createRoot and replaces the shell on first mount.
+// to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
 // Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
@@ -803,7 +812,7 @@ export default defineConfig(({ command }) => {
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(),
       deferDevHotUpdates(),
-      stampChannelIdentity(appChannel, appChannelLabel),
+      stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),

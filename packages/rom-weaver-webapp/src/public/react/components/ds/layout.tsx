@@ -11,10 +11,10 @@ const stampDroppedFiles = (files: readonly File[], atMs: number): void => {
   for (const file of files) recordDrop(file.name, atMs);
 };
 
-// False until the extension ticker has mounted once this session. The first
-// mount inherits the prerendered shell's :root --wall-clock for a seamless
-// swap; every later mount stamps the current epoch. Module-scoped so it spans
-// the ticker unmounting (hero -> compact) and remounting (reset back to hero).
+// False until the extension ticker has hydrated once this session. The retained
+// prerendered node inherits :root --wall-clock; every later mount stamps the
+// current epoch. Module-scoped so it spans the ticker unmounting (hero ->
+// compact) and remounting (reset back to hero).
 let tickerHasMounted = false;
 
 /**
@@ -145,14 +145,12 @@ const DropZone = ({
   // instead of restarting at 0. The head script in index.html seeds :root with
   // the load-time epoch, which the prerendered shell's ticker inherits.
   //
-  // The FIRST ticker mount replaces that prerendered node; leaving it on the
-  // inherited :root value keeps its animation-delay identical to the shell's,
-  // so webapp.ts's captured-phase transfer lands the swap with no jump. A later
-  // remount (tab switch back to an empty hero) has no prerendered counterpart,
-  // so stamp the current epoch to resume in real-time phase rather than snap
-  // back to the load-time position. useLayoutEffect is client-only (the shell
-  // stays deterministic) and runs before paint; keyed on the ticker's presence
-  // so plain re-renders never re-stamp.
+  // Hydration keeps the FIRST ticker and its inherited :root value, so its
+  // animation clock continues untouched. A later remount (tab switch back to an
+  // empty hero) has no prerendered counterpart, so stamp the current epoch to
+  // resume in real-time phase rather than snap back to the load-time position.
+  // useLayoutEffect is client-only and keyed on the ticker's presence, so plain
+  // re-renders never re-stamp.
   useLayoutEffect(() => {
     if (!showFormats) return;
     const lane = formatsRef.current;

@@ -214,15 +214,8 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const serviceWorkerLabel =
-    serviceWorkerStatus === "active"
-      ? "sw"
-      : serviceWorkerStatus === "ready"
-        ? "sw ok"
-        : serviceWorkerStatus
-          ? `sw ${serviceWorkerStatus}`
-          : null;
-  const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
+  const serviceWorkerLabel = serviceWorkerStatus === "off" ? "sw off" : "sw";
+  const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}`;
   const runtimeStatusTitle =
     serviceWorkerStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
@@ -267,22 +260,18 @@ const Masthead = ({
                   {threads ? (
                     <>
                       <span aria-hidden="true" className="masthead-threads-full">
-                        · {threads} {threadsLabel}
+                        {`· ${threads} ${threadsLabel}`}
                       </span>
                       <span aria-hidden="true" className="masthead-threads-short">
-                        · {threads}T
+                        {`· ${threads}T`}
                       </span>
-                      <span className="sr-only">
-                        {threads} {threadsLabel}
-                      </span>
+                      <span className="sr-only">{`${threads} ${threadsLabel}`}</span>
                     </>
                   ) : null}
                 </span>
-                {runtimeStatus ? (
-                  <span className="masthead-runtime" title={runtimeStatusTitle}>
-                    {runtimeStatus}
-                  </span>
-                ) : null}
+                <span className="masthead-runtime" title={runtimeStatusTitle}>
+                  {runtimeStatus}
+                </span>
               </span>
             ) : null}
           </span>
