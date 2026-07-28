@@ -227,9 +227,10 @@ one binary keeps the C loop. Closing it means a repo-root `Cross.toml` with a
 during `pre-build`, so it cannot call the script), which would apply to every
 `cross` leg of the release fan-out. `linux-x64-gnu`, the Docker image, and
 anything built from source with the assembler present are unaffected.
-- The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
-  directory, so the 7z sources can gate every SDK code path behind one define
-  and still build on liblzma alone if the vendor drop is absent.
+
+The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
+directory, so the 7z sources can gate every SDK code path behind one define and
+still build on liblzma alone if the vendor drop is absent.
 
 ## `nod`, inlined into `rom-weaver-containers`
 
