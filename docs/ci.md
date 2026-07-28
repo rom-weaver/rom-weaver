@@ -443,6 +443,29 @@ security ── advisories (warn only, always green)
   parallel browser suite - the single longest webapp step - is never
   serialized behind the rest: `webapp-static` is the node-only work (build
   script tests, lint, unit tests, vite build; no Playwright install),
+  `webapp-static` also runs the production bundle through the checked-in
+  asset-size and Lighthouse budgets. Crossing an expected value emits a warning;
+  crossing the wider maximum/minimum fails the required `Webapp` check.
+  On same-repository pull requests Lighthouse audits the deployed
+  `pr-<number>.rom-weaver-preview.pages.dev` bundle, skipping only the
+  `is-crawlable` audit that the preview's intentional `noindex` would fail.
+  The rest of the SEO category remains enabled. Other events and fork pull
+  requests audit the locally served indexable production build.
+  Both tables land in the job summary, and all three runs per route are
+  downloadable as HTML and JSON in the 14-day `lighthouse-reports` artifact,
+  including on a gate failure. Same-repository pull requests also get a
+  `Lighthouse report` commit status that mirrors the gate result and links
+  to a no-index Cloudflare Pages index with the budget results and links to
+  every detailed HTML run. Fork pull requests still get an artifact link in
+  the job summary because their read-only token cannot deploy or publish commit
+  statuses. Change the soft expected values or hard maximum/minimum values in
+  `packages/rom-weaver-webapp/performance-budgets.json`; sizes are bytes and
+  Brotli values measure the bundled sidecars, Lighthouse scores are 0-1, and
+  timings are milliseconds. Reproduce the CI environment with a production
+  WASM artifact, rebuild, then run the gates:
+  `mise run build-wasm-prod`,
+  `npm --prefix packages/rom-weaver-webapp run build`, and
+  `npm --prefix packages/rom-weaver-webapp run test:performance`.
   `webapp-browser` is the parallel browser suite alone and uses Chrome from the
   Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
   (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the
@@ -516,13 +539,13 @@ promptly. Non-production channels add their `X-Robots-Tag` in the same file.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
-on the wasm and ~50 KB on the main JS bundle, per cold load). Deploy builds
-therefore set `ROM_WEAVER_PAGES_BROTLI=1`, which stages the prebuilt
-`.wasm.br` sidecar next to the hashed wasm asset, compresses every other
-`/assets/*` file to a q11 sibling kept only when it saves at least 2%
-(already-compressed formats such as woff2/png fail that bar and stay
-static), and writes a `_routes.json` routing exactly the sidecar-backed URLs
-through the Pages Function in
+on the wasm and ~50 KB on the main JS bundle, per cold load). Every webapp
+build therefore stages the prebuilt `.wasm.br` sidecar next to the hashed
+wasm asset (or generates it when only a development WASM artifact is
+available), compresses every other `/assets/*` file to a q11 sibling kept
+only when it saves at least 2% (already-compressed formats such as woff2/png
+fail that bar and stay static), and writes a `_routes.json` routing exactly
+the sidecar-backed URLs through the Pages Function in
 `packages/rom-weaver-webapp/functions/assets/[name].js`. The function takes
 the content type from a headers-only probe of the static asset (no hand-kept
 extension map) and serves the sidecar bytes with `Content-Encoding: br`
@@ -533,9 +556,9 @@ and the cross-origin-isolation headers - COEP in particular, which
 dedicated-worker scripts must carry on a cross-origin-isolated page. Only
 `/assets/*` is eligible: the mutable root files (`index.html`,
 `cache-service-worker.js`, `changelog.json`) keep their no-cache semantics
-and never route through the function. Plain builds skip all of this - the
-release tarball asserts `dist` contains no compression sidecars (the Docker
-image generates its own for `static-web-server`).
+and never route through the function. Release archives, Docker images,
+Cloudflare deployments, and local production previews now consume the same
+hashed-asset sidecars.
 
 Cost model: sidecar-backed URLs invoke the function, everything else stays
 on the unmetered static path, and repeat visits are covered by the immutable

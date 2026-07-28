@@ -5,7 +5,7 @@
 // br-capable clients the exact bytes the build produced.
 //
 // The build writes a `_routes.json` scoping invocation to the URLs it staged
-// sidecars for (see writePagesBrotliSidecars in vite.config.mjs); every other
+// sidecars for (see writeBrotliSidecars in vite.config.mjs); every other
 // request stays on Pages' unmetered static path and never invokes this.
 
 const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;

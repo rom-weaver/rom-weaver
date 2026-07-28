@@ -843,6 +843,9 @@ jobs:
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -874,6 +877,95 @@ jobs:
 
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
+
+      - name: Resolve Lighthouse preview
+        if: >-
+          ${{ github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIGHTHOUSE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          preview_url=""
+          for _ in {1..30}; do
+            preview_url=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${LIGHTHOUSE_SHA}/statuses" \
+              --jq '[.[] | select(.context == "Webapp Deploy / preview")][0] | select(.state == "success") | .target_url // empty')
+            if [[ -n "$preview_url" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ -z "$preview_url" ]]; then
+            echo "::error::The preview deployment did not become ready for Lighthouse"
+            exit 1
+          fi
+          printf 'LIGHTHOUSE_BASE_URL=%s\nLIGHTHOUSE_IGNORE_NOINDEX=true\n' "$preview_url" >> "$GITHUB_ENV"
+          echo "Lighthouse target: $preview_url"
+
+      - name: Performance gates
+        id: performance
+        run: npm --prefix packages/rom-weaver-webapp run test:performance
+
+      - name: Upload Lighthouse reports
+        id: lighthouse-reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-reports
+          path: target/lighthouse
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publish Lighthouse HTML reports
+        id: lighthouse-pages
+        if: >-
+          ${{ !cancelled()
+          && steps.lighthouse-reports.outputs.artifact-url != ''
+          && github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: rom-weaver-preview
+          BRANCH: lighthouse-pr-${{ github.event.number }}
+          PAGES_COMMIT_HASH: ${{ github.event.pull_request.head.sha }}
+          PAGES_DIRECTORY: "."
+          PAGES_WORKING_DIRECTORY: target/lighthouse
+        run: node scripts/ci/deploy-pages.mjs
+
+      - name: Link Lighthouse reports in summary
+        if: ${{ !cancelled() && steps.lighthouse-reports.outputs.artifact-url != '' }}
+        env:
+          LIGHTHOUSE_REPORT_URL: ${{ steps.lighthouse-pages.outputs.url || steps.lighthouse-reports.outputs.artifact-url }}
+          LIGHTHOUSE_ARTIFACT_URL: ${{ steps.lighthouse-reports.outputs.artifact-url }}
+        run: |
+          printf '\n[Lighthouse HTML reports](%s)' "$LIGHTHOUSE_REPORT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf ' · [Download raw reports](%s)\n' "$LIGHTHOUSE_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish Lighthouse report status
+        if: >-
+          ${{ !cancelled()
+          && steps.lighthouse-pages.outputs.url != ''
+          && github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIGHTHOUSE_OUTCOME: ${{ steps.performance.outcome }}
+          LIGHTHOUSE_REPORT_URL: ${{ steps.lighthouse-pages.outputs.url }}
+          LIGHTHOUSE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          state=success
+          description="Lighthouse gates passed; open HTML reports"
+          if [[ "$LIGHTHOUSE_OUTCOME" != "success" ]]; then
+            state=failure
+            description="Lighthouse gates failed; open HTML reports"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${LIGHTHOUSE_SHA}" \
+            --field state="$state" \
+            --field context="Lighthouse report" \
+            --field description="$description" \
+            --field target_url="$LIGHTHOUSE_REPORT_URL"
 
       # Consumed by `docker-prebuilt`, so the image's release path is smoked
       # against a real bundle. Deliberately the same name, path and options as
