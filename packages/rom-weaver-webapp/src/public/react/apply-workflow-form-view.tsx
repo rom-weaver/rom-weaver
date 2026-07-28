@@ -175,32 +175,25 @@ const ApplyDropAfter = ({
 
 const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
-    body: "The bundle is unpacked. Open Files to see the exact ROM RomWeaver will change.",
-    target: "#rom-weaver-row-file-rom .cks-head",
-    title: "Inspect the base ROM",
+    body: "The ROM section keeps the file name, remove control, and computed checksums together. Add another ROM in 0x01 whenever you want to replace it.",
+    target: "#rom-weaver-row-file-rom",
+    title: "Start with the ROM",
   },
   {
-    body: "This is the untouched starting file. RomWeaver checks its identity before making any changes.",
-    title: "Base ROM found",
+    body: "These two IPS patches run in order: Hello → Modified, then World → ROM. Each card lets you edit details, reorder the chain, review checksums, and replace or remove the file.",
+    target: "#rom-weaver-row-patch-stack",
+    title: "Shape the patch stack",
   },
   {
-    body: "Now open the patch's Files drawer. The patch is the small recipe that changes the ROM.",
-    target: "#rom-weaver-row-patch-stack .cks-head",
-    title: "Find the patch",
+    body: "The compact 0x01 row stays available after setup. Drop more files anywhere on the workbench, or click the row to browse.",
+    target: "#rom-weaver-row-unified-drop",
+    title: "Add files at any time",
   },
   {
-    body: "RomWeaver keeps the patch separate from the ROM, then checks that they belong together.",
-    title: "Patch identified",
-  },
-  {
-    body: "The practice ROM and patch match. Press Weave & Download to build the changed copy in this browser.",
+    body: "Choose the output name and format, then open Options for compression, header, and bundle packaging controls. Weave when the setup looks right.",
     placement: "top",
-    target: "#rom-weaver-button-apply",
-    title: "Weave the result",
-  },
-  {
-    body: "RomWeaver is applying the patch and checking the result. When it finishes, the same button becomes your download.",
-    title: "The loom is moving",
+    target: "#rom-weaver-row-output-file-name",
+    title: "Finish at the loom",
   },
 ];
 
@@ -1598,7 +1591,7 @@ function ApplyWorkflowFormView({
 
       {sampleTutorialActive ? (
         <SampleTutorial
-          loadingBody="RomWeaver is unpacking one tiny ROM and one patch, then checking what each file is."
+          loadingBody="RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is."
           onClose={() => setSampleTutorialActive(false)}
           ready={sampleTutorialReady}
           steps={APPLY_SAMPLE_TUTORIAL_STEPS}

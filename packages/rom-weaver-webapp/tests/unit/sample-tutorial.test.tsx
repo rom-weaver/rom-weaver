@@ -4,39 +4,32 @@ import { describe, expect, it, vi } from "vitest";
 import { SampleTutorial, type SampleTutorialStep } from "../../src/public/react/components/ds/sample-tutorial.tsx";
 
 const STEPS: readonly SampleTutorialStep[] = [
-  { body: "Open the first control.", target: "#tutorial-first", title: "First move" },
-  { body: "The first control is open.", title: "First result" },
-  { body: "Open the second control.", target: "#tutorial-second", title: "Second move" },
-  { body: "The tutorial is complete.", title: "Finished" },
+  { body: "Review the first section.", target: "#tutorial-first", title: "First section" },
+  { body: "Review the second section.", target: "#tutorial-second", title: "Second section" },
 ];
 
 describe("sample tutorial", () => {
-  it("advances from real target clicks through dialog prompts", async () => {
+  it("highlights live sections while progression stays in the guide", async () => {
     const onClose = vi.fn();
     render(
       <div className="rw-app">
-        <button id="tutorial-first" type="button">
-          First
-        </button>
-        <button id="tutorial-second" type="button">
-          Second
-        </button>
+        <section id="tutorial-first">First</section>
+        <section id="tutorial-second">Second</section>
         <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={STEPS} />
       </div>,
     );
 
-    const first = screen.getByRole("button", { name: "First" });
+    const first = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
     fireEvent.click(first);
-
-    expect(screen.getByRole("heading", { name: "First result" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    const second = screen.getByRole("button", { name: "Second" });
+    const second = document.querySelector("#tutorial-second") as HTMLElement;
     await waitFor(() => expect(second.classList.contains("sample-tutorial-target")).toBe(true));
-    fireEvent.click(second);
+    expect(first.classList.contains("sample-tutorial-target")).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Finish tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

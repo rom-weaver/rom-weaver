@@ -165,7 +165,7 @@ patch from an original and a modified file. Your files are processed locally
 and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
 New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
-with a tiny original homebrew NES ROM that changes “HELLO WORLD” to “MODIFIED WORLD.”
+with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD” to “MODIFIED ROM.”
 
 <a name="self-host-the-webapp"></a>
 

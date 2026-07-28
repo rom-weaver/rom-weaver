@@ -59,32 +59,25 @@ const CREATE_SAMPLE_ASSETS = [
 ] as const;
 const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
-    body: "Open Checks on Original. These fingerprints identify the untouched starting ROM.",
-    target: "#patch-builder-row-original .cks-head",
-    title: "Check the original",
+    body: "The Original section keeps the starting file's name, remove control, and checksums together. Add another original in 0x01 to replace it.",
+    target: "#patch-builder-row-original",
+    title: "Start with the original",
   },
   {
-    body: "The original is the clean starting point. A patch must know exactly which file it expects.",
-    title: "Starting point locked",
+    body: "Modified is the version you want to reproduce. Its name, remove control, and checksums stay together here, and Swap fixes the order in one click.",
+    target: "#patch-builder-row-modified",
+    title: "Compare the modified ROM",
   },
   {
-    body: "Open Checks on Modified. Its different fingerprints identify the edited version.",
-    target: "#patch-builder-row-modified .cks-head",
-    title: "Check the modified ROM",
+    body: "The compact 0x01 row stays available after setup. Drop replacements anywhere on the workbench, or click the row to browse.",
+    target: "#patch-builder-row-unified-drop",
+    title: "Replace files at any time",
   },
   {
-    body: "RomWeaver now has the before and after files. It can compare them without uploading either one.",
-    title: "Both versions found",
-  },
-  {
-    body: "Press Create & Download Patch. RomWeaver will save the differences, not another copy of the ROM.",
+    body: "Choose the patch name and format, then open Options for archive and compression controls. Create when the setup looks right.",
     placement: "top",
-    target: "#patch-builder-button-create",
-    title: "Create the patch",
-  },
-  {
-    body: "RomWeaver is comparing both ROMs and packaging only the changes. When it finishes, the patch downloads.",
-    title: "Patch forge started",
+    target: "#patch-builder-row-output",
+    title: "Finish with the patch",
   },
 ];
 import {
@@ -977,6 +970,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       format: patchType,
       formatId: "patch-builder-select-patch-type",
       formatOptions: patchFormatOptions,
+      id: "patch-builder-row-output",
       info: (
         <InfoPopover title="Output options">
           <strong>Output</strong>

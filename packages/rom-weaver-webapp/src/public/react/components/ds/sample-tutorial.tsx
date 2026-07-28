@@ -23,7 +23,7 @@ const SampleTutorialStart = ({
     <span>New here?</span>
     <button aria-busy={loading} className="btn ghost slim" disabled={loading} onClick={onStart} type="button">
       <span aria-hidden="true" className="sample-tutorial-start-beacon">
-        !
+        0x
       </span>
       {loading ? "Loading practice files…" : label}
     </button>
@@ -43,7 +43,6 @@ const SampleTutorial = ({
   steps: readonly SampleTutorialStep[];
 }) => {
   const bodyId = useId();
-  const dialogId = useId();
   const titleId = useId();
   const [stepIndex, setStepIndex] = useState(0);
   const step = steps[stepIndex];
@@ -64,7 +63,6 @@ const SampleTutorial = ({
     let previousDescription: string | null = null;
     let observer: MutationObserver | null = null;
     let frame = 0;
-    const advance = () => setStepIndex((current) => Math.min(current + 1, steps.length - 1));
     const connect = () => {
       if (target) return true;
       target = document.querySelector<HTMLElement>(targetSelector);
@@ -74,10 +72,8 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
-      target.addEventListener("click", advance, { once: true });
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
-      target.focus({ preventScroll: true });
       return true;
     };
     frame = window.requestAnimationFrame(() => {
@@ -91,7 +87,6 @@ const SampleTutorial = ({
     return () => {
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
-      target?.removeEventListener("click", advance);
       target?.classList.remove("sample-tutorial-target");
       stage?.classList.remove("sample-tutorial-stage");
       if (target) {
@@ -99,7 +94,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, ready, step, steps.length]);
+  }, [bodyId, ready, step]);
 
   if (typeof document === "undefined" || !step) return null;
   const finalStep = ready && stepIndex === steps.length - 1;
@@ -108,28 +103,25 @@ const SampleTutorial = ({
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
       <aside
+        aria-describedby={bodyId}
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
         data-placement={ready ? (step.placement ?? "bottom") : "bottom"}
-        id={dialogId}
         role="dialog"
       >
         <span aria-hidden="true" className="sample-tutorial-beacon">
-          !
+          0x
         </span>
         <div aria-live="polite" className="sample-tutorial-copy" key={copyKey}>
           <span className="sample-tutorial-kicker mono">
-            {ready ? `Practice quest · ${stepIndex + 1}/${steps.length}` : "Reading cartridge…"}
+            {ready ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
           </span>
           <h2 id={titleId}>{ready ? step.title : "Loading the practice files"}</h2>
           <p id={bodyId}>{ready ? step.body : loadingBody}</p>
-          {ready && step.target ? (
-            <span className="sample-tutorial-command mono">Click the blinking control ↑</span>
-          ) : null}
         </div>
         <div className="sample-tutorial-actions">
-          {ready && !step.target ? (
+          {ready ? (
             <button
               className="btn primary slim"
               onClick={() => {
@@ -138,11 +130,11 @@ const SampleTutorial = ({
               }}
               type="button"
             >
-              {finalStep ? "Finish tutorial" : "Continue"}
+              {finalStep ? "Done" : "Continue"}
             </button>
           ) : null}
           <button className="btn ghost slim" onClick={onClose} type="button">
-            End tutorial
+            End guide
           </button>
         </div>
       </aside>

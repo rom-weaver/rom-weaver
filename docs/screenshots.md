@@ -51,6 +51,6 @@
 
 ## Sample ROMs
 
-| Original ROM | Patched ROM |
+| Original ROM | After the first patch |
 | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The patched sample ROM displaying MODIFIED WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
