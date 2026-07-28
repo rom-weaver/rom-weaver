@@ -84,7 +84,7 @@ test("removing a patch refreshes generated output name", async () => {
   if (!(removePatchButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");
   removePatchButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.bin");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 });
 
 test("removing an input refreshes generated output name", async () => {
@@ -132,13 +132,13 @@ test("removing an input refreshes generated output name", async () => {
       timeout: 30000,
     })
     .toBe(2);
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.bin");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 
   const removeInputButton = document.querySelector("button[aria-label='Remove ROM input']");
   if (!(removeInputButton instanceof HTMLButtonElement)) throw new Error("Missing remove ROM input button");
   removeInputButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second.bin");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second");
 });
 
 test("editing output name after download is ready keeps the prepared output", async () => {
