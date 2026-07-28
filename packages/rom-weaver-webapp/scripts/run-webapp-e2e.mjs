@@ -296,17 +296,37 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // The guides are served as their own prerendered documents, so each one is
     // loaded for real rather than switched to in-app: that is the only way a
     // hydration mismatch against the served HTML shows up as a page error.
+    let retargetedSamples = 0;
     for (const slug of DOCS_ROUTES) {
       await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
       await armPage();
       const headings = await page.locator("h1").count();
       if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
+      // This origin is not production, so once the page is live every sample
+      // download has to have moved to it. The served HTML still names
+      // production, which is the right answer for a crawler but the wrong one
+      // for anyone copying a command out of a beta or preview deployment.
+      await page.waitForFunction(() => !document.getElementById("webapp-root")?.hasAttribute("aria-busy"));
+      const samples = await page.evaluate(() => {
+        const blocks = [...document.querySelectorAll(".docs-article pre code")].map((block) => block.textContent || "");
+        return {
+          local: blocks.filter((text) => text.includes(location.origin)).length,
+          production: blocks.filter((text) => text.includes("https://rom-weaver.com")).length,
+        };
+      });
+      if (samples.production)
+        throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+      retargetedSamples += samples.local;
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
         await scanLiveApp(page, `${slug} (${theme})`);
       }
     }
+    // Without this the checks above pass just as happily when the swap stops
+    // running and no guide offers a sample download at all.
+    if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
+    process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
     if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
   } finally {
     await context.close();

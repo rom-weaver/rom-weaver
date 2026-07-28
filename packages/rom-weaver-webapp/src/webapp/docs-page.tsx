@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata } from "./docs-routing.mjs";
+import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useActiveSection } from "./use-active-section.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
@@ -49,10 +51,18 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const route = findDocsRoute(slug);
   const hub = route.slug === "docs";
   const activeId = useActiveSection(route.sections, active);
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  // Starts on the base the guides are authored against, which is what the
+  // served document was rendered with, so hydration has nothing to reconcile.
+  // The deployment's own base applies after mount, and only re-renders the
+  // guides where the two differ.
+  const [sampleBase, setSampleBase] = useState(AUTHORED_SAMPLE_BASE);
+  const html = useMemo(() => retargetSampleUrls(route.html, sampleBase), [route, sampleBase]);
   useEffect(() => {
     if (!active) return;
     syncDocsSeoMetadata(route);
   }, [active, route]);
+  useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
   return (
     <div className="docs-workbench" id="main">
       <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
@@ -91,7 +101,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             // Committed repository Markdown, rendered to HTML at build time by
             // the same parser that feeds the prerendered page.
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
-            dangerouslySetInnerHTML={{ __html: route.html }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
           <aside className="docs-cta">
             <div>
