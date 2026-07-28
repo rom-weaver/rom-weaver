@@ -176,14 +176,18 @@ const webappController = createWebappRootController({
 applySettingsToRuntime(webappController.getState().settings);
 logger.info("Browser environment", collectBrowserInfo());
 
-// The landing tab's workflow form is its own chunk. Start it here, at module
-// evaluation, so it downloads while the boot yield below lets the prerendered
-// shell paint; the first mount then renders the real form synchronously instead
-// of committing a Suspense fallback over the shell the browser just painted.
-// A failed load resolves anyway - the route's Suspense boundary owns the error.
+// The landing tab's workflow form is its own chunk. Start it at module
+// evaluation, then wait for it before hydration so React does not commit a
+// Suspense fallback over the prerendered form. A failed load resolves anyway -
+// the route's Suspense boundary owns the error.
 const initialWorkflowRoute = isNotFoundPage
   ? Promise.resolve()
   : preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
+let initialWorkflowRouteReady = false;
+void initialWorkflowRoute.then(() => {
+  initialWorkflowRouteReady = true;
+  renderWebappRoot();
+});
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
@@ -311,28 +315,11 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
-// Give the prerendered shell a rendering opportunity before hydration starts.
-// Renders requested while waiting coalesce into the deferred first mount.
-let firstMountYield: "pending" | "scheduled" | "done" = "pending";
-
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
   if (serviceWorkerBootGate.isGated()) return undefined;
-  if (firstMountYield !== "done") {
-    if (firstMountYield === "pending") {
-      firstMountYield = "scheduled";
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          void initialWorkflowRoute.then(() => {
-            firstMountYield = "done";
-            renderWebappRoot();
-          });
-        }, 0);
-      });
-    }
-    return undefined;
-  }
+  if (!initialWorkflowRouteReady) return undefined;
   if (appRootHydrating) {
     renderQueuedWhileHydrating = true;
     return undefined;

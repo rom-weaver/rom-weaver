@@ -2,8 +2,8 @@
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 /* The prerendered boot shell (aria-busy until React mounts) must paint with its
-   panel settled while its ambient loops keep moving. The remount carries those
-   loops forward and fast-forwards entry animations before it paints. */
+   panel settled while its ambient loops keep moving. Hydration preserves those
+   loops, then the first client layout fast-forwards entry animations. */
 #webapp-root[aria-busy="true"] .workflow-body { animation: none !important; }
 #webapp-root[aria-busy="true"] .tool { background: transparent; border-color: transparent; transition: none; }
 /* base scale - bumped up (text read a touch small) but still responsive so it

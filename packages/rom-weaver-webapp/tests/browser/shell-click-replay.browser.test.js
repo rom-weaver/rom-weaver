@@ -1,9 +1,9 @@
 /**
  * The prerendered landing shell is clickable before React's first mount gives it
  * any handler, so those clicks are buffered by an inline script in index.html and
- * re-issued once the mounted tree exists. These tests stand in for that inline
- * script (same buffer shape), swap the shell for a "mounted" copy carrying real
- * listeners, and assert what does and does not get replayed.
+ * re-issued once the hydrated tree has handlers. These tests stand in for that
+ * inline script (same buffer shape), attach listeners to the retained shell
+ * nodes, and assert what does and does not get replayed.
  */
 
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -41,9 +41,8 @@ const installCaptureBuffer = () => {
   return buffer;
 };
 
-// React's first render: identical markup, brand new nodes - these ones listening.
-const remountShell = () => {
-  appRoot.innerHTML = SHELL_MARKUP;
+// React hydration: the existing shell nodes gain handlers in place.
+const hydrateShell = () => {
   for (const element of appRoot.querySelectorAll("button, label")) {
     element.addEventListener("click", () => {
       clicked.push(element.getAttribute("aria-label") || element.id || element.textContent.trim());
@@ -66,30 +65,22 @@ afterEach(() => {
   appRoot.remove();
 });
 
-test("replays a pre-mount click on a button identified by its accessible name", () => {
-  appRoot.querySelector('[aria-label="Settings"] .tool-text').click();
+test("replays a pre-mount click on its retained hydrated button", () => {
+  const settings = appRoot.querySelector('[aria-label="Settings"]');
+  settings.querySelector(".tool-text").click();
 
   captureShellClicks();
-  remountShell();
-  // The regression this guards: the shell node that was clicked no longer exists.
+  hydrateShell();
+  expect(appRoot.querySelector('[aria-label="Settings"]')).toBe(settings);
   expect(clicked).toEqual([]);
 
   replayShellClicks(appRoot);
   expect(clicked).toEqual(["Settings"]);
 });
 
-test("replays a pre-mount click resolved by id", () => {
-  appRoot.querySelector("#rom-weaver-button-reset").click();
-  captureShellClicks();
-  remountShell();
-  replayShellClicks(appRoot);
-
-  expect(clicked).toEqual(["rom-weaver-button-reset"]);
-});
-
 test("stops capturing at the drain so a post-mount click is never doubled", () => {
   captureShellClicks();
-  remountShell();
+  hydrateShell();
   appRoot.querySelector('[aria-label="Settings"]').click();
   replayShellClicks(appRoot);
 
@@ -100,7 +91,7 @@ test("stops capturing at the drain so a post-mount click is never doubled", () =
 test("replays only once even if the mount runs again", () => {
   appRoot.querySelector('[aria-label="Settings"]').click();
   captureShellClicks();
-  remountShell();
+  hydrateShell();
   replayShellClicks(appRoot);
   replayShellClicks(appRoot);
 
@@ -110,16 +101,7 @@ test("replays only once even if the mount runs again", () => {
 test("drops clicks on gesture-gated targets the browser would block anyway", () => {
   appRoot.querySelector(".drop.hero").click();
   captureShellClicks();
-  remountShell();
-  replayShellClicks(appRoot);
-
-  expect(clicked).toEqual([]);
-});
-
-test("drops a click whose target is ambiguous in the mounted tree", () => {
-  appRoot.querySelectorAll(".ghost")[1].click();
-  captureShellClicks();
-  remountShell();
+  hydrateShell();
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual([]);
@@ -128,7 +110,7 @@ test("drops a click whose target is ambiguous in the mounted tree", () => {
 test("drops clicks on inert chrome", () => {
   appRoot.querySelector(".masthead-threads").click();
   captureShellClicks();
-  remountShell();
+  hydrateShell();
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual([]);
@@ -138,7 +120,7 @@ test("drops clicks that landed too long before the mount", () => {
   appRoot.querySelector('[aria-label="Settings"]').click();
   window.ROM_WEAVER_SHELL_CLICKS.clicks[0].time -= 60_000;
   captureShellClicks();
-  remountShell();
+  hydrateShell();
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual([]);
@@ -149,7 +131,8 @@ test("does not replay onto a target the mount left disabled", () => {
   weave.removeAttribute("disabled");
   weave.click();
   captureShellClicks();
-  remountShell();
+  weave.setAttribute("disabled", "");
+  hydrateShell();
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual([]);
@@ -160,7 +143,7 @@ test("caps how many pre-mount clicks are replayed", () => {
   appRoot.querySelector('[role="tab"]').click();
   appRoot.querySelector('[aria-label="Settings"]').click();
   captureShellClicks();
-  remountShell();
+  hydrateShell();
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual(["rom-weaver-button-reset", "Create"]);

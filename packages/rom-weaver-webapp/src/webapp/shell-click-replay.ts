@@ -12,10 +12,8 @@ import { createLogger } from "../lib/logging.ts";
  * So a tiny inline script in index.html (the earliest hook there is - the bundle
  * is a module and only runs after the HTML is parsed) buffers those clicks, and
  * this module drains the buffer just before hydration, then re-issues each one
- * against the interactive tree. Capture stops at that drain, so
- * a real post-mount click is never double-fired. Targets are re-found by id, or
- * by tag + role + accessible name, and anything that does not resolve to exactly
- * one mounted node is dropped - a wrong replay is far worse than a missed one.
+ * against the same DOM node once React's handlers are attached. Capture stops at
+ * that drain, so a real post-mount click is never double-fired.
  */
 
 const logger = createLogger("shell-click-replay");
@@ -23,9 +21,6 @@ const logger = createLogger("shell-click-replay");
 // A click older than this predates whatever the user is looking at now.
 const MAX_REPLAY_AGE_MS = 3000;
 const MAX_REPLAYED_CLICKS = 2;
-// Accessible names are compared verbatim, so cap them rather than carry an
-// entire pane's text content around.
-const MAX_NAME_LENGTH = 120;
 
 const INTERACTIVE_SELECTOR = [
   "a[href]",
@@ -49,17 +44,9 @@ const INTERACTIVE_SELECTOR = [
 // downloads. These keep the pre-fix behaviour: the click is simply dropped.
 const GESTURE_GATED_SELECTOR = 'input[type="file"], a[download], a[target="_blank"]';
 
-type ShellClickTarget = { id: string; name: string; role: string; tag: string };
-
 type ShellClickBuffer = { clicks: { target: EventTarget | null; time: number }[]; stop: () => void };
 
-let pending: ShellClickTarget[] = [];
-
-const accessibleName = (element: Element) =>
-  (element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_NAME_LENGTH);
+let pending: HTMLElement[] = [];
 
 const isGestureGated = (element: Element) => {
   if (element.matches(GESTURE_GATED_SELECTOR) || element.querySelector(GESTURE_GATED_SELECTOR)) return true;
@@ -71,39 +58,18 @@ const isGestureGated = (element: Element) => {
 const isDisabled = (element: Element) =>
   element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
 
-const describeClickTarget = (target: EventTarget | null): ShellClickTarget | null => {
+const interactiveTarget = (target: EventTarget | null): HTMLElement | null => {
   const element = target instanceof Element ? target.closest(INTERACTIVE_SELECTOR) : null;
-  if (!element) return null;
+  if (!(element instanceof HTMLElement)) return null;
   if (isGestureGated(element)) {
     logger.trace("Dropped a pre-mount click on a gesture-gated target", { tag: element.tagName });
     return null;
   }
-  return {
-    id: element.id,
-    name: accessibleName(element),
-    role: element.getAttribute("role") || "",
-    tag: element.tagName,
-  };
-};
-
-const isSameTarget = (element: Element, target: ShellClickTarget) =>
-  element.tagName === target.tag &&
-  (element.getAttribute("role") || "") === target.role &&
-  accessibleName(element) === target.name;
-
-const resolveTarget = (appRootElement: HTMLElement, target: ShellClickTarget): HTMLElement | null => {
-  const candidates = Array.from(appRootElement.querySelectorAll(INTERACTIVE_SELECTOR)).filter(
-    (element): element is HTMLElement =>
-      element instanceof HTMLElement &&
-      !isDisabled(element) &&
-      !isGestureGated(element) &&
-      (target.id ? element.id === target.id : isSameTarget(element, target)),
-  );
-  return candidates.length === 1 ? (candidates[0] ?? null) : null;
+  return element;
 };
 
 /**
- * Drains the inline buffer into resolvable descriptors and stops capturing.
+ * Drains the inline buffer into retained shell nodes and stops capturing.
  * Call once, immediately before hydration begins.
  */
 const captureShellClicks = () => {
@@ -113,8 +79,8 @@ const captureShellClicks = () => {
   const now = Date.now();
   pending = buffer.clicks
     .filter((click) => now - click.time <= MAX_REPLAY_AGE_MS)
-    .map((click) => describeClickTarget(click.target))
-    .filter((target): target is ShellClickTarget => !!target)
+    .map((click) => interactiveTarget(click.target))
+    .filter((target): target is HTMLElement => !!target)
     .slice(0, MAX_REPLAYED_CLICKS);
   buffer.clicks.length = 0;
   if (pending.length) logger.debug("Captured clicks that landed before the first mount", { count: pending.length });
@@ -124,13 +90,13 @@ const captureShellClicks = () => {
 const replayShellClicks = (appRootElement: HTMLElement) => {
   const targets = pending;
   pending = [];
-  for (const target of targets) {
-    const element = resolveTarget(appRootElement, target);
-    if (!element) {
-      logger.debug("Dropped a pre-mount click with no unique mounted target", target);
+  for (const element of targets) {
+    const details = { id: element.id, tag: element.tagName };
+    if (!(appRootElement.contains(element) && !isDisabled(element) && !isGestureGated(element))) {
+      logger.debug("Dropped a pre-mount click whose hydrated target is unavailable", details);
       continue;
     }
-    logger.debug("Replaying a click that landed before the first mount", target);
+    logger.debug("Replaying a click that landed before the first mount", details);
     element.click();
   }
 };

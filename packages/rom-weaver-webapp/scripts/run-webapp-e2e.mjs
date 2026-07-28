@@ -26,6 +26,12 @@ const A11Y_ONLY = process.argv.includes("--a11y");
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
+const HYDRATION_SETTINGS = JSON.stringify({
+  apply: { compression: { threads: 3 } },
+  common: { betaToolsEnabled: true },
+  create: { compression: { threads: 3 } },
+  version: 5,
+});
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -79,6 +85,141 @@ const requestStatus = (url) =>
     });
     request.on("error", reject);
   });
+
+const runHydrationAudit = async (createContext, baseUrl) => {
+  const context = await createContext({ ignoreHTTPSErrors: true });
+  await context.addInitScript((settings) => {
+    localStorage.setItem("rom-weaver-settings", settings);
+    localStorage.setItem("rom-weaver-theme", "light");
+    Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: undefined });
+    const audit = {
+      identityResolved: false,
+      initialTheme: "",
+      initialView: "",
+      runtime: null,
+      runtimeTexts: [],
+      threads: null,
+      threadTexts: [],
+    };
+    window.__romWeaverHydrationAudit = audit;
+    const sample = () => {
+      const active = document.querySelector('[role="tab"][aria-selected="true"]');
+      if (!audit.initialView && active) audit.initialView = active.getAttribute("data-mode") || "";
+      if (!audit.identityResolved) return;
+      const threads = document.querySelector(".masthead-threads");
+      const runtime = document.querySelector(".masthead-runtime");
+      if (!(threads && runtime)) return;
+      if (!audit.threads) {
+        audit.threads = threads;
+        audit.runtime = runtime;
+        audit.initialTheme = document.documentElement.dataset.theme || "";
+      }
+      const threadText = threads.textContent || "";
+      const runtimeText = runtime.textContent || "";
+      if (audit.threadTexts.at(-1) !== threadText) audit.threadTexts.push(threadText);
+      if (audit.runtimeTexts.at(-1) !== runtimeText) audit.runtimeTexts.push(runtimeText);
+    };
+    let resolveShellIdentity;
+    Object.defineProperty(window, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY", {
+      configurable: true,
+      get: () => resolveShellIdentity,
+      set: (resolver) => {
+        resolveShellIdentity = (...args) => {
+          const result = resolver(...args);
+          audit.identityResolved = true;
+          sample();
+          return result;
+        };
+      },
+    });
+    new MutationObserver(sample).observe(document, { characterData: true, childList: true, subtree: true });
+    sample();
+  }, HYDRATION_SETTINGS);
+
+  try {
+    for (const testCase of [
+      { finalView: "patcher", initialView: "patcher", path: "weave/", replayClick: true },
+      { finalView: "creator", initialView: "creator", path: "create/" },
+      { finalView: "trim", initialView: "patcher", path: "trim/" },
+    ]) {
+      const page = await context.newPage();
+      const failures = [];
+      page.on("console", (message) => {
+        if (message.type() === "error") failures.push(message.text());
+      });
+      page.on("pageerror", (error) => failures.push(error.stack || error.message));
+
+      let releaseScripts = () => undefined;
+      if (testCase.replayClick) {
+        let release;
+        const scriptsReleased = new Promise((resolve) => {
+          release = resolve;
+        });
+        releaseScripts = release;
+        await page.route(/\/assets\/.*\.js(?:\?.*)?$/, async (route) => {
+          await scriptsReleased;
+          await route.continue();
+        });
+      }
+
+      try {
+        const navigation = page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "domcontentloaded" });
+        if (testCase.replayClick) {
+          const settings = page.getByRole("button", { name: "Settings" });
+          await settings.waitFor({ state: "visible" });
+          await settings.click();
+          releaseScripts();
+        }
+        await navigation;
+        await page.waitForFunction((expectedView) => {
+          const root = document.getElementById("webapp-root");
+          const active = document.querySelector('[role="tab"][aria-selected="true"]');
+          return !root?.hasAttribute("aria-busy") && active?.getAttribute("data-mode") === expectedView;
+        }, testCase.finalView);
+        if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
+        await page.evaluate(
+          () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        );
+
+        const result = await page.evaluate(() => {
+          const audit = window.__romWeaverHydrationAudit;
+          return {
+            finalTheme: document.documentElement.dataset.theme || "",
+            finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
+            initialTheme: audit.initialTheme,
+            initialView: audit.initialView,
+            runtimeRetained: document.querySelector(".masthead-runtime") === audit.runtime,
+            runtimeTexts: audit.runtimeTexts,
+            threadRetained: document.querySelector(".masthead-threads") === audit.threads,
+            threadTexts: audit.threadTexts,
+          };
+        });
+        const problems = [];
+        if (!result.threadRetained) problems.push("thread node was replaced");
+        if (!result.runtimeRetained) problems.push("runtime node was replaced");
+        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 threads"))
+          problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
+        if (result.runtimeTexts.length !== 1 || !result.runtimeTexts[0]?.includes("web · sw off"))
+          problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
+        if (result.initialTheme !== "light" || result.finalTheme !== "light")
+          problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);
+        if (result.initialView !== testCase.initialView || result.finalView !== testCase.finalView)
+          problems.push(`view changed unexpectedly: ${result.initialView} -> ${result.finalView}`);
+        if (failures.length) problems.push(`browser errors: ${failures.join(" | ")}`);
+        if (problems.length)
+          throw new Error(
+            `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+          );
+        process.stdout.write(`PASS hydration ${testCase.path} (${result.initialView} -> ${result.finalView})\n`);
+      } finally {
+        releaseScripts();
+        await page.close();
+      }
+    }
+  } finally {
+    await context.close();
+  }
+};
 
 const scanLiveApp = async (page, label) => {
   const violations = await page.evaluate(async (tags) => {
@@ -302,31 +443,41 @@ const createBrowserContextFactory = async (browserType, browserName) => {
   return { browser, createContext: (options) => browser.newContext(options), persistentContextDirs };
 };
 
-const main = async () => {
-  const port = await reservePort();
-  const baseUrl = `https://${browserName === "webkit" ? "localhost" : "127.0.0.1"}:${port}/`;
-  const temporaryCorpusDir =
-    browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR ? createWorkerReuseCorpus() : null;
-  const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
-  const server = childProcess.spawn(process.execPath, ["scripts/dev-server.mjs", "--port", String(port)], {
+const startServer = (mode, port, corpusDir) => {
+  const server = childProcess.spawn(process.execPath, ["scripts/dev-server.mjs", mode, "--port", String(port)], {
     cwd: PACKAGE_DIR,
     env: { ...process.env, ...(corpusDir ? { ROM_WEAVER_E2E_CORPUS_DIR: corpusDir } : {}) },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  let serverOutput = "";
+  let output = "";
   server.stdout.on("data", (chunk) => {
-    serverOutput += chunk;
+    output += chunk;
   });
   server.stderr.on("data", (chunk) => {
-    serverOutput += chunk;
+    output += chunk;
   });
+  return { output: () => output, server };
+};
+
+const main = async () => {
+  const previewPort = await reservePort();
+  let devPort = await reservePort();
+  while (devPort === previewPort) devPort = await reservePort();
+  const host = browserName === "webkit" ? "localhost" : "127.0.0.1";
+  const previewBaseUrl = `https://${host}:${previewPort}/`;
+  const devBaseUrl = `https://${host}:${devPort}/`;
+  const temporaryCorpusDir =
+    browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR ? createWorkerReuseCorpus() : null;
+  const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
+  const preview = startServer("preview", previewPort);
+  const dev = startServer("dev", devPort, corpusDir);
 
   try {
-    await waitForServer(baseUrl);
+    await Promise.all([waitForServer(previewBaseUrl), waitForServer(devBaseUrl)]);
     if (corpusDir) {
-      const traversalStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/%2e%2e%2fmanifest.json`);
+      const traversalStatus = await requestStatus(`${devBaseUrl}__rom_weaver_corpus__/files/%2e%2e%2fmanifest.json`);
       if (traversalStatus !== 403) throw new Error(`corpus traversal returned ${traversalStatus}, expected 403`);
-      const unlistedStatus = await requestStatus(`${baseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
+      const unlistedStatus = await requestStatus(`${devBaseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
       if (unlistedStatus !== 404) throw new Error(`unlisted corpus file returned ${unlistedStatus}, expected 404`);
     }
     const { browser, createContext, persistentContextDirs } = await createBrowserContextFactory(
@@ -334,31 +485,39 @@ const main = async () => {
       browserName,
     );
     try {
-      await runAccessibilityAudit(createContext, baseUrl);
+      await runHydrationAudit(createContext, previewBaseUrl);
+      await runAccessibilityAudit(createContext, devBaseUrl);
       if (A11Y_ONLY) return;
-      await runApplyJourney(createContext, baseUrl, "raw apply/download", [
+      await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
         "archive_sources/game.bin",
         "archive_sources/change.ips",
       ]);
-      await runApplyJourney(createContext, baseUrl, "archive routing/apply/download", [
+      await runApplyJourney(createContext, devBaseUrl, "archive routing/apply/download", [
         "archives/one-rom.zip",
         "archives/one-patch.7z",
       ]);
-      if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, baseUrl);
+      if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, devBaseUrl);
     } finally {
       await browser?.close();
       for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
     }
   } catch (error) {
-    if (serverOutput.trim()) process.stderr.write(`${serverOutput.trim()}\n`);
+    const serverOutput = [preview.output(), dev.output()].filter((output) => output.trim()).join("\n");
+    if (serverOutput) process.stderr.write(`${serverOutput.trim()}\n`);
     throw error;
   } finally {
-    server.kill("SIGTERM");
+    preview.server.kill("SIGTERM");
+    dev.server.kill("SIGTERM");
     if (temporaryCorpusDir) fs.rmSync(temporaryCorpusDir, { force: true, recursive: true });
   }
 };
 
 const runWithRetry = async () => {
+  childProcess.execFileSync("npm", ["run", "build"], {
+    cwd: PACKAGE_DIR,
+    env: { ...process.env, ROM_WEAVER_CHANNEL: process.env.ROM_WEAVER_CHANNEL || "dev" },
+    stdio: "inherit",
+  });
   for (let attempt = 1; attempt <= E2E_ATTEMPTS; attempt += 1) {
     try {
       await main();

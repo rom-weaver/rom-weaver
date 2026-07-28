@@ -11,6 +11,11 @@ const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
+const assertCount = (source, expected, count, label) => {
+  const actual = source.split(expected).length - 1;
+  if (actual !== count)
+    throw new Error(`${label} contains ${actual} copies of ${JSON.stringify(expected)}; expected ${count}`);
+};
 
 const weaveHtml = read("index.html");
 const notFoundHtml = read("404.html");
@@ -62,8 +67,22 @@ assertIncludes(weaveHtml, 'class="build-version-label"', "preloaded build versio
 assertIncludes(weaveHtml, 'class="masthead-threads-full"', "preloaded full thread label");
 assertIncludes(weaveHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
 assertIncludes(weaveHtml, 'class="masthead-runtime"', "preloaded runtime status slot");
-assertIncludes(weaveHtml, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", "parser-time runtime status resolver");
 assertIncludes(weaveHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
+const runtimeResolver = '<span class="masthead-runtime"></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
+for (const route of [
+  "index.html",
+  "weave.html",
+  "create.html",
+  "404.html",
+  "weave/index.html",
+  "create/index.html",
+  "trim/index.html",
+  "tools/index.html",
+]) {
+  const html = read(route);
+  assertIncludes(html, runtimeResolver, `${route} parser-time runtime status resolver placement`);
+  assertCount(html, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", 1, `${route} parser-time runtime status resolver`);
+}
 assertIncludes(
   read("create/index.html"),
   'aria-selected="true" class="mode" data-mode="creator"',
