@@ -70,6 +70,7 @@ use constants::{
     LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, Z3DS_DECODE_BUFFER_BYTES, Z3DS_DEFAULT_COMPRESSION_LEVEL,
     Z3DS_DEFAULT_FRAME_SIZE_BYTES, Z3DS_EXTRACT_MAX_CHUNK_BYTES, Z3DS_EXTRACT_TASKS_PER_THREAD,
     Z3DS_MAX_COMPRESSION_LEVEL, Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
+    planning_memory_budget_bytes,
 };
 use extract_support::{
     ContainerProgressContext, ExtractChunkWriter, ExtractedFileChecksum,

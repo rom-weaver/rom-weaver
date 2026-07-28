@@ -24,6 +24,32 @@ pub(crate) const Z3DS_EXTRACT_TASKS_PER_THREAD: usize = 4;
 /// the transient decode buffer small and constant regardless of how large an extract task spans.
 pub(crate) const Z3DS_DECODE_BUFFER_BYTES: usize = 256 * 1024;
 
+/// Memory an operation may plan its own concurrency against, in bytes.
+///
+/// `env_key` (read as MiB) wins so constrained or shared hosts can pin it. Otherwise native hosts
+/// take half of physical RAM and leave the rest to the OS and the remainder of the process, while
+/// wasm takes the reported figure whole - there it is already the conservative shared linear-memory
+/// instance budget, not machine RAM. The fixed fallback covers hosts where RAM cannot be queried.
+pub(crate) fn planning_memory_budget_bytes(env_key: &str) -> u64 {
+    #[cfg(target_family = "wasm")]
+    const FALLBACK_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
+    #[cfg(not(target_family = "wasm"))]
+    const FALLBACK_BUDGET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+    rom_weaver_core::env_u64_opt(env_key)
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .or_else(|| {
+            rom_weaver_core::physical_memory_bytes().map(|ram| {
+                if cfg!(target_family = "wasm") {
+                    ram
+                } else {
+                    ram / 2
+                }
+            })
+        })
+        .unwrap_or(FALLBACK_BUDGET_BYTES)
+}
+
 pub(crate) fn copy_progress_buffer_size(total_bytes: u64) -> usize {
     if total_bytes == 0 {
         return COPY_PROGRESS_DEFAULT_BUFFER_BYTES;

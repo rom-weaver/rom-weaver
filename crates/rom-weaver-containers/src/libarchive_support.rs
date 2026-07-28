@@ -36,7 +36,10 @@ use tracing::{debug, trace};
 use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
     attach_emitted_file_paths, attach_extraction_details,
-    constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
+    constants::{
+        LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES,
+        planning_memory_budget_bytes,
+    },
     extract_support::{
         ContainerProgressContext, ExtractChecksumTiming, ExtractHasher, ExtractTiming,
         ExtractedFileChecksum, attach_extract_checksum_details, emit_container_step_progress,
@@ -742,22 +745,69 @@ fn libarchive_extract_total_logical_bytes(tasks: &[LibarchiveExtractTask]) -> u6
         .fold(0u64, |total, bytes| total.saturating_add(bytes))
 }
 
-// Worker count for a libarchive extract: serial below the MT floor, otherwise one per file entry (the
-// thread negotiator then clamps to the configured budget). Mirrors 7z create's `lzma2_achievable_blocks`.
-// A single large file still plans two threads: decode is inherently serial for one entry, but the
-// pipeline's second thread (the consumer that writes and hashes every extracted byte) is real work
-// that otherwise runs inline on the decode thread and extends the critical path by the full write
-// cost. Reference extractors overlap the same way (7zz decodes and checks/writes on separate
-// threads), so the inline-serial single-file path measurably loses to them on wall clock alone.
+// Decoder working set one extract worker holds, on top of the shared per-worker I/O buffers. Every
+// worker opens its own libarchive reader, so this is charged once per worker rather than once per
+// extract.
+//
+// LZMA2 (7z, xz, and the .7z-style codecs zipx may carry) allocates its whole dictionary up front,
+// sized by the header: real archives top out at 7-Zip's `-mx=9`, `Method = LZMA:26`, i.e. 64 MiB.
+// RAR5 is the same shape - a window up to 64 MiB. A hand-built archive can declare more, so this is
+// the practical worst case, not an absolute one.
+const LIBARCHIVE_EXTRACT_LZMA_WINDOW_BYTES: u64 = 64 * 1024 * 1024;
+// Everything else decodes through a small window: deflate is 32 KiB, bzip2 ~4 MiB of block state,
+// zstd's default window at the levels our writers emit is a few MiB. Charging these the LZMA figure
+// would needlessly serialize zip extracts, which parallelize without the memory cost.
+const LIBARCHIVE_EXTRACT_SMALL_WINDOW_BYTES: u64 = 4 * 1024 * 1024;
+
+fn libarchive_extract_worker_memory_bytes(format_name: &str) -> u64 {
+    let window = match format_name {
+        "7z" | "xz" | "tar.xz" | "zipx" | "rar" => LIBARCHIVE_EXTRACT_LZMA_WINDOW_BYTES,
+        _ => LIBARCHIVE_EXTRACT_SMALL_WINDOW_BYTES,
+    };
+    // Each worker also holds a read buffer and the output write buffer it streams through.
+    window.saturating_add((LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES as u64).saturating_mul(2))
+}
+
+// How many workers `budget_bytes` pays for, given the format's per-worker decoder cost. Always at
+// least one - a budget too small for a single reader still has to extract the archive.
+fn libarchive_extract_threads_for_budget(format_name: &str, budget_bytes: u64) -> usize {
+    let per_worker = libarchive_extract_worker_memory_bytes(format_name).max(1);
+    usize::try_from(budget_bytes / per_worker)
+        .unwrap_or(usize::MAX)
+        .max(1)
+}
+
+// `ROM_WEAVER_EXTRACT_MEM_BUDGET_MB` overrides the auto budget for constrained or shared hosts.
+// Mirrors 7z create's `lzma2_memory_thread_cap`, which bounds the same way on the encode side.
+fn libarchive_extract_memory_thread_cap(format_name: &str) -> usize {
+    let budget = planning_memory_budget_bytes("ROM_WEAVER_EXTRACT_MEM_BUDGET_MB");
+    libarchive_extract_threads_for_budget(format_name, budget)
+}
+
+// Worker count for a libarchive extract: serial below the MT floor, otherwise one per file entry,
+// capped at what the memory budget pays for (the thread negotiator then clamps to the configured
+// thread budget). Mirrors 7z create's `lzma2_achievable_blocks().min(lzma2_memory_thread_cap())`.
+//
+// A single large file still plans two threads and is exempt from the memory cap: decode is
+// inherently serial for one entry, but the pipeline's second thread (the consumer that writes and
+// hashes every extracted byte) is real work that otherwise runs inline on the decode thread and
+// extends the critical path by the full write cost. Reference extractors overlap the same way (7zz
+// decodes and checks/writes on separate threads), so the inline-serial single-file path measurably
+// loses to them on wall clock alone. The exemption costs nothing: one file yields one chunk, so
+// there is still only one reader and one decoder working set no matter which of the two threads
+// runs it.
 fn libarchive_extract_achievable_threads(
+    format_name: &str,
     total_logical_bytes: u64,
     file_task_count: usize,
 ) -> usize {
     if total_logical_bytes <= LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES {
-        1
-    } else {
-        file_task_count.max(2)
+        return 1;
     }
+    if file_task_count <= 1 {
+        return 2;
+    }
+    file_task_count.min(libarchive_extract_memory_thread_cap(format_name))
 }
 
 // A worker is only worth spawning if it has real decode work. Each one opens its own reader over the
@@ -1934,8 +1984,20 @@ pub(crate) fn extract_regular_archive_with_libarchive(
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
         let total_logical_bytes = libarchive_extract_total_logical_bytes(&tasks);
-        let achievable_threads =
-            libarchive_extract_achievable_threads(total_logical_bytes, file_task_count);
+        let achievable_threads = libarchive_extract_achievable_threads(
+            format_name,
+            total_logical_bytes,
+            file_task_count,
+        );
+        trace!(
+            format = format_name,
+            file_task_count,
+            total_logical_bytes,
+            worker_memory_bytes = libarchive_extract_worker_memory_bytes(format_name),
+            memory_thread_cap = libarchive_extract_memory_thread_cap(format_name),
+            achievable_threads,
+            "libarchive extract worker budget"
+        );
         // Only stand up the shared worker pool when this extract will actually parallelize. A small
         // archive (under the MT floor, or a single file) negotiates serial, and building the
         // budget-sized operation pool for it would spawn a worker per budget thread that the serial
@@ -2330,6 +2392,78 @@ mod tests {
             is_dir: false,
             logical_bytes: Some(3),
         }
+    }
+
+    const MIB: u64 = 1024 * 1024;
+
+    #[test]
+    fn lzma_formats_are_charged_a_dictionary_and_others_are_not() {
+        let lzma = libarchive_extract_worker_memory_bytes("7z");
+        let small = libarchive_extract_worker_memory_bytes("zip");
+
+        assert!(
+            lzma >= LIBARCHIVE_EXTRACT_LZMA_WINDOW_BYTES,
+            "an LZMA2 worker must be charged at least its dictionary, got {lzma}"
+        );
+        assert_eq!(lzma, libarchive_extract_worker_memory_bytes("tar.xz"));
+        assert_eq!(lzma, libarchive_extract_worker_memory_bytes("rar"));
+        assert!(
+            small < LIBARCHIVE_EXTRACT_LZMA_WINDOW_BYTES,
+            "deflate has a 32 KiB window and must not be charged the LZMA figure, got {small}"
+        );
+        assert_eq!(small, libarchive_extract_worker_memory_bytes("tar"));
+        assert_eq!(small, libarchive_extract_worker_memory_bytes("tar.gz"));
+    }
+
+    #[test]
+    fn budget_divides_by_the_per_format_worker_cost() {
+        // 8 LZMA workers fit; the same budget buys many more deflate workers.
+        let budget = 8 * libarchive_extract_worker_memory_bytes("7z");
+        assert_eq!(libarchive_extract_threads_for_budget("7z", budget), 8);
+        assert!(
+            libarchive_extract_threads_for_budget("zip", budget) > 8,
+            "a deflate worker is cheaper, so the same budget must buy more of them"
+        );
+    }
+
+    #[test]
+    fn budget_below_one_worker_still_yields_one() {
+        assert_eq!(libarchive_extract_threads_for_budget("7z", 0), 1);
+        assert_eq!(libarchive_extract_threads_for_budget("7z", MIB), 1);
+    }
+
+    #[test]
+    fn small_archives_stay_serial_regardless_of_entry_count() {
+        assert_eq!(
+            libarchive_extract_achievable_threads("7z", LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES, 64),
+            1
+        );
+    }
+
+    #[test]
+    fn single_file_extracts_keep_the_write_overlap_thread() {
+        // One entry means one chunk and one reader, so the second thread costs no extra decoder
+        // working set and must not be taken away by the memory cap.
+        assert_eq!(
+            libarchive_extract_achievable_threads("7z", 4 * 1024 * MIB, 1),
+            2
+        );
+    }
+
+    #[test]
+    fn worker_count_is_capped_by_the_memory_budget() {
+        let cap = libarchive_extract_memory_thread_cap("7z");
+        let plentiful_entries = cap.saturating_add(16);
+        assert_eq!(
+            libarchive_extract_achievable_threads("7z", 4 * 1024 * MIB, plentiful_entries),
+            cap,
+            "more entries than the budget pays for must clamp to the budget"
+        );
+        assert_eq!(
+            libarchive_extract_achievable_threads("7z", 4 * 1024 * MIB, 2),
+            2.min(cap),
+            "fewer entries than the budget allows must not be inflated by the cap"
+        );
     }
 
     #[test]

@@ -40,6 +40,7 @@ or `env` options. WASI argv0 is always `rom-weaver`. A command may still supply
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). Set to `0` to force the on-disk path for regression/parity runs. |
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
 | `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
+| `ROM_WEAVER_EXTRACT_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/libarchive_support.rs` | Memory budget that caps how many workers one archive extract spawns. Each worker opens its own libarchive reader, so it is charged that format's decoder working set (an LZMA2/RAR window for `7z`/`xz`/`tar.xz`/`zipx`/`rar`, a much smaller one otherwise). Invalid text is ignored. |
 
 ## Test / build-only knobs
 

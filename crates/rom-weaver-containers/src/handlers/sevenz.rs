@@ -251,29 +251,7 @@ pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_byte
 }
 
 fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
-    // wasm's reported "physical memory" is already the conservative shared
-    // instance budget; native hosts reserve half their RAM for the rest of the
-    // process and the OS.
-    #[cfg(target_family = "wasm")]
-    const FALLBACK_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
-    #[cfg(not(target_family = "wasm"))]
-    const FALLBACK_BUDGET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
-    // `ROM_WEAVER_7Z_MEM_BUDGET_MB` overrides the auto budget for constrained or
-    // shared hosts; otherwise use half of physical RAM, or a fixed fallback.
-    let budget = std::env::var("ROM_WEAVER_7Z_MEM_BUDGET_MB")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|mb| mb.saturating_mul(1024 * 1024))
-        .or_else(|| {
-            physical_memory_bytes().map(|ram| {
-                if cfg!(target_family = "wasm") {
-                    ram
-                } else {
-                    ram / 2
-                }
-            })
-        })
-        .unwrap_or(FALLBACK_BUDGET_BYTES);
+    let budget = planning_memory_budget_bytes("ROM_WEAVER_7Z_MEM_BUDGET_MB");
     lzma2_threads_for_budget(total_bytes, level, budget)
 }
 
