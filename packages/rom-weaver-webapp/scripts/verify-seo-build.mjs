@@ -43,9 +43,20 @@ for (const url of [
   "https://rom-weaver.com/weave",
   "https://rom-weaver.com/create",
   "https://github.com/rom-weaver/rom-weaver",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/webapp-integration.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/self-hosting.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/ARCHITECTURE.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md",
 ]) {
   assertIncludes(llmsTxt, `](${url})`, "llms.txt links");
 }
+assertIncludes(
+  headers,
+  `Content-Signal: ai-train=no, search=${production ? "yes" : "no"}, ai-input=yes`,
+  `${channel} content signal`,
+);
 assertIncludes(
   headers,
   "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8",

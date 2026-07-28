@@ -412,10 +412,11 @@ const writeCloudflareHeadersAsset = (channel) => {
   return {
     apply: "build",
     closeBundle() {
-      const headers =
-        channel === "prod"
-          ? crossOriginIsolationHeaders
-          : { ...crossOriginIsolationHeaders, "X-Robots-Tag": "noindex, nofollow" };
+      const headers = {
+        ...crossOriginIsolationHeaders,
+        "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
+        ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
+      };
       const headerLines = Object.entries(headers)
         .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
