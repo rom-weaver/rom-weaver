@@ -1,5 +1,7 @@
 /* React modal framework */
-.rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--sp-l); }
+/* Above the guided-sample layer (1000-1003): a real modal must never end up
+   dimmed underneath the non-modal coach mark. */
+.rw-modal { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: var(--sp-l); }
 .rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
   /* Viewport cap contains long unbroken filenames. */
