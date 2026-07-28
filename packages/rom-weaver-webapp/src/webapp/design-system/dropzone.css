@@ -339,8 +339,8 @@
   background: color-mix(in oklab, var(--thread) 14%, var(--well)); color: var(--thread-text);
   font-family: var(--mono); font-size: .9rem; font-weight: 850; letter-spacing: -.04em;
 }
+.rw-app .sample-tutorial-live { min-width: 0; }
 .rw-app .sample-tutorial-copy {
-  min-width: 0;
   animation: sample-tutorial-copy-in .18s var(--ease) both;
 }
 .rw-app .sample-tutorial-kicker {

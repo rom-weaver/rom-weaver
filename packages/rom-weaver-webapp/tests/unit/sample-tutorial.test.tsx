@@ -38,6 +38,22 @@ const TutorialSection = ({ id, label }: { id: string; label: string }) => {
   );
 };
 
+// The app commits .rw-app long before the guide mounts, and ending the guide
+// unmounts only the guide. Both matter here: the portal container is resolved
+// on the guide's first render, and the drawer restore runs on its teardown.
+const renderGuidedWorkbench = ({ onClose = vi.fn() }: { onClose?: () => void } = {}) => {
+  const workbench = (guided: boolean) => (
+    <div className="rw-app">
+      <TutorialSection id="tutorial-first" label="First drawer" />
+      <TutorialSection id="tutorial-second" label="Second drawer" />
+      {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={STEPS} /> : null}
+    </div>
+  );
+  const { rerender } = render(workbench(false));
+  rerender(workbench(true));
+  return { endGuide: () => rerender(workbench(false)) };
+};
+
 describe("sample tutorial", () => {
   it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {
     const onClose = vi.fn();
@@ -67,5 +83,47 @@ describe("sample tutorial", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps one live region across steps so the change is announced", async () => {
+    renderGuidedWorkbench();
+
+    const region = document.querySelector("[aria-live]");
+    expect(region?.textContent).toContain("First section");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // Same node, new content - a region inserted alongside its content never announces.
+    expect(document.querySelector("[aria-live]")).toBe(region);
+    expect(region?.textContent).toContain("Second section");
+  });
+
+  it("moves focus into the guide so it is reachable once the trigger unmounts", () => {
+    renderGuidedWorkbench();
+
+    expect(document.activeElement).toBe(document.querySelector(".sample-tutorial-dialog"));
+  });
+
+  it("leaves Escape to the controls that own it and closes only from inside the guide", async () => {
+    const onClose = vi.fn();
+    renderGuidedWorkbench({ onClose });
+
+    const menu = document.querySelector("#tutorial-first .patch-menu-btn") as HTMLButtonElement;
+    await waitFor(() => expect(menu.getAttribute("aria-expanded")).toBe("true"));
+    menu.focus();
+    fireEvent.keyDown(menu, { bubbles: true, key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    const guide = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    guide.focus();
+    fireEvent.keyDown(guide, { bubbles: true, key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("re-closes the drawers it opened when the guide ends", async () => {
+    const { endGuide } = renderGuidedWorkbench();
+
+    const drawer = screen.getByRole("button", { name: "First drawer" });
+    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    endGuide();
+    expect(drawer.getAttribute("aria-expanded")).toBe("false");
   });
 });

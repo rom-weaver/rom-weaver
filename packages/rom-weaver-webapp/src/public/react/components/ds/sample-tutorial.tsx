@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
@@ -94,12 +94,34 @@ const SampleTutorial = ({
 }) => {
   const bodyId = useId();
   const titleId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const step = steps[stepIndex];
+  // Resolved once: re-querying per render hands createPortal a different
+  // container the moment .rw-app appears, which tears the whole overlay down
+  // and rebuilds it - dropping focus and the live region instead of updating.
+  const portalTarget = useMemo(
+    () => (typeof document === "undefined" ? null : (document.querySelector(".rw-app") ?? document.body)),
+    [],
+  );
+
+  // The guide is non-modal and lands last in the DOM, so nothing would reach it
+  // without this - the button that opened it unmounts as soon as the sample
+  // stages, dropping focus to <body>.
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Escape belongs to whatever the user is inside: menus, popovers, and the
+      // inline reorder editor all own it, and the guide opens some of them
+      // itself. Only claim it while the guide holds focus (or nothing does).
+      const active = document.activeElement;
+      const idle = !active || active === document.body;
+      if (!(idle || dialogRef.current?.contains(active))) return;
+      onClose();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
@@ -113,6 +135,7 @@ const SampleTutorial = ({
     let previousDescription: string | null = null;
     let observer: MutationObserver | null = null;
     let openedMenu: HTMLButtonElement | null = null;
+    const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
     const connect = () => {
       if (target) return true;
@@ -125,6 +148,7 @@ const SampleTutorial = ({
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
       if (step.openDrawers) {
         for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
+          openedDrawers.push(drawer);
           drawer.click();
         }
       }
@@ -148,6 +172,9 @@ const SampleTutorial = ({
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
       if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
+      for (const drawer of openedDrawers) {
+        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
+      }
       target?.classList.remove("sample-tutorial-target");
       stage?.classList.remove("sample-tutorial-stage");
       if (target) {
@@ -157,7 +184,7 @@ const SampleTutorial = ({
     };
   }, [bodyId, ready, step]);
 
-  if (typeof document === "undefined" || !step) return null;
+  if (!(portalTarget && step)) return null;
   const finalStep = ready && stepIndex === steps.length - 1;
   const copyKey = ready ? stepIndex : "loading";
   const layer = (
@@ -169,32 +196,39 @@ const SampleTutorial = ({
         aria-modal="false"
         className="sample-tutorial-dialog"
         data-placement={ready ? (step.placement ?? "bottom") : "bottom"}
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <span aria-hidden="true" className="sample-tutorial-beacon">
           0x
         </span>
-        <div aria-live="polite" className="sample-tutorial-copy" key={copyKey}>
-          <span className="sample-tutorial-kicker mono">
-            {ready ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
-          </span>
-          <h2 id={titleId}>{ready ? step.title : "Loading the practice files"}</h2>
-          <p id={bodyId}>{ready ? step.body : loadingBody}</p>
-          {ready && step.actions?.length ? (
-            <ul aria-label="Available actions" className="sample-tutorial-action-list">
-              {step.actions.map(([action, label]) => {
-                const Icon = ACTION_ICONS[action];
-                return (
-                  <li key={label}>
-                    <span aria-hidden="true" className="sample-tutorial-action-icon">
-                      <Icon />
-                    </span>
-                    {label}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
+        {/* The live region has to outlive the step copy: a region inserted
+            together with its content is never announced, and the key below
+            remounts the copy on every step to restart its entry animation. */}
+        <div aria-live="polite" className="sample-tutorial-live">
+          <div className="sample-tutorial-copy" key={copyKey}>
+            <span className="sample-tutorial-kicker mono">
+              {ready ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
+            </span>
+            <h2 id={titleId}>{ready ? step.title : "Loading the practice files"}</h2>
+            <p id={bodyId}>{ready ? step.body : loadingBody}</p>
+            {ready && step.actions?.length ? (
+              <ul aria-label="Available actions" className="sample-tutorial-action-list">
+                {step.actions.map(([action, label]) => {
+                  const Icon = ACTION_ICONS[action];
+                  return (
+                    <li key={label}>
+                      <span aria-hidden="true" className="sample-tutorial-action-icon">
+                        <Icon />
+                      </span>
+                      {label}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
         </div>
         <div className="sample-tutorial-actions">
           {ready ? (
@@ -216,7 +250,7 @@ const SampleTutorial = ({
       </aside>
     </div>
   );
-  return createPortal(layer, document.querySelector(".rw-app") || document.body);
+  return createPortal(layer, portalTarget);
 };
 
 export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep };
