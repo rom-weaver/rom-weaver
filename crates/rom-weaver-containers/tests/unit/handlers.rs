@@ -2612,6 +2612,33 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn seven_z_sdk_thread_plan_stays_inside_mtcoder_limits() {
+        // A huge input with a tiny dictionary would otherwise plan one block
+        // thread per 1 MiB block; MtCoder clamps at MTCODER_THREADS_MAX (64),
+        // and level 0 runs one match-finder thread per block thread.
+        let huge = 8 * 1024 * 1024 * 1024u64;
+        let unbounded = u64::MAX / 4;
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(huge, 0, unbounded, None),
+            64
+        );
+
+        // The output ring outnumbers the workers, so a budget that fits N
+        // encoders does not fit N blocks. 256 MiB input at level 9 takes a
+        // 256 MiB dictionary, a 256 MiB block and a ~256 MiB output buffer:
+        // 12x dict + block is ~3.25 GiB per worker, and the ring adds more.
+        let total = 256 * 1024 * 1024;
+        let gib = 1024 * 1024 * 1024;
+        let planned = lzma2_sdk_threads_for_budget_with_limits(total, 9, 8 * gib, None);
+        assert!(
+            planned <= 2,
+            "8 GiB cannot hold more than one SDK block encoder plus its ring, planned {planned}"
+        );
+        assert!(planned >= 1, "the plan must never reach zero");
+    }
+
+    #[test]
     fn seven_z_level9_small_inputs_reduce_dict_under_wasm_budget() {
         let large_total = 96 * 1024 * 1024;
         let reduced_dict_total = 16 * 1024 * 1024;

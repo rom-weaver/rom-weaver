@@ -192,8 +192,7 @@ pub(crate) use sevenz::SevenZMethod;
 pub(crate) use sevenz::lzma2_sdk_threads_for_budget_with_limits;
 #[cfg(test)]
 pub(crate) use sevenz::{
-    lzma2_liblzma_threads_for_budget_with_limits, lzma2_preset_dict_bytes,
-    lzma2_threads_for_budget,
+    lzma2_liblzma_threads_for_budget_with_limits, lzma2_preset_dict_bytes, lzma2_threads_for_budget,
 };
 
 #[path = "handlers/rar.rs"]

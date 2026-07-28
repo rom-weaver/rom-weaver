@@ -135,7 +135,9 @@ instructions do **not** apply here.
 - Webapp workflows/forms: `packages/rom-weaver-webapp/src`
 - Vendored source is all in-tree under `crates/rom-weaver-containers`: the
   libarchive C sources at `libarchive/vendor/libarchive` (refresh with
-  `scripts/vendor-libarchive.mjs`), the nod and xdvdfs Rust sources under
+  `scripts/vendor-libarchive.mjs`), the 7-Zip LZMA SDK C sources at
+  `lzma-sdk/vendor/C` (refresh with `scripts/vendor-lzma-sdk.mjs`; verbatim, no
+  local patches), the nod and xdvdfs Rust sources under
   `src/nod` and `src/xdvdfs`. There are no git submodules.
 
 ## Worktree setup
