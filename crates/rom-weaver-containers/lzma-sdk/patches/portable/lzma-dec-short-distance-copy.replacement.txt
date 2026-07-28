@@ -1,0 +1,24 @@
+          if (rep0 <= 2)
+          {
+            if (rep0 == 1)
+              memset(dest, dic[pos], curLen);
+            else if (curLen >= 2)
+            {
+              UInt16 pattern;
+              memcpy(&pattern, dest + src, sizeof(pattern));
+              do
+              {
+                memcpy(dest, &pattern, sizeof(pattern));
+                dest += sizeof(pattern);
+              }
+              while ((SizeT)(lim - dest) >= sizeof(pattern));
+              if (dest != lim)
+                *(dest) = (Byte)*(dest + src);
+            }
+            else
+              *(dest) = (Byte)*(dest + src);
+          }
+          else
+            do
+              *(dest) = (Byte)*(dest + src);
+            while (++dest != lim);
