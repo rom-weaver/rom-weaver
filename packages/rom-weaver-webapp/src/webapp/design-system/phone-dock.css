@@ -151,6 +151,8 @@
     overflow: visible;
   }
 
+  .rw-app .panel.workflow .swap-row + .step { margin-block-start: 0; }
+
   .rw-app .panel.workflow .step > .step-body {
     padding: 7px 0 0;
   }
