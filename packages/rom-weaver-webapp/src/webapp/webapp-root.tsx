@@ -18,6 +18,7 @@ import type { PageFileDrop } from "../public/react/public-types.ts";
 import { RomWeaverSettingsProvider } from "../public/react/settings-context.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
@@ -226,16 +227,21 @@ function WebappRoot({
       void loadLogDialog().catch(() => undefined);
       void loadSettingsPanel().catch(() => undefined);
     };
-    void preloadBrowserRuntime({ threads }).then(() => {
+    const preload = () => {
       if (cancelled) return;
-      if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
-      } else {
-        window.setTimeout(preloadDialogsWhenIdle, 0);
-      }
-    });
+      void preloadBrowserRuntime({ threads }).then(() => {
+        if (cancelled) return;
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
+        } else {
+          window.setTimeout(preloadDialogsWhenIdle, 0);
+        }
+      });
+    };
+    const cancelPreload = scheduleBrowserRuntimePreload(preload);
     return () => {
       cancelled = true;
+      cancelPreload();
     };
   }, [notFound, threads]);
   const preloadSettingsPanel = useCallback(() => {
