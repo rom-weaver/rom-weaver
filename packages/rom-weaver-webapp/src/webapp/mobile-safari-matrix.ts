@@ -13,13 +13,14 @@ import {
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
 } from "../wasm/browser-format-matrix.ts";
+import { runBrowserMemoryGrowthProbe } from "../wasm/browser-memory-growth-probe.ts";
 import { runBrowserSharedMemoryProbe } from "../wasm/browser-shared-memory-probe.ts";
 import { runBrowserThreadSweep } from "../wasm/browser-thread-sweep.ts";
 import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
 import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
 
 type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";
-type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "memory" | "stress" | "threads";
+type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "growth" | "memory" | "stress" | "threads";
 
 type MobileSafariMatrixState = {
   diagnostics: BrowserRuntimeDiagnostics | null;
@@ -63,12 +64,14 @@ const exhaustiveButton = document.getElementById("matrix-run-exhaustive");
 const stressButton = document.getElementById("matrix-run-stress");
 const threadsButton = document.getElementById("matrix-run-threads");
 const memoryButton = document.getElementById("matrix-run-memory");
+const growthButton = document.getElementById("matrix-run-growth");
 const copyButton = document.getElementById("matrix-copy");
 const downloadButton = document.getElementById("matrix-download");
 
 const MOBILE_SAFARI_MATRIX_PROFILES: readonly MobileSafariMatrixProfile[] = [
   "exhaustive",
   "fast",
+  "growth",
   "memory",
   "stress",
   "threads",
@@ -216,6 +219,7 @@ const setRunning = (running: boolean) => {
   if (stressButton instanceof HTMLButtonElement) stressButton.disabled = running;
   if (threadsButton instanceof HTMLButtonElement) threadsButton.disabled = running;
   if (memoryButton instanceof HTMLButtonElement) memoryButton.disabled = running;
+  if (growthButton instanceof HTMLButtonElement) growthButton.disabled = running;
   if (copyButton instanceof HTMLButtonElement) copyButton.disabled = running || !state.result;
   if (downloadButton instanceof HTMLButtonElement) downloadButton.disabled = running || !state.result;
 };
@@ -269,6 +273,7 @@ const runProfile = async (
   if (profile === "stress") return runBrowserArchiveStress({ ...callbacks, caseIds: readStressCaseIdsFromLocation() });
   if (profile === "threads") return runBrowserThreadSweep(callbacks);
   if (profile === "memory") return runBrowserSharedMemoryProbe(callbacks);
+  if (profile === "growth") return runBrowserMemoryGrowthProbe(callbacks);
   return runBrowserFullFormatMatrix({ ...callbacks, prefix: "rom-weaver-ios-safari-matrix-", profile });
 };
 
@@ -365,6 +370,9 @@ threadsButton?.addEventListener("click", () => {
 });
 memoryButton?.addEventListener("click", () => {
   runMatrix("memory");
+});
+growthButton?.addEventListener("click", () => {
+  runMatrix("growth");
 });
 copyButton?.addEventListener("click", () => {
   copyReport().catch((error) => {
