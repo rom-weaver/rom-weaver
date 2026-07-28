@@ -133,15 +133,28 @@ export const lighthouseArguments = (url, outputBase) => [
   "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --ignore-certificate-errors",
 ];
 
+export const shouldRetryLighthouse = (attempt, report) => attempt === 1 && Boolean(report?.runtimeError);
+
 const runAudit = (url, outputBase) => {
-  const result = spawnSync(
-    process.execPath,
-    [fileURLToPath(import.meta.resolve("lighthouse/cli/index.js")), ...lighthouseArguments(url, outputBase)],
-    { cwd: PACKAGE_ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
-  );
-  if (result.status !== 0)
-    throw new Error(`Lighthouse failed for ${url}\n${result.stdout || ""}${result.stderr || ""}`);
-  return JSON.parse(fs.readFileSync(`${outputBase}.report.json`, "utf8"));
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(import.meta.resolve("lighthouse/cli/index.js")), ...lighthouseArguments(url, outputBase)],
+      { cwd: PACKAGE_ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+    );
+    const reportPath = `${outputBase}.report.json`;
+    const report = fs.existsSync(reportPath) ? JSON.parse(fs.readFileSync(reportPath, "utf8")) : undefined;
+    if (shouldRetryLighthouse(attempt, report)) {
+      process.stdout.write(
+        `::warning title=Lighthouse retry::${url} hit ${report.runtimeError.code || "a runtime error"}; retrying once\n`,
+      );
+      continue;
+    }
+    if (result.status !== 0)
+      throw new Error(`Lighthouse failed for ${url}\n${result.stdout || ""}${result.stderr || ""}`);
+    if (!report) throw new Error(`Lighthouse produced no report for ${url}`);
+    return report;
+  }
 };
 
 const formatValue = (value, unit = "") => (unit === "ms" ? `${Math.round(value)} ms` : `${value.toFixed(3)}${unit}`);

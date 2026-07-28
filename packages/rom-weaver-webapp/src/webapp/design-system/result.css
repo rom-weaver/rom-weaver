@@ -16,12 +16,14 @@
 .rw-app .download-btn { gap: var(--sp-s) var(--sp-m); font-size: .9rem; flex-wrap: wrap; min-width: 0; }
 .rw-app .download-btn > svg { flex: none; }
 .rw-app .download-btn .dl-kind, .rw-app .download-btn .dl-size { flex: 0 1 auto; overflow-wrap: anywhere; }
-.rw-app .download-btn .dl-delta { min-width: 0; overflow-wrap: anywhere; }
+/* Full opacity preserves 4.5:1 contrast on the orange button. */
+.rw-app .download-btn .dl-delta {
+  min-width: 0; overflow-wrap: anywhere;
+  font-weight: 600; font-size: .88rem; opacity: 1; text-transform: none; letter-spacing: .01em;
+}
 .rw-app .download-btn .dl-kind { font-weight: 700; font-size: 1.02rem; text-transform: none; letter-spacing: .01em; }
 .rw-app .download-btn .dl-size { font-weight: 600; font-size: .94rem; opacity: .92; text-transform: none; letter-spacing: .01em; }
 .rw-app .download-btn .dl-size::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
-/* Full opacity preserves 4.5:1 contrast on the orange button. */
-.rw-app .download-btn .dl-delta { font-weight: 600; font-size: .88rem; opacity: 1; text-transform: none; letter-spacing: .01em; }
 .rw-app .download-btn .dl-delta::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
 .rw-app .download-btn .dl-total { margin-inline-start: auto; font-weight: 600; font-size: .88rem; opacity: .92; text-transform: none; letter-spacing: .01em; white-space: nowrap; }
 .rw-app .download-btn .dl-total b { font-weight: 750; }

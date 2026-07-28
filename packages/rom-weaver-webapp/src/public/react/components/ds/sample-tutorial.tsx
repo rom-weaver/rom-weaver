@@ -200,7 +200,7 @@ const SampleTutorial = ({
 }) => {
   const bodyId = useId();
   const titleId = useId();
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
   const [geometry, setGeometry] = useState<GuideGeometry | null>(null);
@@ -389,7 +389,7 @@ const SampleTutorial = ({
           }}
         />
       ) : null}
-      <aside
+      <div
         aria-describedby={bodyId}
         aria-labelledby={titleId}
         aria-modal="false"
@@ -449,7 +449,7 @@ const SampleTutorial = ({
             End guide
           </button>
         </div>
-      </aside>
+      </div>
     </div>
   );
   return createPortal(layer, portalTarget);

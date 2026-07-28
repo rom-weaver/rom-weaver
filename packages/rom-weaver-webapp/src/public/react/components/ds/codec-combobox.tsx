@@ -382,7 +382,10 @@ const CodecCombobox = ({
       ))}
     </div>
   ) : null;
-  const portalTarget = typeof document === "undefined" ? null : document.body;
+  const portalTarget =
+    typeof document === "undefined"
+      ? null
+      : (inputRef.current?.closest("dialog, main, [role=dialog], [role=region]") ?? document.body);
 
   return (
     <div className="codec-combobox">

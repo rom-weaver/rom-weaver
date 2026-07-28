@@ -16,7 +16,9 @@ import {
   lighthouseArguments,
   median,
   reportIndex,
+  shouldRetryLighthouse,
 } from "../packages/rom-weaver-webapp/scripts/run-lighthouse.mjs";
+import { summarizeCssCoverage } from "../packages/rom-weaver-webapp/scripts/css-coverage.mjs";
 import { brotliCompressFile } from "./wasm/brotli-compress.mjs";
 
 test("size budgets warn at the expected value and fail at the maximum", () => {
@@ -88,6 +90,44 @@ test("Lighthouse scores the full set of budgeted categories", () => {
     true,
   );
   assert.equal(args.includes("--output-path=/tmp/report"), true);
+});
+
+test("Lighthouse retries only the first runtime collection failure", () => {
+  const failedReport = { runtimeError: { code: "NO_NAVSTART" } };
+  assert.equal(shouldRetryLighthouse(1, failedReport), true);
+  assert.equal(shouldRetryLighthouse(2, failedReport), false);
+  assert.equal(shouldRetryLighthouse(1, {}), false);
+});
+
+test("CSS coverage totals bundled stylesheets and ignores inline styles", () => {
+  assert.deepEqual(
+    summarizeCssCoverage([
+      {
+        ranges: [
+          { end: 1, start: 0 },
+          { end: 3, start: 2 },
+        ],
+        text: "aébc",
+        url: "https://localhost:4173/assets/index.css",
+      },
+      {
+        ranges: [],
+        text: "ignored",
+        url: "https://localhost:4173/",
+      },
+    ]),
+    { stylesheetCount: 1, totalBytes: 5, unusedBytes: 3, usedBytes: 2 },
+  );
+});
+
+test("CSS coverage unions the same stylesheet across pages", () => {
+  assert.deepEqual(
+    summarizeCssCoverage([
+      { ranges: [{ end: 2, start: 0 }], text: "abcdef", url: "https://localhost/assets/index.css" },
+      { ranges: [{ end: 6, start: 4 }], text: "abcdef", url: "https://localhost/assets/index.css" },
+    ]),
+    { stylesheetCount: 1, totalBytes: 6, unusedBytes: 2, usedBytes: 4 },
+  );
 });
 
 test("a metric Lighthouse could not collect fails instead of passing", () => {

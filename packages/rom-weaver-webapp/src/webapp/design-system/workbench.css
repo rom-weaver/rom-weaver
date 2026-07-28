@@ -28,10 +28,11 @@
 .rw-app .step-head { display: flex; align-items: baseline; gap: var(--sp-m); padding: var(--step-pt) var(--pad) 2px; position: relative; }
 .rw-app .step-head-action { display: none; }
 /* Match step headings to card-name scaling. */
-.rw-app .step-num { font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
 .rw-app .step-num {
   position: relative; isolation: isolate;
   padding: 2px 18px 2px 9px;
+  font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650;
+  color: var(--thread-text); letter-spacing: .06em; transition: color .3s;
 }
 .rw-app .step-num::before {
   content: ""; position: absolute; inset: 0; z-index: -1;
