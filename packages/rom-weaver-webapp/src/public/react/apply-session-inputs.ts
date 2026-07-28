@@ -71,17 +71,21 @@ const getArchiveNameFromProgressDetails = (details: Record<string, unknown>) => 
   return archivePathEntries.map((entry) => entry.fileName).join(" > ");
 };
 
-// The early `extract --probe` manifest (Rust `stage: "probe-manifest"`) carries the
-// detected platform/disc-format before extraction finishes, so the ROM type tag can
-// light up on the loading card mid-extract instead of only at checksum time. Snake-case
-// keys come straight from the Rust `RomIdentity` serialization.
+// The early identity manifest carries the detected platform/disc-format and the engine's
+// recommended rom-specific container before the run finishes, so the ROM type tag and the
+// automatic output format both settle on the loading card instead of only at completion.
+// Emitted by Rust as `stage: "probe-manifest"` for a container source and `stage:
+// "probe-identity"` for a bare one; both share this `probe_manifest` payload. Snake-case keys
+// come straight from the Rust `RomIdentity` serialization.
 const getRomTypeFromProgressDetails = (details: Record<string, unknown>): StagedInputInfo["romType"] => {
   const manifest = details.probe_manifest;
   if (!manifest || typeof manifest !== "object") return undefined;
   const record = manifest as Record<string, unknown>;
   const platform = typeof record.platform === "string" ? record.platform : undefined;
   const discFormat = typeof record.disc_format === "string" ? record.disc_format : undefined;
-  return platform || discFormat ? { discFormat, platform } : undefined;
+  const recommendedFormat = typeof record.recommended_format === "string" ? record.recommended_format : undefined;
+  if (!(platform || discFormat || recommendedFormat)) return undefined;
+  return { discFormat, platform, ...(recommendedFormat ? { recommendedFormat } : {}) };
 };
 
 // The early `probe-variant-plan` event (Rust) carries the labels of every checksum variant the ROM
@@ -143,6 +147,13 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
 // straight to the checksum stage - so seeing one is a positive "is extracting" signal.
 const EXTRACT_PROGRESS_STAGES = new Set(["extract", "extract-step", "decompress", "nested-extract", "probe-manifest"]);
 
+// `probe-identity` reports what a payload IS, not that work is happening to it: it rides a decoded
+// archive leaf mid-extract, but also a bare source right before an in-place checksum with no
+// extraction behind it at all. It carries a `probe_manifest` payload only to share the parser
+// above, so it must not feed the "is extracting" signal below - the archive case is already covered
+// by the surrounding extract stages and the compressed-name check.
+const IDENTITY_ONLY_PROGRESS_STAGE = "probe-identity";
+
 const getChecksumProgressInfoPatch = (
   details: Record<string, unknown>,
 ): Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> } => {
@@ -155,6 +166,7 @@ const getChecksumProgressInfoPatch = (
   // extracted payload.
   const isExtracting =
     !isChecksum &&
+    stage !== IDENTITY_ONLY_PROGRESS_STAGE &&
     (EXTRACT_PROGRESS_STAGES.has(stage) || !!details.probe_manifest || isCompressedInputFileName(fileName));
   const info: Partial<RomInputRowState["info"]> = {
     crc32: isChecksum ? "" : undefined,

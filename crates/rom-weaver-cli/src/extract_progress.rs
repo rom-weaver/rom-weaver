@@ -189,6 +189,16 @@ impl CliApp {
         manifest.insert("is_rom".to_string(), json!(is_rom));
         manifest.insert("entries".to_string(), json!(entry_summaries));
         identity.write_into(&mut manifest);
+        // Ride the rom-specific container verdict along with the identity so the host can settle its
+        // automatic output format now instead of after the run completes. `recommend_compress_format`
+        // (not the bare identity mapping) is used deliberately: it re-reads the disc header through nod
+        // for wbfs/wia/gcz, whose own container magic hides the GC/Wii header from the prefix probe.
+        // The end-of-run per-asset stamp remains authoritative and may correct this preview.
+        let recommendation = self.containers.recommend_compress_format(source);
+        if let Some(format_name) = Self::rom_specific_recommended_format(recommendation.format_name)
+        {
+            manifest.insert("recommended_format".to_string(), json!(format_name));
+        }
         let mut details = Map::new();
         details.insert("probe_manifest".to_string(), Value::Object(manifest));
         trace!(
@@ -197,6 +207,8 @@ impl CliApp {
             entry_count = entries.len(),
             is_rom,
             platform = ?identity.platform,
+            recommended_format = recommendation.format_name,
+            recommendation_reason = recommendation.reason,
             "emitting probe manifest event"
         );
         self.reporter.emit(ProgressEvent {

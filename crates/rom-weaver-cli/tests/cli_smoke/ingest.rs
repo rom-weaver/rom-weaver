@@ -904,6 +904,106 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
 }
 
 #[test]
+fn ingest_streams_recommended_format_for_bare_disc_before_completion() {
+    // The host settles its automatic output format from this event, so it must arrive before the
+    // checksum pass rather than with the terminal report - otherwise a multi-GB disc image spends
+    // its whole hash showing an extension-guessed format that then snaps to rvz at the end.
+    let temp = setup_temp_dir();
+    let iso = temp.child("game.iso");
+    fs::write(iso.path(), build_test_gamecube_iso(0x8000)).expect("iso fixture");
+    let out_dir = temp.child("ingest-bare-identity-out");
+
+    let events = run_json_events(
+        &[
+            "ingest",
+            "--input",
+            iso.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let identity_index = events
+        .iter()
+        .position(|event| event["stage"] == "probe-identity")
+        .expect("expected a streaming probe-identity event for a bare source");
+    let terminal_index = events
+        .iter()
+        .rposition(|event| event["status"] == "succeeded")
+        .expect("expected a terminal succeeded event");
+    assert!(
+        identity_index < terminal_index,
+        "identity must stream before completion"
+    );
+    let manifest = &events[identity_index]["details"]["probe_manifest"];
+    assert_eq!(manifest["platform"], "Nintendo GameCube");
+    assert_eq!(manifest["disc_format"], "DVD");
+    assert_eq!(
+        manifest["recommended_format"], "rvz",
+        "a GameCube disc recommends rvz, and must say so before the checksum pass"
+    );
+    // A bare source is hashed in place, so this event must not claim an extraction is underway.
+    assert!(
+        events[identity_index]["details"]
+            .get("probe_manifest")
+            .and_then(|manifest| manifest.get("is_rom"))
+            .is_none(),
+        "the bare identity event carries no ROM-vs-patch routing verdict"
+    );
+}
+
+#[test]
+fn ingest_streams_recommended_format_for_archived_disc_before_completion() {
+    // An archive's own `probe-manifest` resolves identity from the archive file, which says nothing
+    // about the ROM inside; the decoded payload's `probe-identity` is the only early signal it gets.
+    // The payload must exceed the 2 MiB identity-detection prefix, since the mid-extract identity
+    // only becomes ready once that many bytes have streamed (a smaller one resolves at completion).
+    let temp = setup_temp_dir();
+    let iso = temp.child("game.iso");
+    fs::write(iso.path(), build_test_gamecube_iso(3 * 1024 * 1024)).expect("iso fixture");
+    let archive = temp.child("game.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            iso.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let out_dir = temp.child("ingest-archived-identity-out");
+
+    let events = run_json_events(
+        &[
+            "ingest",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let identity_index = events
+        .iter()
+        .position(|event| event["details"]["probe_manifest"]["recommended_format"] == "rvz")
+        .expect("expected the decoded payload's recommendation to stream");
+    let terminal_index = events
+        .iter()
+        .rposition(|event| event["status"] == "succeeded")
+        .expect("expected a terminal succeeded event");
+    assert!(
+        identity_index < terminal_index,
+        "the recommendation must stream before completion"
+    );
+}
+
+#[test]
 fn ingest_disc_asset_carries_engine_disc_format() {
     // The webapp's CHD output-panel disc label is now driven by this `disc_format`
     // verdict (engine identity), not a TS filename/cue regex - lock the contract.
