@@ -22,7 +22,10 @@ const TABS = [
 ];
 
 const mastheadProps = {
+  commitHash: "a1b2c3d4e5f6",
+  commitsSinceVersion: 3,
   donateHref: "https://example.com/donate",
+  dirty: true,
   githubHref: "https://example.com/repo",
   currentTab: "patcher",
   onOpenLog: () => undefined,
@@ -31,7 +34,7 @@ const mastheadProps = {
   onSelectTab: () => undefined,
   tabs: TABS,
   threads: 8,
-  version: "v1.2.3 · main* · a1b2c3d",
+  version: "1.2.3",
   versionTitle: "v1.2.3+main.dirty.a1b2c3d",
 };
 
@@ -45,6 +48,12 @@ describe("Masthead", () => {
     const rail = getByRole("tablist", { name: "Workflow" });
     expect(rail.classList.contains("mode-rail")).toBe(true);
     expect(rail.querySelector(".mode-thumb")).toBeTruthy();
+    const logoHome = getByRole("link", { name: "Home" });
+    expect(logoHome.getAttribute("href")).toBe("/");
+    expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
+    const nameHome = getByRole("link", { name: "rom-weaver home" });
+    expect(nameHome.getAttribute("href")).toBe("/");
+    expect(nameHome.querySelector(".brand-word")).toBeTruthy();
     const tabs = Array.from(rail.querySelectorAll('[role="tab"]'));
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Weave", "Create", "Trim"]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
@@ -68,7 +77,13 @@ describe("Masthead", () => {
     expect(container.querySelector(".masthead-threads-short")?.textContent).toBe("· 8T");
     expect(container.querySelector(".masthead-threads .sr-only")?.textContent).toBe("8 threads");
     expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
-    expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
+    const version = getByRole("link", { name: "v1.2.3+3" });
+    expect(version.getAttribute("href")).toBe("https://example.com/repo/releases/tag/v1.2.3");
+    expect(version.classList.contains("build-version-link")).toBe(true);
+    const commit = getByRole("link", { name: "a1b2c3d" });
+    expect(commit.getAttribute("href")).toBe("https://example.com/repo/commit/a1b2c3d4e5f6");
+    expect(commit.classList.contains("build-version-link")).toBe(true);
+    expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3+3 · a1b2c3d*");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
     expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw");
@@ -78,9 +93,10 @@ describe("Masthead", () => {
   });
 
   it("keeps diagnostics in the Log dialog", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} commitsSinceVersion={0} />));
     expect(container.querySelector(".console-copy-toggle")).toBeNull();
     expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();
+    expect(getByRole("link", { name: "v1.2.3" })).toBeTruthy();
   });
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();

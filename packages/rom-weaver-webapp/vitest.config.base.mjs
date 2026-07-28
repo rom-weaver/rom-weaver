@@ -21,6 +21,7 @@ export default defineConfig({
     __APP_CHANNEL_LABEL__: JSON.stringify("dev"),
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version || "0.1.0"),
     __COMMIT_HASH__: JSON.stringify("dev"),
+    __COMMITS_SINCE_VERSION__: JSON.stringify(0),
     __DIRTY_HASH__: JSON.stringify(""),
     __GIT_BRANCH__: JSON.stringify("dev"),
     __SERVICE_WORKER_ENABLED__: "false",
