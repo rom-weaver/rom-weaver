@@ -1,24 +1,53 @@
-          if (rep0 <= 2)
+          #define COPY_MATCH_PATTERN(size) \
+            do { \
+              if (curLen >= size) \
+              { \
+                Byte pattern[size]; \
+                memcpy(pattern, dest + src, sizeof(pattern)); \
+                do \
+                { \
+                  memcpy(dest, pattern, sizeof(pattern)); \
+                  dest += sizeof(pattern); \
+                } \
+                while ((SizeT)(lim - dest) >= sizeof(pattern)); \
+              } \
+              while (dest != lim) \
+              { \
+                *(dest) = (Byte)*(dest + src); \
+                dest++; \
+              } \
+            } while (0)
+
+          switch (rep0)
           {
-            if (rep0 == 1)
+            case 1:
               memset(dest, dic[pos], curLen);
-            else if (curLen >= 2)
-            {
-              UInt16 pattern;
-              memcpy(&pattern, dest + src, sizeof(pattern));
+              break;
+            case 2:
+              COPY_MATCH_PATTERN(2);
+              break;
+            case 3:
+              COPY_MATCH_PATTERN(3);
+              break;
+            case 4:
+              COPY_MATCH_PATTERN(4);
+              break;
+            case 5:
+              COPY_MATCH_PATTERN(5);
+              break;
+            case 6:
+              COPY_MATCH_PATTERN(6);
+              break;
+            case 7:
+              COPY_MATCH_PATTERN(7);
+              break;
+            case 8:
+              COPY_MATCH_PATTERN(8);
+              break;
+            default:
               do
-              {
-                memcpy(dest, &pattern, sizeof(pattern));
-                dest += sizeof(pattern);
-              }
-              while ((SizeT)(lim - dest) >= sizeof(pattern));
-              if (dest != lim)
                 *(dest) = (Byte)*(dest + src);
-            }
-            else
-              *(dest) = (Byte)*(dest + src);
+              while (++dest != lim);
           }
-          else
-            do
-              *(dest) = (Byte)*(dest + src);
-            while (++dest != lim);
+
+          #undef COPY_MATCH_PATTERN
