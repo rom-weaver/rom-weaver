@@ -172,24 +172,24 @@
         const launchSurface = displayModeMatches || iosStandalone ? "pwa" : "web";
         const serviceWorkerEnabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
         const setRuntimeStatus = (status) => {
-          const label = status === "active" ? "sw" : status === "ready" ? "sw ok" : "sw off";
+          const label = status === "off" ? "sw off" : "sw";
           runtimeSlot.textContent = `· ${launchSurface} · ${label}`;
-          runtimeSlot.title =
+          const title =
             status === "active"
               ? "This page is controlled by the service worker and its offline cache is available."
               : status === "ready"
                 ? "A service worker is installed and ready to take control."
-                : "Service-worker offline support is unavailable.";
+                : status === "off"
+                  ? "Service-worker offline support is unavailable."
+                  : "";
+          if (title) runtimeSlot.title = title;
+          else runtimeSlot.removeAttribute("title");
         };
 
         if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("off");
         else if (navigator.serviceWorker.controller)
           setRuntimeStatus(typeof MessageChannel === "function" ? "active" : "ready");
-        else
-          navigator.serviceWorker.ready.then(
-            () => setRuntimeStatus("ready"),
-            () => setRuntimeStatus("off"),
-          );
+        else setRuntimeStatus(null);
       };
     </script>
     <script type="module" src="./src/webapp/main.tsx"></script>

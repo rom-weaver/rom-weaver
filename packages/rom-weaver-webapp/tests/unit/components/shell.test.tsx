@@ -71,7 +71,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3 · main* · a1b2c3d");
     expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
     expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
-    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("");
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw");
     expect(getByRole("link", { name: "Tip" }).getAttribute("href")).toBe("https://example.com/donate");
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
@@ -102,7 +102,7 @@ describe("Masthead", () => {
     );
     expect(container.querySelector(".runtime-badge")).toBeNull();
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="ready" />));
-    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw ok");
+    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw");
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw off");
     expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(

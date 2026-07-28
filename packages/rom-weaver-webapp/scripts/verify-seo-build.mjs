@@ -68,7 +68,8 @@ assertIncludes(weaveHtml, 'class="masthead-threads-full"', "preloaded full threa
 assertIncludes(weaveHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
 assertIncludes(weaveHtml, 'class="masthead-runtime"', "preloaded runtime status slot");
 assertIncludes(weaveHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
-const runtimeResolver = '<span class="masthead-runtime"></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
+const runtimeResolver =
+  '<span class="masthead-runtime">· web · sw</span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [
   "index.html",
   "weave.html",

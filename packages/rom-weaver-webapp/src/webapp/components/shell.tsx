@@ -214,15 +214,8 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const serviceWorkerLabel =
-    serviceWorkerStatus === "active"
-      ? "sw"
-      : serviceWorkerStatus === "ready"
-        ? "sw ok"
-        : serviceWorkerStatus
-          ? `sw ${serviceWorkerStatus}`
-          : null;
-  const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
+  const serviceWorkerLabel = serviceWorkerStatus === "off" ? "sw off" : "sw";
+  const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}`;
   const runtimeStatusTitle =
     serviceWorkerStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
