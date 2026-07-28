@@ -2565,6 +2565,22 @@ compression_lzma2_mt_wait_running_slot(struct lzma2_mt_stream *strm)
 	pthread_mutex_unlock(&strm->progress_mutex);
 }
 
+/*
+ * Give back a slot taken by compression_lzma2_mt_wait_running_slot when the
+ * job it was taken for never reaches a worker thread.
+ */
+static void
+compression_lzma2_mt_release_running_slot(struct lzma2_mt_stream *strm)
+{
+	if (!strm->progress_cond_ready || !strm->progress_mutex_ready)
+		return;
+	pthread_mutex_lock(&strm->progress_mutex);
+	if (strm->running_jobs > 0)
+		strm->running_jobs--;
+	pthread_cond_broadcast(&strm->progress_cond);
+	pthread_mutex_unlock(&strm->progress_mutex);
+}
+
 static int
 compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 {
@@ -2589,6 +2605,7 @@ compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 	memset(job, 0, sizeof(*job));
 	job->in = malloc(preset_size + strm->chunk_used);
 	if (job->in == NULL) {
+		compression_lzma2_mt_release_running_slot(strm);
 		archive_set_error(a, ENOMEM,
 		    "Can't allocate memory for lzma2 worker input");
 		return (ARCHIVE_FATAL);
@@ -2608,12 +2625,7 @@ compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 	ret = pthread_create(&job->thread, NULL, compression_lzma2_mt_worker,
 	    job);
 	if (ret != 0) {
-		if (job->running_jobs != NULL) {
-			pthread_mutex_lock(&strm->progress_mutex);
-			if (strm->running_jobs > 0)
-				strm->running_jobs--;
-			pthread_mutex_unlock(&strm->progress_mutex);
-		}
+		compression_lzma2_mt_release_running_slot(strm);
 		free(job->in);
 		memset(job, 0, sizeof(*job));
 		archive_set_error(a, ret,
