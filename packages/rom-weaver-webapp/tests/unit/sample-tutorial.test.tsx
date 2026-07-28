@@ -5,7 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { SampleTutorial, type SampleTutorialStep } from "../../src/public/react/components/ds/sample-tutorial.tsx";
 
 const STEPS: readonly SampleTutorialStep[] = [
-  { body: "Review the first section.", openDrawers: true, target: "#tutorial-first", title: "First section" },
+  {
+    actions: [["✓", "Checks"]],
+    body: "Review the first section.",
+    openDrawers: true,
+    target: "#tutorial-first",
+    title: "First section",
+  },
   { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
 ];
 
@@ -36,6 +42,7 @@ describe("sample tutorial", () => {
     const first = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
     expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("list", { name: "Available actions" }).textContent).toContain("✓Checks");
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

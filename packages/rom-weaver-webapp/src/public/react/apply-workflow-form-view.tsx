@@ -175,34 +175,50 @@ const ApplyDropAfter = ({
 
 const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
-    body: "The ROM section keeps the file name, remove control, and computed checksums together. Add another ROM in 0x01 whenever you want to replace it.",
+    actions: [
+      ["✓", "Checks"],
+      ["↻", "Replace"],
+      ["×", "Remove"],
+    ],
+    body: "The ROM card keeps its name, source files, checksums, and file controls together.",
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: "Start with the ROM",
   },
   {
-    body: "The first IPS patch changes HELLO to MODIFIED. Use its number to reorder it, the actions menu to edit, replace, or remove it, and Checks to review its expected output.",
+    actions: [
+      ["↕", "Reorder"],
+      ["✎", "Edit"],
+      ["✓", "Checks"],
+      ["↻", "Replace"],
+      ["×", "Remove"],
+    ],
+    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. The second patch's input checks match the first patch's output.",
     openDrawers: true,
-    target: "#rom-weaver-list-patch-stack > .card:nth-child(1)",
-    title: "Patch 1: HELLO → MODIFIED",
+    target: "#rom-weaver-row-patch-stack",
+    title: "Build the two-patch stack",
   },
   {
-    body: "The second IPS patch changes WORLD to ROM. Its input checks match patch 1's output, so the stack proves this patch belongs second before you weave.",
-    openDrawers: true,
-    target: "#rom-weaver-list-patch-stack > .card:nth-child(2)",
-    title: "Patch 2: WORLD → ROM",
-  },
-  {
-    body: "The compact 0x01 row stays available after setup. Drop more files anywhere on the workbench, or click the row to browse.",
+    actions: [
+      ["⇩", "Drop files"],
+      ["＋", "Browse"],
+    ],
+    body: "The compact 0x01 row stays available after setup for more ROMs, patches, bundles, or archives.",
     target: "#rom-weaver-row-unified-drop",
     title: "Add files at any time",
   },
   {
-    body: "Choose the output name and format. Options is open so you can review compression, header, and bundle packaging controls before you weave.",
+    actions: [
+      ["⚙", "Options"],
+      ["▣", "Bundle"],
+      ["▶", "Apply & download"],
+    ],
+    body: "Choose the output name, format, compression, header, and bundle settings. Then press WEAVE & DOWNLOAD to apply both patches.",
     openDrawers: true,
     placement: "top",
+    scrollBlock: "end",
     target: "#rom-weaver-row-output-file-name",
-    title: "Finish at the loom",
+    title: "Apply both patches",
   },
 ];
 

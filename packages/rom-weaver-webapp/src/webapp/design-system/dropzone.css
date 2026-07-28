@@ -354,6 +354,18 @@
 .rw-app .sample-tutorial-copy p {
   margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.5;
 }
+.rw-app .sample-tutorial-action-list {
+  display: flex; flex-wrap: wrap; gap: var(--sp-xs); margin: var(--sp-s) 0 0; padding: 0; list-style: none;
+}
+.rw-app .sample-tutorial-action-list li {
+  display: inline-flex; align-items: center; gap: var(--sp-xs); min-height: 26px; padding: 3px 7px;
+  border: 1px solid var(--seam-strong); border-radius: 3px;
+  background: var(--well); color: var(--ink-2); font-size: .69rem; font-weight: 650;
+}
+.rw-app .sample-tutorial-action-symbol {
+  min-width: 1.1em; color: var(--thread-text); font-family: var(--mono); font-size: .82rem;
+  font-weight: 850; line-height: 1; text-align: center;
+}
 .rw-app .sample-tutorial-actions {
   display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
 }

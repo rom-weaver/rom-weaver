@@ -2,9 +2,11 @@ import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 
 type SampleTutorialStep = {
+  actions?: readonly (readonly [symbol: string, label: string])[];
   body: string;
   openDrawers?: boolean;
   placement?: "bottom" | "top";
+  scrollBlock?: ScrollLogicalPosition;
   target?: string;
   title: string;
 };
@@ -79,7 +81,7 @@ const SampleTutorial = ({
         }
       }
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
+      target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: step.scrollBlock ?? "center" });
       return true;
     };
     frame = window.requestAnimationFrame(() => {
@@ -125,6 +127,18 @@ const SampleTutorial = ({
           </span>
           <h2 id={titleId}>{ready ? step.title : "Loading the practice files"}</h2>
           <p id={bodyId}>{ready ? step.body : loadingBody}</p>
+          {ready && step.actions?.length ? (
+            <ul aria-label="Available actions" className="sample-tutorial-action-list">
+              {step.actions.map(([symbol, label]) => (
+                <li key={label}>
+                  <span aria-hidden="true" className="sample-tutorial-action-symbol">
+                    {symbol}
+                  </span>
+                  {label}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         <div className="sample-tutorial-actions">
           {ready ? (

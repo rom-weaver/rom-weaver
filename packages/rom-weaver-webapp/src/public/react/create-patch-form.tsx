@@ -59,28 +59,49 @@ const CREATE_SAMPLE_ASSETS = [
 ] as const;
 const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
-    body: "The Original section keeps the starting file's name, remove control, and checksums together. Add another original in 0x01 to replace it.",
+    actions: [
+      ["✓", "Checks"],
+      ["↻", "Replace"],
+      ["×", "Remove"],
+    ],
+    body: "The Original card keeps the starting file's name, remove control, and checksums together.",
     openDrawers: true,
     target: "#patch-builder-row-original",
     title: "Start with the original",
   },
   {
-    body: "Modified is the version you want to reproduce. Its name, remove control, and checksums stay together here, and Swap fixes the order in one click.",
+    actions: [
+      ["⇄", "Swap"],
+      ["✓", "Checks"],
+      ["↻", "Replace"],
+      ["×", "Remove"],
+    ],
+    body: "Modified is the version the new patch should reproduce. Swap corrects the file order in one click.",
     openDrawers: true,
     target: "#patch-builder-row-modified",
     title: "Compare the modified ROM",
   },
   {
-    body: "The compact 0x01 row stays available after setup. Drop replacements anywhere on the workbench, or click the row to browse.",
+    actions: [
+      ["⇩", "Drop files"],
+      ["＋", "Browse"],
+    ],
+    body: "The compact 0x01 row stays available after setup for replacing either file.",
     target: "#patch-builder-row-unified-drop",
     title: "Replace files at any time",
   },
   {
-    body: "Choose the patch name and format. Options is open so you can review archive and compression controls before you create it.",
+    actions: [
+      ["⚙", "Options"],
+      ["▣", "Archive"],
+      ["↓", "Create & download"],
+    ],
+    body: "Choose the patch name, format, archive, and compression settings. Then press CREATE & DOWNLOAD PATCH.",
     openDrawers: true,
     placement: "top",
+    scrollBlock: "end",
     target: "#patch-builder-row-output",
-    title: "Finish with the patch",
+    title: "Create the patch",
   },
 ];
 import {
