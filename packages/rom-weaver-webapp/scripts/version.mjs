@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +31,19 @@ const readPackageVersion = () => {
 const runGit = (command) => {
   try {
     return execSync(command, {
+      cwd: packageRoot,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "";
+  }
+};
+
+const runGitArgs = (...args) => {
+  try {
+    return execFileSync("git", args, {
       cwd: packageRoot,
       stdio: ["ignore", "pipe", "ignore"],
     })
@@ -78,6 +91,17 @@ const hasPackageVersionTag = (version) => {
     .some((tagName) => versionTags.has(tagName.trim()));
 };
 
+const getCommitsSinceVersion = (version) => {
+  const versionTag = [version, `v${version}`].find((tagName) =>
+    runGitArgs("rev-parse", "--verify", "--quiet", `refs/tags/${tagName}`),
+  );
+  if (!versionTag) return null;
+  const tagCommit = runGitArgs("rev-list", "-n", "1", versionTag);
+  if (!tagCommit || runGitArgs("merge-base", versionTag, "HEAD") !== tagCommit) return null;
+  const count = runGitArgs("rev-list", "--count", `${versionTag}..HEAD`);
+  return /^\d+$/.test(count) ? Number.parseInt(count, 10) : null;
+};
+
 const getGitMetadata = (version) => {
   const revision = sanitizeVersionToken(runGit("git rev-parse --short HEAD"));
   if (!revision) return null;
@@ -99,6 +123,7 @@ const getGitMetadata = (version) => {
       : "";
 
   return {
+    commitsSinceVersion: getCommitsSinceVersion(version),
     dirtyHash,
     gitBranch,
     isVersionTag,
@@ -146,6 +171,7 @@ const getBuildInfo = () => {
   return {
     buildVersion: buildVersionString(version, gitMetadata),
     commitHash,
+    commitsSinceVersion: gitMetadata?.commitsSinceVersion ?? null,
     dirtyHash,
     displayVersion,
     gitBranch,
