@@ -122,6 +122,12 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         defaultRenderer.parser = this.parser;
         return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
       },
+      // Narrow viewports turn a wide table into its own scroll region, which a
+      // keyboard user can only reach if it can take focus.
+      table(token) {
+        defaultRenderer.parser = this.parser;
+        return defaultRenderer.table(token).replace("<table>", '<table tabindex="0">');
+      },
       heading({ depth, text, tokens }) {
         const base = headingSlug(text);
         const count = seen.get(base) ?? 0;

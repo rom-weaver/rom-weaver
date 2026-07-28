@@ -445,9 +445,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .guide-nav-list { gap: var(--sp-xs); padding-block: 0; }
   .rw-app .guide-nav-list a { white-space: nowrap; }
   /* the warp weave reads as cloth across a full-width row; at chip width it is
-     just noise, so the current guide takes a flat dye instead */
+     just noise, so the current guide takes a flat dye instead. The dye stops at
+     12%: --thread-text over it is 4.62:1 on the weakest accent, and 18% put the
+     default accent under 4.5:1 with nothing else to lift it - the desktop row
+     has the weave to read against, this chip has only the dye. */
   .rw-app .guide-nav-list a[aria-current="page"] {
-    background: color-mix(in oklab, var(--thread) 18%, var(--well));
+    background: color-mix(in oklab, var(--thread) 12%, var(--well));
   }
 
   /* The warp turns with the cloth: the threads lie along the top edge. The
