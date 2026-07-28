@@ -193,6 +193,7 @@ struct lzma2_mt_job {
 	pthread_mutex_t		*progress_mutex;
 	uint64_t		*encoded_bytes;
 	pthread_cond_t		*progress_cond;	/* NULL when unavailable */
+	size_t			*running_jobs;	/* NULL when unavailable */
 	int			 done;		/* set under progress_mutex */
 };
 
@@ -216,6 +217,17 @@ struct lzma2_mt_stream {
 	size_t			 job_head;
 	size_t			 job_count;
 	size_t			 threads;
+	/*
+	 * Ring capacity. With a working condvar this is twice the thread
+	 * count: a block that finishes out of order parks its (already
+	 * compressed, input freed) result in the ring and its core picks up
+	 * the next block immediately, instead of every slot staying occupied
+	 * until the oldest block - possibly on a slow efficiency core -
+	 * finally completes. Concurrency is separately capped at `threads`
+	 * by the running-jobs gate.
+	 */
+	size_t			 job_slots;
+	size_t			 running_jobs;	/* advanced under progress_mutex */
 	size_t			 job_limit;
 	int			 end_marker_written;
 	void			(*progress_callback)(void *, uint64_t);
@@ -2374,13 +2386,23 @@ compression_lzma2_mt_worker(void *arg)
 
 	compression_lzma2_mt_encode(job);
 	/*
+	 * The input (seed + block) is only needed while encoding; free it
+	 * here so a completed block parked in the ring holds just its
+	 * compressed output.
+	 */
+	free(job->in);
+	job->in = NULL;
+	/*
 	 * Mark completion under the progress lock and wake the main thread so
-	 * a drain blocked on this block stops waiting, whether the encode
-	 * succeeded or failed.
+	 * a drain blocked on this block, or a submit waiting on the
+	 * running-jobs gate, stops waiting - whether the encode succeeded or
+	 * failed.
 	 */
 	if (job->progress_cond != NULL) {
 		pthread_mutex_lock(job->progress_mutex);
 		job->done = 1;
+		if (job->running_jobs != NULL && *job->running_jobs > 0)
+			(*job->running_jobs)--;
 		pthread_cond_broadcast(job->progress_cond);
 		pthread_mutex_unlock(job->progress_mutex);
 	}
@@ -2481,7 +2503,7 @@ compression_lzma2_mt_drain(struct archive *a, struct la_zstream *lastrm,
 
 		free(job->out);
 		memset(job, 0, sizeof(*job));
-		strm->job_head = (strm->job_head + 1) % strm->threads;
+		strm->job_head = (strm->job_head + 1) % strm->job_slots;
 		strm->job_count--;
 		if (lastrm->avail_out == 0)
 			return (ARCHIVE_OK);
@@ -2513,6 +2535,52 @@ compression_lzma2_mt_history_push(struct lzma2_mt_stream *strm,
 	strm->history_len += len;
 }
 
+/*
+ * Wait until a worker core is free (fewer running jobs than threads),
+ * relaying the shared encoded-bytes counter to the progress callback while
+ * blocked, exactly like a waiting drain does.
+ */
+static void
+compression_lzma2_mt_wait_running_slot(struct lzma2_mt_stream *strm)
+{
+	uint64_t encoded;
+
+	if (!strm->progress_cond_ready || !strm->progress_mutex_ready)
+		return;
+	pthread_mutex_lock(&strm->progress_mutex);
+	while (strm->running_jobs >= strm->threads) {
+		encoded = strm->encoded_bytes;
+		if (strm->progress_callback != NULL &&
+		    encoded > strm->progress_bytes_reported) {
+			strm->progress_bytes_reported = encoded;
+			pthread_mutex_unlock(&strm->progress_mutex);
+			strm->progress_callback(
+			    strm->progress_callback_data, encoded);
+			pthread_mutex_lock(&strm->progress_mutex);
+			continue;
+		}
+		pthread_cond_wait(&strm->progress_cond, &strm->progress_mutex);
+	}
+	strm->running_jobs++;
+	pthread_mutex_unlock(&strm->progress_mutex);
+}
+
+/*
+ * Give back a slot taken by compression_lzma2_mt_wait_running_slot when the
+ * job it was taken for never reaches a worker thread.
+ */
+static void
+compression_lzma2_mt_release_running_slot(struct lzma2_mt_stream *strm)
+{
+	if (!strm->progress_cond_ready || !strm->progress_mutex_ready)
+		return;
+	pthread_mutex_lock(&strm->progress_mutex);
+	if (strm->running_jobs > 0)
+		strm->running_jobs--;
+	pthread_cond_broadcast(&strm->progress_cond);
+	pthread_mutex_unlock(&strm->progress_mutex);
+}
+
 static int
 compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 {
@@ -2528,14 +2596,16 @@ compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 		    "Internal error queueing lzma2 worker thread");
 		return (ARCHIVE_FATAL);
 	}
+	compression_lzma2_mt_wait_running_slot(strm);
 
 	/* preset_size is 0 unless seeding is enabled (history_cap > 0). */
 	preset_size = strm->history_len;
-	job_index = (strm->job_head + strm->job_count) % strm->threads;
+	job_index = (strm->job_head + strm->job_count) % strm->job_slots;
 	job = &strm->jobs[job_index];
 	memset(job, 0, sizeof(*job));
 	job->in = malloc(preset_size + strm->chunk_used);
 	if (job->in == NULL) {
+		compression_lzma2_mt_release_running_slot(strm);
 		archive_set_error(a, ENOMEM,
 		    "Can't allocate memory for lzma2 worker input");
 		return (ARCHIVE_FATAL);
@@ -2550,9 +2620,12 @@ compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
 	job->encoded_bytes = &strm->encoded_bytes;
 	job->progress_cond = strm->progress_cond_ready ?
 	    &strm->progress_cond : NULL;
+	job->running_jobs = (strm->progress_cond_ready &&
+	    strm->progress_mutex_ready) ? &strm->running_jobs : NULL;
 	ret = pthread_create(&job->thread, NULL, compression_lzma2_mt_worker,
 	    job);
 	if (ret != 0) {
+		compression_lzma2_mt_release_running_slot(strm);
 		free(job->in);
 		memset(job, 0, sizeof(*job));
 		archive_set_error(a, ret,
@@ -2585,6 +2658,8 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 	}
 	strm->opt = *lzma_opt;
 	strm->threads = (size_t)threads;
+	strm->job_slots = strm->threads * 2;
+	/* Raised to the full ring below once the condvar is known good. */
 	strm->job_limit = strm->threads;
 	strm->progress_callback = progress_callback;
 	strm->progress_callback_data = progress_callback_data;
@@ -2599,24 +2674,43 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 		return (ARCHIVE_FATAL);
 	}
 	/*
-	 * Split one file into parallel blocks smaller than the dictionary,
-	 * seeding each later block with the preceding dictionary bytes so
-	 * cross-block matches survive. Only engages when the total size is
-	 * known and a per-thread block is smaller than the dictionary;
-	 * otherwise one chunk == dictionary as before.
+	 * Split one file into parallel blocks, seeding each later block with
+	 * the preceding dictionary bytes so cross-block matches survive. The
+	 * block is one thread's share of the file, floored at the minimum
+	 * chunk and capped at 2x the dictionary: the cap bounds per-worker
+	 * memory on huge inputs and, more importantly, yields more blocks
+	 * than threads there, so the OS rebalances them across asymmetric
+	 * (performance/efficiency) cores instead of the wall clock tracking
+	 * the slowest core's single equal-share block. Every split block is
+	 * seeded; an unseeded block resets the dictionary and loses every
+	 * match that crosses the boundary, which costs several percent of
+	 * output size on inputs larger than the dictionary.
 	 */
-	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1 &&
-	    (uint64_t)lzma_opt->dict_size > LZMA2_MT_MIN_CHUNK_SIZE) {
+	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1) {
+		uint64_t cap = (uint64_t)lzma_opt->dict_size * 2;
 		uint64_t per = (size_hint + strm->threads - 1) / strm->threads;
+		if (per > cap) {
+			/*
+			 * Input too large for one block per thread at the
+			 * memory cap: use the smallest multiple of the thread
+			 * count that fits, so every wave of workers stays
+			 * full instead of leaving a straggler block that
+			 * serializes the tail.
+			 */
+			uint64_t blocks = (size_hint + cap - 1) / cap;
+			blocks = ((blocks + strm->threads - 1) / strm->threads)
+			    * strm->threads;
+			per = (size_hint + blocks - 1) / blocks;
+		}
 		if (per < LZMA2_MT_MIN_CHUNK_SIZE)
 			per = LZMA2_MT_MIN_CHUNK_SIZE;
-		if (per < (uint64_t)lzma_opt->dict_size) {
+		if (per <= (uint64_t)(size_t)-1) {
 			strm->chunk_size = (size_t)per;
 			strm->history_cap = (size_t)lzma_opt->dict_size;
 		}
 	}
 	strm->chunk = malloc(strm->chunk_size);
-	strm->jobs = calloc(strm->threads, sizeof(*strm->jobs));
+	strm->jobs = calloc(strm->job_slots, sizeof(*strm->jobs));
 	if (strm->history_cap > 0)
 		strm->history = malloc(strm->history_cap);
 	if (strm->chunk == NULL || strm->jobs == NULL ||
@@ -2637,6 +2731,14 @@ compression_init_encoder_lzma2_mt(struct archive *a,
 	if (strm->progress_mutex_ready &&
 	    pthread_cond_init(&strm->progress_cond, NULL) == 0)
 		strm->progress_cond_ready = 1;
+	/*
+	 * With a working condvar the running-jobs gate caps concurrency, so
+	 * the whole ring may fill with parked results; without one,
+	 * concurrency is only bounded by the ring itself, so keep it at one
+	 * slot per thread.
+	 */
+	if (strm->progress_cond_ready)
+		strm->job_limit = strm->job_slots;
 	lastrm->real_stream = strm;
 	lastrm->valid = 1;
 	lastrm->code = compression_code_lzma2_mt;
@@ -2740,7 +2842,7 @@ compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
 	if (strm != NULL) {
 		for (i = 0; i < strm->job_count; i++) {
 			struct lzma2_mt_job *job =
-			    &strm->jobs[(strm->job_head + i) % strm->threads];
+			    &strm->jobs[(strm->job_head + i) % strm->job_slots];
 			if (!job->joined)
 				pthread_join(job->thread, NULL);
 			free(job->in);
@@ -2802,6 +2904,29 @@ compression_init_encoder_lzma(struct archive *a,
 		archive_set_error(a, ENOMEM,
 		    "Internal error initializing compression library");
 		return (ARCHIVE_FATAL);
+	}
+	/*
+	 * Use 7-Zip's per-level LZMA2 dictionary table (probed from 7zz
+	 * 26.02: 256 KiB at -mx1 up to 256 MiB at -mx8/9) instead of
+	 * liblzma's smaller presets, so archive sizes stay at parity with
+	 * 7zz on inputs larger than the liblzma dictionary.
+	 *
+	 * This is `LzmaEncProps_Normalize`'s table verbatim, pointer-width
+	 * ceiling included: a 32-bit host tops out at 64 MiB because a
+	 * 256 MiB dictionary needs a ~3 GiB match finder, which fits no
+	 * 32-bit address space - wasm32's 4 GiB linear memory, but equally
+	 * the linux-ia32 and win32-ia32 binaries this project ships.
+	 */
+	if (filter_id == LZMA_FILTER_LZMA2) {
+		const int max_shift_level = (int)(sizeof(size_t) / 2 + 4);
+
+		if (level <= 4)
+			lzma_opt.dict_size = (uint32_t)1 << (level * 2 + 16);
+		else if (level <= max_shift_level)
+			lzma_opt.dict_size = (uint32_t)1 << (level + 20);
+		else
+			lzma_opt.dict_size =
+			    (uint32_t)1 << (sizeof(size_t) / 2 + 24);
 	}
 	/*
 	 * A dictionary larger than the data can never be referenced, so reduce

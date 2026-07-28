@@ -21,8 +21,8 @@ mod tests {
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
         SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
-        copy_progress_buffer_size, lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits,
-        zstd_threads_for_budget,
+        copy_progress_buffer_size, lzma2_preset_dict_bytes, lzma2_threads_for_budget,
+        lzma2_threads_for_budget_with_limits, zstd_threads_for_budget,
     };
     use chd::{
         header::Header,
@@ -2534,15 +2534,39 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_preset_dictionary_matches_seven_zip_table() {
+        // `LzmaEncProps_Normalize`'s own table, which the C writer mirrors.
+        assert_eq!(lzma2_preset_dict_bytes(0), 64 * 1024);
+        assert_eq!(lzma2_preset_dict_bytes(1), 256 * 1024);
+        assert_eq!(lzma2_preset_dict_bytes(4), 16 * 1024 * 1024);
+        assert_eq!(lzma2_preset_dict_bytes(5), 32 * 1024 * 1024);
+        assert_eq!(lzma2_preset_dict_bytes(6), 64 * 1024 * 1024);
+        // Above level 4 the table is capped by the pointer width: a 256 MiB
+        // dictionary needs a ~3 GiB match finder, so 32-bit targets (wasm32,
+        // linux-ia32, win32-ia32) must stop at 64 MiB.
+        let ceiling = 1u64 << (usize::BITS / 16 + 24);
+        for level in 5..=9 {
+            assert!(
+                lzma2_preset_dict_bytes(level) <= ceiling,
+                "level {level} exceeds the pointer-width dictionary ceiling"
+            );
+        }
+        assert_eq!(lzma2_preset_dict_bytes(9), ceiling);
+        // Out-of-range levels clamp rather than shifting out of bounds.
+        assert_eq!(lzma2_preset_dict_bytes(99), lzma2_preset_dict_bytes(9));
+    }
+
+    #[test]
     fn seven_z_memory_budget_scales_thread_cap() {
-        // 64 MiB at level 9 uses a 64 MiB dictionary, ~768 MiB per seeded worker,
-        // so the worker count tracks the budget: a 1 GiB host collapses to a
-        // single encoder (7-Zip-like footprint), larger budgets allow more.
+        // 64 MiB at level 9 reduces the dictionary to 64 MiB (input-limited),
+        // ~1 GiB per seeded worker, so the worker count tracks the budget: a
+        // 1 GiB host collapses to a single encoder (7-Zip-like footprint),
+        // larger budgets allow more.
         let total = 64 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
         assert_eq!(lzma2_threads_for_budget(total, 9, gib), 1);
         assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 2);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 5);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 4);
         // Never zero, even with no budget.
         assert_eq!(lzma2_threads_for_budget(total, 9, 0), 1);
         // A tiny input reduces the dictionary, so the same budget allows many
@@ -2553,7 +2577,7 @@ mod tests {
     #[test]
     fn seven_z_level9_small_inputs_reduce_dict_under_wasm_budget() {
         let large_total = 96 * 1024 * 1024;
-        let reduced_dict_total = 32 * 1024 * 1024;
+        let reduced_dict_total = 16 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
         let wasm_max_threads = Some(2);
 
@@ -2568,6 +2592,21 @@ mod tests {
         assert_eq!(
             lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, 4 * gib, wasm_max_threads),
             2
+        );
+    }
+
+    #[test]
+    fn seven_z_wasm_budget_keeps_level5_parallel_without_oversubscribing_large_inputs() {
+        let gib = 1024 * 1024 * 1024;
+        let wasm_max_threads = Some(2);
+
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(32 * 1024 * 1024, 5, gib, wasm_max_threads),
+            2
+        );
+        assert_eq!(
+            lzma2_threads_for_budget_with_limits(128 * 1024 * 1024, 5, gib, wasm_max_threads),
+            1
         );
     }
 
