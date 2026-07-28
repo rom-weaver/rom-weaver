@@ -344,9 +344,9 @@ to `MODIFIED`, and the second changes `WORLD` to `ROM`. The final ROM displays
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
 Open the result in any NES emulator to run it.
 
-| Original ROM | After the first patch |
-| :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
+| Original ROM | After the first patch | After both patches |
+| :---: | :---: | :---: |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) | ![The sample ROM displaying MODIFIED ROM after both patches](../packages/rom-weaver-webapp/design/first-sample-modified-rom.png) |
 
 ## Common workflows
 

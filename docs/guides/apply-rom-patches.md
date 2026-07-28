@@ -25,6 +25,17 @@ It loads a tiny practice ROM and two patches shipped with the project, then
 walks through the ROM, patch stack, file picker, and output controls. The first
 patch changes `HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
 
+<figure class="docs-screenshot-pair" aria-label="The sample ROM before and after both patches">
+  <figure class="docs-screenshot">
+    <img src="/docs/screenshots/first-sample-hello-world.png" alt="The original sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
+    <figcaption>Before: the original practice ROM.</figcaption>
+  </figure>
+  <figure class="docs-screenshot">
+    <img src="/docs/screenshots/first-sample-modified-rom.png" alt="The sample ROM displaying MODIFIED ROM in an NES emulator after both patches" loading="lazy" decoding="async">
+    <figcaption>After: the result with both patches applied in order.</figcaption>
+  </figure>
+</figure>
+
 Want the files without the guide? Choose **Download the bundle** on that page,
 or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip)
 directly. It contains the ROM, both patches, and the bundle recipe that puts
