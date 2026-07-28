@@ -228,6 +228,9 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
+    // See settleMutations: releasing while an aborted operation is still going
+    // strands whatever it stages next.
+    await this.settleMutations();
     await this.releaseSourceSession(this.originalSession);
     await this.releaseSourceSession(this.modifiedSession);
     this.originalSession = undefined;

@@ -211,6 +211,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
+    // See settleMutations: releasing while an aborted operation is still going
+    // strands whatever it stages next.
+    await this.settleMutations();
     await this.releaseInputStage();
     this.clearListeners();
     this.disposed = true;

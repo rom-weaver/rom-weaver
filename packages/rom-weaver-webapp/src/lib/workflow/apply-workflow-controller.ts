@@ -821,6 +821,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
+    // Abort does not unwind an operation that is already running, and the
+    // releases below only cover what this workflow owns right now. Anything an
+    // in-flight operation stages after them is left with no owner.
+    await this.settleMutations();
     await this.releaseInputSession();
     await this.releasePatchSources();
     await this.flushPendingOwnedSourceReleases();
