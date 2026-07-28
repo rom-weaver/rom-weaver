@@ -735,16 +735,21 @@ describe("rom-weaver-wasm browser runner parity", () => {
   });
 
   it(
-    "round trips distance-2 LZMA2 matches in the portable decoder",
+    "round trips short-period LZMA2 matches in the portable decoder",
     async () => {
       await withTempFixture(
         async ({ dir, worker, opfsHandle }) => {
-          const sourcePath = joinGuestPath(dir, "distance-two-source.bin");
-          const archivePath = joinGuestPath(dir, "distance-two.7z");
-          const extractDir = joinGuestPath(dir, "distance-two-extract");
-          const source = new Uint8Array(1024 * 1024);
-          for (let index = 0; index < source.length; index += 1) {
-            source[index] = index & 1 ? 0x42 : 0x41;
+          const sourcePath = joinGuestPath(dir, "short-period-source.bin");
+          const archivePath = joinGuestPath(dir, "short-period.7z");
+          const extractDir = joinGuestPath(dir, "short-period-extract");
+          const blockSize = 128 * 1024;
+          const source = new Uint8Array(7 * blockSize);
+          for (let block = 0; block < 7; block += 1) {
+            const period = block + 2;
+            const start = block * blockSize;
+            for (let index = 0; index < blockSize; index += 1) {
+              source[start + index] = 0x41 + (index % period);
+            }
           }
           await writeGuestFile(opfsHandle, sourcePath, source);
 
@@ -769,7 +774,7 @@ describe("rom-weaver-wasm browser runner parity", () => {
             { command: "extract" },
           );
 
-          const actual = await readGuestFile(opfsHandle, joinGuestPath(extractDir, "distance-two-source.bin"));
+          const actual = await readGuestFile(opfsHandle, joinGuestPath(extractDir, "short-period-source.bin"));
           expect(actual.length).toBe(source.length);
           expect(actual.every((byte, index) => byte === source[index])).toBe(true);
         },
